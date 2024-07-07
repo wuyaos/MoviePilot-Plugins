@@ -51,7 +51,7 @@ class CloudStrm(_PluginBase):
     _rebuild = False
     _https = False
     _observer = []
-    __cloud_files_json = "cloud_files.json"
+    __cloud_files_json = "cloud_files2.json"
 
     _dirconf = {}
     _libraryconf = {}
