@@ -407,10 +407,10 @@ class CloudStrm(_PluginBase):
                     dest_file = f"{scheme}://{cloud_url}/static/{scheme}/{cloud_url}/False/{dest_file}"
                     logger.info(f"替换后cd2路径:::{dest_file}")
                 elif str(cloud_type) == "alist":
-                    logger.info(f"_alist_tocken::{self._alist_tocken}")
                     # 获取签名
                     signstr = ""
                     try:
+                        logger.info(f"_alist_tocken::{self._alist_tocken}")
                         url = f"{scheme}://{cloud_url}/api/fs/get"
                         payload2 = json.dumps({
                                 "path": f"/{dest_file}",
