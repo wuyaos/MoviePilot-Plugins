@@ -456,6 +456,7 @@ class CloudStrm(_PluginBase):
             "https": self._https,
             "cron": self._cron,
             "monitor_confs": self._monitor_confs,
+            "alist_tocken": self._alist_tocken
         })
 
     def get_state(self) -> bool:
@@ -755,6 +756,7 @@ class CloudStrm(_PluginBase):
             "copy_files": False,
             "https": False,
             "monitor_confs": "",
+            "alist_token": "",
         }
 
     def get_page(self) -> List[dict]:
