@@ -20,7 +20,7 @@ from app.plugins import _PluginBase
 from app.core.config import settings
 
 
-class CloudStrm(_PluginBase):
+class CloudStrm2(_PluginBase):
     # 插件名称
     plugin_name = "云盘Strm生成(自用版)"
     # 插件描述
@@ -493,7 +493,7 @@ class CloudStrm(_PluginBase):
         """
         if self._enabled and self._cron:
             return [{
-                "id": "CloudStrm",
+                "id": "CloudStrm2",
                 "name": "云盘strm文件生成服务",
                 "trigger": CronTrigger.from_crontab(self._cron),
                 "func": self.scan,
@@ -740,7 +740,7 @@ class CloudStrm(_PluginBase):
                                             'type': 'info',
                                             'variant': 'tonal',
                                             'text': '配置说明：'
-                                                    'https://raw.githubusercontent.com/thsrite/MoviePilot-Plugins/main/docs/CloudStrm.md'
+                                                    'https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/docs/CloudStrm.md'
                                         }
                                     }
                                 ]
