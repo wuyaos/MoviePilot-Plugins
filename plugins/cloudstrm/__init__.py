@@ -28,9 +28,9 @@ class CloudStrm(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/create.png"
     # 插件版本
-    plugin_version = "4.41"
+    plugin_version = "4.5"
     # 插件作者
-    plugin_author = "thsrite"
+    plugin_author = "wuyaos"
     # 作者主页
     author_url = "https://github.com/wuyaos"
     # 插件配置项ID前缀
@@ -407,7 +407,9 @@ class CloudStrm(_PluginBase):
                     dest_file = f"{scheme}://{cloud_url}/static/{scheme}/{cloud_url}/False/{dest_file}"
                     logger.info(f"替换后cd2路径:::{dest_file}")
                 elif str(cloud_type) == "alist":
+                    logger.info(f"_alist_tocken::{self._alist_tocken}")
                     # 获取签名
+                    signstr = ""
                     if self._alist_tocken:
                         url = f'{scheme}://{cloud_url}/api/fs/get'
                         payload = json.dumps({
@@ -422,10 +424,8 @@ class CloudStrm(_PluginBase):
                                 'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
                                 'Content-Type': 'application/json'
                                 }
-                        sign = json.loads(requests.request("POST", url, headers=headers, data=payload).text)['data']['sign']
-                    else:
-                        sign = ""
-                    dest_file = f"{scheme}://{cloud_url}/d/{dest_file}?{sign}"
+                        signstr = "?"+json.loads(requests.request("POST", url, headers=headers, data=payload).text)['data']['sign']
+                    dest_file = f"{scheme}://{cloud_url}/d/{dest_file}{signstr}"
                     logger.info(f"替换后alist路径:::{dest_file}")
                 else:
                     logger.error(f"云盘类型 {cloud_type} 错误")
