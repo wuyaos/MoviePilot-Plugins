@@ -410,21 +410,23 @@ class CloudStrm(_PluginBase):
                     logger.info(f"_alist_tocken::{self._alist_tocken}")
                     # 获取签名
                     signstr = ""
-                    if self._alist_tocken:
-                        url = f'{scheme}://{cloud_url}/api/fs/get'
-                        payload = json.dumps({
+                    try:
+                        url = f"{scheme}://{cloud_url}/api/fs/get"
+                        payload2 = json.dumps({
                                 "path": f"/{dest_file}",
                                 "password": "",
                                 "page": 1,
                                 "per_page": 0,
                                 "refresh": False
                                 })
-                        headers = {
+                        headers2 = {
                                 'Authorization': self._alist_tocken,
                                 'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
                                 'Content-Type': 'application/json'
                                 }
-                        signstr = "?"+json.loads(requests.request("POST", url, headers=headers, data=payload).text)['data']['sign']
+                        signstr = "?"+json.loads(requests.request("POST", url, headers=headers2, data=payload2).text)['data']['sign']
+                    except:
+                        pass
                     dest_file = f"{scheme}://{cloud_url}/d/{dest_file}{signstr}"
                     logger.info(f"替换后alist路径:::{dest_file}")
                 else:
