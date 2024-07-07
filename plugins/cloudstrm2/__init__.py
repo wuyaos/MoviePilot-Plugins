@@ -409,8 +409,9 @@ class CloudStrm2(_PluginBase):
                 elif str(cloud_type) == "alist":
                     # 获取签名
                     signstr = ""
+                    logger.info(f"alist_tocken::{self._alist_tocken}")
                     try:
-                        logger.info(f"_alist_tocken::{self._alist_tocken}")
+                        logger.info(f"alist_tocken::{self._alist_tocken}")
                         url = f"{scheme}://{cloud_url}/api/fs/get"
                         payload2 = json.dumps({
                                 "path": f"/{dest_file}",
