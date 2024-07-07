@@ -22,7 +22,7 @@ from app.core.config import settings
 
 class CloudStrm(_PluginBase):
     # 插件名称
-    plugin_name = "云盘Strm生成"
+    plugin_name = "云盘Strm生成(自用版)"
     # 插件描述
     plugin_desc = "定时扫描云盘文件，生成Strm文件。"
     # 插件图标
@@ -34,7 +34,7 @@ class CloudStrm(_PluginBase):
     # 作者主页
     author_url = "https://github.com/wuyaos"
     # 插件配置项ID前缀
-    plugin_config_prefix = "cloudstrm_"
+    plugin_config_prefix = "cloudstrm2_"
     # 加载顺序
     plugin_order = 26
     # 可使用的用户级别
