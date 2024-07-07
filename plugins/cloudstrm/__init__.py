@@ -28,7 +28,7 @@ class CloudStrm(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/create.png"
     # 插件版本
-    plugin_version = "4.4"
+    plugin_version = "4.41"
     # 插件作者
     plugin_author = "thsrite"
     # 作者主页
