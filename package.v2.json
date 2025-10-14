@@ -3,11 +3,12 @@
         "name": "媒体库封面生成（自用）",
         "description": "自动生成媒体库封面，支持 Emby，Jellyfin",
         "labels": "封面,媒体库",
-        "version": "0.8.8",
+        "version": "0.8.9",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png",
         "author": "wuyaos,justzerock",
         "level": 1,
         "history": {
+            "v0.8.9": "添加Emby合集用户筛选",
             "v0.8.8": "改为json配置",
             "v0.8.7": "支持生成播放列表封面",
             "v0.8.6": "修复无参数造成无法生图的错误",

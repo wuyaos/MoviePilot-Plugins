@@ -47,7 +47,7 @@ class MediaCoverGenerator(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     # 插件版本
-    plugin_version = "0.8.8"
+    plugin_version = "0.8.9"
     # 插件作者
     plugin_author = "wuyaos,justzerock"
     # 作者主页
@@ -75,6 +75,7 @@ class MediaCoverGenerator(_PluginBase):
     _selected_servers = []
     _all_libraries = []
     _exclude_libraries = []
+    _all_users = []  # 新增：存储所有用户列表
     _sort_by = 'Random'
     _monitor_sort = ''
     _covers_output = ''
@@ -108,6 +109,7 @@ class MediaCoverGenerator(_PluginBase):
     _color_ratio_multi_1 = 0.8
     _single_use_primary = False
     _multi_1_use_primary = True
+    _selected_users = []  # 新增：选择的用户列表
 
     def __init__(self):
         super().__init__()
@@ -158,15 +160,24 @@ class MediaCoverGenerator(_PluginBase):
             self._color_ratio_multi_1 = config.get("color_ratio_multi_1")
             self._single_use_primary = config.get("single_use_primary")
             self._multi_1_use_primary = config.get("multi_1_use_primary")
+            self._selected_users = config.get("selected_users", [])  # 新增：获取用户筛选配置
 
         if self._selected_servers:
             self._servers = self.mediaserver_helper.get_services(
                 name_filters=self._selected_servers
             )
             self._all_libraries = []
+            self._all_users = []  # 初始化用户列表
             for server, service in self._servers.items():
                 if not service.instance.is_inactive():
                     self._all_libraries.extend(self.__get_all_libraries(server, service))
+                    # 同时获取用户列表
+                    users = self.__get_server_users(service)
+                    for user in users:
+                        self._all_users.append({
+                            "title": f"{server}: {user['name']}",
+                            "value": f"{server}-{user['id']}"
+                        })
                 else:
                     logger.info(f"媒体服务器 {server} 未连接")
         else:
@@ -235,7 +246,8 @@ class MediaCoverGenerator(_PluginBase):
             "color_ratio": self._color_ratio,
             "color_ratio_multi_1": self._color_ratio_multi_1,
             "single_use_primary": self._single_use_primary,
-            "multi_1_use_primary": self._multi_1_use_primary
+            "multi_1_use_primary": self._multi_1_use_primary,
+            "selected_users": self._selected_users  # 新增：保存用户筛选配置
         })
 
     def get_state(self) -> bool:
@@ -1116,6 +1128,48 @@ class MediaCoverGenerator(_PluginBase):
                                                 ]
                                             },
                                         ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'info',
+                                                            'variant': 'tonal',
+                                                            'text': '用户筛选：选择特定用户后，合集将只显示该用户创建的内容。不选择则显示所有用户的合集。'
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSelect',
+                                                        'props': {
+                                                            'multiple': True,
+                                                            'chips': True,
+                                                            'clearable': True,
+                                                            'model': 'selected_users',
+                                                            'label': '合集用户筛选（可选）',
+                                                            'items': self._all_users,
+                                                            'hint': '选择媒体服务器并保存后获取用户列表',
+                                                            'persistentHint': True
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                        ]
                                     }
                                     
                                 ]
@@ -1281,7 +1335,8 @@ class MediaCoverGenerator(_PluginBase):
             "color_ratio": 0.8,
             "color_ratio_multi_1": 0.8,
             "single_use_primary": False,
-            "multi_1_use_primary": True
+            "multi_1_use_primary": True,
+            "selected_users": []  # 新增：默认不筛选用户
         }
 
     def get_page(self) -> List[dict]:
@@ -1505,6 +1560,16 @@ class MediaCoverGenerator(_PluginBase):
             library_id = library.get("ItemId")
         parent_id = library_id
         
+        # 获取当前服务器的选中用户ID（用于非合集库的情况）
+        selected_user_ids = []
+        if self._selected_users and library_type not in ["boxsets", "playlists"]:
+            server_name = service.name
+            # 从 selected_users 中提取当前服务器的用户ID
+            for user_str in self._selected_users:
+                if user_str.startswith(f"{server_name}-"):
+                    user_id = user_str.replace(f"{server_name}-", "")
+                    selected_user_ids.append(user_id)
+        
         # 处理合集类型的特殊情况
         if library_type == "boxsets":
             return self.__handle_boxset_library(service, library, title)
@@ -1513,12 +1578,12 @@ class MediaCoverGenerator(_PluginBase):
         elif library_type == "music":
             include_types = 'MusicAlbum,Audio'
         else:
-            date_created = 'Movie,Episode' if self._cover_style.startswith('single') else 'Movie,Series'
+            date_created = 'Movie,Episode' if self._cover_style and self._cover_style.startswith('single') else 'Movie,Series'
             include_types = {
                 "PremiereDate": "Movie,Series",
                 "DateCreated": date_created,
                 "Random": "Movie,Series"
-            }[self._sort_by]
+            }[self._sort_by if self._sort_by else "Random"]
         for attempt in range(max_attempts):
             batch_items = self.__get_items_batch(service, parent_id,
                                               offset=offset, limit=batch_size,
@@ -1555,8 +1620,20 @@ class MediaCoverGenerator(_PluginBase):
         else:
             library_id = library.get("ItemId")
         parent_id = library_id
+        
+        # 获取当前服务器的选中用户ID
+        selected_user_ids = []
+        if self._selected_users:
+            server_name = service.name
+            # 从 selected_users 中提取当前服务器的用户ID
+            for user_str in self._selected_users:
+                if user_str.startswith(f"{server_name}-"):
+                    user_id = user_str.replace(f"{server_name}-", "")
+                    selected_user_ids.append(user_id)
+        
         boxsets = self.__get_items_batch(service, parent_id,
-                                      include_types=include_types)
+                                      include_types=include_types,
+                                      user_ids=selected_user_ids)
         
         required_items = 1 if self._cover_style.startswith('single') else 9
         valid_items = []
@@ -1573,8 +1650,9 @@ class MediaCoverGenerator(_PluginBase):
                     
                 # 获取此BoxSet中的电影
                 movies = self.__get_items_batch(service,
-                                             parent_id=boxset['Id'], 
-                                             include_types=include_types)
+                                             parent_id=boxset['Id'],
+                                             include_types=include_types,
+                                             user_ids=selected_user_ids)
                 
                 valid_movies = self.__filter_valid_items(movies)
                 valid_items.extend(valid_movies)
@@ -1593,8 +1671,8 @@ class MediaCoverGenerator(_PluginBase):
             return False
         
     def __handle_playlist_library(self, service, library, title):
-        """ 
-        播放列表图片获取 
+        """
+        播放列表图片获取
         """
         include_types = 'Playlist,Movie,Series,Episode,Audio'
         if service.type == 'emby':
@@ -1602,8 +1680,20 @@ class MediaCoverGenerator(_PluginBase):
         else:
             library_id = library.get("ItemId")
         parent_id = library_id
+        
+        # 获取当前服务器的选中用户ID
+        selected_user_ids = []
+        if self._selected_users:
+            server_name = service.name
+            # 从 selected_users 中提取当前服务器的用户ID
+            for user_str in self._selected_users:
+                if user_str.startswith(f"{server_name}-"):
+                    user_id = user_str.replace(f"{server_name}-", "")
+                    selected_user_ids.append(user_id)
+        
         playlists = self.__get_items_batch(service, parent_id,
-                                      include_types=include_types)
+                                      include_types=include_types,
+                                      user_ids=selected_user_ids)
         
         required_items = 1 if self._cover_style.startswith('single') else 9
         valid_items = []
@@ -1620,8 +1710,9 @@ class MediaCoverGenerator(_PluginBase):
                     
                 # 获取此 playlist 中的电影
                 movies = self.__get_items_batch(service,
-                                             parent_id=playlist['Id'], 
-                                             include_types=include_types)
+                                             parent_id=playlist['Id'],
+                                             include_types=include_types,
+                                             user_ids=selected_user_ids)
                 
                 valid_movies = self.__filter_valid_items(movies)
                 valid_items.extend(valid_movies)
@@ -1639,8 +1730,8 @@ class MediaCoverGenerator(_PluginBase):
             print(f"警告: 无法为播放列表 {service.name}：{library['Name']} 找到有效的图片项目")
             return False
         
-    def __get_items_batch(self, service, parent_id, offset=0, limit=20, include_types=None):
-        # 调用API获取项目
+    def __get_items_batch(self, service, parent_id, offset=0, limit=20, include_types=None, user_ids=None):
+        # 调用API获取项目，支持用户筛选
         try:
             if not service:
                 return []
@@ -1659,6 +1750,22 @@ class MediaCoverGenerator(_PluginBase):
                       f'&ParentId={parent_id}&SortBy={sort_by}&Limit={limit}' \
                       f'&StartIndex={offset}&IncludeItemTypes={include_types}' \
                       f'&Recursive=True&SortOrder=Descending'
+                
+                # 如果提供了用户ID列表，则逐个获取每个用户的合集
+                if user_ids and include_types and 'BoxSet' in include_types:
+                    all_items = []
+                    for user_id in user_ids:
+                        user_url = f'{url}&UserId={user_id}'
+                        res = service.instance.get_data(url=user_url)
+                        if res:
+                            data = res.json()
+                            all_items.extend(data.get("Items", []))
+                    
+                    # 去重（基于项目ID）
+                    unique_items = {}
+                    for item in all_items:
+                        unique_items[item['Id']] = item
+                    return list(unique_items.values())
 
                 res = service.instance.get_data(url=url)
                 if res:
@@ -1872,6 +1979,57 @@ class MediaCoverGenerator(_PluginBase):
         except Exception as err:
             logger.error(f"获取所有媒体库失败：{str(err)}")
             return []
+    
+    def __get_server_users(self, service):
+        """
+        获取媒体服务器的用户列表
+        """
+        try:
+            if not service:
+                return []
+            
+            # Emby/Jellyfin API for getting users
+            url = f'[HOST]emby/Users?api_key=[APIKEY]'
+            res = service.instance.get_data(url=url)
+            
+            if res and res.status_code == 200:
+                users = res.json()
+                user_list = []
+                for user in users:
+                    if user.get('Name') and user.get('Id'):
+                        user_list.append({
+                            'name': user['Name'],
+                            'id': user['Id']
+                        })
+                return user_list
+            else:
+                logger.error(f"获取用户列表失败：状态码 {res.status_code if res else 'None'}")
+                return []
+        except Exception as err:
+            logger.error(f"获取用户列表失败：{str(err)}")
+            return []
+    
+    def __get_all_users(self):
+        """
+        获取所有选中服务器的用户列表，用于配置界面
+        """
+        try:
+            all_users = []
+            if self._servers:
+                for server, service in self._servers.items():
+                    if not service.instance.is_inactive():
+                        users = self.__get_server_users(service)
+                        for user in users:
+                            all_users.append({
+                                "title": f"{server}: {user['name']}",
+                                "value": f"{server}-{user['id']}"
+                            })
+                    else:
+                        logger.info(f"媒体服务器 {server} 未连接，无法获取用户列表")
+            return all_users
+        except Exception as err:
+            logger.error(f"获取所有用户列表失败：{str(err)}")
+            return []
         
     def __get_image_url(self, item):
         """
@@ -1953,6 +2111,7 @@ class MediaCoverGenerator(_PluginBase):
         从媒体项信息中获取项目ID
         """
         # Emby/Jellyfin
+        item_id = None  # 初始化变量
         if item['Type'] in 'MusicAlbum,Audio':
             if item.get("ParentBackdropImageTags") and len(item["ParentBackdropImageTags"]) > 0:
                 item_id = item.get("ParentBackdropItemId")
@@ -1961,7 +2120,7 @@ class MediaCoverGenerator(_PluginBase):
             elif item.get("AlbumPrimaryImageTag"):
                 item_id = item.get("AlbumId")
 
-        elif self._cover_style.startswith('multi'):
+        elif self._cover_style and self._cover_style.startswith('multi'):
             if self._multi_1_use_primary:
                 if (item.get("ImageTags") and item.get("ImageTags").get("Primary")) \
                     or (item.get("BackdropImageTags") and len(item["BackdropImageTags"]) > 0):
@@ -1975,7 +2134,7 @@ class MediaCoverGenerator(_PluginBase):
                     or (item.get("BackdropImageTags") and len(item["BackdropImageTags"]) > 0):
                     item_id = item.get("Id")
 
-        elif self._cover_style.startswith('single'):
+        elif self._cover_style and self._cover_style.startswith('single'):
             if self._single_use_primary:
                 if (item.get("BackdropImageTags") and len(item["BackdropImageTags"]) > 0) \
                     or (item.get("ImageTags") and item.get("ImageTags").get("Primary")):
@@ -2056,6 +2215,8 @@ class MediaCoverGenerator(_PluginBase):
         try:
             # 确保目录存在
             local_path = self._covers_output
+            if not local_path:
+                return
             import os
             os.makedirs(local_path, exist_ok=True)
             
