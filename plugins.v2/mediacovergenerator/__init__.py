@@ -1796,17 +1796,32 @@ class MediaCoverGenerator(_PluginBase):
         def load_yaml_safe(yaml_str: str) -> dict:
             try:
                 yaml_str = preprocess_yaml_text(yaml_str)
+                # 添加调试日志
+                logger.debug(f"准备解析的YAML配置:\n{yaml_str}")
                 data = yaml.safe_load(yaml_str)
                 if not isinstance(data, dict):
                     raise ValueError("YAML 顶层结构必须是一个字典")
+                logger.debug(f"YAML解析成功，共有 {len(data)} 个媒体库配置")
                 return data
             except yaml.YAMLError as e:
-                raise ValueError(f"YAML 解析错误：{str(e)}")
+                # 提供更详细的错误信息
+                error_msg = str(e)
+                if hasattr(e, 'problem_mark') and e.problem_mark:
+                    mark = e.problem_mark
+                    if hasattr(e, 'problem'):
+                        error_msg = f"YAML 解析错误在第 {mark.line + 1} 行，第 {mark.column + 1} 列: {e.problem}"
+                    else:
+                        error_msg = f"YAML 解析错误在第 {mark.line + 1} 行，第 {mark.column + 1} 列"
+                raise ValueError(error_msg)
             
         def validate_title_config(data: dict) -> dict:
             for key, value in data.items():
-                if not isinstance(value, list) or len(value) < 2:
-                    raise ValueError(f"条目“{key}”格式错误，必须是包含中英文标题的列表")
+                if not isinstance(value, list):
+                    raise ValueError(f"媒体库 '{key}' 的配置必须是列表格式，当前类型: {type(value).__name__}")
+                if len(value) < 1:
+                    raise ValueError(f"媒体库 '{key}' 至少需要配置一个标题")
+                if len(value) > 2:
+                    logger.warning(f"媒体库 '{key}' 配置了 {len(value)} 个标题，将只使用前两个")
             return data
 
         def load_and_validate_titles(yaml_str: str) -> dict:
@@ -1818,14 +1833,25 @@ class MediaCoverGenerator(_PluginBase):
         if self._title_config:
             try:
                 title_config = load_and_validate_titles(self._title_config)
-                for lib_name, (zh, en) in title_config.items():
+                for lib_name, titles in title_config.items():
                     if lib_name == library_name:
-                        zh_title = zh
-                        en_title = en
+                        if isinstance(titles, list) and len(titles) >= 2:
+                            zh_title = titles[0]
+                            en_title = titles[1]
+                        elif isinstance(titles, list) and len(titles) == 1:
+                            zh_title = titles[0]
+                            en_title = ''
+                            logger.warning(f"媒体库 {library_name} 只配置了中文标题，英文标题留空")
+                        else:
+                            logger.warning(f"媒体库 {library_name} 的标题配置格式错误: {titles}")
                         break
             except ValueError as e:
-                # 如果YAML解析出错，记录错误并继续
-                logger.info(f"标题未正确配置，将使用库名: {library_name}")
+                # 如果YAML解析出错，记录详细错误
+                logger.error(f"标题配置解析失败: {str(e)}")
+                logger.info(f"将使用库名作为标题: {library_name}")
+            except Exception as e:
+                logger.error(f"标题配置处理异常: {type(e).__name__}: {str(e)}")
+                logger.info(f"将使用库名作为标题: {library_name}")
         return (zh_title, en_title)
     
     def __get_server_libraries(self, service):
