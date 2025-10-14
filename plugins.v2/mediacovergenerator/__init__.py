@@ -47,7 +47,7 @@ class MediaCoverGenerator(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     # 插件版本
-    plugin_version = "0.8.9"
+    plugin_version = "0.9.0"
     # 插件作者
     plugin_author = "wuyaos,justzerock"
     # 作者主页
@@ -286,8 +286,8 @@ class MediaCoverGenerator(_PluginBase):
         """
         拼装插件配置页面
         """
-        # 标题配置
-        title_tab = [
+        # 基础设置标签页 - 最常用的核心功能
+        basic_tab = [
             {
                 'component': 'VRow',
                 'content': [
@@ -302,43 +302,15 @@ class MediaCoverGenerator(_PluginBase):
                                 'props': {
                                     'type': 'info',
                                     'variant': 'tonal',
-                                    'text': '使用JSON格式配置媒体库标题。未配置的媒体库将默认使用媒体库名称作为封面中文标题，无副标题。'
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12
-                        },
-                        'content': [
-                            {
-                                'component': 'VAceEditor',
-                                'props': {
-                                    'modelvalue': 'title_config',
-                                    'lang': 'json',
-                                    'theme': 'monokai',
-                                    'style': 'height: 30rem',
-                                    'label': '中英标题配置（JSON格式）',
-                                    'placeholder': '''{
-  "华语电影": ["华语电影", "Chinese Movies"],
-  "欧美电影": ["欧美电影", "Western Movies"],
-  "电视剧": ["电视剧", "TV Series"],
-  "动漫": ["动漫", "Anime"],
-  "纪录片": ["纪录片", "Documentary"]
-}'''
+                                    'text': '媒体库封面生成插件 - 支持Emby/Jellyfin，'
+                                           '自动为您的媒体库生成美观的封面图',
+                                    'class': 'mb-4'
                                 }
                             }
                         ]
                     }
                 ]
             },
-        ]
-
-        # 字体与封面目录标签
-        others_tab = [
-            
             {
                 'component': 'VRow',
                 'content': [
@@ -346,265 +318,193 @@ class MediaCoverGenerator(_PluginBase):
                         'component': 'VCol',
                         'props': {
                             'cols': 12,
-                        },
-                        'content': [
-                            {
-                                'component': 'VAlert',
-                                'props': {
-                                    'type': 'info',
-                                    'variant': 'tonal',
-                                    'text': '自定义图片目录：请将图片存于与媒体库同名的子目录下，例如：/mnt/custom_images/华语电影/1.jpg，填写 /mnt/custom_images 即可。多图模式下，文件名须为 1.jpg, 2.jpg, ...9.jpg，不满足的会被重命名，不够的会随机复制填满9张'
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
                             'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'covers_input',
-                                    'label': '自定义图片目录（可选）',
-                                    'prependInnerIcon': 'mdi-file-image',
-                                    'hint': '使用目录内图片生成封面',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'covers_output',
-                                    'label': '封面另存目录（可选）',
-                                    'prependInnerIcon': 'mdi-file-image',
-                                    'hint': '生成的封面在此另存一份',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    }
-                ]
-            },
-            
-        ]
-        # 字体与封面目录标签
-        single_tab = [
-            {
-                'component': 'VRow',
-                'content': [
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                        },
-                        'content': [
-                            {
-                                'component': 'VAlert',
-                                'props': {
-                                    'type': 'info',
-                                    'variant': 'tonal',
-                                    'text': '若字体无法下载，建议设置：系统 -> 高级设置 -> 网络 -> GitHub加速代理，或者手动下载，填写本地路径'
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'zh_font_path_local',
-                                    'label': '中文字体（本地路径）',
-                                    'prependInnerIcon': 'mdi-ideogram-cjk',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '字体本地路径，优先使用',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'en_font_path_local',
-                                    'label': '英文字体（本地路径）',
-                                    'prependInnerIcon': 'mdi-format-font',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '字体本地路径，优先使用',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'zh_font_url',
-                                    'label': '中文字体（下载链接）',
-                                    'prependInnerIcon': 'mdi-link',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '下载链接，优先级低于本地路径',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'en_font_url',
-                                    'label': '英文字体（下载链接）',
-                                    'prependInnerIcon': 'mdi-link',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '下载链接，优先级低于本地路径',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'zh_font_size',
-                                    'label': '中文字体大小比例',
-                                    'prependInnerIcon': 'mdi-format-size',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '根据自己喜好设置，值为相对原本尺寸的比例，1为原本大小',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'en_font_size',
-                                    'label': '英文字体大小比例',
-                                    'prependInnerIcon': 'mdi-format-size',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '根据自己喜好设置，值为相对原本尺寸的比例，1为原本大小',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'blur_size',
-                                    'label': '背景模糊尺寸',
-                                    'prependInnerIcon': 'mdi-blur',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '数字越大越模糊，默认 50',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'color_ratio',
-                                    'label': '背景颜色混合占比',
-                                    'prependInnerIcon': 'mdi-format-color-fill',
-                                    'placeholder': '留空使用预设占比',
-                                    'hint': '颜色所占的比例，0-1，默认 0.8',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 3
                         },
                         'content': [
                             {
                                 'component': 'VSwitch',
                                 'props': {
-                                    'model': 'single_use_primary',
-                                    'label': '优先使用海报图',
-                                    'hint': '单图不建议开启，不启用则优先使用背景图，没有背景图也会使用海报图',
-                                    "persistent-hint": True,
+                                    'model': 'enabled',
+                                    'label': '启用插件',
+                                    'hint': '开启后将自动为媒体库生成封面',
+                                    'persistentHint': True,
+                                    'color': 'primary'
                                 }
                             }
                         ]
                     },
-                    
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VSwitch',
+                                'props': {
+                                    'model': 'onlyonce',
+                                    'label': '立即运行一次',
+                                    'hint': '保存后立即更新所有媒体库封面',
+                                    'persistentHint': True,
+                                    'color': 'success'
+                                }
+                            }
+                        ]
+                    }
                 ]
             },
-            
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VDivider',
+                                'props': {
+                                    'class': 'my-4'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'multiple': True,
+                                    'chips': True,
+                                    'clearable': True,
+                                    'model': 'selected_servers',
+                                    'label': '媒体服务器',
+                                    'items': [{"title": config.name, "value": config.name}
+                                             for config in
+                                             self.mediaserver_helper.get_configs().values()
+                                             if config.type in ("emby", "jellyfin")],
+                                    'hint': '选择要管理封面的媒体服务器（支持多选）',
+                                    'persistentHint': True,
+                                    'prependInnerIcon': 'mdi-server',
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VSwitch',
+                                'props': {
+                                    'model': 'transfer_monitor',
+                                    'label': '入库监控',
+                                    'hint': '新媒体入库后自动更新所在库的封面',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'delay',
+                                    'label': '入库延迟（秒）',
+                                    'placeholder': '60',
+                                    'type': 'number',
+                                    'hint': '等待媒体服务器扫描完成后再更新封面',
+                                    'persistentHint': True,
+                                    'variant': 'outlined',
+                                    'disabled': '{{ !transfer_monitor }}'
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VCronField',
+                                'props': {
+                                    'model': 'cron',
+                                    'label': '定时更新',
+                                    'placeholder': '0 3 * * *',
+                                    'hint': '使用Cron表达式定时更新所有封面',
+                                    'persistentHint': True,
+                                    'prependInnerIcon': 'mdi-clock-outline',
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'chips': True,
+                                    'multiple': False,
+                                    'model': 'sort_by',
+                                    'label': '封面来源排序',
+                                    'items': [
+                                        {"title": "随机", "value": "Random"},
+                                        {"title": "最新入库", "value": "DateCreated"},
+                                        {"title": "最新发行", "value": "PremiereDate"}
+                                    ],
+                                    'hint': '选择媒体项的排序方式',
+                                    'persistentHint': True,
+                                    'prependInnerIcon': 'mdi-sort',
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                ]
+            }
         ]
 
+        # 封面风格选择卡片生成
         styles = [
             {
                 "title": "单图 1",
@@ -624,14 +524,13 @@ class MediaCoverGenerator(_PluginBase):
         ]
 
         style_content = []
-
         for style in styles:
             style_content.append(
                 {
                     'component': 'VCol',
                     'props': {
                         'cols': 12,
-                        'md': 3,
+                        'md': 4,
                     },
                     'content': [
                         {
@@ -646,12 +545,12 @@ class MediaCoverGenerator(_PluginBase):
                                         "aspect-ratio": "16/9",
                                         "cover": True,
                                     }
-                                },  
+                                },
                                 {
                                     "component": "VCardTitle",
-                                    # "text": style.get("title"),
                                     "props": {
-                                        "class": "text-secondary text-h6 text-center bg-surface-light"
+                                        "class": "text-secondary text-h6 "
+                                                 "text-center bg-surface-light"
                                     },
                                     "content": [
                                         {
@@ -670,22 +569,59 @@ class MediaCoverGenerator(_PluginBase):
                 }
             )
 
-        # 封面风格设置标签
+        # 封面风格标签页 - 样式选择和视觉设置
         style_tab = [
             {
-                'component': 'VRadioGroup',
-                'props': {
-                    'model': 'cover_style',
-                    'inline': True,
-                },
-                'content': style_content
-            }
-        ]
-
-        # 多图风格设置
-        multi_1_tab = [
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VRadioGroup',
+                                'props': {
+                                    'model': 'cover_style',
+                                    'inline': True,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VRow',
+                                        'content': style_content
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
             {
                 'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VDivider',
+                                'props': {
+                                    'class': 'my-4'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            # 单图风格设置
+            {
+                'component': 'VRow',
+                'props': {
+                    'class': 'single-style-settings'
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -698,7 +634,8 @@ class MediaCoverGenerator(_PluginBase):
                                 'props': {
                                     'type': 'info',
                                     'variant': 'tonal',
-                                    'text': '若字体无法下载，建议设置：系统 -> 高级设置 -> 网络 -> GitHub加速代理，或者手动下载，填写本地路径'
+                                    'text': '单图风格设置',
+                                    'class': 'mb-2'
                                 }
                             }
                         ]
@@ -707,17 +644,15 @@ class MediaCoverGenerator(_PluginBase):
                         'component': 'VCol',
                         'props': {
                             'cols': 12,
-                            'md': 6
+                            'md': 4
                         },
                         'content': [
                             {
-                                'component': 'VTextField',
+                                'component': 'VSwitch',
                                 'props': {
-                                    'model': 'zh_font_path_multi_1_local',
-                                    'label': '中文字体（本地路径）',
-                                    'prependInnerIcon': 'mdi-ideogram-cjk',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '字体本地路径，优先使用，多图风格专用',
+                                    'model': 'single_use_primary',
+                                    'label': '优先使用海报图',
+                                    'hint': '否则优先使用背景图',
                                     'persistentHint': True
                                 }
                             }
@@ -727,18 +662,19 @@ class MediaCoverGenerator(_PluginBase):
                         'component': 'VCol',
                         'props': {
                             'cols': 12,
-                            'md': 6
+                            'md': 4
                         },
                         'content': [
                             {
                                 'component': 'VTextField',
                                 'props': {
-                                    'model': 'en_font_path_multi_1_local',
-                                    'label': '英文字体（本地路径）',
-                                    'prependInnerIcon': 'mdi-format-font',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '字体本地路径，优先使用，多图风格专用',
-                                    'persistentHint': True
+                                    'model': 'blur_size',
+                                    'label': '背景模糊程度',
+                                    'type': 'number',
+                                    'placeholder': '50',
+                                    'hint': '数值越大越模糊',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
                                 }
                             }
                         ]
@@ -747,160 +683,48 @@ class MediaCoverGenerator(_PluginBase):
                         'component': 'VCol',
                         'props': {
                             'cols': 12,
-                            'md': 6
+                            'md': 4
                         },
                         'content': [
                             {
                                 'component': 'VTextField',
                                 'props': {
-                                    'model': 'zh_font_url_multi_1',
-                                    'label': '中文字体（下载链接）',
-                                    'prependInnerIcon': 'mdi-link',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '下载链接，优先级低于本地路径，多图风格专用',
-                                    'persistentHint': True
+                                    'model': 'color_ratio',
+                                    'label': '背景颜色混合比',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'min': '0',
+                                    'max': '1',
+                                    'placeholder': '0.8',
+                                    'hint': '0-1之间，控制颜色占比',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
                                 }
                             }
                         ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'en_font_url_multi_1',
-                                    'label': '英文字体（下载链接）',
-                                    'prependInnerIcon': 'mdi-link',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '下载链接，优先级低于本地路径，多图风格专用',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'zh_font_size_multi_1',
-                                    'label': '中文字体大小比例',
-                                    'prependInnerIcon': 'mdi-format-size',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '根据自己喜好设置，值为相对原本尺寸的比例，1为原本大小',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'en_font_size_multi_1',
-                                    'label': '英文字体大小比例',
-                                    'prependInnerIcon': 'mdi-format-size',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '根据自己喜好设置，值为相对原本尺寸的比例，1为原本大小',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'blur_size_multi_1',
-                                    'label': '背景模糊尺寸',
-                                    'prependInnerIcon': 'mdi-blur',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '不启用模糊背景请忽略，数字越大越模糊，默认 50',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'color_ratio_multi_1',
-                                    'label': '背景颜色混合占比',
-                                    'prependInnerIcon': 'mdi-format-color-fill',
-                                    'placeholder': '留空使用预设占比',
-                                    'hint': '不启用模糊背景请忽略，颜色所占的比例，0-1，默认 0.8',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    
+                    }
                 ]
             },
+            # 多图风格设置
             {
                 'component': 'VRow',
+                'props': {
+                    'class': 'multi-style-settings mt-4'
+                },
                 'content': [
                     {
                         'component': 'VCol',
                         'props': {
                             'cols': 12,
-                            'md': 3
                         },
                         'content': [
                             {
-                                'component': 'VSwitch',
+                                'component': 'VAlert',
                                 'props': {
-                                    'model': 'multi_1_blur',
-                                    'label': '启用模糊背景',
-                                    'hint': '不启用则使用纯色渐变背景',
-                                    "persistent-hint": True,
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 3
-                        },
-                        'content': [
-                            {
-                                'component': 'VSwitch',
-                                'props': {
-                                    'model': 'multi_1_use_main_font',
-                                    'label': '使用单图风格字体',
-                                    'hint': '勾选则忽略本页字体设置，字体大小除外',
-                                    "persistent-hint": True,
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '多图风格设置',
+                                    'class': 'mb-2'
                                 }
                             }
                         ]
@@ -917,8 +741,763 @@ class MediaCoverGenerator(_PluginBase):
                                 'props': {
                                     'model': 'multi_1_use_primary',
                                     'label': '优先使用海报图',
-                                    'hint': '多图建议开启，不启用则优先使用背景图，没有背景图也会使用海报图',
+                                    'hint': '多图模式建议开启',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 3
+                        },
+                        'content': [
+                            {
+                                'component': 'VSwitch',
+                                'props': {
+                                    'model': 'multi_1_blur',
+                                    'label': '启用模糊背景',
+                                    'hint': '否则使用纯色渐变',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 3
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'blur_size_multi_1',
+                                    'label': '背景模糊程度',
+                                    'type': 'number',
+                                    'placeholder': '50',
+                                    'hint': '启用模糊时有效',
+                                    'persistentHint': True,
+                                    'variant': 'outlined',
+                                    'disabled': '{{ !multi_1_blur }}'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 3
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'color_ratio_multi_1',
+                                    'label': '背景颜色混合比',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'min': '0',
+                                    'max': '1',
+                                    'placeholder': '0.8',
+                                    'hint': '启用模糊时有效',
+                                    'persistentHint': True,
+                                    'variant': 'outlined',
+                                    'disabled': '{{ !multi_1_blur }}'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+
+        # 媒体库管理标签页 - 整合媒体库配置和用户筛选
+        library_tab = [
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'multiple': True,
+                                    'chips': True,
+                                    'clearable': True,
+                                    'model': 'exclude_libraries',
+                                    'label': '忽略媒体库',
+                                    'items': [
+                                        {"title": config['name'], "value": config['value']}
+                                            for config in self._all_libraries
+                                    ],
+                                    'hint': '选择不需要自动更新封面的媒体库',
+                                    'persistentHint': True,
+                                    'prependInnerIcon': 'mdi-folder-off-outline',
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VDivider',
+                                'props': {
+                                    'class': 'my-4'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '使用JSON格式配置媒体库标题。'
+                                           '格式："库名": ["中文标题", "英文标题"]',
+                                    'class': 'mb-2'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12
+                        },
+                        'content': [
+                            {
+                                'component': 'VAceEditor',
+                                'props': {
+                                    'modelvalue': 'title_config',
+                                    'lang': 'json',
+                                    'theme': 'monokai',
+                                    'style': 'height: 15rem',
+                                    'label': '媒体库标题配置',
+                                    'placeholder': '''{
+  "华语电影": ["华语电影", "Chinese Movies"],
+  "欧美电影": ["欧美电影", "Western Movies"],
+  "电视剧": ["电视剧", "TV Series"],
+  "动漫": ["动漫", "Anime"],
+  "纪录片": ["纪录片", "Documentary"]
+}'''
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VDivider',
+                                'props': {
+                                    'class': 'my-4'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '用户筛选功能：选择特定用户后，合集将只显示该用户创建的内容',
+                                    'class': 'mb-2'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'multiple': True,
+                                    'chips': True,
+                                    'clearable': True,
+                                    'model': 'selected_users',
+                                    'label': '合集用户筛选',
+                                    'items': self._all_users,
+                                    'hint': '不选择则显示所有用户的合集（先选择媒体服务器）',
+                                    'persistentHint': True,
+                                    'prependInnerIcon': 'mdi-account-filter',
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                ]
+            }
+        ]
+
+
+        # 字体设置标签页 - 整合单图和多图字体
+        font_tab = [
+            # 通用字体设置提示
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '字体设置：优先使用本地路径，'
+                                           '如未设置则从URL下载',
+                                    'class': 'mb-4'
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            # 单图字体设置部分
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '单图风格字体设置',
+                                    'class': 'mb-2'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_path_local',
+                                    'label': '中文字体本地路径',
+                                    'prependInnerIcon': 'mdi-ideogram-cjk',
+                                    'placeholder': '/path/to/chinese.ttf',
+                                    'hint': '优先使用本地字体文件',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_path_local',
+                                    'label': '英文字体本地路径',
+                                    'prependInnerIcon': 'mdi-format-font',
+                                    'placeholder': '/path/to/english.ttf',
+                                    'hint': '优先使用本地字体文件',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_url',
+                                    'label': '中文字体下载链接',
+                                    'prependInnerIcon': 'mdi-link',
+                                    'placeholder': 'https://example.com/font.ttf',
+                                    'hint': '本地路径未设置时使用',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_url',
+                                    'label': '英文字体下载链接',
+                                    'prependInnerIcon': 'mdi-link',
+                                    'placeholder': 'https://example.com/font.ttf',
+                                    'hint': '本地路径未设置时使用',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VDivider',
+                                'props': {
+                                    'class': 'my-4'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 4
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_size',
+                                    'label': '中文字体大小',
+                                    'prependInnerIcon': 'mdi-format-size',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'placeholder': '1.0',
+                                    'hint': '相对原尺寸的比例',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 4
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_size',
+                                    'label': '英文字体大小',
+                                    'prependInnerIcon': 'mdi-format-size',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'placeholder': '1.0',
+                                    'hint': '相对原尺寸的比例',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 4
+                        },
+                        'content': [
+                            {
+                                'component': 'VSwitch',
+                                'props': {
+                                    'model': 'single_use_primary',
+                                    'label': '优先使用海报图',
+                                    'hint': '否则优先使用背景图',
                                     "persistent-hint": True,
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'blur_size',
+                                    'label': '背景模糊程度',
+                                    'prependInnerIcon': 'mdi-blur',
+                                    'type': 'number',
+                                    'placeholder': '50',
+                                    'hint': '数值越大越模糊',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'color_ratio',
+                                    'label': '背景颜色混合比',
+                                    'prependInnerIcon': 'mdi-format-color-fill',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'min': '0',
+                                    'max': '1',
+                                    'placeholder': '0.8',
+                                    'hint': '0-1之间，控制颜色占比',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            # 分隔线
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VDivider',
+                                'props': {
+                                    'class': 'my-4'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            # 多图字体设置部分
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '多图风格字体设置',
+                                    'class': 'mb-2'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VSwitch',
+                                'props': {
+                                    'model': 'multi_1_use_main_font',
+                                    'label': '使用单图字体',
+                                    'hint': '勾选后忽略多图专用字体',
+                                    "persistent-hint": True,
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_path_multi_1_local',
+                                    'label': '中文字体本地路径',
+                                    'prependInnerIcon': 'mdi-ideogram-cjk',
+                                    'placeholder': '/path/to/chinese.ttf',
+                                    'hint': '多图风格专用字体',
+                                    'persistentHint': True,
+                                    'disabled': '{{ multi_1_use_main_font }}'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_path_multi_1_local',
+                                    'label': '英文字体本地路径',
+                                    'prependInnerIcon': 'mdi-format-font',
+                                    'placeholder': '/path/to/english.ttf',
+                                    'hint': '多图风格专用字体',
+                                    'persistentHint': True,
+                                    'disabled': '{{ multi_1_use_main_font }}'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_url_multi_1',
+                                    'label': '中文字体下载链接',
+                                    'prependInnerIcon': 'mdi-link',
+                                    'placeholder': 'https://example.com/font.ttf',
+                                    'hint': '本地路径未设置时使用',
+                                    'persistentHint': True,
+                                    'disabled': '{{ multi_1_use_main_font }}'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_url_multi_1',
+                                    'label': '英文字体下载链接',
+                                    'prependInnerIcon': 'mdi-link',
+                                    'placeholder': 'https://example.com/',
+                                    'hint': '本地路径未设置时使用',
+                                    'persistentHint': True,
+                                    'disabled': '{{ multi_1_use_main_font }}'
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_size_multi_1',
+                                    'label': '中文字体大小',
+                                    'prependInnerIcon': 'mdi-format-size',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'placeholder': '1.0',
+                                    'hint': '相对原尺寸的比例',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_size_multi_1',
+                                    'label': '英文字体大小',
+                                    'prependInnerIcon': 'mdi-format-size',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'placeholder': '1.0',
+                                    'hint': '相对原尺寸的比例',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'blur_size_multi_1',
+                                    'label': '背景模糊程度',
+                                    'prependInnerIcon': 'mdi-blur',
+                                    'type': 'number',
+                                    'placeholder': '50',
+                                    'hint': '启用模糊时有效',
+                                    'persistentHint': True,
+                                    'disabled': '{{ !multi_1_blur }}'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'color_ratio_multi_1',
+                                    'label': '背景颜色混合比',
+                                    'prependInnerIcon': 'mdi-format-color-fill',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'min': '0',
+                                    'max': '1',
+                                    'placeholder': '0.8',
+                                    'hint': '启用模糊时有效',
+                                    'persistentHint': True,
+                                    'disabled': '{{ !multi_1_blur }}'
                                 }
                             }
                         ]
@@ -927,385 +1506,169 @@ class MediaCoverGenerator(_PluginBase):
             },
         ]
 
-
-        return [
+        # 高级设置标签页
+        advanced_tab = [
             {
-                "component": "VCard",
-                "props": {"variant": "outlined", "class": "mb-3"},
-                "content": [
+                'component': 'VRow',
+                'content': [
                     {
-                        "component": "VCardTitle",
-                        "props": {"class": "d-flex align-center"},
-                        "content": [
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
                             {
-                                "component": "VIcon",
-                                "props": {
-                                    "icon": "mdi-cog",
-                                    "color": "primary",
-                                    "class": "mr-2",
-                                },
-                            },
-                            {"component": "span", "text": "基础设置"},
-                        ],
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '自定义图片：将图片存于与媒体库同名的'
+                                           '子目录下。多图模式需要1-9.jpg',
+                                    'class': 'mb-2'
+                                }
+                            }
+                        ]
                     },
-                    {"component": "VDivider"},
                     {
-                        "component": "VCardText",
-                        "content": [
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
                             {
-                                'component': 'VForm',
-                                'content': [
-                                    {
-                                        'component': 'VRow',
-                                        'content': [
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSwitch',
-                                                        'props': {
-                                                            'model': 'enabled',
-                                                            'label': '启用插件',
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSwitch',
-                                                        'props': {
-                                                            'model': 'onlyonce',
-                                                            'label': '立即运行一次',
-                                                            'hint': '更新全部媒体库封面',
-                                                            'persistentHint': True
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSwitch',
-                                                        'props': {
-                                                            'model': 'transfer_monitor',
-                                                            'label': '入库监控',
-                                                            'hint': '自动更新入库媒体所在媒体库封面',
-                                                            'persistentHint': True
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VTextField',
-                                                        'props': {
-                                                            'model': 'delay',
-                                                            'label': '入库延迟（秒）',
-                                                            'placeholder': '60',
-                                                            'hint': '根据实际情况调整延迟时间',
-                                                            'persistentHint': True
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                        ]
-                                    },
-                                    {
-                                        'component': 'VRow',
-                                        'content': [
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 6
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSelect',
-                                                        'props': {
-                                                            'multiple': True,
-                                                            'chips': True,
-                                                            'clearable': True,
-                                                            'model': 'selected_servers',
-                                                            'label': '媒体服务器',
-                                                            'items': [{"title": config.name, "value": config.name}
-                                                                    for config in self.mediaserver_helper.get_configs().values()
-                                                                    if config.type in ("emby", "jellyfin")
-                                                                    ]
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSelect',
-                                                        'props': {
-                                                            'chips': True,
-                                                            'multiple': False,
-                                                            'model': 'sort_by',
-                                                            'label': '封面来源排序，默认随机',
-                                                            'items': [
-                                                                {"title": "随机", "value": "Random"},
-                                                                {"title": "最新入库", "value": "DateCreated"},
-                                                                {"title": "最新发行", "value": "PremiereDate"}
-                                                                ]
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VCronField',
-                                                        'props': {
-                                                            'model': 'cron',
-                                                            'label': '定时更新封面',
-                                                            'placeholder': '5位cron表达式'
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            
-                                        ]
-                                    },
-                                    {
-                                        'component': 'VRow',
-                                        'content': [
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSelect',
-                                                        'props': {
-                                                            'multiple': True,
-                                                            'chips': True,
-                                                            'clearable': True,
-                                                            'model': 'exclude_libraries',
-                                                            'label': '忽略媒体库，默认更新全部',
-                                                            'items': [
-                                                                {"title": config['name'], "value": config['value']}
-                                                                    for config in self._all_libraries
-                                                            ],
-                                                            'hint': '勾选媒体服务器，保存后获取列表',
-                                                            'persistentHint': True
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                        ]
-                                    },
-                                    {
-                                        'component': 'VRow',
-                                        'content': [
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VAlert',
-                                                        'props': {
-                                                            'type': 'info',
-                                                            'variant': 'tonal',
-                                                            'text': '用户筛选：选择特定用户后，合集将只显示该用户创建的内容。不选择则显示所有用户的合集。'
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSelect',
-                                                        'props': {
-                                                            'multiple': True,
-                                                            'chips': True,
-                                                            'clearable': True,
-                                                            'model': 'selected_users',
-                                                            'label': '合集用户筛选（可选）',
-                                                            'items': self._all_users,
-                                                            'hint': '选择媒体服务器并保存后获取用户列表',
-                                                            'persistentHint': True
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                        ]
-                                    }
-                                    
-                                ]
-                            },
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'covers_input',
+                                    'label': '自定义图片目录',
+                                    'prependInnerIcon': 'mdi-folder-image',
+                                    'hint': '使用自定义图片生成封面',
+                                    'persistentHint': True,
+                                    'placeholder': '/mnt/custom_images',
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'covers_output',
+                                    'label': '封面另存目录',
+                                    'prependInnerIcon': 'mdi-content-save-all',
+                                    'hint': '生成的封面另存一份',
+                                    'persistentHint': True,
+                                    'placeholder': '/mnt/covers_backup',
+                                    'variant': 'outlined'
+                                }
+                            }
                         ]
                     }
                 ]
-            },
+            }
+        ]
+
+        # 返回完整的表单结构
+        return [
             {
-                "component": "VCard",
-                "props": {"variant": "outlined"},
+                "component": "VTabs",
+                "props": {
+                    "model": "tab",
+                    "height": 400,
+                    "fixed-tabs": True,
+                    "color": "primary"
+                },
                 "content": [
                     {
-                        "component": "VTabs",
-                        "props": {"model": "tab", "grow": True, "color": "primary"},
+                        "component": "VTab",
+                        "props": {"value": "basic"},
                         "content": [
-                            {
-                                "component": "VTab",
-                                "props": {"value": "style-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-palette-swatch",
-                                            "start": True,
-                                            "color": "#cc76d1",
-                                        },
-                                    },
-                                    {"component": "span", "text": "封面风格"},
-                                ],
-                            },
-                            {
-                                "component": "VTab",
-                                "props": {"value": "title-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-text-box-edit",
-                                            "start": True,
-                                            "color": "#1976D2",
-                                        },
-                                    },
-                                    {"component": "span", "text": "封面标题"},
-                                ],
-                            },
-                            {
-                                "component": "VTab",
-                                "props": {"value": "single-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-palette-swatch-variant",
-                                            "start": True,
-                                            "color": "#f3afe4",
-                                        },
-                                    },
-                                    {"component": "span", "text": "单图风格设置"},
-                                ],
-                            },
-                            {
-                                "component": "VTab",
-                                "props": {"value": "multi-1-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-palette-swatch-variant",
-                                            "start": True,
-                                            "color": "#609585",
-                                        },
-                                    },
-                                    {"component": "span", "text": "多图风格1设置"},
-                                ],
-                            },
-                            {
-                                "component": "VTab",
-                                "props": {"value": "others-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-cogs",
-                                            "start": True,
-                                            "color": "#8958f4",
-                                        },
-                                    },
-                                    {"component": "span", "text": "其他设置"},
-                                ],
-                            },
+                            {"component": "VIcon",
+                             "props": {"icon": "mdi-cog", "start": True}},
+                            {"component": "span", "text": "基础设置"},
                         ],
                     },
-                    {"component": "VDivider"},
                     {
-                        "component": "VWindow",
-                        "props": {"model": "tab"},
+                        "component": "VTab",
+                        "props": {"value": "style"},
                         "content": [
-                            {
-                                "component": "VWindowItem",
-                                "props": {"value": "title-tab"},
-                                "content": [
-                                    {
-                                        "component": "VCardText",
-                                        "content": title_tab,
-                                    }
-                                ],
-                            },
-                            {
-                                "component": "VWindowItem",
-                                "props": {"value": "others-tab"},
-                                "content": [
-                                    {"component": "VCardText", "content": others_tab}
-                                ],
-                            },
-                            {
-                                "component": "VWindowItem",
-                                "props": {"value": "style-tab"},
-                                "content": [
-                                    {"component": "VCardText", "content": style_tab}
-                                ],
-                            },
-                            {
-                                "component": "VWindowItem",
-                                "props": {"value": "single-tab"},
-                                "content": [
-                                    {"component": "VCardText", "content": single_tab}
-                                ],
-                            },
-                            {
-                                "component": "VWindowItem",
-                                "props": {"value": "multi-1-tab"},
-                                "content": [
-                                    {"component": "VCardText", "content": multi_1_tab}
-                                ],
-                            },
+                            {"component": "VIcon",
+                             "props": {"icon": "mdi-palette-swatch", "start": True}},
+                            {"component": "span", "text": "封面风格"},
+                        ],
+                    },
+                    {
+                        "component": "VTab",
+                        "props": {"value": "library"},
+                        "content": [
+                            {"component": "VIcon",
+                             "props": {"icon": "mdi-folder-cog", "start": True}},
+                            {"component": "span", "text": "媒体库配置"},
+                        ],
+                    },
+                    {
+                        "component": "VTab",
+                        "props": {"value": "font"},
+                        "content": [
+                            {"component": "VIcon", "props": {"icon": "mdi-format-font", "start": True}},
+                            {"component": "span", "text": "字体设置"},
+                        ],
+                    },
+                    {
+                        "component": "VTab",
+                        "props": {"value": "advanced"},
+                        "content": [
+                            {"component": "VIcon",
+                             "props": {"icon": "mdi-cogs", "start": True}},
+                            {"component": "span", "text": "高级设置"},
+                        ],
+                    },
+                ]
+            },
+            {
+                "component": "VWindow",
+                "props": {"model": "tab"},
+                "content": [
+                    {
+                        "component": "VWindowItem",
+                        "props": {"value": "basic"},
+                        "content": [
+                            {"component": "VCardText", "content": basic_tab}
+                        ],
+                    },
+                    {
+                        "component": "VWindowItem",
+                        "props": {"value": "style"},
+                        "content": [
+                            {"component": "VCardText", "content": style_tab}
+                        ],
+                    },
+                    {
+                        "component": "VWindowItem",
+                        "props": {"value": "library"},
+                        "content": [
+                            {"component": "VCardText", "content": library_tab}
+                        ],
+                    },
+                    {
+                        "component": "VWindowItem",
+                        "props": {"value": "font"},
+                        "content": [
+                            {"component": "VCardText", "content": font_tab}
+                        ],
+                    },
+                    {
+                        "component": "VWindowItem",
+                        "props": {"value": "advanced"},
+                        "content": [
+                            {"component": "VCardText", "content": advanced_tab}
                         ],
                     },
                 ],
@@ -1322,7 +1685,7 @@ class MediaCoverGenerator(_PluginBase):
             "title_config": '''{
   "示例媒体库": ["中文标题", "English Title"]
 }''',
-            "tab": "style-tab",
+            "tab": "basic",
             "cover_style": "single_1",
             "multi_1_blur": False,
             "multi_1_use_main_font": False,
@@ -1336,7 +1699,7 @@ class MediaCoverGenerator(_PluginBase):
             "color_ratio_multi_1": 0.8,
             "single_use_primary": False,
             "multi_1_use_primary": True,
-            "selected_users": []  # 新增：默认不筛选用户
+            "selected_users": []  # 默认不筛选用户
         }
 
     def get_page(self) -> List[dict]:
