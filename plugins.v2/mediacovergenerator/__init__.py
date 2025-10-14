@@ -290,6 +290,9 @@ class MediaCoverGenerator(_PluginBase):
         basic_tab = [
             {
                 'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -304,7 +307,7 @@ class MediaCoverGenerator(_PluginBase):
                                     'variant': 'tonal',
                                     'text': '媒体库封面生成插件 - 支持Emby/Jellyfin，'
                                            '自动为您的媒体库生成美观的封面图',
-                                    'class': 'mb-4'
+                                    'class': 'mb-2'
                                 }
                             }
                         ]
@@ -313,6 +316,9 @@ class MediaCoverGenerator(_PluginBase):
             },
             {
                 'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -356,25 +362,10 @@ class MediaCoverGenerator(_PluginBase):
             },
             {
                 'component': 'VRow',
-                'content': [
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                        },
-                        'content': [
-                            {
-                                'component': 'VDivider',
-                                'props': {
-                                    'class': 'my-4'
-                                }
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                'component': 'VRow',
+                'props': {
+                    'dense': True,
+                    'class': 'mt-2'
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -406,6 +397,9 @@ class MediaCoverGenerator(_PluginBase):
             },
             {
                 'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -451,6 +445,9 @@ class MediaCoverGenerator(_PluginBase):
             },
             {
                 'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -573,6 +570,9 @@ class MediaCoverGenerator(_PluginBase):
         style_tab = [
             {
                 'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -597,30 +597,12 @@ class MediaCoverGenerator(_PluginBase):
                     }
                 ]
             },
-            {
-                'component': 'VRow',
-                'content': [
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                        },
-                        'content': [
-                            {
-                                'component': 'VDivider',
-                                'props': {
-                                    'class': 'my-4'
-                                }
-                            }
-                        ]
-                    }
-                ]
-            },
             # 单图风格设置
             {
                 'component': 'VRow',
                 'props': {
-                    'class': 'single-style-settings'
+                    'dense': True,
+                    'class': 'single-style-settings mt-3'
                 },
                 'content': [
                     {
@@ -709,7 +691,8 @@ class MediaCoverGenerator(_PluginBase):
             {
                 'component': 'VRow',
                 'props': {
-                    'class': 'multi-style-settings mt-4'
+                    'dense': True,
+                    'class': 'multi-style-settings mt-3'
                 },
                 'content': [
                     {
@@ -813,6 +796,175 @@ class MediaCoverGenerator(_PluginBase):
                         ]
                     }
                 ]
+            },
+            # 合并字体设置到封面风格标签页
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VDivider',
+                                'props': {
+                                    'class': 'my-3'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            # 字体设置部分
+            {
+                'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '字体设置',
+                                    'class': 'mb-2'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            # 单图字体设置
+            {
+                'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_path_local',
+                                    'label': '中文字体本地路径',
+                                    'prependInnerIcon': 'mdi-ideogram-cjk',
+                                    'placeholder': '/path/to/chinese.ttf',
+                                    'hint': '优先使用本地字体文件',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_path_local',
+                                    'label': '英文字体本地路径',
+                                    'prependInnerIcon': 'mdi-format-font',
+                                    'placeholder': '/path/to/english.ttf',
+                                    'hint': '优先使用本地字体文件',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 3
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_size',
+                                    'label': '中文字体大小',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'placeholder': '1.0',
+                                    'hint': '相对原尺寸的比例',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 3
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_size',
+                                    'label': '英文字体大小',
+                                    'type': 'number',
+                                    'step': '0.1',
+                                    'placeholder': '1.0',
+                                    'hint': '相对原尺寸的比例',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            # 多图字体设置
+            {
+                'component': 'VRow',
+                'props': {
+                    'dense': True,
+                    'class': 'mt-2'
+                },
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VSwitch',
+                                'props': {
+                                    'model': 'multi_1_use_main_font',
+                                    'label': '多图使用单图字体',
+                                    'hint': '勾选后忽略多图专用字体',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    }
+                ]
             }
         ]
 
@@ -820,6 +972,9 @@ class MediaCoverGenerator(_PluginBase):
         library_tab = [
             {
                 'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -851,6 +1006,10 @@ class MediaCoverGenerator(_PluginBase):
             },
             {
                 'component': 'VRow',
+                'props': {
+                    'dense': True,
+                    'class': 'mt-3'
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -918,6 +1077,10 @@ class MediaCoverGenerator(_PluginBase):
             },
             {
                 'component': 'VRow',
+                'props': {
+                    'dense': True,
+                    'class': 'mt-3'
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -1510,6 +1673,9 @@ class MediaCoverGenerator(_PluginBase):
         advanced_tab = [
             {
                 'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
                 'content': [
                     {
                         'component': 'VCol',
@@ -1581,7 +1747,7 @@ class MediaCoverGenerator(_PluginBase):
                 "component": "VTabs",
                 "props": {
                     "model": "tab",
-                    "height": 400,
+                    "height": 240,
                     "fixed-tabs": True,
                     "color": "primary"
                 },
@@ -1611,14 +1777,6 @@ class MediaCoverGenerator(_PluginBase):
                             {"component": "VIcon",
                              "props": {"icon": "mdi-folder-cog", "start": True}},
                             {"component": "span", "text": "媒体库配置"},
-                        ],
-                    },
-                    {
-                        "component": "VTab",
-                        "props": {"value": "font"},
-                        "content": [
-                            {"component": "VIcon", "props": {"icon": "mdi-format-font", "start": True}},
-                            {"component": "span", "text": "字体设置"},
                         ],
                     },
                     {
@@ -1655,13 +1813,6 @@ class MediaCoverGenerator(_PluginBase):
                         "props": {"value": "library"},
                         "content": [
                             {"component": "VCardText", "content": library_tab}
-                        ],
-                    },
-                    {
-                        "component": "VWindowItem",
-                        "props": {"value": "font"},
-                        "content": [
-                            {"component": "VCardText", "content": font_tab}
                         ],
                     },
                     {
