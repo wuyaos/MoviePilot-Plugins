@@ -1,6 +1,7 @@
 import base64
 import datetime
 import hashlib
+import json
 import os
 import re
 import threading
@@ -289,7 +290,7 @@ class MediaCoverGenerator(_PluginBase):
                                 'props': {
                                     'type': 'info',
                                     'variant': 'tonal',
-                                    'text': '未配置的媒体库将默认使用媒体库名称作为封面中文标题，无副标题'
+                                    'text': '使用JSON格式配置媒体库标题。未配置的媒体库将默认使用媒体库名称作为封面中文标题，无副标题。'
                                 }
                             }
                         ]
@@ -304,13 +305,17 @@ class MediaCoverGenerator(_PluginBase):
                                 'component': 'VAceEditor',
                                 'props': {
                                     'modelvalue': 'title_config',
-                                    'lang': 'yaml',
+                                    'lang': 'json',
                                     'theme': 'monokai',
                                     'style': 'height: 30rem',
-                                    'label': '中英标题配置',
-                                    'placeholder': '''媒体库名称:
-- 中文标题
-- 英文标题'''
+                                    'label': '中英标题配置（JSON格式）',
+                                    'placeholder': '''{
+  "华语电影": ["华语电影", "Chinese Movies"],
+  "欧美电影": ["欧美电影", "Western Movies"],
+  "电视剧": ["电视剧", "TV Series"],
+  "动漫": ["动漫", "Anime"],
+  "纪录片": ["纪录片", "Documentary"]
+}'''
                                 }
                             }
                         ]
@@ -1260,14 +1265,9 @@ class MediaCoverGenerator(_PluginBase):
             "selected_servers": [],
             "exclude_libraries": [],
             "sort_by": "Random",
-            "title_config": '''# 配置封面标题（按媒体库名称对应）
-# 格式如下：
-#
-# 媒体库名称:
-#   - 中文标题
-#   - 英文标题
-#
-''',
+            "title_config": '''{
+  "示例媒体库": ["中文标题", "English Title"]
+}''',
             "tab": "style-tab",
             "cover_style": "single_1",
             "multi_1_blur": False,
@@ -1420,7 +1420,7 @@ class MediaCoverGenerator(_PluginBase):
         # 自定义图像路径
         image_path = self.__check_custom_image(library_name)
         # 从配置获取标题
-        title = self.__get_library_title_from_yaml(library_name)
+        title = self.__get_library_title_from_config(library_name)
         if image_path:
             logger.info(f"媒体库 {service.name}：{library_name} 从自定义路径获取封面")
             image_data = self.__generate_image_from_path(service.name, library_name, title, image_path[0])
@@ -1782,76 +1782,52 @@ class MediaCoverGenerator(_PluginBase):
             
         return image_data
     
-    def __get_library_title_from_yaml(self, library_name):
-        """ 
-        从 yaml 配置中获取媒体库的中英文标题
+    def __get_library_title_from_config(self, library_name):
         """
-        def preprocess_yaml_text(yaml_str: str) -> str:
-            # 替换中文全角冒号为英文半角
-            yaml_str = yaml_str.replace("：", ":")
-            # 替换制表符为两个空格，统一缩进
-            yaml_str = yaml_str.replace("\t", "  ")
-            return yaml_str
-        
-        def load_yaml_safe(yaml_str: str) -> dict:
-            try:
-                yaml_str = preprocess_yaml_text(yaml_str)
-                # 添加调试日志
-                logger.debug(f"准备解析的YAML配置:\n{yaml_str}")
-                data = yaml.safe_load(yaml_str)
-                if not isinstance(data, dict):
-                    raise ValueError("YAML 顶层结构必须是一个字典")
-                logger.debug(f"YAML解析成功，共有 {len(data)} 个媒体库配置")
-                return data
-            except yaml.YAMLError as e:
-                # 提供更详细的错误信息
-                error_msg = str(e)
-                if hasattr(e, 'problem_mark') and e.problem_mark:
-                    mark = e.problem_mark
-                    if hasattr(e, 'problem'):
-                        error_msg = f"YAML 解析错误在第 {mark.line + 1} 行，第 {mark.column + 1} 列: {e.problem}"
-                    else:
-                        error_msg = f"YAML 解析错误在第 {mark.line + 1} 行，第 {mark.column + 1} 列"
-                raise ValueError(error_msg)
-            
-        def validate_title_config(data: dict) -> dict:
-            for key, value in data.items():
-                if not isinstance(value, list):
-                    raise ValueError(f"媒体库 '{key}' 的配置必须是列表格式，当前类型: {type(value).__name__}")
-                if len(value) < 1:
-                    raise ValueError(f"媒体库 '{key}' 至少需要配置一个标题")
-                if len(value) > 2:
-                    logger.warning(f"媒体库 '{key}' 配置了 {len(value)} 个标题，将只使用前两个")
-            return data
-
-        def load_and_validate_titles(yaml_str: str) -> dict:
-            data = load_yaml_safe(yaml_str)
-            return validate_title_config(data)
-        
+        从 JSON 配置中获取媒体库的中英文标题
+        """
         zh_title = library_name
         en_title = ''
-        if self._title_config:
-            try:
-                title_config = load_and_validate_titles(self._title_config)
-                for lib_name, titles in title_config.items():
-                    if lib_name == library_name:
-                        if isinstance(titles, list) and len(titles) >= 2:
-                            zh_title = titles[0]
-                            en_title = titles[1]
-                        elif isinstance(titles, list) and len(titles) == 1:
-                            zh_title = titles[0]
-                            en_title = ''
-                            logger.warning(f"媒体库 {library_name} 只配置了中文标题，英文标题留空")
-                        else:
-                            logger.warning(f"媒体库 {library_name} 的标题配置格式错误: {titles}")
-                        break
-            except ValueError as e:
-                # 如果YAML解析出错，记录详细错误
-                logger.error(f"标题配置解析失败: {str(e)}")
-                logger.info(f"将使用库名作为标题: {library_name}")
-            except Exception as e:
-                logger.error(f"标题配置处理异常: {type(e).__name__}: {str(e)}")
-                logger.info(f"将使用库名作为标题: {library_name}")
+        
+        if not self._title_config:
+            return (zh_title, en_title)
+        
+        try:
+            # 解析 JSON 配置
+            data = json.loads(self._title_config)
+            if not isinstance(data, dict):
+                raise ValueError("JSON 顶层结构必须是一个对象")
+            
+            logger.debug(f"JSON解析成功，共有 {len(data)} 个媒体库配置")
+            
+            # 获取指定媒体库的配置
+            titles = data.get(library_name)
+            if titles:
+                if not isinstance(titles, list):
+                    logger.warning(f"媒体库 '{library_name}' 的配置必须是数组格式，当前类型: {type(titles).__name__}")
+                    return (zh_title, en_title)
+                
+                if len(titles) >= 2:
+                    zh_title = titles[0]
+                    en_title = titles[1]
+                elif len(titles) == 1:
+                    zh_title = titles[0]
+                    en_title = ''
+                    logger.info(f"媒体库 {library_name} 只配置了中文标题，英文标题留空")
+                else:
+                    logger.warning(f"媒体库 {library_name} 的标题配置为空数组")
+            else:
+                logger.debug(f"JSON 配置中未找到媒体库 {library_name} 的标题配置")
+                
+        except json.JSONDecodeError as e:
+            # 提供详细的错误信息
+            error_msg = f"JSON 解析错误在第 {e.lineno} 行，第 {e.colno} 列: {e.msg}"
+            logger.error(f"标题配置解析失败: {error_msg}")
+            logger.info(f"将使用库名作为标题: {library_name}")
+        except Exception as e:
+            logger.error(f"标题配置处理异常: {type(e).__name__}: {str(e)}")
+            logger.info(f"将使用库名作为标题: {library_name}")
+        
         return (zh_title, en_title)
     
     def __get_server_libraries(self, service):
