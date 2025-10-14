@@ -44,13 +44,13 @@ class MediaCoverGenerator(_PluginBase):
     # 插件描述
     plugin_desc = "自动生成媒体库封面，支持 Emby，Jellyfin"
     # 插件图标
-    plugin_icon = "https://raw.githubusercontent.com/justzerock/MoviePilot-Plugins/main/icons/emby.png"
+    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     # 插件版本
     plugin_version = "0.8.7"
     # 插件作者
-    plugin_author = "justzerock"
+    plugin_author = "wuyaos,justzerock"
     # 作者主页
-    author_url = "https://github.com/justzerock/MoviePilot-Plugins"
+    author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     # 插件配置项ID前缀
     plugin_config_prefix = "mediacovergenerator_"
     # 加载顺序
@@ -2295,11 +2295,11 @@ class MediaCoverGenerator(_PluginBase):
     def __get_fonts(self):
         font_dir_path = self._font_path
 
-        default_zh_url = "https://raw.githubusercontent.com/justzerock/MoviePilot-Plugins/main/fonts/wendao.ttf"
-        default_en_url = "https://raw.githubusercontent.com/justzerock/MoviePilot-Plugins/main/fonts/EmblemaOne.woff2"
+        default_zh_url = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/fonts/wendao.ttf"
+        default_en_url = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/fonts/EmblemaOne.woff2"
         
-        default_zh_url_multi_1 = "https://raw.githubusercontent.com/justzerock/MoviePilot-Plugins/main/fonts/multi_1_zh.ttf"
-        default_en_url_multi_1 = "https://raw.githubusercontent.com/justzerock/MoviePilot-Plugins/main/fonts/multi_1_en.otf"
+        default_zh_url_multi_1 = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/fonts/multi_1_zh.ttf"
+        default_en_url_multi_1 = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/fonts/multi_1_en.otf"
 
         is_multi_1_style = self._cover_style == "multi_1"
 
