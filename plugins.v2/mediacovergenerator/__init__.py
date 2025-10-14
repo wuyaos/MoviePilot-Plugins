@@ -1747,7 +1747,10 @@ class MediaCoverGenerator(_PluginBase):
                 "component": "VTabs",
                 "props": {
                     "model": "tab",
-                    "height": 240,
+                    'style': {
+                        'margin-top': '8px',
+                        'margin-bottom': '16px'
+                    },
                     "fixed-tabs": True,
                     "color": "primary"
                 },
