@@ -43,7 +43,7 @@ from app.plugins.mediacovergenerator_custom.static.single_2 import single_2
 from app.plugins.mediacovergenerator_custom.static.multi_1  import multi_1
 
 
-class MediaCoverGenerator(_PluginBase):
+class MediaCoverGeneratorCustom(_PluginBase):
     # 插件名称
     plugin_name = "媒体库封面生成（自用版）"
     # 插件描述
