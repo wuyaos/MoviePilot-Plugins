@@ -10,7 +10,7 @@ import random  # 添加随机模块
 import colorsys
 import traceback
 from app.log import logger
-from app.plugins.mediacovergenerator.utils.color_helper import ColorHelper
+from app.plugins.mediacovergeneratorcustom.utils.color_helper import ColorHelper
 
 """ 
 代码修改自 https://github.com/HappyQuQu/jellyfin-library-poster/blob/main/gen_poster.py

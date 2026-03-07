@@ -132,6 +132,12 @@
       "type": "file"
     },
     {
+      "path": "plugins.v2/mediacovergeneratorcustom/style/style_static_4.py",
+      "accessCount": 2,
+      "lastAccessed": 1772915003311,
+      "type": "file"
+    },
+    {
       "path": "plugins.v2/mediacovergenerator",
       "accessCount": 1,
       "lastAccessed": 1772896460403,
@@ -166,6 +172,18 @@
       "accessCount": 1,
       "lastAccessed": 1772913585684,
       "type": "directory"
+    },
+    {
+      "path": "plugins.v2/mediacovergeneratorcustom/style/style_static_1.py",
+      "accessCount": 1,
+      "lastAccessed": 1772914996187,
+      "type": "file"
+    },
+    {
+      "path": "plugins.v2/mediacovergeneratorcustom/style/style_static_3.py",
+      "accessCount": 1,
+      "lastAccessed": 1772915002741,
+      "type": "file"
     }
   ],
   "userDirectives": []
