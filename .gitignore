@@ -1,5 +1,7 @@
 .omc/
 docs/
+.ace-tool/
+.omx/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
