@@ -1112,127 +1112,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             }
         ]
 
-        # 其他设置标签（非字体部分）
-        others_settings_tab = [
-            
-            {
-                'component': 'VRow',
-                'content': [
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                        },
-                        'content': [
-                            {
-                                'component': 'VAlert',
-                                'props': {
-                                    'type': 'info',
-                                    'variant': 'tonal',
-                                    'text': '自定义图片目录：请将图片存于与媒体库同名的子目录下，例如：/mnt/custom_images/华语电影/1.jpg，填写 /mnt/custom_images 即可。多图模式下，文件名须为 1.jpg, 2.jpg, ...9.jpg，不满足的会被重命名，不够的会随机复制填满9张'
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 4
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'covers_input',
-                                    'label': '自定义图片目录（可选）',
-                                    'prependInnerIcon': 'mdi-file-image',
-                                    'hint': '使用你指定的图片生成封面，图片放在与媒体库同名的文件夹下',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 4
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'covers_output',
-                                    'label': '历史封面保存目录（可选）',
-                                    'prependInnerIcon': 'mdi-file-image',
-                                    'hint': '生成的封面默认保存在本插件数据目录下',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                                        {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 4
-                        },
-                        'content': [
-                            {
-                                'component': 'VSwitch',
-                                'props': {
-                                    'model': 'save_recent_covers',
-                                    'label': '保存最近生成的封面',
-                                    'hint': '默认开启，保存历史封面',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 4
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'covers_history_limit_per_library',
-                                    'label': '媒体库历史封面数量',
-                                    'prependInnerIcon': 'mdi-history',
-                                    'hint': '单个媒体库封面保留上限，默认 10',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 4
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'covers_page_history_limit',
-                                    'label': '历史封面显示数量',
-                                    'prependInnerIcon': 'mdi-image-multiple-outline',
-                                    'hint': '历史封面「显示数量」，默认 50',
-                                    'persistentHint': True
-                                },
-                            }
-                        ]
-                    }
-                ]
-            },
-            
-        ]
         # 更多参数标签
         single_tab = [
             {
@@ -2025,16 +1904,133 @@ class MediaCoverGeneratorCustom(_PluginBase):
         ]
 
 
-        # 基础设置标签 = style_tab 的前3个元素 + 基本参数面板（不包含动画参数）
+        # 基础设置标签 = style_tab 的前3个元素 + 基本参数/动态参数面板 + 存储设置
         basic_tab = style_tab[:3]
         if len(style_tab) > 3 and style_tab[3].get("content"):
             basic_tab.append(
                 {
                     "component": "VExpansionPanels",
                     "props": style_tab[3].get("props", {}),
-                    "content": [style_tab[3]["content"][0]],  # 仅保留"基本参数"面板
+                    "content": style_tab[3]["content"],
                 }
             )
+        basic_tab.append(
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '自定义图片目录：请将图片存于与媒体库同名的子目录下，例如：/mnt/custom_images/华语电影/1.jpg，填写 /mnt/custom_images 即可。多图模式下，文件名须为 1.jpg, 2.jpg, ...9.jpg，不满足的会被重命名，不够的会随机复制填满9张'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 4
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'covers_input',
+                                    'label': '自定义图片目录（可选）',
+                                    'prependInnerIcon': 'mdi-file-image',
+                                    'hint': '使用你指定的图片生成封面，图片放在与媒体库同名的文件夹下',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 4
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'covers_output',
+                                    'label': '历史封面保存目录（可选）',
+                                    'prependInnerIcon': 'mdi-file-image',
+                                    'hint': '生成的封面默认保存在本插件数据目录下',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 4
+                        },
+                        'content': [
+                            {
+                                'component': 'VSwitch',
+                                'props': {
+                                    'model': 'save_recent_covers',
+                                    'label': '保存最近生成的封面',
+                                    'hint': '默认开启，保存历史封面',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 4
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'covers_history_limit_per_library',
+                                    'label': '媒体库历史封面数量',
+                                    'prependInnerIcon': 'mdi-history',
+                                    'hint': '单个媒体库封面保留上限，默认 10',
+                                    'persistentHint': True
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 4
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'covers_page_history_limit',
+                                    'label': '历史封面显示数量',
+                                    'prependInnerIcon': 'mdi-image-multiple-outline',
+                                    'hint': '历史封面「显示数量」，默认 50',
+                                    'persistentHint': True
+                                },
+                            }
+                        ]
+                    }
+                ]
+            },
+        )
 
         return [
             {
@@ -2297,7 +2293,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                             },
                             {
                                 "component": "VTab",
-                                "props": {"value": "others-tab"},
+                                "props": {"value": "title-tab"},
                                 "content": [
                                     {
                                         "component": "VIcon",
@@ -2307,7 +2303,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                             "color": "#2196F3",
                                         },
                                     },
-                                    {"component": "span", "text": "其他设置"},
+                                    {"component": "span", "text": "标题设置"},
                                 ],
                             },
                             {
@@ -2355,9 +2351,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                             },
                             {
                                 "component": "VWindowItem",
-                                "props": {"value": "others-tab"},
+                                "props": {"value": "title-tab"},
                                 "content": [
-                                    {"component": "VCardText", "content": title_tab + others_settings_tab}
+                                    {"component": "VCardText", "content": title_tab}
                                 ],
                             },
                             {
@@ -2420,7 +2416,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "animation_fps": 24,
             "animation_format": "apng",
             "animation_resolution": "320x180",
-            "animation_reduce_colors": "medium",
+            "animation_reduce_colors": "strong",
             "animated_2_image_count": 6,
             "animated_2_departure_type": "fly",
             "clean_images": False,
