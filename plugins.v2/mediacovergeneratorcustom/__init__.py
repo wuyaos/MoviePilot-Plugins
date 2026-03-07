@@ -58,7 +58,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
-    author_url = "https://github.com/justzerock/MoviePilot-Plugins"
+    author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     # 插件配置项ID前缀
     plugin_config_prefix = "mediacovergeneratorcustom_"
     # 加载顺序
