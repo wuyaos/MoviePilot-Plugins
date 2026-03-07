@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from app.log import logger
-from app.plugins.mediacovergenerator.utils.color_helper import ColorHelper
+from app.plugins.mediacovergenerator_custom.utils.color_helper import ColorHelper
 
 
 def darken_color(color, factor=0.7):

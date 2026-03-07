@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from app.log import logger
-from app.plugins.mediacovergenerator.utils.color_helper import ColorHelper
+from app.plugins.mediacovergenerator_custom.utils.color_helper import ColorHelper
 
 # ========== 配置 ==========
 canvas_size = (1920, 1080)

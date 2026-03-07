@@ -31,21 +31,21 @@ from app.schemas.types import EventType
 from app.schemas import ServiceInfo
 from app.utils.http import RequestUtils
 from app.utils.url import UrlUtils
-from app.plugins.mediacovergenerator.style_single_1 import create_style_single_1
-from app.plugins.mediacovergenerator.style_single_2 import create_style_single_2
-from app.plugins.mediacovergenerator.style_multi_1  import create_style_multi_1
-from app.plugins.mediacovergenerator.style.style_animated_1 import create_style_animated_1
-from app.plugins.mediacovergenerator.style.style_animated_2 import create_style_animated_2
-from app.plugins.mediacovergenerator.style.style_animated_3 import create_style_animated_3
-from app.plugins.mediacovergenerator.style.style_animated_4 import create_style_animated_4
-from app.plugins.mediacovergenerator.static.single_1 import single_1
-from app.plugins.mediacovergenerator.static.single_2 import single_2
-from app.plugins.mediacovergenerator.static.multi_1  import multi_1
+from app.plugins.mediacovergenerator_custom.style_single_1 import create_style_single_1
+from app.plugins.mediacovergenerator_custom.style_single_2 import create_style_single_2
+from app.plugins.mediacovergenerator_custom.style_multi_1  import create_style_multi_1
+from app.plugins.mediacovergenerator_custom.style.style_animated_1 import create_style_animated_1
+from app.plugins.mediacovergenerator_custom.style.style_animated_2 import create_style_animated_2
+from app.plugins.mediacovergenerator_custom.style.style_animated_3 import create_style_animated_3
+from app.plugins.mediacovergenerator_custom.style.style_animated_4 import create_style_animated_4
+from app.plugins.mediacovergenerator_custom.static.single_1 import single_1
+from app.plugins.mediacovergenerator_custom.static.single_2 import single_2
+from app.plugins.mediacovergenerator_custom.static.multi_1  import multi_1
 
 
 class MediaCoverGenerator(_PluginBase):
     # 插件名称
-    plugin_name = "媒体库封面生成（增强版）"
+    plugin_name = "媒体库封面生成（自用版）"
     # 插件描述
     plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、4种动画风格、Emby和Jellyfin"
     # 插件图标
