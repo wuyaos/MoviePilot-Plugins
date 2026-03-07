@@ -34,6 +34,10 @@ from app.utils.url import UrlUtils
 from app.plugins.mediacovergenerator.style_single_1 import create_style_single_1
 from app.plugins.mediacovergenerator.style_single_2 import create_style_single_2
 from app.plugins.mediacovergenerator.style_multi_1  import create_style_multi_1
+from app.plugins.mediacovergenerator.style.style_animated_1 import create_style_animated_1
+from app.plugins.mediacovergenerator.style.style_animated_2 import create_style_animated_2
+from app.plugins.mediacovergenerator.style.style_animated_3 import create_style_animated_3
+from app.plugins.mediacovergenerator.style.style_animated_4 import create_style_animated_4
 from app.plugins.mediacovergenerator.static.single_1 import single_1
 from app.plugins.mediacovergenerator.static.single_2 import single_2
 from app.plugins.mediacovergenerator.static.multi_1  import multi_1
@@ -113,6 +117,12 @@ class MediaCoverGenerator(_PluginBase):
     _multi_1_use_primary = True
     _selected_users = []  # 新增：选择的用户列表
     _font_download = True  # 新增：字体下载开关
+    _animation_duration = 10  # 新增：动画时长（秒）
+    _animation_fps = 15  # 新增：动画帧率
+    _animation_format = 'apng'  # 新增：动画格式（apng/gif）
+    _animation_scroll = 'down'  # 新增：动画滚动方向（down/up/alternate）
+    _animation_resolution = '640x360'  # 新增：动画分辨率
+    _animation_reduce_colors = 'medium'  # 新增：颜色减少（off/medium/strong）
 
     def __init__(self):
         super().__init__()
@@ -167,6 +177,12 @@ class MediaCoverGenerator(_PluginBase):
             self._font_download = config.get("font_download", True)  # 新增：获取字体下载配置
             self._selected_libraries = config.get("selected_libraries", [])  # 新增：库白名单
             self._exclude_boxsets = config.get("exclude_boxsets", [])  # 新增：合集黑名单
+            self._animation_duration = config.get("animation_duration") or 10  # 新增：动画时长
+            self._animation_fps = config.get("animation_fps") or 15  # 新增：动画帧率
+            self._animation_format = config.get("animation_format") or "apng"  # 新增：动画格式
+            self._animation_scroll = config.get("animation_scroll") or "down"  # 新增：动画滚动
+            self._animation_resolution = config.get("animation_resolution") or "640x360"  # 新增：动画分辨率
+            self._animation_reduce_colors = config.get("animation_reduce_colors") or "medium"  # 新增：颜色减少
 
         if self._selected_servers:
             self._servers = self.mediaserver_helper.get_services(
@@ -256,7 +272,13 @@ class MediaCoverGenerator(_PluginBase):
             "selected_users": self._selected_users,  # 新增：保存用户筛选配置
             "font_download": self._font_download,  # 新增：保存字体下载配置
             "selected_libraries": self._selected_libraries,  # 新增：库白名单
-            "exclude_boxsets": self._exclude_boxsets  # 新增：合集黑名单
+            "exclude_boxsets": self._exclude_boxsets,  # 新增：合集黑名单
+            "animation_duration": self._animation_duration,  # 新增：动画时长
+            "animation_fps": self._animation_fps,  # 新增：动画帧率
+            "animation_format": self._animation_format,  # 新增：动画格式
+            "animation_scroll": self._animation_scroll,  # 新增：动画滚动
+            "animation_resolution": self._animation_resolution,  # 新增：动画分辨率
+            "animation_reduce_colors": self._animation_reduce_colors  # 新增：颜色减少
         })
 
     def get_state(self) -> bool:
@@ -2123,11 +2145,68 @@ class MediaCoverGenerator(_PluginBase):
             else:
                 library_dir = Path(self._covers_path) / library_name
             if self.prepare_library_images(library_dir):
-                image_data = create_style_multi_1(library_dir, title, font_path, 
-                                                  font_size=font_size, 
-                                                  is_blur=self._multi_1_blur, 
-                                                  blur_size=blur_size_multi_1, 
+                image_data = create_style_multi_1(library_dir, title, font_path,
+                                                  font_size=font_size,
+                                                  is_blur=self._multi_1_blur,
+                                                  blur_size=blur_size_multi_1,
                                                   color_ratio=color_ratio_multi_1)
+        elif self._cover_style == 'animated_1':
+            if image_path:
+                library_dir = Path(self._covers_input) / library_name
+            else:
+                library_dir = Path(self._covers_path) / library_name
+            if self.prepare_library_images(library_dir):
+                image_data = create_style_animated_1(library_dir, title, font_path,
+                                                     font_size=font_size,
+                                                     is_blur=self._multi_1_blur,
+                                                     blur_size=blur_size_multi_1,
+                                                     color_ratio=color_ratio_multi_1,
+                                                     animation_duration=self._animation_duration,
+                                                     animation_fps=self._animation_fps,
+                                                     animation_format=self._animation_format)
+        elif self._cover_style == 'animated_2':
+            if image_path:
+                library_dir = Path(self._covers_input) / library_name
+            else:
+                library_dir = Path(self._covers_path) / library_name
+            if self.prepare_library_images(library_dir):
+                image_data = create_style_animated_2(library_dir, title, font_path,
+                                                     font_size=font_size,
+                                                     is_blur=self._multi_1_blur,
+                                                     blur_size=blur_size_multi_1,
+                                                     color_ratio=color_ratio_multi_1,
+                                                     animation_duration=self._animation_duration,
+                                                     animation_fps=self._animation_fps,
+                                                     animation_format=self._animation_format)
+        elif self._cover_style == 'animated_3':
+            if image_path:
+                library_dir = Path(self._covers_input) / library_name
+            else:
+                library_dir = Path(self._covers_path) / library_name
+            if self.prepare_library_images(library_dir):
+                image_data = create_style_animated_3(library_dir, title, font_path,
+                                                     font_size=font_size,
+                                                     is_blur=self._multi_1_blur,
+                                                     blur_size=blur_size_multi_1,
+                                                     color_ratio=color_ratio_multi_1,
+                                                     animation_duration=self._animation_duration,
+                                                     animation_scroll=self._animation_scroll,
+                                                     animation_fps=self._animation_fps,
+                                                     animation_format=self._animation_format)
+        elif self._cover_style == 'animated_4':
+            if image_path:
+                library_dir = Path(self._covers_input) / library_name
+            else:
+                library_dir = Path(self._covers_path) / library_name
+            if self.prepare_library_images(library_dir):
+                image_data = create_style_animated_4(library_dir, title, font_path,
+                                                     font_size=font_size,
+                                                     is_blur=self._multi_1_blur,
+                                                     blur_size=blur_size_multi_1,
+                                                     color_ratio=color_ratio_multi_1,
+                                                     animation_duration=self._animation_duration,
+                                                     animation_fps=self._animation_fps,
+                                                     animation_format=self._animation_format)
         return image_data
     
     def __generate_from_server(self, service, library, title):
