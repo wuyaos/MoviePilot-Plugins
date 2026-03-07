@@ -2459,7 +2459,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
         recent_covers = self.__get_recent_generated_covers(limit=limit)
         if recent_covers:
             for item in recent_covers:
-                delete_api = f"plugin/MediaCoverGenerator/delete_saved_cover?file={quote(item['path'])}"
+                delete_api = f"plugin/MediaCoverGeneratorCustom/delete_saved_cover?file={quote(item['path'])}"
                 cover_rows.append(
                     {
                         "component": "VCol",
@@ -2566,19 +2566,19 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                 "component": "VTab",
                                 "props": {"value": "generate-tab"},
                                 "text": "封面生成",
-                                "events": {"click": {"api": "plugin/MediaCoverGenerator/set_page_tab_generate", "method": "post"}},
+                                "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/set_page_tab_generate", "method": "post"}},
                             },
                             {
                                 "component": "VTab",
                                 "props": {"value": "history-tab"},
                                 "text": "历史封面",
-                                "events": {"click": {"api": "plugin/MediaCoverGenerator/set_page_tab_history", "method": "post"}},
+                                "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/set_page_tab_history", "method": "post"}},
                             },
                             {
                                 "component": "VTab",
                                 "props": {"value": "clean-tab"},
                                 "text": "清理缓存",
-                                "events": {"click": {"api": "plugin/MediaCoverGenerator/set_page_tab_clean", "method": "post"}},
+                                "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/set_page_tab_clean", "method": "post"}},
                             },
                         ],
                     },
@@ -2625,7 +2625,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                                     "prepend-icon": "mdi-swap-horizontal",
                                                                 },
                                                     "text": f"切换到{'动态' if style_variant == 'static' else '静态'}",
-                                                    "events": {"click": {"api": "plugin/MediaCoverGenerator/toggle_style_variant", "method": "post"}},
+                                                    "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/toggle_style_variant", "method": "post"}},
                                                 },
                                                             {
                                                                 "component": "VBtn",
@@ -2636,7 +2636,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                                     "prepend-icon": "mdi-play-circle-outline",
                                                                 },
                                                     "text": "立即生成当前风格",
-                                                    "events": {"click": {"api": "plugin/MediaCoverGenerator/generate_now", "method": "post"}},
+                                                    "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/generate_now", "method": "post"}},
                                                 },
                                                 {
                                                     "component": "div",
@@ -2680,7 +2680,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                                     "prepend-icon": "mdi-swap-horizontal",
                                                                 },
                                                     "text": f"切换到{'动态' if style_variant == 'static' else '静态'}",
-                                                    "events": {"click": {"api": "plugin/MediaCoverGenerator/toggle_style_variant", "method": "post"}},
+                                                    "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/toggle_style_variant", "method": "post"}},
                                                 },
                                                             {
                                                                 "component": "VBtn",
@@ -2691,7 +2691,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                                     "prepend-icon": "mdi-play-circle-outline",
                                                                 },
                                                     "text": "立即生成当前风格",
-                                                    "events": {"click": {"api": "plugin/MediaCoverGenerator/generate_now", "method": "post"}},
+                                                    "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/generate_now", "method": "post"}},
                                                 }
                                             ],
                                         }
@@ -2735,7 +2735,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                     "class": "mb-3 text-none",
                                                 },
                                     "text": "立即清理图片缓存",
-                                    "events": {"click": {"api": "plugin/MediaCoverGenerator/clean_images", "method": "post"}},
+                                    "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/clean_images", "method": "post"}},
                                 },
                                             {
                                                 "component": "VBtn",
@@ -2747,7 +2747,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                     "class": "mb-3 text-none",
                                                 },
                                     "text": "立即清理字体缓存",
-                                    "events": {"click": {"api": "plugin/MediaCoverGenerator/clean_fonts", "method": "post"}},
+                                    "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/clean_fonts", "method": "post"}},
                                 },
                                 {
                                     "component": "div",
@@ -2850,12 +2850,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         mime_type = "image/webp"
                     elif file_path.suffix.lower() == ".apng":
                         mime_type = "image/apng"
-
-                    with open(file_path, "rb") as image_file:
-                        image_b64 = base64.b64encode(image_file.read()).decode("utf-8")
-
-                    image_src = f"data:{mime_type};base64,{image_b64}"
-
                     items.append(
                         {
                             "name": file_path.name,
@@ -2863,14 +2857,35 @@ class MediaCoverGeneratorCustom(_PluginBase):
                             "mtime_ts": float(stat.st_mtime),
                             "mtime": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
                             "size": self.__format_size(stat.st_size),
-                            "src": image_src,
+                            "mime_type": mime_type,
                         }
                     )
                 except Exception as e:
                     logger.debug(f"读取封面文件信息失败: {file_path} -> {e}")
 
         items.sort(key=lambda x: x.get("mtime_ts", 0.0), reverse=True)
-        return items[:max(1, int(limit))]
+        limited_items = items[:max(1, int(limit))]
+
+        result: List[Dict[str, Any]] = []
+        for item in limited_items:
+            try:
+                with open(item["path"], "rb") as image_file:
+                    image_b64 = base64.b64encode(image_file.read()).decode("utf-8")
+                image_src = f"data:{item['mime_type']};base64,{image_b64}"
+                result.append(
+                    {
+                        "name": item["name"],
+                        "path": item["path"],
+                        "mtime_ts": item["mtime_ts"],
+                        "mtime": item["mtime"],
+                        "size": item["size"],
+                        "src": image_src,
+                    }
+                )
+            except Exception as e:
+                logger.debug(f"读取封面文件信息失败: {item.get('path')} -> {e}")
+
+        return result
 
     @staticmethod
     def __format_size(size_bytes: int) -> str:
