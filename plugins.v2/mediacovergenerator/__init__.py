@@ -76,6 +76,8 @@ class MediaCoverGenerator(_PluginBase):
     _all_libraries = []
     _exclude_libraries = []
     _all_users = []  # 新增：存储所有用户列表
+    _selected_libraries = []     # 新增：库白名单
+    _exclude_boxsets = []        # 新增：合集黑名单
     _sort_by = 'Random'
     _monitor_sort = ''
     _covers_output = ''
@@ -110,6 +112,7 @@ class MediaCoverGenerator(_PluginBase):
     _single_use_primary = False
     _multi_1_use_primary = True
     _selected_users = []  # 新增：选择的用户列表
+    _font_download = True  # 新增：字体下载开关
 
     def __init__(self):
         super().__init__()
@@ -161,6 +164,9 @@ class MediaCoverGenerator(_PluginBase):
             self._single_use_primary = config.get("single_use_primary")
             self._multi_1_use_primary = config.get("multi_1_use_primary")
             self._selected_users = config.get("selected_users", [])  # 新增：获取用户筛选配置
+            self._font_download = config.get("font_download", True)  # 新增：获取字体下载配置
+            self._selected_libraries = config.get("selected_libraries", [])  # 新增：库白名单
+            self._exclude_boxsets = config.get("exclude_boxsets", [])  # 新增：合集黑名单
 
         if self._selected_servers:
             self._servers = self.mediaserver_helper.get_services(
@@ -247,7 +253,10 @@ class MediaCoverGenerator(_PluginBase):
             "color_ratio_multi_1": self._color_ratio_multi_1,
             "single_use_primary": self._single_use_primary,
             "multi_1_use_primary": self._multi_1_use_primary,
-            "selected_users": self._selected_users  # 新增：保存用户筛选配置
+            "selected_users": self._selected_users,  # 新增：保存用户筛选配置
+            "font_download": self._font_download,  # 新增：保存字体下载配置
+            "selected_libraries": self._selected_libraries,  # 新增：库白名单
+            "exclude_boxsets": self._exclude_boxsets  # 新增：合集黑名单
         })
 
     def get_state(self) -> bool:
@@ -837,6 +846,52 @@ class MediaCoverGenerator(_PluginBase):
                                     'variant': 'tonal',
                                     'text': '字体设置',
                                     'class': 'mb-2'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            # 字体下载开关
+            {
+                'component': 'VRow',
+                'props': {
+                    'dense': True
+                },
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VSwitch',
+                                'props': {
+                                    'model': 'font_download',
+                                    'label': '自动下载字体',
+                                    'hint': '启用后会自动从URL下载字体文件',
+                                    'persistentHint': True,
+                                    'color': 'primary'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'warning',
+                                    'variant': 'tonal',
+                                    'text': '提示：本地路径优先级高于下载',
+                                    'dense': True
                                 }
                             }
                         ]
@@ -1853,7 +1908,8 @@ class MediaCoverGenerator(_PluginBase):
             "color_ratio_multi_1": 0.8,
             "single_use_primary": False,
             "multi_1_use_primary": True,
-            "selected_users": []  # 默认不筛选用户
+            "selected_users": [],  # 默认不筛选用户
+            "font_download": True  # 默认启用字体下载
         }
 
     def get_page(self) -> List[dict]:
@@ -1989,6 +2045,21 @@ class MediaCoverGenerator(_PluginBase):
     def __update_library(self, service, library):
         library_name = library['Name']
         logger.info(f"媒体库 {service.name}：{library_name} 开始准备更新封面")
+
+        # 新增：检查库白名单
+        if self._selected_libraries:
+            # 获取库ID（兼容Emby/Jellyfin）
+            if service.type == 'emby':
+                lib_id = library.get('Id')
+            else:
+                lib_id = library.get('ItemId')
+
+            if lib_id:
+                lib_key = f"{service.name}-{lib_id}"
+                if lib_key not in self._selected_libraries:
+                    logger.info(f"库 {library_name} 不在白名单中，跳过")
+                    return False
+
         # 自定义图像路径
         image_path = self.__check_custom_image(library_name)
         # 从配置获取标题
@@ -2164,7 +2235,15 @@ class MediaCoverGenerator(_PluginBase):
             for boxset in boxsets:
                 if len(valid_items) >= required_items:
                     break
-                    
+
+                # 新增：检查合集来源库是否在黑名单中
+                source_library_id = boxset.get('ParentId')
+                if source_library_id:
+                    boxset_key = f"{service.name}-{source_library_id}"
+                    if boxset_key in self._exclude_boxsets:
+                        logger.info(f"合集 {boxset.get('Name')} 来自黑名单库，跳过")
+                        continue
+
                 # 获取此BoxSet中的电影
                 movies = self.__get_items_batch(service,
                                              parent_id=boxset['Id'],
@@ -2948,6 +3027,18 @@ class MediaCoverGenerator(_PluginBase):
 
     def __get_fonts(self):
         font_dir_path = self._font_path
+        
+        # 如果未启用字体下载，直接返回
+        if not self._font_download:
+            logger.info("字体下载功能已禁用，跳过字体获取")
+            # 设置默认字体路径为空，避免报错
+            if self._cover_style == "multi_1" and not self._multi_1_use_main_font:
+                self._zh_font_path_multi_1 = self._zh_font_path_multi_1_local or ""
+                self._en_font_path_multi_1 = self._en_font_path_multi_1_local or ""
+            else:
+                self._zh_font_path = self._zh_font_path_local or ""
+                self._en_font_path = self._en_font_path_local or ""
+            return
 
         default_zh_url = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/fonts/wendao.ttf"
         default_en_url = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/fonts/EmblemaOne.woff2"
