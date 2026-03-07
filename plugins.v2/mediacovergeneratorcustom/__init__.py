@@ -3047,13 +3047,14 @@ class MediaCoverGeneratorCustom(_PluginBase):
             item_id=item_id
         )
         # logger.info(f"最新数据： {new_history}")
+        original_monitor_sort = self._monitor_sort
         self._monitor_sort = 'DateCreated'
         self._current_updating_items.add(update_key)
         try:
             if self.__update_library(service, library):
-                self._monitor_sort = ''
                 logger.info(f"媒体库 {server}：{library['Name']} 封面更新成功")
         finally:
+            self._monitor_sort = original_monitor_sort
             self._current_updating_items.discard(update_key)
 
     
