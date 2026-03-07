@@ -1,9 +1,13 @@
 # MoviePilot-Plugins
 MoviePilot官方插件市场：https://github.com/jxxghp/MoviePilot-Plugins
 
-### [媒体库封面生成](https://github.com/wuyaos/MoviePilot-Plugins/tree/main/plugins.v2/mediacovergenerator)
-  > 参考项目：https://github.com/HappyQuQu/jellyfin-library-poster
+### [媒体库封面生成（自用版）](https://github.com/wuyaos/MoviePilot-Plugins/tree/main/plugins.v2/mediacovergenerator-custom)
+  > 参考项目：https://github.com/justzerock/MoviePilot-Plugins | https://github.com/HappyQuQu/jellyfin-library-poster
 
-  在群里受到这个项目的启发，督促 AI 帮我写封面处理的代码，于是有了这个插件，支持切换风格
+  基于 justzerock 的原始项目改进，新增功能：
+  - ✨ **库白名单**：仅处理指定媒体库
+  - 🎬 **合集黑名单**：排除指定库的所有合集（用于过滤 R18 内容）
+  - 🎞️ **4 种动画风格**：支持 animated_1/2/3/4，可配置帧率、时长、格式
+  - 📋 **合集多风格**：保留原有的 multi_1 合集专用风格
 
   ![插件界面](https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/images/plugin.webp)
