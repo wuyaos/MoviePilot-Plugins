@@ -49,7 +49,7 @@ class MediaCoverGenerator(_PluginBase):
     # 插件版本
     plugin_version = "0.9.0.1"
     # 插件作者
-    plugin_author = "wuyaos,justzerock"
+    plugin_author = "wuyaos"
     # 作者主页
     author_url = "https://github.com/wuyaos"
     # 插件配置项ID前缀
