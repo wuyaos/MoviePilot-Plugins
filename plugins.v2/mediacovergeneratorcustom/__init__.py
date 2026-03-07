@@ -306,7 +306,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
         """
         if self._enabled and self._cron:
             return [{
-                "id": "MediaCoverGenerator",
+                "id": "MediaCoverGeneratorCustom",
                 "name": "媒体库封面更新服务",
                 "trigger": CronTrigger.from_crontab(self._cron),
                 "func": self.__update_all_libraries,
