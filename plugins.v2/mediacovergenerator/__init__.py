@@ -828,6 +828,172 @@ class MediaCoverGenerator(_PluginBase):
                     }
                 ]
             },
+            # 动画风格设置
+            {
+                'component': 'VRow',
+                'props': {
+                    'dense': True,
+                    'class': 'animated-style-settings mt-3'
+                },
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '动画风格设置',
+                                    'class': 'mb-2'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 3
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'animation_duration',
+                                    'label': '动画时长（秒）',
+                                    'type': 'number',
+                                    'min': '1',
+                                    'max': '60',
+                                    'step': '1',
+                                    'placeholder': '10',
+                                    'hint': '每个循环的持续秒数',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 3
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'animation_fps',
+                                    'label': '帧率（FPS）',
+                                    'type': 'number',
+                                    'min': '1',
+                                    'max': '60',
+                                    'step': '1',
+                                    'placeholder': '15',
+                                    'hint': '每秒帧数，值越大越流畅',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 3
+                        },
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'model': 'animation_format',
+                                    'label': '动画格式',
+                                    'items': [
+                                        {"title": "APNG", "value": "apng"},
+                                        {"title": "GIF", "value": "gif"}
+                                    ],
+                                    'hint': '选择输出动画格式',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 3
+                        },
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'model': 'animation_scroll',
+                                    'label': '滚动方向',
+                                    'items': [
+                                        {"title": "向下", "value": "down"},
+                                        {"title": "向上", "value": "up"},
+                                        {"title": "交替", "value": "alternate"}
+                                    ],
+                                    'hint': '图片滚动方向',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'animation_resolution',
+                                    'label': '动画分辨率',
+                                    'placeholder': '640x360',
+                                    'hint': '格式：宽度x高度，例如 1280x720',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                            'md': 6
+                        },
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'model': 'animation_reduce_colors',
+                                    'label': '颜色压缩',
+                                    'items': [
+                                        {"title": "关闭", "value": "off"},
+                                        {"title": "中等", "value": "medium"},
+                                        {"title": "强力", "value": "strong"}
+                                    ],
+                                    'hint': '减少颜色数量以压缩文件大小',
+                                    'persistentHint': True,
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
             # 合并字体设置到封面风格标签页
             {
                 'component': 'VRow',
@@ -2163,7 +2329,9 @@ class MediaCoverGenerator(_PluginBase):
                                                      color_ratio=color_ratio_multi_1,
                                                      animation_duration=self._animation_duration,
                                                      animation_fps=self._animation_fps,
-                                                     animation_format=self._animation_format)
+                                                     animation_format=self._animation_format,
+                                                     animation_resolution=self._animation_resolution,
+                                                     animation_reduce_colors=self._animation_reduce_colors)
         elif self._cover_style == 'animated_2':
             if image_path:
                 library_dir = Path(self._covers_input) / library_name
@@ -2177,7 +2345,9 @@ class MediaCoverGenerator(_PluginBase):
                                                      color_ratio=color_ratio_multi_1,
                                                      animation_duration=self._animation_duration,
                                                      animation_fps=self._animation_fps,
-                                                     animation_format=self._animation_format)
+                                                     animation_format=self._animation_format,
+                                                     animation_resolution=self._animation_resolution,
+                                                     animation_reduce_colors=self._animation_reduce_colors)
         elif self._cover_style == 'animated_3':
             if image_path:
                 library_dir = Path(self._covers_input) / library_name
@@ -2192,7 +2362,9 @@ class MediaCoverGenerator(_PluginBase):
                                                      animation_duration=self._animation_duration,
                                                      animation_scroll=self._animation_scroll,
                                                      animation_fps=self._animation_fps,
-                                                     animation_format=self._animation_format)
+                                                     animation_format=self._animation_format,
+                                                     animation_resolution=self._animation_resolution,
+                                                     animation_reduce_colors=self._animation_reduce_colors)
         elif self._cover_style == 'animated_4':
             if image_path:
                 library_dir = Path(self._covers_input) / library_name
@@ -2206,7 +2378,9 @@ class MediaCoverGenerator(_PluginBase):
                                                      color_ratio=color_ratio_multi_1,
                                                      animation_duration=self._animation_duration,
                                                      animation_fps=self._animation_fps,
-                                                     animation_format=self._animation_format)
+                                                     animation_format=self._animation_format,
+                                                     animation_resolution=self._animation_resolution,
+                                                     animation_reduce_colors=self._animation_reduce_colors)
         return image_data
     
     def __generate_from_server(self, service, library, title):
