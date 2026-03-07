@@ -1,7 +1,7 @@
 {
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from plugins.v2.mediacovergenerator_custom import MediaCoverGenerator; print('✅ 导入成功')\\\" 2>&1\",\"description\":\"测试直接导入插件\"}",
-  "error": "Exit code 1\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'plugins'\n\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'plugins'",
-  "timestamp": "2026-03-07T18:15:12.967Z",
+  "tool_name": "WebFetch",
+  "tool_input_preview": "{\"url\":\"https://github.com/jxxghp/MoviePilot/blob/v2/app/core/plugin.py\",\"prompt\":\"plugin loading mechanism, sys.path, sys.modules, how plugins are imported from app.plugins namespace\"}",
+  "error": "Unable to verify if domain github.com is safe to fetch. This may be due to network restrictions or enterprise security policies blocking claude.ai.",
+  "timestamp": "2026-03-07T18:58:34.867Z",
   "retry_count": 1
 }

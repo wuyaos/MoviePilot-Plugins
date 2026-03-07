@@ -31,16 +31,12 @@ from app.schemas.types import EventType
 from app.schemas import ServiceInfo
 from app.utils.http import RequestUtils
 from app.utils.url import UrlUtils
-from app.plugins.mediacovergeneratorcustom.style_single_1 import create_style_single_1
-from app.plugins.mediacovergeneratorcustom.style_single_2 import create_style_single_2
-from app.plugins.mediacovergeneratorcustom.style_multi_1  import create_style_multi_1
+from app.plugins.mediacovergeneratorcustom.style.style_static_2 import create_style_single_2
 from app.plugins.mediacovergeneratorcustom.style.style_animated_1 import create_style_animated_1
 from app.plugins.mediacovergeneratorcustom.style.style_animated_2 import create_style_animated_2
 from app.plugins.mediacovergeneratorcustom.style.style_animated_3 import create_style_animated_3
 from app.plugins.mediacovergeneratorcustom.style.style_animated_4 import create_style_animated_4
-from app.plugins.mediacovergeneratorcustom.static.single_1 import single_1
 from app.plugins.mediacovergeneratorcustom.static.single_2 import single_2
-from app.plugins.mediacovergeneratorcustom.static.multi_1  import multi_1
 
 
 class MediaCoverGeneratorCustom(_PluginBase):
@@ -535,19 +531,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
         # 封面风格选择卡片生成
         styles = [
             {
-                "title": "单图 1",
-                "value": "single_1",
-                "src": single_1
-            },
-            {
                 "title": "单图 2",
                 "value": "single_2",
                 "src": single_2
-            },
-            {
-                "title": "多图 1",
-                "value": "multi_1",
-                "src": multi_1
             }
         ]
 
@@ -2386,31 +2372,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
         color_ratio_multi_1 = self._color_ratio_multi_1 or 0.8
         font_size = (float(zh_font_size), float(en_font_size))
 
-        if self._cover_style == 'single_1':
-            image_data = create_style_single_1(image_path, title, font_path, 
-                                               font_size=font_size, 
-                                               blur_size=blur_size, 
+        if self._cover_style == 'single_2':
+            image_data = create_style_single_2(image_path, title, font_path,
+                                               font_size=font_size,
+                                               blur_size=blur_size,
                                                color_ratio=color_ratio)
-        elif self._cover_style == 'single_2':
-            image_data = create_style_single_2(image_path, title, font_path, 
-                                               font_size=font_size, 
-                                               blur_size=blur_size, 
-                                               color_ratio=color_ratio)
-        elif self._cover_style == 'multi_1':
-            zh_font_path = self._zh_font_path if self._multi_1_use_main_font else self._zh_font_path_multi_1
-            en_font_path = self._en_font_path if self._multi_1_use_main_font else self._en_font_path_multi_1
-            font_path = (zh_font_path, en_font_path)
-            font_size = (float(zh_font_size_multi_1), float(en_font_size_multi_1))
-            if image_path:
-                library_dir = Path(self._covers_input) / library_name
-            else:
-                library_dir = Path(self._covers_path) / library_name
-            if self.prepare_library_images(library_dir):
-                image_data = create_style_multi_1(library_dir, title, font_path,
-                                                  font_size=font_size,
-                                                  is_blur=self._multi_1_blur,
-                                                  blur_size=blur_size_multi_1,
-                                                  color_ratio=color_ratio_multi_1)
         elif self._cover_style == 'animated_1':
             if image_path:
                 library_dir = Path(self._covers_input) / library_name
