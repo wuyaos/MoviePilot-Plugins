@@ -981,8 +981,24 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     "type": "info",
                                     "variant": "tonal",
                                     "text": "库配置用于控制封面更新范围与合集筛选规则。",
-                                    "class": "mb-2"
+                                    "class": "mb-3"
                                 }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "component": "VRow",
+                "content": [
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12},
+                        "content": [
+                            {
+                                "component": "VSubheader",
+                                "props": {"class": "pl-0 py-2"},
+                                "text": "库过滤"
                             }
                         ]
                     }
@@ -1034,67 +1050,61 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 ]
             },
             {
-                "component": "VExpansionPanels",
-                "props": {"multiple": True, "class": "mt-2"},
+                "component": "VRow",
                 "content": [
                     {
-                        "component": "VExpansionPanel",
-                        "props": {"elevation": 0, "class": "rounded-lg"},
+                        "component": "VCol",
+                        "props": {"cols": 12},
                         "content": [
                             {
-                                "component": "VExpansionPanelTitle",
-                                "props": {"class": "font-weight-medium"},
+                                "component": "VSubheader",
+                                "props": {"class": "pl-0 py-2 mt-2"},
                                 "text": "合集配置"
-                            },
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "component": "VRow",
+                "content": [
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12, "md": 6},
+                        "content": [
                             {
-                                "component": "VExpansionPanelText",
-                                "content": [
-                                    {
-                                        "component": "VRow",
-                                        "content": [
-                                            {
-                                                "component": "VCol",
-                                                "props": {"cols": 12, "md": 6},
-                                                "content": [
-                                                    {
-                                                        "component": "VSelect",
-                                                        "props": {
-                                                            "multiple": True,
-                                                            "chips": True,
-                                                            "clearable": True,
-                                                            "model": "exclude_boxsets",
-                                                            "label": "排除来源库",
-                                                            "items": library_items,
-                                                            "hint": "选中的来源库不参与合集封面素材",
-                                                            "persistentHint": True,
-                                                            "prependInnerIcon": "mdi-folder-remove-outline"
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "component": "VCol",
-                                                "props": {"cols": 12, "md": 6},
-                                                "content": [
-                                                    {
-                                                        "component": "VSelect",
-                                                        "props": {
-                                                            "multiple": True,
-                                                            "chips": True,
-                                                            "clearable": True,
-                                                            "model": "selected_users",
-                                                            "label": "合集用户筛选",
-                                                            "items": [],
-                                                            "hint": "未选用户时不过滤；当前无用户列表则保持空",
-                                                            "persistentHint": True,
-                                                            "prependInnerIcon": "mdi-account-filter"
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "component": "VSelect",
+                                "props": {
+                                    "multiple": True,
+                                    "chips": True,
+                                    "clearable": True,
+                                    "model": "exclude_boxsets",
+                                    "label": "排除来源库",
+                                    "items": library_items,
+                                    "hint": "选中的来源库不参与合集封面素材",
+                                    "persistentHint": True,
+                                    "prependInnerIcon": "mdi-folder-remove-outline"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12, "md": 6},
+                        "content": [
+                            {
+                                "component": "VSelect",
+                                "props": {
+                                    "multiple": True,
+                                    "chips": True,
+                                    "clearable": True,
+                                    "model": "selected_users",
+                                    "label": "合集用户筛选",
+                                    "items": [],
+                                    "hint": "未选用户时不过滤；当前无用户列表则保持空",
+                                    "persistentHint": True,
+                                    "prependInnerIcon": "mdi-account-filter"
+                                }
                             }
                         ]
                     }
@@ -2989,8 +2999,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
         item_id = existsinfo.itemid
         server = existsinfo.server
         service = self._servers.get(server)
-        if service:
-            libraries = self.__get_server_libraries(service)
+        libraries = self.__get_server_libraries(service) if service else []
         if libraries and not library_id:
             library = next(
                 (library
@@ -3040,10 +3049,12 @@ class MediaCoverGeneratorCustom(_PluginBase):
         # logger.info(f"最新数据： {new_history}")
         self._monitor_sort = 'DateCreated'
         self._current_updating_items.add(update_key)
-        if self.__update_library(service, library):
-            self._monitor_sort = ''
-            self._current_updating_items.remove(update_key)
-            logger.info(f"媒体库 {server}：{library['Name']} 封面更新成功")
+        try:
+            if self.__update_library(service, library):
+                self._monitor_sort = ''
+                logger.info(f"媒体库 {server}：{library['Name']} 封面更新成功")
+        finally:
+            self._current_updating_items.discard(update_key)
 
     
     def __update_all_libraries(self):

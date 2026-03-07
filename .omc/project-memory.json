@@ -103,8 +103,8 @@
   "hotPaths": [
     {
       "path": "plugins.v2/mediacovergeneratorcustom/__init__.py",
-      "accessCount": 72,
-      "lastAccessed": 1772913704059,
+      "accessCount": 80,
+      "lastAccessed": 1772914300569,
       "type": "directory"
     },
     {
@@ -115,8 +115,8 @@
     },
     {
       "path": "package.v2.json",
-      "accessCount": 6,
-      "lastAccessed": 1772913202867,
+      "accessCount": 9,
+      "lastAccessed": 1772914321358,
       "type": "file"
     },
     {
