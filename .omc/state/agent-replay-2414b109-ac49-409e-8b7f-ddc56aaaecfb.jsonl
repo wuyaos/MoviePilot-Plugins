@@ -13,3 +13,9 @@
 {"t":0,"agent":"a946bf4","agent_type":"scientist","event":"agent_stop","success":true,"duration_ms":231732}
 {"t":0,"agent":"acf0be4","agent_type":"scientist","event":"agent_start","parent_mode":"none"}
 {"t":0,"agent":"acf0be4","agent_type":"scientist","event":"agent_stop","success":true,"duration_ms":347522}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:sciomc"}
+{"t":0,"agent":"system","event":"keyword_detected","keyword":"ralph"}
+{"t":0,"agent":"system","event":"mode_change","mode_from":"none","mode_to":"ralph"}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:ralph"}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:cancel"}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:cancel"}

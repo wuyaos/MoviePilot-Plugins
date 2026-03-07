@@ -32,35 +32,35 @@ from app.schemas.types import EventType
 from app.schemas import ServiceInfo
 from app.utils.http import RequestUtils
 from app.utils.url import UrlUtils
-from app.plugins.mediacovergeneratorcustom.style.style_static_1 import create_style_static_1
-from app.plugins.mediacovergeneratorcustom.style.style_static_2 import create_style_static_2
-from app.plugins.mediacovergeneratorcustom.style.style_static_3 import create_style_static_3
-from app.plugins.mediacovergeneratorcustom.style.style_static_4 import create_style_static_4
-from app.plugins.mediacovergeneratorcustom.style.style_animated_1 import create_style_animated_1
-from app.plugins.mediacovergeneratorcustom.style.style_animated_2 import create_style_animated_2
-from app.plugins.mediacovergeneratorcustom.style.style_animated_3 import create_style_animated_3
-from app.plugins.mediacovergeneratorcustom.style.style_animated_4 import create_style_animated_4
-from app.plugins.mediacovergeneratorcustom.utils.image_manager import ResolutionConfig, ImageResourceManager
-from app.plugins.mediacovergeneratorcustom.utils.network_helper import NetworkHelper, validate_font_file
-from app.plugins.mediacovergeneratorcustom.utils.performance_helper import PerformanceMonitor, ProgressTracker, memory_efficient_operation
-from app.plugins.mediacovergeneratorcustom.utils.color_helper import ColorHelper
+from app.plugins.mediacovergenerator.style.style_static_1 import create_style_static_1
+from app.plugins.mediacovergenerator.style.style_static_2 import create_style_static_2
+from app.plugins.mediacovergenerator.style.style_static_3  import create_style_static_3
+from app.plugins.mediacovergenerator.style.style_static_4 import create_style_static_4
+from app.plugins.mediacovergenerator.style.style_animated_1 import create_style_animated_1
+from app.plugins.mediacovergenerator.style.style_animated_2 import create_style_animated_2
+from app.plugins.mediacovergenerator.style.style_animated_3 import create_style_animated_3
+from app.plugins.mediacovergenerator.style.style_animated_4 import create_style_animated_4
+from app.plugins.mediacovergenerator.utils.image_manager import ResolutionConfig, ImageResourceManager
+from app.plugins.mediacovergenerator.utils.network_helper import NetworkHelper, validate_font_file
+from app.plugins.mediacovergenerator.utils.performance_helper import PerformanceMonitor, ProgressTracker, memory_efficient_operation
+from app.plugins.mediacovergenerator.utils.color_helper import ColorHelper
 
 
-class MediaCoverGeneratorCustom(_PluginBase):
+class MediaCoverGenerator(_PluginBase):
     # 插件名称
-    plugin_name = "媒体库封面生成（自用版）"
+    plugin_name = "Emby媒体库封面生成"
     # 插件描述
-    plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、4种动画风格、Emby和Jellyfin"
+    plugin_desc = "生成媒体库动态/静态封面，支持 Emby/Jellyfin"
     # 插件图标
-    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
+    plugin_icon = "https://raw.githubusercontent.com/justzerock/MoviePilot-Plugins/main/icons/emby.png"
     # 插件版本
     plugin_version = "0.9.2"
     # 插件作者
-    plugin_author = "wuyaos,justzerock"
+    plugin_author = "justzerock"
     # 作者主页
     author_url = "https://github.com/justzerock/MoviePilot-Plugins"
     # 插件配置项ID前缀
-    plugin_config_prefix = "mediacovergeneratorcustom_"
+    plugin_config_prefix = "mediacovergenerator_"
     # 加载顺序
     plugin_order = 2
     # 可使用的用户级别
@@ -122,14 +122,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _animation_scroll = 'alternate'
     _animation_fps = 24
     _animation_format = 'apng'
-    _animation_reduce_colors = "strong"
-    
-    # 本地特有功能：库白名单、合集黑名单、用户筛选
-    _selected_libraries = []      # 库白名单
-    _exclude_boxsets = []         # 合集黑名单
-    _selected_users = []          # 合集用户筛选
-    _exclude_libraries = []        # [可选] 库忽略列表
-
     _animation_resolution = '320x180'
     _animation_reduce_colors = 'medium'
     _animated_2_image_count = 6
@@ -184,11 +176,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             default_base, default_variant = self.__resolve_cover_style_ui(self._cover_style)
             self._cover_style_base = config.get("cover_style_base", default_base)
             self._cover_style_variant = config.get("cover_style_variant", default_variant)
-            # 读取本地特有配置
-            self._selected_libraries = config.get("selected_libraries", [])
-            self._exclude_boxsets = config.get("exclude_boxsets", [])
-            self._selected_users = config.get("selected_users", [])
-            self._exclude_libraries = config.get("exclude_libraries", [])
             self._cover_style = self.__compose_cover_style(self._cover_style_base, self._cover_style_variant)
             self._multi_1_blur = config.get("multi_1_blur", True)
             self._zh_font_size = config.get("zh_font_size", 170)
@@ -439,10 +426,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "animation_format": self._animation_format,
             "animation_resolution": self._animation_resolution,
             "animation_reduce_colors": self._animation_reduce_colors,
-            "selected_libraries": self._selected_libraries,
-            "exclude_boxsets": self._exclude_boxsets,
-            "selected_users": self._selected_users,
-            "exclude_libraries": self._exclude_libraries,
             "animated_2_image_count": self._animated_2_image_count,
             "animated_2_departure_type": self._animated_2_departure_type,
             "bg_color_mode": self._bg_color_mode,
@@ -956,154 +939,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
             },
         ]
 
-        # 构建库选择器数据（去重+容错）
-        seen = set()
-        library_items = [
-            {"title": config.get("name"), "value": config.get("value")}
-            for config in self._all_libraries or []
-            if config.get("name") and config.get("value") and not (
-                config.get("value") in seen or seen.add(config.get("value"))
-            )
-        ]
-
-        # 库配置标签（NEW）
-        library_tab = [
-            {
-                "component": "VRow",
-                "content": [
-                    {
-                        "component": "VCol",
-                        "props": {"cols": 12},
-                        "content": [
-                            {
-                                "component": "VAlert",
-                                "props": {
-                                    "type": "info",
-                                    "variant": "tonal",
-                                    "text": "库配置用于控制封面更新范围与合集筛选规则。",
-                                    "class": "mb-2"
-                                }
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "component": "VRow",
-                "content": [
-                    {
-                        "component": "VCol",
-                        "props": {"cols": 12, "md": 6},
-                        "content": [
-                            {
-                                "component": "VSelect",
-                                "props": {
-                                    "multiple": True,
-                                    "chips": True,
-                                    "clearable": True,
-                                    "model": "selected_libraries",
-                                    "label": "库白名单",
-                                    "items": library_items,
-                                    "hint": "仅更新勾选库；留空表示不过滤",
-                                    "persistentHint": True,
-                                    "prependInnerIcon": "mdi-folder-check-outline"
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        "component": "VCol",
-                        "props": {"cols": 12, "md": 6},
-                        "content": [
-                            {
-                                "component": "VSelect",
-                                "props": {
-                                    "multiple": True,
-                                    "chips": True,
-                                    "clearable": True,
-                                    "model": "exclude_libraries",
-                                    "label": "忽略库",
-                                    "items": library_items,
-                                    "hint": "命中后跳过更新（与白名单并存时以运行逻辑为准）",
-                                    "persistentHint": True,
-                                    "prependInnerIcon": "mdi-folder-off-outline"
-                                }
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "component": "VExpansionPanels",
-                "props": {"multiple": True, "class": "mt-2"},
-                "content": [
-                    {
-                        "component": "VExpansionPanel",
-                        "props": {"elevation": 0, "class": "rounded-lg"},
-                        "content": [
-                            {
-                                "component": "VExpansionPanelTitle",
-                                "props": {"class": "font-weight-medium"},
-                                "text": "合集配置"
-                            },
-                            {
-                                "component": "VExpansionPanelText",
-                                "content": [
-                                    {
-                                        "component": "VRow",
-                                        "content": [
-                                            {
-                                                "component": "VCol",
-                                                "props": {"cols": 12, "md": 6},
-                                                "content": [
-                                                    {
-                                                        "component": "VSelect",
-                                                        "props": {
-                                                            "multiple": True,
-                                                            "chips": True,
-                                                            "clearable": True,
-                                                            "model": "exclude_boxsets",
-                                                            "label": "排除来源库",
-                                                            "items": library_items,
-                                                            "hint": "选中的来源库不参与合集封面素材",
-                                                            "persistentHint": True,
-                                                            "prependInnerIcon": "mdi-folder-remove-outline"
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "component": "VCol",
-                                                "props": {"cols": 12, "md": 6},
-                                                "content": [
-                                                    {
-                                                        "component": "VSelect",
-                                                        "props": {
-                                                            "multiple": True,
-                                                            "chips": True,
-                                                            "clearable": True,
-                                                            "model": "selected_users",
-                                                            "label": "合集用户筛选",
-                                                            "items": [],
-                                                            "hint": "未选用户时不过滤；当前无用户列表则保持空",
-                                                            "persistentHint": True,
-                                                            "prependInnerIcon": "mdi-account-filter"
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            }
-        ]
-
-        # 其他设置标签（非字体部分）
-        others_settings_tab = [
+        # 其他设置标签
+        others_tab = [
             
             {
                 'component': 'VRow',
@@ -1487,6 +1324,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 ]
             },
         ]
+
+        more_tab = single_tab + others_tab
 
         styles = [
             {
@@ -2015,17 +1854,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
         ]
 
 
-        # 基础设置标签 = style_tab 的前3个元素 + 基本参数面板（不包含动画参数）
-        basic_tab = style_tab[:3]
-        if len(style_tab) > 3 and style_tab[3].get("content"):
-            basic_tab.append(
-                {
-                    "component": "VExpansionPanels",
-                    "props": style_tab[3].get("props", {}),
-                    "content": [style_tab[3]["content"][0]],  # 仅保留"基本参数"面板
-                }
-            )
-
         return [
             {
                 "component": "VCard",
@@ -2242,21 +2070,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         "content": [
                             {
                                 "component": "VTab",
-                                "props": {"value": "basic-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-cog",
-                                            "start": True,
-                                            "color": "#FF6B6B",
-                                        },
-                                    },
-                                    {"component": "span", "text": "基础设置"},
-                                ],
-                            },
-                            {
-                                "component": "VTab",
                                 "props": {"value": "style-tab"},
                                 "content": [
                                     {
@@ -2267,52 +2080,37 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                             "color": "#cc76d1",
                                         },
                                     },
-                                    {"component": "span", "text": "风格选择"},
+                                    {"component": "span", "text": "封面风格"},
                                 ],
                             },
                             {
                                 "component": "VTab",
-                                "props": {"value": "library-tab"},
+                                "props": {"value": "title-tab"},
                                 "content": [
                                     {
                                         "component": "VIcon",
                                         "props": {
-                                            "icon": "mdi-folder-cog",
+                                            "icon": "mdi-text-box-edit",
                                             "start": True,
-                                            "color": "#4CAF50",
+                                            "color": "#1976D2",
                                         },
                                     },
-                                    {"component": "span", "text": "库配置"},
+                                    {"component": "span", "text": "封面标题"},
                                 ],
                             },
                             {
                                 "component": "VTab",
-                                "props": {"value": "others-tab"},
+                                "props": {"value": "more-tab"},
                                 "content": [
                                     {
                                         "component": "VIcon",
                                         "props": {
-                                            "icon": "mdi-tune-vertical",
+                                            "icon": "mdi-palette-swatch-variant",
                                             "start": True,
-                                            "color": "#2196F3",
+                                            "color": "#f3afe4",
                                         },
                                     },
-                                    {"component": "span", "text": "其他设置"},
-                                ],
-                            },
-                            {
-                                "component": "VTab",
-                                "props": {"value": "font-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-format-font",
-                                            "start": True,
-                                            "color": "#9C27B0",
-                                        },
-                                    },
-                                    {"component": "span", "text": "字体设置"},
+                                    {"component": "span", "text": "更多参数"},
                                 ],
                             },
                         ],
@@ -2324,13 +2122,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         "content": [
                             {
                                 "component": "VWindowItem",
-                                "props": {"value": "basic-tab"},
-                                "content": [
-                                    {"component": "VCardText", "content": basic_tab}
-                                ],
-                            },
-                            {
-                                "component": "VWindowItem",
                                 "props": {"value": "style-tab"},
                                 "content": [
                                     {"component": "VCardText", "content": style_tab}
@@ -2338,23 +2129,19 @@ class MediaCoverGeneratorCustom(_PluginBase):
                             },
                             {
                                 "component": "VWindowItem",
-                                "props": {"value": "library-tab"},
+                                "props": {"value": "title-tab"},
                                 "content": [
-                                    {"component": "VCardText", "content": library_tab}
+                                    {
+                                        "component": "VCardText",
+                                        "content": title_tab,
+                                    }
                                 ],
                             },
                             {
                                 "component": "VWindowItem",
-                                "props": {"value": "others-tab"},
+                                "props": {"value": "more-tab"},
                                 "content": [
-                                    {"component": "VCardText", "content": title_tab + others_settings_tab}
-                                ],
-                            },
-                            {
-                                "component": "VWindowItem",
-                                "props": {"value": "font-tab"},
-                                "content": [
-                                    {"component": "VCardText", "content": single_tab}
+                                    {"component": "VCardText", "content": more_tab}
                                 ],
                             }
                         ],
@@ -2385,7 +2172,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
 #   - "#FF5722"  # 背景颜色（可选，必须加引号）
 #
 ''',
-            "tab": "basic-tab",
+            "tab": "style-tab",
             "cover_style": "static_1",
             "cover_style_base": "static_1",
             "cover_style_variant": "static",
@@ -2420,10 +2207,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "covers_page_history_limit": 50,
             "page_tab": "generate-tab",
             "style_naming_v2": True,
-            "selected_libraries": [],
-            "exclude_libraries": [],
-            "exclude_boxsets": [],
-            "selected_users": [],
         }
 
     def get_page(self) -> List[dict]:
@@ -3108,32 +2891,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                  
 
     def __update_library(self, service, library):
-        # 库白名单检查
-        if self._selected_libraries:
-            if service.type == 'emby':
-                lib_id = library.get('Id')
-            else:
-                lib_id = library.get('ItemId')
-            
-            if lib_id:
-                lib_key = f"{service.name}-{lib_id}"
-                if lib_key not in self._selected_libraries:
-                    logger.info(f"库 {library.get('Name')} 不在白名单中，跳过")
-                    return False
-        
-        # 库忽略列表检查
-        if self._exclude_libraries:
-            if service.type == 'emby':
-                lib_id = library.get('Id')
-            else:
-                lib_id = library.get('ItemId')
-            
-            if lib_id:
-                lib_key = f"{service.name}-{lib_id}"
-                if lib_key in self._exclude_libraries:
-                    logger.info(f"库 {library.get('Name')} 在忽略列表中，跳过")
-                    return False
-        
         library_name = library['Name']
         logger.info(f"媒体库 {service.name}：{library_name} 开始准备更新封面")
         # 自定义图像路径
@@ -3504,20 +3261,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
         else:
             library_id = library.get("ItemId")
         parent_id = library_id
-
-        # 排除来源库：按当前合集库本身进行过滤（与 UI 的库选择器 value 对齐）
-        if self._exclude_boxsets:
-            current_library_key = f"{service.name}-{library_id}"
-            if current_library_key in self._exclude_boxsets:
-                logger.info(f"合集来源库 {library.get('Name')} 在排除列表中，跳过")
-                return False
-
         boxsets = self.__get_items_batch(service, parent_id,
                                       include_types=include_types)
-        if not boxsets:
-            logger.warning(f"媒体库 {service.name}：{library['Name']} 未获取到可用合集项")
-            return False
-
+        
         required_items = self.__get_required_items()
         valid_items = []
         

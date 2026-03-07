@@ -102,9 +102,21 @@
   },
   "hotPaths": [
     {
+      "path": "plugins.v2/mediacovergeneratorcustom/__init__.py",
+      "accessCount": 72,
+      "lastAccessed": 1772913704059,
+      "type": "directory"
+    },
+    {
       "path": "plugins.v2/mediacovergenerator/__init__.py",
-      "accessCount": 25,
-      "lastAccessed": 1772899165885,
+      "accessCount": 28,
+      "lastAccessed": 1772911208283,
+      "type": "file"
+    },
+    {
+      "path": "package.v2.json",
+      "accessCount": 6,
+      "lastAccessed": 1772913202867,
       "type": "file"
     },
     {
@@ -117,12 +129,6 @@
       "path": "plugins.v2/mediacovergenerator/style_single_1.py",
       "accessCount": 2,
       "lastAccessed": 1772896809668,
-      "type": "file"
-    },
-    {
-      "path": "package.v2.json",
-      "accessCount": 2,
-      "lastAccessed": 1772896994463,
       "type": "file"
     },
     {
@@ -153,6 +159,12 @@
       "path": "",
       "accessCount": 1,
       "lastAccessed": 1772897675878,
+      "type": "directory"
+    },
+    {
+      "path": "plugins.v2/mediacovergeneratorcustom",
+      "accessCount": 1,
+      "lastAccessed": 1772913585684,
       "type": "directory"
     }
   ],
