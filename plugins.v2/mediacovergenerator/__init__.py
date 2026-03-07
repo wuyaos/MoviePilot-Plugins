@@ -1261,6 +1261,93 @@ class MediaCoverGenerator(_PluginBase):
                         },
                         'content': [
                             {
+                                'component': 'VSelect',
+                                'props': {
+                                    'multiple': True,
+                                    'chips': True,
+                                    'clearable': True,
+                                    'model': 'selected_libraries',
+                                    'label': '库白名单',
+                                    'items': [
+                                        {"title": config['name'], "value": config['value']}
+                                            for config in self._all_libraries
+                                    ],
+                                    'hint': '不选则处理所有媒体库，选择后仅处理指定媒体库',
+                                    'persistentHint': True,
+                                    'prependInnerIcon': 'mdi-folder-check-outline',
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                'component': 'VRow',
+                'props': {
+                    'dense': True,
+                    'class': 'mt-3'
+                },
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '合集源库黑名单：排除来自指定库的合集',
+                                    'class': 'mb-2'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'multiple': True,
+                                    'chips': True,
+                                    'clearable': True,
+                                    'model': 'exclude_boxsets',
+                                    'label': '排除来源库',
+                                    'items': [
+                                        {"title": config['name'], "value": config['value']}
+                                            for config in self._all_libraries
+                                    ],
+                                    'hint': '选择后，来自这些库的合集将被排除',
+                                    'persistentHint': True,
+                                    'prependInnerIcon': 'mdi-folder-remove-outline',
+                                    'variant': 'outlined'
+                                }
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                'component': 'VRow',
+                'props': {
+                    'dense': True,
+                    'class': 'mt-3'
+                },
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {
+                            'cols': 12,
+                        },
+                        'content': [
+                            {
                                 'component': 'VDivider',
                                 'props': {
                                     'class': 'my-4'
@@ -2078,6 +2165,8 @@ class MediaCoverGenerator(_PluginBase):
             "delay": 60,
             "selected_servers": [],
             "exclude_libraries": [],
+            "selected_libraries": [],
+            "exclude_boxsets": [],
             "sort_by": "Random",
             "title_config": '''{
   "示例媒体库": ["中文标题", "English Title"]
@@ -2097,7 +2186,13 @@ class MediaCoverGenerator(_PluginBase):
             "single_use_primary": False,
             "multi_1_use_primary": True,
             "selected_users": [],  # 默认不筛选用户
-            "font_download": True  # 默认启用字体下载
+            "font_download": True,  # 默认启用字体下载
+            "animation_duration": 10,
+            "animation_fps": 15,
+            "animation_format": "apng",
+            "animation_scroll": "down",
+            "animation_resolution": "640x360",
+            "animation_reduce_colors": "medium"
         }
 
     def get_page(self) -> List[dict]:
