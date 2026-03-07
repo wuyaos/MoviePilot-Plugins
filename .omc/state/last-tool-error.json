@@ -1,0 +1,7 @@
+{
+  "tool_name": "WebFetch",
+  "tool_input_preview": "{\"url\":\"https://raw.githubusercontent.com/justzerock/MoviePilot-Plugins/main/plugins.v2/mediacovergenerator/style_animated_3.py\",\"prompt\":\"Return the COMPLETE raw Python source code. Do not summarize ...",
+  "error": "Request failed with status code 404",
+  "timestamp": "2026-03-07T15:34:51.543Z",
+  "retry_count": 6
+}

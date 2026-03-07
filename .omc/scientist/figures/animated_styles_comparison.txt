@@ -1,0 +1,43 @@
+
+=== ANIMATED STYLES COMPLEXITY COMPARISON ===
+
+Metric              | animated_1  | animated_2  | animated_3  | animated_4
+                    | Card Stack  | Diag Split  | Scroll Grid | Crossfade
+--------------------|-------------|-------------|-------------|-------------
+Code Lines          | ~878        | ~320        | ~1056       | ~310
+Operations/Frame    | HIGH (5)    | MED (3)     | MED-HI (4)  | LOW (2)
+Est. Memory (MB)    | 50-80       | 30-50       | 40-70       | 20-30
+Default Frames      | 60          | 150         | 180         | 150
+Default Duration    | 4s          | 10s         | 12s         | 10s
+Default Resolution  | 400x300     | 320x180     | 300x200     | 320x180
+Image Input         | Any posters | Any posters | Named 1-9   | Any posters
+De-duplication      | MD5 sig     | MD5 sig     | None        | MD5 sig
+Font Position       | Left 25%    | Left 25%    | Fixed XY    | Center
+ffmpeg Method       | Popen+poll  | Popen+poll  | run(block)  | Popen+poll
+stop_event Support  | Full        | Full        | Partial*    | Full
+
+* animated_3 uses subprocess.run() which blocks during ffmpeg encoding
+
+=== PIPELINE TIME ESTIMATES (seconds, 320x180) ===
+
+Stage           | animated_1 | animated_2 | animated_3 | animated_4
+----------------|------------|------------|------------|------------
+Load Images     |    0.5     |    0.5     |    0.3     |    0.5
+Extract Colors  |    0.3     |    0.3     |    0.2     |    0.3
+Pre-render      |    1.5     |    0.8     |    1.0     |    0.5
+Gen Frames      |    3.0     |    3.0     |    6.3     |    1.5
+ffmpeg Encode   |    2.0     |    3.0     |    4.0     |    3.0
+----------------|------------|------------|------------|------------
+TOTAL           |   ~7.3s    |   ~7.6s    |  ~11.8s    |   ~5.8s
+
+=== FILE SIZE ESTIMATES (KB, 320x180) ===
+
+Format/Reduce   | animated_1 | animated_2 | animated_3 | animated_4
+                | (60 frm)   | (150 frm)  | (180 frm)  | (150 frm)
+----------------|------------|------------|------------|------------
+APNG/strong     | 200-400    | 300-600    | 400-800    | 200-400
+APNG/medium     | 350-600    | 550-900    | 700-1200   | 400-700
+APNG/off        | 600-1000   | 900-1500   | 1200-2000  | 700-1100
+GIF/strong      | 150-300    | 250-500    | 350-600    | 180-350
+GIF/medium      | 250-450    | 400-700    | 500-900    | 300-550
+GIF/off         | 400-700    | 700-1100   | 900-1500   | 550-900

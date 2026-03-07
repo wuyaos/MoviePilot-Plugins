@@ -1,0 +1,160 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1772896217981,
+  "projectRoot": "/mnt/d/work/project/person/MoviePilot-Plugins",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 1,
+      "lastAccessed": 1772896217935,
+      "keyFiles": [
+        "V2_Plugin_Development.md"
+      ]
+    },
+    "fonts": {
+      "path": "fonts",
+      "purpose": null,
+      "fileCount": 8,
+      "lastAccessed": 1772896217941,
+      "keyFiles": [
+        "EmblemaOne.woff2",
+        "josefinsans.woff2",
+        "lilitaone.woff2",
+        "longzhu.ttf",
+        "multi_1_en.otf"
+      ]
+    },
+    "icons": {
+      "path": "icons",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1772896217946,
+      "keyFiles": [
+        "douban.png",
+        "emby.png",
+        "speed.png"
+      ]
+    },
+    "images": {
+      "path": "images",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1772896217953,
+      "keyFiles": [
+        "multi_1.jpg",
+        "plugin.webp",
+        "single_1.jpg",
+        "single_2.jpg"
+      ]
+    },
+    "memory-bank": {
+      "path": "memory-bank",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1772896217960,
+      "keyFiles": [
+        "activeContext.md",
+        "decisionLog.md",
+        "productContext.md",
+        "progress.md",
+        "systemPatterns.md"
+      ]
+    },
+    "plugins.v2": {
+      "path": "plugins.v2",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1772896217965,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "plugins.v2/mediacovergenerator/__init__.py",
+      "accessCount": 25,
+      "lastAccessed": 1772899165885,
+      "type": "file"
+    },
+    {
+      "path": "plugins.v2/mediacovergenerator/style_multi_1.py",
+      "accessCount": 3,
+      "lastAccessed": 1772896812199,
+      "type": "file"
+    },
+    {
+      "path": "plugins.v2/mediacovergenerator/style_single_1.py",
+      "accessCount": 2,
+      "lastAccessed": 1772896809668,
+      "type": "file"
+    },
+    {
+      "path": "package.v2.json",
+      "accessCount": 2,
+      "lastAccessed": 1772896994463,
+      "type": "file"
+    },
+    {
+      "path": "plugins.v2/mediacovergenerator",
+      "accessCount": 1,
+      "lastAccessed": 1772896460403,
+      "type": "directory"
+    },
+    {
+      "path": "LICENSE",
+      "accessCount": 1,
+      "lastAccessed": 1772896490466,
+      "type": "file"
+    },
+    {
+      "path": "plugins.v2/mediacovergenerator/style_single_2.py",
+      "accessCount": 1,
+      "lastAccessed": 1772896822512,
+      "type": "file"
+    },
+    {
+      "path": "plugins.v2/mediacovergenerator/static/multi_1.py",
+      "accessCount": 1,
+      "lastAccessed": 1772896833423,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 1,
+      "lastAccessed": 1772897675878,
+      "type": "directory"
+    }
+  ],
+  "userDirectives": []
+}
