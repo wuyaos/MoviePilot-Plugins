@@ -1486,9 +1486,12 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 }
             )
 
-        # 条件显示的style变量：使用动态表达式支持实时切换
-        static_panel_style = 'background-color: rgba(var(--v-theme-surface), 0.38); border: 1px solid rgba(var(--v-border-color), 0.35); backdrop-filter: blur(6px); display: {{ cover_style_variant === "static" ? "block" : "none" }};'
-        animated_panel_style = 'background-color: rgba(var(--v-theme-surface), 0.32); border: 1px solid rgba(var(--v-border-color), 0.32); backdrop-filter: blur(6px); display: {{ cover_style_variant === "animated" ? "block" : "none" }};'
+        # 条件显示变量：用于 Vue3 条件渲染
+        is_static = 'cover_style_variant === "static"'
+        is_animated = 'cover_style_variant === "animated"'
+
+        static_panel_style = 'background-color: rgba(var(--v-theme-surface), 0.38); border: 1px solid rgba(var(--v-border-color), 0.35); backdrop-filter: blur(6px);'
+        animated_panel_style = 'background-color: rgba(var(--v-theme-surface), 0.32); border: 1px solid rgba(var(--v-border-color), 0.32); backdrop-filter: blur(6px);'
 
         # 封面风格设置标签
         style_tab = [
@@ -1756,7 +1759,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         'props': {
                             'elevation': 0,
                             'class': 'rounded-lg',
-                            'style': animated_panel_style
+                            'style': animated_panel_style,
+                            'v-if': is_animated
                         },
                         'content': [
                             {
@@ -1923,26 +1927,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
         # 基础设置标签 = 基本参数/动态参数面板 + 存储设置（不复用 style_tab）
         # 基础设置标签：合并原顶部基础设置 + 库配置
         basic_tab = [
-            {
-                'component': 'VRow',
-                'content': [
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12},
-                        'content': [
-                            {
-                                'component': 'VAlert',
-                                'props': {
-                                    'type': 'info',
-                                    'variant': 'tonal',
-                                    'text': '基础设置集中管理插件开关、更新策略、媒体服务器与库筛选规则。',
-                                    'class': 'mb-3'
-                                }
-                            }
-                        ]
-                    }
-                ]
-            },
             # 第一行：插件开关 (3 列)
             {
                 'component': 'VRow',
@@ -1980,7 +1964,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             {
                 'component': 'VRow',
                 'content': [
-                    {'component': 'VCol', 'props': {'cols': 12}, 'content': [{'component': 'VSubheader', 'props': {'class': 'pl-0 py-2 mt-2'}, 'text': '库过滤与合集'}]},
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_libraries', 'label': '库黑名单', 'items': library_items, 'hint': '命中后跳过更新；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-off-outline'}}]},
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_boxsets', 'label': '排除来源库', 'items': library_items, 'hint': '选中的来源库不参与合集封面素材', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-remove-outline'}}]},
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_users', 'label': '用户黑名单', 'items': self._all_users, 'hint': '命中用户时跳过合集封面；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-account-filter'}}]}
