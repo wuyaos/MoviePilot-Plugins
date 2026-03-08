@@ -962,57 +962,58 @@ class MediaCoverGeneratorCustom(_PluginBase):
         # 所有可用的媒体库列表
         all_library_options = [{"title": lib['name'], "value": lib['value']} for lib in self._all_libraries] if self._all_libraries else []
 
-        title_editor_block = []
-        if self._title_edit_mode == "simple":
-            # 表格模式：VDataTable显示和编辑title_config
-            title_editor_block = [
+        # 两种编辑器共存，用 CSS display 控制显示隐藏
+        simple_display = 'display: block;' if self._title_edit_mode == "simple" else 'display: none;'
+        json_display = 'display: block;' if self._title_edit_mode == "json" else 'display: none;'
+
+        # 表格编辑器
+        simple_editor = {
+            "component": "VRow",
+            "props": {"style": simple_display},
+            "content": [
                 {
-                    "component": "VRow",
+                    "component": "VCol",
+                    "props": {"cols": 12},
                     "content": [
                         {
-                            "component": "VCol",
-                            "props": {"cols": 12},
-                            "content": [
-                                {
-                                    "component": "VDataTable",
-                                    "props": {
-                                        "model": "title_config",
-                                        "headers": [
-                                            {"title": "媒体库", "key": "library", "width": "30%"},
-                                            {"title": "主标题", "key": "main", "width": "25%"},
-                                            {"title": "副标题", "key": "sub", "width": "25%"},
-                                            {"title": "背景色", "key": "bg", "width": "15%"},
-                                            {"title": "操作", "key": "action", "width": "5%"}
-                                        ],
-                                        "items": title_config_data,
-                                        "density": "compact",
-                                        "hideDefaultFooter": False
-                                    }
-                                }
-                            ]
+                            "component": "VDataTable",
+                            "props": {
+                                "model": "title_config",
+                                "headers": [
+                                    {"title": "媒体库", "key": "library", "width": "30%"},
+                                    {"title": "主标题", "key": "main", "width": "25%"},
+                                    {"title": "副标题", "key": "sub", "width": "25%"},
+                                    {"title": "背景色", "key": "bg", "width": "15%"},
+                                    {"title": "操作", "key": "action", "width": "5%"}
+                                ],
+                                "items": title_config_data,
+                                "density": "compact",
+                                "hideDefaultFooter": False
+                            }
                         }
                     ]
                 }
             ]
-        else:
-            # JSON编辑模式：VAceEditor编辑title_config JSON
-            title_editor_block = [
+        }
+
+        # JSON编辑器
+        json_editor = {
+            'component': 'VRow',
+            'props': {'style': json_display},
+            'content': [
                 {
-                    'component': 'VRow',
+                    'component': 'VCol',
+                    'props': {'cols': 12},
                     'content': [
                         {
-                            'component': 'VCol',
-                            'props': {'cols': 12},
-                            'content': [
-                                {
-                                    'component': 'VAceEditor',
-                                    'props': {
-                                        'modelvalue': 'title_config',
-                                        'lang': 'json',
-                                        'theme': 'monokai',
-                                        'style': 'height: 30rem',
-                                        'label': '标题配置（JSON格式）',
-                                        'placeholder': '''[
+                            'component': 'VAceEditor',
+                            'props': {
+                                'modelvalue': 'title_config',
+                                'lang': 'json',
+                                'theme': 'monokai',
+                                'style': 'height: 30rem',
+                                'label': '标题配置（JSON格式）',
+                                'placeholder': '''[
   {
     "library": "电影",
     "main": "2024新",
@@ -1026,13 +1027,14 @@ class MediaCoverGeneratorCustom(_PluginBase):
     "bg": ""
   }
 ]'''
-                                    }
-                                }
-                            ]
-                        },
+                            }
+                        }
                     ]
                 },
             ]
+        }
+
+        title_editor_block = [simple_editor, json_editor]
 
         title_tab = [
             {
@@ -1563,11 +1565,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 }
             )
 
-        # 条件显示的style变量：根据静态/动态模式自适应显示
-        is_static = self._cover_style_variant == "static"
-        is_animated = self._cover_style_variant == "animated"
-        static_panel_style = 'display: block;' if is_static else 'display: none;'
-        animated_panel_style = 'display: block;' if is_animated else 'display: none;'
+        # 条件显示的style变量：使用动态表达式支持实时切换
+        static_panel_style = 'background-color: rgba(var(--v-theme-surface), 0.38); border: 1px solid rgba(var(--v-border-color), 0.35); backdrop-filter: blur(6px); display: {{ cover_style_variant === "static" ? "block" : "none" }};'
+        animated_panel_style = 'background-color: rgba(var(--v-theme-surface), 0.32); border: 1px solid rgba(var(--v-border-color), 0.32); backdrop-filter: blur(6px); display: {{ cover_style_variant === "animated" ? "block" : "none" }};'
 
         # 封面风格设置标签
         style_tab = [
@@ -1614,7 +1614,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         'props': {
                             'elevation': 0,
                             'class': 'rounded-lg',
-                            'style': f'background-color: rgba(var(--v-theme-surface), 0.38); border: 1px solid rgba(var(--v-border-color), 0.35); backdrop-filter: blur(6px); {static_panel_style}'
+                            'style': static_panel_style
                         },
                         'content': [
                             {
@@ -1835,7 +1835,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         'props': {
                             'elevation': 0,
                             'class': 'rounded-lg',
-                            'style': f'background-color: rgba(var(--v-theme-surface), 0.32); border: 1px solid rgba(var(--v-border-color), 0.32); backdrop-filter: blur(6px); {animated_panel_style}'
+                            'style': animated_panel_style
                         },
                         'content': [
                             {
