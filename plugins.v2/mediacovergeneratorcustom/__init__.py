@@ -125,7 +125,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     
     # 本地特有功能：统一黑名单模式
     _exclude_libraries = []       # 库黑名单
-    _exclude_boxsets = []         # 合集黑名单
+    _exclude_boxsets = []         # 合集来源库黑名单
     _exclude_users = []           # 用户黑名单
     _all_users = []               # 所有用户列表
 
@@ -3265,45 +3265,44 @@ class MediaCoverGeneratorCustom(_PluginBase):
             library_id = library.get("ItemId")
         parent_id = library_id
 
-        # 排除来源库：按当前合集库本身进行过滤（与 UI 的库选择器 value 对齐）
+        # 统一来源库黑名单：合并 exclude_boxsets 与 exclude_users 派生出的来源库
+        exclude_source_library_ids = set()
+
         if self._exclude_boxsets:
-            current_library_key = f"{service.name}-{library_id}"
-            if current_library_key in self._exclude_boxsets:
-                logger.info(f"合集来源库 {library.get('Name')} 在排除列表中，跳过")
-                return False
+            for library_str in self._exclude_boxsets:
+                if '-' in library_str:
+                    parts = library_str.split('-', 1)
+                    if parts[0] == service.name:
+                        exclude_source_library_ids.add(parts[1])
+                else:
+                    exclude_source_library_ids.add(library_str)
+
+        if self._exclude_users:
+            exclude_user_ids = set()
+            for user_str in self._exclude_users:
+                if '-' in user_str:
+                    parts = user_str.split('-', 1)
+                    if parts[0] == service.name:
+                        exclude_user_ids.add(parts[1])
+                else:
+                    exclude_user_ids.add(user_str)
+            exclude_source_library_ids.update(self.__get_user_library_ids(service, exclude_user_ids))
+
+        if library_id in exclude_source_library_ids:
+            logger.info(f"合集来源库 {library.get('Name')} 在排除列表中，跳过")
+            return False
 
         # 获取所有合集（不限制用户）
         boxsets = self.__get_items_batch(service, parent_id,
                                       include_types=include_types,
                                       user_ids=None)
 
-        # 客户端过滤：排除指定用户的项目
-        if self._exclude_users and boxsets:
-            try:
-                # exclude_users 格式为 "server-userid"，需要提取当前 service 的用户 ID
-                exclude_user_ids = set()
-                for user_str in self._exclude_users:
-                    # 格式: "server-userid" 或 "userid"
-                    if '-' in user_str:
-                        parts = user_str.rsplit('-', 1)  # 支持 server-userid 或直接 userid
-                        if parts[0] == service.name:  # 只过滤当前 service 的用户
-                            exclude_user_ids.add(parts[1])
-                    else:
-                        # 兼容直接的 userid
-                        exclude_user_ids.add(user_str)
-
-                if exclude_user_ids:
-                    logger.debug(f"合集库排除用户: {exclude_user_ids}")
-                    filtered_boxsets = []
-                    for boxset in boxsets:
-                        user_data = boxset.get('UserData', {})
-                        boxset_user_id = user_data.get('UserId')
-                        if boxset_user_id not in exclude_user_ids:
-                            filtered_boxsets.append(boxset)
-                    boxsets = filtered_boxsets
-                    logger.debug(f"用户过滤后剩余 {len(boxsets)} 个合集")
-            except Exception as e:
-                logger.warning(f"用户过滤失败: {e}")
+        # 仅按 LibraryId 过滤来源库黑名单
+        if exclude_source_library_ids and boxsets:
+            boxsets = [
+                boxset for boxset in boxsets
+                if boxset.get("LibraryId") not in exclude_source_library_ids
+            ]
         if not boxsets:
             logger.warning(f"媒体库 {service.name}：{library['Name']} 未获取到可用合集项")
             return False
@@ -3329,23 +3328,12 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                              include_types=include_types,
                                              user_ids=None)
 
-                # 应用同样的用户过滤
-                if self._exclude_users and movies:
-                    try:
-                        # 从 exclude_users 中提取当前 service 的用户 ID
-                        exclude_user_ids = set()
-                        for user_str in self._exclude_users:
-                            if '-' in user_str:
-                                parts = user_str.rsplit('-', 1)
-                                if parts[0] == service.name:
-                                    exclude_user_ids.add(parts[1])
-                            else:
-                                exclude_user_ids.add(user_str)
-
-                        if exclude_user_ids:
-                            movies = [m for m in movies if m.get('UserData', {}).get('UserId') not in exclude_user_ids]
-                    except Exception as e:
-                        logger.warning(f"用户过滤失败: {e}")
+                # 仅按 LibraryId 过滤来源库黑名单
+                if exclude_source_library_ids and movies:
+                    movies = [
+                        movie for movie in movies
+                        if movie.get("LibraryId") not in exclude_source_library_ids
+                    ]
 
                 valid_movies = self.__filter_valid_items(movies)
                 valid_items.extend(valid_movies)
@@ -3768,6 +3756,46 @@ class MediaCoverGeneratorCustom(_PluginBase):
         except Exception as err:
             logger.debug(f"获取用户列表失败：{str(err)}")
             return []
+
+    def __get_user_library_ids(self, service, user_ids):
+        """获取指定用户可见来源库 ID 集合（支持 Emby/Jellyfin）"""
+        library_ids = set()
+        if not service or not user_ids:
+            return library_ids
+
+        for user_id in user_ids:
+            try:
+                if service.type == 'emby':
+                    candidate_urls = [
+                        f'[HOST]emby/Users/{user_id}/Views?api_key=[APIKEY]',
+                        f'[HOST]emby/UserViews?userId={user_id}&api_key=[APIKEY]'
+                    ]
+                else:
+                    candidate_urls = [
+                        f'[HOST]emby/UserViews?userId={user_id}&api_key=[APIKEY]'
+                    ]
+
+                data = None
+                for url in candidate_urls:
+                    res = service.instance.get_data(url=url)
+                    if res and res.status_code == 200:
+                        data = res.json()
+                        break
+
+                if not data:
+                    continue
+
+                for item in data.get("Items", []):
+                    if service.type == 'jellyfin':
+                        item_id = item.get("Id") or item.get("ItemId")
+                    else:
+                        item_id = item.get("Id")
+                    if item_id:
+                        library_ids.add(item_id)
+            except Exception as err:
+                logger.debug(f"获取用户 {user_id} 可见来源库失败：{str(err)}")
+
+        return library_ids
 
     def __get_all_libraries(self, server, service):
         try:
