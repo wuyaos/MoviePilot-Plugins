@@ -1639,8 +1639,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
         ]
 
 
-        # 基础设置标签 = style_tab 的前3个元素 + 基本参数/动态参数面板 + 存储设置
-        basic_tab = style_tab[:3]
+        # 基础设置标签 = 基本参数/动态参数面板 + 存储设置（不复用 style_tab）
+        basic_tab = []
         if len(style_tab) > 3 and style_tab[3].get("content"):
             basic_tab.append(
                 {
@@ -1682,7 +1682,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     'model': 'covers_input',
                                     'label': '自定义图片目录（可选）',
                                     'prependInnerIcon': 'mdi-file-image',
-                                    'hint': '使用你指定的图片生成封面，图片放在与媒体库同名的文件夹下',
+                                    'hint': '使用自定义图片生成封面，图片目录需与媒体库同名',
                                     'persistentHint': True
                                 }
                             }
@@ -1701,7 +1701,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     'model': 'covers_output',
                                     'label': '历史封面保存目录（可选）',
                                     'prependInnerIcon': 'mdi-file-image',
-                                    'hint': '生成的封面默认保存在本插件数据目录下',
+                                    'hint': '留空则使用插件数据目录，否则保存到指定路径',
                                     'persistentHint': True
                                 }
                             }
