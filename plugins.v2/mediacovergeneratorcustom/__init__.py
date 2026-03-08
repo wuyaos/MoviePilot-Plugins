@@ -54,7 +54,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     # 插件版本
-    plugin_version = "0.9.4"
+    plugin_version = "0.9.4.1"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -3366,8 +3366,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
         logger.info(f"[合集过滤] 运行配置 | 排除来源库: {self._exclude_boxsets} | 用户黑名单: {self._exclude_users}")
         logger.info(f"[合集过滤] 合并排除合集数: {len(excluded_boxset_ids)}")
 
-        # 获取所有合集
+        # 获取所有合集（全量，过滤后由 __filter_valid_items 按需裁剪）
         boxsets = self.__get_items_batch(service, parent_id,
+                                      limit=99999,
                                       include_types=include_types,
                                       user_ids=None)
 
