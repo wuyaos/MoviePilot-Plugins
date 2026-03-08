@@ -949,15 +949,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
         拼装插件配置页面
         """
         zh_font_items, en_font_items, _, _ = self.__get_font_presets()
-        # 标题配置：双模式编辑（JSON表格 / JSON编辑器）
-        # 获取已配置的库列表用于下拉选择
-        title_config_data = []
-        try:
-            if isinstance(self._title_config, str):
-                import json
-                title_config_data = json.loads(self._title_config) if self._title_config else []
-        except Exception:
-            title_config_data = []
+        # 标题配置：YAML格式编辑
+        # 注意：title_config 现在使用 YAML 格式，由 __load_title_config() 在运行时解析
 
         # 所有可用的媒体库列表
         all_library_options = [{"title": lib['name'], "value": lib['value']} for lib in self._all_libraries] if self._all_libraries else []
@@ -988,7 +981,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     "theme": "monokai",
                                     "style": "height: 30rem",
                                     "label": "标题配置（YAML格式）",
-                                    "placeholder": "[]"
+                                    "placeholder": "库名: [主标题, 副标题]\n3D-HAnime: [H漫, 3D]"
                                 }
                             }
                         ]
@@ -2153,7 +2146,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "selected_servers": [],
             "include_libraries": [],
             "sort_by": "Random",
-            "title_config": '[]',
+            "title_config": '',
             "tab": "basic-tab",
             "title_edit_mode": "json",
             "title_simple_library": "",
