@@ -231,8 +231,11 @@ def create_style_animated_2(
         formats = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
         all_posters = sorted(
             [str(folder / f) for f in os.listdir(folder) if f.lower().endswith(formats)],
-            key=lambda p: os.path.getmtime(p),
-            reverse=True,
+            key=lambda p: (
+                # 优先按数字文件名（1.jpg, 2.jpg, ...）排序，保证动画帧序列正确
+                int(Path(p).stem) if Path(p).stem.isdigit() else float('inf'),
+                os.path.basename(p)  # 数字相同时按文件名排序
+            ),
         )
         if not all_posters:
             logger.warning("style_animated_3 未找到素材图片")

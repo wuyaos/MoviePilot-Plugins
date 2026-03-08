@@ -3139,6 +3139,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                     image_count=animated_2_image_count,
                                                     departure_type=self._animated_2_departure_type,
                                                     stop_event=self._event)
+            else:
+                logger.warning(f"animated_1: 图片目录准备失败 {library_dir}，降级到静图")
+                image_data = False
         elif self._cover_style == 'animated_2':
             # 动态封面强制使用 320x180 分辨率以保证性能
             anim_res = '320x180'

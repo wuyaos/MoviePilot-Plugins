@@ -401,8 +401,11 @@ def create_style_animated_1(
                 for f in os.listdir(poster_folder)
                 if f.lower().endswith(supported_formats)
             ],
-            key=lambda x: os.path.getmtime(x),
-            reverse=True,
+            key=lambda x: (
+                # 优先按数字文件名（1.jpg, 2.jpg, ...）排序，保证动画帧序列正确
+                int(Path(x).stem) if Path(x).stem.isdigit() else float('inf'),
+                os.path.basename(x)  # 数字相同时按文件名排序
+            ),
         )
 
         if not all_posters:
