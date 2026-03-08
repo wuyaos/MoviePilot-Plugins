@@ -127,6 +127,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _exclude_libraries = []       # 库黑名单
     _exclude_boxsets = []         # 合集来源库黑名单
     _exclude_users = []           # 用户黑名单
+    _debug_mode = False           # Debug 开关：打印详细日志
     _all_users = []               # 所有用户列表
 
     _animation_resolution = '320x180'
@@ -191,6 +192,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
             self._exclude_libraries = config.get("exclude_libraries", [])
             self._exclude_boxsets = config.get("exclude_boxsets", [])
             self._exclude_users = config.get("exclude_users", [])
+            self._debug_mode = config.get("debug_mode", False)
             self._cover_style = self.__compose_cover_style(self._cover_style_base, self._cover_style_variant)
             self._multi_1_blur = config.get("multi_1_blur", True)
             self._zh_font_size = config.get("zh_font_size", 170)
@@ -3255,7 +3257,18 @@ class MediaCoverGeneratorCustom(_PluginBase):
         else:
             logger.warning(f"媒体库 {service.name}：{library['Name']} 无法找到有效的图片项目 (筛选类型: {include_types})")
             return False
-        
+
+    def __debug_log(self, msg: str, level="info"):
+        """Debug 日志输出（仅在 _debug_mode 为 True 时输出）"""
+        if not self._debug_mode:
+            return
+        if level == "debug":
+            logger.debug(f"【DEBUG】{msg}")
+        elif level == "info":
+            logger.info(f"【DEBUG】{msg}")
+        elif level == "warning":
+            logger.warning(f"【DEBUG】{msg}")
+
     def __handle_boxset_library(self, service, library, title):
 
         include_types = 'BoxSet,Movie'
@@ -3277,6 +3290,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 else:
                     exclude_source_library_ids.add(str(library_str))
 
+        self.__debug_log(f"排除来源库配置项: {self._exclude_boxsets}", "info")
+        self.__debug_log(f"排除来源库ID集合: {exclude_source_library_ids}", "debug")
+
         if self._exclude_users:
             exclude_user_ids = set()
             for user_str in self._exclude_users:
@@ -3286,7 +3302,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         exclude_user_ids.add(str(parts[1]))
                 else:
                     exclude_user_ids.add(str(user_str))
-            exclude_source_library_ids.update(self.__get_user_library_ids(service, exclude_user_ids))
+            self.__debug_log(f"用户黑名单配置项: {self._exclude_users}", "info")
+            self.__debug_log(f"用户黑名单ID集合: {exclude_user_ids}", "debug")
+            user_libs = self.__get_user_library_ids(service, exclude_user_ids)
+            self.__debug_log(f"用户黑名单映射来源库: {user_libs}", "debug")
+            exclude_source_library_ids.update(user_libs)
 
         if library_id in exclude_source_library_ids:
             logger.info(f"合集来源库 {library.get('Name')} 在排除列表中，跳过")
@@ -3785,16 +3805,22 @@ class MediaCoverGeneratorCustom(_PluginBase):
 
                 data = None
                 for url in candidate_urls:
+                    self.__debug_log(f"正在查询用户 {user_id} 的库接口: {url.split('?')[0]}", "debug")
                     res = service.instance.get_data(url=url)
                     if res and res.status_code == 200:
                         data = res.json()
                         break
 
                 if not data:
+                    self.__debug_log(f"用户 {user_id} 未获取到库数据", "warning")
                     continue
+
+                items_count = len(data.get("Items", []))
+                self.__debug_log(f"用户 {user_id} 获取到 {items_count} 个库", "info")
 
                 for item in data.get("Items", []):
                     if item.get('Type') == 'BoxSet' or item.get('CollectionType') == 'boxsets':
+                        self.__debug_log(f"  跳过合集库: {item.get('Name')} (Type={item.get('Type')})", "debug")
                         continue  # 跳过合集库
                     if service.type == 'jellyfin':
                         item_id = item.get("Id") or item.get("ItemId")
@@ -3802,6 +3828,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         item_id = item.get("Id")
                     if item_id:
                         library_ids.add(str(item_id))
+                        self.__debug_log(f"  添加库: {item.get('Name')} Id={item_id}", "debug")
             except Exception as err:
                 logger.debug(f"获取用户 {user_id} 可见来源库失败：{str(err)}")
 
