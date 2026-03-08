@@ -128,6 +128,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _selected_libraries = []      # 库白名单
     _exclude_boxsets = []         # 合集黑名单
     _selected_users = []          # 合集用户筛选
+    _all_users = []               # 所有用户列表
     _exclude_libraries = []        # [可选] 库忽略列表
 
     _animation_resolution = '320x180'
@@ -303,9 +304,17 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 name_filters=self._selected_servers
             )
             self._all_libraries = []
+            self._all_users = []
             for server, service in self._servers.items():
                 if not service.instance.is_inactive():
                     self._all_libraries.extend(self.__get_all_libraries(server, service))
+                    # 获取用户列表
+                    users = self.__get_server_users(service)
+                    for user in users:
+                        self._all_users.append({
+                            "title": f"{server}: {user['name']}",
+                            "value": f"{server}-{user['id']}"
+                        })
                 else:
                     logger.info(f"媒体服务器 {server} 未连接")
         else:
@@ -1312,21 +1321,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
         ]
 
         # 库配置标签（NEW）
-        # 获取用户列表 - 从所有已连接的服务器聚合用户
-        all_users = []
-        user_set = set()
-        if self._servers:
-            for server, service in self._servers.items():
-                try:
-                    if hasattr(service.instance, 'get_users'):
-                        users_map = service.instance.get_users() or {}
-                        for user_name, user_id in users_map.items():
-                            if user_name and user_name not in user_set:
-                                all_users.append({"title": user_name, "value": user_name})
-                                user_set.add(user_name)
-                except Exception as e:
-                    logger.debug(f"获取服务器 {server} 的用户列表失败: {e}")
-
         library_tab = [
             {
                 "component": "VRow",
@@ -1460,7 +1454,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     "clearable": True,
                                     "model": "selected_users",
                                     "label": "合集用户筛选",
-                                    "items": [],
+                                    "items": self._all_users,
                                     "hint": "未选用户时不过滤；当前无用户列表则保持空",
                                     "persistentHint": True,
                                     "prependInnerIcon": "mdi-account-filter"
@@ -3819,7 +3813,36 @@ class MediaCoverGeneratorCustom(_PluginBase):
         except Exception as err:
             logger.error(f"获取媒体库列表失败：{str(err)}")
             return []
-    
+
+    def __get_server_users(self, service):
+        """
+        获取媒体服务器的用户列表
+        """
+        try:
+            if not service:
+                return []
+
+            # Emby/Jellyfin API for getting users
+            url = '[HOST]emby/Users?api_key=[APIKEY]'
+            res = service.instance.get_data(url=url)
+
+            if res and res.status_code == 200:
+                users = res.json()
+                user_list = []
+                for user in users:
+                    if user.get('Name') and user.get('Id'):
+                        user_list.append({
+                            'name': user['Name'],
+                            'id': user['Id']
+                        })
+                return user_list
+            else:
+                logger.debug(f"获取用户列表失败：状态码 {res.status_code if res else 'None'}")
+                return []
+        except Exception as err:
+            logger.debug(f"获取用户列表失败：{str(err)}")
+            return []
+
     def __get_all_libraries(self, server, service):
         try:
             lib_items = []
