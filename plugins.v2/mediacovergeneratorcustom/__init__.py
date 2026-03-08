@@ -54,7 +54,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     # 插件版本
-    plugin_version = "0.9.4.2"
+    plugin_version = "0.9.5"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -2714,27 +2714,35 @@ class MediaCoverGeneratorCustom(_PluginBase):
             return
         if not self._transfer_monitor:
             return
-        
-        event_data = event.event_data    
+
+        event_data = event.event_data
         if not event_data:
             return
-        
-        # transfer: TransferInfo = event_data.get("transferinfo")        
-        # Event data
-        mediainfo: MediaInfo = event_data.get("mediainfo")
 
-        # logger.info(f"转移信息：{transfer}")
-        # logger.info(f"元数据：{meta}")
-        # logger.info(f"媒体信息：{mediainfo}")
-        # logger.info(f"监控到的媒体信息：{mediainfo}")
+        mediainfo: MediaInfo = event_data.get("mediainfo")
         if not mediainfo:
             return
-            
-        # Delay
-        if self._delay:
-            logger.info(f"延迟 {self._delay} 秒后开始更新封面")
-            time.sleep(int(self._delay))
-            
+
+        try:
+            delay = max(0, int(self._delay)) if self._delay else 0
+        except (TypeError, ValueError):
+            delay = 0
+
+        if delay > 0:
+            logger.info(f"延迟 {delay} 秒后开始更新封面")
+            timer = threading.Timer(delay, self.__do_update_library_cover, args=[mediainfo])
+            timer.daemon = True
+            timer.start()
+        else:
+            self.__do_update_library_cover(mediainfo)
+
+    def __do_update_library_cover(self, mediainfo: MediaInfo):
+        """
+        执行媒体库封面更新逻辑，由事件回调或延迟定时器调用
+        """
+        if not self._servers:
+            return
+
         # Query the item in media server
         existsinfo = self.mschain.media_exists(mediainfo=mediainfo)
         if not existsinfo or not existsinfo.itemid:
@@ -2743,14 +2751,13 @@ class MediaCoverGeneratorCustom(_PluginBase):
             if not existsinfo:
                 logger.warning(f"{mediainfo.title_year} 不存在媒体库中，可能服务器还未扫描完成，建议设置合适的延迟时间")
                 return
-        
+
         # Get item details including backdrop
         iteminfo = self.mschain.iteminfo(server=existsinfo.server, item_id=existsinfo.itemid)
-        # logger.info(f"获取到媒体项 {mediainfo.title_year} 详情：{iteminfo}")
         if not iteminfo:
             logger.warning(f"获取 {mediainfo.title_year} 详情失败")
             return
-            
+
         # Try to get library ID
         library_id = None
         library = {}
@@ -2761,11 +2768,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
         if libraries and not library_id:
             library = next(
                 (library
-                 for library in libraries if library.get('Locations', []) 
+                 for library in libraries if library.get('Locations', [])
                  and any(iteminfo.path.startswith(path) for path in library.get('Locations', []))),
                 None
             )
-        
+
         if not library:
             logger.warning(f"找不到 {mediainfo.title_year} 所在媒体库")
             return
@@ -2781,9 +2788,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
         if update_key in self._current_updating_items:
             logger.info(f"媒体库 {server}：{library['Name']} 的项目 {mediainfo.title_year} 正在更新中，跳过此次更新")
             return
-        # self.clean_cover_history(save=True)
         old_history = self.get_data('cover_history') or []
-        # 新增去重判断逻辑
         latest_item = max(
             (item for item in old_history if str(item.get("library_id")) == str(library_id)),
             key=lambda x: x["timestamp"],
@@ -2792,19 +2797,16 @@ class MediaCoverGeneratorCustom(_PluginBase):
         if latest_item and str(latest_item.get("item_id")) == str(item_id):
             logger.info(f"媒体 {mediainfo.title_year} 在库中是最新记录，不更新封面图")
             return
-        
-        # 安全地获取字体和翻译
+
         try:
             self.__get_fonts()
         except Exception as e:
             logger.error(f"初始化字体或翻译时出错: {e}")
-            # 继续执行，但可能会影响封面生成质量
-        new_history = self.update_cover_history(
-            server=server, 
-            library_id=library_id, 
+        self.update_cover_history(
+            server=server,
+            library_id=library_id,
             item_id=item_id
         )
-        # logger.info(f"最新数据： {new_history}")
         original_monitor_sort = self._monitor_sort
         self._monitor_sort = 'DateCreated'
         self._current_updating_items.add(update_key)
