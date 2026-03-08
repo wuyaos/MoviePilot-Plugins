@@ -3258,8 +3258,20 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 logger.info(f"合集来源库 {library.get('Name')} 在排除列表中，跳过")
                 return False
 
+        # 获取选中用户的 ID
+        selected_user_ids = None
+        if self._selected_users:
+            try:
+                user_map = service.instance.get_users() if hasattr(service.instance, 'get_users') else {}
+                selected_user_ids = [user_map.get(user_name) for user_name in self._selected_users if user_map.get(user_name)]
+                if selected_user_ids:
+                    logger.debug(f"合集库用户筛选: {selected_user_ids}")
+            except Exception as e:
+                logger.warning(f"获取用户 ID 失败: {e}")
+
         boxsets = self.__get_items_batch(service, parent_id,
-                                      include_types=include_types)
+                                      include_types=include_types,
+                                      user_ids=selected_user_ids)
         if not boxsets:
             logger.warning(f"媒体库 {service.name}：{library['Name']} 未获取到可用合集项")
             return False
@@ -3281,8 +3293,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     
                 # 获取此BoxSet中的电影
                 movies = self.__get_items_batch(service,
-                                             parent_id=boxset['Id'], 
-                                             include_types=include_types)
+                                             parent_id=boxset['Id'],
+                                             include_types=include_types,
+                                             user_ids=selected_user_ids)
                 
                 valid_movies = self.__filter_valid_items(movies)
                 valid_items.extend(valid_movies)
