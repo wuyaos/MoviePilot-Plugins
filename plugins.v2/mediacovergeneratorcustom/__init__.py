@@ -3863,15 +3863,22 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     return f'[HOST]emby/Items/{item_id}/Images/Backdrop/0?tag={tag}&api_key=[APIKEY]'
             else:
                 if item.get("Type") == 'Episode':
-                    if item.get("ParentBackdropImageTags") and len(item["ParentBackdropImageTags"]) > 0:
-                        item_id = item.get("ParentBackdropItemId")
-                        tag = item["ParentBackdropImageTags"][0]
-                        return f'[HOST]emby/Items/{item_id}/Images/Backdrop/0?tag={tag}&api_key=[APIKEY]'
-                    elif item.get("SeriesPrimaryImageTag"):
+                    # Episode：优先级为 Series海报 → 剧照 → 海报
+                    if item.get("SeriesPrimaryImageTag"):
                         item_id = item.get("SeriesId")
                         tag = item.get("SeriesPrimaryImageTag")
                         return f'[HOST]emby/Items/{item_id}/Images/Primary?tag={tag}&api_key=[APIKEY]'
-                if item.get("ParentBackdropImageTags") and len(item["ParentBackdropImageTags"]) > 0:
+                    elif item.get("ParentBackdropImageTags") and len(item["ParentBackdropImageTags"]) > 0:
+                        item_id = item.get("ParentBackdropItemId")
+                        tag = item["ParentBackdropImageTags"][0]
+                        return f'[HOST]emby/Items/{item_id}/Images/Backdrop/0?tag={tag}&api_key=[APIKEY]'
+
+                # 非Episode：优先级为 海报 → 剧照
+                if item.get("ImageTags") and item.get("ImageTags").get("Primary"):
+                    item_id = item.get("Id")
+                    tag = item.get("ImageTags").get("Primary")
+                    return f'[HOST]emby/Items/{item_id}/Images/Primary?tag={tag}&api_key=[APIKEY]'
+                elif item.get("ParentBackdropImageTags") and len(item["ParentBackdropImageTags"]) > 0:
                     item_id = item.get("ParentBackdropItemId")
                     tag = item["ParentBackdropImageTags"][0]
                     return f'[HOST]emby/Items/{item_id}/Images/Backdrop/0?tag={tag}&api_key=[APIKEY]'
@@ -3879,10 +3886,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     item_id = item.get("Id")
                     tag = item["BackdropImageTags"][0]
                     return f'[HOST]emby/Items/{item_id}/Images/Backdrop/0?tag={tag}&api_key=[APIKEY]'
-                elif item.get("ImageTags") and item.get("ImageTags").get("Primary"):
-                    item_id = item.get("Id")
-                    tag = item.get("ImageTags").get("Primary")
-                    return f'[HOST]emby/Items/{item_id}/Images/Primary?tag={tag}&api_key=[APIKEY]'
 
         elif self._cover_style.startswith('static'):
             if self._use_primary:
