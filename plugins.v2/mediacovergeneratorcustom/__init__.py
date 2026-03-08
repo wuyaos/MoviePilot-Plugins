@@ -3364,17 +3364,13 @@ class MediaCoverGeneratorCustom(_PluginBase):
         valid_items = []
 
         self._seen_keys = set()
-        # 每个 boxset 取一张电影图片
+        # 每个 boxset 按封面风格图片优先级取一张
         for boxset in boxsets:
             if len(valid_items) >= required_items:
                 break
-            movies = self.__get_items_batch(service,
-                                         parent_id=boxset['Id'],
-                                         include_types=include_types,
-                                         user_ids=None)
-            valid_movies = self.__filter_valid_items(movies)
-            if valid_movies:
-                valid_items.append(valid_movies[0])
+            valid = self.__filter_valid_items([boxset])
+            if valid:
+                valid_items.append(valid[0])
         
         # 使用获取到的有效项目更新封面
         if len(valid_items) > 0:
