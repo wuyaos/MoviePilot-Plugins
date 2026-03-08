@@ -143,7 +143,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _covers_history_limit_per_library = 10
     _covers_page_history_limit = 50
     _page_tab = "generate-tab"
-    _title_edit_mode = "yaml"
+    _title_edit_mode = "json"
     _title_simple_library = ""
     _title_simple_main = ""
     _title_simple_sub = ""
@@ -267,7 +267,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 int,
             )
             self._page_tab = config.get("page_tab", "generate-tab")
-            self._title_edit_mode = config.get("title_edit_mode", "yaml")
+            self._title_edit_mode = config.get("title_edit_mode", "json")
             self._title_simple_library = config.get("title_simple_library", "")
             self._title_simple_main = config.get("title_simple_main", "")
             self._title_simple_sub = config.get("title_simple_sub", "")
@@ -1004,25 +1004,12 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         {
                             'component': 'VAceEditor',
                             'props': {
-                                'modelvalue': 'title_config',
+                                'model': 'title_config',
                                 'lang': 'json',
                                 'theme': 'monokai',
                                 'style': 'height: 30rem',
                                 'label': '标题配置（JSON格式）',
-                                'placeholder': '''[
-  {
-    "library": "电影",
-    "main": "2024新",
-    "sub": "好看",
-    "bg": "#FF5722"
-  },
-  {
-    "library": "电视剧",
-    "main": "新剧",
-    "sub": "精选",
-    "bg": ""
-  }
-]'''
+                                'placeholder': '[]'
                             }
                         }
                     ]
