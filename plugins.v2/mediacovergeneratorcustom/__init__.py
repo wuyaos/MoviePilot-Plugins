@@ -3386,9 +3386,20 @@ class MediaCoverGeneratorCustom(_PluginBase):
         valid_items = []
 
         self._seen_keys = set()
-        valid_boxsets = self.__filter_valid_items(boxsets)
-        valid_items.extend(valid_boxsets)
-        
+        # 每个合集取一张：从合集内部的电影/剧集中取图
+        for boxset in boxsets:
+            if len(valid_items) >= required_items:
+                break
+            child_items = self.__get_items_batch(service,
+                                                 parent_id=boxset.get('Id'),
+                                                 include_types='Movie,Series,Episode',
+                                                 limit=20)
+            child_valids = self.__filter_valid_items(child_items)
+            if child_valids:
+                valid_items.append(child_valids[0])
+
+        logger.info(f"[合集过滤] 从 {min(len(boxsets), required_items)} 个合集中取得有效图片 {len(valid_items)} 张")
+
         # 使用获取到的有效项目更新封面
         if len(valid_items) > 0:
             if self.__is_single_image_style():
@@ -3396,7 +3407,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
             else:
                 return self.__update_grid_image(service, library, title, valid_items[:required_items if self._cover_style in ['animated_1', 'animated_2'] else 9])
         else:
-            print(f"媒体库 {service.name}：{library['Name']} 无法找到有效的图片项目")
+            logger.warning(f"媒体库 {service.name}：{library['Name']} 无法找到有效的图片项目")
             return False
         
     def __handle_playlist_library(self, service, library, title):
