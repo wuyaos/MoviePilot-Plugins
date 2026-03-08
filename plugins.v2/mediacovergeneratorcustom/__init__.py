@@ -3273,9 +3273,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 if '-' in library_str:
                     parts = library_str.split('-', 1)
                     if parts[0] == service.name:
-                        exclude_source_library_ids.add(parts[1])
+                        exclude_source_library_ids.add(str(parts[1]))
                 else:
-                    exclude_source_library_ids.add(library_str)
+                    exclude_source_library_ids.add(str(library_str))
 
         if self._exclude_users:
             exclude_user_ids = set()
@@ -3283,9 +3283,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 if '-' in user_str:
                     parts = user_str.split('-', 1)
                     if parts[0] == service.name:
-                        exclude_user_ids.add(parts[1])
+                        exclude_user_ids.add(str(parts[1]))
                 else:
-                    exclude_user_ids.add(user_str)
+                    exclude_user_ids.add(str(user_str))
             exclude_source_library_ids.update(self.__get_user_library_ids(service, exclude_user_ids))
 
         if library_id in exclude_source_library_ids:
@@ -3301,7 +3301,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
         if exclude_source_library_ids and boxsets:
             boxsets = [
                 boxset for boxset in boxsets
-                if boxset.get("LibraryId") not in exclude_source_library_ids
+                if str(boxset.get("LibraryId") or "") not in exclude_source_library_ids
             ]
         if not boxsets:
             logger.warning(f"媒体库 {service.name}：{library['Name']} 未获取到可用合集项")
@@ -3309,12 +3309,20 @@ class MediaCoverGeneratorCustom(_PluginBase):
 
         required_items = self.__get_required_items()
         valid_items = []
-        
-        # 首先检查BoxSet本身是否有合适的图片
-        self._seen_keys = set()
 
-        valid_boxsets = self.__filter_valid_items(boxsets)
-        valid_items.extend(valid_boxsets)
+        # 首先检查BoxSet本身是否有合适的图片
+        # 根因：exclude_source_library_ids 针对"来源库"，而 BoxSet 项的 LibraryId 通常是"合集库"本身，
+        # 直接使用 BoxSet 海报会绕过来源库黑名单，导致黑名单内容仍出现在合集中。
+        # 修复：当存在来源库黑名单时，禁用 BoxSet 自身海报，仅使用其子项电影并按来源库过滤。
+        self._seen_keys = set()
+        valid_boxsets = []
+        if not exclude_source_library_ids:
+            valid_boxsets = self.__filter_valid_items(boxsets)
+            valid_items.extend(valid_boxsets)
+        else:
+            logger.debug(
+                "检测到来源库黑名单，跳过 BoxSet 自身海报，改为仅从过滤后的合集子项中选图"
+            )
         
         # 如果BoxSet本身没有足够的图片，则获取其中的电影
         if len(valid_items) < required_items:
@@ -3332,7 +3340,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 if exclude_source_library_ids and movies:
                     movies = [
                         movie for movie in movies
-                        if movie.get("LibraryId") not in exclude_source_library_ids
+                        if str(movie.get("LibraryId") or "") not in exclude_source_library_ids
                     ]
 
                 valid_movies = self.__filter_valid_items(movies)
@@ -3793,7 +3801,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     else:
                         item_id = item.get("Id")
                     if item_id:
-                        library_ids.add(item_id)
+                        library_ids.add(str(item_id))
             except Exception as err:
                 logger.debug(f"获取用户 {user_id} 可见来源库失败：{str(err)}")
 
