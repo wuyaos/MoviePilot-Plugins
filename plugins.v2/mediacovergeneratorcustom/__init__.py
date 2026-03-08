@@ -143,6 +143,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _covers_page_history_limit = 50
     _page_tab = "generate-tab"
     _title_edit_mode = "yaml"
+    _title_simple_library = ""
+    _title_simple_main = ""
+    _title_simple_sub = ""
+    _title_simple_bg = ""
 
     def __init__(self):
         super().__init__()
@@ -262,6 +266,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 int,
             )
             self._page_tab = config.get("page_tab", "generate-tab")
+            self._title_edit_mode = config.get("title_edit_mode", "yaml")
+            self._title_simple_library = config.get("title_simple_library", "")
+            self._title_simple_main = config.get("title_simple_main", "")
+            self._title_simple_sub = config.get("title_simple_sub", "")
+            self._title_simple_bg = config.get("title_simple_bg", "")
 
             if self._resolution not in ["1080p", "720p", "480p"]:
                 self._resolution = "480p"
@@ -454,6 +463,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "covers_history_limit_per_library": self._covers_history_limit_per_library,
             "covers_page_history_limit": self._covers_page_history_limit,
             "page_tab": self._page_tab,
+            "title_edit_mode": self._title_edit_mode,
+            "title_simple_library": self._title_simple_library,
+            "title_simple_main": self._title_simple_main,
+            "title_simple_sub": self._title_simple_sub,
+            "title_simple_bg": self._title_simple_bg,
             "style_naming_v2": True,
         })
 
