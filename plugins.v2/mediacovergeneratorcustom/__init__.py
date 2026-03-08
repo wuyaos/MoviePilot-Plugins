@@ -2125,9 +2125,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     {
                                         "component": "VIcon",
                                         "props": {
-                                            "icon": "mdi-typeface",
+                                            "icon": "mdi-format-size",
                                             "start": True,
-                                            "color": "#FF9800",
                                         },
                                     },
                                     {"component": "span", "text": "字体设置"},
