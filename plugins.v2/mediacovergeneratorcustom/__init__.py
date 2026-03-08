@@ -976,7 +976,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                             {
                                 "component": "VAceEditor",
                                 "props": {
-                                    "model": "title_config",
+                                    "modelvalue": "title_config",
                                     "lang": "yaml",
                                     "theme": "monokai",
                                     "style": "height: 30rem",
