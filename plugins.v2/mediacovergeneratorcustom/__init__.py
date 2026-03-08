@@ -962,14 +962,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
         # 所有可用的媒体库列表
         all_library_options = [{"title": lib['name'], "value": lib['value']} for lib in self._all_libraries] if self._all_libraries else []
 
-        # 两种编辑器共存，用 CSS display 控制显示隐藏
-        simple_display = 'display: block;' if self._title_edit_mode == "simple" else 'display: none;'
-        json_display = 'display: block;' if self._title_edit_mode == "json" else 'display: none;'
-
-        # 表格编辑器
+        # 两种编辑器共存，用动态表达式控制显示隐藏
         simple_editor = {
             "component": "VRow",
-            "props": {"style": simple_display},
+            "props": {"style": 'display: {{ title_edit_mode === "simple" ? "block" : "none" }};'},
             "content": [
                 {
                     "component": "VCol",
@@ -999,7 +995,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
         # JSON编辑器
         json_editor = {
             'component': 'VRow',
-            'props': {'style': json_display},
+            'props': {'style': 'display: {{ title_edit_mode === "json" ? "block" : "none" }};'},
             'content': [
                 {
                     'component': 'VCol',
@@ -2142,7 +2138,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     {
                                         "component": "VIcon",
                                         "props": {
-                                            "icon": "mdi-font",
+                                            "icon": "mdi-typeface",
                                             "start": True,
                                             "color": "#FF9800",
                                         },
