@@ -3786,6 +3786,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     continue
 
                 for item in data.get("Items", []):
+                    if item.get('Type') == 'BoxSet' or item.get('CollectionType') == 'boxsets':
+                        continue  # 跳过合集库
                     if service.type == 'jellyfin':
                         item_id = item.get("Id") or item.get("ItemId")
                     else:
