@@ -1964,9 +1964,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
             {
                 'component': 'VRow',
                 'content': [
-                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_libraries', 'label': '库黑名单', 'items': library_items, 'hint': '命中后跳过更新；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-off-outline'}}]},
-                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_boxsets', 'label': '排除来源库', 'items': library_items, 'hint': '选中的来源库不参与合集封面素材', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-remove-outline'}}]},
-                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_users', 'label': '用户黑名单', 'items': self._all_users, 'hint': '命中用户时跳过合集封面；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-account-filter'}}]}
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_libraries', 'label': '库黑名单', 'items': library_items, 'hint': '命中后跳过更新；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-off-outline'}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_boxsets', 'label': '排除来源库', 'items': library_items, 'hint': '选中的来源库不参与合集封面素材', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-remove-outline'}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_users', 'label': '用户黑名单', 'items': self._all_users, 'hint': '命中用户时跳过合集封面；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-account-filter'}}]}
                 ]
             }
         ]
