@@ -925,36 +925,120 @@ class MediaCoverGeneratorCustom(_PluginBase):
         拼装插件配置页面
         """
         zh_font_items, en_font_items, _, _ = self.__get_font_presets()
-        # 标题配置
-        title_tab = [
-            {
-                'component': 'VRow',
-                'content': [
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
+        # 标题配置：双模式编辑（YAML / 简易）
+        title_editor_block = []
+        if self._title_edit_mode == "simple":
+            title_editor_block = [
+                {
+                    "component": "VRow",
+                    "content": [
+                        {
+                            "component": "VCol",
+                            "props": {"cols": 12, "md": 3},
+                            "content": [
+                                {
+                                    "component": "VTextField",
+                                    "props": {
+                                        "model": "title_simple_library",
+                                        "label": "媒体库名称",
+                                        "hint": "简易模式用于快速维护单库常用标题",
+                                        "persistentHint": True
+                                    }
+                                }
+                            ]
                         },
-                        'content': [
-                            {
-                                'component': 'VAceEditor',
-                                'props': {
-                                    'modelvalue': 'title_config',
-                                    'lang': 'yaml',
-                                    'theme': 'monokai',
-                                    'style': 'height: 30rem',
-                                    'label': '中英标题配置',
-                                    'placeholder': '''媒体库名称:
+                        {
+                            "component": "VCol",
+                            "props": {"cols": 12, "md": 3},
+                            "content": [
+                                {
+                                    "component": "VTextField",
+                                    "props": {"model": "title_simple_main", "label": "主标题"}
+                                }
+                            ]
+                        },
+                        {
+                            "component": "VCol",
+                            "props": {"cols": 12, "md": 3},
+                            "content": [
+                                {
+                                    "component": "VTextField",
+                                    "props": {"model": "title_simple_sub", "label": "副标题"}
+                                }
+                            ]
+                        },
+                        {
+                            "component": "VCol",
+                            "props": {"cols": 12, "md": 3},
+                            "content": [
+                                {
+                                    "component": "VTextField",
+                                    "props": {
+                                        "model": "title_simple_bg",
+                                        "label": "背景色（可选）",
+                                        "placeholder": "#FF5722"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        else:
+            title_editor_block = [
+                {
+                    'component': 'VRow',
+                    'content': [
+                        {
+                            'component': 'VCol',
+                            'props': {'cols': 12},
+                            'content': [
+                                {
+                                    'component': 'VAceEditor',
+                                    'props': {
+                                        'modelvalue': 'title_config',
+                                        'lang': 'yaml',
+                                        'theme': 'monokai',
+                                        'style': 'height: 30rem',
+                                        'label': '中英标题配置',
+                                        'placeholder': '''媒体库名称:
 - 主标题
 - 副标题
 - "#FF5722"  # 可选：背景颜色（必须加引号）'''
-                                 }
-                             }
-                         ]
-                     },
+                                    }
+                                }
+                            ]
+                        },
+                    ]
+                },
+            ]
+
+        title_tab = [
+            {
+                "component": "VRow",
+                "content": [
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12},
+                        "content": [
+                            {
+                                "component": "VBtnToggle",
+                                "props": {
+                                    "model": "title_edit_mode",
+                                    "mandatory": True,
+                                    "divided": True,
+                                    "class": "mb-3"
+                                },
+                                "content": [
+                                    {"component": "VBtn", "props": {"value": "yaml", "variant": "outlined"}, "text": "YAML编辑"},
+                                    {"component": "VBtn", "props": {"value": "simple", "variant": "outlined"}, "text": "简易编辑"}
+                                ]
+                            }
+                        ]
+                    }
                 ]
-            },
-        ]
+            }
+        ] + title_editor_block
 
         # 字体设置标签
         font_tab = [
@@ -971,7 +1055,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     'model': 'zh_font_preset',
                                     'label': '中文字体预设',
                                     'items': zh_font_items,
-                                    'prependInnerIcon': 'mdi-ideogram-cjk'
+                                    'prependInnerIcon': 'mdi-ideogram-cjk',
+                                    'hint': '默认 chaohei，留空自动回退 chaohei',
+                                    'persistentHint': True
                                 }
                             }
                         ]
@@ -986,7 +1072,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     'model': 'en_font_preset',
                                     'label': '英文字体预设',
                                     'items': en_font_items,
-                                    'prependInnerIcon': 'mdi-format-font'
+                                    'prependInnerIcon': 'mdi-format-font',
+                                    'hint': '默认 EmblemaOne，留空自动回退 EmblemaOne',
+                                    'persistentHint': True
                                 }
                             }
                         ]
@@ -1039,7 +1127,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     'model': 'zh_font_size',
                                     'label': '中文字体大小',
                                     'type': 'number',
-                                    'prependInnerIcon': 'mdi-format-size'
+                                    'prependInnerIcon': 'mdi-format-size',
+                                    'hint': '留空使用风格默认值',
+                                    'persistentHint': True
                                 }
                             }
                         ]
@@ -1054,7 +1144,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     'model': 'en_font_size',
                                     'label': '英文字体大小',
                                     'type': 'number',
-                                    'prependInnerIcon': 'mdi-format-size'
+                                    'prependInnerIcon': 'mdi-format-size',
+                                    'hint': '留空使用风格默认值',
+                                    'persistentHint': True
                                 }
                             }
                         ]
@@ -1450,6 +1542,12 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 }
             )
 
+        # 条件显示的style变量：根据静态/动态模式自适应显示
+        is_static = self._cover_style_variant == "static"
+        is_animated = self._cover_style_variant == "animated"
+        static_panel_style = 'display: block;' if is_static else 'display: none;'
+        animated_panel_style = 'display: block;' if is_animated else 'display: none;'
+
         # 封面风格设置标签
         style_tab = [
             {
@@ -1716,7 +1814,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         'props': {
                             'elevation': 0,
                             'class': 'rounded-lg',
-                            'style': 'background-color: rgba(var(--v-theme-surface), 0.32); border: 1px solid rgba(var(--v-border-color), 0.32); backdrop-filter: blur(6px);'
+                            'style': f'background-color: rgba(var(--v-theme-surface), 0.32); border: 1px solid rgba(var(--v-border-color), 0.32); backdrop-filter: blur(6px); {animated_panel_style}'
                         },
                         'content': [
                             {
@@ -2102,211 +2200,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
         return [
             {
                 "component": "VCard",
-                "props": {"variant": "outlined", "class": "mb-3"},
-                "content": [
-                    {
-                        "component": "VCardTitle",
-                        "props": {"class": "d-flex align-center"},
-                        "content": [
-                            {
-                                "component": "VIcon",
-                                "props": {
-                                    "icon": "mdi-cog",
-                                    "color": "primary",
-                                    "class": "mr-2",
-                                },
-                            },
-                            {"component": "span", "text": "基础设置"},
-                        ],
-                    },
-                    {"component": "VDivider"},
-                    {
-                        "component": "VCardText",
-                        "content": [
-                            {
-                                'component': 'VForm',
-                                'content': [
-                                    {
-                                        'component': 'VRow',
-                                        'content': [
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSwitch',
-                                                        'props': {
-                                                            'model': 'enabled',
-                                                            'label': '启用插件',
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSwitch',
-                                                        'props': {
-                                                            'model': 'update_now',
-                                                            'label': '立即更新封面',
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSwitch',
-                                                        'props': {
-                                                            'model': 'transfer_monitor',
-                                                            'label': '入库监控',
-                                                            'hint': '自动更新入库媒体所在媒体库封面',
-                                                            'persistentHint': True
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VTextField',
-                                                        'props': {
-                                                            'model': 'delay',
-                                                            'label': '入库延迟（秒）',
-                                                            'placeholder': '60',
-                                                            'hint': '根据实际情况调整延迟时间',
-                                                            'persistentHint': True
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                        ]
-                                    },
-                                    {
-                                        'component': 'VRow',
-                                        'content': [
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 6
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSelect',
-                                                        'props': {
-                                                            'multiple': True,
-                                                            'chips': True,
-                                                            'clearable': True,
-                                                            'model': 'selected_servers',
-                                                            'label': '媒体服务器',
-                                                            'items': [{"title": config.name, "value": config.name}
-                                                                    for config in self.mediaserver_helper.get_configs().values()
-                                                                    if config.type in ("emby", "jellyfin")
-                                                                    ]
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSelect',
-                                                        'props': {
-                                                            'chips': False,
-                                                            'multiple': False,
-                                                            'model': 'sort_by',
-                                                            'label': '封面来源排序，默认随机',
-                                                            'items': [
-                                                                {"title": "随机", "value": "Random"},
-                                                                {"title": "最新入库", "value": "DateCreated"},
-                                                                {"title": "最新发行", "value": "PremiereDate"}
-                                                                ]
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VCronField',
-                                                        'props': {
-                                                            'model': 'cron',
-                                                            'label': '定时更新封面',
-                                                            'placeholder': '5位cron表达式'
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            
-                                        ]
-                                    },
-                                    {
-                                        'component': 'VRow',
-                                        'content': [
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VSelect',
-                                                        'props': {
-                                                            'multiple': True,
-                                                            'chips': True,
-                                                            'clearable': True,
-                                                            'model': 'include_libraries',
-                                                            'label': '更新媒体库',
-                                                            'items': [
-                                                                {"title": config['name'], "value": config['value']}
-                                                                    for config in self._all_libraries
-                                                            ],
-                                                            'hint': '默认更新全部，或只更新勾选的媒体库',
-                                                            'persistentHint': True
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                        ]
-                                    }
-                                    
-                                ]
-                            },
-                        ]
-                    }
-                ]
-            },
-            {
-                "component": "VCard",
                 "props": {"variant": "outlined"},
                 "content": [
                     {
@@ -2330,36 +2223,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                             },
                             {
                                 "component": "VTab",
-                                "props": {"value": "style-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-palette-swatch",
-                                            "start": True,
-                                            "color": "#cc76d1",
-                                        },
-                                    },
-                                    {"component": "span", "text": "风格选择"},
-                                ],
-                            },
-                            {
-                                "component": "VTab",
-                                "props": {"value": "other-settings-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-tune",
-                                            "start": True,
-                                            "color": "#4DB6AC",
-                                        },
-                                    },
-                                    {"component": "span", "text": "其他设置"},
-                                ],
-                            },
-                            {
-                                "component": "VTab",
                                 "props": {"value": "title-tab"},
                                 "content": [
                                     {
@@ -2375,6 +2238,21 @@ class MediaCoverGeneratorCustom(_PluginBase):
                             },
                             {
                                 "component": "VTab",
+                                "props": {"value": "style-tab"},
+                                "content": [
+                                    {
+                                        "component": "VIcon",
+                                        "props": {
+                                            "icon": "mdi-palette-swatch",
+                                            "start": True,
+                                            "color": "#cc76d1",
+                                        },
+                                    },
+                                    {"component": "span", "text": "风格选择"},
+                                ],
+                            },
+                            {
+                                "component": "VTab",
                                 "props": {"value": "font-tab"},
                                 "content": [
                                     {
@@ -2386,6 +2264,21 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                         },
                                     },
                                     {"component": "span", "text": "字体设置"},
+                                ],
+                            },
+                            {
+                                "component": "VTab",
+                                "props": {"value": "other-settings-tab"},
+                                "content": [
+                                    {
+                                        "component": "VIcon",
+                                        "props": {
+                                            "icon": "mdi-tune",
+                                            "start": True,
+                                            "color": "#4DB6AC",
+                                        },
+                                    },
+                                    {"component": "span", "text": "其他设置"},
                                 ],
                             },
                         ],
@@ -2404,20 +2297,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                             },
                             {
                                 "component": "VWindowItem",
-                                "props": {"value": "style-tab"},
-                                "content": [
-                                    {"component": "VCardText", "content": style_tab}
-                                ],
-                            },
-                            {
-                                "component": "VWindowItem",
-                                "props": {"value": "other-settings-tab"},
-                                "content": [
-                                    {"component": "VCardText", "content": other_settings_tab}
-                                ],
-                            },
-                            {
-                                "component": "VWindowItem",
                                 "props": {"value": "title-tab"},
                                 "content": [
                                     {"component": "VCardText", "content": title_tab}
@@ -2425,9 +2304,23 @@ class MediaCoverGeneratorCustom(_PluginBase):
                             },
                             {
                                 "component": "VWindowItem",
+                                "props": {"value": "style-tab"},
+                                "content": [
+                                    {"component": "VCardText", "content": style_tab}
+                                ],
+                            },
+                            {
+                                "component": "VWindowItem",
                                 "props": {"value": "font-tab"},
                                 "content": [
                                     {"component": "VCardText", "content": font_tab}
+                                ],
+                            },
+                            {
+                                "component": "VWindowItem",
+                                "props": {"value": "other-settings-tab"},
+                                "content": [
+                                    {"component": "VCardText", "content": other_settings_tab}
                                 ],
                             },
                         ],
@@ -2459,6 +2352,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
 #
 ''',
             "tab": "basic-tab",
+            "title_edit_mode": "yaml",
+            "title_simple_library": "",
+            "title_simple_main": "",
+            "title_simple_sub": "",
+            "title_simple_bg": "",
             "cover_style": "static_1",
             "cover_style_base": "static_1",
             "cover_style_variant": "static",
