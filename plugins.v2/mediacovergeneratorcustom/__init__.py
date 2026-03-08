@@ -956,6 +956,247 @@ class MediaCoverGeneratorCustom(_PluginBase):
             },
         ]
 
+        # 字体设置标签
+        font_tab = [
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'model': 'zh_font_preset',
+                                    'label': '中文字体预设',
+                                    'items': zh_font_items,
+                                    'prependInnerIcon': 'mdi-ideogram-cjk'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VSelect',
+                                'props': {
+                                    'model': 'en_font_preset',
+                                    'label': '英文字体预设',
+                                    'items': en_font_items,
+                                    'prependInnerIcon': 'mdi-format-font'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_custom',
+                                    'label': '中文自定义字体',
+                                    'prependInnerIcon': 'mdi-ideogram-cjk'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_custom',
+                                    'label': '英文自定义字体',
+                                    'prependInnerIcon': 'mdi-format-font'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_size',
+                                    'label': '中文字体大小',
+                                    'type': 'number',
+                                    'prependInnerIcon': 'mdi-format-size'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_size',
+                                    'label': '英文字体大小',
+                                    'type': 'number',
+                                    'prependInnerIcon': 'mdi-format-size'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_url',
+                                    'label': '中文字体 URL',
+                                    'prependInnerIcon': 'mdi-link-variant'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_url',
+                                    'label': '英文字体 URL',
+                                    'prependInnerIcon': 'mdi-link-variant'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_path_local',
+                                    'label': '中文本地字体路径',
+                                    'prependInnerIcon': 'mdi-file-outline'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_path_local',
+                                    'label': '英文本地字体路径',
+                                    'prependInnerIcon': 'mdi-file-outline'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_path_multi_1_local',
+                                    'label': '多图中文字体路径',
+                                    'prependInnerIcon': 'mdi-file-multiple-outline'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_path_multi_1_local',
+                                    'label': '多图英文字体路径',
+                                    'prependInnerIcon': 'mdi-file-multiple-outline'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'zh_font_size_multi_1',
+                                    'label': '多图中文字体大小',
+                                    'type': 'number',
+                                    'prependInnerIcon': 'mdi-format-size'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [
+                            {
+                                'component': 'VTextField',
+                                'props': {
+                                    'model': 'en_font_size_multi_1',
+                                    'label': '多图英文字体大小',
+                                    'type': 'number',
+                                    'prependInnerIcon': 'mdi-format-size'
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+
         # 构建库选择器数据（去重+容错）
         seen = set()
         library_items = [
@@ -2041,6 +2282,21 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     {"component": "span", "text": "标题设置"},
                                 ],
                             },
+                            {
+                                "component": "VTab",
+                                "props": {"value": "font-tab"},
+                                "content": [
+                                    {
+                                        "component": "VIcon",
+                                        "props": {
+                                            "icon": "mdi-font",
+                                            "start": True,
+                                            "color": "#FF9800",
+                                        },
+                                    },
+                                    {"component": "span", "text": "字体设置"},
+                                ],
+                            },
                         ],
                     },
                     {"component": "VDivider"},
@@ -2074,6 +2330,13 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                 "props": {"value": "title-tab"},
                                 "content": [
                                     {"component": "VCardText", "content": title_tab}
+                                ],
+                            },
+                            {
+                                "component": "VWindowItem",
+                                "props": {"value": "font-tab"},
+                                "content": [
+                                    {"component": "VCardText", "content": font_tab}
                                 ],
                             },
                         ],
@@ -2153,6 +2416,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "en_font_path_multi_1_local": "",
             "zh_font_url_multi_1": "",
             "en_font_url_multi_1": "",
+            "zh_font_size_multi_1": 1,
+            "en_font_size_multi_1": 1,
         }
 
     def get_page(self) -> List[dict]:
