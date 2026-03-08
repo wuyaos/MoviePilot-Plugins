@@ -4159,18 +4159,16 @@ class MediaCoverGeneratorCustom(_PluginBase):
             logger.warning(f"清理历史封面失败: {e}")
         
 
-    def __set_library_image(self, service, library, image_base64):
+    def __set_library_image(self, service, library, image_base64, retries=3, delay=2):
         """
-        设置媒体库封面
+        设置媒体库封面，失败时自动重试
         """
-
-        """设置Emby媒体库封面"""
         try:
             if service.type == 'emby':
                 library_id = library.get("Id")
             else:
                 library_id = library.get("ItemId")
-            
+
             url = f'[HOST]emby/Items/{library_id}/Images/Primary?api_key=[APIKEY]'
             # 根据 base64 前几个字节简单判断格式
             content_type = "image/png"
@@ -4188,6 +4186,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 content_type = "image/jpeg"
                 extension = "jpg"
 
+            size_kb = len(image_base64) * 3 // 4 // 1024
+            logger.info(f"上传封面: {library['Name']} | 格式: {extension} | 大小: ~{size_kb} KB")
+
             # 在发送前保存一份图片到本地
             if self._save_recent_covers:
                 try:
@@ -4195,20 +4196,26 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     self.__save_image_to_local(image_bytes, service.name, library['Name'], extension)
                 except Exception as save_err:
                     logger.error(f"保存发送前图片失败: {str(save_err)}")
-            
-            res = service.instance.post_data(
-                url=url,
-                data=image_base64,
-                headers={
-                    "Content-Type": content_type
-                }
-            )
-            
-            if res and res.status_code in [200, 204]:
-                return True
-            else:
-                logger.error(f"设置「{library['Name']}」封面失败，错误码：{res.status_code if res else 'No response'}")
-                return False
+
+            for attempt in range(1, retries + 1):
+                try:
+                    res = service.instance.post_data(
+                        url=url,
+                        data=image_base64,
+                        headers={
+                            "Content-Type": content_type
+                        }
+                    )
+                    if res and res.status_code in [200, 204]:
+                        return True
+                    logger.warning(f"上传封面失败（第 {attempt}/{retries} 次），状态码: {res.status_code if res else 'No response'}")
+                except Exception as upload_err:
+                    logger.warning(f"上传封面异常（第 {attempt}/{retries} 次）：{str(upload_err)}")
+                if attempt < retries:
+                    time.sleep(delay)
+
+            logger.error(f"设置「{library['Name']}」封面失败，已重试 {retries} 次")
+            return False
         except Exception as err:
             logger.error(f"设置「{library['Name']}」封面失败：{str(err)}")
         return False
