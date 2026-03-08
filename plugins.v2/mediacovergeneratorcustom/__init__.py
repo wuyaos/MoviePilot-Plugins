@@ -940,58 +940,44 @@ class MediaCoverGeneratorCustom(_PluginBase):
         拼装插件配置页面
         """
         zh_font_items, en_font_items, _, _ = self.__get_font_presets()
-        # 标题配置：双模式编辑（YAML / 简易）
+        # 标题配置：双模式编辑（JSON表格 / JSON编辑器）
+        # 获取已配置的库列表用于下拉选择
+        title_config_data = []
+        try:
+            if isinstance(self._title_config, str):
+                import json
+                title_config_data = json.loads(self._title_config) if self._title_config else []
+        except Exception:
+            title_config_data = []
+
+        # 所有可用的媒体库列表
+        all_library_options = [{"title": lib['name'], "value": lib['value']} for lib in self._all_libraries] if self._all_libraries else []
+
         title_editor_block = []
         if self._title_edit_mode == "simple":
+            # 表格模式：VDataTable显示和编辑title_config
             title_editor_block = [
                 {
                     "component": "VRow",
                     "content": [
                         {
                             "component": "VCol",
-                            "props": {"cols": 12, "md": 3},
+                            "props": {"cols": 12},
                             "content": [
                                 {
-                                    "component": "VTextField",
+                                    "component": "VDataTable",
                                     "props": {
-                                        "model": "title_simple_library",
-                                        "label": "媒体库名称",
-                                        "hint": "简易模式用于快速维护单库常用标题",
-                                        "persistentHint": True
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "component": "VCol",
-                            "props": {"cols": 12, "md": 3},
-                            "content": [
-                                {
-                                    "component": "VTextField",
-                                    "props": {"model": "title_simple_main", "label": "主标题"}
-                                }
-                            ]
-                        },
-                        {
-                            "component": "VCol",
-                            "props": {"cols": 12, "md": 3},
-                            "content": [
-                                {
-                                    "component": "VTextField",
-                                    "props": {"model": "title_simple_sub", "label": "副标题"}
-                                }
-                            ]
-                        },
-                        {
-                            "component": "VCol",
-                            "props": {"cols": 12, "md": 3},
-                            "content": [
-                                {
-                                    "component": "VTextField",
-                                    "props": {
-                                        "model": "title_simple_bg",
-                                        "label": "背景色（可选）",
-                                        "placeholder": "#FF5722"
+                                        "model": "title_config",
+                                        "headers": [
+                                            {"title": "媒体库", "key": "library", "width": "30%"},
+                                            {"title": "主标题", "key": "main", "width": "25%"},
+                                            {"title": "副标题", "key": "sub", "width": "25%"},
+                                            {"title": "背景色", "key": "bg", "width": "15%"},
+                                            {"title": "操作", "key": "action", "width": "5%"}
+                                        ],
+                                        "items": title_config_data,
+                                        "density": "compact",
+                                        "hideDefaultFooter": False
                                     }
                                 }
                             ]
@@ -1000,6 +986,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 }
             ]
         else:
+            # JSON编辑模式：VAceEditor编辑title_config JSON
             title_editor_block = [
                 {
                     'component': 'VRow',
@@ -1012,14 +999,24 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     'component': 'VAceEditor',
                                     'props': {
                                         'modelvalue': 'title_config',
-                                        'lang': 'yaml',
+                                        'lang': 'json',
                                         'theme': 'monokai',
                                         'style': 'height: 30rem',
-                                        'label': '中英标题配置',
-                                        'placeholder': '''媒体库名称:
-- 主标题
-- 副标题
-- "#FF5722"  # 可选：背景颜色（必须加引号）'''
+                                        'label': '标题配置（JSON格式）',
+                                        'placeholder': '''[
+  {
+    "library": "电影",
+    "main": "2024新",
+    "sub": "好看",
+    "bg": "#FF5722"
+  },
+  {
+    "library": "电视剧",
+    "main": "新剧",
+    "sub": "精选",
+    "bg": ""
+  }
+]'''
                                     }
                                 }
                             ]
@@ -1045,8 +1042,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     "class": "mb-3"
                                 },
                                 "content": [
-                                    {"component": "VBtn", "props": {"value": "yaml", "variant": "outlined"}, "text": "YAML编辑"},
-                                    {"component": "VBtn", "props": {"value": "simple", "variant": "outlined"}, "text": "简易编辑"}
+                                    {"component": "VBtn", "props": {"value": "json", "variant": "outlined"}, "text": "JSON编辑"},
+                                    {"component": "VBtn", "props": {"value": "simple", "variant": "outlined"}, "text": "表格编辑"}
                                 ]
                             }
                         ]
@@ -1315,6 +1312,21 @@ class MediaCoverGeneratorCustom(_PluginBase):
         ]
 
         # 库配置标签（NEW）
+        # 获取用户列表 - 从所有已连接的服务器聚合用户
+        all_users = []
+        user_set = set()
+        if self._servers:
+            for server, service in self._servers.items():
+                try:
+                    if hasattr(service.instance, 'get_users'):
+                        users_map = service.instance.get_users() or {}
+                        for user_name, user_id in users_map.items():
+                            if user_name and user_name not in user_set:
+                                all_users.append({"title": user_name, "value": user_name})
+                                user_set.add(user_name)
+                except Exception as e:
+                    logger.debug(f"获取服务器 {server} 的用户列表失败: {e}")
+
         library_tab = [
             {
                 "component": "VRow",
@@ -1608,7 +1620,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         'props': {
                             'elevation': 0,
                             'class': 'rounded-lg',
-                            'style': 'background-color: rgba(var(--v-theme-surface), 0.38); border: 1px solid rgba(var(--v-border-color), 0.35); backdrop-filter: blur(6px);'
+                            'style': f'background-color: rgba(var(--v-theme-surface), 0.38); border: 1px solid rgba(var(--v-border-color), 0.35); backdrop-filter: blur(6px); {static_panel_style}'
                         },
                         'content': [
                             {
@@ -2016,185 +2028,48 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     }
                 ]
             },
+            # 第一行：插件开关 (3 列)
+            {
+                'component': 'VRow',
+                'content': [
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'enabled', 'label': '启用插件'}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'update_now', 'label': '立即更新封面'}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'transfer_monitor', 'label': '入库监控', 'hint': '自动更新入库媒体所在媒体库封面', 'persistentHint': True}}]}
+                ]
+            },
+            # 第二行：延迟与定时 (2 列)
+            {
+                'component': 'VRow',
+                'content': [
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'delay', 'label': '入库延迟（秒）', 'placeholder': '60', 'hint': '根据实际情况调整延迟时间', 'persistentHint': True}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VCronField', 'props': {'model': 'cron', 'label': '定时更新封面', 'placeholder': '5位cron表达式'}}]}
+                ]
+            },
+            # 第三行：服务器与排序 (2 列)
             {
                 'component': 'VRow',
                 'content': [
                     {
                         'component': 'VCol',
-                        'props': {'cols': 12},
-                        'content': [{'component': 'VSubheader', 'props': {'class': 'pl-0 py-2'}, 'text': '插件与更新'}]
+                        'props': {'cols': 12, 'md': 6},
+                        'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'selected_servers', 'label': '媒体服务器', 'items': [{"title": config.name, "value": config.name} for config in self.mediaserver_helper.get_configs().values() if config.type in ("emby", "jellyfin")]}}]
                     },
                     {
                         'component': 'VCol',
                         'props': {'cols': 12, 'md': 6},
-                        'content': [{'component': 'VSwitch', 'props': {'model': 'enabled', 'label': '启用插件'}}]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [{'component': 'VSwitch', 'props': {'model': 'update_now', 'label': '立即更新封面'}}]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [{'component': 'VSwitch', 'props': {'model': 'transfer_monitor', 'label': '入库监控', 'hint': '自动更新入库媒体所在媒体库封面', 'persistentHint': True}}]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [{'component': 'VTextField', 'props': {'model': 'delay', 'label': '入库延迟（秒）', 'placeholder': '60', 'hint': '根据实际情况调整延迟时间', 'persistentHint': True}}]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [{'component': 'VCronField', 'props': {'model': 'cron', 'label': '定时更新封面', 'placeholder': '5位cron表达式'}}]
+                        'content': [{'component': 'VSelect', 'props': {'chips': False, 'multiple': False, 'model': 'sort_by', 'label': '封面来源排序', 'items': [{"title": "随机", "value": "Random"}, {"title": "最新入库", "value": "DateCreated"}, {"title": "最新发行", "value": "PremiereDate"}]}}]
                     }
                 ]
             },
+            # 第四行：库过滤 (宽自适应)
             {
                 'component': 'VRow',
                 'content': [
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12},
-                        'content': [{'component': 'VSubheader', 'props': {'class': 'pl-0 py-2 mt-2'}, 'text': '服务器与库范围'}]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [
-                            {
-                                'component': 'VSelect',
-                                'props': {
-                                    'multiple': True,
-                                    'chips': True,
-                                    'clearable': True,
-                                    'model': 'selected_servers',
-                                    'label': '媒体服务器',
-                                    'items': [{"title": config.name, "value": config.name} for config in self.mediaserver_helper.get_configs().values() if config.type in ("emby", "jellyfin")]
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [
-                            {
-                                'component': 'VSelect',
-                                'props': {
-                                    'chips': False,
-                                    'multiple': False,
-                                    'model': 'sort_by',
-                                    'label': '封面来源排序',
-                                    'items': [
-                                        {"title": "随机", "value": "Random"},
-                                        {"title": "最新入库", "value": "DateCreated"},
-                                        {"title": "最新发行", "value": "PremiereDate"}
-                                    ]
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [
-                            {
-                                'component': 'VSelect',
-                                'props': {
-                                    'multiple': True,
-                                    'chips': True,
-                                    'clearable': True,
-                                    'model': 'include_libraries',
-                                    'label': '更新媒体库',
-                                    'items': [{"title": config['name'], "value": config['value']} for config in self._all_libraries],
-                                    'hint': '默认更新全部，或只更新勾选的媒体库',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [
-                            {
-                                'component': 'VSelect',
-                                'props': {
-                                    'multiple': True,
-                                    'chips': True,
-                                    'clearable': True,
-                                    'model': 'selected_libraries',
-                                    'label': '库白名单',
-                                    'items': library_items,
-                                    'hint': '仅更新勾选库；留空表示不过滤',
-                                    'persistentHint': True,
-                                    'prependInnerIcon': 'mdi-folder-check-outline'
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [
-                            {
-                                'component': 'VSelect',
-                                'props': {
-                                    'multiple': True,
-                                    'chips': True,
-                                    'clearable': True,
-                                    'model': 'exclude_libraries',
-                                    'label': '忽略库',
-                                    'items': library_items,
-                                    'hint': '命中后跳过更新',
-                                    'persistentHint': True,
-                                    'prependInnerIcon': 'mdi-folder-off-outline'
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [
-                            {
-                                'component': 'VSelect',
-                                'props': {
-                                    'multiple': True,
-                                    'chips': True,
-                                    'clearable': True,
-                                    'model': 'exclude_boxsets',
-                                    'label': '排除来源库',
-                                    'items': library_items,
-                                    'hint': '选中的来源库不参与合集封面素材',
-                                    'persistentHint': True,
-                                    'prependInnerIcon': 'mdi-folder-remove-outline'
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12, 'md': 6},
-                        'content': [
-                            {
-                                'component': 'VSelect',
-                                'props': {
-                                    'multiple': True,
-                                    'chips': True,
-                                    'clearable': True,
-                                    'model': 'selected_users',
-                                    'label': '合集用户筛选',
-                                    'items': [],
-                                    'hint': '未选用户时不过滤；当前无用户列表则保持空',
-                                    'persistentHint': True,
-                                    'prependInnerIcon': 'mdi-account-filter'
-                                }
-                            }
-                        ]
-                    }
+                    {'component': 'VCol', 'props': {'cols': 12}, 'content': [{'component': 'VSubheader', 'props': {'class': 'pl-0 py-2 mt-2'}, 'text': '库过滤与合集'}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'selected_libraries', 'label': '库白名单', 'items': library_items, 'hint': '仅更新勾选库；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-check-outline'}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_libraries', 'label': '忽略库', 'items': library_items, 'hint': '命中后跳过更新', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-off-outline'}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_boxsets', 'label': '排除来源库', 'items': library_items, 'hint': '选中的来源库不参与合集封面素材', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-remove-outline'}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'selected_users', 'label': '合集用户筛选', 'items': all_users, 'hint': '未选用户时不过滤；当前无用户列表则保持空', 'persistentHint': True, 'prependInnerIcon': 'mdi-account-filter'}}]}
                 ]
             }
         ]
@@ -2351,23 +2226,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "selected_servers": [],
             "include_libraries": [],
             "sort_by": "Random",
-            "title_config": '''# 配置封面标题（按媒体库名称对应）
-# 支持两种格式：
-#
-# 格式1 - 两行配置（主标题+副标题）：
-# 媒体库名称:
-#   - 主标题
-#   - 副标题
-#
-# 格式2 - 三行配置（主标题+副标题+背景颜色）：
-# 媒体库名称:
-#   - 主标题
-#   - 副标题
-#   - "#FF5722"  # 背景颜色（可选，必须加引号）
-#
-''',
+            "title_config": '[]',
             "tab": "basic-tab",
-            "title_edit_mode": "yaml",
+            "title_edit_mode": "json",
             "title_simple_library": "",
             "title_simple_main": "",
             "title_simple_sub": "",
