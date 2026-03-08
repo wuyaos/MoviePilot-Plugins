@@ -3294,8 +3294,17 @@ class MediaCoverGeneratorCustom(_PluginBase):
         # 客户端过滤：排除指定用户的项目
         if self._exclude_users and boxsets:
             try:
-                user_map = service.instance.get_users() if hasattr(service.instance, 'get_users') else {}
-                exclude_user_ids = [user_map.get(user_name) for user_name in self._exclude_users if user_map.get(user_name)]
+                # exclude_users 格式为 "server-userid"，需要提取当前 service 的用户 ID
+                exclude_user_ids = set()
+                for user_str in self._exclude_users:
+                    # 格式: "server-userid" 或 "userid"
+                    if '-' in user_str:
+                        parts = user_str.rsplit('-', 1)  # 支持 server-userid 或直接 userid
+                        if parts[0] == service.name:  # 只过滤当前 service 的用户
+                            exclude_user_ids.add(parts[1])
+                    else:
+                        # 兼容直接的 userid
+                        exclude_user_ids.add(user_str)
 
                 if exclude_user_ids:
                     logger.debug(f"合集库排除用户: {exclude_user_ids}")
@@ -3308,7 +3317,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     boxsets = filtered_boxsets
                     logger.debug(f"用户过滤后剩余 {len(boxsets)} 个合集")
             except Exception as e:
-                logger.warning(f"获取用户 ID 失败: {e}")
+                logger.warning(f"用户过滤失败: {e}")
         if not boxsets:
             logger.warning(f"媒体库 {service.name}：{library['Name']} 未获取到可用合集项")
             return False
@@ -3337,12 +3346,20 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 # 应用同样的用户过滤
                 if self._exclude_users and movies:
                     try:
-                        user_map = service.instance.get_users() if hasattr(service.instance, 'get_users') else {}
-                        exclude_user_ids = [user_map.get(user_name) for user_name in self._exclude_users if user_map.get(user_name)]
+                        # 从 exclude_users 中提取当前 service 的用户 ID
+                        exclude_user_ids = set()
+                        for user_str in self._exclude_users:
+                            if '-' in user_str:
+                                parts = user_str.rsplit('-', 1)
+                                if parts[0] == service.name:
+                                    exclude_user_ids.add(parts[1])
+                            else:
+                                exclude_user_ids.add(user_str)
+
                         if exclude_user_ids:
                             movies = [m for m in movies if m.get('UserData', {}).get('UserId') not in exclude_user_ids]
                     except Exception as e:
-                        logger.warning(f"获取用户 ID 失败: {e}")
+                        logger.warning(f"用户过滤失败: {e}")
 
                 valid_movies = self.__filter_valid_items(movies)
                 valid_items.extend(valid_movies)
