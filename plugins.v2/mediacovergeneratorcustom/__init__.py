@@ -3278,7 +3278,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     exclude_source_library_ids.add(str(library_str))
 
         logger.info(f"[合集过滤] 运行配置 | 排除来源库: {self._exclude_boxsets} | 用户黑名单: {self._exclude_users}")
-        logger.debug(f"[合集过滤] 解析后排除来源库ID集合: {exclude_source_library_ids}")
+        logger.info(f"[合集过滤] 解析后排除来源库ID集合: {exclude_source_library_ids}")
 
         if self._exclude_users:
             exclude_user_ids = set()
@@ -3289,7 +3289,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         exclude_user_ids.add(str(parts[1]))
                 else:
                     exclude_user_ids.add(str(user_str))
-            logger.debug(f"[合集过滤] 用户黑名单ID集合: {exclude_user_ids}")
+            logger.info(f"[合集过滤] 用户黑名单ID集合: {exclude_user_ids}")
             user_libs = self.__get_user_library_ids(service, exclude_user_ids)
             logger.info(f"[合集过滤] 用户黑名单映射来源库ID: {user_libs}")
             exclude_source_library_ids.update(user_libs)
@@ -3791,7 +3791,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
 
                 data = None
                 for url in candidate_urls:
-                    logger.debug(f"[用户黑名单] 查询用户 {user_id} 的库接口: {url.split('?')[0]}")
+                    logger.info(f"[用户黑名单] 查询用户 {user_id} 的库接口: {url.split('?')[0]}")
                     res = service.instance.get_data(url=url)
                     if res and res.status_code == 200:
                         data = res.json()
@@ -3802,11 +3802,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     continue
 
                 items_count = len(data.get("Items", []))
-                logger.debug(f"[用户黑名单] 用户 {user_id} 获取到 {items_count} 个库")
+                logger.info(f"[用户黑名单] 用户 {user_id} 获取到 {items_count} 个库")
 
                 for item in data.get("Items", []):
                     if item.get('Type') == 'BoxSet' or item.get('CollectionType') == 'boxsets':
-                        logger.debug(f"[用户黑名单] 跳过合集库: {item.get('Name')} (Type={item.get('Type')})")
+                        logger.info(f"[用户黑名单] 跳过合集库: {item.get('Name')} (Type={item.get('Type')})")
                         continue  # 跳过合集库
                     if service.type == 'jellyfin':
                         item_id = item.get("Id") or item.get("ItemId")
@@ -3814,9 +3814,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         item_id = item.get("Id")
                     if item_id:
                         library_ids.add(str(item_id))
-                        logger.debug(f"[用户黑名单] 添加库: {item.get('Name')} Id={item_id}")
+                        logger.info(f"[用户黑名单] 添加库: {item.get('Name')} Id={item_id}")
             except Exception as err:
-                logger.debug(f"获取用户 {user_id} 可见来源库失败：{str(err)}")
+                logger.warning(f"[用户黑名单] 获取用户 {user_id} 可见来源库失败：{str(err)}")
 
         return library_ids
 
