@@ -3262,19 +3262,32 @@ class MediaCoverGeneratorCustom(_PluginBase):
         for user_id in user_ids:
             try:
                 if service.type == 'emby':
-                    url = f"emby/Users/{user_id}/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=Id"
+                    candidate_urls = [
+                        f"emby/Users/{user_id}/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=Id",
+                        f"emby/Items?UserId={user_id}&IncludeItemTypes=BoxSet&Recursive=true&Fields=Id",
+                    ]
                 else:
-                    url = f"Users/{user_id}/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=Id"
-                res = service.instance.get_data(url=url)
-                if res and res.status_code == 200:
-                    data = res.json()
+                    candidate_urls = [
+                        f"Users/{user_id}/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=Id",
+                        f"Items?UserId={user_id}&IncludeItemTypes=BoxSet&Recursive=true&Fields=Id",
+                    ]
+                data = None
+                for url in candidate_urls:
+                    res = service.instance.get_data(url=url)
+                    if res and res.status_code == 200:
+                        data = res.json()
+                        break
+                    else:
+                        status = res.status_code if res else "无响应"
+                        logger.warning(f"[用户黑名单] 用户 {user_id} 查询合集接口 {url.split('?')[0]} 返回: {status}")
+                if data:
                     for item in data.get("Items", []):
                         item_id = item.get("Id") or item.get("ItemId")
                         if item_id:
                             boxset_ids.add(str(item_id))
                     logger.info(f"[用户黑名单] 用户 {user_id} 可见合集数: {len(data.get('Items', []))}")
                 else:
-                    logger.warning(f"[用户黑名单] 查询用户 {user_id} 可见合集失败")
+                    logger.warning(f"[用户黑名单] 用户 {user_id} 所有接口均查询失败")
             except Exception as err:
                 logger.warning(f"[用户黑名单] 查询用户 {user_id} 可见合集出错：{str(err)}")
         return boxset_ids
