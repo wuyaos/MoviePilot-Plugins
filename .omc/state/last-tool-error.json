@@ -1,7 +1,0 @@
-{
-  "tool_name": "Read",
-  "tool_input_preview": "{\"file_path\":\"/mnt/d/work/project/person/MoviePilot-Plugins/plugins.v2/mediacovergenerator/__init__.py\"}",
-  "error": "File content (32412 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.",
-  "timestamp": "2026-03-08T01:38:30.254Z",
-  "retry_count": 1
-}
