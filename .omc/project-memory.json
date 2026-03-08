@@ -103,14 +103,14 @@
   "hotPaths": [
     {
       "path": "plugins.v2/mediacovergeneratorcustom/__init__.py",
-      "accessCount": 90,
-      "lastAccessed": 1772914826344,
+      "accessCount": 145,
+      "lastAccessed": 1772934625426,
       "type": "directory"
     },
     {
       "path": "plugins.v2/mediacovergenerator/__init__.py",
-      "accessCount": 28,
-      "lastAccessed": 1772911208283,
+      "accessCount": 57,
+      "lastAccessed": 1772933954293,
       "type": "file"
     },
     {
@@ -126,6 +126,18 @@
       "type": "file"
     },
     {
+      "path": "plugins.v2/mediacovergeneratorcustom/style",
+      "accessCount": 3,
+      "lastAccessed": 1772915325902,
+      "type": "directory"
+    },
+    {
+      "path": "plugins.v2/mediacovergeneratorcustom",
+      "accessCount": 3,
+      "lastAccessed": 1772934205491,
+      "type": "directory"
+    },
+    {
       "path": "plugins.v2/mediacovergenerator/style_single_1.py",
       "accessCount": 2,
       "lastAccessed": 1772896809668,
@@ -135,6 +147,12 @@
       "path": "plugins.v2/mediacovergeneratorcustom/style/style_static_4.py",
       "accessCount": 2,
       "lastAccessed": 1772915003311,
+      "type": "file"
+    },
+    {
+      "path": "plugins.v2/mediacovergeneratorcustom/style/style_static_1.py",
+      "accessCount": 2,
+      "lastAccessed": 1772915288889,
       "type": "file"
     },
     {
@@ -168,21 +186,21 @@
       "type": "directory"
     },
     {
-      "path": "plugins.v2/mediacovergeneratorcustom",
-      "accessCount": 1,
-      "lastAccessed": 1772913585684,
-      "type": "directory"
-    },
-    {
-      "path": "plugins.v2/mediacovergeneratorcustom/style/style_static_1.py",
-      "accessCount": 1,
-      "lastAccessed": 1772914996187,
-      "type": "file"
-    },
-    {
       "path": "plugins.v2/mediacovergeneratorcustom/style/style_static_3.py",
       "accessCount": 1,
       "lastAccessed": 1772915002741,
+      "type": "file"
+    },
+    {
+      "path": "FORM_OPTIMIZATION_GUIDE.md",
+      "accessCount": 1,
+      "lastAccessed": 1772933813769,
+      "type": "file"
+    },
+    {
+      "path": "DEFAULT_VALUES_GUIDE.md",
+      "accessCount": 1,
+      "lastAccessed": 1772934105766,
       "type": "file"
     }
   ],

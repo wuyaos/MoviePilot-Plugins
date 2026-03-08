@@ -8,6 +8,10 @@ __pycache__/
 .history/
 memory-bank/
 docs/
+.omc/
+.omx/
+.ace-tool/
+state/
 
 # Distribution / packaging
 .Python

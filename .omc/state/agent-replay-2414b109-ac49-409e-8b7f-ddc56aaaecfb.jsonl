@@ -20,3 +20,16 @@
 {"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:cancel"}
 {"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:cancel"}
 {"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:cancel"}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:cancel"}
+{"t":0,"agent":"ab46080","agent_type":"scientist","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a001586","agent_type":"scientist","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"aa5f37e","agent_type":"scientist","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"aa5f37e","agent_type":"scientist","event":"agent_stop","success":true,"duration_ms":82533}
+{"t":0,"agent":"ab46080","agent_type":"scientist","event":"agent_stop","success":true,"duration_ms":112436}
+{"t":0,"agent":"a001586","agent_type":"scientist","event":"agent_stop","success":true,"duration_ms":150435}
+{"t":0,"agent":"aa663fd","agent_type":"scientist","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"aa663fd","agent_type":"scientist","event":"agent_stop","success":true,"duration_ms":266333}
+{"t":0,"agent":"aa22a7f","agent_type":"scientist","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"af89e20","agent_type":"scientist","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"af89e20","agent_type":"scientist","event":"agent_stop","success":true,"duration_ms":115804}
+{"t":0,"agent":"aa22a7f","agent_type":"scientist","event":"agent_stop","success":true,"duration_ms":163234}

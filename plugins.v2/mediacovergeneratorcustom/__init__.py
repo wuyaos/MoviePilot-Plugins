@@ -163,14 +163,14 @@ class MediaCoverGeneratorCustom(_PluginBase):
             self._selected_servers = config.get("selected_servers")
             self._include_libraries = config.get("include_libraries")
             self._sort_by = config.get("sort_by")
-            self._covers_output = config.get("covers_output")
-            self._covers_input = config.get("covers_input")
+            self._covers_output = config.get("covers_output", "")
+            self._covers_input = config.get("covers_input", "")
             # self._title_config = self.get_data('title_config')
             self._title_config = config.get("title_config")
-            self._zh_font_url = config.get("zh_font_url")
-            self._en_font_url = config.get("en_font_url")
-            self._zh_font_path = config.get("zh_font_path")
-            self._en_font_path = config.get("en_font_path")
+            self._zh_font_url = config.get("zh_font_url", "")
+            self._en_font_url = config.get("en_font_url", "")
+            self._zh_font_path = config.get("zh_font_path", "")
+            self._en_font_path = config.get("en_font_path", "")
             self._cover_style = config.get("cover_style", "static_1")
 
             # 样式命名升级兼容（仅对旧配置执行一次迁移）
@@ -1112,271 +1112,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             }
         ]
 
-        # 更多参数标签
-        single_tab = [
-            {
-                'component': 'VRow',
-                'content': [
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                        },
-                        'content': [
-                            {
-                                'component': 'VAlert',
-                                'props': {
-                                    'type': 'info',
-                                    'variant': 'tonal',
-                                    'text': '字体设置为可选项。若字体无法下载，可以手动下载并填写本地路径。主标题和副标题可以使用不同的字体。'
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VSelect',
-                                'props': {
-                                    'chips': False,
-                                    'multiple': False,
-                                    'model': 'zh_font_preset',
-                                    'label': '主标题字体预设',
-                                    'prependInnerIcon': 'mdi-ideogram-cjk',
-                                    'items': zh_font_items
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VSelect',
-                                'props': {
-                                    'chips': False,
-                                    'multiple': False,
-                                    'model': 'en_font_preset',
-                                    'label': '副标题字体预设',
-                                    'prependInnerIcon': 'mdi-format-font',
-                                    'items': en_font_items
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'zh_font_custom',
-                                    'label': '自定义主标题字体',
-                                    'prependInnerIcon': 'mdi-ideogram-cjk',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '字体链接 / 路径',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'en_font_custom',
-                                    'label': '自定义副标题字体',
-                                    'prependInnerIcon': 'mdi-format-font',
-                                    'placeholder': '留空使用预设字体',
-                                    'hint': '字体链接 / 路径',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'zh_font_size',
-                                    'label': '主标题字体大小',
-                                    'prependInnerIcon': 'mdi-format-size',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '根据自己喜好设置，默认 180',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'en_font_size',
-                                    'label': '副标题字体大小',
-                                    'prependInnerIcon': 'mdi-format-size',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '根据自己喜好设置，默认 75',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'blur_size',
-                                    'label': '背景模糊尺寸',
-                                    'prependInnerIcon': 'mdi-blur',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '数字越大越模糊，默认 50',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'color_ratio',
-                                    'label': '背景颜色混合占比',
-                                    'prependInnerIcon': 'mdi-format-color-fill',
-                                    'placeholder': '留空使用预设占比',
-                                    'hint': '颜色所占的比例，0-1，默认 0.8',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 6
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'title_scale',
-                                    'label': '标题整体缩放',
-                                    'prependInnerIcon': 'mdi-arrow-expand-all',
-                                    'placeholder': '留空使用预设比例',
-                                    'hint': '以 1080p 为基准，1.0 为默认',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 4
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'zh_font_offset',
-                                    'label': '主标题偏移量',
-                                    'prependInnerIcon': 'mdi-arrow-up-down',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '上移为负值，下移为正值',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 4
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'title_spacing',
-                                    'label': '主副标题间距',
-                                    'prependInnerIcon': 'mdi-arrow-up-down',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '大于 0，默认 40',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VCol',
-                        'props': {
-                            'cols': 12,
-                            'md': 4
-                        },
-                        'content': [
-                            {
-                                'component': 'VTextField',
-                                'props': {
-                                    'model': 'en_line_spacing',
-                                    'label': '副标题行间距',
-                                    'prependInnerIcon': 'mdi-format-line-height',
-                                    'placeholder': '留空使用预设尺寸',
-                                    'hint': '大于 0，默认 40',
-                                    'persistentHint': True
-                                }
-                            }
-                        ]
-                    },
-                ]
-            },
-        ]
-
         styles = [
             {
                 "value": "static_1",
@@ -2306,21 +2041,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     {"component": "span", "text": "标题设置"},
                                 ],
                             },
-                            {
-                                "component": "VTab",
-                                "props": {"value": "font-tab"},
-                                "content": [
-                                    {
-                                        "component": "VIcon",
-                                        "props": {
-                                            "icon": "mdi-format-font",
-                                            "start": True,
-                                            "color": "#9C27B0",
-                                        },
-                                    },
-                                    {"component": "span", "text": "字体设置"},
-                                ],
-                            },
                         ],
                     },
                     {"component": "VDivider"},
@@ -2356,13 +2076,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     {"component": "VCardText", "content": title_tab}
                                 ],
                             },
-                            {
-                                "component": "VWindowItem",
-                                "props": {"value": "font-tab"},
-                                "content": [
-                                    {"component": "VCardText", "content": single_tab}
-                                ],
-                            }
                         ],
                     },
                 ],
@@ -2430,6 +2143,16 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "exclude_libraries": [],
             "exclude_boxsets": [],
             "selected_users": [],
+            "zh_font_path_local": "",
+            "en_font_path_local": "",
+            "covers_input": "",
+            "covers_output": "",
+            "zh_font_url": "",
+            "en_font_url": "",
+            "zh_font_path_multi_1_local": "",
+            "en_font_path_multi_1_local": "",
+            "zh_font_url_multi_1": "",
+            "en_font_url_multi_1": "",
         }
 
     def get_page(self) -> List[dict]:

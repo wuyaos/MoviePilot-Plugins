@@ -1,7 +1,7 @@
 {
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"python3 << 'EOF'\\n# 验证所有清理目标的实现完整性\\nchecks = {\\n    \\\"库白名单 (selected_libraries)\\\": False,\\n    \\\"库忽略列表 (exclude_libraries)\\\": False,\\n    \\\"合集黑名单 (exclude_boxsets)\\\": False,\\n    \\\"合集用户筛选 ...",
-  "error": "Exit code 1\n==================================================\n代码清理验证报告\n==================================================\n✓ 库白名单 (selected_libraries)\n✗ 库忽略列表 (exclude_libraries)\n✓ 合集黑名单 (exclude_boxsets)\n✓ 合集用户筛选 (selected_users)\n✓ 5个VTab标签\n✓ VWindowItem内联表达式\n✓ 列表推导式去重\n==================================================\n✗ 存在未完成的检查项\n\n==================================================\n代码清理验证报告\n==================================================\n✓ 库白名单 (selected_libraries)\n✗ 库忽略列表 (exclude_libraries...",
-  "timestamp": "2026-03-07T20:02:06.358Z",
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"/mnt/d/work/project/person/MoviePilot-Plugins/plugins.v2/mediacovergenerator/__init__.py\"}",
+  "error": "File content (32412 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.",
+  "timestamp": "2026-03-08T01:38:30.254Z",
   "retry_count": 1
 }
