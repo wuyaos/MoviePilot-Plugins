@@ -54,7 +54,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     # 插件版本
-    plugin_version = "0.9.3"
+    plugin_version = "0.9.3.3"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
