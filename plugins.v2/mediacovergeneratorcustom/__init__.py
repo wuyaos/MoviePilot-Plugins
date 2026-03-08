@@ -3349,7 +3349,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
             print(f"警告: 无法为播放列表 {service.name}：{library['Name']} 找到有效的图片项目")
             return False
         
-    def __get_items_batch(self, service, parent_id, offset=0, limit=20, include_types=None):
+    def __get_items_batch(self, service, parent_id, offset=0, limit=20, include_types=None, user_ids=None):
         # 调用API获取项目
         try:
             if not service:
@@ -3372,6 +3372,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
                       f'&ParentId={parent_id}&SortBy={sort_by}&Limit={limit}' \
                       f'&StartIndex={offset}&IncludeItemTypes={include_types}' \
                       f'&Recursive=True&SortOrder=Descending'
+
+                # 添加用户筛选参数（如果指定了用户 ID）
+                if user_ids:
+                    for user_id in user_ids:
+                        url += f'&UserId={user_id}'
 
                 res = service.instance.get_data(url=url)
                 if res:
