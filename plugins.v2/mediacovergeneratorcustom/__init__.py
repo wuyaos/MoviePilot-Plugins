@@ -962,14 +962,14 @@ class MediaCoverGeneratorCustom(_PluginBase):
         # 所有可用的媒体库列表
         all_library_options = [{"title": lib['name'], "value": lib['value']} for lib in self._all_libraries] if self._all_libraries else []
 
-        # 标题配置编辑（JSON格式）
+        # 标题配置编辑（YAML格式）
         title_tab = [
             {
                 "component": "VAlert",
                 "props": {
                     "type": "info",
                     "variant": "tonal",
-                    "text": "JSON格式：[{\"library\": \"库名\", \"main\": \"主标题\", \"sub\": \"副标题\", \"bg\": \"背景色\"}]",
+                    "text": "YAML格式：库名: [主标题, 副标题, 颜色(可选)]。特殊字符的库名需用双引号包裹，如 \\\"3D-HAnime\\\": [主标题, 副标题]",
                     "class": "mb-3"
                 }
             },
@@ -984,10 +984,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                 "component": "VAceEditor",
                                 "props": {
                                     "model": "title_config",
-                                    "lang": "json",
+                                    "lang": "yaml",
                                     "theme": "monokai",
                                     "style": "height: 30rem",
-                                    "label": "标题配置（JSON格式）",
+                                    "label": "标题配置（YAML格式）",
                                     "placeholder": "[]"
                                 }
                             }
