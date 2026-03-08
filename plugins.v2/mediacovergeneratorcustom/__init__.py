@@ -3277,8 +3277,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 else:
                     exclude_source_library_ids.add(str(library_str))
 
-        logger.debug(f"[合集过滤] 排除来源库配置项: {self._exclude_boxsets}")
-        logger.debug(f"[合集过滤] 排除来源库ID集合: {exclude_source_library_ids}")
+        logger.info(f"[合集过滤] 运行配置 | 排除来源库: {self._exclude_boxsets} | 用户黑名单: {self._exclude_users}")
+        logger.debug(f"[合集过滤] 解析后排除来源库ID集合: {exclude_source_library_ids}")
 
         if self._exclude_users:
             exclude_user_ids = set()
@@ -3289,10 +3289,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         exclude_user_ids.add(str(parts[1]))
                 else:
                     exclude_user_ids.add(str(user_str))
-            logger.debug(f"[合集过滤] 用户黑名单配置项: {self._exclude_users}")
             logger.debug(f"[合集过滤] 用户黑名单ID集合: {exclude_user_ids}")
             user_libs = self.__get_user_library_ids(service, exclude_user_ids)
-            logger.debug(f"[合集过滤] 用户黑名单映射来源库: {user_libs}")
+            logger.info(f"[合集过滤] 用户黑名单映射来源库ID: {user_libs}")
             exclude_source_library_ids.update(user_libs)
 
         if library_id in exclude_source_library_ids:
