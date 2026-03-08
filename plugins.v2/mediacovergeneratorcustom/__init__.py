@@ -142,6 +142,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _covers_history_limit_per_library = 10
     _covers_page_history_limit = 50
     _page_tab = "generate-tab"
+    _title_edit_mode = "yaml"
 
     def __init__(self):
         super().__init__()
