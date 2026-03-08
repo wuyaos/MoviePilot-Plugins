@@ -54,7 +54,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     # 插件版本
-    plugin_version = "0.9.3.4"
+    plugin_version = "0.9.3.5"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -3352,8 +3352,16 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 else:
                     exclude_user_ids.add(str(user_str))
             if exclude_user_ids:
-                user_boxset_ids = self.__get_user_visible_boxset_ids(service, exclude_user_ids)
-                excluded_boxset_ids.update(user_boxset_ids)
+                for user_id in exclude_user_ids:
+                    user_boxsets = self.__get_items_batch(service, parent_id,
+                                                         limit=99999,
+                                                         include_types='BoxSet',
+                                                         user_ids=[user_id])
+                    for b in user_boxsets:
+                        bid = b.get("Id") or b.get("ItemId")
+                        if bid:
+                            excluded_boxset_ids.add(str(bid))
+                logger.info(f"[用户黑名单] 黑名单用户可见合集数: {len(excluded_boxset_ids)}")
 
         logger.info(f"[合集过滤] 运行配置 | 排除来源库: {self._exclude_boxsets} | 用户黑名单: {self._exclude_users}")
         logger.info(f"[合集过滤] 合并排除合集数: {len(excluded_boxset_ids)}")
