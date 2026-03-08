@@ -127,7 +127,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _exclude_libraries = []       # 库黑名单
     _exclude_boxsets = []         # 合集来源库黑名单
     _exclude_users = []           # 用户黑名单
-    _debug_mode = False           # Debug 开关：打印详细日志
     _all_users = []               # 所有用户列表
 
     _animation_resolution = '320x180'
@@ -192,7 +191,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             self._exclude_libraries = config.get("exclude_libraries", [])
             self._exclude_boxsets = config.get("exclude_boxsets", [])
             self._exclude_users = config.get("exclude_users", [])
-            self._debug_mode = config.get("debug_mode", False)
             self._cover_style = self.__compose_cover_style(self._cover_style_base, self._cover_style_variant)
             self._multi_1_blur = config.get("multi_1_blur", True)
             self._zh_font_size = config.get("zh_font_size", 170)
@@ -1981,8 +1979,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'covers_output', 'label': '历史封面保存目录（可选）', 'prependInnerIcon': 'mdi-file-image', 'hint': '留空则使用插件数据目录，否则保存到指定路径', 'persistentHint': True}}]},
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'covers_history_limit_per_library', 'label': '媒体库历史封面数量', 'prependInnerIcon': 'mdi-history', 'hint': '单个媒体库封面保留上限，默认 10', 'persistentHint': True}}]},
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'covers_page_history_limit', 'label': '历史封面显示数量', 'prependInnerIcon': 'mdi-image-multiple-outline', 'hint': '历史封面「显示数量」，默认 50', 'persistentHint': True}}]},
-                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSwitch', 'props': {'model': 'save_recent_covers', 'label': '保存最近生成的封面', 'hint': '默认开启，保存历史封面', 'persistentHint': True}}]},
-                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSwitch', 'props': {'model': 'debug_mode', 'label': 'Debug 模式', 'hint': '启用时将输出详细的调试日志，用于诊断问题', 'persistentHint': True}}]}
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSwitch', 'props': {'model': 'save_recent_covers', 'label': '保存最近生成的封面', 'hint': '默认开启，保存历史封面', 'persistentHint': True}}]}
                 ]
             }
         ]
@@ -2180,7 +2177,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "en_font_url_multi_1": "",
             "zh_font_size_multi_1": 1,
             "en_font_size_multi_1": 1,
-            "debug_mode": False,
         }
 
     def get_page(self) -> List[dict]:
@@ -3260,17 +3256,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             logger.warning(f"媒体库 {service.name}：{library['Name']} 无法找到有效的图片项目 (筛选类型: {include_types})")
             return False
 
-    def __debug_log(self, msg: str, level="info"):
-        """Debug 日志输出（仅在 _debug_mode 为 True 时输出）"""
-        if not self._debug_mode:
-            return
-        if level == "debug":
-            logger.debug(f"【DEBUG】{msg}")
-        elif level == "info":
-            logger.info(f"【DEBUG】{msg}")
-        elif level == "warning":
-            logger.warning(f"【DEBUG】{msg}")
-
     def __handle_boxset_library(self, service, library, title):
 
         include_types = 'BoxSet,Movie'
@@ -3292,8 +3277,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 else:
                     exclude_source_library_ids.add(str(library_str))
 
-        self.__debug_log(f"排除来源库配置项: {self._exclude_boxsets}", "info")
-        self.__debug_log(f"排除来源库ID集合: {exclude_source_library_ids}", "debug")
+        logger.debug(f"[合集过滤] 排除来源库配置项: {self._exclude_boxsets}")
+        logger.debug(f"[合集过滤] 排除来源库ID集合: {exclude_source_library_ids}")
 
         if self._exclude_users:
             exclude_user_ids = set()
@@ -3304,10 +3289,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         exclude_user_ids.add(str(parts[1]))
                 else:
                     exclude_user_ids.add(str(user_str))
-            self.__debug_log(f"用户黑名单配置项: {self._exclude_users}", "info")
-            self.__debug_log(f"用户黑名单ID集合: {exclude_user_ids}", "debug")
+            logger.debug(f"[合集过滤] 用户黑名单配置项: {self._exclude_users}")
+            logger.debug(f"[合集过滤] 用户黑名单ID集合: {exclude_user_ids}")
             user_libs = self.__get_user_library_ids(service, exclude_user_ids)
-            self.__debug_log(f"用户黑名单映射来源库: {user_libs}", "debug")
+            logger.debug(f"[合集过滤] 用户黑名单映射来源库: {user_libs}")
             exclude_source_library_ids.update(user_libs)
 
         if library_id in exclude_source_library_ids:
@@ -3807,22 +3792,22 @@ class MediaCoverGeneratorCustom(_PluginBase):
 
                 data = None
                 for url in candidate_urls:
-                    self.__debug_log(f"正在查询用户 {user_id} 的库接口: {url.split('?')[0]}", "debug")
+                    logger.debug(f"[用户黑名单] 查询用户 {user_id} 的库接口: {url.split('?')[0]}")
                     res = service.instance.get_data(url=url)
                     if res and res.status_code == 200:
                         data = res.json()
                         break
 
                 if not data:
-                    self.__debug_log(f"用户 {user_id} 未获取到库数据", "warning")
+                    logger.warning(f"[用户黑名单] 用户 {user_id} 未获取到库数据")
                     continue
 
                 items_count = len(data.get("Items", []))
-                self.__debug_log(f"用户 {user_id} 获取到 {items_count} 个库", "info")
+                logger.debug(f"[用户黑名单] 用户 {user_id} 获取到 {items_count} 个库")
 
                 for item in data.get("Items", []):
                     if item.get('Type') == 'BoxSet' or item.get('CollectionType') == 'boxsets':
-                        self.__debug_log(f"  跳过合集库: {item.get('Name')} (Type={item.get('Type')})", "debug")
+                        logger.debug(f"[用户黑名单] 跳过合集库: {item.get('Name')} (Type={item.get('Type')})")
                         continue  # 跳过合集库
                     if service.type == 'jellyfin':
                         item_id = item.get("Id") or item.get("ItemId")
@@ -3830,7 +3815,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         item_id = item.get("Id")
                     if item_id:
                         library_ids.add(str(item_id))
-                        self.__debug_log(f"  添加库: {item.get('Name')} Id={item_id}", "debug")
+                        logger.debug(f"[用户黑名单] 添加库: {item.get('Name')} Id={item_id}")
             except Exception as err:
                 logger.debug(f"获取用户 {user_id} 可见来源库失败：{str(err)}")
 
