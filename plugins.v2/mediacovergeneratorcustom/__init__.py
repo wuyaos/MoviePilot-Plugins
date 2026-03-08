@@ -81,7 +81,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _servers = None
     _selected_servers = []
     _all_libraries = []
-    _include_libraries = []
     _sort_by = 'Random'
     _monitor_sort = ''
     _current_updating_items = set()
@@ -124,12 +123,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _animation_format = 'apng'
     _animation_reduce_colors = "strong"
     
-    # 本地特有功能：库白名单、合集黑名单、用户筛选
-    _selected_libraries = []      # 库白名单
+    # 本地特有功能：统一黑名单模式
+    _exclude_libraries = []       # 库黑名单
     _exclude_boxsets = []         # 合集黑名单
-    _selected_users = []          # 合集用户筛选
+    _exclude_users = []           # 用户黑名单
     _all_users = []               # 所有用户列表
-    _exclude_libraries = []        # [可选] 库忽略列表
 
     _animation_resolution = '320x180'
     _animation_reduce_colors = 'medium'
@@ -167,7 +165,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             self._cron = config.get("cron")
             self._delay = config.get("delay")
             self._selected_servers = config.get("selected_servers")
-            self._include_libraries = config.get("include_libraries")
             self._sort_by = config.get("sort_by")
             self._covers_output = config.get("covers_output", "")
             self._covers_input = config.get("covers_input", "")
@@ -191,10 +188,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
             self._cover_style_base = config.get("cover_style_base", default_base)
             self._cover_style_variant = config.get("cover_style_variant", default_variant)
             # 读取本地特有配置
-            self._selected_libraries = config.get("selected_libraries", [])
-            self._exclude_boxsets = config.get("exclude_boxsets", [])
-            self._selected_users = config.get("selected_users", [])
             self._exclude_libraries = config.get("exclude_libraries", [])
+            self._exclude_boxsets = config.get("exclude_boxsets", [])
+            self._exclude_users = config.get("exclude_users", [])
             self._cover_style = self.__compose_cover_style(self._cover_style_base, self._cover_style_variant)
             self._multi_1_blur = config.get("multi_1_blur", True)
             self._zh_font_size = config.get("zh_font_size", 170)
@@ -422,7 +418,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "cron": self._cron,
             "delay": self._delay,
             "selected_servers": self._selected_servers,
-            "include_libraries": self._include_libraries,
             "all_libraries": self._all_libraries,
             "sort_by": self._sort_by,
             "covers_output": self._covers_output,
@@ -458,10 +453,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "animation_format": self._animation_format,
             "animation_resolution": self._animation_resolution,
             "animation_reduce_colors": self._animation_reduce_colors,
-            "selected_libraries": self._selected_libraries,
-            "exclude_boxsets": self._exclude_boxsets,
-            "selected_users": self._selected_users,
             "exclude_libraries": self._exclude_libraries,
+            "exclude_boxsets": self._exclude_boxsets,
+            "exclude_users": self._exclude_users,
             "animated_2_image_count": self._animated_2_image_count,
             "animated_2_departure_type": self._animated_2_departure_type,
             "bg_color_mode": self._bg_color_mode,
@@ -1300,10 +1294,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     "multiple": True,
                                     "chips": True,
                                     "clearable": True,
-                                    "model": "selected_libraries",
-                                    "label": "库白名单",
+                                    "model": "exclude_libraries",
+                                    "label": "库黑名单",
                                     "items": library_items,
-                                    "hint": "仅更新勾选库；留空表示不过滤",
+                                    "hint": "命中后跳过更新；留空表示不过滤",
                                     "persistentHint": True,
                                     "prependInnerIcon": "mdi-folder-check-outline"
                                 }
@@ -1381,10 +1375,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                     "multiple": True,
                                     "chips": True,
                                     "clearable": True,
-                                    "model": "selected_users",
-                                    "label": "合集用户筛选",
+                                    "model": "exclude_users",
+                                    "label": "用户黑名单",
                                     "items": self._all_users,
-                                    "hint": "未选用户时不过滤；当前无用户列表则保持空",
+                                    "hint": "命中用户时跳过合集封面；留空表示不过滤",
                                     "persistentHint": True,
                                     "prependInnerIcon": "mdi-account-filter"
                                 }
@@ -1987,10 +1981,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 'component': 'VRow',
                 'content': [
                     {'component': 'VCol', 'props': {'cols': 12}, 'content': [{'component': 'VSubheader', 'props': {'class': 'pl-0 py-2 mt-2'}, 'text': '库过滤与合集'}]},
-                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'selected_libraries', 'label': '库白名单', 'items': library_items, 'hint': '仅更新勾选库；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-check-outline'}}]},
-                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_libraries', 'label': '忽略库', 'items': library_items, 'hint': '命中后跳过更新', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-off-outline'}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_libraries', 'label': '库黑名单', 'items': library_items, 'hint': '命中后跳过更新；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-off-outline'}}]},
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_boxsets', 'label': '排除来源库', 'items': library_items, 'hint': '选中的来源库不参与合集封面素材', 'persistentHint': True, 'prependInnerIcon': 'mdi-folder-remove-outline'}}]},
-                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'selected_users', 'label': '合集用户筛选', 'items': self._all_users, 'hint': '未选用户时不过滤；当前无用户列表则保持空', 'persistentHint': True, 'prependInnerIcon': 'mdi-account-filter'}}]}
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'exclude_users', 'label': '用户黑名单', 'items': self._all_users, 'hint': '命中用户时跳过合集封面；留空表示不过滤', 'persistentHint': True, 'prependInnerIcon': 'mdi-account-filter'}}]}
                 ]
             }
         ]
@@ -2144,7 +2137,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "cron": "",
             "delay": 60,
             "selected_servers": [],
-            "include_libraries": [],
             "sort_by": "Random",
             "title_config": '',
             "tab": "basic-tab",
@@ -2187,10 +2179,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "covers_page_history_limit": 50,
             "page_tab": "generate-tab",
             "style_naming_v2": True,
-            "selected_libraries": [],
             "exclude_libraries": [],
             "exclude_boxsets": [],
-            "selected_users": [],
+            "exclude_users": [],
             "zh_font_path_local": "",
             "en_font_path_local": "",
             "covers_input": "",
@@ -2799,8 +2790,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
             library_id = library.get("Id")
         else:
             library_id = library.get("ItemId")
-        if self._include_libraries and f"{server}-{library_id}" not in self._include_libraries:
-            logger.info(f"{server}：{library['Name']} 不在列表中，跳过更新封面")
+        if self._exclude_libraries and f"{server}-{library_id}" in self._exclude_libraries:
+            logger.info(f"{server}：{library['Name']} 在排除列表中，跳过更新封面")
             return
 
         update_key = (server, item_id)
@@ -2889,8 +2880,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     library_id = library.get("Id")
                 else:
                     library_id = library.get("ItemId")
-                if self._include_libraries and f"{server}-{library_id}" not in self._include_libraries:
-                    logger.info(f"{server}：{library['Name']} 不在列表中，跳过更新封面")
+                if self._exclude_libraries and f"{server}-{library_id}" in self._exclude_libraries:
+                    logger.info(f"{server}：{library['Name']} 在排除列表中，跳过更新封面")
                     continue
                 if self.__update_library(service, library):
                     logger.info(f"媒体库 {server}：{library['Name']} 封面更新成功")
@@ -2904,30 +2895,17 @@ class MediaCoverGeneratorCustom(_PluginBase):
                  
 
     def __update_library(self, service, library):
-        # 库白名单检查
-        if self._selected_libraries:
-            if service.type == 'emby':
-                lib_id = library.get('Id')
-            else:
-                lib_id = library.get('ItemId')
-            
-            if lib_id:
-                lib_key = f"{service.name}-{lib_id}"
-                if lib_key not in self._selected_libraries:
-                    logger.info(f"库 {library.get('Name')} 不在白名单中，跳过")
-                    return False
-        
-        # 库忽略列表检查
+        # 库黑名单检查
         if self._exclude_libraries:
             if service.type == 'emby':
                 lib_id = library.get('Id')
             else:
                 lib_id = library.get('ItemId')
-            
+
             if lib_id:
                 lib_key = f"{service.name}-{lib_id}"
                 if lib_key in self._exclude_libraries:
-                    logger.info(f"库 {library.get('Name')} 在忽略列表中，跳过")
+                    logger.info(f"库 {library.get('Name')} 在排除列表中，跳过")
                     return False
         
         library_name = library['Name']
@@ -3308,20 +3286,29 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 logger.info(f"合集来源库 {library.get('Name')} 在排除列表中，跳过")
                 return False
 
-        # 获取选中用户的 ID
-        selected_user_ids = None
-        if self._selected_users:
-            try:
-                user_map = service.instance.get_users() if hasattr(service.instance, 'get_users') else {}
-                selected_user_ids = [user_map.get(user_name) for user_name in self._selected_users if user_map.get(user_name)]
-                if selected_user_ids:
-                    logger.debug(f"合集库用户筛选: {selected_user_ids}")
-            except Exception as e:
-                logger.warning(f"获取用户 ID 失败: {e}")
-
+        # 获取所有合集（不限制用户）
         boxsets = self.__get_items_batch(service, parent_id,
                                       include_types=include_types,
-                                      user_ids=selected_user_ids)
+                                      user_ids=None)
+
+        # 客户端过滤：排除指定用户的项目
+        if self._exclude_users and boxsets:
+            try:
+                user_map = service.instance.get_users() if hasattr(service.instance, 'get_users') else {}
+                exclude_user_ids = [user_map.get(user_name) for user_name in self._exclude_users if user_map.get(user_name)]
+
+                if exclude_user_ids:
+                    logger.debug(f"合集库排除用户: {exclude_user_ids}")
+                    filtered_boxsets = []
+                    for boxset in boxsets:
+                        user_data = boxset.get('UserData', {})
+                        boxset_user_id = user_data.get('UserId')
+                        if boxset_user_id not in exclude_user_ids:
+                            filtered_boxsets.append(boxset)
+                    boxsets = filtered_boxsets
+                    logger.debug(f"用户过滤后剩余 {len(boxsets)} 个合集")
+            except Exception as e:
+                logger.warning(f"获取用户 ID 失败: {e}")
         if not boxsets:
             logger.warning(f"媒体库 {service.name}：{library['Name']} 未获取到可用合集项")
             return False
@@ -3345,8 +3332,18 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 movies = self.__get_items_batch(service,
                                              parent_id=boxset['Id'],
                                              include_types=include_types,
-                                             user_ids=selected_user_ids)
-                
+                                             user_ids=None)
+
+                # 应用同样的用户过滤
+                if self._exclude_users and movies:
+                    try:
+                        user_map = service.instance.get_users() if hasattr(service.instance, 'get_users') else {}
+                        exclude_user_ids = [user_map.get(user_name) for user_name in self._exclude_users if user_map.get(user_name)]
+                        if exclude_user_ids:
+                            movies = [m for m in movies if m.get('UserData', {}).get('UserId') not in exclude_user_ids]
+                    except Exception as e:
+                        logger.warning(f"获取用户 ID 失败: {e}")
+
                 valid_movies = self.__filter_valid_items(movies)
                 valid_items.extend(valid_movies)
                 
