@@ -32,7 +32,7 @@
         "name": "媒体库封面生成（自用版）",
         "description": "自动生成媒体库封面，支持库白名单、合集黑名单过滤、4种动画风格、Emby和Jellyfin",
         "labels": "封面,媒体库",
-        "version": "0.9.3.4",
+        "version": "0.9.3.5",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png",
         "author": "wuyaos",
         "level": 1,
