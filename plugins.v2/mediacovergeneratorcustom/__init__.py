@@ -3256,6 +3256,29 @@ class MediaCoverGeneratorCustom(_PluginBase):
             logger.warning(f"媒体库 {service.name}：{library['Name']} 无法找到有效的图片项目 (筛选类型: {include_types})")
             return False
 
+    def __get_user_visible_boxset_ids(self, service, user_ids: set) -> set:
+        """查询黑名单用户可见的合集 ID 集合，用于从生成结果中排除"""
+        boxset_ids = set()
+        for user_id in user_ids:
+            try:
+                if service.type == 'emby':
+                    url = f"emby/Users/{user_id}/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=Id"
+                else:
+                    url = f"Users/{user_id}/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=Id"
+                res = service.instance.get_data(url=url)
+                if res and res.status_code == 200:
+                    data = res.json()
+                    for item in data.get("Items", []):
+                        item_id = item.get("Id") or item.get("ItemId")
+                        if item_id:
+                            boxset_ids.add(str(item_id))
+                    logger.info(f"[用户黑名单] 用户 {user_id} 可见合集数: {len(data.get('Items', []))}")
+                else:
+                    logger.warning(f"[用户黑名单] 查询用户 {user_id} 可见合集失败")
+            except Exception as err:
+                logger.warning(f"[用户黑名单] 查询用户 {user_id} 可见合集出错：{str(err)}")
+        return boxset_ids
+
     def __handle_boxset_library(self, service, library, title):
 
         include_types = 'BoxSet,Movie'
@@ -3265,9 +3288,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
             library_id = library.get("ItemId")
         parent_id = library_id
 
-        # 统一来源库黑名单：合并 exclude_boxsets 与 exclude_users 派生出的来源库
+        # 来源库黑名单（exclude_boxsets 配置）
         exclude_source_library_ids = set()
-
         if self._exclude_boxsets:
             for library_str in self._exclude_boxsets:
                 if '-' in library_str:
@@ -3277,9 +3299,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 else:
                     exclude_source_library_ids.add(str(library_str))
 
-        logger.info(f"[合集过滤] 运行配置 | 排除来源库: {self._exclude_boxsets} | 用户黑名单: {self._exclude_users}")
-        logger.info(f"[合集过滤] 解析后排除来源库ID集合: {exclude_source_library_ids}")
-
+        # 用户黑名单（exclude_users 配置）：查询黑名单用户可见的合集 ID，直接排除
+        excluded_boxset_ids = set()
         if self._exclude_users:
             exclude_user_ids = set()
             for user_str in self._exclude_users:
@@ -3289,26 +3310,30 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         exclude_user_ids.add(str(parts[1]))
                 else:
                     exclude_user_ids.add(str(user_str))
-            logger.info(f"[合集过滤] 用户黑名单ID集合: {exclude_user_ids}")
-            user_libs = self.__get_user_library_ids(service, exclude_user_ids)
-            logger.info(f"[合集过滤] 用户黑名单映射来源库ID: {user_libs}")
-            exclude_source_library_ids.update(user_libs)
+            excluded_boxset_ids = self.__get_user_visible_boxset_ids(service, exclude_user_ids)
+
+        logger.info(f"[合集过滤] 运行配置 | 排除来源库: {self._exclude_boxsets} | 用户黑名单: {self._exclude_users}")
+        logger.info(f"[合集过滤] 来源库黑名单ID: {exclude_source_library_ids} | 黑名单用户可见合集数: {len(excluded_boxset_ids)}")
 
         if library_id in exclude_source_library_ids:
             logger.info(f"合集来源库 {library.get('Name')} 在排除列表中，跳过")
             return False
 
-        # 获取所有合集（不限制用户）
+        # 获取所有合集
         boxsets = self.__get_items_batch(service, parent_id,
                                       include_types=include_types,
                                       user_ids=None)
 
-        # 仅按 LibraryId 过滤来源库黑名单
+        # 按来源库黑名单过滤（exclude_boxsets）
         if exclude_source_library_ids and boxsets:
-            boxsets = [
-                boxset for boxset in boxsets
-                if str(boxset.get("LibraryId") or "") not in exclude_source_library_ids
-            ]
+            boxsets = [b for b in boxsets if str(b.get("LibraryId") or "") not in exclude_source_library_ids]
+
+        # 按用户黑名单过滤（exclude_users）：排除黑名单用户可见的合集
+        if excluded_boxset_ids and boxsets:
+            before = len(boxsets)
+            boxsets = [b for b in boxsets if str(b.get("Id") or "") not in excluded_boxset_ids]
+            logger.info(f"[合集过滤] 用户黑名单过滤: {before} → {len(boxsets)} 个合集")
+
         if not boxsets:
             logger.warning(f"媒体库 {service.name}：{library['Name']} 未获取到可用合集项")
             return False
@@ -3316,19 +3341,9 @@ class MediaCoverGeneratorCustom(_PluginBase):
         required_items = self.__get_required_items()
         valid_items = []
 
-        # 首先检查BoxSet本身是否有合适的图片
-        # 根因：exclude_source_library_ids 针对"来源库"，而 BoxSet 项的 LibraryId 通常是"合集库"本身，
-        # 直接使用 BoxSet 海报会绕过来源库黑名单，导致黑名单内容仍出现在合集中。
-        # 修复：当存在来源库黑名单时，禁用 BoxSet 自身海报，仅使用其子项电影并按来源库过滤。
         self._seen_keys = set()
-        valid_boxsets = []
-        if not exclude_source_library_ids:
-            valid_boxsets = self.__filter_valid_items(boxsets)
-            valid_items.extend(valid_boxsets)
-        else:
-            logger.debug(
-                "检测到来源库黑名单，跳过 BoxSet 自身海报，改为仅从过滤后的合集子项中选图"
-            )
+        valid_boxsets = self.__filter_valid_items(boxsets)
+        valid_items.extend(valid_boxsets)
         
         # 如果BoxSet本身没有足够的图片，则获取其中的电影
         if len(valid_items) < required_items:
@@ -3341,16 +3356,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                              parent_id=boxset['Id'],
                                              include_types=include_types,
                                              user_ids=None)
-
-                # 仅按 LibraryId 过滤来源库黑名单
-                if exclude_source_library_ids and movies:
-                    sample = [(m.get("Name"), m.get("LibraryId")) for m in movies[:3]]
-                    logger.info(f"[合集过滤] 子项 LibraryId 采样(前3): {sample}")
-                    movies = [
-                        movie for movie in movies
-                        if str(movie.get("LibraryId") or "") not in exclude_source_library_ids
-                    ]
-                    logger.info(f"[合集过滤] 过滤后剩余子项数: {len(movies)}")
 
                 valid_movies = self.__filter_valid_items(movies)
                 valid_items.extend(valid_movies)
