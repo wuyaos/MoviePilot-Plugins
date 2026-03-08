@@ -3344,10 +3344,13 @@ class MediaCoverGeneratorCustom(_PluginBase):
 
                 # 仅按 LibraryId 过滤来源库黑名单
                 if exclude_source_library_ids and movies:
+                    sample = [(m.get("Name"), m.get("LibraryId")) for m in movies[:3]]
+                    logger.info(f"[合集过滤] 子项 LibraryId 采样(前3): {sample}")
                     movies = [
                         movie for movie in movies
                         if str(movie.get("LibraryId") or "") not in exclude_source_library_ids
                     ]
+                    logger.info(f"[合集过滤] 过滤后剩余子项数: {len(movies)}")
 
                 valid_movies = self.__filter_valid_items(movies)
                 valid_items.extend(valid_movies)
