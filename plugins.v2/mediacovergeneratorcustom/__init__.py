@@ -962,64 +962,17 @@ class MediaCoverGeneratorCustom(_PluginBase):
         # 所有可用的媒体库列表
         all_library_options = [{"title": lib['name'], "value": lib['value']} for lib in self._all_libraries] if self._all_libraries else []
 
-        # 两种编辑器共存，用动态表达式控制显示隐藏
-        simple_editor = {
-            "component": "VRow",
-            "props": {"style": 'display: {{ title_edit_mode === "simple" ? "block" : "none" }};'},
-            "content": [
-                {
-                    "component": "VCol",
-                    "props": {"cols": 12},
-                    "content": [
-                        {
-                            "component": "VDataTable",
-                            "props": {
-                                "model": "title_config",
-                                "headers": [
-                                    {"title": "媒体库", "key": "library", "width": "30%"},
-                                    {"title": "主标题", "key": "main", "width": "25%"},
-                                    {"title": "副标题", "key": "sub", "width": "25%"},
-                                    {"title": "背景色", "key": "bg", "width": "15%"},
-                                    {"title": "操作", "key": "action", "width": "5%"}
-                                ],
-                                "items": title_config_data,
-                                "density": "compact",
-                                "hideDefaultFooter": False
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
-
-        # JSON编辑器
-        json_editor = {
-            'component': 'VRow',
-            'props': {'style': 'display: {{ title_edit_mode === "json" ? "block" : "none" }};'},
-            'content': [
-                {
-                    'component': 'VCol',
-                    'props': {'cols': 12},
-                    'content': [
-                        {
-                            'component': 'VAceEditor',
-                            'props': {
-                                'model': 'title_config',
-                                'lang': 'json',
-                                'theme': 'monokai',
-                                'style': 'height: 30rem',
-                                'label': '标题配置（JSON格式）',
-                                'placeholder': '[]'
-                            }
-                        }
-                    ]
-                },
-            ]
-        }
-
-        title_editor_block = [simple_editor, json_editor]
-
+        # 标题配置编辑（JSON格式）
         title_tab = [
+            {
+                "component": "VAlert",
+                "props": {
+                    "type": "info",
+                    "variant": "tonal",
+                    "text": "JSON格式：[{\"library\": \"库名\", \"main\": \"主标题\", \"sub\": \"副标题\", \"bg\": \"背景色\"}]",
+                    "class": "mb-3"
+                }
+            },
             {
                 "component": "VRow",
                 "content": [
@@ -1028,23 +981,21 @@ class MediaCoverGeneratorCustom(_PluginBase):
                         "props": {"cols": 12},
                         "content": [
                             {
-                                "component": "VBtnToggle",
+                                "component": "VAceEditor",
                                 "props": {
-                                    "model": "title_edit_mode",
-                                    "mandatory": True,
-                                    "divided": True,
-                                    "class": "mb-3"
-                                },
-                                "content": [
-                                    {"component": "VBtn", "props": {"value": "json", "variant": "outlined"}, "text": "JSON编辑"},
-                                    {"component": "VBtn", "props": {"value": "simple", "variant": "outlined"}, "text": "表格编辑"}
-                                ]
+                                    "model": "title_config",
+                                    "lang": "json",
+                                    "theme": "monokai",
+                                    "style": "height: 30rem",
+                                    "label": "标题配置（JSON格式）",
+                                    "placeholder": "[]"
+                                }
                             }
                         ]
                     }
                 ]
             }
-        ] + title_editor_block
+        ]
 
         # 字体设置标签
         font_tab = [
