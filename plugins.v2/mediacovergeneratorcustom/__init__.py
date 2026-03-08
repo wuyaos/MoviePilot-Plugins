@@ -1981,7 +1981,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'covers_output', 'label': '历史封面保存目录（可选）', 'prependInnerIcon': 'mdi-file-image', 'hint': '留空则使用插件数据目录，否则保存到指定路径', 'persistentHint': True}}]},
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'covers_history_limit_per_library', 'label': '媒体库历史封面数量', 'prependInnerIcon': 'mdi-history', 'hint': '单个媒体库封面保留上限，默认 10', 'persistentHint': True}}]},
                     {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'covers_page_history_limit', 'label': '历史封面显示数量', 'prependInnerIcon': 'mdi-image-multiple-outline', 'hint': '历史封面「显示数量」，默认 50', 'persistentHint': True}}]},
-                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSwitch', 'props': {'model': 'save_recent_covers', 'label': '保存最近生成的封面', 'hint': '默认开启，保存历史封面', 'persistentHint': True}}]}
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSwitch', 'props': {'model': 'save_recent_covers', 'label': '保存最近生成的封面', 'hint': '默认开启，保存历史封面', 'persistentHint': True}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSwitch', 'props': {'model': 'debug_mode', 'label': 'Debug 模式', 'hint': '启用时将输出详细的调试日志，用于诊断问题', 'persistentHint': True}}]}
                 ]
             }
         ]
@@ -2179,6 +2180,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "en_font_url_multi_1": "",
             "zh_font_size_multi_1": 1,
             "en_font_size_multi_1": 1,
+            "debug_mode": False,
         }
 
     def get_page(self) -> List[dict]:
