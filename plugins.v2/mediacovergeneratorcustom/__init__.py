@@ -1,6 +1,7 @@
 import base64
 import datetime
 import hashlib
+import json
 import mimetypes
 import os
 import re
@@ -50,6 +51,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
     LOG_PREFIX = "【MediaCoverGeneratorCustom】"
     SERVICE_ID = "MediaCoverGeneratorCustom"
     LEGACY_SERVICE_ID = "MediaCoverGenerator"
+    STOP_SERVICE_ID = "StopMediaCoverGeneratorCustom"
+    LEGACY_STOP_SERVICE_ID = "StopMediaCoverGenerator"
     # 插件名称
     plugin_name = "媒体库封面生成（自用版）"
     # 插件描述
@@ -57,7 +60,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     # 插件版本
-    plugin_version = "0.9.5"
+    plugin_version = "0.9.6"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -144,6 +147,13 @@ class MediaCoverGeneratorCustom(_PluginBase):
     _covers_history_limit_per_library = 10
     _covers_page_history_limit = 50
     _page_tab = "generate-tab"
+    _dry_run = False
+    _library_update_retry = 1
+    _manual_server = ""
+    _manual_library_id = ""
+    _manual_item_id = ""
+    _last_run_stats = {}
+    _last_library_result_reason = ""
     _title_edit_mode = "json"
     _title_simple_library = ""
     _title_simple_main = ""
@@ -153,6 +163,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     def __init__(self):
         super().__init__()
         # 使用实例级可变状态，避免类属性在多实例/热重载场景下互相污染
+        self._event.clear()
         self._current_updating_items = set()
         self._seen_keys = set()
         self._sanitize_log_cache = set()
@@ -163,6 +174,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
         self._exclude_boxsets = []
         self._exclude_users = []
         self._all_users = []
+        self._transfer_event_timers = {}
+        self._transfer_timer_lock = threading.Lock()
+        self._last_run_stats = {}
+        self._last_library_result_reason = ""
 
     def init_plugin(self, config: dict = None):
         self.mschain = MediaServerChain()
@@ -276,6 +291,18 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 "covers_page_history_limit[init_plugin]",
                 int,
             )
+            self._dry_run = bool(config.get("dry_run", False))
+            self._library_update_retry = self.__clamp_value(
+                config.get("library_update_retry", 1),
+                1,
+                5,
+                1,
+                "library_update_retry[init_plugin]",
+                int,
+            )
+            self._manual_server = (config.get("manual_server") or "").strip()
+            self._manual_library_id = (config.get("manual_library_id") or "").strip()
+            self._manual_item_id = (config.get("manual_item_id") or "").strip()
             self._page_tab = config.get("page_tab", "generate-tab")
             self._title_edit_mode = config.get("title_edit_mode", "json")
             self._title_simple_library = config.get("title_simple_library", "")
@@ -412,6 +439,96 @@ class MediaCoverGeneratorCustom(_PluginBase):
             return self.__get_animated_2_required_items()
         return 1
 
+    def __log_event(self, level: str, event: str, **fields):
+        """
+        统一输出结构化日志，便于后续检索与告警聚合。
+        """
+        payload = {"event": event}
+        payload.update(fields)
+        message = f"{self.LOG_PREFIX} {json.dumps(payload, ensure_ascii=False, default=str)}"
+        if level == "error":
+            logger.error(message)
+        elif level == "warning":
+            logger.warning(message)
+        elif level == "debug":
+            logger.debug(message)
+        else:
+            logger.info(message)
+
+    def __new_run_stats(self) -> Dict[str, Any]:
+        return {
+            "started_at": datetime.datetime.now().isoformat(),
+            "finished_at": "",
+            "dry_run": bool(self._dry_run),
+            "mode": "all",
+            "target_server": "",
+            "target_library_id": "",
+            "target_item_id": "",
+            "success_count": 0,
+            "fail_count": 0,
+            "skip_count": 0,
+            "error_reasons": {},
+            "libraries": [],
+        }
+
+    def __record_library_result(
+        self,
+        run_stats: Dict[str, Any],
+        server: str,
+        library_name: str,
+        library_id: str,
+        status: str,
+        reason: str = "",
+    ):
+        entry = {
+            "server": server,
+            "library_name": library_name,
+            "library_id": str(library_id or ""),
+            "status": status,
+            "reason": reason,
+        }
+        run_stats["libraries"].append(entry)
+        if status == "success":
+            run_stats["success_count"] += 1
+        elif status == "failed":
+            run_stats["fail_count"] += 1
+            reason_key = reason or "unknown"
+            run_stats["error_reasons"][reason_key] = run_stats["error_reasons"].get(reason_key, 0) + 1
+        else:
+            run_stats["skip_count"] += 1
+
+    def __snapshot_run_stats(self, run_stats: Dict[str, Any]):
+        snapshot = dict(run_stats)
+        snapshot["libraries"] = list(run_stats.get("libraries", []))
+        snapshot["error_reasons"] = dict(run_stats.get("error_reasons", {}))
+        snapshot["finished_at"] = datetime.datetime.now().isoformat()
+        self._last_run_stats = snapshot
+        self.__log_event(
+            "info",
+            "run_summary",
+            mode=snapshot.get("mode"),
+            dry_run=snapshot.get("dry_run"),
+            success=snapshot.get("success_count"),
+            failed=snapshot.get("fail_count"),
+            skipped=snapshot.get("skip_count"),
+            reasons=snapshot.get("error_reasons"),
+        )
+
+    def __format_last_run_stats(self) -> str:
+        if not self._last_run_stats:
+            return "尚无最近一次任务统计。"
+        stats = self._last_run_stats
+        reasons = stats.get("error_reasons") or {}
+        reason_text = "、".join([f"{k}:{v}" for k, v in reasons.items()]) if reasons else "无"
+        return (
+            f"最近任务模式={stats.get('mode', 'unknown')}，"
+            f"dry_run={'开启' if stats.get('dry_run') else '关闭'}，"
+            f"成功={stats.get('success_count', 0)}，"
+            f"失败={stats.get('fail_count', 0)}，"
+            f"跳过={stats.get('skip_count', 0)}，"
+            f"失败原因汇总={reason_text}"
+        )
+
     def __update_config(self):
         """
         更新配置
@@ -479,6 +596,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "save_recent_covers": self._save_recent_covers,
             "covers_history_limit_per_library": self._covers_history_limit_per_library,
             "covers_page_history_limit": self._covers_page_history_limit,
+            "dry_run": self._dry_run,
+            "library_update_retry": self._library_update_retry,
+            "manual_server": self._manual_server,
+            "manual_library_id": self._manual_library_id,
+            "manual_item_id": self._manual_item_id,
             "page_tab": self._page_tab,
             "title_edit_mode": self._title_edit_mode,
             "title_simple_library": self._title_simple_library,
@@ -706,6 +828,20 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 "summary": "立即生成媒体库封面",
             },
             {
+                "path": "/generate_library_now",
+                "endpoint": self.api_generate_library_now,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "立即生成指定媒体库封面",
+            },
+            {
+                "path": "generate_library_now",
+                "endpoint": self.api_generate_library_now,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "立即生成指定媒体库封面(兼容无前导斜杠)",
+            },
+            {
                 "path": "generate_now",
                 "endpoint": self.api_generate_now,
                 "auth": "bear",
@@ -805,11 +941,56 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     return {"code": 1, "msg": f"不支持的风格: {target_style}"}
                 self._cover_style = target_style
             logger.info(f"{self.LOG_PREFIX} 收到立即生成请求，风格: {self._cover_style}")
-            tips = self.__update_all_libraries()
+            tips = self.__update_all_libraries(mode="manual_all")
             return {"code": 0, "msg": tips or "封面生成任务已完成"}
         except Exception as e:
             logger.error(f"{self.LOG_PREFIX} 立即生成失败: {e}", exc_info=True)
             return {"code": 1, "msg": f"封面生成失败: {e}"}
+        finally:
+            self._cover_style = old_style
+
+    def api_generate_library_now(self, server: str = "", library_id: str = "", item_id: str = "", style: str = ""):
+        old_style = self._cover_style
+        try:
+            target_server = (server or self._manual_server or "").strip()
+            target_library_id = str(library_id or self._manual_library_id or "").strip()
+            target_item_id = str(item_id or self._manual_item_id or "").strip()
+            if not self._enabled:
+                return {"code": 1, "msg": "插件未启用，请先在设置页启用插件并保存"}
+            if not target_server or not target_library_id:
+                return {"code": 1, "msg": "缺少目标参数：server 和 library_id 为必填"}
+            if not self._servers or target_server not in self._servers:
+                return {"code": 1, "msg": f"服务器不可用: {target_server}"}
+
+            target_style = (style or "").strip()
+            allowed_styles = {
+                "static_1", "static_2", "static_3", "static_4",
+                "animated_1", "animated_2", "animated_3", "animated_4",
+            }
+            if target_style:
+                if target_style not in allowed_styles:
+                    return {"code": 1, "msg": f"不支持的风格: {target_style}"}
+                self._cover_style = target_style
+
+            self.__log_event(
+                "info",
+                "manual_generate_library_request",
+                server=target_server,
+                library_id=target_library_id,
+                item_id=target_item_id,
+                style=self._cover_style,
+                dry_run=self._dry_run,
+            )
+            tips = self.__update_all_libraries(
+                mode="manual_single",
+                target_server=target_server,
+                target_library_id=target_library_id,
+                target_item_id=target_item_id,
+            )
+            return {"code": 0, "msg": tips or "指定媒体库封面生成任务已完成"}
+        except Exception as e:
+            logger.error(f"{self.LOG_PREFIX} 指定媒体库立即生成失败: {e}", exc_info=True)
+            return {"code": 1, "msg": f"指定媒体库封面生成失败: {e}"}
         finally:
             self._cover_style = old_style
 
@@ -932,22 +1113,31 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 "kwargs": {}
             })
             # 最小兼容迁移：保留旧ID为手动触发入口，避免已有外部调用直接失效
-            services.append({
-                "id": self.LEGACY_SERVICE_ID,
-                "name": "媒体库封面更新服务（兼容旧ID）",
-                "trigger": None,
-                "func": self.__update_all_libraries,
-                "kwargs": {}
-            })
+            if self.LEGACY_SERVICE_ID != self.SERVICE_ID:
+                services.append({
+                    "id": self.LEGACY_SERVICE_ID,
+                    "name": "媒体库封面更新服务（兼容旧ID）",
+                    "trigger": None,
+                    "func": self.__update_all_libraries,
+                    "kwargs": {}
+                })
         
         # 总是显示停止按钮，以便中断长时间运行的任务
         services.append({
-            "id": "StopMediaCoverGenerator",
+            "id": self.STOP_SERVICE_ID,
             "name": "停止当前更新任务",
             "trigger": None,
             "func": self.stop_task,
             "kwargs": {}
         })
+        if self.LEGACY_STOP_SERVICE_ID != self.STOP_SERVICE_ID:
+            services.append({
+                "id": self.LEGACY_STOP_SERVICE_ID,
+                "name": "停止当前更新任务（兼容旧ID）",
+                "trigger": None,
+                "func": self.stop_task,
+                "kwargs": {}
+            })
         return services
 
     def stop_task(self):
@@ -1978,8 +2168,24 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     {
                         'component': 'VCol',
                         'props': {'cols': 12, 'md': 6},
-                        'content': [{'component': 'VSelect', 'props': {'chips': False, 'multiple': False, 'model': 'sort_by', 'label': '封面来源排序', 'items': [{"title": "随机", "value": "Random"}, {"title": "最新入库", "value": "DateCreated"}, {"title": "最新发行", "value": "PremiereDate"}]}}]
+                        'content': [{'component': 'VSelect', 'props': {'chips': False, 'multiple': False, 'model': 'sort_by', 'label': '封面来源排序', 'items': [{"title": "随机", "value": "Random"}, {"title": "最新入库", "value": "DateCreated"}, {"title": "最新发行", "value": "PremiereDate"}, {"title": "最后一集更新时间", "value": "LatestEpisodeDate"}]}}]
                     }
+                ]
+            },
+            # 第四行：高级执行控制
+            {
+                'component': 'VRow',
+                'content': [
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'dry_run', 'label': 'Dry Run（只演练不写入）', 'hint': '开启后仅做筛选与日志输出，不会更新媒体库封面', 'persistentHint': True}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VTextField', 'props': {'model': 'library_update_retry', 'label': '失败重试次数', 'type': 'number', 'hint': '每个媒体库更新失败后自动重试，范围 1-5', 'persistentHint': True}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VTextField', 'props': {'model': 'manual_server', 'label': '手动重生成-服务器', 'hint': '填写 server 名称；与下方 library_id 联用', 'persistentHint': True}}]},
+                ]
+            },
+            {
+                'component': 'VRow',
+                'content': [
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'manual_library_id', 'label': '手动重生成-library_id', 'hint': '目标媒体库 ID（必填）', 'persistentHint': True}}]},
+                    {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'manual_item_id', 'label': '手动重生成-item_id（可选）', 'hint': '指定后优先使用该媒体项做封面来源', 'persistentHint': True}}]},
                 ]
             },
             # 第四行：库过滤 (宽自适应)
@@ -2182,6 +2388,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
             "save_recent_covers": True,
             "covers_history_limit_per_library": 10,
             "covers_page_history_limit": 50,
+            "dry_run": False,
+            "library_update_retry": 1,
+            "manual_server": "",
+            "manual_library_id": "",
+            "manual_item_id": "",
             "page_tab": "generate-tab",
             "style_naming_v2": True,
             "exclude_libraries": [],
@@ -2381,11 +2592,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                         "component": "VCol",
                                             "props": {"cols": 12, "md": 9},
                                             "content": [
-                                                            {
-                                                                "component": "VBtn",
-                                                                "props": {
-                                                                    "variant": "flat",
-                                                                    "color": "primary",
+                                                {
+                                                    "component": "VBtn",
+                                                    "props": {
+                                                        "variant": "flat",
+                                                        "color": "primary",
                                                                     "class": "text-none mr-2 mb-2",
                                                                     "prepend-icon": "mdi-swap-horizontal",
                                                                 },
@@ -2402,6 +2613,17 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                                 },
                                                     "text": "立即生成当前风格",
                                                     "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/generate_now", "method": "post"}},
+                                                },
+                                                {
+                                                    "component": "VBtn",
+                                                    "props": {
+                                                        "variant": "outlined",
+                                                        "color": "primary",
+                                                        "class": "text-none ml-2 mb-2",
+                                                        "prepend-icon": "mdi-playlist-edit",
+                                                    },
+                                                    "text": "生成指定媒体库",
+                                                    "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/generate_library_now", "method": "post"}},
                                                 },
                                                 {
                                                     "component": "div",
@@ -2436,11 +2658,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                         "component": "VCol",
                                             "props": {"cols": 12, "md": 9},
                                             "content": [
-                                                            {
-                                                                "component": "VBtn",
-                                                                "props": {
-                                                                    "variant": "flat",
-                                                                    "color": "primary",
+                                                {
+                                                    "component": "VBtn",
+                                                    "props": {
+                                                        "variant": "flat",
+                                                        "color": "primary",
                                                                     "class": "text-none mr-2 mb-2",
                                                                     "prepend-icon": "mdi-swap-horizontal",
                                                                 },
@@ -2457,6 +2679,18 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                                 },
                                                     "text": "立即生成当前风格",
                                                     "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/generate_now", "method": "post"}},
+                                                }
+                                                ,
+                                                {
+                                                    "component": "VBtn",
+                                                    "props": {
+                                                        "variant": "outlined",
+                                                        "color": "primary",
+                                                        "class": "text-none ml-2 mb-2",
+                                                        "prepend-icon": "mdi-playlist-edit",
+                                                    },
+                                                    "text": "生成指定媒体库",
+                                                    "events": {"click": {"api": "plugin/MediaCoverGeneratorCustom/generate_library_now", "method": "post"}},
                                                 }
                                             ],
                                         }
@@ -2476,6 +2710,16 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     "component": "VCard",
                     "props": {"variant": "outlined", "class": "mt-3"},
                     "content": [
+                        {
+                            "component": "VAlert",
+                            "props": {
+                                "type": "info",
+                                "variant": "tonal",
+                                "density": "compact",
+                                "class": "mx-4 mt-4 mb-0",
+                            },
+                            "text": self.__format_last_run_stats(),
+                        },
                         {"component": "VCardTitle", "text": f"最近生成的封面（最多 {limit} 条）"},
                         {"component": "VCardText", "content": [{"component": "VRow", "content": cover_rows}]},
                     ],
@@ -2745,18 +2989,33 @@ class MediaCoverGeneratorCustom(_PluginBase):
         if not mediainfo:
             return
 
+        transfer_key = f"{getattr(mediainfo, 'tmdb_id', '')}:{getattr(mediainfo, 'title', '')}:{getattr(mediainfo, 'year', '')}"
         try:
             delay = max(0, int(self._delay)) if self._delay else 0
         except (TypeError, ValueError):
             delay = 0
 
+        with self._transfer_timer_lock:
+            old_timer = self._transfer_event_timers.pop(transfer_key, None)
+            if old_timer:
+                old_timer.cancel()
+
         if delay > 0:
             logger.info(f"延迟 {delay} 秒后开始更新封面")
-            timer = threading.Timer(delay, self.__do_update_library_cover, args=[mediainfo])
+            timer = threading.Timer(delay, self.__run_delayed_transfer_update, args=[transfer_key, mediainfo])
             timer.daemon = True
+            with self._transfer_timer_lock:
+                self._transfer_event_timers[transfer_key] = timer
             timer.start()
         else:
             self.__do_update_library_cover(mediainfo)
+
+    def __run_delayed_transfer_update(self, transfer_key: str, mediainfo: MediaInfo):
+        try:
+            self.__do_update_library_cover(mediainfo)
+        finally:
+            with self._transfer_timer_lock:
+                self._transfer_event_timers.pop(transfer_key, None)
 
     def __do_update_library_cover(self, mediainfo: MediaInfo):
         """
@@ -2833,14 +3092,20 @@ class MediaCoverGeneratorCustom(_PluginBase):
         self._monitor_sort = 'DateCreated'
         self._current_updating_items.add(update_key)
         try:
-            if self.__update_library(service, library):
-                logger.info(f"媒体库 {server}：{library['Name']} 封面更新成功")
+                if self.__update_library(service, library, target_item_id=str(item_id)):
+                    logger.info(f"媒体库 {server}：{library['Name']} 封面更新成功")
         finally:
             self._monitor_sort = original_monitor_sort
             self._current_updating_items.discard(update_key)
 
     
-    def __update_all_libraries(self):
+    def __update_all_libraries(
+        self,
+        mode: str = "all",
+        target_server: str = "",
+        target_library_id: str = "",
+        target_item_id: str = "",
+    ):
         """
         更新所有媒体库封面
         """
@@ -2858,9 +3123,18 @@ class MediaCoverGeneratorCustom(_PluginBase):
         logger.info("开始更新媒体库封面 ...")
         # 开始前确保停止信号已清除
         self._event.clear()
+        run_stats = self.__new_run_stats()
+        run_stats["mode"] = mode
+        run_stats["target_server"] = target_server
+        run_stats["target_library_id"] = str(target_library_id or "")
+        run_stats["target_item_id"] = str(target_item_id or "")
         success_count = 0
         fail_count = 0
+        skip_count = 0
+        processed_target = False
         for server, service in self._servers.items():
+            if target_server and server != target_server:
+                continue
             # 扫描所有媒体库
             logger.info(f"当前服务器 {server}")
             cover_style = {
@@ -2882,26 +3156,101 @@ class MediaCoverGeneratorCustom(_PluginBase):
             for library in libraries:
                 if self._event.is_set():
                     logger.info("媒体库封面更新服务停止")
+                    self.__snapshot_run_stats(run_stats)
                     return
                 if service.type == 'emby':
                     library_id = library.get("Id")
                 else:
                     library_id = library.get("ItemId")
+                if target_library_id and str(library_id) != str(target_library_id):
+                    continue
+                processed_target = True
                 if self._exclude_libraries and f"{server}-{library_id}" in self._exclude_libraries:
                     logger.info(f"{server}：{library['Name']} 在排除列表中，跳过更新封面")
+                    skip_count += 1
+                    self.__record_library_result(
+                        run_stats,
+                        server=server,
+                        library_name=library.get("Name"),
+                        library_id=str(library_id),
+                        status="skipped",
+                        reason="excluded_library",
+                    )
                     continue
-                if self.__update_library(service, library):
+                if self._dry_run:
+                    self.__log_event(
+                        "info",
+                        "dry_run_library",
+                        server=server,
+                        library=library.get("Name"),
+                        library_id=str(library_id),
+                        target_item_id=target_item_id,
+                    )
+                    success_count += 1
+                    self.__record_library_result(
+                        run_stats,
+                        server=server,
+                        library_name=library.get("Name"),
+                        library_id=str(library_id),
+                        status="success",
+                        reason="dry_run",
+                    )
+                    continue
+                updated = False
+                update_reason = ""
+                for attempt in range(1, int(self._library_update_retry) + 1):
+                    updated = self.__update_library(service, library, target_item_id=target_item_id)
+                    update_reason = self._last_library_result_reason or ""
+                    if updated:
+                        break
+                    if attempt < int(self._library_update_retry):
+                        logger.warning(f"{self.LOG_PREFIX} 媒体库 {server}:{library['Name']} 更新失败，准备重试 {attempt + 1}/{self._library_update_retry}")
+                if updated:
                     logger.info(f"媒体库 {server}：{library['Name']} 封面更新成功")
                     success_count += 1
+                    self.__record_library_result(
+                        run_stats,
+                        server=server,
+                        library_name=library.get("Name"),
+                        library_id=str(library_id),
+                        status="success",
+                        reason=update_reason or "",
+                    )
                 else:
                     logger.warning(f"媒体库 {server}：{library['Name']} 封面更新失败")
                     fail_count += 1
-        tips = f"媒体库封面更新任务结束，成功 {success_count} 个，失败 {fail_count} 个"
+                    self.__record_library_result(
+                        run_stats,
+                        server=server,
+                        library_name=library.get("Name"),
+                        library_id=str(library_id),
+                        status="failed",
+                        reason=update_reason or "update_failed",
+                    )
+        if mode == "manual_single" and not processed_target:
+            fail_count += 1
+            self.__record_library_result(
+                run_stats,
+                server=target_server or "unknown",
+                library_name="(not_found)",
+                library_id=str(target_library_id or ""),
+                status="failed",
+                reason="target_library_not_found",
+            )
+        run_stats["success_count"] = success_count
+        run_stats["fail_count"] = fail_count
+        run_stats["skip_count"] = skip_count
+        self.__snapshot_run_stats(run_stats)
+        tips = (
+            f"媒体库封面更新任务结束，成功 {success_count} 个，"
+            f"失败 {fail_count} 个，跳过 {run_stats.get('skip_count', 0)} 个"
+        )
         logger.info(tips)
         return tips
                  
 
-    def __update_library(self, service, library):
+    def __update_library(self, service, library, target_item_id: str = ""):
+        self._last_library_result_reason = ""
         # 库黑名单检查
         if self._exclude_libraries:
             if service.type == 'emby':
@@ -2913,6 +3262,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 lib_key = f"{service.name}-{lib_id}"
                 if lib_key in self._exclude_libraries:
                     logger.info(f"库 {library.get('Name')} 在排除列表中，跳过")
+                    self._last_library_result_reason = "excluded_library"
                     return False
         
         library_name = library['Name']
@@ -2931,10 +3281,14 @@ class MediaCoverGeneratorCustom(_PluginBase):
             logger.info(f"媒体库 {service.name}：{library_name} 从自定义路径获取封面")
             image_data = self.__generate_image_from_path(service.name, library_name, title, image_path[0], config_bg_color)
         else:
-            image_data = self.__generate_from_server(service, library, title)
+            image_data = self.__generate_from_server(service, library, title, target_item_id=target_item_id)
 
         if image_data:
-            return self.__set_library_image(service, library, image_data)
+            updated = self.__set_library_image(service, library, image_data)
+            self._last_library_result_reason = "updated" if updated else "set_library_image_failed"
+            return updated
+        self._last_library_result_reason = self._last_library_result_reason or "generate_image_failed"
+        return False
 
     def __check_custom_image(self, library_name):
         if not self._covers_input:
@@ -3210,10 +3564,45 @@ class MediaCoverGeneratorCustom(_PluginBase):
                                                     stop_event=self._event)
         return image_data
     
-    def __generate_from_server(self, service, library, title):
+    def __generate_from_server(self, service, library, title, target_item_id: str = ""):
 
         logger.info(f"媒体库 {service.name}：{library['Name']} 开始筛选媒体项")
         required_items = self.__get_required_items()
+        if target_item_id:
+            direct_item = self.__get_item_by_id(service, str(target_item_id))
+            if direct_item:
+                logger.info(f"媒体库 {service.name}：{library['Name']} 使用指定媒体项 {target_item_id} 生成封面")
+                if self.__is_single_image_style():
+                    return self.__update_single_image(service, library, title, direct_item)
+                # 多图时使用指定项作为首图，剩余按当前排序补足
+                items = [direct_item]
+                if required_items > 1:
+                    fill_items = self.__get_items_batch(
+                        service,
+                        library.get("Id") if service.type == "emby" else library.get("ItemId"),
+                        offset=0,
+                        limit=max(20, required_items * 3),
+                        include_types="Movie,Series,Episode",
+                    )
+                    deduped = []
+                    seen_ids = {str(direct_item.get("Id") or direct_item.get("ItemId") or "")}
+                    for candidate in fill_items:
+                        cid = str(candidate.get("Id") or candidate.get("ItemId") or "")
+                        if not cid or cid in seen_ids:
+                            continue
+                        seen_ids.add(cid)
+                        deduped.append(candidate)
+                        if len(deduped) >= required_items - 1:
+                            break
+                    items.extend(deduped)
+                return self.__update_grid_image(service, library, title, items[:required_items if self._cover_style in ['animated_1', 'animated_2'] else 9])
+            self.__log_event(
+                "warning",
+                "manual_item_not_found",
+                server=service.name,
+                library=library.get("Name"),
+                target_item_id=str(target_item_id),
+            )
         
         # 获取项目集合
         items = []
@@ -3278,7 +3667,24 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 return self.__update_grid_image(service, library, title, items[:required_items if self._cover_style in ['animated_1', 'animated_2'] else 9])
         else:
             logger.warning(f"媒体库 {service.name}：{library['Name']} 无法找到有效的图片项目 (筛选类型: {include_types})")
+            self._last_library_result_reason = "no_valid_items"
             return False
+
+    def __get_item_by_id(self, service, item_id: str) -> Optional[dict]:
+        if not service or not item_id:
+            return None
+        try:
+            url = f"[HOST]emby/Items/{item_id}?api_key=[APIKEY]"
+            res = service.instance.get_data(url=url)
+            if not res or res.status_code != 200:
+                return None
+            data = res.json()
+            if isinstance(data, dict) and (data.get("Id") or data.get("ItemId")):
+                return data
+            return None
+        except Exception as err:
+            self.__log_event("warning", "get_item_by_id_failed", item_id=item_id, error=str(err))
+            return None
 
     def __get_user_visible_boxset_ids(self, service, user_ids: set) -> set:
         """查询黑名单用户可见的合集 ID 集合，用于从生成结果中排除"""
@@ -3499,6 +3905,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
                     # 仅在单图风格时才强制使用 Episode
                     if self.__is_single_image_style():
                         include_types = 'Movie,Episode'
+                if sort_by == "LatestEpisodeDate":
+                    sort_by = "DateLastContentAdded"
+                    if self.__is_single_image_style():
+                        include_types = "Series,Episode"
                 if not include_types:
                     include_types = 'Movie,Series'
 
@@ -4303,8 +4713,16 @@ class MediaCoverGeneratorCustom(_PluginBase):
         else:
             items.append(history_item)
 
-        # 排序 + 截取前9
-        grouped[key] = sorted(items, key=lambda x: x["timestamp"], reverse=True)[:9]
+        # 排序 + 截取配置上限
+        limit = self.__clamp_value(
+            self._covers_history_limit_per_library,
+            1,
+            100,
+            10,
+            "covers_history_limit_per_library[history]",
+            int,
+        )
+        grouped[key] = sorted(items, key=lambda x: x["timestamp"], reverse=True)[:limit]
 
         # 重新整合所有分组的数据
         new_history = []
@@ -4794,6 +5212,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
         停止服务
         """
         try:
+            with self._transfer_timer_lock:
+                for timer in self._transfer_event_timers.values():
+                    timer.cancel()
+                self._transfer_event_timers.clear()
             if self._scheduler:
                 self._scheduler.remove_all_jobs()
                 if self._scheduler.running:
