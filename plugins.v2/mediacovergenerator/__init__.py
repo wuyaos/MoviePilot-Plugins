@@ -40,6 +40,8 @@ from app.plugins.mediacovergenerator.static.multi_1  import multi_1
 
 
 class MediaCoverGenerator(_PluginBase):
+    LOG_PREFIX = "【MediaCoverGeneratorLegacy】"
+    SERVICE_ID = "MediaCoverGeneratorLegacy"
     # 插件名称
     plugin_name = "媒体库封面生成"
     # 插件描述
@@ -255,7 +257,15 @@ class MediaCoverGenerator(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        pass
+        return [
+            {
+                "cmd": "/update_covers",
+                "event": EventType.PluginAction,
+                "desc": "更新媒体库封面",
+                "category": "",
+                "data": {"action": "update_covers"},
+            }
+        ]
 
     def get_api(self) -> List[Dict[str, Any]]:
         """
@@ -267,15 +277,48 @@ class MediaCoverGenerator(_PluginBase):
             "summary": "API说明"
         }]
         """
-        pass
+        return [
+            {
+                "path": "/generate_now",
+                "endpoint": self.api_generate_now,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "立即生成媒体库封面",
+            },
+            {
+                "path": "generate_now",
+                "endpoint": self.api_generate_now,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "立即生成媒体库封面(兼容无前导斜杠)",
+            },
+        ]
+
+    def api_generate_now(self):
+        try:
+            if not self._enabled:
+                logger.warning(f"{self.LOG_PREFIX} 立即生成失败：插件未启用，请先在设置页启用插件并保存")
+                return {"code": 1, "msg": "插件未启用，请先在设置页启用插件并保存"}
+            if not self._selected_servers:
+                logger.warning(f"{self.LOG_PREFIX} 立即生成失败：未勾选媒体服务器，请先在设置页勾选服务器并保存")
+                return {"code": 1, "msg": "未勾选媒体服务器，请先在设置页勾选服务器并保存"}
+            if not self._servers:
+                logger.warning(f"{self.LOG_PREFIX} 立即生成失败：服务器连接信息为空，请检查设置并保存后重试")
+                return {"code": 1, "msg": "服务器连接信息为空，请检查设置并保存后重试"}
+            tips = self.__update_all_libraries()
+            return {"code": 0, "msg": tips or "封面生成任务已完成"}
+        except Exception as e:
+            logger.error(f"{self.LOG_PREFIX} 立即生成失败: {e}", exc_info=True)
+            return {"code": 1, "msg": f"封面生成失败: {e}"}
 
     def get_service(self) -> List[Dict[str, Any]]:
         """
         注册插件公共服务
         """
         if self._enabled and self._cron:
+            logger.info(f"{self.LOG_PREFIX} 服务ID迁移：MediaCoverGenerator -> {self.SERVICE_ID}")
             return [{
-                "id": "MediaCoverGenerator",
+                "id": self.SERVICE_ID,
                 "name": "媒体库封面更新服务",
                 "trigger": CronTrigger.from_crontab(self._cron),
                 "func": self.__update_all_libraries,
@@ -1876,37 +1919,45 @@ class MediaCoverGenerator(_PluginBase):
             return
             
         # Delay
-        if self._delay:
-            logger.info(f"延迟 {self._delay} 秒后开始更新封面")
-            time.sleep(int(self._delay))
-            
+        try:
+            delay = max(0, int(self._delay)) if self._delay else 0
+        except (TypeError, ValueError):
+            delay = 0
+        if delay > 0:
+            logger.info(f"延迟 {delay} 秒后开始更新封面")
+            timer = threading.Timer(delay, self.__do_update_library_cover, args=[mediainfo])
+            timer.daemon = True
+            timer.start()
+        else:
+            self.__do_update_library_cover(mediainfo)
+
+    def __do_update_library_cover(self, mediainfo: MediaInfo):
         # Query the item in media server
         existsinfo = self.mschain.media_exists(mediainfo=mediainfo)
         if not existsinfo or not existsinfo.itemid:
             logger.warning(f"{mediainfo.title_year} 不存在媒体库中，可能服务器还未扫描完成，建议设置合适的延迟时间")
             return
-        
+
         # Get item details including backdrop
         iteminfo = self.mschain.iteminfo(server=existsinfo.server, item_id=existsinfo.itemid)
         # logger.info(f"获取到媒体项 {mediainfo.title_year} 详情：{iteminfo}")
         if not iteminfo:
             logger.warning(f"获取 {mediainfo.title_year} 详情失败")
             return
-            
+
         # Try to get library ID
         library_id = None
         library = {}
         service = self._servers.get(existsinfo.server)
-        if service:
-            libraries = self.__get_server_libraries(service)
+        libraries = self.__get_server_libraries(service) if service else []
         if libraries and not library_id:
             library = next(
                 (library
-                 for library in libraries if library.get('Locations', []) 
+                 for library in libraries if library.get('Locations', [])
                  and any(iteminfo.path.startswith(path) for path in library.get('Locations', []))),
                 None
             )
-        
+
         if not library:
             logger.warning(f"找不到 {mediainfo.title_year} 所在媒体库")
             return
@@ -1928,21 +1979,22 @@ class MediaCoverGenerator(_PluginBase):
         if latest_item and str(latest_item.get("item_id")) == str(existsinfo.itemid):
             logger.info(f"媒体 {mediainfo.title_year} 在库中是最新记录，不更新封面图")
             return
-        new_history = self.update_cover_history(
-            server=existsinfo.server, 
-            library_id=library_id, 
+        self.update_cover_history(
+            server=existsinfo.server,
+            library_id=library_id,
             item_id=existsinfo.itemid
         )
-        # logger.info(f"最新数据： {new_history}")
+        original_monitor_sort = self._monitor_sort
         self._monitor_sort = 'DateCreated'
-        if self._cover_style.startswith('single'):
-            if self.__update_library(service, library):
-                self._monitor_sort = ''
-                logger.info(f"媒体库 {existsinfo.server}：{library['Name']} 封面更新成功")
-        elif self._cover_style.startswith('multi'):
-            if self.__update_library(service, library):
-                self._monitor_sort = ''
-                logger.info(f"媒体库 {existsinfo.server}：{library['Name']} 封面更新成功")
+        try:
+            if self._cover_style.startswith('single'):
+                if self.__update_library(service, library):
+                    logger.info(f"媒体库 {existsinfo.server}：{library['Name']} 封面更新成功")
+            elif self._cover_style.startswith('multi'):
+                if self.__update_library(service, library):
+                    logger.info(f"媒体库 {existsinfo.server}：{library['Name']} 封面更新成功")
+        finally:
+            self._monitor_sort = original_monitor_sort
     
     def __update_all_libraries(self):
         """

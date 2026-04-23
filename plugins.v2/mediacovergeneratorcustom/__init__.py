@@ -47,6 +47,9 @@ from app.plugins.mediacovergeneratorcustom.utils.color_helper import ColorHelper
 
 
 class MediaCoverGeneratorCustom(_PluginBase):
+    LOG_PREFIX = "【MediaCoverGeneratorCustom】"
+    SERVICE_ID = "MediaCoverGeneratorCustom"
+    LEGACY_SERVICE_ID = "MediaCoverGenerator"
     # 插件名称
     plugin_name = "媒体库封面生成（自用版）"
     # 插件描述
@@ -149,6 +152,17 @@ class MediaCoverGeneratorCustom(_PluginBase):
 
     def __init__(self):
         super().__init__()
+        # 使用实例级可变状态，避免类属性在多实例/热重载场景下互相污染
+        self._current_updating_items = set()
+        self._seen_keys = set()
+        self._sanitize_log_cache = set()
+        self._current_config = {}
+        self._selected_servers = []
+        self._all_libraries = []
+        self._exclude_libraries = []
+        self._exclude_boxsets = []
+        self._exclude_users = []
+        self._all_users = []
 
     def init_plugin(self, config: dict = None):
         self.mschain = MediaServerChain()
@@ -734,24 +748,24 @@ class MediaCoverGeneratorCustom(_PluginBase):
 
     def api_clean_images(self):
         try:
-            logger.info("【MediaCoverGenerator】收到立即清理图片缓存请求")
+            logger.info(f"{self.LOG_PREFIX} 收到立即清理图片缓存请求")
             self.__clean_generated_images()
             self._clean_images = False
             self.__update_config()
             return {"code": 0, "msg": "图片缓存清理完成"}
         except Exception as e:
-            logger.error(f"【MediaCoverGenerator】立即清理图片失败: {e}", exc_info=True)
+            logger.error(f"{self.LOG_PREFIX} 立即清理图片失败: {e}", exc_info=True)
             return {"code": 1, "msg": f"图片缓存清理失败: {e}"}
 
     def api_clean_fonts(self):
         try:
-            logger.info("【MediaCoverGenerator】收到立即清理字体缓存请求")
+            logger.info(f"{self.LOG_PREFIX} 收到立即清理字体缓存请求")
             self.__clean_downloaded_fonts()
             self._clean_fonts = False
             self.__update_config()
             return {"code": 0, "msg": "字体缓存清理完成"}
         except Exception as e:
-            logger.error(f"【MediaCoverGenerator】立即清理字体失败: {e}", exc_info=True)
+            logger.error(f"{self.LOG_PREFIX} 立即清理字体失败: {e}", exc_info=True)
             return {"code": 1, "msg": f"字体缓存清理失败: {e}"}
 
     def api_delete_saved_cover(self, file: str = ""):
@@ -762,23 +776,23 @@ class MediaCoverGeneratorCustom(_PluginBase):
             if not target_file.exists() or not target_file.is_file():
                 return {"code": 1, "msg": "文件不存在"}
             target_file.unlink(missing_ok=True)
-            logger.info(f"【MediaCoverGenerator】已删除封面文件: {target_file}")
+            logger.info(f"{self.LOG_PREFIX} 已删除封面文件: {target_file}")
             return {"code": 0, "msg": "封面文件删除成功"}
         except Exception as e:
-            logger.error(f"【MediaCoverGenerator】删除封面文件失败: {e}", exc_info=True)
+            logger.error(f"{self.LOG_PREFIX} 删除封面文件失败: {e}", exc_info=True)
             return {"code": 1, "msg": f"封面文件删除失败: {e}"}
 
     def api_generate_now(self, style: str = ""):
         old_style = self._cover_style
         try:
             if not self._enabled:
-                logger.warning("【MediaCoverGenerator】立即生成失败：插件未启用，请先在设置页启用插件并保存")
+                logger.warning(f"{self.LOG_PREFIX} 立即生成失败：插件未启用，请先在设置页启用插件并保存")
                 return {"code": 1, "msg": "插件未启用，请先在设置页启用插件并保存"}
             if not self._selected_servers:
-                logger.warning("【MediaCoverGenerator】立即生成失败：未勾选媒体服务器，请先在设置页勾选服务器并保存")
+                logger.warning(f"{self.LOG_PREFIX} 立即生成失败：未勾选媒体服务器，请先在设置页勾选服务器并保存")
                 return {"code": 1, "msg": "未勾选媒体服务器，请先在设置页勾选服务器并保存"}
             if not self._servers:
-                logger.warning("【MediaCoverGenerator】立即生成失败：服务器连接信息为空，请检查设置并保存后重试")
+                logger.warning(f"{self.LOG_PREFIX} 立即生成失败：服务器连接信息为空，请检查设置并保存后重试")
                 return {"code": 1, "msg": "服务器连接信息为空，请检查设置并保存后重试"}
 
             target_style = (style or "").strip()
@@ -790,11 +804,11 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 if target_style not in allowed_styles:
                     return {"code": 1, "msg": f"不支持的风格: {target_style}"}
                 self._cover_style = target_style
-            logger.info(f"【MediaCoverGenerator】收到立即生成请求，风格: {self._cover_style}")
+            logger.info(f"{self.LOG_PREFIX} 收到立即生成请求，风格: {self._cover_style}")
             tips = self.__update_all_libraries()
             return {"code": 0, "msg": tips or "封面生成任务已完成"}
         except Exception as e:
-            logger.error(f"【MediaCoverGenerator】立即生成失败: {e}", exc_info=True)
+            logger.error(f"{self.LOG_PREFIX} 立即生成失败: {e}", exc_info=True)
             return {"code": 1, "msg": f"封面生成失败: {e}"}
         finally:
             self._cover_style = old_style
@@ -813,10 +827,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
             self._cover_style_base = base
             self._cover_style_variant = variant
             self.__update_config()
-            logger.info(f"【MediaCoverGenerator】已保存封面风格: {target_style}")
+            logger.info(f"{self.LOG_PREFIX} 已保存封面风格: {target_style}")
             return {"code": 0, "msg": f"已保存风格: {target_style}"}
         except Exception as e:
-            logger.error(f"【MediaCoverGenerator】保存封面风格失败: {e}", exc_info=True)
+            logger.error(f"{self.LOG_PREFIX} 保存封面风格失败: {e}", exc_info=True)
             return {"code": 1, "msg": f"保存风格失败: {e}"}
 
     def __get_cover_style_parts(self) -> Tuple[str, int]:
@@ -837,7 +851,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
         self._cover_style_base = f"static_{safe_index}"
         self._cover_style_variant = safe_variant
         self.__update_config()
-        logger.info(f"【MediaCoverGenerator】已保存封面风格: {target_style}")
+        logger.info(f"{self.LOG_PREFIX} 已保存封面风格: {target_style}")
 
     def api_toggle_style_variant(self):
         try:
@@ -846,7 +860,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
             self.__set_cover_style_parts(new_variant, index)
             return {"code": 0, "msg": f"已切换为{new_variant}风格{index}"}
         except Exception as e:
-            logger.error(f"【MediaCoverGenerator】切换静态/动态失败: {e}", exc_info=True)
+            logger.error(f"{self.LOG_PREFIX} 切换静态/动态失败: {e}", exc_info=True)
             return {"code": 1, "msg": f"切换失败: {e}"}
 
     def __api_select_style(self, index: int):
@@ -855,7 +869,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
             self.__set_cover_style_parts(variant, index)
             return {"code": 0, "msg": f"已选择{variant}风格{index}"}
         except Exception as e:
-            logger.error(f"【MediaCoverGenerator】选择风格失败: {e}", exc_info=True)
+            logger.error(f"{self.LOG_PREFIX} 选择风格失败: {e}", exc_info=True)
             return {"code": 1, "msg": f"选择风格失败: {e}"}
 
     def api_select_style_1(self):
@@ -872,7 +886,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
 
     def __set_page_tab(self, tab: str):
         self._page_tab = tab if tab in ["generate-tab", "history-tab", "clean-tab"] else "generate-tab"
-        logger.info(f"【MediaCoverGenerator】已切换页面Tab: {self._page_tab}")
+        logger.info(f"{self.LOG_PREFIX} 已切换页面Tab: {self._page_tab}")
 
     def api_set_page_tab_generate(self):
         self.__set_page_tab("generate-tab")
@@ -901,7 +915,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
                 from starlette.responses import FileResponse
                 return FileResponse(path=str(target_file), media_type=mime_type)
             except Exception as e:
-                logger.error(f"【MediaCoverGenerator】返回图片失败: {e}")
+                logger.error(f"{self.LOG_PREFIX} 返回图片失败: {e}")
                 return {"code": 1, "msg": "返回图片失败"}
 
     def get_service(self) -> List[Dict[str, Any]]:
@@ -911,9 +925,17 @@ class MediaCoverGeneratorCustom(_PluginBase):
         services = []
         if self._enabled and self._cron:
             services.append({
-                "id": "MediaCoverGenerator",
+                "id": self.SERVICE_ID,
                 "name": "媒体库封面更新服务",
                 "trigger": CronTrigger.from_crontab(self._cron),
+                "func": self.__update_all_libraries,
+                "kwargs": {}
+            })
+            # 最小兼容迁移：保留旧ID为手动触发入口，避免已有外部调用直接失效
+            services.append({
+                "id": self.LEGACY_SERVICE_ID,
+                "name": "媒体库封面更新服务（兼容旧ID）",
+                "trigger": None,
                 "func": self.__update_all_libraries,
                 "kwargs": {}
             })
@@ -2836,6 +2858,8 @@ class MediaCoverGeneratorCustom(_PluginBase):
         logger.info("开始更新媒体库封面 ...")
         # 开始前确保停止信号已清除
         self._event.clear()
+        success_count = 0
+        fail_count = 0
         for server, service in self._servers.items():
             # 扫描所有媒体库
             logger.info(f"当前服务器 {server}")
@@ -2855,8 +2879,6 @@ class MediaCoverGeneratorCustom(_PluginBase):
             if not libraries:
                 logger.warning(f"服务器 {server} 的媒体库列表获取失败")
                 continue
-            success_count = 0
-            fail_count = 0
             for library in libraries:
                 if self._event.is_set():
                     logger.info("媒体库封面更新服务停止")

@@ -1,0 +1,11 @@
+{
+  "MyPlugin": {
+    "name": "我的插件",
+    "description": "一个最小可运行的 V2 插件示例。",
+    "labels": "示例",
+    "version": "1.0.0",
+    "icon": "Moviepilot_A.png",
+    "author": "your-name",
+    "level": 1
+  }
+}
