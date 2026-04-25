@@ -529,6 +529,26 @@ class MediaCoverGeneratorCustom(_PluginBase):
             f"失败原因汇总={reason_text}"
         )
 
+    def __normalize_cover_title(self, library_name: str, title: Any) -> Tuple[str, str]:
+        """
+        规范化封面标题，避免空标题导致渲染阶段“有图无字”。
+        """
+        default_zh = str(library_name or "").strip() or "媒体库"
+        zh_title = ""
+        en_title = ""
+
+        if isinstance(title, (tuple, list)):
+            if len(title) > 0 and title[0] is not None:
+                zh_title = str(title[0]).strip()
+            if len(title) > 1 and title[1] is not None:
+                en_title = str(title[1]).strip()
+        elif title is not None:
+            zh_title = str(title).strip()
+
+        if not zh_title:
+            zh_title = default_zh
+        return zh_title, en_title
+
     def __update_config(self):
         """
         更新配置
@@ -3277,6 +3297,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
         else:
             title = title_result
             config_bg_color = None
+        title = self.__normalize_cover_title(library_name, title)
         if image_path:
             logger.info(f"媒体库 {service.name}：{library_name} 从自定义路径获取封面")
             image_data = self.__generate_image_from_path(service.name, library_name, title, image_path[0], config_bg_color)
@@ -3311,6 +3332,7 @@ class MediaCoverGeneratorCustom(_PluginBase):
     @memory_efficient_operation
     def __generate_image_from_path(self, server, library_name, title, image_path=None, config_bg_color=None):
         logger.info(f"媒体库 {server}：{library_name} 正在生成封面图 ...")
+        title = self.__normalize_cover_title(library_name, title)
 
         # 执行健康检查
         if not self.health_check():
@@ -4195,8 +4217,10 @@ class MediaCoverGeneratorCustom(_PluginBase):
             # 如果没有找到配置，检查是否是数字开头的媒体库名导致的问题
             if library_name and (library_name[0].isdigit() or library_name[0].isalpha()):
                 logger.info(f"媒体库名 '{library_name}' 以数字或字母开头，如果需要自定义标题，请在配置中使用引号包围媒体库名，例如: \"{library_name}\":")
-
-        return (zh_title, en_title, bg_color)
+        normalized_zh, normalized_en = self.__normalize_cover_title(library_name, (zh_title, en_title))
+        if not str(zh_title or "").strip():
+            logger.warning(f"{self.LOG_PREFIX} 标题配置命中但主标题为空，已回退媒体库名: {library_name}")
+        return (normalized_zh, normalized_en, bg_color)
     
     def __get_server_libraries(self, service):
         try:
