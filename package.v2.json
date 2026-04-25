@@ -44,5 +44,18 @@
             "v0.9.1": "修复导入错误和包结构问题",
             "v0.9.0": "初始版本：库白名单、合集黑名单、4种动画风格"
         }
+    },
+    "CloudStrmCompanionCustom": {
+        "name": "云盘Strm助手（CD2增强）",
+        "description": "生成strm并支持CloudDrive2下载非视频文件，含CD2处理方式配置",
+        "labels": "strm,云盘,cd2",
+        "version": "0.1.1",
+        "icon": "https://raw.githubusercontent.com/thsrite/MoviePilot-Plugins/main/icons/cloudcompanion.png",
+        "author": "wuyaos",
+        "level": 1,
+        "history": {
+            "v0.1.1": "新增cd2_handle_mode配置，默认使用GetDownloadUrlPath下载非视频，兼容旧cd2_use_grpc_lookup",
+            "v0.1.0": "初始版本：目录映射生成strm，支持CD2下载非视频文件"
+        }
     }
 }
