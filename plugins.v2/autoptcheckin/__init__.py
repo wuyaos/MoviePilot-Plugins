@@ -60,6 +60,9 @@ class AutoPtCheckin(_PluginBase):
     # 加载的模块
     _site_schema: list = []
 
+    # 运行时状态
+    _enabled = False
+
     # 自定义站点属性（合并自 CustomSites 插件）
     _custom_site_urls: str = ""
     _custom_sites_data: list = []
@@ -282,10 +285,15 @@ class AutoPtCheckin(_PluginBase):
         # 站点的可选项（内置站点 + 自定义站点）
         customSites = self.__custom_sites()
 
-        site_options = ([{"title": site.name, "value": site.id}
-                         for site in self.siteoper.list_order_by_pri()]
-                        + [{"title": site.get("name"), "value": site.get("id")}
-                           for site in customSites])
+        try:
+            site_options = ([{"title": site.name, "value": site.id}
+                             for site in self.siteoper.list_order_by_pri()]
+                            + [{"title": site.get("name"), "value": site.get("id")}
+                               for site in customSites])
+        except Exception as e:
+            logger.warning(f"获取站点列表失败: {e}")
+            site_options = [{"title": site.get("name"), "value": site.get("id")}
+                            for site in customSites]
         return [
             {
                 'component': 'VForm',
@@ -685,6 +693,20 @@ class AutoPtCheckin(_PluginBase):
         """
         拼装插件详情页面，需要返回页面配置，同时附带数据
         """
+        try:
+            return self._build_page()
+        except Exception as e:
+            logger.error(f"构建详情页失败: {e}")
+            return [{
+                'component': 'VAlert',
+                'props': {
+                    'type': 'error',
+                    'text': f'详情页加载失败: {e}',
+                    'variant': 'tonal',
+                }
+            }]
+
+    def _build_page(self) -> List[dict]:
         # 获取最近14天的日期数组
         date_list = [(datetime.now() - timedelta(days=i)).date() for i in range(14)]
 
