@@ -1,33 +1,4 @@
 {
-    "MediaCoverGenerator": {
-        "name": "媒体库封面生成",
-        "description": "自动生成媒体库封面，支持 Emby，Jellyfin",
-        "labels": "封面,媒体库",
-        "version": "0.9.0.1",
-        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png",
-        "author": "wuyaos",
-        "level": 1,
-        "history": {
-            "v0.9.0": "重新设计的5标签页布局",
-            "v0.8.9": "添加Emby合集用户筛选",
-            "v0.8.8": "改为json配置",
-            "v0.8.7": "支持生成播放列表封面",
-            "v0.8.6": "修复无参数造成无法生图的错误",
-            "v0.8.5": "可选优先使用海报或者背景图，修复部分bug",
-            "v0.8.4": "补充部分信息",
-            "v0.8.3": "修复合集等库图片获取问题，改善字体下载问题，增加无用的若干选项",
-            "v0.8.2": "1. 支持添加本地字体路径  2. 未设置标题或参数错误时，自动使用媒体库名",
-            "v0.8.1": "修复 bug，也许还有漏网之鱼",
-            "v0.8": "改界面，加风格，可能还有新 bug",
-            "v0.7": "修复一个非常简单的小问题，我真是太菜了",
-            "v0.6": "修复部分问题",
-            "v0.5": "微调图片处理颜色",
-            "v0.4": "自定义背景图目录",
-            "v0.3": "修复bug",
-            "v0.2": "测试",
-            "v0.1": "自定义字体"
-        }
-    },
     "MediaCoverGeneratorCustom": {
         "name": "媒体库封面生成（自用版）",
         "description": "自动生成媒体库封面，支持库白名单、合集黑名单过滤、4种动画风格、Emby和Jellyfin",
@@ -56,6 +27,18 @@
         "history": {
             "v0.1.1": "新增cd2_handle_mode配置，默认使用GetDownloadUrlPath下载非视频，兼容旧cd2_use_grpc_lookup",
             "v0.1.0": "初始版本：目录映射生成strm，支持CD2下载非视频文件"
+        }
+    },
+    "AutoPtCheckin": {
+        "name": "PT站点自动签到",
+        "description": "自动签到/登录站点，支持自定义站点和CookieCloud同步，ddddocr验证码识别，curl-cffi绕过CF",
+        "labels": "签到,PT,CookieCloud,OCR",
+        "version": "1.0.0",
+        "icon": "https://raw.githubusercontent.com/thsrite/MoviePilot-Plugins/main/icons/signin.png",
+        "author": "wuyaos",
+        "level": 2,
+        "history": {
+            "v1.0.0": "初始版本：基于autosignin，合并CookieCloud同步，新增siqi站点，ddddocr增强OCR，curl-cffi绕过CF"
         }
     }
 }
