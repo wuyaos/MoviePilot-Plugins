@@ -1,23 +1,22 @@
 # input: MoviePilot _PluginBase | output: AnimeZ 保活插件 | pos: 插件入口
-
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-
 from app.core.config import settings as app_settings
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import NotificationType
 from app.utils.timer import TimerUtils
 
-from .core.page import build_page, v_col, v_cron, v_row, v_select, v_switch, v_text
+from .core.form_utils import v_col, v_cron, v_row, v_select, v_switch, v_text
+from .core.page import build_page
 
 
 class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
-    plugin_desc = "定时访问 AnimeZ 站点并从种子页选种提交下载器，满足保活要求"
+    plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
     plugin_version = "2.1.0"
     plugin_author = "wuyaos"
@@ -179,7 +178,14 @@ class AzKeepAlive(_PluginBase):
     def get_page(self) -> List[dict]:
         try:
             state = self.get_data("state") or {}
-            return build_page(state, self._keepalive_days)
+            dl_torrents = []
+            try:
+                from .core.downloader import get_downloader_instance, dl_list_category
+                inst = get_downloader_instance(self._downloader)
+                if inst:
+                    dl_torrents = dl_list_category(inst, self._qb_category)
+            except Exception: pass
+            return build_page(state, self._keepalive_days, dl_torrents)
         except Exception as e:
             logger.error(f"AnimeZ保活详情页失败: {e}")
             return [{"component": "VAlert", "props": {

@@ -6,16 +6,16 @@ import datetime as dt
 from typing import Any
 
 
-def build_page(state: dict[str, Any], keepalive_days: int) -> list[dict]:
+def build_page(state: dict[str, Any], keepalive_days: int,
+               dl_torrents: list[dict] | None = None) -> list[dict]:
     """构建插件详情页"""
     result = []
-    # 用户信息条（单卡片横排）
     user_row = _build_user_bar(state)
     if user_row:
         result.append(user_row)
-    # 保活状态卡片
     result.append(_build_status_row(state, keepalive_days))
-    # 运行记录表格
+    if dl_torrents:
+        result.append(_build_dl_table(dl_torrents))
     result.append(_build_history_table(state))
     return result
 
@@ -93,6 +93,35 @@ def _tonal_card(label: str, value: str, color: str, icon: str, cols: int) -> dic
     }]}
 
 
+def _build_dl_table(torrents: list[dict]) -> dict:
+    """下载器中 AZ 分类的种子"""
+    def _sz(b: int) -> str:
+        for u in ["B", "KB", "MB", "GB", "TB"]:
+            if b < 1024: return f"{b:.1f}{u}" if u != "B" else f"{b}B"
+            b /= 1024
+        return str(b)
+    rows = []
+    for t in torrents[:10]:
+        pct = f"{t.get('progress', 0) * 100:.0f}%"
+        rows.append({"component": "tr", "content": [
+            {"component": "td", "props": {"class": "text-caption"}, "text": _truncate(t.get("name", ""), 50)},
+            {"component": "td", "props": {"class": "text-caption"}, "text": _sz(t.get("size", 0))},
+            {"component": "td", "props": {"class": "text-caption"}, "text": pct},
+            {"component": "td", "props": {"class": "text-caption"}, "text": str(t.get("state", ""))},
+        ]})
+    return {"component": "VCard", "props": {"variant": "flat", "class": "mt-2 mb-2"}, "content": [
+        {"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"},
+         "text": f"下载器种子 ({len(torrents)})"},
+        {"component": "VTable", "props": {"density": "compact"}, "content": [
+            {"component": "thead", "content": [{"component": "tr", "content": [
+                {"component": "th", "props": {"class": "text-caption"}, "text": c}
+                for c in ["名称", "体积", "进度", "状态"]
+            ]}]},
+            {"component": "tbody", "content": rows},
+        ]},
+    ]}
+
+
 def _build_history_table(state: dict[str, Any]) -> dict:
     """运行记录表格"""
     history = list(reversed(state.get("history", [])[-20:]))
@@ -155,33 +184,3 @@ def _fmt_time(iso_str: str) -> str:
 
 def _truncate(text: str, max_len: int) -> str:
     return text if len(text) <= max_len else text[:max_len - 1] + "…"
-
-
-# --- Vuetify JSON 表单辅助（供 __init__.py get_form 使用） ---
-
-def v_row(cols: list) -> dict:
-    return {"component": "VRow", "content": cols}
-
-def v_col(md: int, content: dict) -> dict:
-    return {"component": "VCol", "props": {"cols": 12, "md": md}, "content": [content]}
-
-def v_switch(model: str, label: str) -> dict:
-    return {"component": "VSwitch", "props": {"model": model, "label": label}}
-
-def v_select(model: str, label: str, items: list) -> dict:
-    return {"component": "VSelect", "props": {"model": model, "label": label, "items": items}}
-
-def v_text(model: str, label: str, placeholder: str = "", input_type: str = "") -> dict:
-    props: dict = {"model": model, "label": label}
-    if placeholder:
-        props["placeholder"] = placeholder
-    if input_type:
-        props["type"] = input_type
-    return {"component": "VTextField", "props": props}
-
-def v_cron(model: str, label: str, placeholder: str = "") -> dict:
-    props: dict = {"model": model, "label": label}
-    if placeholder:
-        props["placeholder"] = placeholder
-    props["hint"] = "5位cron表达式，留空则每天9-23点随机执行一次"
-    return {"component": "VCronField", "props": props}

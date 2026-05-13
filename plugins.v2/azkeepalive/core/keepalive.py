@@ -1,8 +1,6 @@
 # input: site_url, 下载器实例, 插件 state
 # output: keepalive 结果 | pos: 核心运行器
-
 from __future__ import annotations
-
 import datetime as dt
 import tempfile
 from pathlib import Path
@@ -10,7 +8,6 @@ from typing import Any
 
 from app.core.config import settings as app_settings
 from app.log import logger
-
 from .models import FeedItem, format_size
 from .downloader import dl_add_torrent, dl_has_hash, torrent_infohash
 from .scraper import fetch_torrents, filter_eligible, visit_site
@@ -31,13 +28,17 @@ def run_keepalive(
 
     # 每次访问站点（模拟登录 + 抓取用户信息）
     if site_url:
+        if not cookie:
+            logger.warning("AZ保活: CookieCloud 未获取到 Cookie，用户信息无法抓取")
         vr = visit_site(site_url, cookie=cookie, timeout=timeout, proxies=proxies)
         state["last_visit_at"] = _ts(now)
-        if vr.get("ok"):
-            for k in ("upload", "download", "ratio", "buffer", "seeds",
-                      "leeches", "bonus", "hnr", "reseed"):
+        if vr.get("ok") and cookie:
+            found = False
+            for k in ("upload", "download", "ratio", "buffer", "seeds", "leeches", "bonus", "hnr", "reseed"):
                 if k in vr:
-                    state[f"user_{k}"] = vr[k]
+                    state[f"user_{k}"] = vr[k]; found = True
+            if not found:
+                logger.warning("AZ保活: 访问成功但未解析到用户信息")
 
     should, reason = _should_run(state, keepalive_days, now)
     if not should:

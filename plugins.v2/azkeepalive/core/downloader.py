@@ -92,3 +92,28 @@ def torrent_infohash(torrent_path: Path) -> str:
         raise RuntimeError("缺少依赖: torf")
     t = Torrent.read(torrent_path)
     return str(t.infohash).lower()
+
+
+def dl_list_category(instance: Any, category: str) -> list[dict[str, Any]]:
+    """列出下载器中指定分类的种子"""
+    result = []
+    try:
+        qbc = getattr(instance, "qbc", None)
+        if qbc:
+            torrents = qbc.torrents_info(category=category)
+            for t in torrents:
+                result.append({"name": t.name, "size": t.size, "state": t.state,
+                               "progress": t.progress, "hash": t.hash})
+            return result
+        trc = getattr(instance, "trc", None)
+        if trc:
+            torrents, _ = trc.get_torrents()
+            for t in torrents:
+                labels = getattr(t, "labels", []) or []
+                if category in labels:
+                    result.append({"name": t.name, "size": getattr(t, "total_size", 0),
+                                   "state": t.status, "progress": t.progress / 100,
+                                   "hash": t.hashString})
+    except Exception as e:
+        logger.warning(f"查询下载器种子失败: {e}")
+    return result

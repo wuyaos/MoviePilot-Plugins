@@ -135,7 +135,15 @@ def visit_site(
         result["ok"] = True
         logger.info(f"AZ站点访问成功: {site_url}")
         if cookie:
-            result.update(_parse_user_stats(res.text))
+            stats = _parse_user_stats(res.text)
+            if stats:
+                result.update(stats)
+            else:
+                # 诊断：检查 ratio-bar 是否存在
+                has_bar = "ratio-bar" in res.text
+                has_login = "LOGIN" in res.text.upper()[:2000]
+                logger.warning(f"用户信息解析为空 ratio-bar={has_bar} login页={has_login} "
+                               f"HTML长度={len(res.text)}")
     except Exception as e:
         logger.warning(f"站点访问失败: {e}")
     return result
