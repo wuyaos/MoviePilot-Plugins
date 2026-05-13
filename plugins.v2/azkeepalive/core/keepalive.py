@@ -61,7 +61,9 @@ def run_keepalive(
             logger.info(f"AZ保活: 策略[{label}]无新种子，尝试下一策略")
 
         _append(state, "no_candidate", now, reason="所有策略均未找到可下载种子")
-        return "no_candidate", "所有策略均未找到新种子", state
+        return "no_candidate", ("⚠️ 未找到新种子\n━━━━━━━━━━━━━\n"
+                                 "所有策略已扫描，候选种子均已存在于下载器\n"
+                                 "建议: 删除部分旧种子或调整筛选条件"), state
     except Exception as e:
         logger.error(f"AZ保活失败: {e}")
         _append(state, "failed", now, reason=str(e))
@@ -127,10 +129,14 @@ def _try_one(
         if dl_add_torrent(dl_inst, tmp_path, category=category, tags=tags):
             tmp_path.unlink(missing_ok=True)
             _append(state, "success", now, item=item, infohash=infohash)
-            msg = (f"成功: {item.title}\n"
-                   f"体积: {format_size(item.size_bytes)} | S:{item.seeders}"
-                   f"{' | Free' if item.is_free else ''}")
-            logger.info(f"AZ保活: {msg}")
+            free_tag = "🆓 Free" if item.is_free else "付费"
+            msg = (f"✅ 保活下载成功\n"
+                   f"━━━━━━━━━━━━━\n"
+                   f"📦 {item.title}\n"
+                   f"💾 体积: {format_size(item.size_bytes)}\n"
+                   f"🌱 做种: {item.seeders}  |  {free_tag}\n"
+                   f"📁 分类: {category}")
+            logger.info(f"AZ保活: 成功 {item.title}")
             return "success", msg
 
         tmp_path.unlink(missing_ok=True)
@@ -183,7 +189,10 @@ def _append(
 def _skip_msg(state: dict[str, Any], days: int, now: dt.datetime, reason: str) -> str:
     last = _parse_ts(state.get("last_success_at"))
     nxt = _ts(last + dt.timedelta(days=days)) if last else "未知"
-    return f"跳过: {reason}\n上次成功: {state.get('last_success_at', '无')}\n下次窗口: {nxt}"
+    return (f"⏭ 跳过本次执行\n━━━━━━━━━━━━━\n"
+            f"📋 原因: {reason}\n"
+            f"✅ 上次成功: {state.get('last_success_at', '无')}\n"
+            f"📅 下次窗口: {nxt}")
 
 
 def _ts(t: dt.datetime) -> str:
