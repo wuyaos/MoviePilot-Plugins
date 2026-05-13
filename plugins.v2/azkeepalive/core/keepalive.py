@@ -1,6 +1,5 @@
-# input: RSS URL, 下载器实例, 插件 state
-# output: keepalive 执行结果（成功/跳过/失败）
-# pos: 核心运行器，编排 RSS → 筛选 → 下载 → 提交 → 记录
+# input: site_url, 下载器实例, 插件 state
+# output: keepalive 结果 | pos: 核心运行器
 
 from __future__ import annotations
 
@@ -55,19 +54,39 @@ def run_keepalive(
         return "skipped", _skip_msg(state, keepalive_days, now, reason), state
 
     try:
-        items = fetch_torrents(site_url, cookie=cookie, timeout=timeout,
-                               proxies=proxies, freeleech=require_free)
-        eligible = filter_eligible(items, min_seeders, max_size_gb, require_free)
-        logger.info(f"AZ保活: 扫描={len(items)} 候选={len(eligible)}")
+        # 逐页扫描种子，直到找到可下载候选或达到最大页数
+        max_pages = 10
+        total_scanned = 0
+        total_eligible = 0
+        for page in range(1, max_pages + 1):
+            items = fetch_torrents(site_url, cookie=cookie, timeout=timeout,
+                                   proxies=proxies, freeleech=require_free, page=page)
+            if not items:
+                logger.info(f"AZ保活: 第{page}页无种子，停止翻页")
+                break
+            eligible = filter_eligible(items, min_seeders, max_size_gb, require_free)
+            total_scanned += len(items)
+            total_eligible += len(eligible)
+            logger.info(f"AZ保活: p{page} 扫描={len(items)} 候选={len(eligible)} "
+                        f"累计={total_scanned}/{total_eligible}")
 
-        if not eligible:
+            if eligible:
+                status, msg, _ = _try_candidates(
+                    eligible, downloader_instance, category, tags,
+                    timeout, proxies, state, now)
+                if status == "success":
+                    return status, msg, state
+                # 候选全在 qB 中，继续下一页
+
+        if total_eligible == 0:
             _append(state, "no_candidate", now, reason="无符合条件的候选")
-            msg = f"扫描 {len(items)} 条，无候选 (S>={min_seeders}, <={max_size_gb}GB)"
-            return "no_candidate", msg, state
-
-        status, msg, _ = _try_candidates(
-            eligible, downloader_instance, category, tags, timeout, proxies, state, now)
-        return status, msg, state
+            msg = f"扫描 {max_pages} 页共 {total_scanned} 条，无候选 " \
+                  f"(S>={min_seeders}, <={max_size_gb}GB)"
+        else:
+            _append(state, "no_candidate", now,
+                    reason=f"扫描 {total_scanned} 条，{total_eligible} 条候选均已存在")
+            msg = f"扫描 {total_scanned} 条，{total_eligible} 条候选均已存在于下载器"
+        return "no_candidate", msg, state
 
     except Exception as e:
         logger.error(f"AZ保活失败: {e}")

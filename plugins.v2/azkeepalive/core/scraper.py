@@ -17,13 +17,14 @@ BASE_HEADERS = {"User-Agent": USER_AGENT}
 
 def fetch_torrents(
     site_url: str, cookie: str = "", timeout: int = 30,
-    proxies: dict | None = None, freeleech: bool = True,
+    proxies: dict | None = None, freeleech: bool = True, page: int = 1,
 ) -> list[FeedItem]:
-    """从种子列表页解析种子信息"""
+    """从种子列表页解析种子信息（支持分页）"""
     from app.utils.http import RequestUtils
-    url = f"{site_url.rstrip('/')}/torrents?q=&adult=&anime_id=&uploader="
+    base = f"{site_url.rstrip('/')}/torrents?q=&adult=&anime_id=&uploader="
     if freeleech:
-        url += "&freeleech=1"
+        base += "&freeleech=1"
+    url = f"{base}&page={page}"
     headers = {**BASE_HEADERS}
     if cookie:
         headers["Cookie"] = cookie
@@ -34,7 +35,9 @@ def fetch_torrents(
         code = res.status_code if res else "无响应"
         raise RuntimeError(f"种子页请求失败: [{code}] {url}")
     res.encoding = res.encoding or "utf-8"
-    return _parse_torrent_rows(res.text, site_url)
+    items = _parse_torrent_rows(res.text, site_url)
+    logger.debug(f"第{page}页解析: {len(items)} 条种子")
+    return items
 
 
 def _parse_torrent_rows(html: str, site_url: str) -> list[FeedItem]:
