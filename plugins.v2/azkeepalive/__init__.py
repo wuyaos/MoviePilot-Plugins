@@ -30,14 +30,14 @@ class AzKeepAlive(_PluginBase):
     _notify = True
     _cron = ""
     _onlyonce = False
-    _rss_url = ""
     _site_url = "https://animez.to/"
     _downloader = ""
     _qb_category = "AnimeZ"
     _qb_tags = "keepalive"
     _keepalive_days = 30
     _min_seeders = 5
-    _max_items = 50
+    _max_size_gb = 10.0
+    _require_free = True
     _timeout = 30
     _use_proxy = False
     _scheduler: Optional[BackgroundScheduler] = None
@@ -49,14 +49,14 @@ class AzKeepAlive(_PluginBase):
         self._notify = bool(config.get("notify", True))
         self._cron = str(config.get("cron") or "").strip()
         self._onlyonce = bool(config.get("onlyonce"))
-        self._rss_url = str(config.get("rss_url") or "").strip()
         self._site_url = str(config.get("site_url") or "https://animez.to/").strip().rstrip("/")
         self._downloader = str(config.get("downloader") or "")
         self._qb_category = str(config.get("qb_category") or "AnimeZ")
         self._qb_tags = str(config.get("qb_tags") or "keepalive")
         self._keepalive_days = int(config.get("keepalive_days") or 30)
         self._min_seeders = int(config.get("min_seeders") or 5)
-        self._max_items = int(config.get("max_items") or 50)
+        self._max_size_gb = float(config.get("max_size_gb") or 10.0)
+        self._require_free = bool(config.get("require_free", True))
         self._timeout = int(config.get("timeout") or 30)
         self._use_proxy = bool(config.get("use_proxy"))
         if self._onlyonce:
@@ -73,31 +73,30 @@ class AzKeepAlive(_PluginBase):
         self.update_config({
             "enabled": self._enabled, "notify": self._notify,
             "cron": self._cron, "onlyonce": False,
-            "rss_url": self._rss_url, "site_url": self._site_url,
-            "downloader": self._downloader,
+            "site_url": self._site_url, "downloader": self._downloader,
             "qb_category": self._qb_category, "qb_tags": self._qb_tags,
             "keepalive_days": self._keepalive_days, "min_seeders": self._min_seeders,
-            "max_items": self._max_items, "timeout": self._timeout,
-            "use_proxy": self._use_proxy,
+            "max_size_gb": self._max_size_gb, "require_free": self._require_free,
+            "timeout": self._timeout, "use_proxy": self._use_proxy,
         })
 
     def _run_task(self):
         from .core.keepalive import run_keepalive
-        from .core.qb_client import get_downloader_instance
-        from .core.rss import get_site_cookie
-        if not self._rss_url:
-            logger.warning("AnimeZ保活: 缺少 RSS URL"); return
+        from .core.downloader import get_downloader_instance
+        from .core.scraper import get_site_cookie
+        if not self._site_url:
+            logger.warning("AnimeZ保活: 缺少站点地址"); return
         dl_instance = get_downloader_instance(self._downloader)
         if not dl_instance:
             logger.warning("AnimeZ保活: 下载器未配置或不可用"); return
         state = self.get_data("state") or {}
         cookie = get_site_cookie(self._site_url)
         status, message, state = run_keepalive(
-            rss_url=self._rss_url, downloader_instance=dl_instance,
+            site_url=self._site_url, downloader_instance=dl_instance,
             category=self._qb_category, tags=self._qb_tags,
             keepalive_days=self._keepalive_days, min_seeders=self._min_seeders,
-            max_items=self._max_items, timeout=self._timeout,
-            use_proxy=self._use_proxy, site_url=self._site_url,
+            max_size_gb=self._max_size_gb, require_free=self._require_free,
+            timeout=self._timeout, use_proxy=self._use_proxy,
             cookie=cookie, state=state,
         )
         self.save_data("state", state)
@@ -146,18 +145,20 @@ class AzKeepAlive(_PluginBase):
                 v_col(3, v_switch("use_proxy", "使用代理")),
             ]),
             v_row([
-                v_col(6, v_text("rss_url", "RSS 地址", "https://animez.to/your-private-rss")),
-                v_col(6, v_text("site_url", "站点地址（定时访问）", "https://animez.to/")),
+                v_col(6, v_text("site_url", "站点地址", "https://animez.to/")),
+                v_col(6, v_select("downloader", "下载器", dl_options)),
             ]),
             v_row([
-                v_col(4, v_select("downloader", "下载器", dl_options)),
-                v_col(4, v_text("qb_category", "下载分类")),
-                v_col(4, v_text("qb_tags", "下载标签")),
+                v_col(3, v_text("qb_category", "分类(qB)/标签(TR)")),
+                v_col(3, v_text("qb_tags", "标签(仅qB)")),
+                v_col(3, v_switch("require_free", "仅Free种子")),
+                v_col(3, v_cron("cron", "执行周期", "留空=每天随机一次")),
             ]),
             v_row([
-                v_col(4, v_cron("cron", "执行周期", "留空=每天随机一次")),
-                v_col(4, v_text("keepalive_days", "保活间隔(天)")),
-                v_col(4, v_text("min_seeders", "最小做种数")),
+                v_col(3, v_text("keepalive_days", "保活间隔(天)")),
+                v_col(3, v_text("min_seeders", "最小做种数")),
+                v_col(3, v_text("max_size_gb", "最大体积(GB)")),
+                v_col(3, v_text("timeout", "超时(秒)")),
             ]),
             v_row([v_col(12, {"component": "VAlert", "props": {
                 "type": "info", "variant": "tonal",
@@ -169,10 +170,10 @@ class AzKeepAlive(_PluginBase):
             }})]),
         ]}], {
             "enabled": False, "notify": True, "cron": "", "onlyonce": False,
-            "rss_url": "", "site_url": "https://animez.to/",
+            "site_url": "https://animez.to/",
             "downloader": "", "qb_category": "AnimeZ", "qb_tags": "keepalive",
-            "keepalive_days": 30, "min_seeders": 5, "max_items": 50,
-            "timeout": 30, "use_proxy": False,
+            "require_free": True, "keepalive_days": 30, "min_seeders": 5,
+            "max_size_gb": 10.0, "timeout": 30, "use_proxy": False,
         }
 
     def get_page(self) -> List[dict]:

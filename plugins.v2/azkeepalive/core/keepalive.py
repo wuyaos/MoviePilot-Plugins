@@ -13,31 +13,28 @@ from app.core.config import settings as app_settings
 from app.log import logger
 
 from .models import FeedItem, format_size
-from .qb_client import qb_add_torrent, qb_has_hash, torrent_infohash
-from .rss import fetch_rss, filter_eligible, parse_feed, visit_site
+from .downloader import dl_add_torrent, dl_has_hash, torrent_infohash
+from .scraper import fetch_torrents, filter_eligible, visit_site
 
 MAX_HISTORY = 50
 
 
 def run_keepalive(
     *,
-    rss_url: str,
+    site_url: str,
     downloader_instance: Any,
     category: str = "AnimeZ",
     tags: str = "keepalive",
     keepalive_days: int,
     min_seeders: int,
-    max_items: int,
+    max_size_gb: float = 10.0,
+    require_free: bool = True,
     timeout: int,
     use_proxy: bool,
-    site_url: str = "",
     cookie: str = "",
     state: dict[str, Any],
 ) -> tuple[str, str, dict[str, Any]]:
-    """
-    执行一次保活检查。
-    返回 (status, message, updated_state)
-    """
+    """执行一次保活检查"""
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
     proxies = app_settings.PROXY if use_proxy else None
 
@@ -46,7 +43,8 @@ def run_keepalive(
         visit_result = visit_site(site_url, cookie=cookie, timeout=timeout, proxies=proxies)
         state["last_visit_at"] = now.isoformat().replace("+00:00", "Z")
         if visit_result.get("ok"):
-            for k in ("upload", "download", "ratio", "hnr", "bonus"):
+            for k in ("upload", "download", "ratio", "buffer", "seeds",
+                      "leeches", "bonus", "hnr", "reseed"):
                 if k in visit_result:
                     state[f"user_{k}"] = visit_result[k]
 
@@ -57,14 +55,15 @@ def run_keepalive(
         return "skipped", _skip_msg(state, keepalive_days, now, reason), state
 
     try:
-        xml = fetch_rss(rss_url, timeout=timeout, proxies=proxies)
-        items = parse_feed(xml, max_items)
-        eligible = filter_eligible(items, min_seeders)
+        items = fetch_torrents(site_url, cookie=cookie, timeout=timeout,
+                               proxies=proxies, freeleech=require_free)
+        eligible = filter_eligible(items, min_seeders, max_size_gb, require_free)
         logger.info(f"AZ保活: 扫描={len(items)} 候选={len(eligible)}")
 
         if not eligible:
             _append(state, "no_candidate", now, reason="无符合条件的候选")
-            return "no_candidate", f"扫描 {len(items)} 条，无候选 (seeders>={min_seeders})", state
+            msg = f"扫描 {len(items)} 条，无候选 (S>={min_seeders}, <={max_size_gb}GB)"
+            return "no_candidate", msg, state
 
         status, msg, _ = _try_candidates(
             eligible, downloader_instance, category, tags, timeout, proxies, state, now)
@@ -110,12 +109,12 @@ def _try_candidates(
                 tmp_path = Path(tmp.name)
 
             infohash = torrent_infohash(tmp_path)
-            if qb_has_hash(dl_instance, infohash):
+            if dl_has_hash(dl_instance, infohash):
                 logger.debug(f"qB 已存在: {item.title} ({infohash})")
                 tmp_path.unlink(missing_ok=True)
                 continue
 
-            if qb_add_torrent(dl_instance, tmp_path, category=category, tags=tags):
+            if dl_add_torrent(dl_instance, tmp_path, category=category, tags=tags):
                 tmp_path.unlink(missing_ok=True)
                 _append(state, "success", now, item=item, infohash=infohash)
                 msg = f"成功提交: {item.title}\n体积: {format_size(item.size_bytes)} | 做种: {item.seeders}"

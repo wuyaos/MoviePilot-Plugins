@@ -10,12 +10,13 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class FeedItem:
-    """RSS 种子条目"""
+    """种子条目"""
     title: str
     url: str
     seeders: int | None
     size_bytes: int | None
     size_text: str
+    is_free: bool = False
 
 
 def format_size(size_bytes: int | None, fallback: str = "") -> str:
