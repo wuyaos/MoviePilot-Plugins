@@ -5,26 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-# AnimeZ H&R 所需做种时长查找表（GB → 小时），线性插值
-_HNR_TABLE = [
-    (0, 72), (1, 74), (5, 82), (10, 92), (15, 102), (20, 112),
-    (25, 122), (30, 132), (35, 142), (40, 152), (45, 162), (50, 172),
-    (60, 190), (70, 206), (80, 219), (90, 231), (100, 241),
-    (125, 264), (150, 282), (175, 297), (200, 311), (225, 322),
-    (250, 333), (275, 342), (300, 351), (400, 380), (500, 402),
-    (600, 420), (700, 436), (800, 449), (900, 461), (1000, 472),
-]
-
-
-def _hnr_req(size_bytes: int) -> int:
-    """根据 AnimeZ H&R 规则，按体积插值计算所需做种时长（小时）"""
-    gb = size_bytes / 1073741824
-    for i in range(len(_HNR_TABLE) - 1):
-        s0, h0 = _HNR_TABLE[i]
-        s1, h1 = _HNR_TABLE[i + 1]
-        if s0 <= gb <= s1:
-            return round(h0 + (gb - s0) / (s1 - s0) * (h1 - h0))
-    return _HNR_TABLE[-1][1]
+from .models import hnr_required_hours
 
 
 def build_page(state: dict[str, Any], keepalive_days: int,
@@ -42,12 +23,42 @@ def build_page(state: dict[str, Any], keepalive_days: int,
     return result
 
 
+def _remain_days(iso_str: str, limit_days: int, now: dt.datetime) -> tuple:
+    """返回 (剩余天数 | None, 显示文字)"""
+    if not iso_str:
+        return None, "未知"
+    try:
+        ts = dt.datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=dt.timezone.utc)
+        remaining = (ts + dt.timedelta(days=limit_days) - now).days
+        if remaining < 0:
+            return remaining, f"⚠ 超期{-remaining}天"
+        return remaining, f"剩{remaining}天"
+    except (ValueError, OSError):
+        return None, "未知"
+
+
+def _urgency_color(days, default: str) -> str:
+    if days is None:
+        return default
+    if days < 10:
+        return "error"
+    if days < 30:
+        return "warning"
+    return default
+
+
 def _build_status_row(state: dict[str, Any], keepalive_days: int) -> dict:
-    """保活状态 4 列等高 tonal 卡片"""
+    """保活状态 4 列等高 tonal 卡片（含失活倒计时）"""
+    now = dt.datetime.now(dt.timezone.utc)
     last_status = state.get("last_status", "未运行")
     color_map = {"success": "success", "skipped": "info",
                  "no_candidate": "warning", "failed": "error"}
+    last_v = state.get("last_visit_at", "")
+    v_days, v_text = _remain_days(last_v, 60, now)
     last_s = state.get("last_success_at", "")
+    s_days, s_text = _remain_days(last_s, 90, now)
     next_window = "未知"
     if last_s:
         try:
@@ -57,27 +68,35 @@ def _build_status_row(state: dict[str, Any], keepalive_days: int) -> dict:
             pass
     return {"component": "VRow", "props": {"class": "mb-3", "align": "stretch"}, "content": [
         _tonal_card("当前状态", last_status, color_map.get(last_status, "grey"), "mdi-pulse", 3),
-        _tonal_card("上次访问", _fmt_time(state.get("last_visit_at", "")), "primary", "mdi-web", 3),
-        _tonal_card("上次下载", _fmt_time(last_s), "success", "mdi-download-circle", 3),
+        _tonal_card("上次访问", _fmt_time(last_v), _urgency_color(v_days, "primary"),
+                    "mdi-web", 3, v_text),
+        _tonal_card("上次下载", _fmt_time(last_s), _urgency_color(s_days, "success"),
+                    "mdi-download-circle", 3, s_text),
         _tonal_card("下次窗口", next_window, "info", "mdi-calendar-clock", 3),
     ]}
 
 
-def _tonal_card(label: str, value: str, color: str, icon: str, cols: int) -> dict:
-    """等高 tonal 卡片：时间值拆两行，其他值补空行保持对齐"""
+def _tonal_card(label: str, value: str, color: str, icon: str, cols: int,
+                subtitle: str = "") -> dict:
+    """等高 tonal 卡片：时间值拆两行，subtitle 显示倒计时或备注"""
     if "月" in value and " " in value:
         date_part, time_part = value.split(" ", 1)
-        value_node = {"component": "div", "content": [
+        nodes = [
             {"component": "div", "props": {"class": "text-subtitle-2 font-weight-bold"},
              "text": date_part},
             {"component": "div", "props": {"class": "text-caption text-medium-emphasis"},
              "text": time_part},
-        ]}
+        ]
+        if subtitle:
+            nodes.append({"component": "div", "props": {"class": "text-caption mt-1"},
+                          "text": subtitle})
+        value_node = {"component": "div", "content": nodes}
     else:
         value_node = {"component": "div", "content": [
             {"component": "div", "props": {"class": "text-subtitle-2 font-weight-bold"},
              "text": _truncate(value or "无", 20)},
-            {"component": "div", "props": {"class": "text-caption"}, "text": "\u00a0"},
+            {"component": "div", "props": {"class": "text-caption"},
+             "text": subtitle or "\u00a0"},
         ]}
     return {"component": "VCol", "props": {"cols": 6, "md": cols}, "content": [{
         "component": "VCard",
@@ -154,7 +173,7 @@ def _build_dl_section(torrents: list[dict], dl_name: str = "") -> dict:
         pct = f"{t.get('progress', 0) * 100:.0f}%"
         size_b = t.get("size", 0)
         seed_s = t.get("seeding_time", 0) or 0
-        req_h = _hnr_req(size_b)
+        req_h = hnr_required_hours(size_b) + 24
         done_h = seed_s // 3600
         hnr = f"✓ {done_h}h" if done_h >= req_h else f"{done_h}/{req_h}h"
         rows.append({"component": "tr", "content": [

@@ -1,5 +1,5 @@
 # input: MoviePilot DownloaderHelper service instance, torrent 文件
-# output: hash 检查、种子提交（支持 qBittorrent / Transmission）
+# output: hash 检查、种子提交（支持 qBittorrent / Transmission）、H&R 标签管理
 # pos: 下载器操作层，使用 MP 下载器已连接实例
 
 from __future__ import annotations
@@ -119,3 +119,44 @@ def dl_list_category(instance: Any, category: str) -> list[dict[str, Any]]:
     except Exception as e:
         logger.warning(f"查询下载器种子失败: {e}")
     return result
+
+
+def dl_check_hnr(instance: Any, category: str, hnr_tag: str = "H&R",
+                 auto_delete: bool = False) -> list[str]:
+    """扫描带 H&R 标签的种子，满足做种时限后移除标签；auto_delete=True 时同时删除种子"""
+    from .models import hnr_required_hours
+    completed: list[str] = []
+    try:
+        qbc = getattr(instance, "qbc", None)
+        if qbc:
+            for t in qbc.torrents_info(category=category, tag=hnr_tag):
+                req_h = hnr_required_hours(t.size)
+                done_h = (getattr(t, "seeding_time", 0) or 0) // 3600
+                if done_h >= req_h + 24:
+                    qbc.torrents_remove_tags(tags=hnr_tag, torrent_hashes=t.hash)
+                    logger.info(f"H&R满足，移除标签: {t.name} ({done_h}h/{req_h}h)")
+                    if auto_delete:
+                        qbc.torrents_delete(delete_files=False, torrent_hashes=t.hash)
+                        logger.info(f"H&R完成，已删除: {t.name}")
+                    completed.append(t.name)
+            return completed
+        trc = getattr(instance, "trc", None)
+        if trc:
+            torrents, _ = trc.get_torrents()
+            for t in torrents:
+                labels = getattr(t, "labels", []) or []
+                if hnr_tag not in labels:
+                    continue
+                req_h = hnr_required_hours(getattr(t, "total_size", 0) or 0)
+                done_h = (getattr(t, "secondsSeeding", 0) or 0) // 3600
+                if done_h >= req_h + 24:
+                    trc.change_torrent([t.hashString],
+                                       labels=[l for l in labels if l != hnr_tag])
+                    logger.info(f"H&R满足，移除标签: {t.name} ({done_h}h/{req_h}h)")
+                    if auto_delete:
+                        trc.remove_torrent(t.hashString, delete_data=False)
+                        logger.info(f"H&R完成，已删除: {t.name}")
+                    completed.append(t.name)
+    except Exception as e:
+        logger.warning(f"H&R检查失败: {e}")
+    return completed

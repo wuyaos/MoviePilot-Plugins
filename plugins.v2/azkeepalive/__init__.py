@@ -18,7 +18,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.3.0"
+    plugin_version = "2.4.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -40,6 +40,7 @@ class AzKeepAlive(_PluginBase):
     _require_free = True
     _timeout = 30
     _use_proxy = False
+    _auto_delete_hnr = False
     _scheduler: Optional[BackgroundScheduler] = None
 
     def init_plugin(self, config: dict = None):
@@ -61,6 +62,7 @@ class AzKeepAlive(_PluginBase):
         self._require_free = bool(config.get("require_free", True))
         self._timeout = int(config.get("timeout") or 30)
         self._use_proxy = bool(config.get("use_proxy"))
+        self._auto_delete_hnr = bool(config.get("auto_delete_hnr"))
         if self._onlyonce or self._force_keepalive:
             force = self._force_keepalive
             self._scheduler = BackgroundScheduler(timezone=app_settings.TZ)
@@ -93,6 +95,7 @@ class AzKeepAlive(_PluginBase):
             "keepalive_days": self._keepalive_days, "min_seeders": self._min_seeders,
             "max_size_gb": self._max_size_gb, "require_free": self._require_free,
             "timeout": self._timeout, "use_proxy": self._use_proxy,
+            "auto_delete_hnr": self._auto_delete_hnr,
         })
 
     def _run_task(self, force: bool = False):
@@ -113,6 +116,7 @@ class AzKeepAlive(_PluginBase):
             max_size_gb=self._max_size_gb, require_free=self._require_free,
             timeout=self._timeout, use_proxy=self._use_proxy,
             cookie=cookie, state=state, force=force,
+            auto_delete_hnr=self._auto_delete_hnr,
         )
         self.save_data("state", state)
         logger.info(f"AnimeZ保活: [{status}] {message}")
@@ -152,43 +156,65 @@ class AzKeepAlive(_PluginBase):
         except Exception as e:
             logger.debug(f"获取下载器列表失败: {e}")
             dl_options = []
+
+        def _sec(text: str) -> dict:
+            return {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12},
+                "content": [{"component": "div", "props": {
+                    "class": "text-subtitle-2 font-weight-medium text-medium-emphasis pt-2 pb-1"
+                }, "text": text}]}]}
+
         return [{"component": "VForm", "content": [
+            # ── 基本控制 ───────────────────────────
             v_row([
                 v_col(3, v_switch("enabled", "启用插件")),
                 v_col(3, v_switch("notify", "发送通知")),
                 v_col(3, v_switch("onlyonce", "立即运行一次")),
-                v_col(3, v_switch("force_keepalive", "强制保活（忽略窗口）")),
+                v_col(3, v_switch("force_keepalive", "强制保活")),
             ]),
+            # ── 站点与下载器 ───────────────────────
+            _sec("🌐 站点与下载器"),
             v_row([
+                v_col(5, v_text("site_url", "站点地址", "https://animez.to/")),
+                v_col(4, v_select("downloader", "下载器", dl_options)),
                 v_col(3, v_switch("use_proxy", "使用代理")),
-                v_col(6, v_text("site_url", "站点地址", "https://animez.to/")),
-                v_col(3, v_select("downloader", "下载器", dl_options)),
             ]),
             v_row([
-                v_col(3, v_text("qb_category", "分类(qB)/标签(TR)")),
-                v_col(3, v_text("qb_tags", "标签(仅qB)")),
-                v_col(3, v_switch("require_free", "仅Free种子")),
-                v_col(3, v_cron("cron", "执行周期", "留空=每天随机一次")),
+                v_col(3, v_text("qb_category", "分类(qB)/标签(TR)", "AnimeZ")),
+                v_col(3, v_text("qb_tags", "额外标签(仅qB)", "keepalive")),
+                v_col(6, v_cron("cron", "执行周期", "留空=每天随机一次")),
             ]),
+            # ── 筛选参数 ───────────────────────────
+            _sec("🔍 筛选参数"),
             v_row([
                 v_col(3, v_text("keepalive_days", "保活间隔(天)")),
                 v_col(3, v_text("min_seeders", "最小做种数")),
                 v_col(3, v_text("max_size_gb", "最大体积(GB)")),
                 v_col(3, v_text("timeout", "超时(秒)")),
             ]),
+            # ── H&R 控制 ──────────────────────────
+            _sec("⏱ H&R 控制"),
+            v_row([
+                v_col(3, v_switch("require_free", "仅Free种子")),
+                v_col(3, v_switch("auto_delete_hnr", "H&R到期自动删除")),
+                v_col(6, {"component": "VAlert", "props": {
+                    "type": "warning", "variant": "tonal", "density": "compact",
+                    "text": "开启后，满足做种时限的H&R种子将被自动删除（保留文件）",
+                }}),
+            ]),
+            # ── 说明 ──────────────────────────────
             v_row([v_col(12, {"component": "VAlert", "props": {
                 "type": "info", "variant": "tonal",
                 "text": "AZ保活策略：① 每 60 天至少登录一次，否则账号删除；"
                         "② 每 90 天至少下载 1 个种子，否则账号禁用。"
-                        "本插件每次运行时访问站点满足登录要求，并在保活窗口到期前自动从 AZ 种子列表页 "
-                        "筛选体积最小、做种数达标的种子提交到下载器满足下载要求。"
-                        "默认 30 天一次下载（距 90 天限制留 60 天缓冲），执行周期留空则每天 9-23 点随机执行。"
+                        "插件每次运行访问站点满足登录要求，到期前自动选种提交下载器，"
+                        "种子自动打 H&R 标签，到期后自动移除（可选删除）。"
             }})]),
         ]}], {
             "enabled": False, "notify": True, "cron": "", "onlyonce": False, "force_keepalive": False,
             "site_url": "https://animez.to/",
             "downloader": "", "qb_category": "AnimeZ", "qb_tags": "keepalive",
-            "require_free": True, "keepalive_days": 30, "min_seeders": 5,
+            "require_free": True, "auto_delete_hnr": False,
+            "keepalive_days": 30, "min_seeders": 5,
             "max_size_gb": 10.0, "timeout": 30, "use_proxy": False,
         }
 

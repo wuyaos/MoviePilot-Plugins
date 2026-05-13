@@ -1,5 +1,5 @@
 # input: 无外部依赖
-# output: FeedItem 数据类, format_size, parse_size_bytes
+# output: FeedItem 数据类, format_size, parse_size_bytes, hnr_required_hours
 # pos: 数据模型层，供 keepalive / page 模块使用
 
 from __future__ import annotations
@@ -51,3 +51,25 @@ def parse_size_bytes(value: str) -> int | None:
         "kib": 1024, "mib": 1024**2, "gib": 1024**3, "tib": 1024**4,
     }
     return int(number * multipliers.get(unit, 1))
+
+
+# AnimeZ H&R 所需做种时长查找表（GB → 小时），线性插值
+_HNR_TABLE = [
+    (0, 72), (1, 74), (5, 82), (10, 92), (15, 102), (20, 112),
+    (25, 122), (30, 132), (35, 142), (40, 152), (45, 162), (50, 172),
+    (60, 190), (70, 206), (80, 219), (90, 231), (100, 241),
+    (125, 264), (150, 282), (175, 297), (200, 311), (225, 322),
+    (250, 333), (275, 342), (300, 351), (400, 380), (500, 402),
+    (600, 420), (700, 436), (800, 449), (900, 461), (1000, 472),
+]
+
+
+def hnr_required_hours(size_bytes: int) -> int:
+    """根据 AnimeZ H&R 规则，按体积插值计算所需做种时长（小时）"""
+    gb = size_bytes / 1073741824
+    for i in range(len(_HNR_TABLE) - 1):
+        s0, h0 = _HNR_TABLE[i]
+        s1, h1 = _HNR_TABLE[i + 1]
+        if s0 <= gb <= s1:
+            return round(h0 + (gb - s0) / (s1 - s0) * (h1 - h0))
+    return _HNR_TABLE[-1][1]

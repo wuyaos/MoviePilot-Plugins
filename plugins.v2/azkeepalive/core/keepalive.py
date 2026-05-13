@@ -9,7 +9,7 @@ from typing import Any
 from app.core.config import settings as app_settings
 from app.log import logger
 from .models import FeedItem, format_size
-from .downloader import dl_add_torrent, dl_has_hash, torrent_infohash
+from .downloader import dl_add_torrent, dl_check_hnr, dl_has_hash, torrent_infohash
 from .scraper import fetch_torrents, filter_eligible, visit_site
 
 MAX_HISTORY = 50
@@ -21,7 +21,7 @@ def run_keepalive(
     category: str, tags: str, keepalive_days: int, min_seeders: int,
     max_size_gb: float, require_free: bool, timeout: int,
     use_proxy: bool, cookie: str = "", state: dict[str, Any],
-    force: bool = False,
+    force: bool = False, auto_delete_hnr: bool = False,
 ) -> tuple[str, str, dict[str, Any]]:
     """执行一次保活检查"""
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
@@ -41,12 +41,19 @@ def run_keepalive(
             if not found:
                 logger.warning("AZ保活: 访问成功但未解析到用户信息")
 
+    # H&R 检查：满足做种时限则移除标签，可选删除
+    if downloader_instance:
+        done = dl_check_hnr(downloader_instance, category, auto_delete=auto_delete_hnr)
+        if done:
+            logger.info(f"AZ保活: H&R完成 {len(done)} 个: {', '.join(done[:3])}")
+
     should, reason = _should_run(state, keepalive_days, now, force=force)
     if not should:
         _append(state, "skipped", now, reason=reason)
         return "skipped", _skip_msg(state, keepalive_days, now, reason), state
 
     try:
+        submit_tags = f"{tags},H&R" if tags else "H&R"
         # 渐进策略：Free小体积 → Free不限 → 全部小体积
         strategies = [
             (f"Free<={max_size_gb}GB", require_free, max_size_gb),
@@ -55,7 +62,7 @@ def run_keepalive(
         ]
         for label, free, size in strategies:
             r = _scan_pages(site_url, cookie, timeout, proxies, free, size,
-                            min_seeders, downloader_instance, category, tags,
+                            min_seeders, downloader_instance, category, submit_tags,
                             state, now)
             if r:
                 return r[0], r[1], state
