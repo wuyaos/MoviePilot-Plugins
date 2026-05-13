@@ -118,11 +118,10 @@ def _build_dl_table(torrents: list[dict]) -> dict:
             b /= 1024
         return str(b)
     if not torrents:
-        return {"component": "VCard", "props": {"variant": "flat", "class": "mt-2 mb-2"},
-                "content": [{"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"},
-                              "text": "下载器种子 (0)"},
-                             {"component": "VCardText", "props": {"class": "text-caption text-grey pa-3"},
-                              "text": "暂无 AnimeZ 分类种子"}]}
+        return {"component": "VAlert", "props": {
+            "type": "info", "variant": "tonal", "density": "compact", "class": "mt-2 mb-2",
+            "text": "下载器种子：暂无 AnimeZ 分类种子",
+        }}
     rows = []
     for t in torrents[:10]:
         pct = f"{t.get('progress', 0) * 100:.0f}%"
