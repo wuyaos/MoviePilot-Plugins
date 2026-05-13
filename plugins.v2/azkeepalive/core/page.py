@@ -117,15 +117,27 @@ def _history_row(ev: dict[str, Any]) -> dict:
     status = ev.get("status", "")
     color_map = {"success": "success", "skipped": "info",
                  "no_candidate": "warning", "failed": "error"}
-    detail = ev.get("title") or ev.get("reason") or ""
+    # 拼接详情：种子名 | 体积 | 做种 | Free | 原因
+    parts = []
+    if ev.get("title"):
+        parts.append(ev["title"])
+    if ev.get("size"):
+        parts.append(ev["size"])
+    if ev.get("seeders") is not None:
+        parts.append(f"S:{ev['seeders']}")
+    if ev.get("free"):
+        parts.append("Free")
+    if ev.get("reason"):
+        parts.append(ev["reason"])
+    detail = " | ".join(parts) if parts else ""
     return {"component": "tr", "content": [
-        {"component": "td", "props": {"class": "text-caption"},
+        {"component": "td", "props": {"class": "text-caption text-no-wrap"},
          "text": _fmt_time(ev.get("time", ""))},
         {"component": "td", "content": [{"component": "VChip", "props": {
             "color": color_map.get(status, "grey"), "size": "x-small", "variant": "flat",
         }, "text": status}]},
         {"component": "td", "props": {"class": "text-caption"},
-         "text": _truncate(detail, 50)},
+         "text": _truncate(detail, 80)},
     ]}
 
 
