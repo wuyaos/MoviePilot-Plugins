@@ -16,176 +16,177 @@ from .downloader import dl_add_torrent, dl_has_hash, torrent_infohash
 from .scraper import fetch_torrents, filter_eligible, visit_site
 
 MAX_HISTORY = 50
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 
 def run_keepalive(
-    *,
-    site_url: str,
-    downloader_instance: Any,
-    category: str = "AnimeZ",
-    tags: str = "keepalive",
-    keepalive_days: int,
-    min_seeders: int,
-    max_size_gb: float = 10.0,
-    require_free: bool = True,
-    timeout: int,
-    use_proxy: bool,
-    cookie: str = "",
-    state: dict[str, Any],
+    *, site_url: str, downloader_instance: Any,
+    category: str, tags: str, keepalive_days: int, min_seeders: int,
+    max_size_gb: float, require_free: bool, timeout: int,
+    use_proxy: bool, cookie: str = "", state: dict[str, Any],
 ) -> tuple[str, str, dict[str, Any]]:
     """执行一次保活检查"""
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
     proxies = app_settings.PROXY if use_proxy else None
 
-    # 每次都访问站点（模拟登录活跃 + 抓取用户信息）
+    # 每次访问站点（模拟登录 + 抓取用户信息）
     if site_url:
-        visit_result = visit_site(site_url, cookie=cookie, timeout=timeout, proxies=proxies)
-        state["last_visit_at"] = now.isoformat().replace("+00:00", "Z")
-        if visit_result.get("ok"):
+        vr = visit_site(site_url, cookie=cookie, timeout=timeout, proxies=proxies)
+        state["last_visit_at"] = _ts(now)
+        if vr.get("ok"):
             for k in ("upload", "download", "ratio", "buffer", "seeds",
                       "leeches", "bonus", "hnr", "reseed"):
-                if k in visit_result:
-                    state[f"user_{k}"] = visit_result[k]
+                if k in vr:
+                    state[f"user_{k}"] = vr[k]
 
-    # 检查是否需要执行
     should, reason = _should_run(state, keepalive_days, now)
     if not should:
         _append(state, "skipped", now, reason=reason)
         return "skipped", _skip_msg(state, keepalive_days, now, reason), state
 
     try:
-        # 逐页扫描种子，直到找到可下载候选或达到最大页数
-        max_pages = 10
-        total_scanned = 0
-        total_eligible = 0
-        for page in range(1, max_pages + 1):
-            items = fetch_torrents(site_url, cookie=cookie, timeout=timeout,
-                                   proxies=proxies, freeleech=require_free, page=page)
-            if not items:
-                logger.info(f"AZ保活: 第{page}页无种子，停止翻页")
-                break
-            eligible = filter_eligible(items, min_seeders, max_size_gb, require_free)
-            total_scanned += len(items)
-            total_eligible += len(eligible)
-            logger.info(f"AZ保活: p{page} 扫描={len(items)} 候选={len(eligible)} "
-                        f"累计={total_scanned}/{total_eligible}")
+        # 渐进策略：Free小体积 → Free不限 → 全部小体积
+        strategies = [
+            (f"Free<={max_size_gb}GB", require_free, max_size_gb),
+            ("Free不限体积", require_free, 999999),
+            (f"全部<={max_size_gb}GB", False, max_size_gb),
+        ]
+        for label, free, size in strategies:
+            r = _scan_pages(site_url, cookie, timeout, proxies, free, size,
+                            min_seeders, downloader_instance, category, tags,
+                            state, now)
+            if r:
+                return r[0], r[1], state
+            logger.info(f"AZ保活: 策略[{label}]无新种子，尝试下一策略")
 
-            if eligible:
-                status, msg, _ = _try_candidates(
-                    eligible, downloader_instance, category, tags,
-                    timeout, proxies, state, now)
-                if status == "success":
-                    return status, msg, state
-                # 候选全在 qB 中，继续下一页
-
-        if total_eligible == 0:
-            _append(state, "no_candidate", now, reason="无符合条件的候选")
-            msg = f"扫描 {max_pages} 页共 {total_scanned} 条，无候选 " \
-                  f"(S>={min_seeders}, <={max_size_gb}GB)"
-        else:
-            _append(state, "no_candidate", now,
-                    reason=f"扫描 {total_scanned} 条，{total_eligible} 条候选均已存在")
-            msg = f"扫描 {total_scanned} 条，{total_eligible} 条候选均已存在于下载器"
-        return "no_candidate", msg, state
-
+        _append(state, "no_candidate", now, reason="所有策略均未找到可下载种子")
+        return "no_candidate", "所有策略均未找到新种子", state
     except Exception as e:
         logger.error(f"AZ保活失败: {e}")
         _append(state, "failed", now, reason=str(e))
         return "failed", f"执行失败: {e}", state
 
 
-def _should_run(state: dict[str, Any], keepalive_days: int, now: dt.datetime) -> tuple[bool, str]:
-    last_success = _parse_ts(state.get("last_success_at"))
-    if last_success is None:
-        return True, "无历史成功记录"
-    if now - last_success >= dt.timedelta(days=keepalive_days):
-        return True, "已到保活窗口"
-    return False, "未到保活窗口"
-
-
-def _try_candidates(
-    eligible: list[FeedItem], dl_instance: Any,
-    category: str, tags: str, timeout: int, proxies: dict | None,
+def _scan_pages(
+    site_url: str, cookie: str, timeout: int, proxies: dict | None,
+    freeleech: bool, max_size_gb: float, min_seeders: int,
+    dl_inst: Any, category: str, tags: str,
     state: dict[str, Any], now: dt.datetime,
-) -> tuple[str, str, FeedItem | None]:
+) -> tuple[str, str] | None:
+    """逐页扫描，找到第一个可下载种子立即提交"""
+    for page in range(1, 11):
+        items = fetch_torrents(site_url, cookie=cookie, timeout=timeout,
+                               proxies=proxies, freeleech=freeleech, page=page)
+        if not items:
+            break
+        eligible = filter_eligible(items, min_seeders, max_size_gb, freeleech)
+        logger.info(f"AZ保活: p{page} 解析={len(items)} 候选={len(eligible)}")
+
+        # 逐个检查候选，找到即提交
+        for item in eligible:
+            result = _try_one(item, cookie, timeout, proxies, dl_inst,
+                              category, tags, state, now)
+            if result:
+                return result
+    return None
+
+
+def _try_one(
+    item: FeedItem, cookie: str, timeout: int, proxies: dict | None,
+    dl_inst: Any, category: str, tags: str,
+    state: dict[str, Any], now: dt.datetime,
+) -> tuple[str, str] | None:
+    """尝试下载并提交单个种子"""
     from app.utils.http import RequestUtils
+    try:
+        headers = {"User-Agent": UA, "Referer": "https://animez.to/"}
+        if cookie:
+            headers["Cookie"] = cookie
+        res = RequestUtils(
+            headers=headers, proxies=proxies, timeout=timeout,
+        ).get_res(url=item.url)
+        if not res or res.status_code != 200:
+            logger.debug(f"种子下载失败: {item.title} [{res.status_code if res else '无响应'}]")
+            return None
+        body = res.content
+        if not _looks_like_torrent(body, res.headers.get("Content-Type", "")):
+            logger.debug(f"非种子文件: {item.title}")
+            return None
 
-    for i, item in enumerate(eligible, 1):
-        logger.debug(f"检查候选 {i}/{len(eligible)}: {item.title}")
-        try:
-            res = RequestUtils(
-                headers={"User-Agent": "AZ_KeepAlive/1.0", "Referer": "https://animez.to/"},
-                proxies=proxies, timeout=timeout,
-            ).get_res(url=item.url)
-            if not res or res.status_code != 200:
-                continue
-            body = res.content
-            if not _looks_like_torrent(body, res.headers.get("Content-Type", "")):
-                continue
+        with tempfile.NamedTemporaryFile(suffix=".torrent", delete=False) as tmp:
+            tmp.write(body)
+            tmp_path = Path(tmp.name)
 
-            with tempfile.NamedTemporaryFile(suffix=".torrent", delete=False) as tmp:
-                tmp.write(body)
-                tmp_path = Path(tmp.name)
-
-            infohash = torrent_infohash(tmp_path)
-            if dl_has_hash(dl_instance, infohash):
-                logger.debug(f"qB 已存在: {item.title} ({infohash})")
-                tmp_path.unlink(missing_ok=True)
-                continue
-
-            if dl_add_torrent(dl_instance, tmp_path, category=category, tags=tags):
-                tmp_path.unlink(missing_ok=True)
-                _append(state, "success", now, item=item, infohash=infohash)
-                msg = f"成功提交: {item.title}\n体积: {format_size(item.size_bytes)} | 做种: {item.seeders}"
-                return "success", msg, item
-
+        infohash = torrent_infohash(tmp_path)
+        if dl_has_hash(dl_inst, infohash):
+            logger.debug(f"下载器已有: {item.title} ({infohash[:8]})")
             tmp_path.unlink(missing_ok=True)
-        except Exception as e:
-            logger.warning(f"候选处理失败: {item.title} - {e}")
-            continue
+            return None
 
-    _append(state, "no_candidate", now, reason="所有候选均已存在或不可用")
-    return "no_candidate", "所有候选均已存在于 qBittorrent 或不可下载", None
+        if dl_add_torrent(dl_inst, tmp_path, category=category, tags=tags):
+            tmp_path.unlink(missing_ok=True)
+            _append(state, "success", now, item=item, infohash=infohash)
+            msg = (f"成功: {item.title}\n"
+                   f"体积: {format_size(item.size_bytes)} | S:{item.seeders}"
+                   f"{' | Free' if item.is_free else ''}")
+            logger.info(f"AZ保活: {msg}")
+            return "success", msg
+
+        tmp_path.unlink(missing_ok=True)
+        logger.warning(f"提交失败: {item.title}")
+    except Exception as e:
+        logger.warning(f"候选异常: {item.title} - {e}")
+    return None
 
 
 def _looks_like_torrent(body: bytes, content_type: str) -> bool:
     if "text/html" in content_type.lower():
         return False
-    stripped = body.lstrip()
-    return stripped.startswith(b"d") and b"announce" in body[:4096]
+    return body.lstrip().startswith(b"d") and b"announce" in body[:4096]
+
+
+def _should_run(state: dict[str, Any], days: int, now: dt.datetime) -> tuple[bool, str]:
+    last = _parse_ts(state.get("last_success_at"))
+    if last is None:
+        return True, "无历史成功记录"
+    if now - last >= dt.timedelta(days=days):
+        return True, "已到保活窗口"
+    return False, "未到保活窗口"
 
 
 def _append(
     state: dict[str, Any], status: str, now: dt.datetime,
     reason: str = "", item: FeedItem | None = None, infohash: str = "",
 ) -> None:
-    ts = now.isoformat().replace("+00:00", "Z")
-    event: dict[str, Any] = {"time": ts, "status": status}
+    ev: dict[str, Any] = {"time": _ts(now), "status": status}
     if reason:
-        event["reason"] = reason
+        ev["reason"] = reason
     if item:
-        event.update(title=item.title, seeders=item.seeders,
-                     size=format_size(item.size_bytes, item.size_text))
+        ev.update(title=item.title, seeders=item.seeders,
+                  size=format_size(item.size_bytes, item.size_text),
+                  free=item.is_free)
     if infohash:
-        event["infohash"] = infohash
+        ev["infohash"] = infohash
     history = state.setdefault("history", [])
-    history.append(event)
+    history.append(ev)
     del history[:-MAX_HISTORY]
     state["last_status"] = status
     if status == "success":
-        state["last_success_at"] = ts
+        state["last_success_at"] = _ts(now)
         if item:
             state["last_title"] = item.title
     if status in {"success", "no_candidate", "skipped"}:
-        state["last_checked_at"] = ts
+        state["last_checked_at"] = _ts(now)
 
 
-def _skip_msg(state: dict[str, Any], keepalive_days: int, now: dt.datetime, reason: str) -> str:
-    last_s = _parse_ts(state.get("last_success_at"))
-    nxt = "未知"
-    if last_s:
-        nxt = (last_s + dt.timedelta(days=keepalive_days)).isoformat().replace("+00:00", "Z")
+def _skip_msg(state: dict[str, Any], days: int, now: dt.datetime, reason: str) -> str:
+    last = _parse_ts(state.get("last_success_at"))
+    nxt = _ts(last + dt.timedelta(days=days)) if last else "未知"
     return f"跳过: {reason}\n上次成功: {state.get('last_success_at', '无')}\n下次窗口: {nxt}"
+
+
+def _ts(t: dt.datetime) -> str:
+    return t.isoformat().replace("+00:00", "Z")
 
 
 def _parse_ts(val: str | None) -> dt.datetime | None:
@@ -193,8 +194,6 @@ def _parse_ts(val: str | None) -> dt.datetime | None:
         return None
     try:
         p = dt.datetime.fromisoformat(val.replace("Z", "+00:00"))
-        if p.tzinfo is None:
-            p = p.replace(tzinfo=dt.UTC)
-        return p.astimezone(dt.UTC)
+        return p.replace(tzinfo=dt.UTC) if p.tzinfo is None else p.astimezone(dt.UTC)
     except ValueError:
         return None
