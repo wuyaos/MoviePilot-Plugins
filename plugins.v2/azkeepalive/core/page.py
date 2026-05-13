@@ -5,6 +5,27 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
+# AnimeZ H&R 所需做种时长查找表（GB → 小时），线性插值
+_HNR_TABLE = [
+    (0, 72), (1, 74), (5, 82), (10, 92), (15, 102), (20, 112),
+    (25, 122), (30, 132), (35, 142), (40, 152), (45, 162), (50, 172),
+    (60, 190), (70, 206), (80, 219), (90, 231), (100, 241),
+    (125, 264), (150, 282), (175, 297), (200, 311), (225, 322),
+    (250, 333), (275, 342), (300, 351), (400, 380), (500, 402),
+    (600, 420), (700, 436), (800, 449), (900, 461), (1000, 472),
+]
+
+
+def _hnr_req(size_bytes: int) -> int:
+    """根据 AnimeZ H&R 规则，按体积插值计算所需做种时长（小时）"""
+    gb = size_bytes / 1073741824
+    for i in range(len(_HNR_TABLE) - 1):
+        s0, h0 = _HNR_TABLE[i]
+        s1, h1 = _HNR_TABLE[i + 1]
+        if s0 <= gb <= s1:
+            return round(h0 + (gb - s0) / (s1 - s0) * (h1 - h0))
+    return _HNR_TABLE[-1][1]
+
 
 def build_page(state: dict[str, Any], keepalive_days: int,
                dl_torrents: list[dict] | None = None,
@@ -131,13 +152,19 @@ def _build_dl_section(torrents: list[dict], dl_name: str = "") -> dict:
     rows = []
     for t in torrents[:10]:
         pct = f"{t.get('progress', 0) * 100:.0f}%"
+        size_b = t.get("size", 0)
+        seed_s = t.get("seeding_time", 0) or 0
+        req_h = _hnr_req(size_b)
+        done_h = seed_s // 3600
+        hnr = f"✓ {done_h}h" if done_h >= req_h else f"{done_h}/{req_h}h"
         rows.append({"component": "tr", "content": [
             {"component": "td", "props": {"class": "text-caption"},
              "text": _truncate(t.get("name", ""), 50)},
-            {"component": "td", "props": {"class": "text-caption"}, "text": _sz(t.get("size", 0))},
+            {"component": "td", "props": {"class": "text-caption"}, "text": _sz(size_b)},
             {"component": "td", "props": {"class": "text-caption"}, "text": pct},
             {"component": "td", "props": {"class": "text-caption"}, "text": str(t.get("state", ""))},
-            {"component": "td", "props": {"class": "text-caption"}, "text": _st(t.get("seeding_time", 0))},
+            {"component": "td", "props": {"class": "text-caption"}, "text": _st(seed_s)},
+            {"component": "td", "props": {"class": "text-caption"}, "text": hnr},
         ]})
     return {"component": "VCard", "props": {"variant": "tonal", "color": "blue-grey", "class": "mb-3"},
             "content": [
@@ -146,7 +173,7 @@ def _build_dl_section(torrents: list[dict], dl_name: str = "") -> dict:
         {"component": "VTable", "props": {"density": "compact"}, "content": [
             {"component": "thead", "content": [{"component": "tr", "content": [
                 {"component": "th", "props": {"class": "text-caption"}, "text": c}
-                for c in ["名称", "体积", "进度", "状态", "做种时长"]
+                for c in ["名称", "体积", "进度", "状态", "做种时长", "H&R"]
             ]}]},
             {"component": "tbody", "content": rows},
         ]},
@@ -176,14 +203,15 @@ def _history_row(ev: dict[str, Any]) -> dict:
     status = ev.get("status", "")
     color_map = {"success": "success", "skipped": "info",
                  "no_candidate": "warning", "failed": "error"}
+    _detail_map = {
+        "success": "下载种子保活成功",
+        "skipped": "访问PT站保活成功",
+        "no_candidate": "访问PT站成功，无候选种子",
+    }
     parts = []
-    if ev.get("size"):
-        parts.append(ev["size"])
-    if ev.get("seeders") is not None:
-        parts.append(f"S:{ev['seeders']}")
-    if ev.get("free"):
-        parts.append("Free")
-    if ev.get("reason"):
+    if status in _detail_map:
+        parts.append(_detail_map[status])
+    if ev.get("reason") and status not in ("success", "skipped", "no_candidate"):
         parts.append(ev["reason"])
     detail = " | ".join(parts) if parts else ""
     return {"component": "tr", "content": [
