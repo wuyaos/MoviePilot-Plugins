@@ -10,12 +10,17 @@ def build_page(state: dict[str, Any], keepalive_days: int,
                dl_torrents: list[dict] | None = None) -> list[dict]:
     """构建插件详情页"""
     result = []
+    # 1. 用户信息（无数据时显示占位）
     user_row = _build_user_bar(state)
-    if user_row:
-        result.append(user_row)
+    result.append(user_row or {"component": "VCard", "props": {
+        "variant": "flat", "class": "mb-3 pa-3"},
+        "content": [{"component": "span", "props": {"class": "text-caption text-grey"},
+                      "text": "用户信息：等待首次运行后从站点获取（需CookieCloud配置）"}]})
+    # 2. 保活状态
     result.append(_build_status_row(state, keepalive_days))
-    if dl_torrents:
-        result.append(_build_dl_table(dl_torrents))
+    # 3. 下载器种子（始终显示）
+    result.append(_build_dl_table(dl_torrents or []))
+    # 4. 运行记录
     result.append(_build_history_table(state))
     return result
 
@@ -100,6 +105,12 @@ def _build_dl_table(torrents: list[dict]) -> dict:
             if b < 1024: return f"{b:.1f}{u}" if u != "B" else f"{b}B"
             b /= 1024
         return str(b)
+    if not torrents:
+        return {"component": "VCard", "props": {"variant": "flat", "class": "mt-2 mb-2"},
+                "content": [{"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"},
+                              "text": "下载器种子 (0)"},
+                             {"component": "VCardText", "props": {"class": "text-caption text-grey pa-3"},
+                              "text": "暂无 AnimeZ 分类种子"}]}
     rows = []
     for t in torrents[:10]:
         pct = f"{t.get('progress', 0) * 100:.0f}%"
