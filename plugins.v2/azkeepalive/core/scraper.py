@@ -165,6 +165,29 @@ def _parse_user_stats(html: str) -> dict[str, str]:
         "Active Leeches": "leeches", "Bonus Points": "bonus",
         "Hit & Run": "hnr", "Reseed Requests": "reseed",
     }
+    # 尝试从多种 profile 链接模式提取用户名（搜索前 15KB 以覆盖 Tabler 导航栏）
+    nav_html = html[:15000]
+    name_patterns = [
+        # Tabler UI: <div class="d-none d-xl-block ps-2"><div>USERNAME</div>
+        (r'class="d-none d-xl-block[^"]*"[^>]*>\s*<div[^>]*>\s*([^<\n]{2,40}?)\s*</div>', 1),
+        # 通用 /profile/username 链接
+        (r'href="/profile/([^/"?\s]+)"', 1),
+        # /user/username 或 /users/username
+        (r'href="/users?/([^/"?\s]+)"', 1),
+        # dropdown-item 中含 profile
+        (r'class="dropdown-item"[^>]+href="[^"]*profile[^"]*"[^>]*>\s*([^<]{2,40}?)\s*<', 1),
+    ]
+    for pat, grp in name_patterns:
+        name_m = re.search(pat, nav_html)
+        if name_m:
+            candidate = html_lib.unescape(name_m.group(grp).strip())
+            if candidate and len(candidate) >= 2:
+                stats["name"] = candidate
+                logger.debug(f"用户名匹配模式: {pat!r} → {candidate!r}")
+                break
+    else:
+        logger.debug(f"未匹配到用户名，请检查 HTML；nav前500字节: "
+                    f"{re.sub(chr(60)+'[^>]+'+chr(62), ' ', nav_html[2500:3500]).strip()[:500]}")
     for block in li_blocks:
         title_m = re.search(r'(?:data-bs-original-title|data-original-title|aria-label|title)="([^"]+)"', block)
         if not title_m:

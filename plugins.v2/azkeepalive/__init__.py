@@ -29,6 +29,7 @@ class AzKeepAlive(_PluginBase):
     _notify = True
     _cron = ""
     _onlyonce = False
+    _force_keepalive = False
     _site_url = "https://animez.to/"
     _downloader = ""
     _qb_category = "AnimeZ"
@@ -49,6 +50,7 @@ class AzKeepAlive(_PluginBase):
         self._notify = bool(config.get("notify", True))
         self._cron = str(config.get("cron") or "").strip()
         self._onlyonce = bool(config.get("onlyonce"))
+        self._force_keepalive = bool(config.get("force_keepalive"))
         self._site_url = str(config.get("site_url") or "https://animez.to/").strip().rstrip("/")
         self._downloader = str(config.get("downloader") or "")
         self._qb_category = str(config.get("qb_category") or "AnimeZ")
@@ -59,11 +61,14 @@ class AzKeepAlive(_PluginBase):
         self._require_free = bool(config.get("require_free", True))
         self._timeout = int(config.get("timeout") or 30)
         self._use_proxy = bool(config.get("use_proxy"))
-        if self._onlyonce:
+        if self._onlyonce or self._force_keepalive:
+            force = self._force_keepalive
             self._scheduler = BackgroundScheduler(timezone=app_settings.TZ)
-            self._scheduler.add_job(self._run_task, "date", name="AnimeZ保活-立即执行")
+            self._scheduler.add_job(lambda: self._run_task(force=force), "date",
+                                    name="AnimeZ保活-立即执行")
             self._scheduler.start()
             self._onlyonce = False
+            self._force_keepalive = False
             self._save_config()
 
     def get_state(self) -> bool:
@@ -82,7 +87,7 @@ class AzKeepAlive(_PluginBase):
     def _save_config(self):
         self.update_config({
             "enabled": self._enabled, "notify": self._notify,
-            "cron": self._cron, "onlyonce": False,
+            "cron": self._cron, "onlyonce": False, "force_keepalive": False,
             "site_url": self._site_url, "downloader": self._downloader,
             "qb_category": self._qb_category, "qb_tags": self._qb_tags,
             "keepalive_days": self._keepalive_days, "min_seeders": self._min_seeders,
@@ -90,7 +95,7 @@ class AzKeepAlive(_PluginBase):
             "timeout": self._timeout, "use_proxy": self._use_proxy,
         })
 
-    def _run_task(self):
+    def _run_task(self, force: bool = False):
         from .core.keepalive import run_keepalive
         from .core.downloader import get_downloader_instance
         from .core.scraper import get_site_cookie
@@ -107,7 +112,7 @@ class AzKeepAlive(_PluginBase):
             keepalive_days=self._keepalive_days, min_seeders=self._min_seeders,
             max_size_gb=self._max_size_gb, require_free=self._require_free,
             timeout=self._timeout, use_proxy=self._use_proxy,
-            cookie=cookie, state=state,
+            cookie=cookie, state=state, force=force,
         )
         self.save_data("state", state)
         logger.info(f"AnimeZ保活: [{status}] {message}")
@@ -127,7 +132,7 @@ class AzKeepAlive(_PluginBase):
             return []
         if self._cron:
             try:
-                return [{"id": "AzKeepAlive", "name": "AnimeZ保活",
+                return [{"id": "cron", "name": "AnimeZ保活",
                          "trigger": CronTrigger.from_crontab(self._cron),
                          "func": self._run_task, "kwargs": {}}]
             except Exception as e:
@@ -135,7 +140,7 @@ class AzKeepAlive(_PluginBase):
         # 无 cron 时每天随机执行一次（9-23点间）
         triggers = TimerUtils.random_scheduler(
             num_executions=1, begin_hour=9, end_hour=23, min_interval=60, max_interval=120)
-        return [{"id": f"AzKeepAlive|{t.hour}:{t.minute}", "name": "AnimeZ保活",
+        return [{"id": "cron", "name": "AnimeZ保活",
                  "trigger": "cron", "func": self._run_task,
                  "kwargs": {"hour": t.hour, "minute": t.minute}} for t in triggers]
 
@@ -152,11 +157,12 @@ class AzKeepAlive(_PluginBase):
                 v_col(3, v_switch("enabled", "启用插件")),
                 v_col(3, v_switch("notify", "发送通知")),
                 v_col(3, v_switch("onlyonce", "立即运行一次")),
-                v_col(3, v_switch("use_proxy", "使用代理")),
+                v_col(3, v_switch("force_keepalive", "强制保活（忽略窗口）")),
             ]),
             v_row([
+                v_col(3, v_switch("use_proxy", "使用代理")),
                 v_col(6, v_text("site_url", "站点地址", "https://animez.to/")),
-                v_col(6, v_select("downloader", "下载器", dl_options)),
+                v_col(3, v_select("downloader", "下载器", dl_options)),
             ]),
             v_row([
                 v_col(3, v_text("qb_category", "分类(qB)/标签(TR)")),
@@ -174,12 +180,12 @@ class AzKeepAlive(_PluginBase):
                 "type": "info", "variant": "tonal",
                 "text": "AZ保活策略：① 每 60 天至少登录一次，否则账号删除；"
                         "② 每 90 天至少下载 1 个种子，否则账号禁用。"
-                        "本插件每天定时访问站点满足登录要求，并在保活窗口到期前自动从 RSS "
+                        "本插件每次运行时访问站点满足登录要求，并在保活窗口到期前自动从 AZ 种子列表页 "
                         "筛选体积最小、做种数达标的种子提交到下载器满足下载要求。"
-                        "默认 30 天一次下载（留 60 天容错），执行周期留空则每天 9-23 点随机执行。"
+                        "默认 30 天一次下载（距 90 天限制留 60 天缓冲），执行周期留空则每天 9-23 点随机执行。"
             }})]),
         ]}], {
-            "enabled": False, "notify": True, "cron": "", "onlyonce": False,
+            "enabled": False, "notify": True, "cron": "", "onlyonce": False, "force_keepalive": False,
             "site_url": "https://animez.to/",
             "downloader": "", "qb_category": "AnimeZ", "qb_tags": "keepalive",
             "require_free": True, "keepalive_days": 30, "min_seeders": 5,
@@ -197,7 +203,7 @@ class AzKeepAlive(_PluginBase):
                     dl_torrents = dl_list_category(inst, self._qb_category)
             except Exception as e:
                 logger.debug(f"查询下载器种子失败: {e}")
-            return build_page(state, self._keepalive_days, dl_torrents)
+            return build_page(state, self._keepalive_days, dl_torrents, dl_name=self._downloader)
         except Exception as e:
             logger.error(f"AnimeZ保活详情页失败: {e}")
             return [{"component": "VAlert", "props": {

@@ -21,6 +21,7 @@ def run_keepalive(
     category: str, tags: str, keepalive_days: int, min_seeders: int,
     max_size_gb: float, require_free: bool, timeout: int,
     use_proxy: bool, cookie: str = "", state: dict[str, Any],
+    force: bool = False,
 ) -> tuple[str, str, dict[str, Any]]:
     """执行一次保活检查"""
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
@@ -34,13 +35,13 @@ def run_keepalive(
         state["last_visit_at"] = _ts(now)
         if vr.get("ok") and cookie:
             found = False
-            for k in ("upload", "download", "ratio", "buffer", "seeds", "leeches", "bonus", "hnr", "reseed"):
+            for k in ("upload", "download", "ratio", "buffer", "seeds", "leeches", "bonus", "hnr", "reseed", "name"):
                 if k in vr:
                     state[f"user_{k}"] = vr[k]; found = True
             if not found:
                 logger.warning("AZ保活: 访问成功但未解析到用户信息")
 
-    should, reason = _should_run(state, keepalive_days, now)
+    should, reason = _should_run(state, keepalive_days, now, force=force)
     if not should:
         _append(state, "skipped", now, reason=reason)
         return "skipped", _skip_msg(state, keepalive_days, now, reason), state
@@ -152,7 +153,10 @@ def _looks_like_torrent(body: bytes, content_type: str) -> bool:
     return body.lstrip().startswith(b"d") and b"announce" in body[:4096]
 
 
-def _should_run(state: dict[str, Any], days: int, now: dt.datetime) -> tuple[bool, str]:
+def _should_run(state: dict[str, Any], days: int, now: dt.datetime,
+                force: bool = False) -> tuple[bool, str]:
+    if force:
+        return True, "强制保活"
     last = _parse_ts(state.get("last_success_at"))
     if last is None:
         return True, "无历史成功记录"

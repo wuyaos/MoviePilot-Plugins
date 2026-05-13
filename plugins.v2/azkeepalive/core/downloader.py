@@ -103,7 +103,8 @@ def dl_list_category(instance: Any, category: str) -> list[dict[str, Any]]:
             torrents = qbc.torrents_info(category=category)
             for t in torrents:
                 result.append({"name": t.name, "size": t.size, "state": t.state,
-                               "progress": t.progress, "hash": t.hash})
+                               "progress": t.progress, "hash": t.hash,
+                               "seeding_time": getattr(t, "seeding_time", 0) or 0})
             return result
         trc = getattr(instance, "trc", None)
         if trc:
@@ -113,7 +114,8 @@ def dl_list_category(instance: Any, category: str) -> list[dict[str, Any]]:
                 if category in labels:
                     result.append({"name": t.name, "size": getattr(t, "total_size", 0),
                                    "state": t.status, "progress": t.progress / 100,
-                                   "hash": t.hashString})
+                                   "hash": t.hashString,
+                                   "seeding_time": getattr(t, "secondsSeeding", 0) or 0})
     except Exception as e:
         logger.warning(f"查询下载器种子失败: {e}")
     return result
