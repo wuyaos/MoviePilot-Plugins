@@ -29,6 +29,18 @@
             "v0.1.0": "初始版本：目录映射生成strm，支持CD2下载非视频文件"
         }
     },
+    "AzKeepAlive": {
+        "name": "AnimeZ保活",
+        "description": "定时从AnimeZ私有RSS选种提交qBittorrent，满足90天保活要求",
+        "labels": "保活,AnimeZ,PT,qBittorrent",
+        "version": "1.0.0",
+        "icon": "https://raw.githubusercontent.com/thsrite/MoviePilot-Plugins/main/icons/signin.png",
+        "author": "wuyaos",
+        "level": 2,
+        "history": {
+            "v1.0.0": "初始版本：从青龙脚本转换为MoviePilot插件"
+        }
+    },
     "AutoPtCheckin": {
         "name": "PT站点自动签到",
         "description": "自动签到/登录站点，支持自定义站点和CookieCloud同步，ddddocr验证码识别，curl-cffi绕过CF",

@@ -12,6 +12,7 @@ docs/
 .omx/
 .ace-tool/
 state/
+.claude/
 
 # Distribution / packaging
 .Python
