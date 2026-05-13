@@ -18,7 +18,7 @@ from .core.page import build_page, v_col, v_cron, v_row, v_switch, v_text
 class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时从 AnimeZ 私有 RSS 选种提交 qBittorrent，满足 90 天保活要求"
-    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
+    plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/refresh.png"
     plugin_version = "1.0.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"

@@ -34,7 +34,7 @@
         "description": "定时从AnimeZ私有RSS选种提交qBittorrent，满足90天保活要求",
         "labels": "保活,AnimeZ,PT,qBittorrent",
         "version": "1.0.0",
-        "icon": "https://raw.githubusercontent.com/thsrite/MoviePilot-Plugins/main/icons/signin.png",
+        "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/refresh.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
