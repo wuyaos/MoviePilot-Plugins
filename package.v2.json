@@ -21,7 +21,7 @@
         "description": "生成strm并支持CloudDrive2下载非视频文件，含CD2处理方式配置",
         "labels": "strm,云盘,cd2",
         "version": "0.1.1",
-        "icon": "https://raw.githubusercontent.com/thsrite/MoviePilot-Plugins/main/icons/cloudcompanion.png",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png",
         "author": "wuyaos",
         "level": 1,
         "history": {
@@ -34,7 +34,7 @@
         "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
         "labels": "保活,AnimeZ,PT,qBittorrent",
         "version": "2.1.0",
-        "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/refresh.png",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
@@ -49,7 +49,7 @@
         "description": "自动签到/登录站点，支持自定义站点和CookieCloud同步，ddddocr验证码识别，curl-cffi绕过CF",
         "labels": "签到,PT,CookieCloud,OCR",
         "version": "1.0.0",
-        "icon": "https://raw.githubusercontent.com/thsrite/MoviePilot-Plugins/main/icons/signin.png",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
