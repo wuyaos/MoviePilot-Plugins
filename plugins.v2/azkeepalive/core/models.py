@@ -1,5 +1,5 @@
 # input: 无外部依赖
-# output: FeedItem, QBSettings 数据类
+# output: FeedItem 数据类, format_size, parse_size_bytes
 # pos: 数据模型层，供 keepalive / page 模块使用
 
 from __future__ import annotations
@@ -16,16 +16,6 @@ class FeedItem:
     seeders: int | None
     size_bytes: int | None
     size_text: str
-
-
-@dataclass(frozen=True)
-class QBSettings:
-    """qBittorrent 连接配置"""
-    url: str
-    username: str
-    password: str
-    category: str
-    tags: str
 
 
 def format_size(size_bytes: int | None, fallback: str = "") -> str:

@@ -83,17 +83,18 @@ class AzKeepAlive(_PluginBase):
 
     def _run_task(self):
         from .core.keepalive import run_keepalive
-        from .core.qb_client import get_qb_from_downloader
+        from .core.qb_client import get_downloader_instance
         from .core.rss import get_site_cookie
         if not self._rss_url:
             logger.warning("AnimeZ保活: 缺少 RSS URL"); return
-        qb = get_qb_from_downloader(self._downloader, self._qb_category, self._qb_tags)
-        if not qb or not qb.url:
+        dl_instance = get_downloader_instance(self._downloader)
+        if not dl_instance:
             logger.warning("AnimeZ保活: 下载器未配置或不可用"); return
         state = self.get_data("state") or {}
         cookie = get_site_cookie(self._site_url)
         status, message, state = run_keepalive(
-            rss_url=self._rss_url, qb=qb,
+            rss_url=self._rss_url, downloader_instance=dl_instance,
+            category=self._qb_category, tags=self._qb_tags,
             keepalive_days=self._keepalive_days, min_seeders=self._min_seeders,
             max_items=self._max_items, timeout=self._timeout,
             use_proxy=self._use_proxy, site_url=self._site_url,
