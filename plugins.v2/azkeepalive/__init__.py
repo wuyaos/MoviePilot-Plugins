@@ -184,7 +184,8 @@ class AzKeepAlive(_PluginBase):
                 inst = get_downloader_instance(self._downloader)
                 if inst:
                     dl_torrents = dl_list_category(inst, self._qb_category)
-            except Exception: pass
+            except Exception as e:
+                logger.debug(f"查询下载器种子失败: {e}")
             return build_page(state, self._keepalive_days, dl_torrents)
         except Exception as e:
             logger.error(f"AnimeZ保活详情页失败: {e}")
