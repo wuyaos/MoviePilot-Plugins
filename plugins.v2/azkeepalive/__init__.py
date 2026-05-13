@@ -132,9 +132,10 @@ class AzKeepAlive(_PluginBase):
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         try:
             from app.helper.downloader import DownloaderHelper
-            dl_options = [{"title": n, "value": n}
-                          for n in DownloaderHelper().get_services().keys()]
-        except Exception:
+            services = DownloaderHelper().get_services() or {}
+            dl_options = [{"title": n, "value": n} for n in services.keys()]
+        except Exception as e:
+            logger.debug(f"获取下载器列表失败: {e}")
             dl_options = []
         return [{"component": "VForm", "content": [
             v_row([
