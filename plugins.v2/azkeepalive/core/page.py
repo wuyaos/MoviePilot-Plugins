@@ -1,6 +1,4 @@
-# input: 插件 state (history, last_success_at, last_status)
-# output: Vuetify JSON 详情页组件列表
-# pos: 详情页构建器，供 __init__.py get_page() 调用
+# input: 插件 state (history, user_*, last_*) | output: Vuetify JSON 详情页 | pos: 面板构建
 
 from __future__ import annotations
 
@@ -9,130 +7,138 @@ from typing import Any
 
 
 def build_page(state: dict[str, Any], keepalive_days: int) -> list[dict]:
-    """构建插件详情页 Vuetify JSON"""
-    last_status = state.get("last_status", "未运行")
-    last_success = state.get("last_success_at", "无")
-    last_title = state.get("last_title", "无")
-    last_visit = state.get("last_visit_at", "无")
-    last_checked = state.get("last_checked_at", "无")
-
-    # 计算下次窗口
-    next_window = "未知"
-    if last_success and last_success != "无":
-        try:
-            ts = dt.datetime.fromisoformat(last_success.replace("Z", "+00:00"))
-            nxt = ts + dt.timedelta(days=keepalive_days)
-            next_window = nxt.strftime("%Y-%m-%d %H:%M UTC")
-        except ValueError:
-            pass
-
-    # 状态颜色
-    color_map = {"success": "success", "skipped": "info", "no_candidate": "warning", "failed": "error"}
-    status_color = color_map.get(last_status, "grey")
-
-    # 概览卡片 - 两行
-    row1 = {
-        "component": "VRow", "props": {"class": "mb-2"},
-        "content": [
-            _stat_card("当前状态", last_status, status_color, 3),
-            _stat_card("上次站点访问", last_visit, "primary", 3),
-            _stat_card("上次下载成功", last_success, "success", 3),
-            _stat_card("下次保活窗口", next_window, "info", 3),
-        ],
-    }
-    row2 = {
-        "component": "VRow", "props": {"class": "mb-2"},
-        "content": [
-            _stat_card("上次检查", last_checked, "grey", 4),
-            _stat_card("上次种子", last_title, "grey", 4),
-            _stat_card("保活间隔", f"{keepalive_days} 天", "grey", 4),
-        ],
-    }
-
-    # 用户信息卡片（有 cookie 时才有数据）
-    user_upload = state.get("user_upload", "")
-    user_download = state.get("user_download", "")
-    user_ratio = state.get("user_ratio", "")
-    user_hnr = state.get("user_hnr", "")
-    user_bonus = state.get("user_bonus", "")
-    has_user_info = any([user_upload, user_download, user_ratio])
-
-    if has_user_info:
-        row_user = {
-            "component": "VRow", "props": {"class": "mb-4"},
-            "content": [
-                _stat_card("上传量", user_upload or "N/A", "success", 3),
-                _stat_card("下载量", user_download or "N/A", "error", 3),
-                _stat_card("分享率", user_ratio or "N/A", "info", 3),
-                _stat_card("H&R / 魔力", f"{user_hnr or '-'} / {user_bonus or '-'}", "warning", 3),
-            ],
-        }
-    else:
-        row_user = None
-
-    # 历史表格
-    history = list(reversed(state.get("history", [])[-20:]))
-    if history:
-        rows = [_history_row(ev) for ev in history]
-        table = {
-            "component": "VTable", "props": {"density": "compact", "class": "mt-4"},
-            "content": [
-                {"component": "thead", "content": [
-                    {"component": "tr", "content": [
-                        {"component": "th", "text": "时间"},
-                        {"component": "th", "text": "状态"},
-                        {"component": "th", "text": "详情"},
-                    ]},
-                ]},
-                {"component": "tbody", "content": rows},
-            ],
-        }
-    else:
-        table = {
-            "component": "VAlert",
-            "props": {"type": "info", "variant": "tonal", "text": "暂无运行记录"},
-        }
-
-    result = [row1, row2]
-    if row_user:
-        result.append(row_user)
-    result.append(table)
+    """构建插件详情页"""
+    result = []
+    # 用户信息条（单卡片横排）
+    user_row = _build_user_bar(state)
+    if user_row:
+        result.append(user_row)
+    # 保活状态卡片
+    result.append(_build_status_row(state, keepalive_days))
+    # 运行记录表格
+    result.append(_build_history_table(state))
     return result
 
 
-def _stat_card(label: str, value: str, color: str, cols: int) -> dict:
-    return {
-        "component": "VCol", "props": {"cols": 12, "md": cols},
-        "content": [{
-            "component": "VCard", "props": {"variant": "tonal"},
-            "content": [{
-                "component": "VCardText",
-                "content": [
+def _build_user_bar(state: dict[str, Any]) -> dict | None:
+    """用户信息横条（类似 AZ ratio-bar）"""
+    fields = [
+        ("upload", "mdi-arrow-up", "success"), ("download", "mdi-arrow-down", "warning"),
+        ("ratio", "mdi-percent-circle", "info"), ("buffer", "mdi-database", "success"),
+        ("seeds", "mdi-upload", "success"), ("leeches", "mdi-download", "warning"),
+        ("bonus", "mdi-star", "amber"), ("hnr", "mdi-alert", "error"),
+        ("reseed", "mdi-refresh", "grey"),
+    ]
+    chips = []
+    for key, icon, color in fields:
+        val = state.get(f"user_{key}", "")
+        if not val:
+            continue
+        label = {"upload": "Up", "download": "Down", "ratio": "R", "buffer": "Buf",
+                 "seeds": "S", "leeches": "L", "bonus": "BP", "hnr": "H&R",
+                 "reseed": "Reseed"}.get(key, key)
+        chips.append({"component": "VChip", "props": {
+            "color": color, "size": "small", "variant": "tonal",
+            "class": "mr-1 mb-1", "prepend-icon": icon,
+        }, "text": f"{label}: {val}"})
+    if not chips:
+        return None
+    return {"component": "VCard", "props": {"variant": "flat", "class": "mb-3 pa-3"},
+            "content": [{"component": "div", "props": {
+                "class": "d-flex flex-wrap align-center gap-1"}, "content": chips}]}
+
+
+def _build_status_row(state: dict[str, Any], keepalive_days: int) -> dict:
+    """保活状态 + 下载器状态（4列卡片）"""
+    last_status = state.get("last_status", "未运行")
+    color_map = {"success": "success", "skipped": "info",
+                 "no_candidate": "warning", "failed": "error"}
+
+    # 计算下次窗口
+    next_window = "未知"
+    last_s = state.get("last_success_at", "")
+    if last_s:
+        try:
+            ts = dt.datetime.fromisoformat(last_s.replace("Z", "+00:00"))
+            nxt = ts + dt.timedelta(days=keepalive_days)
+            next_window = _fmt_time(nxt.isoformat())
+        except ValueError:
+            pass
+
+    # 下载器状态
+    dl_status = state.get("last_dl_status", "未知")
+
+    return {"component": "VRow", "props": {"class": "mb-3"}, "content": [
+        _tonal_card("当前状态", last_status, color_map.get(last_status, "grey"), "mdi-pulse", 3),
+        _tonal_card("上次访问", _fmt_time(state.get("last_visit_at", "")), "primary", "mdi-web", 3),
+        _tonal_card("上次下载", _fmt_time(last_s), "success", "mdi-download-circle", 3),
+        _tonal_card("下次窗口", next_window, "info", "mdi-calendar-clock", 3),
+    ]}
+
+
+def _tonal_card(label: str, value: str, color: str, icon: str, cols: int) -> dict:
+    return {"component": "VCol", "props": {"cols": 6, "md": cols}, "content": [{
+        "component": "VCard", "props": {"variant": "tonal", "color": color},
+        "content": [{"component": "VCardText", "props": {"class": "pa-3"},
+            "content": [
+                {"component": "div", "props": {"class": "d-flex align-center"},
+                 "content": [
+                    {"component": "VIcon", "props": {
+                        "icon": icon, "size": "small", "class": "mr-2"}},
                     {"component": "span", "props": {"class": "text-caption"}, "text": label},
-                    {"component": "div", "props": {"class": f"text-h6 text-{color} mt-1"},
-                     "text": _truncate(value, 40)},
-                ],
-            }],
-        }],
-    }
+                ]},
+                {"component": "div", "props": {"class": "text-subtitle-1 font-weight-bold mt-1"},
+                 "text": _truncate(value or "无", 30)},
+            ]}],
+    }]}
+
+
+def _build_history_table(state: dict[str, Any]) -> dict:
+    """运行记录表格"""
+    history = list(reversed(state.get("history", [])[-20:]))
+    if not history:
+        return {"component": "VAlert", "props": {
+            "type": "info", "variant": "tonal", "text": "暂无运行记录", "class": "mt-2"}}
+    rows = [_history_row(ev) for ev in history]
+    return {"component": "VCard", "props": {"variant": "flat", "class": "mt-2"}, "content": [
+        {"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"}, "text": "运行记录"},
+        {"component": "VTable", "props": {"density": "compact"}, "content": [
+            {"component": "thead", "content": [{"component": "tr", "content": [
+                {"component": "th", "props": {"class": "text-caption"}, "text": "时间"},
+                {"component": "th", "props": {"class": "text-caption"}, "text": "状态"},
+                {"component": "th", "props": {"class": "text-caption"}, "text": "详情"},
+            ]}]},
+            {"component": "tbody", "content": rows},
+        ]},
+    ]}
 
 
 def _history_row(ev: dict[str, Any]) -> dict:
     status = ev.get("status", "")
-    color_map = {"success": "success", "skipped": "info", "no_candidate": "warning", "failed": "error"}
-    color = color_map.get(status, "grey")
+    color_map = {"success": "success", "skipped": "info",
+                 "no_candidate": "warning", "failed": "error"}
     detail = ev.get("title") or ev.get("reason") or ""
-    return {
-        "component": "tr",
-        "content": [
-            {"component": "td", "props": {"class": "text-caption"}, "text": ev.get("time", "")},
-            {"component": "td", "content": [
-                {"component": "VChip", "props": {"color": color, "size": "x-small", "variant": "flat"},
-                 "text": status},
-            ]},
-            {"component": "td", "props": {"class": "text-caption"}, "text": _truncate(detail, 60)},
-        ],
-    }
+    return {"component": "tr", "content": [
+        {"component": "td", "props": {"class": "text-caption"},
+         "text": _fmt_time(ev.get("time", ""))},
+        {"component": "td", "content": [{"component": "VChip", "props": {
+            "color": color_map.get(status, "grey"), "size": "x-small", "variant": "flat",
+        }, "text": status}]},
+        {"component": "td", "props": {"class": "text-caption"},
+         "text": _truncate(detail, 50)},
+    ]}
+
+
+def _fmt_time(iso_str: str) -> str:
+    """ISO 时间 → 'M月D日 HH:MM'"""
+    if not iso_str or iso_str == "无":
+        return "无"
+    try:
+        ts = dt.datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        local = ts.astimezone()
+        return f"{local.month}月{local.day}日 {local.strftime('%H:%M')}"
+    except (ValueError, OSError):
+        return iso_str[:16]
 
 
 def _truncate(text: str, max_len: int) -> str:
