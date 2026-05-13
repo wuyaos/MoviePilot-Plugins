@@ -92,14 +92,44 @@ def get_qb_from_downloader(downloader_name: str, category: str, tags: str) -> QB
     try:
         from app.helper.downloader import DownloaderHelper
         svc = DownloaderHelper().get_service(name=downloader_name)
-        if not svc or not svc.instance:
-            logger.warning(f"下载器 {downloader_name} 不可用")
+        if not svc:
+            logger.warning(f"下载器 {downloader_name} 未找到")
             return None
-        cfg = svc.instance.get_config() if hasattr(svc.instance, "get_config") else {}
-        return QBSettings(
-            url=str(cfg.get("host") or cfg.get("url") or "").rstrip("/"),
-            username=str(cfg.get("username") or ""), password=str(cfg.get("password") or ""),
-            category=category, tags=tags)
+        inst = svc.instance
+        if not inst:
+            logger.warning(f"下载器 {downloader_name} 实例为空")
+            return None
+        # 尝试多种方式获取连接信息
+        url = ""
+        username = ""
+        password = ""
+        # 方式1: get_config()
+        if hasattr(inst, "get_config"):
+            cfg = inst.get_config() or {}
+            logger.debug(f"下载器 config keys: {list(cfg.keys()) if isinstance(cfg, dict) else type(cfg)}")
+            if isinstance(cfg, dict):
+                url = str(cfg.get("host") or cfg.get("url") or cfg.get("qbhost") or "")
+                username = str(cfg.get("username") or cfg.get("qbuser") or "")
+                password = str(cfg.get("password") or cfg.get("qbpass") or "")
+        # 方式2: 直接属性
+        if not url:
+            for attr in ("host", "hostname", "url", "_host", "_url"):
+                if hasattr(inst, attr):
+                    url = str(getattr(inst, attr, ""))
+                    if url:
+                        break
+        # 方式3: svc 本身的配置
+        if not url and hasattr(svc, "config"):
+            sc = svc.config if isinstance(svc.config, dict) else {}
+            url = str(sc.get("host") or sc.get("url") or "")
+            username = username or str(sc.get("username") or "")
+            password = password or str(sc.get("password") or "")
+        if not url:
+            logger.warning(f"下载器 {downloader_name} 无法获取连接地址, "
+                           f"inst attrs: {[a for a in dir(inst) if not a.startswith('__')][:20]}")
+            return None
+        return QBSettings(url=url.rstrip("/"), username=username,
+                          password=password, category=category, tags=tags)
     except Exception as e:
         logger.warning(f"获取下载器配置失败: {e}")
         return None
