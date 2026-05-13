@@ -12,10 +12,10 @@ def build_page(state: dict[str, Any], keepalive_days: int,
     result = []
     # 1. 用户信息（无数据时显示占位）
     user_row = _build_user_bar(state)
-    result.append(user_row or {"component": "VCard", "props": {
-        "variant": "flat", "class": "mb-3 pa-3"},
-        "content": [{"component": "span", "props": {"class": "text-caption text-grey"},
-                      "text": "用户信息：等待首次运行后从站点获取（需CookieCloud配置）"}]})
+    result.append(user_row or {"component": "VAlert", "props": {
+        "type": "info", "variant": "tonal", "density": "compact", "class": "mb-3",
+        "text": "用户信息：等待首次运行后从站点获取（需 CookieCloud 配置 AnimeZ 域名）",
+    }})
     # 2. 保活状态
     result.append(_build_status_row(state, keepalive_days))
     # 3. 下载器种子（始终显示）
@@ -82,18 +82,30 @@ def _build_status_row(state: dict[str, Any], keepalive_days: int) -> dict:
 
 
 def _tonal_card(label: str, value: str, color: str, icon: str, cols: int) -> dict:
+    # 时间值（含"月日 HH:MM"）拆为两行显示
+    if "月" in value and " " in value:
+        date_part, time_part = value.split(" ", 1)
+        value_node = {"component": "div", "content": [
+            {"component": "div", "props": {"class": "text-subtitle-2 font-weight-bold"},
+             "text": date_part},
+            {"component": "div", "props": {"class": "text-caption text-grey"},
+             "text": time_part},
+        ]}
+    else:
+        value_node = {"component": "div",
+                      "props": {"class": "text-subtitle-1 font-weight-bold"},
+                      "text": _truncate(value or "无", 20)}
     return {"component": "VCol", "props": {"cols": 6, "md": cols}, "content": [{
-        "component": "VCard", "props": {"variant": "tonal", "color": color},
-        "content": [{"component": "VCardText", "props": {"class": "pa-3"},
+        "component": "VCard", "props": {"variant": "tonal", "color": color, "density": "compact"},
+        "content": [{"component": "VCardText", "props": {"class": "pa-2"},
             "content": [
-                {"component": "div", "props": {"class": "d-flex align-center"},
+                {"component": "div", "props": {"class": "d-flex align-center mb-1"},
                  "content": [
                     {"component": "VIcon", "props": {
-                        "icon": icon, "size": "small", "class": "mr-2"}},
+                        "icon": icon, "size": "x-small", "class": "mr-1"}},
                     {"component": "span", "props": {"class": "text-caption"}, "text": label},
                 ]},
-                {"component": "div", "props": {"class": "text-subtitle-1 font-weight-bold mt-1"},
-                 "text": _truncate(value or "无", 30)},
+                value_node,
             ]}],
     }]}
 
