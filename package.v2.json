@@ -1,60 +1,61 @@
 {
-    "MediaCoverGeneratorCustom": {
-        "name": "媒体库封面生成（自用版）",
-        "description": "自动生成媒体库封面，支持库白名单、合集黑名单过滤、4种动画风格、Emby和Jellyfin",
-        "labels": "封面,媒体库",
-        "version": "0.9.7",
-        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png",
-        "author": "wuyaos",
-        "level": 1,
-        "history": {
-            "v0.9.7": "版本号更新",
-            "v0.9.6": "新增手动指定媒体库重生成、Dry Run、失败重试与统计聚合，支持最后一集更新时间排序",
-            "v0.9.4": "修复用户黑名单合集过滤：替换失效API端点，修复limit=20导致的漏过滤问题",
-            "v0.9.3": "UI优化：库配置字段分组、关键bug修复（libraries未定义、状态泄漏）",
-            "v0.9.1": "修复导入错误和包结构问题",
-            "v0.9.0": "初始版本：库白名单、合集黑名单、4种动画风格"
-        }
-    },
-    "CloudStrmCompanionCustom": {
-        "name": "云盘Strm助手（CD2增强）",
-        "description": "生成strm并支持CloudDrive2下载非视频文件，含CD2处理方式配置",
-        "labels": "strm,云盘,cd2",
-        "version": "0.1.1",
-        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png",
-        "author": "wuyaos",
-        "level": 1,
-        "history": {
-            "v0.1.1": "新增cd2_handle_mode配置，默认使用GetDownloadUrlPath下载非视频，兼容旧cd2_use_grpc_lookup",
-            "v0.1.0": "初始版本：目录映射生成strm，支持CD2下载非视频文件"
-        }
-    },
-    "AzKeepAlive": {
-        "name": "AnimeZ保活",
-        "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
-        "labels": "保活,AnimeZ,PT,qBittorrent",
-        "version": "2.2.0",
-        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
-        "author": "wuyaos",
-        "level": 2,
-        "history": {
-            "v2.2.0": "修复用户信息解析（兼容嵌套div/BS4属性/HTML实体），修复插件日志404",
-            "v2.1.0": "面板重构：紧凑用户信息条、tonal状态卡片、中文时间、分页扫描种子",
-            "v2.0.0": "重构：页面解析替代RSS，支持qB/TR多下载器，freeleech筛选，体积上限",
-            "v1.1.0": "使用MP下载器选择，站点定时访问，每天随机执行，保活策略说明",
-            "v1.0.0": "初始版本：从青龙脚本转换为MoviePilot插件"
-        }
-    },
-    "AutoPtCheckin": {
-        "name": "PT站点自动签到",
-        "description": "自动签到/登录站点，支持自定义站点和CookieCloud同步，ddddocr验证码识别，curl-cffi绕过CF",
-        "labels": "签到,PT,CookieCloud,OCR",
-        "version": "1.0.0",
-        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
-        "author": "wuyaos",
-        "level": 2,
-        "history": {
-            "v1.0.0": "初始版本：基于autosignin，合并CookieCloud同步，新增siqi站点，ddddocr增强OCR，curl-cffi绕过CF"
-        }
+  "MediaCoverGeneratorCustom": {
+    "name": "媒体库封面生成（自用版）",
+    "description": "自动生成媒体库封面，支持库白名单、合集黑名单过滤、4种动画风格、Emby和Jellyfin",
+    "labels": "封面,媒体库",
+    "version": "0.9.7",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png",
+    "author": "wuyaos",
+    "level": 1,
+    "history": {
+      "v0.9.7": "版本号更新",
+      "v0.9.6": "新增手动指定媒体库重生成、Dry Run、失败重试与统计聚合，支持最后一集更新时间排序",
+      "v0.9.4": "修复用户黑名单合集过滤：替换失效API端点，修复limit=20导致的漏过滤问题",
+      "v0.9.3": "UI优化：库配置字段分组、关键bug修复（libraries未定义、状态泄漏）",
+      "v0.9.1": "修复导入错误和包结构问题",
+      "v0.9.0": "初始版本：库白名单、合集黑名单、4种动画风格"
     }
+  },
+  "CloudStrmCompanionCustom": {
+    "name": "云盘Strm助手（CD2增强）",
+    "description": "生成strm并支持CloudDrive2下载非视频文件，含CD2处理方式配置",
+    "labels": "strm,云盘,cd2",
+    "version": "0.1.1",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png",
+    "author": "wuyaos",
+    "level": 1,
+    "history": {
+      "v0.1.1": "新增cd2_handle_mode配置，默认使用GetDownloadUrlPath下载非视频，兼容旧cd2_use_grpc_lookup",
+      "v0.1.0": "初始版本：目录映射生成strm，支持CD2下载非视频文件"
+    }
+  },
+  "AzKeepAlive": {
+    "name": "AnimeZ保活",
+    "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
+    "labels": "保活,AnimeZ,PT,qBittorrent",
+    "version": "2.3.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
+    "author": "wuyaos",
+    "level": 2,
+    "history": {
+      "v2.2.0": "修复用户信息解析（兼容嵌套div/BS4属性/HTML实体），修复插件日志404",
+      "v2.1.0": "面板重构：紧凑用户信息条、tonal状态卡片、中文时间、分页扫描种子",
+      "v2.0.0": "重构：页面解析替代RSS，支持qB/TR多下载器，freeleech筛选，体积上限",
+      "v1.1.0": "使用MP下载器选择，站点定时访问，每天随机执行，保活策略说明",
+      "v1.0.0": "初始版本：从青龙脚本转换为MoviePilot插件",
+      "v2.3.0": "面板重构：等高tonal卡片、用户名chip、H&R做种进度列、语义化运行记录；用户名多模式提取兼容Tabler UI；强制保活一次性开关"
+    }
+  },
+  "AutoPtCheckin": {
+    "name": "PT站点自动签到",
+    "description": "自动签到/登录站点，支持自定义站点和CookieCloud同步，ddddocr验证码识别，curl-cffi绕过CF",
+    "labels": "签到,PT,CookieCloud,OCR",
+    "version": "1.0.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
+    "author": "wuyaos",
+    "level": 2,
+    "history": {
+      "v1.0.0": "初始版本：基于autosignin，合并CookieCloud同步，新增siqi站点，ddddocr增强OCR，curl-cffi绕过CF"
+    }
+  }
 }
