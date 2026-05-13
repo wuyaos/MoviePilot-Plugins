@@ -152,26 +152,36 @@ def visit_site(
 
 
 def _parse_user_stats(html: str) -> dict[str, str]:
-    """从 ratio-bar 解析用户信息"""
+    """从 ratio-bar 解析用户信息，兼容 HTML entity / 多行 SVG / a/span"""
+    import html as html_lib
     stats: dict[str, str] = {}
-    pattern = re.compile(
-        r'data-bs-original-title="([^"]+)".*?</svg>\s*(.*?)\s*</(?:span|a)>',
-        re.DOTALL
-    )
+    # 用位置窗口代替懒惰闭合标签匹配，避免 li 内嵌 div 导致提前截断
+    bar_m = re.search(r'<div[^>]+class="[^"]*ratio-bar[^"]*"', html)
+    source = html[bar_m.start():bar_m.start() + 6000] if bar_m else html
+    li_blocks = re.findall(r'<li\b[\s\S]*?</li>', source)
     key_map = {
         "Uploaded": "upload", "Downloaded": "download", "Ratio": "ratio",
         "Buffer (Upload - Download)": "buffer", "Active Seeds": "seeds",
         "Active Leeches": "leeches", "Bonus Points": "bonus",
-        "Hit &amp; Run": "hnr", "Reseed Requests": "reseed",
+        "Hit & Run": "hnr", "Reseed Requests": "reseed",
     }
-    for m in pattern.finditer(html):
-        key, val = m.group(1).strip(), m.group(2).strip()
-        for prefix in ("BP: ", "H&amp;R: ", "Reseed: "):
-            if val.startswith(prefix):
-                val = val[len(prefix):].strip()
+    for block in li_blocks:
+        title_m = re.search(r'(?:data-bs-original-title|data-original-title|aria-label|title)="([^"]+)"', block)
+        if not title_m:
+            continue
+        key = html_lib.unescape(title_m.group(1).strip())
+        mapped = key_map.get(key)
+        if not mapped:
+            continue
+        text = re.sub(r'<svg[\s\S]*?</svg>', ' ', block)
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = html_lib.unescape(re.sub(r'\s+', ' ', text)).strip()
+        for prefix in ("BP:", "H&R:", "Reseed:"):
+            if text.startswith(prefix):
+                text = text[len(prefix):].strip()
                 break
-        if key in key_map and val:
-            stats[key_map[key]] = val
+        if text:
+            stats[mapped] = text
     if stats:
-        logger.debug(f"AZ用户信息: {stats}")
+        logger.info(f"AZ用户信息解析成功: {stats}")
     return stats

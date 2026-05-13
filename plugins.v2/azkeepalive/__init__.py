@@ -43,6 +43,7 @@ class AzKeepAlive(_PluginBase):
 
     def init_plugin(self, config: dict = None):
         self.stop_service()
+        self._ensure_plugin_log_file()
         config = config or {}
         self._enabled = bool(config.get("enabled"))
         self._notify = bool(config.get("notify", True))
@@ -67,6 +68,16 @@ class AzKeepAlive(_PluginBase):
 
     def get_state(self) -> bool:
         return self._enabled
+
+    def _ensure_plugin_log_file(self):
+        """确保插件日志文件存在，避免前端日志页 404"""
+        try:
+            from app.core.config import settings
+            path = settings.LOG_PATH / "plugins" / "azkeepalive.log"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch(exist_ok=True)
+        except Exception:
+            pass
 
     def _save_config(self):
         self.update_config({
