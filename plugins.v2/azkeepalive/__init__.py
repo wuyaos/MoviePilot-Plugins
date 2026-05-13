@@ -130,6 +130,7 @@ class AzKeepAlive(_PluginBase):
                  "kwargs": {"hour": t.hour, "minute": t.minute}} for t in triggers]
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        from app.helper.downloader import DownloaderHelper
         dl_options = [{"title": n, "value": n}
                       for n in DownloaderHelper().get_services().keys()]
         return [{"component": "VForm", "content": [
