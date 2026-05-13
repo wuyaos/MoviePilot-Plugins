@@ -33,11 +33,12 @@
         "name": "AnimeZ保活",
         "description": "定时从AnimeZ私有RSS选种提交qBittorrent，满足90天保活要求",
         "labels": "保活,AnimeZ,PT,qBittorrent",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/refresh.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.1.0": "使用MP下载器选择，站点定时访问，每天随机执行，保活策略说明",
             "v1.0.0": "初始版本：从青龙脚本转换为MoviePilot插件"
         }
     },

@@ -125,6 +125,9 @@ def v_col(md: int, content: dict) -> dict:
 def v_switch(model: str, label: str) -> dict:
     return {"component": "VSwitch", "props": {"model": model, "label": label}}
 
+def v_select(model: str, label: str, items: list) -> dict:
+    return {"component": "VSelect", "props": {"model": model, "label": label, "items": items}}
+
 def v_text(model: str, label: str, placeholder: str = "", input_type: str = "") -> dict:
     props: dict = {"model": model, "label": label}
     if placeholder:

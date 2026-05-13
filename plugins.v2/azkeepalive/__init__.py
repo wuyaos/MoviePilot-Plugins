@@ -7,19 +7,20 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import settings as app_settings
+from app.helper.downloader import DownloaderHelper
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import NotificationType
+from app.utils.timer import TimerUtils
 
-
-from .core.page import build_page, v_col, v_cron, v_row, v_switch, v_text
+from .core.page import build_page, v_col, v_cron, v_row, v_select, v_switch, v_text
 
 
 class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
-    plugin_desc = "定时从 AnimeZ 私有 RSS 选种提交 qBittorrent，满足 90 天保活要求"
+    plugin_desc = "定时访问 AnimeZ 站点并从 RSS 选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "1.0.0"
+    plugin_version = "1.1.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -28,16 +29,14 @@ class AzKeepAlive(_PluginBase):
 
     _enabled = False
     _notify = True
-    _cron = "17 3 * * 0"
+    _cron = ""
     _onlyonce = False
     _rss_url = ""
-    _site_url = ""
-    _qb_url = ""
-    _qb_username = ""
-    _qb_password = ""
+    _site_url = "https://animez.to/"
+    _downloader = ""
     _qb_category = "AnimeZ"
     _qb_tags = "keepalive"
-    _keepalive_days = 75
+    _keepalive_days = 30
     _min_seeders = 5
     _max_items = 50
     _timeout = 30
@@ -49,25 +48,21 @@ class AzKeepAlive(_PluginBase):
         config = config or {}
         self._enabled = bool(config.get("enabled"))
         self._notify = bool(config.get("notify", True))
-        self._cron = str(config.get("cron") or "17 3 * * 0").strip()
+        self._cron = str(config.get("cron") or "").strip()
         self._onlyonce = bool(config.get("onlyonce"))
         self._rss_url = str(config.get("rss_url") or "").strip()
-        self._site_url = str(config.get("site_url") or "").strip().rstrip("/")
-        self._qb_url = str(config.get("qb_url") or "").strip().rstrip("/")
-        self._qb_username = str(config.get("qb_username") or "")
-        self._qb_password = str(config.get("qb_password") or "")
+        self._site_url = str(config.get("site_url") or "https://animez.to/").strip().rstrip("/")
+        self._downloader = str(config.get("downloader") or "")
         self._qb_category = str(config.get("qb_category") or "AnimeZ")
         self._qb_tags = str(config.get("qb_tags") or "keepalive")
-        self._keepalive_days = int(config.get("keepalive_days") or 75)
+        self._keepalive_days = int(config.get("keepalive_days") or 30)
         self._min_seeders = int(config.get("min_seeders") or 5)
         self._max_items = int(config.get("max_items") or 50)
         self._timeout = int(config.get("timeout") or 30)
         self._use_proxy = bool(config.get("use_proxy"))
-
         if self._onlyonce:
             self._scheduler = BackgroundScheduler(timezone=app_settings.TZ)
-            self._scheduler.add_job(self._run_task, "date",
-                                    name="AnimeZ保活-立即执行")
+            self._scheduler.add_job(self._run_task, "date", name="AnimeZ保活-立即执行")
             self._scheduler.start()
             self._onlyonce = False
             self._save_config()
@@ -78,28 +73,38 @@ class AzKeepAlive(_PluginBase):
     def _save_config(self):
         self.update_config({
             "enabled": self._enabled, "notify": self._notify,
-            "cron": self._cron, "onlyonce": False, "rss_url": self._rss_url,
-            "site_url": self._site_url, "qb_url": self._qb_url,
-            "qb_password": self._qb_password, "qb_category": self._qb_category,
-            "qb_tags": self._qb_tags, "keepalive_days": self._keepalive_days,
-            "min_seeders": self._min_seeders, "max_items": self._max_items,
-            "timeout": self._timeout, "use_proxy": self._use_proxy,
+            "cron": self._cron, "onlyonce": False,
+            "rss_url": self._rss_url, "site_url": self._site_url,
+            "downloader": self._downloader,
+            "qb_category": self._qb_category, "qb_tags": self._qb_tags,
+            "keepalive_days": self._keepalive_days, "min_seeders": self._min_seeders,
+            "max_items": self._max_items, "timeout": self._timeout,
+            "use_proxy": self._use_proxy,
         })
+
+    def _get_qb_settings(self):
+        """从 MoviePilot 下载器获取 qB 连接信息"""
+        from .core.models import QBSettings
+        if not self._downloader:
+            return None
+        svc = DownloaderHelper().get_service(name=self._downloader)
+        if not svc or not svc.instance:
+            logger.warning(f"AnimeZ保活: 下载器 {self._downloader} 不可用")
+            return None
+        cfg = svc.instance.get_config() if hasattr(svc.instance, "get_config") else {}
+        return QBSettings(
+            url=str(cfg.get("host") or cfg.get("url") or "").rstrip("/"),
+            username=str(cfg.get("username") or ""), password=str(cfg.get("password") or ""),
+            category=self._qb_category, tags=self._qb_tags)
 
     def _run_task(self):
         from .core.keepalive import run_keepalive
-        from .core.models import QBSettings
-
-        if not self._rss_url or not self._qb_url:
-            logger.warning("AnimeZ保活: 缺少 RSS URL 或 qBittorrent URL")
-            return
-
+        if not self._rss_url:
+            logger.warning("AnimeZ保活: 缺少 RSS URL"); return
+        qb = self._get_qb_settings()
+        if not qb or not qb.url:
+            logger.warning("AnimeZ保活: 下载器未配置或不可用"); return
         state = self.get_data("state") or {}
-        qb = QBSettings(
-            url=self._qb_url, username=self._qb_username,
-            password=self._qb_password, category=self._qb_category,
-            tags=self._qb_tags,
-        )
         status, message, state = run_keepalive(
             rss_url=self._rss_url, qb=qb,
             keepalive_days=self._keepalive_days, min_seeders=self._min_seeders,
@@ -108,13 +113,9 @@ class AzKeepAlive(_PluginBase):
         )
         self.save_data("state", state)
         logger.info(f"AnimeZ保活: [{status}] {message}")
-
         if self._notify and status != "skipped":
-            self.post_message(
-                title="【AnimeZ保活】",
-                mtype=NotificationType.SiteMessage,
-                text=message,
-            )
+            self.post_message(title="【AnimeZ保活】",
+                              mtype=NotificationType.SiteMessage, text=message)
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -124,21 +125,25 @@ class AzKeepAlive(_PluginBase):
         return []
 
     def get_service(self) -> List[Dict[str, Any]]:
-        if not self._enabled or not self._cron:
+        if not self._enabled:
             return []
-        try:
-            return [{
-                "id": "AzKeepAlive",
-                "name": "AnimeZ保活定时任务",
-                "trigger": CronTrigger.from_crontab(self._cron),
-                "func": self._run_task,
-                "kwargs": {},
-            }]
-        except Exception as e:
-            logger.error(f"AnimeZ保活 cron 配置错误: {e}")
-            return []
+        if self._cron:
+            try:
+                return [{"id": "AzKeepAlive", "name": "AnimeZ保活",
+                         "trigger": CronTrigger.from_crontab(self._cron),
+                         "func": self._run_task, "kwargs": {}}]
+            except Exception as e:
+                logger.error(f"AnimeZ保活 cron 错误: {e}")
+        # 无 cron 时每天随机执行一次（9-23点间）
+        triggers = TimerUtils.random_scheduler(
+            num_executions=1, begin_hour=9, end_hour=23, min_interval=60, max_interval=120)
+        return [{"id": f"AzKeepAlive|{t.hour}:{t.minute}", "name": "AnimeZ保活",
+                 "trigger": "cron", "func": self._run_task,
+                 "kwargs": {"hour": t.hour, "minute": t.minute}} for t in triggers]
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        dl_options = [{"title": n, "value": n}
+                      for n in DownloaderHelper().get_services().keys()]
         return [{"component": "VForm", "content": [
             v_row([
                 v_col(3, v_switch("enabled", "启用插件")),
@@ -147,38 +152,32 @@ class AzKeepAlive(_PluginBase):
                 v_col(3, v_switch("use_proxy", "使用代理")),
             ]),
             v_row([
-                v_col(6, v_text("rss_url", "AnimeZ RSS URL", "https://animez.to/your-private-rss")),
-                v_col(6, v_text("site_url", "站点访问地址", "https://animez.to/")),
+                v_col(6, v_text("rss_url", "RSS 地址", "https://animez.to/your-private-rss")),
+                v_col(6, v_text("site_url", "站点地址（定时访问）", "https://animez.to/")),
             ]),
             v_row([
-                v_col(6, v_text("qb_url", "qBittorrent 地址", "http://127.0.0.1:8080")),
-                v_col(3, v_text("qb_username", "qB 用户名", "留空=无认证")),
-                v_col(3, v_text("qb_password", "qB 密码", "", "password")),
+                v_col(4, v_select("downloader", "下载器", dl_options)),
+                v_col(4, v_text("qb_category", "下载分类")),
+                v_col(4, v_text("qb_tags", "下载标签")),
             ]),
             v_row([
-                v_col(3, v_text("qb_category", "qB 分类")),
-                v_col(3, v_text("qb_tags", "qB 标签")),
-                v_col(3, v_cron("cron", "执行周期", "17 3 * * 0")),
-                v_col(3, v_text("keepalive_days", "保活间隔(天)")),
-            ]),
-            v_row([
+                v_col(4, v_cron("cron", "执行周期", "留空=每天随机一次")),
+                v_col(4, v_text("keepalive_days", "保活间隔(天)")),
                 v_col(4, v_text("min_seeders", "最小做种数")),
-                v_col(4, v_text("max_items", "最大扫描条目")),
-                v_col(4, v_text("timeout", "超时(秒)")),
             ]),
             v_row([v_col(12, {"component": "VAlert", "props": {
                 "type": "info", "variant": "tonal",
-                "text": "AnimeZ 要求 90 天内至少下载一个种子。插件按 cron 周期检查 RSS，"
-                        "筛选做种数 >= 阈值且体积最小的种子，提交到 qBittorrent。"
-                        "保活间隔建议 75 天，留 15 天容错。"
+                "text": "AZ保活策略：AnimeZ 要求每 90 天至少下载 1 个种子，否则账号将被禁用。"
+                        "本插件每天定时访问站点模拟活跃，并在保活窗口到期前自动从 RSS 筛选"
+                        "体积最小、做种数达标的种子提交到下载器。"
+                        "默认 30 天一次下载（留 60 天容错），执行周期留空则每天 9-23 点随机执行。"
             }})]),
         ]}], {
-            "enabled": False, "notify": True, "cron": "17 3 * * 0",
-            "onlyonce": False, "rss_url": "", "site_url": "",
-            "qb_url": "", "qb_username": "", "qb_password": "",
-            "qb_category": "AnimeZ", "qb_tags": "keepalive",
-            "keepalive_days": 75, "min_seeders": 5,
-            "max_items": 50, "timeout": 30, "use_proxy": False,
+            "enabled": False, "notify": True, "cron": "", "onlyonce": False,
+            "rss_url": "", "site_url": "https://animez.to/",
+            "downloader": "", "qb_category": "AnimeZ", "qb_tags": "keepalive",
+            "keepalive_days": 30, "min_seeders": 5, "max_items": 50,
+            "timeout": 30, "use_proxy": False,
         }
 
     def get_page(self) -> List[dict]:
