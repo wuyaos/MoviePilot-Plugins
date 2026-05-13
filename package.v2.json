@@ -31,13 +31,14 @@
     },
     "AzKeepAlive": {
         "name": "AnimeZ保活",
-        "description": "定时从AnimeZ私有RSS选种提交qBittorrent，满足90天保活要求",
+        "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
         "labels": "保活,AnimeZ,PT,qBittorrent",
-        "version": "1.1.0",
+        "version": "2.0.0",
         "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/refresh.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v2.0.0": "重构：页面解析替代RSS，支持qB/TR多下载器，freeleech筛选，体积上限",
             "v1.1.0": "使用MP下载器选择，站点定时访问，每天随机执行，保活策略说明",
             "v1.0.0": "初始版本：从青龙脚本转换为MoviePilot插件"
         }

@@ -165,4 +165,5 @@ def v_cron(model: str, label: str, placeholder: str = "") -> dict:
     props: dict = {"model": model, "label": label}
     if placeholder:
         props["placeholder"] = placeholder
+    props["hint"] = "5位cron表达式，留空则每天9-23点随机执行一次"
     return {"component": "VCronField", "props": props}
