@@ -113,18 +113,74 @@ def _val_from_entry(entry: Any, names: set[str]) -> Any:
     return None
 
 
-def visit_site(site_url: str, timeout: int = 30, proxies: dict | None = None) -> bool:
-    """访问站点首页，模拟用户活跃。返回是否成功。"""
-    from app.utils.http import RequestUtils
+def get_site_cookie(site_url: str) -> str:
+    """从 CookieCloud 获取站点 Cookie"""
+    if not site_url:
+        return ""
     try:
+        from urllib.parse import urlparse
+        from app.helper.cookiecloud import CookieCloudHelper
+        cookies, _ = CookieCloudHelper().download()
+        if not cookies:
+            return ""
+        domain = urlparse(site_url).netloc
+        for d, c in cookies.items():
+            if domain.endswith(d):
+                logger.debug(f"CookieCloud 匹配到 {domain} 的 Cookie")
+                return c
+    except Exception as e:
+        logger.debug(f"CookieCloud 获取失败: {e}")
+    return ""
+
+
+def visit_site(
+    site_url: str, cookie: str = "", timeout: int = 30, proxies: dict | None = None
+) -> dict[str, Any]:
+    """访问站点首页，解析用户信息。返回 {"ok": bool, ...stats}"""
+    from app.utils.http import RequestUtils
+    result: dict[str, Any] = {"ok": False}
+    try:
+        headers = {**REQUEST_HEADERS}
+        if cookie:
+            headers["Cookie"] = cookie
         res = RequestUtils(
-            headers=REQUEST_HEADERS, proxies=proxies, timeout=timeout,
+            headers=headers, proxies=proxies, timeout=timeout,
         ).get_res(url=site_url)
-        if res and res.status_code == 200:
-            logger.info(f"AZ站点访问成功: {site_url}")
-            return True
-        code = res.status_code if res else "无响应"
-        logger.warning(f"AZ站点访问异常: {site_url} [{code}]")
+        if not res or res.status_code != 200:
+            logger.warning(f"AZ站点访问异常: {site_url} [{res.status_code if res else '无响应'}]")
+            return result
+        result["ok"] = True
+        logger.info(f"AZ站点访问成功: {site_url}")
+        if cookie:
+            result.update(_parse_user_stats(res.text))
     except Exception as e:
         logger.warning(f"AZ站点访问失败: {site_url} - {e}")
-    return False
+    return result
+
+
+def _parse_user_stats(html: str) -> dict[str, str]:
+    """从页面 HTML 解析上传/下载/分享率/H&R 等用户信息"""
+    stats: dict[str, str] = {}
+    # 上传量
+    m = re.search(r'[上UP]\w*[传load]\w*[：:]\s*([\d,.]+\s*[KMGTP]?i?B)', html, re.I)
+    if m:
+        stats["upload"] = m.group(1).strip()
+    # 下载量
+    m = re.search(r'[下Down]\w*[载load]\w*[：:]\s*([\d,.]+\s*[KMGTP]?i?B)', html, re.I)
+    if m:
+        stats["download"] = m.group(1).strip()
+    # 分享率
+    m = re.search(r'[分Share]\w*[享率atio]\w*[：:]\s*([\d,.]+|∞|Inf)', html, re.I)
+    if m:
+        stats["ratio"] = m.group(1).strip()
+    # H&R
+    m = re.search(r'H&R[：:\s]*(\d+)', html, re.I)
+    if m:
+        stats["hnr"] = m.group(1).strip()
+    # 魔力值/Bonus
+    m = re.search(r'[魔Bonus]\w*[力Points]\w*[：:]\s*([\d,.]+)', html, re.I)
+    if m:
+        stats["bonus"] = m.group(1).strip()
+    if stats:
+        logger.debug(f"AZ用户信息: {stats}")
+    return stats

@@ -41,13 +41,34 @@ def build_page(state: dict[str, Any], keepalive_days: int) -> list[dict]:
         ],
     }
     row2 = {
-        "component": "VRow", "props": {"class": "mb-4"},
+        "component": "VRow", "props": {"class": "mb-2"},
         "content": [
             _stat_card("上次检查", last_checked, "grey", 4),
             _stat_card("上次种子", last_title, "grey", 4),
             _stat_card("保活间隔", f"{keepalive_days} 天", "grey", 4),
         ],
     }
+
+    # 用户信息卡片（有 cookie 时才有数据）
+    user_upload = state.get("user_upload", "")
+    user_download = state.get("user_download", "")
+    user_ratio = state.get("user_ratio", "")
+    user_hnr = state.get("user_hnr", "")
+    user_bonus = state.get("user_bonus", "")
+    has_user_info = any([user_upload, user_download, user_ratio])
+
+    if has_user_info:
+        row_user = {
+            "component": "VRow", "props": {"class": "mb-4"},
+            "content": [
+                _stat_card("上传量", user_upload or "N/A", "success", 3),
+                _stat_card("下载量", user_download or "N/A", "error", 3),
+                _stat_card("分享率", user_ratio or "N/A", "info", 3),
+                _stat_card("H&R / 魔力", f"{user_hnr or '-'} / {user_bonus or '-'}", "warning", 3),
+            ],
+        }
+    else:
+        row_user = None
 
     # 历史表格
     history = list(reversed(state.get("history", [])[-20:]))
@@ -72,7 +93,11 @@ def build_page(state: dict[str, Any], keepalive_days: int) -> list[dict]:
             "props": {"type": "info", "variant": "tonal", "text": "暂无运行记录"},
         }
 
-    return [row1, row2, table]
+    result = [row1, row2]
+    if row_user:
+        result.append(row_user)
+    result.append(table)
+    return result
 
 
 def _stat_card(label: str, value: str, color: str, cols: int) -> dict:

@@ -7,7 +7,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import settings as app_settings
-from app.helper.downloader import DownloaderHelper
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import NotificationType
@@ -82,34 +81,23 @@ class AzKeepAlive(_PluginBase):
             "use_proxy": self._use_proxy,
         })
 
-    def _get_qb_settings(self):
-        """从 MoviePilot 下载器获取 qB 连接信息"""
-        from .core.models import QBSettings
-        if not self._downloader:
-            return None
-        svc = DownloaderHelper().get_service(name=self._downloader)
-        if not svc or not svc.instance:
-            logger.warning(f"AnimeZ保活: 下载器 {self._downloader} 不可用")
-            return None
-        cfg = svc.instance.get_config() if hasattr(svc.instance, "get_config") else {}
-        return QBSettings(
-            url=str(cfg.get("host") or cfg.get("url") or "").rstrip("/"),
-            username=str(cfg.get("username") or ""), password=str(cfg.get("password") or ""),
-            category=self._qb_category, tags=self._qb_tags)
-
     def _run_task(self):
         from .core.keepalive import run_keepalive
+        from .core.qb_client import get_qb_from_downloader
+        from .core.rss import get_site_cookie
         if not self._rss_url:
             logger.warning("AnimeZ保活: 缺少 RSS URL"); return
-        qb = self._get_qb_settings()
+        qb = get_qb_from_downloader(self._downloader, self._qb_category, self._qb_tags)
         if not qb or not qb.url:
             logger.warning("AnimeZ保活: 下载器未配置或不可用"); return
         state = self.get_data("state") or {}
+        cookie = get_site_cookie(self._site_url)
         status, message, state = run_keepalive(
             rss_url=self._rss_url, qb=qb,
             keepalive_days=self._keepalive_days, min_seeders=self._min_seeders,
             max_items=self._max_items, timeout=self._timeout,
-            use_proxy=self._use_proxy, site_url=self._site_url, state=state,
+            use_proxy=self._use_proxy, site_url=self._site_url,
+            cookie=cookie, state=state,
         )
         self.save_data("state", state)
         logger.info(f"AnimeZ保活: [{status}] {message}")

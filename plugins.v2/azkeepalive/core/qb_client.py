@@ -83,3 +83,23 @@ def torrent_infohash(torrent_path: Path) -> str:
         raise RuntimeError("缺少依赖: torf")
     t = Torrent.read(torrent_path)
     return str(t.infohash).lower()
+
+
+def get_qb_from_downloader(downloader_name: str, category: str, tags: str) -> QBSettings | None:
+    """从 MoviePilot 下载器获取 qB 连接信息"""
+    if not downloader_name:
+        return None
+    try:
+        from app.helper.downloader import DownloaderHelper
+        svc = DownloaderHelper().get_service(name=downloader_name)
+        if not svc or not svc.instance:
+            logger.warning(f"下载器 {downloader_name} 不可用")
+            return None
+        cfg = svc.instance.get_config() if hasattr(svc.instance, "get_config") else {}
+        return QBSettings(
+            url=str(cfg.get("host") or cfg.get("url") or "").rstrip("/"),
+            username=str(cfg.get("username") or ""), password=str(cfg.get("password") or ""),
+            category=category, tags=tags)
+    except Exception as e:
+        logger.warning(f"获取下载器配置失败: {e}")
+        return None

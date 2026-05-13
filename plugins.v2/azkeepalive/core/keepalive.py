@@ -30,6 +30,7 @@ def run_keepalive(
     timeout: int,
     use_proxy: bool,
     site_url: str = "",
+    cookie: str = "",
     state: dict[str, Any],
 ) -> tuple[str, str, dict[str, Any]]:
     """
@@ -40,10 +41,15 @@ def run_keepalive(
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
     proxies = app_settings.PROXY if use_proxy else None
 
-    # 每次都访问站点（模拟登录活跃）
+    # 每次都访问站点（模拟登录活跃 + 抓取用户信息）
     if site_url:
-        visit_site(site_url, timeout, proxies)
+        visit_result = visit_site(site_url, cookie=cookie, timeout=timeout, proxies=proxies)
         state["last_visit_at"] = now.isoformat().replace("+00:00", "Z")
+        if visit_result.get("ok"):
+            # 保存用户统计信息
+            for k in ("upload", "download", "ratio", "hnr", "bonus"):
+                if k in visit_result:
+                    state[f"user_{k}"] = visit_result[k]
 
     # 检查是否需要执行
     should, reason = _should_run(state, keepalive_days, now)
