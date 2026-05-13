@@ -103,16 +103,19 @@ def get_site_cookie(site_url: str) -> str:
     try:
         from urllib.parse import urlparse
         from app.helper.cookiecloud import CookieCloudHelper
-        cookies, _ = CookieCloudHelper().download()
+        cookies, msg = CookieCloudHelper().download()
         if not cookies:
+            logger.warning(f"CookieCloud 未返回 cookies: {msg}")
             return ""
         domain = urlparse(site_url).netloc
+        # 双向匹配
         for d, c in cookies.items():
-            if domain.endswith(d):
-                logger.debug(f"CookieCloud 匹配到 {domain}")
+            if domain.endswith(d) or d.endswith(domain):
+                logger.info(f"CookieCloud 匹配: site={domain} → cookie_key={d}")
                 return c
+        logger.warning(f"CookieCloud 中无 {domain} 的 Cookie；可用域名: {list(cookies.keys())[:10]}")
     except Exception as e:
-        logger.debug(f"CookieCloud 获取失败: {e}")
+        logger.warning(f"CookieCloud 获取失败: {e}")
     return ""
 
 
@@ -133,17 +136,16 @@ def visit_site(
             logger.warning(f"站点访问异常: [{res.status_code if res else '无响应'}]")
             return result
         result["ok"] = True
-        logger.info(f"AZ站点访问成功: {site_url}")
-        if cookie:
-            stats = _parse_user_stats(res.text)
-            if stats:
-                result.update(stats)
-            else:
-                # 诊断：检查 ratio-bar 是否存在
-                has_bar = "ratio-bar" in res.text
-                has_login = "LOGIN" in res.text.upper()[:2000]
-                logger.warning(f"用户信息解析为空 ratio-bar={has_bar} login页={has_login} "
-                               f"HTML长度={len(res.text)}")
+        logger.info(f"AZ站点访问成功: {site_url} (HTML {len(res.text)} bytes)")
+        # 始终尝试解析（cookie 已由调用方传递，无需再次判断）
+        stats = _parse_user_stats(res.text)
+        if stats:
+            result.update(stats)
+        else:
+            has_bar = "ratio-bar" in res.text
+            has_login = "Sign in" in res.text or "LOGIN" in res.text[:3000].upper()
+            logger.warning(f"用户信息解析为空 ratio-bar={has_bar} login页={has_login} "
+                           f"cookie长度={len(cookie)}")
     except Exception as e:
         logger.warning(f"站点访问失败: {e}")
     return result
