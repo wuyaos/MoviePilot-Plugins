@@ -8,6 +8,7 @@ __pycache__/
 .history/
 memory-bank/
 docs/
+.codex/
 .omc/
 .omx/
 .ace-tool/
