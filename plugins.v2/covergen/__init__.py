@@ -132,8 +132,21 @@ class CoverGen(_PluginBase):
 
     def get_page(self) -> List[dict]:
         covers = self._get_recent_covers()
+        last_run = None
+        if self._engine and hasattr(self._engine, '_last_stats') and self._engine._last_stats:
+            last_run = self._engine._last_stats
+        elif self._engine:
+            # 从持久化恢复
+            saved = self.get_data("last_run_stats")
+            if saved and isinstance(saved, dict):
+                try:
+                    from app.plugins.covergen.core.engine import RunStats
+                    last_run = RunStats(**saved)
+                except Exception:
+                    pass
         return build_page(enabled=self._cfg.enabled, has_servers=bool(self._servers),
-                          cover_style=self._cfg.cover_style, covers=covers, plugin_id=self.SERVICE_ID)
+                          cover_style=self._cfg.cover_style, covers=covers,
+                          plugin_id=self.SERVICE_ID, last_run=last_run)
 
     def get_api(self) -> List[Dict[str, Any]]:
         return build_api_routes(self)
@@ -247,4 +260,26 @@ class CoverGen(_PluginBase):
     # ---- 辅助 ----
 
     def _get_recent_covers(self) -> List[Dict[str, Any]]:
-        return []
+        """扫描历史封面输出目录，返回最近 N 张。"""
+        covers_dir = self._cfg.covers_output
+        if not covers_dir:
+            data_path = self.get_data_path()
+            covers_dir = str(data_path / "covers")
+        # 确保目录存在
+        os.makedirs(covers_dir, exist_ok=True)
+        results = []
+        try:
+            for f in sorted(Path(covers_dir).iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+                if not f.is_file():
+                    continue
+                if f.suffix.lower() not in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".apng"):
+                    continue
+                results.append({
+                    "file": f.name,
+                    "label": f"{f.stem}",
+                })
+                if len(results) >= self._cfg.covers_page_history_limit:
+                    break
+        except Exception as e:
+            logger.warning(f"扫描历史封面失败: {e}")
+        return results

@@ -192,6 +192,12 @@ def _build_other_tab() -> list:
             ])),
             v_col(6, v_text("custom_bg_color", "自定义背景色", "#FF5722 / rgb(255,87,34)")),
         ]),
+        v_divider_section("🧹 清理缓存"),
+        v_alert("清理操作不可撤销，请确认后再操作", "warning"),
+        v_row([
+            v_col(4, v_switch("clean_images", "清理图片缓存", "保存后立即清理")),
+            v_col(4, v_switch("clean_fonts", "清理字体缓存", "保存后立即清理")),
+        ]),
     ]
 
 

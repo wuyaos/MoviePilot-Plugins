@@ -49,6 +49,18 @@ def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list:
     return lines
 
 
+def _fit_font_size(text: str, font_path: str, target_width: int,
+                   start_size: int, min_size: int = 24) -> ImageFont.FreeTypeFont:
+    """二分逼近：让单行文本宽度不超过 target_width；若仍超出则返回 min_size 字号。"""
+    size = start_size
+    while size > min_size:
+        font = ImageFont.truetype(str(font_path), int(size))
+        if font.getlength(text) <= target_width:
+            return font
+        size = int(size * 0.9)
+    return ImageFont.truetype(str(font_path), min_size)
+
+
 def create_style_static_5(
     image_path, title, font_path,
     font_size=(170, 75),
@@ -140,30 +152,40 @@ def create_style_static_5(
         en_font = ImageFont.truetype(str(en_font_path), int(en_size))
 
         draw = ImageDraw.Draw(canvas)
-        text_area_w = int(width * 0.30)  # 左侧 30% 区域
+        text_area_w = int(width * 0.30)  # 左侧 30% 区域，避免越过对角分割线
         text_x = int(width * 0.05)
-        # 主标题 Y：底部往上
-        zh_bbox = draw.textbbox((0, 0), zh_title, font=zh_font)
-        zh_h = zh_bbox[3] - zh_bbox[1]
 
-        # 副标题折行
+        # 主标题：先尝试自动缩字到 1 行；如缩到 min 仍超出，则按字符折行
+        zh_font = _fit_font_size(zh_title, zh_font_path, text_area_w, int(zh_size), min_size=int(zh_size * 0.5))
+        zh_lines = _wrap_text(zh_title, zh_font, text_area_w) or [zh_title]
+        zh_line_h = max((zh_font.getbbox(l)[3] - zh_font.getbbox(l)[1]) for l in zh_lines)
+        zh_total_h = zh_line_h * len(zh_lines) + (len(zh_lines) - 1) * 6
+
+        # 副标题：折行
         en_lines = _wrap_text(en_title, en_font, text_area_w) if en_title else []
         en_total_h = sum(en_font.getbbox(line)[3] - en_font.getbbox(line)[1] + en_spacing
                          for line in en_lines) if en_lines else 0
 
-        total_text_h = zh_h + title_spacing + en_total_h
-        text_y = height - total_text_h - int(height * 0.12)  # 底部留 12% 边距
+        total_text_h = zh_total_h + title_spacing + en_total_h
+        # Y 边界保护：太高时上抬，确保不出画
+        max_text_h = height - int(height * 0.05) - int(height * 0.12)
+        if total_text_h > max_text_h:
+            text_y = int(height * 0.05)
+        else:
+            text_y = height - total_text_h - int(height * 0.12)
 
-        # 绘制主标题
-        draw.text((text_x, text_y + zh_offset), zh_title, font=zh_font, fill=(255, 255, 255))
+        # 绘制主标题（多行）
+        cur_y = text_y + zh_offset
+        for line in zh_lines:
+            draw.text((text_x, cur_y), line, font=zh_font, fill=(255, 255, 255))
+            cur_y += zh_line_h + 6
+        cur_y += title_spacing - 6
 
         # 绘制副标题
-        if en_lines:
-            en_y = text_y + zh_h + title_spacing
-            for line in en_lines:
-                draw.text((text_x, en_y), line, font=en_font, fill=(230, 230, 230))
-                bbox = en_font.getbbox(line)
-                en_y += (bbox[3] - bbox[1]) + en_spacing
+        for line in en_lines:
+            draw.text((text_x, cur_y), line, font=en_font, fill=(230, 230, 230))
+            bbox = en_font.getbbox(line)
+            cur_y += (bbox[3] - bbox[1]) + en_spacing
 
         # ---- 输出 base64 ----
         buf = io.BytesIO()

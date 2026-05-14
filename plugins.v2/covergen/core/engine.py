@@ -79,6 +79,7 @@ class CoverEngine:
         self._title_cache: Optional[dict] = None
         self._get_data = get_data_fn
         self._save_data = save_data_fn
+        self._last_stats: Optional[RunStats] = None
 
     # ---- 主调度 ----
 
@@ -88,16 +89,20 @@ class CoverEngine:
                          dry_run=self.cfg.dry_run)
         self.stop_event.clear()
         self._title_cache = render.parse_title_config(self.cfg.title_config) if self.cfg.title_config else {}
+        logger.info(f"{LOG_PREFIX} ═══ 开始封面更新任务 ═══ 模式={mode} 风格={self.cfg.cover_style} "
+                    f"dry_run={self.cfg.dry_run} 服务器数={len(servers)}")
 
         for sname, service in servers.items():
             if target_server and sname != target_server:
                 continue
             libraries = srv.get_libraries(service)
             if not libraries:
-                logger.warning(f"{LOG_PREFIX} 服务器 {sname} 库列表为空")
+                logger.warning(f"{LOG_PREFIX} 服务器 {sname} 库列表为空，跳过")
                 continue
+            logger.info(f"{LOG_PREFIX} ── 服务器 {sname} ── 共 {len(libraries)} 个库")
             for lib in libraries:
                 if self.stop_event.is_set():
+                    logger.info(f"{LOG_PREFIX} 收到停止信号，中断任务")
                     stats.finish()
                     return stats
                 lid = srv.get_library_id(service, lib)
@@ -106,22 +111,34 @@ class CoverEngine:
                 lname = lib.get("Name", "")
                 lib_key = f"{sname}-{lid}"
                 if lib_key in (self.cfg.exclude_libraries or []):
+                    logger.info(f"{LOG_PREFIX} ⊘ {sname}：{lname} 在排除列表中，跳过")
                     stats.record(sname, lname, str(lid), "skipped", "excluded")
                     continue
                 if self.cfg.dry_run:
+                    logger.info(f"{LOG_PREFIX} [DRY_RUN] {sname}：{lname} ({lid}) 模拟生成（不实际上传）")
                     stats.record(sname, lname, str(lid), "success", "dry_run")
                     continue
                 ok = False
                 reason = ""
                 for attempt in range(1, self.cfg.library_update_retry + 1):
+                    logger.info(f"{LOG_PREFIX} → {sname}：{lname} 开始处理 (尝试 {attempt}/{self.cfg.library_update_retry})")
                     ok, reason = self._process_library(service, sname, lib, target_item_id)
                     if ok:
+                        logger.info(f"{LOG_PREFIX} ✓ {sname}：{lname} 封面更新成功")
                         break
                     if attempt < self.cfg.library_update_retry:
-                        logger.warning(f"{LOG_PREFIX} {sname}:{lname} 重试 {attempt + 1}/{self.cfg.library_update_retry}")
+                        logger.warning(f"{LOG_PREFIX} ↻ {sname}：{lname} 失败，准备重试 ({attempt + 1}/{self.cfg.library_update_retry})")
+                if not ok:
+                    logger.warning(f"{LOG_PREFIX} ✗ {sname}：{lname} 封面更新失败（原因：{reason}）")
                 stats.record(sname, lname, str(lid), "success" if ok else "failed", reason)
-        stats.finish()
-        logger.info(f"{LOG_PREFIX} {stats.finish()}")
+        summary = stats.finish()
+        self._last_stats = stats
+        if self._save_data:
+            try:
+                self._save_data("last_run_stats", stats.model_dump())
+            except Exception:
+                pass
+        logger.info(f"{LOG_PREFIX} ═══ 任务结束 ═══ {summary}")
         return stats
 
     # ---- 单库处理 ----
@@ -151,12 +168,25 @@ class CoverEngine:
     def _generate_from_server(self, service, lib: dict, title: Tuple[str, str]):
         lid = srv.get_library_id(service, lib)
         sort_by = self.cfg.sort_by or "Random"
-        inc = "Movie,Series" if not self.cfg.is_single_image_style else "Movie,Series"
+        # 根据库类型决定 IncludeItemTypes
+        coll_type = (lib.get("CollectionType") or "").lower()
+        lib_type = (lib.get("Type") or "").lower()
+        if coll_type == "playlists" or lib_type == "playlist":
+            inc = "Audio,MusicAlbum,Movie,Series,Episode"
+        elif coll_type == "boxsets" or lib_type == "boxset":
+            inc = "BoxSet,Movie"
+        elif coll_type == "music":
+            inc = "MusicAlbum,Audio"
+        else:
+            inc = "Movie,Series"
         items_raw = srv.get_items_batch(service, lid, limit=self.cfg.required_items * 3,
                                         include_types=inc, sort_by=sort_by)
+        if not items_raw:
+            logger.warning(f"{LOG_PREFIX} {service.name}：{lib.get('Name')} 拉取项目为空 (type={coll_type or lib_type})")
         seen: Set[str] = set()
         valid = self._filter_items(items_raw, seen)
         if not valid:
+            logger.warning(f"{LOG_PREFIX} {service.name}：{lib.get('Name')} 筛选后无有效项目")
             return False
         if self.cfg.is_single_image_style:
             return self._process_single(service, lib, title, valid[0])
@@ -208,11 +238,18 @@ class CoverEngine:
 
     # ---- 渲染 ----
 
-    def _generate(self, sname: str, lname: str, title: Tuple[str, str],
-                  image_path: Optional[str] = None) -> Optional[str]:
+    def _generate(self, sname: str, lname: str, title, image_path: Optional[str] = None) -> Optional[str]:
         if not self.zh_font or not self.en_font:
             logger.error(f"{LOG_PREFIX} 字体缺失")
             return None
+        # title 可能是 (zh, en) 或 (zh, en, color)；统一拆开
+        if isinstance(title, (list, tuple)) and len(title) >= 3:
+            title_pair = (title[0], title[1])
+            config_bg_color = title[2]
+        else:
+            title_pair = (title[0] if isinstance(title, (list, tuple)) else title,
+                          title[1] if isinstance(title, (list, tuple)) and len(title) > 1 else "")
+            config_bg_color = None
         res_cfg = ResolutionConfig(self.cfg.resolution)
         scale = self.cfg.title_scale if self.cfg.title_scale > 0 else 1.0
         is_anim = self.cfg.cover_style.startswith("animated")
@@ -225,10 +262,12 @@ class CoverEngine:
         lib_dir = (Path(self.covers_input) / safe if self.covers_input and image_path
                    else Path(self.covers_path) / safe)
         bg = {"mode": self.cfg.bg_color_mode, "custom_color": self.cfg.custom_bg_color,
-              "config_color": self._resolve_title(lname)[2] if len(self._resolve_title(lname)) > 2 else None}
+              "config_color": config_bg_color}
+        logger.info(f"{LOG_PREFIX} 渲染封面 {sname}：{lname} | 风格={self.cfg.cover_style} | "
+                    f"分辨率={self.cfg.resolution} | 主标题='{title_pair[0]}' 副标题='{title_pair[1]}'")
 
         return render.dispatch_style(
-            self.cfg.cover_style, image_path=image_path, library_dir=lib_dir, title=title,
+            self.cfg.cover_style, image_path=image_path, library_dir=lib_dir, title=title_pair,
             font_path=(str(self.zh_font), str(self.en_font)),
             font_size=(zh_sz, en_sz), font_offset=offset,
             blur_size=self.cfg.blur_size, color_ratio=self.cfg.color_ratio,
