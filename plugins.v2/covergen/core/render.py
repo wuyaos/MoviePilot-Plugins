@@ -4,7 +4,7 @@
 """图片 URL 解析、标题配置解析、风格函数分发。"""
 from __future__ import annotations
 
-import logging
+from app.log import logger
 import re
 from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
@@ -20,15 +20,15 @@ from app.plugins.covergen.style.style_animated_1 import create_style_animated_1
 from app.plugins.covergen.style.style_animated_2 import create_style_animated_2
 from app.plugins.covergen.style.style_animated_3 import create_style_animated_3
 from app.plugins.covergen.style.style_animated_4 import create_style_animated_4
+from app.plugins.covergen.style.style_animated_5 import create_style_animated_5
 
-logger = logging.getLogger(__name__)
 LOG_PREFIX = "【CoverGen】"
 
 # 静态风格签名: (image_path, title, font_path, **common_kwargs)
 # 动态风格签名: (library_dir, title, font_path, **common_kwargs, **anim_kwargs)
 STATIC_STYLES = {"static_1", "static_2", "static_4", "static_5"}
 GRID_STYLES = {"static_3"}  # 9 张图
-ANIMATED_STYLES = {"animated_1", "animated_2", "animated_3", "animated_4"}
+ANIMATED_STYLES = {"animated_1", "animated_2", "animated_3", "animated_4", "animated_5"}
 
 STYLE_FUNCS: Dict[str, Callable] = {
     "static_1": create_style_static_1,
@@ -40,6 +40,7 @@ STYLE_FUNCS: Dict[str, Callable] = {
     "animated_2": create_style_animated_2,
     "animated_3": create_style_animated_3,
     "animated_4": create_style_animated_4,
+    "animated_5": create_style_animated_5,
 }
 
 

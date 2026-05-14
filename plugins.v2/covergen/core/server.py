@@ -4,10 +4,9 @@
 """媒体服务器元数据查询。消除原 12 处 library_id 抽取与 2 处 URL 回落重复。"""
 from __future__ import annotations
 
-import logging
+from app.log import logger
 from typing import Dict, List, Optional, Set
 
-logger = logging.getLogger(__name__)
 LOG_PREFIX = "【CoverGen】"
 
 

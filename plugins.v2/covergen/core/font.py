@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import hashlib
-import logging
+from app.log import logger
 import os
 import re
 from pathlib import Path
@@ -14,7 +14,6 @@ from urllib.parse import urlparse
 
 from app.utils.http import RequestUtils
 
-logger = logging.getLogger(__name__)
 LOG_PREFIX = "【CoverGen】"
 
 DEFAULT_FONT_BASE = "https://raw.githubusercontent.com/justzerock/MoviePilot-Plugins/main/fonts"

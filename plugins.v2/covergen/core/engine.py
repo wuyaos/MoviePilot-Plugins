@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import datetime
-import logging
+from app.log import logger
 import os
 import re
 import threading
@@ -21,7 +21,6 @@ from app.plugins.covergen.core import image_io
 from app.plugins.covergen.core import render
 from app.plugins.covergen.utils.image_manager import ResolutionConfig
 
-logger = logging.getLogger(__name__)
 LOG_PREFIX = "【CoverGen】"
 
 

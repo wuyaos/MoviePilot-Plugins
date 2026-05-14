@@ -86,10 +86,24 @@ class CoverGen(_PluginBase):
             get_data_fn=self.get_data, save_data_fn=self.save_data)
 
         self.stop_service()
-        if self._cfg.update_now:
-            self._cfg.update_now = False
+        # update_now 与 dry_run 都是一次性开关：开启即运行一次，运行后自动关闭
+        if self._cfg.update_now or self._cfg.dry_run:
+            mode_label = "模拟" if self._cfg.dry_run else "正式"
+            logger.info(f"【CoverGen】一次性运行触发（{mode_label}模式），运行后自动关闭开关")
+            # 先以当前 cfg（含 dry_run）触发运行，再清开关并保存
+            run_cfg = self._cfg
+            self._cfg = PluginConfig.from_dict({**self._cfg.to_dict(),
+                                                 "update_now": False, "dry_run": False})
+            self._engine.cfg = run_cfg  # 让本次运行仍然按原 cfg（dry_run/update_now）执行
             self._update_config()
-            self._scheduler.run_once(self._run_all)
+            self._scheduler.run_once(self._reset_engine_then_run)
+
+    def _reset_engine_then_run(self):
+        try:
+            self._engine.run(self._servers)
+        finally:
+            # 运行后恢复 engine.cfg 到当前已清开关的 cfg
+            self._engine.cfg = self._cfg
 
     def _run_all(self):
         if self._engine:
@@ -106,7 +120,12 @@ class CoverGen(_PluginBase):
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         zh_items, en_items, _, _ = self._font_mgr.get_presets() if self._font_mgr else ([], [], {}, {})
-        server_items = [{"title": s, "value": s} for s in self._servers] if self._servers else []
+        # 选项始终列出所有可用媒体服务器（即使未选）
+        try:
+            all_services = self._mediaserver_helper.get_services() or {}
+        except Exception:
+            all_services = {}
+        server_items = [{"title": n, "value": n} for n in all_services.keys()]
         lib_opts = [{"title": lib["name"], "value": lib["value"]} for lib in self._all_libraries]
         return build_form(server_items=server_items, library_options=lib_opts,
                           user_options=self._all_users, zh_font_items=zh_items, en_font_items=en_items)
@@ -129,8 +148,18 @@ class CoverGen(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        return [{"cmd": "/update_covers", "event": EventType.PluginAction,
-                 "desc": "更新媒体库封面", "data": {"action": "update_covers"}}]
+        """注册远程命令（如 Bot 或 Webhook 触发）。"""
+        return [
+            {"cmd": "/update_covers", "event": EventType.PluginAction,
+             "desc": "立即更新所有媒体库封面", "category": "媒体",
+             "data": {"action": "update_covers"}},
+            {"cmd": "/cover_clean_images", "event": EventType.PluginAction,
+             "desc": "清理封面图片缓存", "category": "媒体",
+             "data": {"action": "clean_images"}},
+            {"cmd": "/cover_clean_fonts", "event": EventType.PluginAction,
+             "desc": "清理字体缓存", "category": "媒体",
+             "data": {"action": "clean_fonts"}},
+        ]
 
     def stop_service(self):
         if self._scheduler:
@@ -195,8 +224,13 @@ class CoverGen(_PluginBase):
     def on_plugin_action(self, event: Event):
         if not event or not event.event_data:
             return
-        if event.event_data.get("action") == "update_covers":
+        action = event.event_data.get("action")
+        if action == "update_covers":
             self._run_all()
+        elif action == "clean_images":
+            self.api_clean_images()
+        elif action == "clean_fonts":
+            self.api_clean_fonts()
 
     @eventmanager.register(EventType.TransferComplete)
     def on_transfer_complete(self, event: Event):

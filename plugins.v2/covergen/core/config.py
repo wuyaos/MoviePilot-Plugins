@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Tuple
 VALID_RESOLUTIONS = ("1080p", "720p", "480p")
 VALID_STYLES = (
     "static_1", "static_2", "static_3", "static_4", "static_5",
-    "animated_1", "animated_2", "animated_3", "animated_4",
+    "animated_1", "animated_2", "animated_3", "animated_4", "animated_5",
 )
 VALID_VARIANTS = ("static", "animated")
 VALID_BASE_STYLES = ("static_1", "static_2", "static_3", "static_4", "static_5")

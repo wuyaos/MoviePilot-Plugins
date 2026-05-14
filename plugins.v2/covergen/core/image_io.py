@@ -4,7 +4,7 @@
 """图片 IO：下载远程图片、上传 base64 封面到媒体服务器。"""
 from __future__ import annotations
 
-import logging
+from app.log import logger
 import os
 import re
 import time
@@ -15,7 +15,6 @@ from app.utils.http import RequestUtils
 
 from .server import get_library_id
 
-logger = logging.getLogger(__name__)
 _shared_request = RequestUtils()  # 单例，避免重试循环重复构造
 LOG_PREFIX = "【CoverGen】"
 

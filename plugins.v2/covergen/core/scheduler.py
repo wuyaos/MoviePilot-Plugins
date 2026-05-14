@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import datetime
-import logging
+from app.log import logger
 import threading
 from typing import Any, Callable, Dict, Optional
 
@@ -13,7 +13,6 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
 LOG_PREFIX = "【CoverGen】"
 
 
