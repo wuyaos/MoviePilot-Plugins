@@ -76,8 +76,8 @@ def _download_image(
         from app.plugins.autoptcheckin.helper.http_helper import CffiClient
         client = CffiClient(cookie=cookie or "", ua=ua)
         return client.get_bytes(url)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"CffiClient 下载验证码失败，回退到 RequestUtils: {e}")
 
     # 回退到 RequestUtils
     try:

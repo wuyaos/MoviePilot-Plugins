@@ -2,7 +2,6 @@ import re
 import traceback
 from datetime import datetime, timedelta
 from multiprocessing.dummy import Pool as ThreadPool
-from multiprocessing.pool import ThreadPool
 from typing import Any, List, Dict, Tuple, Optional
 from urllib.parse import urljoin
 
@@ -231,7 +230,7 @@ class AutoPtCheckin(_PluginBase):
                             self._start_time = int(times[0])
                             # 23
                             self._end_time = int(times[1])
-                        if self._start_time and self._end_time:
+                        if self._start_time is not None and self._end_time is not None:
                             return [{
                                 "id": "AutoSignIn",
                                 "name": "站点自动签到服务",
@@ -888,31 +887,12 @@ class AutoPtCheckin(_PluginBase):
             # 按日期排序，最新的在前面
             try:
                 records.sort(key=lambda x: x.get("day_obj", datetime.now().date()), reverse=True)
-            except:
-                pass  # 排序失败时跳过
+            except Exception as e:
+                logger.debug(f"签到记录排序失败: {e}")
 
             # 获取最新的状态作为站点概要
             latest_status = records[0].get("status", "未知状态")
-
-            # 确定状态颜色和图标
-            status_color = "teal-lighten-3"
-            status_icon = "mdi-emoticon-happy-outline"
-
-            if "失败" in latest_status or "错误" in latest_status:
-                status_color = "deep-orange-lighten-3"
-                status_icon = "mdi-emoticon-sad-outline"
-            elif "Cookie已失效" in latest_status:
-                status_color = "pink-lighten-3"
-                status_icon = "mdi-cookie-off"
-            elif "重试" in latest_status:
-                status_color = "amber-lighten-3"
-                status_icon = "mdi-emoticon-confused-outline"
-            elif "已签到" in latest_status:
-                status_color = "light-blue-lighten-3"
-                status_icon = "mdi-emoticon-cool-outline"
-            elif "成功" in latest_status:
-                status_color = "teal-lighten-3"
-                status_icon = "mdi-emoticon-happy-outline"
+            status_color, status_icon = self._resolve_status_style(latest_status)
 
             # 创建每个站点的折叠面板
             signin_panels.append(
@@ -924,31 +904,12 @@ class AutoPtCheckin(_PluginBase):
             # 按日期排序，最新的在前面
             try:
                 records.sort(key=lambda x: x.get("day_obj", datetime.now().date()), reverse=True)
-            except:
-                pass  # 排序失败时跳过
+            except Exception as e:
+                logger.debug(f"登录记录排序失败: {e}")
 
             # 获取最新的状态作为站点概要
             latest_status = records[0].get("status", "未知状态")
-
-            # 确定状态颜色和图标
-            status_color = "teal-lighten-3"
-            status_icon = "mdi-emoticon-happy-outline"
-
-            if "失败" in latest_status or "错误" in latest_status:
-                status_color = "deep-orange-lighten-3"
-                status_icon = "mdi-emoticon-sad-outline"
-            elif "Cookie已失效" in latest_status:
-                status_color = "pink-lighten-3"
-                status_icon = "mdi-cookie-off"
-            elif "重试" in latest_status:
-                status_color = "amber-lighten-3"
-                status_icon = "mdi-emoticon-confused-outline"
-            elif "已签到" in latest_status:
-                status_color = "light-blue-lighten-3"
-                status_icon = "mdi-emoticon-cool-outline"
-            elif "成功" in latest_status:
-                status_color = "teal-lighten-3"
-                status_icon = "mdi-emoticon-happy-outline"
+            status_color, status_icon = self._resolve_status_style(latest_status)
 
             # 创建每个站点的折叠面板
             login_panels.append(
@@ -1296,6 +1257,21 @@ class AutoPtCheckin(_PluginBase):
             }
         ]
 
+    @staticmethod
+    def _resolve_status_style(status: str) -> Tuple[str, str]:
+        """根据状态文本返回 (颜色, 图标)"""
+        if "失败" in status or "错误" in status:
+            return "deep-orange-lighten-3", "mdi-emoticon-sad-outline"
+        if "Cookie已失效" in status:
+            return "pink-lighten-3", "mdi-cookie-off"
+        if "重试" in status:
+            return "amber-lighten-3", "mdi-emoticon-confused-outline"
+        if "已签到" in status:
+            return "light-blue-lighten-3", "mdi-emoticon-cool-outline"
+        if "成功" in status:
+            return "teal-lighten-3", "mdi-emoticon-happy-outline"
+        return "teal-lighten-3", "mdi-emoticon-happy-outline"
+
     def _create_expansion_panel(self, site_name, records, status_color, status_icon, latest_status):
         """创建站点折叠面板"""
         # 生成站点图标（使用站点名的首字母）
@@ -1445,7 +1421,7 @@ class AutoPtCheckin(_PluginBase):
                 return
         # 日期
         today = datetime.today()
-        if self._start_time and self._end_time:
+        if self._start_time is not None and self._end_time is not None:
             if int(datetime.today().hour) < self._start_time or int(datetime.today().hour) > self._end_time:
                 logger.error(
                     f"当前时间 {int(datetime.today().hour)} 不在 {self._start_time}-{self._end_time} 范围内，暂不执行任务")
@@ -1472,8 +1448,8 @@ class AutoPtCheckin(_PluginBase):
         self.del_data(key=f"{last_day.month}月{last_day.day}日")
 
         # 查看今天有没有签到|登录历史
-        today = today.strftime('%Y-%m-%d')
-        today_history = self.get_data(key=type_str + "-" + today)
+        today_str = today.strftime('%Y-%m-%d')
+        today_history = self.get_data(key=type_str + "-" + today_str)
 
         # 查询所有站点
         all_sites = [site for site in self.sites.get_indexers() if not site.get("public")] + self.__custom_sites()
@@ -1485,7 +1461,7 @@ class AutoPtCheckin(_PluginBase):
 
         # 今日没数据
         if not today_history or self._clean:
-            logger.info(f"今日 {today} 未{type_str}，开始{type_str}已选站点")
+            logger.info(f"今日 {today_str} 未{type_str}，开始{type_str}已选站点")
             if self._clean:
                 # 关闭开关
                 self._clean = False
@@ -1500,12 +1476,12 @@ class AutoPtCheckin(_PluginBase):
                         site.get("id") not in already_sites or site.get("id") in retry_sites]
 
             if not no_sites:
-                logger.info(f"今日 {today} 已{type_str}，无重新{type_str}站点，本次任务结束")
+                logger.info(f"今日 {today_str} 已{type_str}，无重新{type_str}站点，本次任务结束")
                 return
 
             # 任务站点 = 需要重试+今日未do
             do_sites = no_sites
-            logger.info(f"今日 {today} 已{type_str}，开始重试命中关键词站点")
+            logger.info(f"今日 {today_str} 已{type_str}，开始重试命中关键词站点")
 
         if not do_sites:
             logger.info(f"没有需要{type_str}的站点")
@@ -1600,7 +1576,7 @@ class AutoPtCheckin(_PluginBase):
             logger.debug(f"下次{type_str}重试站点 {retry_sites}")
 
             # 存入历史
-            self.save_data(key=type_str + "-" + today,
+            self.save_data(key=type_str + "-" + today_str,
                            value={
                                "do": self._sign_sites if type_str == "签到" else self._login_sites,
                                "retry": retry_sites
@@ -1891,8 +1867,8 @@ class AutoPtCheckin(_PluginBase):
                 do_sites = [do_sites]
 
             # 删除对应站点
-            if site_id:
-                do_sites = [site for site in do_sites if int(site) != int(site_id)]
+            if site_id is not None:
+                do_sites = [site for site in do_sites if str(site) != str(site_id)]
             else:
                 # 清空
                 do_sites = []
