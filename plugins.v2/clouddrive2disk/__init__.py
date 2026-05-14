@@ -20,8 +20,8 @@ _shim_modules: List[str] = []
 _shim_sys_path: Optional[str] = None
 
 
-def _load_local_module(module_name: str, file_path: Path):
-    if module_name in sys.modules:
+def _load_local_module(module_name: str, file_path: Path, force_reload: bool = False):
+    if module_name in sys.modules and not force_reload:
         return sys.modules[module_name]
 
     spec = importlib.util.spec_from_file_location(module_name, file_path)
@@ -46,7 +46,11 @@ def _install_clouddrive_shim() -> Tuple[List[str], Optional[str]]:
         injected_path = str(plugin_dir)
 
     pb2_module = _load_local_module("clouddrive_pb2", pb2_file)
+    if not hasattr(pb2_module, "CloudDriveSystemInfo"):
+        raise ImportError("已加载的 clouddrive_pb2 与 CloudDrive2 proto 0.9.24 不匹配，请重启 MoviePilot 清理模块缓存")
     pb2_grpc_module = _load_local_module("clouddrive_pb2_grpc", pb2_grpc_file)
+    if hasattr(pb2_grpc_module, "clouddrive__pb2"):
+        pb2_grpc_module.clouddrive__pb2 = pb2_module
 
     clouddrive_pkg = sys.modules.get("clouddrive") or types.ModuleType("clouddrive")
     proto_pkg = sys.modules.get("clouddrive.proto") or types.ModuleType("clouddrive.proto")
@@ -69,7 +73,10 @@ def _install_clouddrive_shim() -> Tuple[List[str], Optional[str]]:
 
 try:
     _shim_modules, _shim_sys_path = _install_clouddrive_shim()
-    from .cd2_api import Cd2Api
+    try:
+        from .cd2_api import Cd2Api
+    except ImportError:
+        from cd2_api import Cd2Api
 except Exception as err:
     logger.error(f"【CloudDrive2Disk】加载 CloudDrive2 gRPC 模块失败: {err}")
     Cd2Api = None
@@ -195,10 +202,10 @@ class CloudDrive2Disk(_PluginBase):
                                             "model": "upload_mode",
                                             "label": "上传模式",
                                             "items": [
-                                                {"title": "direct_write", "value": "direct_write"},
-                                                {"title": "remote_upload（预留）", "value": "remote_upload"},
+                                                {"title": "直接上传", "value": "direct_write"},
+                                                {"title": "远程上传", "value": "remote_upload"},
                                             ],
-                                            "hint": "当前仅 direct_write 生效，remote_upload 仅占位",
+                                            "hint": "直接上传会通过 gRPC 写入远端文件；远程上传会由 CloudDrive2 拉取本地文件，当前仅保留选项未实现。",
                                             "persistent-hint": True,
                                         },
                                     }
@@ -256,7 +263,7 @@ class CloudDrive2Disk(_PluginBase):
                                         "props": {
                                             "type": "info",
                                             "variant": "tonal",
-                                            "text": "上传使用 direct_write：CreateFile → 3MB 分块 WriteToFile → CloseFile，并等待 CloudDrive2 云端上传完成。",
+                                            "text": "直接上传：CreateFile → 3MB 分块 WriteToFile → CloseFile，并等待 CloudDrive2 云端上传完成；远程上传：CloudDrive2 通过本地 URL 拉取文件，当前仅预留未实现。",
                                         },
                                     }
                                 ],
