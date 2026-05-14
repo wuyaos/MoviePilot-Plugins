@@ -6,12 +6,9 @@ option csharp_namespace = "CloudDriveSrv.Protos";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
-import "google/protobuf/descriptor.proto";
-
-// Define a custom option for versioning.
-extend google.protobuf.FileOptions { string version = 50001; }
-
-option (version) = "1.0.7";
+// descriptor.proto and the (version) custom option removed:
+// the extension field 50001 on FileOptions conflicts with other plugins
+// already loaded in the same descriptor pool at runtime.
 
 service CloudDriveFileSrv {
   // public methods, no authorization is required
