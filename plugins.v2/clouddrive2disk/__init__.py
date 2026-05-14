@@ -6,6 +6,7 @@ import sys
 import types
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 from app.core.event import Event, eventmanager
 from app.helper.storage import StorageHelper
@@ -89,8 +90,9 @@ class CloudDrive2Disk(_PluginBase):
 
     _enabled = False
     _disk_name = "CloudDrive2"
-    _cd2_url = "127.0.0.1:19798"
+    _cd2_url = "http://127.0.0.1:19798"
     _api_token = ""
+    _upload_mode = "direct_write"
     _cd2_api: Optional[Cd2Api] = None if Cd2Api else None
 
     def init_plugin(self, config: dict = None):
@@ -99,10 +101,18 @@ class CloudDrive2Disk(_PluginBase):
 
         self._enabled = bool(config.get("enabled", False))
         self._disk_name = (config.get("disk_name") or "CloudDrive2").strip() or "CloudDrive2"
-        self._cd2_url = (config.get("cd2_url") or "127.0.0.1:19798").strip()
-        self._api_token = config.get("api_token") or config.get("cd2_api_key") or ""
-
         self._ensure_plugin_log_file()
+        self._cd2_url = self._normalize_cd2_url(config.get("cd2_url") or "http://127.0.0.1:19798")
+        if not self._cd2_url:
+            logger.warning("【CloudDrive2Disk】CloudDrive2 gRPC 地址格式错误，必须为 http(s)://host:port")
+            self._register_storage()
+            return
+        self._api_token = config.get("api_token") or config.get("cd2_api_key") or ""
+        self._upload_mode = (config.get("upload_mode") or "direct_write").strip() or "direct_write"
+        if self._upload_mode != "direct_write":
+            logger.warning("【CloudDrive2Disk】当前仅支持 direct_write，已忽略 remote_upload 选择")
+            self._upload_mode = "direct_write"
+
         self._register_storage()
 
         if not self._enabled:
@@ -126,6 +136,17 @@ class CloudDrive2Disk(_PluginBase):
             self._cd2_api = None
             logger.error(f"【CloudDrive2Disk】初始化 CloudDrive2 连接失败: {err}")
 
+    @staticmethod
+    def _normalize_cd2_url(value: str) -> Optional[str]:
+        text = (value or "").strip()
+        parsed = urlsplit(text)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return None
+        host_part = parsed.netloc.rsplit("@", 1)[-1]
+        if ":" not in host_part:
+            return None
+        return f"{parsed.scheme}://{parsed.netloc}"
+
     def get_state(self) -> bool:
         return bool(self._enabled)
 
@@ -139,22 +160,20 @@ class CloudDrive2Disk(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "props": {"cols": 12, "md": 6},
                                 "content": [
                                     {
                                         "component": "VSwitch",
                                         "props": {
                                             "model": "enabled",
                                             "label": "启用插件",
-                                            "hint": "启用后注册 CloudDrive2 存储并接管对应文件操作",
-                                            "persistent-hint": True,
                                         },
                                     }
                                 ],
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "props": {"cols": 12, "md": 6},
                                 "content": [
                                     {
                                         "component": "VTextField",
@@ -162,23 +181,26 @@ class CloudDrive2Disk(_PluginBase):
                                             "model": "disk_name",
                                             "label": "存储名称",
                                             "placeholder": "CloudDrive2",
-                                            "hint": "MoviePilot 存储类型/名称，修改后需在媒体整理配置中选择同名存储",
-                                            "persistent-hint": True,
                                         },
                                     }
                                 ],
                             },
+                        ],
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "props": {"cols": 12, "md": 6},
                                 "content": [
                                     {
                                         "component": "VTextField",
                                         "props": {
                                             "model": "cd2_url",
                                             "label": "CloudDrive2 gRPC 地址",
-                                            "placeholder": "127.0.0.1:19798",
-                                            "hint": "填写 gRPC 端口，不是 Web UI 端口；可填 host:port 或 http://host:port",
+                                            "placeholder": "http://127.0.0.1:19798",
+                                            "hint": "必须使用 http(s)://host:port，填写 gRPC 地址，不是 Web UI 端口",
                                             "persistent-hint": True,
                                         },
                                     }
@@ -186,22 +208,50 @@ class CloudDrive2Disk(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12},
+                                "props": {"cols": 12, "md": 6},
                                 "content": [
                                     {
-                                        "component": "VTextarea",
+                                        "component": "VTextField",
                                         "props": {
                                             "model": "api_token",
                                             "label": "API 令牌",
-                                            "rows": 3,
-                                            "auto-grow": True,
+                                            "placeholder": "粘贴 API 令牌",
                                             "type": "password",
-                                            "hint": "支持直接粘贴 token、Bearer token 或 Authorization: Bearer token",
+                                            "hint": "API 令牌",
                                             "persistent-hint": True,
                                         },
                                     }
                                 ],
                             },
+                        ],
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6},
+                                "content": [
+                                    {
+                                        "component": "VSelect",
+                                        "props": {
+                                            "model": "upload_mode",
+                                            "label": "上传模式",
+                                            "items": [
+                                                {"title": "direct_write", "value": "direct_write"},
+                                                {"title": "remote_upload（预留）", "value": "remote_upload"},
+                                            ],
+                                            "hint": "当前仅 direct_write 生效，remote_upload 仅占位",
+                                            "persistent-hint": True,
+                                        },
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
                             {
                                 "component": "VCol",
                                 "props": {"cols": 12},
@@ -217,14 +267,15 @@ class CloudDrive2Disk(_PluginBase):
                                 ],
                             },
                         ],
-                    }
+                    },
                 ],
             }
         ], {
             "enabled": False,
             "disk_name": "CloudDrive2",
-            "cd2_url": "127.0.0.1:19798",
+            "cd2_url": "http://127.0.0.1:19798",
             "api_token": "",
+            "upload_mode": "direct_write",
         }
 
     def get_page(self) -> List[dict]:
