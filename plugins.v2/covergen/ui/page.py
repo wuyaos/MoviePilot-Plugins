@@ -37,48 +37,59 @@ def _build_generate(*, enabled: bool, has_servers: bool, cover_style: str, plugi
     ]
 
 
-def _build_history(covers: List[Dict[str, Any]], plugin_id: str) -> list:
-    if not covers:
-        inner = {"component": "div", "props": {
-            "class": "text-center text-medium-emphasis py-4",
-        }, "text": "暂无历史封面，生成后将在此展示"}
-    else:
-        cards = []
-        for c in covers:
-            src = c.get("src", "")
-            if not src:
-                continue
-            cards.append({
-                "component": "VCol",
-                "props": {"cols": 6, "sm": 4, "md": 3},
-                "content": [{
-                    "component": "VCard",
-                    "props": {"variant": "outlined", "class": "rounded-lg overflow-hidden"},
-                    "content": [
-                        {"component": "VImg", "props": {
-                            "src": src, "aspect-ratio": "16/9", "cover": True, "height": 120,
-                        }},
-                        {"component": "VCardText", "props": {"class": "py-1 text-caption text-truncate"},
-                         "text": c.get("label", "")},
-                    ],
-                }],
-            })
-        inner = {"component": "VRow", "props": {"dense": True}, "content": cards}
-
-    return [{
-        "component": "VExpansionPanels",
-        "props": {"variant": "accordion", "class": "mt-1"},
+def _cover_card(c: Dict[str, Any]) -> dict:
+    src = c.get("src", "")
+    return {
+        "component": "VCol",
+        "props": {"cols": 6, "sm": 4, "md": 3},
         "content": [{
-            "component": "VExpansionPanel",
+            "component": "VCard",
+            "props": {"variant": "outlined", "class": "rounded-lg overflow-hidden"},
             "content": [
-                {"component": "VExpansionPanelTitle",
-                 "props": {"class": "text-body-2"},
-                 "text": f"历史封面（{len(covers)} 张）"},
-                {"component": "VExpansionPanelText",
-                 "content": [inner]},
+                {"component": "VImg", "props": {
+                    "src": src, "aspect-ratio": "16/9", "cover": True, "height": 120,
+                }},
+                {"component": "VCardText", "props": {"class": "py-1 text-caption text-truncate"},
+                 "text": c.get("label", "")},
             ],
         }],
-    }]
+    }
+
+
+def _build_history(covers: List[Dict[str, Any]], plugin_id: str) -> list:
+    valid_covers = [c for c in covers if c.get("src")]
+    title = {"component": "div", "props": {
+        "class": "text-subtitle-2 font-weight-medium text-medium-emphasis mt-2 mb-1",
+    }, "text": f"📚 历史封面（{len(valid_covers)} 张）"}
+    if not valid_covers:
+        empty = {"component": "div", "props": {
+            "class": "text-center text-medium-emphasis py-4",
+        }, "text": "暂无历史封面，生成后将在此展示"}
+        return [v_row([v_col(12, title)]), v_row([v_col(12, empty)])]
+
+    first_row = valid_covers[:4]
+    rest = valid_covers[4:]
+    blocks = [
+        v_row([v_col(12, title)]),
+        {"component": "VRow", "props": {"dense": True}, "content": [_cover_card(c) for c in first_row]},
+    ]
+    if rest:
+        blocks.append({
+            "component": "VExpansionPanels",
+            "props": {"variant": "accordion", "class": "mt-1"},
+            "content": [{
+                "component": "VExpansionPanel",
+                "content": [
+                    {"component": "VExpansionPanelTitle",
+                     "props": {"class": "text-body-2"},
+                     "text": f"展开更多历史封面（{len(rest)} 张）"},
+                    {"component": "VExpansionPanelText",
+                     "content": [{"component": "VRow", "props": {"dense": True},
+                                  "content": [_cover_card(c) for c in rest]}]},
+                ],
+            }],
+        })
+    return blocks
 
 
 def _build_clean(plugin_id: str) -> list:
@@ -99,22 +110,53 @@ def _build_clean(plugin_id: str) -> list:
     return [v_row([v_col(6, clean_img), v_col(6, clean_font)])]
 
 
-def _build_run_status(last_run) -> list:
-    """最近一次执行情况：统计 + 每库列表。"""
+def _build_run_status(run_history, last_run=None) -> list:
+    """最近执行情况：按运行汇总列表。"""
+    def _get(obj, key, default=None):
+        return obj.get(key, default) if isinstance(obj, dict) else getattr(obj, key, default)
+
+    history = run_history or []
+    if history:
+        rows = []
+        for run in history:
+            started = str(_get(run, "started_at", ""))[:19] or "-"
+            finished = str(_get(run, "finished_at", ""))[:19] or started
+            mode = _get(run, "mode", "") or "all"
+            dry_run = _get(run, "dry_run", False)
+            success = _get(run, "success", 0)
+            failed = _get(run, "failed", 0)
+            skipped = _get(run, "skipped", 0)
+            status = "成功" if failed == 0 else "部分失败"
+            status_color = "success" if failed == 0 else "error"
+            rows.append({"component": "tr", "content": [
+                {"component": "td", "text": finished},
+                {"component": "td", "text": f"{mode}{' / 模拟' if dry_run else ''}"},
+                {"component": "td", "text": f"成 {success} 败 {failed} 跳 {skipped}"},
+                {"component": "td", "content": [{"component": "VChip", "props": {
+                    "color": status_color, "variant": "tonal", "size": "small",
+                }, "text": status}]},
+            ]})
+        table = {"component": "VTable", "props": {"density": "compact", "class": "mt-2"}, "content": [
+            {"component": "thead", "content": [{"component": "tr", "content": [
+                {"component": "th", "text": "时间"},
+                {"component": "th", "text": "模式"},
+                {"component": "th", "text": "统计"},
+                {"component": "th", "text": "状态"},
+            ]}]},
+            {"component": "tbody", "content": rows},
+        ]}
+        return [v_row([{"component": "VCol", "props": {"cols": 12}, "content": [table]}])]
+
     if not last_run:
         return [v_row([v_col(12, {"component": "div", "props": {
             "class": "text-center text-medium-emphasis py-2",
         }, "text": "尚无执行记录"})])]
-    def _get(obj, key, default=None):
-        return obj.get(key, default) if isinstance(obj, dict) else getattr(obj, key, default)
+
     success = _get(last_run, "success", 0)
     failed = _get(last_run, "failed", 0)
     skipped = _get(last_run, "skipped", 0)
     mode = _get(last_run, "mode", "")
     finished = _get(last_run, "finished_at", "")
-    libraries = _get(last_run, "libraries", []) or []
-
-    # 统计行
     chips = [
         {"component": "VChip", "props": {"color": "success", "variant": "tonal", "size": "small", "class": "mr-1",
                                           "prependIcon": "mdi-check-circle"}, "text": f"成功 {success}"},
@@ -129,46 +171,12 @@ def _build_run_status(last_run) -> list:
                       "text": f"跳过 {skipped}"})
     chips.append({"component": "VChip", "props": {"variant": "text", "size": "small"},
                   "text": f"{mode} | {str(finished)[:19] if finished else '运行中'}"})
-    summary_row = v_row([{"component": "VCol", "props": {"cols": 12}, "content": chips}])
-
-    # 每库详情表
-    if not libraries:
-        return [summary_row]
-    rows = []
-    for lib in libraries:
-        if isinstance(lib, dict):
-            name = lib.get("name", "")
-            server = lib.get("server", "")
-            status = lib.get("status", "")
-            reason = lib.get("reason", "")
-        else:
-            name = getattr(lib, "name", "")
-            server = getattr(lib, "server", "")
-            status = getattr(lib, "status", "")
-            reason = getattr(lib, "reason", "")
-        icon = "mdi-check" if status == "success" else ("mdi-close" if status == "failed" else "mdi-skip-next")
-        color = "success" if status == "success" else ("error" if status == "failed" else "warning")
-        rows.append({"component": "tr", "content": [
-            {"component": "td", "text": server},
-            {"component": "td", "text": name},
-            {"component": "td", "content": [{"component": "VIcon", "props": {"icon": icon, "color": color, "size": "small"}}]},
-            {"component": "td", "text": reason or "-"},
-        ]})
-    table = {"component": "VTable", "props": {"density": "compact", "class": "mt-2"}, "content": [
-        {"component": "thead", "content": [{"component": "tr", "content": [
-            {"component": "th", "text": "服务器"},
-            {"component": "th", "text": "媒体库"},
-            {"component": "th", "text": "状态"},
-            {"component": "th", "text": "详情"},
-        ]}]},
-        {"component": "tbody", "content": rows},
-    ]}
-    return [summary_row, v_row([{"component": "VCol", "props": {"cols": 12}, "content": [table]}])]
+    return [v_row([{"component": "VCol", "props": {"cols": 12}, "content": chips}])]
 
 
 def build_page(*, enabled: bool, has_servers: bool, cover_style: str,
                covers: List[Dict[str, Any]], plugin_id: str = "CoverGen",
-               last_run=None) -> List[dict]:
+               last_run=None, run_history=None) -> List[dict]:
     """构建详情面板（VCard 包裹：生成 + 历史 + 执行情况）。"""
     try:
         content = [
@@ -176,7 +184,7 @@ def build_page(*, enabled: bool, has_servers: bool, cover_style: str,
                              cover_style=cover_style, plugin_id=plugin_id),
             *_build_history(covers, plugin_id),
             v_divider_section("📊 最近执行"),
-            *_build_run_status(last_run),
+            *_build_run_status(run_history, last_run),
         ]
         return [{
             "component": "VCard",

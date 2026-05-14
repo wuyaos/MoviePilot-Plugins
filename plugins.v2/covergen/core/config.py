@@ -133,12 +133,13 @@ class PluginConfig:
     exclude_libraries: List[str] = field(default_factory=list)
     exclude_boxsets: List[str] = field(default_factory=list)
     exclude_users: List[str] = field(default_factory=list)
+    hide_user_blacklist_libraries: bool = True
 
     # 历史与清理
     clean_images: bool = False
     clean_fonts: bool = False
     save_recent_covers: bool = True
-    covers_history_limit_per_library: int = 10
+    covers_history_limit_per_library: int = 50
     covers_page_history_limit: int = 50
 
     # 运行控制
@@ -191,7 +192,7 @@ class PluginConfig:
         self.animation_duration = _cast(self.animation_duration, int, 8)
         self.animation_fps = _cast(self.animation_fps, int, 24)
         self.animated_2_image_count = _clamp(self.animated_2_image_count, 3, 9, 5, int)
-        self.covers_history_limit_per_library = _clamp(self.covers_history_limit_per_library, 1, 100, 10, int)
+        self.covers_history_limit_per_library = _clamp(self.covers_history_limit_per_library, 1, 200, 50, int)
         self.covers_page_history_limit = _clamp(self.covers_page_history_limit, 1, 500, 50, int)
         self.library_update_retry = _clamp(self.library_update_retry, 1, 5, 1, int)
 

@@ -1,5 +1,5 @@
 # input: core/, api/, ui/ 子模块
-# output: CoverGen 插件类（注册到 MoviePilot）
+# output: CoverGen 插件类（注册到 MoviePilot；聚合 run_history / last_run_stats）
 # pos: 插件入口，组装各子模块并暴露 _PluginBase 接口
 """CoverGen — 媒体库封面自动生成插件（模块化重构版）。"""
 from __future__ import annotations
@@ -10,7 +10,7 @@ import os
 import re
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from app.core.event import eventmanager, Event
 from app.helper.mediaserver import MediaServerHelper
@@ -31,9 +31,9 @@ from app.plugins.covergen.ui.page import build_page
 class CoverGen(_PluginBase):
     """媒体库封面自动生成。"""
     plugin_name = "媒体库封面生成"
-    plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、4种动画风格、Emby和Jellyfin"
+    plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
-    plugin_version = "1.0.0"
+    plugin_version = "1.1.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "covergen_"
@@ -133,6 +133,10 @@ class CoverGen(_PluginBase):
     def get_page(self) -> List[dict]:
         covers = self._get_recent_covers()
         last_run = None
+        run_history = []
+        history = self.get_data("run_history")
+        if isinstance(history, list):
+            run_history = history
         if self._engine and hasattr(self._engine, '_last_stats') and self._engine._last_stats:
             last_run = self._engine._last_stats
         elif self._engine:
@@ -146,7 +150,7 @@ class CoverGen(_PluginBase):
                     pass
         return build_page(enabled=self._cfg.enabled, has_servers=bool(self._servers),
                           cover_style=self._cfg.cover_style, covers=covers,
-                          plugin_id=self.SERVICE_ID, last_run=last_run)
+                          plugin_id=self.SERVICE_ID, last_run=last_run, run_history=run_history)
 
     def get_api(self) -> List[Dict[str, Any]]:
         return build_api_routes(self)
@@ -283,6 +287,38 @@ class CoverGen(_PluginBase):
 
     # ---- 辅助 ----
 
+    @staticmethod
+    def _sanitize_history_name(name: str) -> str:
+        return re.sub(r'[^\w\-.]', '_', name) if name else "unknown"
+
+    def _history_hidden_lib_ids(self) -> Set[str]:
+        """解析历史封面中需要默认后置的黑名单用户可见库 ID。"""
+        hidden: Set[str] = set()
+        if not self._cfg.hide_user_blacklist_libraries or not self._cfg.exclude_users:
+            return hidden
+        for entry in self._cfg.exclude_users:
+            if "-" not in entry:
+                continue
+            server, user_id = entry.split("-", 1)
+            svc = self._servers.get(server)
+            if not svc or not user_id:
+                continue
+            hidden.update(f"{server}-{lib_id}" for lib_id in srv.get_user_views(svc, {user_id}))
+        return hidden
+
+    def _history_library_value(self, filename: str) -> str:
+        """从历史封面文件名匹配 server-library。"""
+        for lib in self._all_libraries:
+            value = str(lib.get("value") or "")
+            name = str(lib.get("name") or "")
+            if not value or ": " not in name:
+                continue
+            server_name, lib_name = name.split(": ", 1)
+            prefix = f"{self._sanitize_history_name(server_name)}_{self._sanitize_history_name(lib_name)}_"
+            if filename.startswith(prefix):
+                return value
+        return ""
+
     def _get_recent_covers(self) -> List[Dict[str, Any]]:
         """扫描历史封面输出目录，返回最近 N 张（base64 data URI）。"""
         covers_dir = self._cfg.covers_output
@@ -293,19 +329,26 @@ class CoverGen(_PluginBase):
         _mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
                  ".gif": "image/gif", ".webp": "image/webp", ".apng": "image/apng"}
         results = []
+        hidden_lib_ids = self._history_hidden_lib_ids()
         try:
-            files = sorted(Path(covers_dir).iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
-            for f in files:
-                if not f.is_file():
+            files = []
+            for p in Path(covers_dir).iterdir():
+                if not p.is_file():
                     continue
-                ext = f.suffix.lower()
+                ext = p.suffix.lower()
                 if ext not in _mime:
                     continue
+                lib_value = self._history_library_value(p.name)
+                files.append((p, lib_value, p.stat().st_mtime))
+            files.sort(key=lambda x: (1 if x[1] in hidden_lib_ids else 0, -x[2]))
+            for f, lib_value, _ in files:
+                ext = f.suffix.lower()
                 try:
                     data = base64.b64encode(f.read_bytes()).decode("utf-8")
                     results.append({
                         "file": f.name,
                         "label": f.stem,
+                        "library_value": lib_value,
                         "src": f"data:{_mime[ext]};base64,{data}",
                     })
                 except Exception as e:

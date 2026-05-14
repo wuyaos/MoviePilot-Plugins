@@ -163,6 +163,7 @@ def _build_font_tab(zh_items: list, en_items: list) -> list:
 def _build_filter_tab(library_options: list, user_options: list) -> list:
     return [
         v_alert("黑名单：选中的库/合集来源/用户将被排除（需先选择媒体服务器保存后才能选择）"),
+        v_row([v_col(12, v_switch("hide_user_blacklist_libraries", "默认隐藏黑名单用户的库", "关闭后仅排除黑名单用户可见的合集，不隐藏其来源库"))]),
         v_row([v_col(12, v_select("exclude_libraries", "库黑名单", library_options,
                                    multiple=True, chips=True, clearable=True))]),
         v_row([
@@ -250,7 +251,8 @@ def build_form(*, server_items: list, library_options: list, user_options: list,
         "zh_font_offset": "", "title_spacing": "", "en_line_spacing": "",
         "title_config": "", "exclude_libraries": [], "exclude_boxsets": [],
         "exclude_users": [], "covers_input": "", "covers_output": "",
-        "save_recent_covers": True, "covers_history_limit_per_library": 10,
+        "hide_user_blacklist_libraries": True,
+        "save_recent_covers": True, "covers_history_limit_per_library": 50,
         "covers_page_history_limit": 50, "bg_color_mode": "auto",
         "custom_bg_color": "", "dry_run": False, "library_update_retry": 1,
     }

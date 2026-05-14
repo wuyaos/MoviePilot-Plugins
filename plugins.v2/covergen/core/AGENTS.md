@@ -9,12 +9,12 @@
 - **Pos**：`plugins.v2/covergen/core/`，被 `__init__.py` 装配，被 `api/` `ui/` 间接引用
 
 ## Files
-- `config.py` — `@dataclass PluginConfig` 65 字段，统一校验/clamp/迁移
+- `config.py` — `@dataclass PluginConfig` 全字段配置、校验、迁移、派生属性
 - `font.py` — `FontManager`：预设发现、URL 下载（cache-skip）、本地校验
-- `server.py` — 媒体服务器元数据查询：库/用户/项目/合集/视图（消除 12 处 library_id 重复）
+- `server.py` — 媒体服务器元数据查询：库/用户/项目/合集/视图（统一 Emby/Jellyfin 差异）
 - `image_io.py` — 图片下载（远程/HOST 通道）+ base64 上传
 - `render.py` — 图片 URL 解析、标题 YAML 解析、8 风格函数分发
-- `engine.py` — `CoverEngine` 主调度器 + `RunStats`（ThreadPoolExecutor 并行下载、Lock 保护并发）
+- `engine.py` — `CoverEngine` 主调度器 + `RunStats`（黑名单合集过滤、历史封面每库保留上限）
 - `scheduler.py` — `Scheduler`：cron 注册、TransferComplete 防抖、stop_event 管理
 
 ## 关键设计

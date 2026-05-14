@@ -135,6 +135,10 @@ class CoverEngine:
         self._last_stats = stats
         if self._save_data:
             try:
+                current = self._get_data("run_history") if self._get_data else []
+                history = current if isinstance(current, list) else []
+                history.insert(0, stats.model_dump())
+                self._save_data("run_history", history[:20])
                 self._save_data("last_run_stats", stats.model_dump())
             except Exception:
                 pass
@@ -168,6 +172,7 @@ class CoverEngine:
                 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 fp = os.path.join(covers_dir, f"{safe_s}_{safe_l}_{ts}.{ext}")
                 Path(fp).write_bytes(b64mod.b64decode(b64))
+                self._cleanup_history_covers(covers_dir, safe_s, safe_l)
                 logger.info(f"{LOG_PREFIX} 封面已保存: {fp}")
             ok = image_io.upload_library_image(service, lib, data, on_save_local=_save_cb)
             return ok, "updated" if ok else "upload_failed"
@@ -204,10 +209,22 @@ class CoverEngine:
             return self._process_single(service, lib, title, valid[0])
         return self._process_grid(service, lib, title, valid[:self.cfg.required_items])
 
-    def _get_excluded_boxset_ids(self, service, sname: str) -> Set[str]:
-        """解析 exclude_boxsets + exclude_users 配置，查询需排除的合集 ID。"""
+    def _get_blacklist_user_ids(self, sname: str) -> Set[str]:
+        """解析当前服务器的用户黑名单 ID。"""
+        user_ids: Set[str] = set()
+        for entry in self.cfg.exclude_users:
+            if "-" in entry:
+                parts = entry.split("-", 1)
+                if parts[0] == sname:
+                    user_ids.add(parts[1])
+            else:
+                user_ids.add(entry)
+        return user_ids
+
+    def _get_excluded_boxset_ids(self, service, sname: str, parent_id: str = "") -> Set[str]:
+        """按原插件逻辑合并来源库黑名单 + 用户黑名单可见合集 ID。"""
         excluded: Set[str] = set()
-        # 来源库黑名单
+        # 来源库黑名单：查询来源库内的合集 ID
         if self.cfg.exclude_boxsets:
             source_lib_ids: Set[str] = set()
             for entry in self.cfg.exclude_boxsets:
@@ -221,20 +238,21 @@ class CoverEngine:
                 found = srv.get_boxsets_by_libraries(service, source_lib_ids)
                 excluded.update(found)
                 logger.info(f"{LOG_PREFIX} [来源库黑名单] 排除合集 {len(found)} 个")
-        # 用户黑名单
-        if self.cfg.exclude_users:
-            user_ids: Set[str] = set()
-            for entry in self.cfg.exclude_users:
-                if "-" in entry:
-                    parts = entry.split("-", 1)
-                    if parts[0] == sname:
-                        user_ids.add(parts[1])
-                else:
-                    user_ids.add(entry)
-            if user_ids:
-                found = srv.get_boxsets_by_users(service, user_ids)
-                excluded.update(found)
-                logger.info(f"{LOG_PREFIX} [用户黑名单] 排除合集 {len(found)} 个")
+        # 用户黑名单：在当前合集库下按 UserId 查询用户可见 BoxSet
+        if self.cfg.exclude_users and parent_id:
+            user_ids = self._get_blacklist_user_ids(sname)
+            found: Set[str] = set()
+            for uid in user_ids:
+                items = srv.get_items_batch(service, parent_id, limit=99999,
+                                            include_types="BoxSet", sort_by=self.cfg.sort_by or "Random",
+                                            user_ids=[uid])
+                for boxset in items:
+                    bid = boxset.get("Id") or boxset.get("ItemId")
+                    if bid:
+                        found.add(str(bid))
+            excluded.update(found)
+            logger.info(f"{LOG_PREFIX} [用户黑名单] 黑名单用户可见合集数: {len(found)}")
+        logger.info(f"{LOG_PREFIX} [合集过滤] 合并排除合集数: {len(excluded)}")
         return excluded
 
     def _handle_boxset_library(self, service, lib: dict, title) -> Optional[str]:
@@ -243,7 +261,7 @@ class CoverEngine:
         sname = service.name if hasattr(service, 'name') else ""
         sort_by = self.cfg.sort_by or "Random"
 
-        excluded_ids = self._get_excluded_boxset_ids(service, sname)
+        excluded_ids = self._get_excluded_boxset_ids(service, sname, lid)
 
         all_boxsets = srv.get_items_batch(service, lid, limit=99999,
                                           include_types="BoxSet,Movie", sort_by=sort_by)
@@ -268,7 +286,9 @@ class CoverEngine:
                 continue
             children = srv.get_items_batch(service, bs_id, limit=20,
                                            include_types="Movie,Series,Episode", sort_by=sort_by)
-            valid.extend(self._filter_items(children, seen))
+            child_valids = self._filter_items(children, seen)
+            if child_valids:
+                valid.append(child_valids[0])
 
         if not valid:
             logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 合集库筛选后无有效项目")
@@ -420,3 +440,19 @@ class CoverEngine:
     @staticmethod
     def _sanitize(name: str) -> str:
         return re.sub(r'[^\w\-.]', '_', name) if name else "unknown"
+
+    def _cleanup_history_covers(self, covers_dir: str, safe_server: str, safe_library: str):
+        """每个库只保留最近 N 张历史封面。"""
+        limit = int(self.cfg.covers_history_limit_per_library or 50)
+        if limit <= 0:
+            return
+        prefix = f"{safe_server}_{safe_library}_"
+        try:
+            files = [p for p in Path(covers_dir).iterdir()
+                     if p.is_file() and p.name.startswith(prefix)]
+            files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            for old in files[limit:]:
+                old.unlink(missing_ok=True)
+                logger.info(f"{LOG_PREFIX} 清理历史封面: {old}")
+        except Exception as err:
+            logger.debug(f"{LOG_PREFIX} 清理历史封面失败: {err}")
