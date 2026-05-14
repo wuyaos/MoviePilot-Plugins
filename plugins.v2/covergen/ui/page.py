@@ -45,7 +45,9 @@ def _build_history(covers: List[Dict[str, Any]], plugin_id: str) -> list:
     else:
         cards = []
         for c in covers:
-            src = f"api/v1/plugin/{plugin_id}/saved_cover_image?file={c.get('file', '')}"
+            src = c.get("src", "")
+            if not src:
+                continue
             cards.append({
                 "component": "VCol",
                 "props": {"cols": 6, "sm": 4, "md": 3},

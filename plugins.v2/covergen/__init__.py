@@ -284,26 +284,34 @@ class CoverGen(_PluginBase):
     # ---- 辅助 ----
 
     def _get_recent_covers(self) -> List[Dict[str, Any]]:
-        """扫描历史封面输出目录，返回最近 N 张。"""
+        """扫描历史封面输出目录，返回最近 N 张（base64 data URI）。"""
         covers_dir = self._cfg.covers_output
         if not covers_dir:
             data_path = self.get_data_path()
             covers_dir = str(data_path / "covers")
-        # 确保目录存在
         os.makedirs(covers_dir, exist_ok=True)
+        _mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                 ".gif": "image/gif", ".webp": "image/webp", ".apng": "image/apng"}
         results = []
         try:
-            for f in sorted(Path(covers_dir).iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+            files = sorted(Path(covers_dir).iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+            for f in files:
                 if not f.is_file():
                     continue
-                if f.suffix.lower() not in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".apng"):
+                ext = f.suffix.lower()
+                if ext not in _mime:
                     continue
-                results.append({
-                    "file": f.name,
-                    "label": f"{f.stem}",
-                })
+                try:
+                    data = base64.b64encode(f.read_bytes()).decode("utf-8")
+                    results.append({
+                        "file": f.name,
+                        "label": f.stem,
+                        "src": f"data:{_mime[ext]};base64,{data}",
+                    })
+                except Exception as e:
+                    logger.debug(f"【CoverGen】读取封面文件失败: {f} -> {e}")
                 if len(results) >= self._cfg.covers_page_history_limit:
                     break
         except Exception as e:
-            logger.warning(f"扫描历史封面失败: {e}")
+            logger.warning(f"【CoverGen】扫描历史封面失败: {e}")
         return results
