@@ -177,6 +177,7 @@ class CoverEngine:
 
     def _generate_from_server(self, service, lib: dict, title: Tuple[str, str]):
         lid = srv.get_library_id(service, lib)
+        sname = service.name if hasattr(service, 'name') else ""
         sort_by = self.cfg.sort_by or "Random"
         # 根据库类型决定 IncludeItemTypes
         coll_type = (lib.get("CollectionType") or "").lower()
@@ -192,15 +193,59 @@ class CoverEngine:
         items_raw = srv.get_items_batch(service, lid, limit=self.cfg.required_items * 3,
                                         include_types=inc, sort_by=sort_by)
         if not items_raw:
-            logger.warning(f"{LOG_PREFIX} {service.name}：{lib.get('Name')} 拉取项目为空 (type={coll_type or lib_type})")
+            logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 拉取项目为空 (type={coll_type or lib_type})")
+
+        # ---- 合集黑名单过滤（来源库 + 用户） ----
+        excluded_ids = self._get_excluded_boxset_ids(service, sname)
+        if excluded_ids and items_raw:
+            before = len(items_raw)
+            items_raw = [it for it in items_raw
+                         if str(it.get("Id") or it.get("ItemId") or "") not in excluded_ids]
+            filtered_count = before - len(items_raw)
+            if filtered_count:
+                logger.info(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 合集黑名单过滤掉 {filtered_count} 项")
+
         seen: Set[str] = set()
         valid = self._filter_items(items_raw, seen)
         if not valid:
-            logger.warning(f"{LOG_PREFIX} {service.name}：{lib.get('Name')} 筛选后无有效项目")
+            logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 筛选后无有效项目")
             return False
         if self.cfg.is_single_image_style:
             return self._process_single(service, lib, title, valid[0])
         return self._process_grid(service, lib, title, valid[:self.cfg.required_items])
+
+    def _get_excluded_boxset_ids(self, service, sname: str) -> Set[str]:
+        """解析 exclude_boxsets + exclude_users 配置，查询需排除的合集 ID。"""
+        excluded: Set[str] = set()
+        # 来源库黑名单
+        if self.cfg.exclude_boxsets:
+            source_lib_ids: Set[str] = set()
+            for entry in self.cfg.exclude_boxsets:
+                if "-" in entry:
+                    parts = entry.split("-", 1)
+                    if parts[0] == sname:
+                        source_lib_ids.add(parts[1])
+                else:
+                    source_lib_ids.add(entry)
+            if source_lib_ids:
+                found = srv.get_boxsets_by_libraries(service, source_lib_ids)
+                excluded.update(found)
+                logger.info(f"{LOG_PREFIX} [来源库黑名单] 排除合集 {len(found)} 个")
+        # 用户黑名单
+        if self.cfg.exclude_users:
+            user_ids: Set[str] = set()
+            for entry in self.cfg.exclude_users:
+                if "-" in entry:
+                    parts = entry.split("-", 1)
+                    if parts[0] == sname:
+                        user_ids.add(parts[1])
+                else:
+                    user_ids.add(entry)
+            if user_ids:
+                found = srv.get_boxsets_by_users(service, user_ids)
+                excluded.update(found)
+                logger.info(f"{LOG_PREFIX} [用户黑名单] 排除合集 {len(found)} 个")
+        return excluded
 
     def _filter_items(self, items: List[dict], seen: Set[str]) -> List[dict]:
         out = []
