@@ -229,7 +229,31 @@ class CoverGen(_PluginBase):
         return {"code": 0, "msg": f"已切换 {tab}"}
 
     def api_saved_cover_image(self, file: str = ""):
-        return {"code": 1, "msg": "图片不存在"}
+        if not file:
+            return {"code": 1, "msg": "参数缺失"}
+        covers_dir = self._cfg.covers_output
+        if not covers_dir:
+            covers_dir = str(self.get_data_path() / "covers")
+        # 只接受文件名（无路径分隔符），防止路径穿越
+        safe_name = os.path.basename(file)
+        if not safe_name or safe_name != file:
+            return {"code": 1, "msg": "非法路径"}
+        target = Path(covers_dir) / safe_name
+        if not target.is_file():
+            return {"code": 1, "msg": "图片不存在"}
+        mime_type, _ = mimetypes.guess_type(str(target))
+        if not mime_type:
+            mime_type = "image/jpeg"
+        try:
+            from fastapi.responses import FileResponse
+            return FileResponse(path=str(target), media_type=mime_type)
+        except Exception:
+            try:
+                from starlette.responses import FileResponse
+                return FileResponse(path=str(target), media_type=mime_type)
+            except Exception as e:
+                logger.error(f"【CoverGen】返回图片失败: {e}")
+                return {"code": 1, "msg": "返回图片失败"}
 
     # ---- 事件 ----
 
