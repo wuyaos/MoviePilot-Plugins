@@ -65,13 +65,14 @@
     "name": "CloudDrive2 存储",
     "description": "基于 clouddrivedisk/cd2disk 修改而成，通过 CloudDrive2 proto 1.0.7 / gRPC 直连与 API 令牌接入 CloudDrive2，提供 MoviePilot 存储模块能力",
     "labels": "云盘,CloudDrive2,存储",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
       "v0.1.0": "初始版本：基于 clouddrivedisk/cd2disk 修改而成，采用 CloudDrive2 proto 0.9.24 / gRPC 直连与 API 令牌鉴权，注册 MoviePilot 存储并支持浏览、上传、下载、删除、重命名、移动、复制与空间统计",
-      "v0.2.0": "升级 CloudDrive2 proto 至 1.0.7，重构 pb2 模块为插件专属子包（proto/），彻底消除与其他插件的 descriptor pool 命名冲突"
+      "v0.2.0": "升级 CloudDrive2 proto 至 1.0.7，重构 pb2 模块为插件专属子包（proto/），彻底消除与其他插件的 descriptor pool 命名冲突",
+      "v0.3.0": "重构核心模块为 cd2_helpers / cd2_client / cd2_upload / cd2_api 四层，移除冗余多候选鉴权逻辑，修复 GetUploadFileList 使用分页查询，切换 proto 包名为 cd2 彻底消除 descriptor pool 冲突"
     }
   }
 }

@@ -25,7 +25,7 @@ class CloudDrive2Disk(_PluginBase):
     plugin_name = "CloudDrive2 存储"
     plugin_desc = "基于 clouddrivedisk/cd2disk 修改而成，通过 CloudDrive2 proto 1.0.7 / gRPC 直连与 API 令牌接入 CloudDrive2，提供 MoviePilot 存储模块能力。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png"
-    plugin_version = "0.2.0"
+    plugin_version = "0.3.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "clouddrive2disk_"
