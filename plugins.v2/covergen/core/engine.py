@@ -159,7 +159,17 @@ class CoverEngine:
         else:
             data = self._generate_from_server(service, lib, title)
         if data:
-            ok = image_io.upload_library_image(service, lib, data)
+            def _save_cb(b64, ext):
+                import base64 as b64mod
+                covers_dir = str(self.cfg.covers_output) if self.cfg.covers_output else str(self.covers_path.parent / "covers")
+                os.makedirs(covers_dir, exist_ok=True)
+                safe_s = self._sanitize(sname)
+                safe_l = self._sanitize(lib.get("Name", ""))
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                fp = os.path.join(covers_dir, f"{safe_s}_{safe_l}_{ts}.{ext}")
+                Path(fp).write_bytes(b64mod.b64decode(b64))
+                logger.info(f"{LOG_PREFIX} 封面已保存: {fp}")
+            ok = image_io.upload_library_image(service, lib, data, on_save_local=_save_cb)
             return ok, "updated" if ok else "upload_failed"
         return False, "generate_failed"
 

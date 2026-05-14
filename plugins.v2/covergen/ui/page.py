@@ -82,40 +82,70 @@ def _build_clean(plugin_id: str) -> list:
 
 
 def _build_run_status(last_run) -> list:
-    """最近一次执行情况（兼容 Pydantic model 和 dict）。"""
+    """最近一次执行情况：统计 + 每库列表。"""
     if not last_run:
         return [v_row([v_col(12, {"component": "div", "props": {
             "class": "text-center text-medium-emphasis py-2",
         }, "text": "尚无执行记录"})])]
-    # 兼容 dict / Pydantic
-    def _get(obj, key, default=0):
-        if isinstance(obj, dict):
-            return obj.get(key, default)
-        return getattr(obj, key, default)
+    def _get(obj, key, default=None):
+        return obj.get(key, default) if isinstance(obj, dict) else getattr(obj, key, default)
     success = _get(last_run, "success", 0)
     failed = _get(last_run, "failed", 0)
     skipped = _get(last_run, "skipped", 0)
     mode = _get(last_run, "mode", "")
     finished = _get(last_run, "finished_at", "")
-    chips = []
-    chips.append({"component": "VChip", "props": {
-        "color": "success", "variant": "tonal", "size": "small", "class": "mr-1",
-        "prependIcon": "mdi-check-circle",
-    }, "text": f"成功 {success}"})
-    if failed > 0:
-        chips.append({"component": "VChip", "props": {
-            "color": "error", "variant": "tonal", "size": "small", "class": "mr-1",
-            "prependIcon": "mdi-close-circle",
-        }, "text": f"失败 {failed}"})
-    if skipped > 0:
-        chips.append({"component": "VChip", "props": {
-            "color": "warning", "variant": "tonal", "size": "small", "class": "mr-1",
-            "prependIcon": "mdi-skip-next",
-        }, "text": f"跳过 {skipped}"})
-    chips.append({"component": "VChip", "props": {
-        "variant": "text", "size": "small",
-    }, "text": f"模式: {mode} | {str(finished)[:19] if finished else '运行中'}"})
-    return [v_row([{"component": "VCol", "props": {"cols": 12}, "content": chips}])]
+    libraries = _get(last_run, "libraries", []) or []
+
+    # 统计行
+    chips = [
+        {"component": "VChip", "props": {"color": "success", "variant": "tonal", "size": "small", "class": "mr-1",
+                                          "prependIcon": "mdi-check-circle"}, "text": f"成功 {success}"},
+    ]
+    if failed:
+        chips.append({"component": "VChip", "props": {"color": "error", "variant": "tonal", "size": "small",
+                                                       "class": "mr-1", "prependIcon": "mdi-close-circle"},
+                      "text": f"失败 {failed}"})
+    if skipped:
+        chips.append({"component": "VChip", "props": {"color": "warning", "variant": "tonal", "size": "small",
+                                                       "class": "mr-1", "prependIcon": "mdi-skip-next"},
+                      "text": f"跳过 {skipped}"})
+    chips.append({"component": "VChip", "props": {"variant": "text", "size": "small"},
+                  "text": f"{mode} | {str(finished)[:19] if finished else '运行中'}"})
+    summary_row = v_row([{"component": "VCol", "props": {"cols": 12}, "content": chips}])
+
+    # 每库详情表
+    if not libraries:
+        return [summary_row]
+    rows = []
+    for lib in libraries:
+        if isinstance(lib, dict):
+            name = lib.get("name", "")
+            server = lib.get("server", "")
+            status = lib.get("status", "")
+            reason = lib.get("reason", "")
+        else:
+            name = getattr(lib, "name", "")
+            server = getattr(lib, "server", "")
+            status = getattr(lib, "status", "")
+            reason = getattr(lib, "reason", "")
+        icon = "mdi-check" if status == "success" else ("mdi-close" if status == "failed" else "mdi-skip-next")
+        color = "success" if status == "success" else ("error" if status == "failed" else "warning")
+        rows.append({"component": "tr", "content": [
+            {"component": "td", "text": server},
+            {"component": "td", "text": name},
+            {"component": "td", "content": [{"component": "VIcon", "props": {"icon": icon, "color": color, "size": "small"}}]},
+            {"component": "td", "text": reason or "-"},
+        ]})
+    table = {"component": "VTable", "props": {"density": "compact", "class": "mt-2"}, "content": [
+        {"component": "thead", "content": [{"component": "tr", "content": [
+            {"component": "th", "text": "服务器"},
+            {"component": "th", "text": "媒体库"},
+            {"component": "th", "text": "状态"},
+            {"component": "th", "text": "详情"},
+        ]}]},
+        {"component": "tbody", "content": rows},
+    ]}
+    return [summary_row, v_row([{"component": "VCol", "props": {"cols": 12}, "content": [table]}])]
 
 
 def build_page(*, enabled: bool, has_servers: bool, cover_style: str,
