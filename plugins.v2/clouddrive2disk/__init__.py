@@ -160,7 +160,7 @@ class CloudDrive2Disk(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
                                         "component": "VSwitch",
@@ -173,7 +173,7 @@ class CloudDrive2Disk(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
                                         "component": "VTextField",
@@ -181,6 +181,25 @@ class CloudDrive2Disk(_PluginBase):
                                             "model": "disk_name",
                                             "label": "存储名称",
                                             "placeholder": "CloudDrive2",
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 4},
+                                "content": [
+                                    {
+                                        "component": "VSelect",
+                                        "props": {
+                                            "model": "upload_mode",
+                                            "label": "上传模式",
+                                            "items": [
+                                                {"title": "direct_write", "value": "direct_write"},
+                                                {"title": "remote_upload（预留）", "value": "remote_upload"},
+                                            ],
+                                            "hint": "当前仅 direct_write 生效，remote_upload 仅占位",
+                                            "persistent-hint": True,
                                         },
                                     }
                                 ],
@@ -218,30 +237,6 @@ class CloudDrive2Disk(_PluginBase):
                                             "placeholder": "粘贴 API 令牌",
                                             "type": "password",
                                             "hint": "API 令牌",
-                                            "persistent-hint": True,
-                                        },
-                                    }
-                                ],
-                            },
-                        ],
-                    },
-                    {
-                        "component": "VRow",
-                        "content": [
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
-                                "content": [
-                                    {
-                                        "component": "VSelect",
-                                        "props": {
-                                            "model": "upload_mode",
-                                            "label": "上传模式",
-                                            "items": [
-                                                {"title": "direct_write", "value": "direct_write"},
-                                                {"title": "remote_upload（预留）", "value": "remote_upload"},
-                                            ],
-                                            "hint": "当前仅 direct_write 生效，remote_upload 仅占位",
                                             "persistent-hint": True,
                                         },
                                     }
