@@ -1,4 +1,16 @@
 {
+  "CoverGen": {
+    "name": "媒体库封面生成",
+    "description": "自动生成媒体库封面（模块化重构版），支持库白名单、合集黑名单过滤、4种动画风格、Emby和Jellyfin",
+    "labels": "封面,媒体库",
+    "version": "1.0.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png",
+    "author": "wuyaos",
+    "level": 1,
+    "history": {
+      "v1.0.0": "初始版本：基于 MediaCoverGeneratorCustom v0.9.7 模块化重构，5200 行 → 9 模块，配置 dataclass 化，并行下载 9 张图，统一 API 路由消除 40 处重复"
+    }
+  },
   "MediaCoverGeneratorCustom": {
     "name": "媒体库封面生成（自用版）",
     "description": "自动生成媒体库封面，支持库白名单、合集黑名单过滤、4种动画风格、Emby和Jellyfin",
