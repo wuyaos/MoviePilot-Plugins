@@ -39,28 +39,44 @@ def _build_generate(*, enabled: bool, has_servers: bool, cover_style: str, plugi
 
 def _build_history(covers: List[Dict[str, Any]], plugin_id: str) -> list:
     if not covers:
-        return [v_row([v_col(12, {"component": "div", "props": {
+        inner = {"component": "div", "props": {
             "class": "text-center text-medium-emphasis py-4",
-        }, "text": "暂无历史封面，生成后将在此展示"})])]
-    cards = []
-    for c in covers:
-        src = f"api/v1/plugin/{plugin_id}/saved_cover_image?file={c.get('file', '')}"
-        cards.append({
-            "component": "VCol",
-            "props": {"cols": 6, "sm": 4, "md": 3},
-            "content": [{
-                "component": "VCard",
-                "props": {"variant": "outlined", "class": "rounded-lg overflow-hidden"},
-                "content": [
-                    {"component": "VImg", "props": {
-                        "src": src, "aspect-ratio": "16/9", "cover": True, "height": 120,
-                    }},
-                    {"component": "VCardText", "props": {"class": "py-1 text-caption text-truncate"},
-                     "text": c.get("label", "")},
-                ],
-            }],
-        })
-    return [{"component": "VRow", "props": {"dense": True}, "content": cards}]
+        }, "text": "暂无历史封面，生成后将在此展示"}
+    else:
+        cards = []
+        for c in covers:
+            src = f"api/v1/plugin/{plugin_id}/saved_cover_image?file={c.get('file', '')}"
+            cards.append({
+                "component": "VCol",
+                "props": {"cols": 6, "sm": 4, "md": 3},
+                "content": [{
+                    "component": "VCard",
+                    "props": {"variant": "outlined", "class": "rounded-lg overflow-hidden"},
+                    "content": [
+                        {"component": "VImg", "props": {
+                            "src": src, "aspect-ratio": "16/9", "cover": True, "height": 120,
+                        }},
+                        {"component": "VCardText", "props": {"class": "py-1 text-caption text-truncate"},
+                         "text": c.get("label", "")},
+                    ],
+                }],
+            })
+        inner = {"component": "VRow", "props": {"dense": True}, "content": cards}
+
+    return [{
+        "component": "VExpansionPanels",
+        "props": {"variant": "accordion", "class": "mt-1"},
+        "content": [{
+            "component": "VExpansionPanel",
+            "content": [
+                {"component": "VExpansionPanelTitle",
+                 "props": {"class": "text-body-2"},
+                 "text": f"历史封面（{len(covers)} 张）"},
+                {"component": "VExpansionPanelText",
+                 "content": [inner]},
+            ],
+        }],
+    }]
 
 
 def _build_clean(plugin_id: str) -> list:
@@ -156,7 +172,6 @@ def build_page(*, enabled: bool, has_servers: bool, cover_style: str,
         content = [
             *_build_generate(enabled=enabled, has_servers=has_servers,
                              cover_style=cover_style, plugin_id=plugin_id),
-            v_divider_section("📚 历史封面"),
             *_build_history(covers, plugin_id),
             v_divider_section("📊 最近执行"),
             *_build_run_status(last_run),
