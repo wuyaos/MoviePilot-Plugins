@@ -183,10 +183,10 @@ class CoverEngine:
         coll_type = (lib.get("CollectionType") or "").lower()
         lib_type = (lib.get("Type") or "").lower()
         if coll_type == "playlists" or lib_type == "playlist":
-            inc = "Audio,MusicAlbum,Movie,Series,Episode"
-        elif coll_type == "boxsets" or lib_type == "boxset":
-            inc = "BoxSet,Movie"
-        elif coll_type == "music":
+            return self._handle_playlist_library(service, lib, title)
+        if coll_type == "boxsets" or lib_type == "boxset":
+            return self._handle_boxset_library(service, lib, title)
+        if coll_type == "music":
             inc = "MusicAlbum,Audio"
         else:
             inc = "Movie,Series"
@@ -194,16 +194,6 @@ class CoverEngine:
                                         include_types=inc, sort_by=sort_by)
         if not items_raw:
             logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 拉取项目为空 (type={coll_type or lib_type})")
-
-        # ---- 合集黑名单过滤（来源库 + 用户） ----
-        excluded_ids = self._get_excluded_boxset_ids(service, sname)
-        if excluded_ids and items_raw:
-            before = len(items_raw)
-            items_raw = [it for it in items_raw
-                         if str(it.get("Id") or it.get("ItemId") or "") not in excluded_ids]
-            filtered_count = before - len(items_raw)
-            if filtered_count:
-                logger.info(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 合集黑名单过滤掉 {filtered_count} 项")
 
         seen: Set[str] = set()
         valid = self._filter_items(items_raw, seen)
@@ -246,6 +236,81 @@ class CoverEngine:
                 excluded.update(found)
                 logger.info(f"{LOG_PREFIX} [用户黑名单] 排除合集 {len(found)} 个")
         return excluded
+
+    def _handle_boxset_library(self, service, lib: dict, title) -> Optional[str]:
+        """合集库专用：排除黑名单合集后，从子项取图。"""
+        lid = srv.get_library_id(service, lib)
+        sname = service.name if hasattr(service, 'name') else ""
+        sort_by = self.cfg.sort_by or "Random"
+
+        excluded_ids = self._get_excluded_boxset_ids(service, sname)
+
+        all_boxsets = srv.get_items_batch(service, lid, limit=99999,
+                                          include_types="BoxSet,Movie", sort_by=sort_by)
+        if not all_boxsets:
+            logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 合集库无 BoxSet")
+            return False
+
+        if excluded_ids:
+            before = len(all_boxsets)
+            all_boxsets = [b for b in all_boxsets
+                           if str(b.get("Id") or b.get("ItemId") or "") not in excluded_ids]
+            logger.info(f"{LOG_PREFIX} [合集过滤] {sname}：{lib.get('Name')} "
+                        f"过滤 {before - len(all_boxsets)} 个合集，剩余 {len(all_boxsets)} 个")
+
+        seen: Set[str] = set()
+        valid = []
+        for boxset in all_boxsets:
+            if len(valid) >= self.cfg.required_items:
+                break
+            bs_id = boxset.get("Id") or boxset.get("ItemId")
+            if not bs_id:
+                continue
+            children = srv.get_items_batch(service, bs_id, limit=20,
+                                           include_types="Movie,Series,Episode", sort_by=sort_by)
+            valid.extend(self._filter_items(children, seen))
+
+        if not valid:
+            logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 合集库筛选后无有效项目")
+            return False
+        if self.cfg.is_single_image_style:
+            return self._process_single(service, lib, title, valid[0])
+        return self._process_grid(service, lib, title, valid[:self.cfg.required_items])
+
+    def _handle_playlist_library(self, service, lib: dict, title) -> Optional[str]:
+        """播放列表库专用：先尝试 playlist 本身图片，再取子项。"""
+        lid = srv.get_library_id(service, lib)
+        sname = service.name if hasattr(service, 'name') else ""
+        sort_by = self.cfg.sort_by or "Random"
+
+        playlists = srv.get_items_batch(service, lid, limit=50,
+                                        include_types="Playlist,Audio,MusicAlbum,Movie,Series,Episode",
+                                        sort_by=sort_by)
+        if not playlists:
+            logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 播放列表库为空")
+            return False
+
+        seen: Set[str] = set()
+        valid = list(self._filter_items(playlists, seen))
+
+        if len(valid) < self.cfg.required_items:
+            for pl in playlists:
+                if len(valid) >= self.cfg.required_items:
+                    break
+                pl_id = pl.get("Id") or pl.get("ItemId")
+                if not pl_id:
+                    continue
+                children = srv.get_items_batch(service, pl_id, limit=20,
+                                               include_types="Audio,MusicAlbum,Movie,Series,Episode",
+                                               sort_by=sort_by)
+                valid.extend(self._filter_items(children, seen))
+
+        if not valid:
+            logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 播放列表筛选后无有效项目")
+            return False
+        if self.cfg.is_single_image_style:
+            return self._process_single(service, lib, title, valid[0])
+        return self._process_grid(service, lib, title, valid[:self.cfg.required_items])
 
     def _filter_items(self, items: List[dict], seen: Set[str]) -> List[dict]:
         out = []

@@ -210,7 +210,7 @@ class PluginConfig:
     def required_items(self) -> int:
         if self.cover_style in ("static_3", "animated_3"):
             return 9
-        if self.cover_style in ("animated_1", "animated_2", "animated_4"):
+        if self.cover_style in ("animated_1", "animated_2", "animated_4", "animated_5"):
             return self.animated_2_image_count
         return 1
 
