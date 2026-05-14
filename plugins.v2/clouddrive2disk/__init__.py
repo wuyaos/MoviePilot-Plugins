@@ -1,9 +1,6 @@
 # input: MoviePilot 存储模块调用、CloudDrive2 gRPC 地址与 API 令牌配置
 # output: CloudDrive2Disk 插件类，注册 CloudDrive2 存储并暴露文件管理覆盖方法
 # pos: clouddrive2disk 插件入口，负责 MoviePilot V2 插件生命周期与存储适配
-import importlib.util
-import sys
-import types
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
@@ -15,68 +12,8 @@ from app.plugins import _PluginBase
 from app.schemas import FileItem, StorageOperSelectionEventData, StorageUsage
 from app.schemas.types import ChainEventType
 
-
-_shim_modules: List[str] = []
-_shim_sys_path: Optional[str] = None
-
-
-def _load_local_module(module_name: str, file_path: Path, force_reload: bool = False):
-    if module_name in sys.modules and not force_reload:
-        return sys.modules[module_name]
-
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    if not spec or not spec.loader:
-        raise ImportError(f"无法加载模块: {module_name}")
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def _install_clouddrive_shim() -> Tuple[List[str], Optional[str]]:
-    """兼容生成代码可能使用的 clouddrive.proto 导入路径。"""
-    plugin_dir = Path(__file__).resolve().parent
-    pb2_file = plugin_dir / "clouddrive_pb2.py"
-    pb2_grpc_file = plugin_dir / "clouddrive_pb2_grpc.py"
-
-    injected_path = None
-    if str(plugin_dir) not in sys.path:
-        sys.path.insert(0, str(plugin_dir))
-        injected_path = str(plugin_dir)
-
-    pb2_module = _load_local_module("clouddrive_pb2", pb2_file)
-    if not hasattr(pb2_module, "CloudDriveSystemInfo"):
-        raise ImportError("已加载的 clouddrive_pb2 与 CloudDrive2 proto 0.9.24 不匹配，请重启 MoviePilot 清理模块缓存")
-    pb2_grpc_module = _load_local_module("clouddrive_pb2_grpc", pb2_grpc_file)
-    if hasattr(pb2_grpc_module, "clouddrive__pb2"):
-        pb2_grpc_module.clouddrive__pb2 = pb2_module
-
-    clouddrive_pkg = sys.modules.get("clouddrive") or types.ModuleType("clouddrive")
-    proto_pkg = sys.modules.get("clouddrive.proto") or types.ModuleType("clouddrive.proto")
-    clouddrive_pkg.proto = proto_pkg
-    proto_pkg.CloudDrive_pb2 = pb2_module
-    proto_pkg.CloudDrive_pb2_grpc = pb2_grpc_module
-
-    shim_keys = [
-        "clouddrive",
-        "clouddrive.proto",
-        "clouddrive.proto.CloudDrive_pb2",
-        "clouddrive.proto.CloudDrive_pb2_grpc",
-    ]
-    sys.modules["clouddrive"] = clouddrive_pkg
-    sys.modules["clouddrive.proto"] = proto_pkg
-    sys.modules["clouddrive.proto.CloudDrive_pb2"] = pb2_module
-    sys.modules["clouddrive.proto.CloudDrive_pb2_grpc"] = pb2_grpc_module
-    return shim_keys, injected_path
-
-
 try:
-    _shim_modules, _shim_sys_path = _install_clouddrive_shim()
-    try:
-        from .cd2_api import Cd2Api
-    except ImportError:
-        from cd2_api import Cd2Api
+    from .core.cd2_api import Cd2Api
 except Exception as err:
     logger.error(f"【CloudDrive2Disk】加载 CloudDrive2 gRPC 模块失败: {err}")
     Cd2Api = None
@@ -86,9 +23,9 @@ class CloudDrive2Disk(_PluginBase):
     """CloudDrive2 存储插件。"""
 
     plugin_name = "CloudDrive2 存储"
-    plugin_desc = "基于 clouddrivedisk/cd2disk 修改而成，通过 CloudDrive2 proto 0.9.24 / gRPC 直连与 API 令牌接入 CloudDrive2，提供 MoviePilot 存储模块能力。"
+    plugin_desc = "基于 clouddrivedisk/cd2disk 修改而成，通过 CloudDrive2 proto 1.0.7 / gRPC 直连与 API 令牌接入 CloudDrive2，提供 MoviePilot 存储模块能力。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png"
-    plugin_version = "0.1.0"
+    plugin_version = "0.2.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "clouddrive2disk_"

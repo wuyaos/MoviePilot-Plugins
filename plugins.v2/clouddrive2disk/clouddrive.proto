@@ -11,7 +11,7 @@ import "google/protobuf/descriptor.proto";
 // Define a custom option for versioning.
 extend google.protobuf.FileOptions { string version = 50001; }
 
-option (version) = "0.9.24";
+option (version) = "1.0.7";
 
 service CloudDriveFileSrv {
   // public methods, no authorization is required
@@ -135,6 +135,27 @@ service CloudDriveFileSrv {
   rpc PurgeFileBufferDiskCache(google.protobuf.Empty) returns (google.protobuf.Empty) {}
   // set disk cache eviction strategy
   rpc SetDiskCacheEvictionStrategy(SetDiskCacheEvictionStrategyRequest) returns (google.protobuf.Empty) {}
+  // enable file buffer disk cache for a folder
+  rpc SetFolderDiskCache(SetFolderDiskCacheRequest) returns (google.protobuf.Empty) {}
+  // disable file buffer disk cache for a folder
+  rpc RemoveFolderDiskCache(FileRequest) returns (google.protobuf.Empty) {}
+  // list all folders with disk cache enabled
+  rpc ListDiskCacheFolders(google.protobuf.Empty) returns (ListDiskCacheFoldersReply) {}
+  // client-driven cache hints: tell the server to prefetch byte ranges ahead of
+  // actual reads, with a priority that also triages concurrent work
+  rpc PrefetchFileRanges(PrefetchFileRangesRequest) returns (PrefetchFileRangesReply) {}
+  // cancel one or more hints previously registered via PrefetchFileRanges
+  rpc CancelFilePrefetch(CancelFilePrefetchRequest) returns (google.protobuf.Empty) {}
+  // Tell the server: "I won't read this file again — drop the EntryReader
+  // (download buffers + downloader threads) as soon as no open handles
+  // remain, skipping the default 2-second post-close retention window that
+  // serves rapid close/reopen patterns from mounted filesystems. Use for
+  // web thumbnail generation, one-shot metadata probes, and any client that
+  // can guarantee it won't re-open the file in the near future."
+  rpc CloseFileReader(FileRequest) returns (google.protobuf.Empty) {}
+  // diagnostic: list currently-registered prefetch hints and cumulative
+  // telemetry counters (since process start)
+  rpc GetActivePrefetchHints(google.protobuf.Empty) returns (GetActivePrefetchHintsReply) {}
   // get server stats, including cpu/mem/uptime
   rpc GetRunningInfo(google.protobuf.Empty) returns (RunInfo) {}
   // get all opened file handles
@@ -167,6 +188,8 @@ service CloudDriveFileSrv {
   // get subfiles of a local path, used for adding mountpoint from web ui
   rpc LocalGetSubFiles(LocalGetSubFilesRequest)
       returns (stream LocalGetSubFilesResult) {}
+  // create a folder on the local filesystem
+  rpc LocalCreateFolder(LocalCreateFolderRequest) returns (LocalCreateFolderResult) {}
   // get all transfer tasks' count
   rpc GetAllTasksCount(google.protobuf.Empty) returns (GetAllTasksCountResult) {
   }
@@ -241,7 +264,7 @@ service CloudDriveFileSrv {
   // add 115 open with OAuth
   rpc APILogin115OpenOAuth(Login115OpenOAuthRequest) returns (APILoginResult) {}
   // add 115 open with qr scanning
-  rpc APILogin115OpenQRCode(google.protobuf.Empty)
+  rpc APILogin115OpenQRCode(Login115OpenQRCodeRequest)
       returns (stream QRCodeScanMessage) {}
   // add AliyunDriveOpen with OAuth result
   rpc APILoginAliyundriveOAuth(LoginAliyundriveOAuthRequest)
@@ -272,7 +295,7 @@ service CloudDriveFileSrv {
   // add 123 cloud with client id and client secret
   rpc ApiLogin123panOAuth(Login123panOAuthRequest) returns (APILoginResult) {}
   // add 189 cloud with qr scanning
-  rpc APILogin189QRCode(google.protobuf.Empty)
+  rpc APILogin189QRCode(Login189QRCodeRequest)
       returns (stream QRCodeScanMessage) {}
   // add PikPak cloud with username and password
   // rpc APILoginPikPak(UserLoginRequest) returns (APILoginResult) {}
@@ -284,6 +307,16 @@ service CloudDriveFileSrv {
   rpc APIAddLocalFolder(AddLocalFolderRequest) returns (APILoginResult) {}
   // add remote clouddrive
   rpc APILoginCloudDrive(LoginCloudDriveRequest) returns (APILoginResult) {}
+  // add SFTP server
+  rpc APILoginSftp(LoginSftpRequest) returns (APILoginResult) {}
+  // add FTP/FTPS server
+  rpc APILoginFtp(LoginFtpRequest) returns (APILoginResult) {}
+  // add SMB/CIFS share
+  rpc APILoginSmb(LoginSmbRequest) returns (APILoginResult) {}
+  // discover SMB servers on the local network
+  rpc DiscoverSmbServers(google.protobuf.Empty) returns (DiscoverSmbServersResult) {}
+  // discover SMB shares on a server
+  rpc DiscoverSmbShares(DiscoverSmbSharesRequest) returns (DiscoverSmbSharesResult) {}
   // remove a cloud
   rpc RemoveCloudAPI(RemoveCloudAPIRequest) returns (FileOperationResult) {}
   // get all cloud apis
@@ -333,6 +366,8 @@ service CloudDriveFileSrv {
       returns (stream CloudDrivePushMessage) {}
   // get CloudDrive1's user data string
   rpc GetCloudDrive1UserData(google.protobuf.Empty) returns (StringResult) {}
+  // get service capabilities (restart/update availability)
+  rpc GetServiceCapabilities(google.protobuf.Empty) returns (ServiceCapabilities) {}
   // restart service
   rpc RestartService(google.protobuf.Empty) returns (google.protobuf.Empty) {}
   // shutdown service
@@ -571,6 +606,7 @@ message SearchRequest {
   bool forceRefresh = 3;
   bool fuzzyMatch = 4;
   optional bool addResultToMountedSearchFolder = 5; // if true, add search result to a mounted search folder
+  optional bool contentSearch = 6; // if true, also search file content (not just filename), requires canContentSearch
 }
 message AddOfflineFileRequest {
   string urls = 1;
@@ -718,11 +754,16 @@ message CloudDriveFile {
   bool CanLock = 73; // An unlocked encrypted file/folder can be locked
   bool CanSyncFileChangesFromCloud = 74; // File change can be synced from cloud
   bool supportOfflineDownloadManagement = 75; // can manage offline files
+  bool canContentSearch = 79; // cloud supports content search (not just filename)
 
   // Download URL path with placeholders and expiration info for direct client
   // use Client replaces {SCHEME} with "http"/"https", {HOST} with actual
   // host:port, and {PREVIEW} with "true"/"false"
   optional DownloadUrlPathInfo downloadUrlPath = 76;
+  // whether file buffer disk cache is enabled for this file/folder (resolved via ancestor)
+  optional bool fileBufferDiskCacheEnabled = 77;
+  // disk cache rules for this file/folder (resolved via ancestor, present only when enabled)
+  optional DiskCacheFolder fileBufferDiskCacheRules = 78;
 }
 
 message SpaceInfo {
@@ -760,17 +801,35 @@ message FileDetailProperties {
   string originalPath = 6;
 }
 message FileMetaData { map<string, string> metadata = 1; }
+// Device power type — describes power and storage characteristics.
+// Set by the host app via C interface, exposed via GetSystemInfo.
+enum DevicePowerType {
+  // Desktop/server: constant power, fast storage — no restrictions (default)
+  DESKTOP = 0;
+  // TV set / set-top box: constant power, slow flash storage
+  // → local caches disabled, web UI should hide cache-heavy features
+  SLOW_STORAGE = 1;
+  // Phone / tablet: battery-powered, fast storage
+  // → web UI should offer power-saving options when on battery
+  BATTERY = 2;
+}
 message CloudDriveSystemInfo {
   bool IsLogin = 1;
   string UserName = 2;
   bool SystemReady = 3;
   optional string SystemMessage = 4;
   optional bool hasError = 5;
+  // device power and storage profile, see DevicePowerType
+  DevicePowerType devicePowerType = 6;
+  // true when dir cache persistence and disk buffer are force-disabled
+  // (by platform config or SLOW_STORAGE device type)
+  optional bool diskCacheDisabled = 7;
 }
 message UserLoginRequest {
   string userName = 1;
   string password = 2;
   bool synDataToCloud = 3;
+  optional ProxyInfo cloudfsProxy = 4; // Optional proxy for reaching CloudFS account server
 }
 message LoginWithThirdPartyAccountRequest {
   string cloudName = 1;
@@ -778,10 +837,12 @@ message LoginWithThirdPartyAccountRequest {
   string accessToken = 3;
   uint64 expiresIn = 4;
   bool synDataToCloud = 5;
+  optional ProxyInfo cloudfsProxy = 6; // Optional proxy for reaching CloudFS account server
 }
 message UserRegisterRequest {
   string userName = 1;
   string password = 2;
+  optional ProxyInfo cloudfsProxy = 3; // Optional proxy for reaching CloudFS account server
 }
 message UserLogoutRequest { bool logoutFromCloudFS = 1; }
 message ChangePasswordRequest {
@@ -887,6 +948,15 @@ message LocalGetSubFilesRequest {
   bool includeAvailableDrive = 4;
 }
 message LocalGetSubFilesResult { repeated string subFiles = 1; }
+message LocalCreateFolderRequest {
+  string parentFolder = 1;
+  string folderName = 2;
+}
+message LocalCreateFolderResult {
+  bool success = 1;
+  string errorMessage = 2;
+  string createdPath = 3;
+}
 message PushMessage { string clouddriveVersion = 1; }
 message GetAllTasksCountResult {
   uint32 downloadCount = 1;
@@ -1167,57 +1237,89 @@ message LoginAliyundriveOAuthRequest {
   string refresh_token = 1;
   string access_token = 2;
   uint64 expires_in = 3;
+  optional ProxyInfo apiProxy = 4;
+  optional ProxyInfo dataProxy = 5;
 }
 message LoginAliyundriveRefreshtokenRequest {
   string refreshToken = 1;
   bool useOpenAPI = 2;
 }
-message LoginAliyundriveQRCodeRequest { bool useOpenAPI = 1; }
+message LoginAliyundriveQRCodeRequest {
+  bool useOpenAPI = 1;
+  optional ProxyInfo apiProxy = 2;
+  optional ProxyInfo dataProxy = 3;
+}
+message Login115OpenQRCodeRequest {
+  optional ProxyInfo apiProxy = 1;
+  optional ProxyInfo dataProxy = 2;
+}
+message Login189QRCodeRequest {
+  optional ProxyInfo apiProxy = 1;
+  optional ProxyInfo dataProxy = 2;
+}
 message LoginBaiduPanOAuthRequest {
   string refresh_token = 1;
   string access_token = 2;
   uint64 expires_in = 3;
+  optional ProxyInfo apiProxy = 4;
+  optional ProxyInfo dataProxy = 5;
 }
 message LoginOneDriveOAuthRequest {
   string refresh_token = 1;
   string access_token = 2;
   uint64 expires_in = 3;
+  optional ProxyInfo apiProxy = 4;
+  optional ProxyInfo dataProxy = 5;
 }
 message LoginGoogleDriveOAuthRequest {
   string refresh_token = 1;
   string access_token = 2;
   uint64 expires_in = 3;
+  optional ProxyInfo apiProxy = 4;
+  optional ProxyInfo dataProxy = 5;
 }
 message LoginGoogleDriveRefreshTokenRequest {
   string client_id = 1;
   string client_secret = 2;
   string refresh_token = 3;
+  optional ProxyInfo apiProxy = 4;
+  optional ProxyInfo dataProxy = 5;
 }
 message LoginXunleiOAuthRequest {
   string refresh_token = 1;
   string access_token = 2;
   uint64 expires_in = 3;
+  optional ProxyInfo apiProxy = 4;
+  optional ProxyInfo dataProxy = 5;
 }
 message LoginXunleiOpenOAuthRequest {
   string refresh_token = 1;
   string access_token = 2;
   uint64 expires_in = 3;
+  optional ProxyInfo apiProxy = 4;
+  optional ProxyInfo dataProxy = 5;
 }
 message Login123panOAuthRequest {
   string refresh_token = 1;
   string access_token = 2;
   uint64 expires_in = 3;
+  optional ProxyInfo apiProxy = 4;
+  optional ProxyInfo dataProxy = 5;
 }
 message Login115OpenOAuthRequest {
   string refresh_token = 1;
   string access_token = 2;
   uint64 expires_in = 3;
+  optional ProxyInfo apiProxy = 4;
+  optional ProxyInfo dataProxy = 5;
 }
 message LoginWebDavRequest {
   string serverUrl = 1;
   string userName = 2;
   string password = 3;
   bool doNotSyncToCloud = 4; // If true, do NOT sync this API config to cloud (default: false, meaning sync by default)
+  optional ProxyInfo apiProxy = 5; // Optional API proxy for the initial connection and metadata calls
+  optional ProxyInfo dataProxy = 6; // Optional data proxy for file upload/download
 }
 message LoginS3Request {
   string accessKeyId = 1; // AWS Access Key ID
@@ -1228,6 +1330,8 @@ message LoginS3Request {
   bool pathStyle = 6; // Use path-style URLs instead of virtual-hosted style (required for some S3-compatible services)
   bool doNotSyncToCloud = 7; // If true, do NOT sync this API config to cloud (default: false, meaning sync by default)
   optional uint32 signatureVersion = 8; // S3 signature version: 2 or 4 (default 4)
+  optional ProxyInfo apiProxy = 9; // Optional API proxy for the initial connection and metadata calls
+  optional ProxyInfo dataProxy = 10; // Optional data proxy for file upload/download
 }
 message APILoginResult {
   bool success = 1;
@@ -1241,6 +1345,60 @@ message LoginCloudDriveRequest {
   // self-signed certs)
   bool insecureTls = 3;
   bool doNotSyncToCloud = 4; // If true, do NOT sync this API config to cloud (default: false, meaning sync by default)
+  optional ProxyInfo apiProxy = 5;
+  optional ProxyInfo dataProxy = 6;
+}
+message LoginSftpRequest {
+  string host = 1;
+  uint32 port = 2; // default 22
+  string userName = 3;
+  string password = 4; // password authentication
+  optional string privateKey = 5;     // PEM-encoded private key for key-based auth
+  optional string passphrase = 6;     // passphrase for encrypted private keys
+  optional string rootPath = 7;       // remote root directory (default: "/")
+  bool doNotSyncToCloud = 8;
+  optional ProxyInfo apiProxy = 9;
+  optional ProxyInfo dataProxy = 10;
+}
+message LoginFtpRequest {
+  string host = 1;
+  uint32 port = 2; // default 21
+  string userName = 3;
+  string password = 4;
+  bool useTls = 5; // enable FTPS (TLS)
+  optional string rootPath = 6;       // remote root directory (default: "/")
+  bool doNotSyncToCloud = 7;
+  optional ProxyInfo apiProxy = 8;
+  optional ProxyInfo dataProxy = 9;
+}
+message LoginSmbRequest {
+  string server = 1; // SMB server hostname or IP
+  string share = 2; // share name (e.g., "SharedDocs")
+  uint32 port = 3; // default 445
+  string userName = 4;
+  string password = 5;
+  optional string workgroup = 6;      // domain/workgroup
+  optional string rootPath = 7;       // path within share (default: "/")
+  bool doNotSyncToCloud = 8;
+  optional ProxyInfo apiProxy = 9;
+  optional ProxyInfo dataProxy = 10;
+}
+message SmbServerInfo {
+  string name = 1; // server name (e.g., "MINIPC-Y10")
+  string address = 2; // IP address or hostname
+}
+message DiscoverSmbServersResult {
+  repeated SmbServerInfo servers = 1;
+}
+message DiscoverSmbSharesRequest {
+  string server = 1;
+  uint32 port = 2; // default 445
+  string userName = 3;
+  string password = 4;
+  optional string workgroup = 5;
+}
+message DiscoverSmbSharesResult {
+  repeated string shareNames = 1;
 }
 message RemoveCloudAPIRequest {
   string cloudName = 1;
@@ -1289,10 +1447,15 @@ message CloudAPIConfig {
   optional bool supportDirectLink = 14;
   // whether this cloud API supports direct download URLs (read-only, determined by API implementation)
   optional bool supportDirectDownloadUrl = 15;
-  // whether to cache downloaded file content to local disk for this cloud API
-  optional bool fileBufferDiskCacheEnabled = 16;
-  // maximum file size to cache locally for this cloud API (0 = no limit, uses system max_bytes)
-  optional uint64 fileBufferDiskCacheMaxFileSize = 17;
+  // field 16 and 17 removed: disk cache settings moved to per-folder (SetFolderDiskCache)
+  reserved 16, 17;
+  // Read-only caps reported by the server so clients can bound user input.
+  // Each is the effective per-cloud (and platform-clamped, where applicable)
+  // upper bound. Absent / zero means "no advertised cap; client should fall
+  // back to a sensible default". Ignored on SetCloudAPIConfig.
+  optional uint32 maxDownloadThreadsLimit = 18;
+  optional uint64 maxBufferPoolSizeMBLimit = 19;
+  optional double maxQueriesPerSecondLimit = 20;
 }
 message SetCloudAPIConfigRequest {
   string cloudName = 1;
@@ -1362,6 +1525,22 @@ message SystemSettings {
   optional string fileBufferDiskCacheLocation = 24;
   // Max bytes allowed for disk cache; LRU eviction keeps size under this
   optional uint64 fileBufferDiskCacheMaxBytes = 25;
+  // Proxy settings for reaching CloudFS account server (cloudfs.zhenyunpan.com)
+  optional ProxyInfo cloudfsProxy = 26;
+  // Log file rotation settings.
+  // All 4 fields must be sent together in SetSystemSettings; when any
+  // field is present the server updates all 4, so omitted size fields
+  // are interpreted as "no limit" rather than "don't change".
+  //
+  // Max size in bytes for a single log file before rotation:
+  //   not set (None) = no limit (file grows indefinitely)
+  //   0              = disable logging to file
+  //   > 0            = rotate when the file exceeds this size
+  optional uint64 maxFileLogSizeBytes = 27;
+  optional uint64 maxBackupLogSizeBytes = 28;
+  // Max number of rotated log files to keep (default: 10)
+  optional uint32 maxFileLogFiles = 29;
+  optional uint32 maxBackupLogFiles = 30;
 }
 
 // Eviction strategy for disk cache
@@ -1387,6 +1566,99 @@ message FileBufferDiskCacheStats {
   bool scanCompleted = 7; // Whether initial disk scan has completed after restart
   EvictionStrategy evictionStrategy = 8; // Current active eviction strategy
 }
+// Extension filter mode for disk cache rules
+enum ExtensionFilterMode {
+  EXTENSION_FILTER_DISABLED = 0; // No extension filtering
+  EXTENSION_FILTER_INCLUDE = 1; // Only cache files with listed extensions
+  EXTENSION_FILTER_EXCLUDE = 2; // Cache all files except those with listed extensions
+}
+
+// Request to set disk cache rules for a folder
+message SetFolderDiskCacheRequest {
+  string path = 1;
+  uint64 maxFileSize = 2; // 0 = no limit
+  uint64 minFileSize = 3; // 0 = no minimum
+  ExtensionFilterMode extensionFilterMode = 4;
+  repeated string extensions = 5; // without dot, lowercase (e.g. "mp4", "mkv")
+  bool enabled = 6; // true = enable cache, false = explicitly disable (blocks parent inheritance)
+}
+
+// A folder with disk cache rules
+message DiskCacheFolder {
+  string path = 1;
+  uint64 maxFileSize = 2;
+  uint64 minFileSize = 3;
+  ExtensionFilterMode extensionFilterMode = 4;
+  repeated string extensions = 5;
+  bool enabled = 6;
+}
+
+// List of folders with disk cache enabled
+message ListDiskCacheFoldersReply {
+  repeated DiskCacheFolder folders = 1;
+}
+
+// Priority of a client-driven cache hint or a Range read.
+// HIGH is served before NORMAL, NORMAL before LOW. LOW is used for
+// best-effort prefetch (e.g. thumbnail batches) that should not
+// stall the main playback read stream.
+enum HintPriority {
+  HINT_PRIORITY_LOW = 0;
+  HINT_PRIORITY_NORMAL = 1;
+  HINT_PRIORITY_HIGH = 2;
+}
+
+message ByteRange {
+  uint64 start = 1;  // inclusive
+  uint64 length = 2; // bytes
+}
+
+message PrefetchFileRangesRequest {
+  string path = 1;
+  repeated ByteRange ranges = 2;
+  HintPriority priority = 3;
+  // 0 = server allocates and returns an id
+  uint64 hint_id = 4;
+  // 0 = server default (clamped to [1, PREFETCH_HINT_TTL_SEC])
+  uint32 ttl_seconds = 5;
+  // if true, cancel any prior hints on this path before adding
+  bool replace_existing = 6;
+}
+
+message PrefetchFileRangesReply {
+  uint64 hint_id = 1;
+  uint32 accepted_range_count = 2;
+  // ranges dropped for being out-of-bounds or already fully cached
+  uint32 rejected_range_count = 3;
+}
+
+message CancelFilePrefetchRequest {
+  string path = 1;
+  // empty = cancel all hints on that path
+  repeated uint64 hint_ids = 2;
+}
+
+message ActivePrefetchHint {
+  string path = 1;
+  uint64 hint_id = 2;
+  HintPriority priority = 3;
+  uint64 total_bytes = 4;
+  uint32 seconds_since_created = 5;
+  uint32 remaining_ttl_seconds = 6;
+  uint32 event_count = 7;
+}
+
+// Diagnostic snapshot + process-lifetime counters for the prefetch system.
+message GetActivePrefetchHintsReply {
+  repeated ActivePrefetchHint hints = 1;
+  uint64 hints_created_total = 2;
+  uint64 hints_cancelled_total = 3;
+  uint64 hints_expired_total = 4;
+  uint64 ranges_rejected_cache_hit_total = 5;
+  uint64 scale_up_events_total = 6;
+  uint64 preempt_events_total = 7;
+}
+
 message SetDirCacheTimeRequest {
   string path = 1;
   // if not present, please delete the value to restore default
@@ -1420,6 +1692,10 @@ message UpdateResult {
   bool hasUpdate = 1;
   string newVersion = 2;
   string description = 3;
+}
+message ServiceCapabilities {
+  bool canRestart = 1; // whether service restart is available
+  bool canUpdate = 2; // whether service update is available
 }
 message OpenFileTable {
   map<uint64, string> openFileTable = 1;
@@ -1691,6 +1967,7 @@ message Backup {
   repeated TimeSchedule timeSchedules = 10;
   bool isTimeSchedulesEnabled = 11;
   bool syncDeleteFromDest = 14; // Delete files/folders from destination that don't exist in source while walking through
+  optional bool dontStartScanAfterAdd = 15; // If set to true, don't auto start full scan after backup is added. Default (false/unset) scans immediately.
 }
 message BackupStatus {
   enum Status {
@@ -2152,6 +2429,7 @@ message LoginWith2FARequest {
   string password = 2;
   string totp_code = 3; // 6-digit TOTP code or 8-character recovery code
   bool synDataToCloud = 4;
+  optional ProxyInfo cloudfsProxy = 5; // Optional proxy for reaching CloudFS account server
 }
 
 // ==================== End 2FA Messages ====================

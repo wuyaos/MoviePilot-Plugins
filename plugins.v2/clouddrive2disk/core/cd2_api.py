@@ -1,5 +1,5 @@
 # input: CloudDrive2 gRPC 地址、API 令牌、MoviePilot FileItem 文件操作请求
-# output: Cd2Api 适配器，基于 CloudDrive2 proto 0.9.24 / gRPC 提供存储操作
+# output: Cd2Api 适配器，基于 CloudDrive2 proto 1.0.7 / gRPC 提供存储操作
 # pos: clouddrive2disk 的底层 CloudDrive2 proto/gRPC API 封装
 import hashlib
 import time
@@ -12,12 +12,8 @@ from urllib.request import Request, urlopen
 import grpc
 from google.protobuf import empty_pb2
 
-try:
-    from . import clouddrive_pb2 as CloudDrive_pb2
-    from . import clouddrive_pb2_grpc as CloudDrive_pb2_grpc
-except Exception:
-    import clouddrive_pb2 as CloudDrive_pb2
-    import clouddrive_pb2_grpc as CloudDrive_pb2_grpc
+from ..proto import clouddrive2disk_pb2 as CloudDrive_pb2
+from ..proto import clouddrive2disk_pb2_grpc as CloudDrive_pb2_grpc
 
 from app.core.config import settings
 from app.log import logger
