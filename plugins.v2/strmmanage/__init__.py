@@ -1,3 +1,6 @@
+# input: MoviePilot 配置、目录映射、CloudDrive2 接口与插件事件
+# output: StrmManage 插件类（生成 strm、处理非视频文件、暴露扫描 API/命令）
+# pos: 插件入口，负责配置解析、文件扫描与单文件处理调度
 import os
 import shutil
 import threading
@@ -15,14 +18,14 @@ from app.plugins import _PluginBase
 from app.schemas.types import EventType
 
 
-class CloudStrmCompanionCustom(_PluginBase):
+class StrmManage(_PluginBase):
     plugin_name = "云盘Strm助手（CD2增强）"
     plugin_desc = "联动生成 strm，并支持通过 CloudDrive2 下载非视频文件。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png"
     plugin_version = "0.1.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
-    plugin_config_prefix = "cloudstrmcompanioncustom_"
+    plugin_config_prefix = "strmmanage_"
     plugin_order = 25
     auth_level = 1
 
@@ -83,7 +86,7 @@ class CloudStrmCompanionCustom(_PluginBase):
         self.__load_monitor_conf()
 
         if self._onlyonce and self._enabled:
-            threading.Thread(target=self.scan, daemon=True, name="cloudstrmcompanioncustom_scan").start()
+            threading.Thread(target=self.scan, daemon=True, name="strmmanage_scan").start()
             self._onlyonce = False
             self.__update_config()
 
@@ -179,7 +182,7 @@ class CloudStrmCompanionCustom(_PluginBase):
     def api_scan(self):
         if not self._enabled:
             return {"code": 1, "msg": "插件未启用"}
-        threading.Thread(target=self.scan, daemon=True, name="cloudstrmcompanioncustom_api_scan").start()
+        threading.Thread(target=self.scan, daemon=True, name="strmmanage_api_scan").start()
         return {"code": 0, "msg": "扫描任务已启动"}
 
     def api_process_file(self, file_path: str = "", body: dict = None):
@@ -202,7 +205,7 @@ class CloudStrmCompanionCustom(_PluginBase):
         if action == "cloudstrm_scan_custom":
             if not self._enabled:
                 return
-            threading.Thread(target=self.scan, daemon=True, name="cloudstrmcompanioncustom_cmd_scan").start()
+            threading.Thread(target=self.scan, daemon=True, name="strmmanage_cmd_scan").start()
             return
         if action != "cloudstrm_file":
             return
