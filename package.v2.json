@@ -34,7 +34,7 @@
   "AzKeepAlive": {
     "name": "AnimeZ保活",
     "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
-    "labels": "保活,AnimeZ,PT,qBittorrent",
+    "labels": "保活,AnimeZ",
     "version": "2.4.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
     "author": "wuyaos",
@@ -52,7 +52,7 @@
   "AutoPtCheckin": {
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点和验证码识别",
-    "labels": "签到,PT,OCR",
+    "labels": "签到,PT",
     "version": "1.0.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
@@ -64,7 +64,7 @@
   "CloudDrive2Disk": {
     "name": "CloudDrive2 存储",
     "description": "基于 clouddrivedisk/cd2disk 修改而成，通过 CloudDrive2 proto 0.9.24 / gRPC 直连与 API 令牌接入 CloudDrive2，提供 MoviePilot 存储模块能力",
-    "labels": "云盘,CloudDrive2,存储,gRPC",
+    "labels": "云盘,CloudDrive2,存储",
     "version": "0.1.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png",
     "author": "wuyaos",
