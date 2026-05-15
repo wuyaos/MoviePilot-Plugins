@@ -495,52 +495,6 @@ class AutoPtCheckin(_PluginBase):
                         'content': [
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '执行周期支持：'
-                                                    '1、5位cron表达式；'
-                                                    '2、配置间隔（小时），如2.3/9-23（9-23点之间每隔2.3小时执行一次）；'
-                                                    '3、周期不填默认9-23点随机执行2次。'
-                                                    '每天首次全量执行，其余执行命中重试关键词的站点。'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '自动优选：0-关闭，命中重试关键词次数大于该数量时自动执行Cloudflare IP优选（需要开启且则正确配置Cloudflare IP优选插件和自定义Hosts插件）'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
                                 'props': {'cols': 12},
                                 'content': [{'component': 'VDivider'}]
                             }
@@ -582,6 +536,31 @@ class AutoPtCheckin(_PluginBase):
                                             'placeholder': '每行一个站点，格式：\n'
                                                            '站点名称|站点地址|是否仿真(Y/N)\n'
                                                            '例如：思齐|https://si-qi.xyz/|N'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '执行周期支持：'
+                                                    '1、5位cron表达式；'
+                                                    '2、配置间隔（小时），如2.3/9-23（9-23点之间每隔2.3小时执行一次）；'
+                                                    '3、周期不填默认9-23点随机执行2次。'
+                                                    '每天首次全量执行，其余执行命中重试关键词的站点。'
+                                                    '自动优选：0-关闭，命中重试关键词次数大于该数量时自动执行Cloudflare IP优选（需要开启且正确配置Cloudflare IP优选插件和自定义Hosts插件）。'
+                                                    '自定义站点：添加 MoviePilot 站点库中没有的站点，Cookie 通过 CookieCloud 自动同步。'
                                         }
                                     }
                                 ]
