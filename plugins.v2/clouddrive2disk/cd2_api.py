@@ -928,6 +928,11 @@ class Cd2Api:
                     )
                     continue
 
+                # 跳过 WebDAV 云盘（不计入空间统计）
+                if cloud_name.lower() == "webdav":
+                    logger.debug(f"【Cd2Disk】跳过 WebDAV 云盘: name={name}, path={full_path}")
+                    continue
+
                 if not full_path:
                     full_path = f"/{name}" if name else ""
                 if not full_path:
@@ -1019,6 +1024,75 @@ class Cd2Api:
             f"free={self._human_size(free)}, available={self._human_size(available)}"
         )
         return StorageUsage(total=total, available=available)
+
+    def link(self, fileitem: FileItem, target_file: Path) -> bool:
+        """硬链接（CloudDrive2 不支持，始终返回 False）"""
+        return False
+
+    def softlink(self, fileitem: FileItem, target_file: Path) -> bool:
+        """软链接（CloudDrive2 不支持，始终返回 False）"""
+        return False
+
+    def get_runtime_info(self) -> Optional[Dict[str, str]]:
+        """获取 CD2 服务器版本信息，供面板展示"""
+        try:
+            info = self._call_authed("GetRuntimeInfo", empty_pb2.Empty())
+            return {
+                "product_name": getattr(info, "productName", "") or "",
+                "product_version": getattr(info, "productVersion", "") or "",
+                "cloud_api_version": getattr(info, "CloudAPIVersion", "") or "",
+                "os_info": getattr(info, "osInfo", "") or "",
+            }
+        except Exception as e:
+            logger.debug(f"【Cd2Disk】获取运行时信息失败: {e}")
+            return None
+
+    def get_cloud_drives_info(self) -> List[Dict[str, Any]]:
+        """获取所有非 WebDAV 云盘信息（含空间），供面板展示"""
+        base_root = self._token_root or "/"
+        result: List[Dict[str, Any]] = []
+        try:
+            roots = self._list_cloud_files(base_root, force_refresh=False)
+            for one in roots:
+                name = getattr(one, "name", "") or ""
+                full_path = getattr(one, "fullPathName", "") or ""
+                is_cloud_root = bool(getattr(one, "isCloudRoot", False))
+                cloud_api = getattr(one, "CloudAPI", None)
+                cloud_name = getattr(cloud_api, "name", "") if cloud_api else ""
+
+                if not is_cloud_root:
+                    continue
+                if cloud_name.lower() == "webdav":
+                    continue
+
+                if not full_path:
+                    full_path = f"/{name}" if name else ""
+                if not full_path:
+                    continue
+
+                normalized = self._normalize_dir_path(str(full_path))
+                if normalized == "/":
+                    continue
+
+                entry: Dict[str, Any] = {
+                    "name": name,
+                    "cloud_name": cloud_name,
+                    "path": normalized,
+                    "total": 0,
+                    "used": 0,
+                    "free": 0,
+                }
+                try:
+                    space = self._call_authed("GetSpaceInfo", CloudDrive_pb2.FileRequest(path=normalized))
+                    entry["total"] = int(getattr(space, "totalSpace", 0) or 0)
+                    entry["used"] = int(getattr(space, "usedSpace", 0) or 0)
+                    entry["free"] = int(getattr(space, "freeSpace", 0) or 0)
+                except Exception:
+                    pass
+                result.append(entry)
+        except Exception as e:
+            logger.debug(f"【Cd2Disk】获取云盘列表失败: {e}")
+        return result
 
     def close(self):
         try:

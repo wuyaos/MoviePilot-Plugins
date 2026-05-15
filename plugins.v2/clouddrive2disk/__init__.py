@@ -150,7 +150,14 @@ class CloudDrive2Disk(_PluginBase):
         return []
 
     def get_api(self) -> List[Dict[str, Any]]:
-        return []
+        return [
+            {
+                "path": "/status",
+                "endpoint": self.api_status,
+                "methods": ["GET"],
+                "summary": "CloudDrive2 连接状态与云盘信息",
+            }
+        ]
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return [
@@ -261,6 +268,116 @@ class CloudDrive2Disk(_PluginBase):
             "cd2_url": "http://127.0.0.1:19798",
             "cd2_api_key": "",
         }
+
+    def api_status(self) -> Dict[str, Any]:
+        """GET /api/v1/plugin/CloudDrive2Disk/status — 返回连接状态与云盘列表"""
+        if not self._cd2_api:
+            return {"connected": False, "drives": [], "runtime": None}
+        drives = self._cd2_api.get_cloud_drives_info()
+        runtime = self._cd2_api.get_runtime_info()
+        return {"connected": True, "drives": drives, "runtime": runtime}
+
+    def get_dashboard(self) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], List[dict]]]:
+        """
+        数据面板，显示 CD2 连接状态、版本、各云盘空间占用。
+        返回 (cols, attrs, elements)
+        """
+        if not self._cd2_api:
+            return None
+
+        drives = self._cd2_api.get_cloud_drives_info()
+        runtime = self._cd2_api.get_runtime_info()
+
+        # 版本信息行
+        version_text = ""
+        if runtime:
+            version_text = (
+                f"{runtime.get('product_name', 'CloudDrive2')} "
+                f"{runtime.get('product_version', '')} | "
+                f"{runtime.get('os_info', '')}"
+            ).strip(" |")
+
+        # 构造云盘卡片列表
+        drive_rows = []
+        for d in drives:
+            total = d.get("total", 0)
+            used = d.get("used", 0)
+            free = d.get("free", 0)
+            available = free if free > 0 else max(total - used, 0)
+            pct = round(used / total * 100, 1) if total > 0 else 0
+            drive_rows.append({
+                "component": "VRow",
+                "props": {"class": "mb-1 align-center"},
+                "content": [
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 5},
+                        "content": [{"component": "span", "text": f"{d.get('name', '')} ({d.get('cloud_name', '')})"}],
+                    },
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 7},
+                        "content": [
+                            {
+                                "component": "VProgressLinear",
+                                "props": {
+                                    "value": pct,
+                                    "color": "primary",
+                                    "bg-color": "grey-darken-3",
+                                    "height": 6,
+                                    "rounded": True,
+                                },
+                            },
+                            {
+                                "component": "div",
+                                "props": {"class": "text-caption text-right mt-n1"},
+                                "text": f"{self._human_size(used)} / {self._human_size(total)} ({pct}%)",
+                            },
+                        ],
+                    },
+                ],
+            })
+
+        elements = [
+            {
+                "component": "VCard",
+                "props": {"variant": "tonal", "class": "pa-3"},
+                "content": [
+                    {
+                        "component": "div",
+                        "props": {"class": "text-subtitle-2 mb-2"},
+                        "text": "CloudDrive2 存储",
+                    },
+                    *([{
+                        "component": "div",
+                        "props": {"class": "text-caption text-medium-emphasis mb-2"},
+                        "text": version_text,
+                    }] if version_text else []),
+                    *(drive_rows if drive_rows else [{
+                        "component": "div",
+                        "props": {"class": "text-caption"},
+                        "text": "暂无云盘数据",
+                    }]),
+                ],
+            }
+        ]
+
+        return (
+            {"cols": 12, "md": 6},
+            {"border": False, "flat": True},
+            elements,
+        )
+
+    @staticmethod
+    def _human_size(size_bytes: int) -> str:
+        if size_bytes <= 0:
+            return "0 B"
+        units = ["B", "KB", "MB", "GB", "TB"]
+        i, v = 0, float(size_bytes)
+        while v >= 1024 and i < len(units) - 1:
+            v /= 1024
+            i += 1
+        return f"{v:.1f} {units[i]}"
 
     def get_page(self) -> List[dict]:
         return []
