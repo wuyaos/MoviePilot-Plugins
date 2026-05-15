@@ -497,16 +497,48 @@ class AutoPtCheckin(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '执行周期：1、5位cron表达式；'
+                                            'text': '执行周期：'
+                                                    '1、5位cron表达式；'
                                                     '2、间隔/时间段，如 2.3/9-23（9-23点每隔2.3小时执行一次）；'
                                                     '3、留空默认9-23点随机执行2次。'
-                                                    '每天首次全量执行，后续仅重试命中关键词的站点。\n'
-                                                    '重试关键词：支持正则，命中签到结果才纳入下次重试。\n'
-                                                    '自动优选：命中重试关键词次数超过阈值时触发 Cloudflare IP 优选（需配置优选插件与自定义 Hosts 插件）。'
+                                                    '每天首次全量执行，后续仅重试命中关键词的站点。'
                                         }
                                     }
                                 ]
                             }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 6},
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '重试关键词：支持正则，命中签到结果才纳入下次重试。'
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 6},
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '自动优选：命中重试关键词次数超过阈值时触发 Cloudflare IP 优选（需配置优选插件与自定义 Hosts 插件）。'
+                                        }
+                                    }
+                                ]
+                            },
                         ]
                     },
                     {
