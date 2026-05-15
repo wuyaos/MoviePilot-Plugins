@@ -35,7 +35,7 @@ class CoverGen(_PluginBase):
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     plugin_version = "1.1.0"
     plugin_author = "wuyaos"
-    author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
+    author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "covergen_"
     plugin_order = 2
     auth_level = 1
