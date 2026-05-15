@@ -3,11 +3,12 @@
     "name": "媒体库封面生成",
     "description": "自动生成媒体库封面（模块化重构版），支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin",
     "labels": "封面,媒体库",
-    "version": "1.2.0",
+    "version": "1.4.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png",
     "author": "wuyaos",
     "level": 1,
     "history": {
+      "v1.4.0": "简化入库触发为 TransferComplete 防抖60s全库更新；移除Webhook模式和自定义目录；最近执行新增触发/库数/耗时列",
       "v1.2.0": "入库触发防抖60s后全库更新；最近执行新增触发方式、库数、耗时列；移除自定义目录配置项；执行周期说明优化",
       "v1.1.0": "新增 animated_5 与风格预览，历史封面黑名单默认后置，每库历史保留提升到 50，最近执行改为按次汇总展示",
       "v1.0.0": "初始版本：基于 MediaCoverGeneratorCustom v0.9.7 模块化重构，5200 行 → 9 模块，配置 dataclass 化，并行下载 9 张图，统一 API 路由消除 40 处重复",
