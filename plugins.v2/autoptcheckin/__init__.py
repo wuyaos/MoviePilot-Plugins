@@ -393,7 +393,7 @@ class AutoPtCheckin(_PluginBase):
                                         'props': {
                                             'model': 'cron',
                                             'label': '执行周期',
-                                            'placeholder': '5位cron表达式，留空自动'
+                                            'placeholder': '5位cron / 2.3/9-23 / 留空随机'
                                         }
                                     }
                                 ]
@@ -512,7 +512,7 @@ class AutoPtCheckin(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '自定义站点：添加 MoviePilot 站点库中没有的站点，'
+                                            'text': '自定义站点：每行一个，格式：站点名称|站点地址|是否仿真(Y/N)。'
                                                     'Cookie 通过 CookieCloud 自动同步。'
                                         }
                                     }
@@ -554,13 +554,12 @@ class AutoPtCheckin(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '执行周期支持：'
-                                                    '1、5位cron表达式；'
-                                                    '2、配置间隔（小时），如2.3/9-23（9-23点之间每隔2.3小时执行一次）；'
-                                                    '3、周期不填默认9-23点随机执行2次。'
-                                                    '每天首次全量执行，其余执行命中重试关键词的站点。'
-                                                    '自动优选：0-关闭，命中重试关键词次数大于该数量时自动执行Cloudflare IP优选（需要开启且正确配置Cloudflare IP优选插件和自定义Hosts插件）。'
-                                                    '自定义站点：添加 MoviePilot 站点库中没有的站点，Cookie 通过 CookieCloud 自动同步。'
+                                            'text': '执行周期：1、5位cron表达式；'
+                                                    '2、间隔/时间段，如 2.3/9-23（9-23点每隔2.3小时执行一次）；'
+                                                    '3、留空默认9-23点随机执行2次。'
+                                                    '每天首次全量执行，后续仅重试命中关键词的站点。\n'
+                                                    '重试关键词：支持正则，命中签到结果才纳入下次重试。\n'
+                                                    '自动优选：命中重试关键词次数超过阈值时触发 Cloudflare IP 优选（需配置优选插件与自定义 Hosts 插件）。'
                                         }
                                     }
                                 ]
@@ -579,8 +578,8 @@ class AutoPtCheckin(_PluginBase):
                                         'props': {
                                             'type': 'warning',
                                             'variant': 'tonal',
-                                            'text': '不是所有的站点都会把程序自动登录/签到定义为用户活跃（比如馒头），'
-                                                    '提示签到/登录成功仍然存在掉号风险！请结合站点公告说明自行把握。'
+                                            'text': '注意：部分站点（如馒头）不将程序签到/登录计为用户活跃，'
+                                                    '提示成功仍存在掉号风险，请结合站点公告自行判断。'
                                         }
                                     }
                                 ]
