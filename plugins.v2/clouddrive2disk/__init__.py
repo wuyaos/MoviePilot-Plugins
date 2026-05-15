@@ -40,6 +40,14 @@ class CloudDrive2Disk(_PluginBase):
     _cd2_api: Optional[Cd2Api] = None if Cd2Api else None
 
     def init_plugin(self, config: dict = None):
+        global Cd2Api
+        if Cd2Api is None:
+            try:
+                from .core.cd2_api import Cd2Api as _cls
+                Cd2Api = _cls
+            except Exception:
+                pass
+
         config = config or {}
         self.stop_service()
 
