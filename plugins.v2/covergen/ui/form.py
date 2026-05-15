@@ -36,7 +36,7 @@ def _build_basic_tab(server_items: list) -> list:
                 {"component": "div", "text": "• Webhook新入库：媒体服务器实际入库后仅更新对应库（未配置时自动兜底为全量更新）"},
                 {"component": "VDivider", "props": {"class": "my-2"}},
                 {"component": "div", "props": {"class": "font-weight-medium"}, "text": "Webhook 配置方法："},
-                {"component": "div", "text": "① 地址：http://{MP地址}:3001/api/v1/webhook/?token={API_TOKEN}&source={服务器名}"},
+                {"component": "div", "text": "① 地址：http://{MP地址}:3001/api/v1/webhook?token={API_TOKEN}&source={服务器名}"},
                 {"component": "div", "text": "② 消息类型勾选「新入库」(library.new / Item Added)"},
                 {"component": "div", "text": "③ API_TOKEN = MoviePilot 设置中的 API密钥；source = MP中配置的媒体服务器名称"},
                 {"component": "div", "text": "④ 多个媒体服务器各自配置独立的 Webhook（source 不同）"},
