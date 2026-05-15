@@ -606,7 +606,14 @@ class CloudDrive2Disk(_PluginBase):
             return None
         if not self._cd2_api:
             return None
-        return self._cd2_api.upload(fileitem, path, new_name)
+        logger.info(f"【Cd2Disk】upload_file: target_dir={fileitem.path}, "
+                    f"local_path={path}, new_name={new_name}")
+        result = self._cd2_api.upload(fileitem, path, new_name)
+        if result:
+            logger.info(f"【Cd2Disk】upload_file 成功: {result.path}")
+        else:
+            logger.warning(f"【Cd2Disk】upload_file 返回 None，上传可能失败")
+        return result
 
     def delete_file(self, fileitem: FileItem) -> Optional[bool]:
         if fileitem.storage != self._disk_name:
