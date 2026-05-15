@@ -278,6 +278,8 @@ class CoverGen(_PluginBase):
     def on_transfer_complete(self, event: Event):
         if not self._cfg.enabled or not self._cfg.transfer_monitor or not self._scheduler:
             return
+        if self._cfg.transfer_source != "transfer":
+            return
         if not event or not event.event_data:
             return
         media = event.event_data.get("mediainfo")
@@ -286,14 +288,7 @@ class CoverGen(_PluginBase):
         title = getattr(media, "title", "") or "unknown"
         tmdb_id = getattr(media, "tmdb_id", "") or ""
         key = f"cover:{tmdb_id}:{title}"
-        if self._cfg.transfer_source == "webhook":
-            # Webhook 模式下 TransferComplete 作为兜底，延迟加倍
-            self._scheduler.debounce_transfer(
-                key, self._run_all, trigger="transfer",
-                delay_override=self._cfg.delay * 5)
-        else:
-            # 默认模式：正常延迟，全部库更新
-            self._scheduler.debounce_transfer(key, self._run_all, trigger="transfer")
+        self._scheduler.debounce_transfer(key, self._run_all, trigger="transfer")
 
     @eventmanager.register(EventType.WebhookMessage)
     def on_webhook_message(self, event: Event):
