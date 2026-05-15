@@ -1048,7 +1048,7 @@ class Cd2Api:
             return None
 
     def get_cloud_drives_info(self) -> List[Dict[str, Any]]:
-        """获取所有非 WebDAV 云盘信息（含空间），供面板展示"""
+        """获取所有云盘信息供面板展示；WebDAV 盘标记 is_webdav=True 且不查询空间。"""
         base_root = self._token_root or "/"
         result: List[Dict[str, Any]] = []
         try:
@@ -1062,8 +1062,6 @@ class Cd2Api:
 
                 if not is_cloud_root:
                     continue
-                if cloud_name.lower() == "webdav":
-                    continue
 
                 if not full_path:
                     full_path = f"/{name}" if name else ""
@@ -1074,21 +1072,24 @@ class Cd2Api:
                 if normalized == "/":
                     continue
 
+                is_webdav = cloud_name.lower() == "webdav"
                 entry: Dict[str, Any] = {
                     "name": name,
                     "cloud_name": cloud_name,
                     "path": normalized,
+                    "is_webdav": is_webdav,
                     "total": 0,
                     "used": 0,
                     "free": 0,
                 }
-                try:
-                    space = self._call_authed("GetSpaceInfo", CloudDrive_pb2.FileRequest(path=normalized))
-                    entry["total"] = int(getattr(space, "totalSpace", 0) or 0)
-                    entry["used"] = int(getattr(space, "usedSpace", 0) or 0)
-                    entry["free"] = int(getattr(space, "freeSpace", 0) or 0)
-                except Exception:
-                    pass
+                if not is_webdav:
+                    try:
+                        space = self._call_authed("GetSpaceInfo", CloudDrive_pb2.FileRequest(path=normalized))
+                        entry["total"] = int(getattr(space, "totalSpace", 0) or 0)
+                        entry["used"] = int(getattr(space, "usedSpace", 0) or 0)
+                        entry["free"] = int(getattr(space, "freeSpace", 0) or 0)
+                    except Exception:
+                        pass
                 result.append(entry)
         except Exception as e:
             logger.debug(f"【Cd2Disk】获取云盘列表失败: {e}")

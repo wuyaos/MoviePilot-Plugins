@@ -85,7 +85,7 @@ class CloudDrive2Disk(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png"
     # 插件版本
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -288,9 +288,10 @@ class CloudDrive2Disk(_PluginBase):
 
         drives = self._cd2_api.get_cloud_drives_info()
         runtime = self._cd2_api.get_runtime_info()
-        total = sum(int(d.get("total", 0) or 0) for d in drives)
-        used = sum(int(d.get("used", 0) or 0) for d in drives)
-        free = sum(int(d.get("free", 0) or 0) for d in drives)
+        non_webdav = [d for d in drives if not d.get("is_webdav")]
+        total = sum(int(d.get("total", 0) or 0) for d in non_webdav)
+        used = sum(int(d.get("used", 0) or 0) for d in non_webdav)
+        free = sum(int(d.get("free", 0) or 0) for d in non_webdav)
         return {
             "connected": True,
             "enabled": bool(self._enabled),
@@ -298,7 +299,7 @@ class CloudDrive2Disk(_PluginBase):
             "proto_version": proto_version,
             "runtime": runtime,
             "drives": drives,
-            "summary": {"total": total, "used": used, "free": free, "count": len(drives)},
+            "summary": {"total": total, "used": used, "free": free, "count": len(non_webdav)},
         }
 
     @staticmethod
@@ -407,7 +408,7 @@ class CloudDrive2Disk(_PluginBase):
                 *([{"component": "VDivider", "props": {"class": "my-2"}}] if drives else []),
                 *(self._drive_progress(d) for d in drives[:4]),
                 *([{"component": "div", "props": {"class": "text-caption text-medium-emphasis text-right"}, "text": f"还有 {len(drives) - 4} 个云盘，详情页查看全部"}] if len(drives) > 4 else []),
-                *([{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "density": "compact", "text": "暂无可统计云盘数据（WebDAV 已过滤）"}}] if not drives else []),
+                *([{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "density": "compact", "text": "暂无可统计云盘数据"}}] if not drives else []),
             ],
         }]
 
@@ -425,7 +426,7 @@ class CloudDrive2Disk(_PluginBase):
         return f"{v:.1f} {units[i]}"
 
     def get_page(self) -> List[dict]:
-        """插件详情页：展示连接性、版本、proto 版本与云盘容量。"""
+        """插件详情页：连接状态卡片 + 云盘列表（含空间，WebDAV 显示 N/A）。"""
         status = self._collect_status()
         runtime = status.get("runtime") or {}
         summary = status.get("summary") or {}
@@ -438,21 +439,33 @@ class CloudDrive2Disk(_PluginBase):
 
         drive_rows = []
         for d in drives:
-            d_total = int(d.get("total", 0) or 0)
-            d_used = int(d.get("used", 0) or 0)
-            d_free = int(d.get("free", 0) or 0)
-            d_pct = self._usage_percent(d_used, d_total)
+            is_webdav = bool(d.get("is_webdav"))
+            if is_webdav:
+                cap_cells = [
+                    {"component": "td", "text": "N/A"},
+                    {"component": "td", "text": "N/A"},
+                    {"component": "td", "text": "N/A"},
+                    {"component": "td", "text": "N/A"},
+                ]
+            else:
+                d_total = int(d.get("total", 0) or 0)
+                d_used = int(d.get("used", 0) or 0)
+                d_free = int(d.get("free", 0) or 0)
+                d_pct = self._usage_percent(d_used, d_total)
+                cap_cells = [
+                    {"component": "td", "text": self._human_size(d_total)},
+                    {"component": "td", "text": self._human_size(d_used)},
+                    {"component": "td", "text": self._human_size(d_free)},
+                    {"component": "td", "content": [
+                        {"component": "VProgressLinear", "props": {"model-value": d_pct, "color": self._usage_color(d_pct), "height": 8, "rounded": True}},
+                        {"component": "div", "props": {"class": "text-caption text-right"}, "text": f"{d_pct}%"},
+                    ]},
+                ]
             drive_rows.append({"component": "tr", "content": [
                 {"component": "td", "text": d.get("name") or "-"},
-                {"component": "td", "content": [{"component": "VChip", "props": {"size": "small", "variant": "tonal", "color": "primary"}, "text": d.get("cloud_name") or "-"}]},
+                {"component": "td", "content": [{"component": "VChip", "props": {"size": "small", "variant": "tonal", "color": "secondary" if is_webdav else "primary"}, "text": d.get("cloud_name") or "-"}]},
                 {"component": "td", "text": d.get("path") or "-"},
-                {"component": "td", "text": self._human_size(d_total)},
-                {"component": "td", "text": self._human_size(d_used)},
-                {"component": "td", "text": self._human_size(d_free)},
-                {"component": "td", "content": [
-                    {"component": "VProgressLinear", "props": {"model-value": d_pct, "color": self._usage_color(d_pct), "height": 8, "rounded": True}},
-                    {"component": "div", "props": {"class": "text-caption text-right"}, "text": f"{d_pct}%"},
-                ]},
+                *cap_cells,
             ]})
 
         return [
@@ -462,20 +475,9 @@ class CloudDrive2Disk(_PluginBase):
                 self._stat_card("Proto 版本", status.get("proto_version") or "未知", runtime.get("cloud_api_version") or "CloudAPI 未知", "mdi-code-json", "primary", 3),
                 self._stat_card("总空间", self._human_size(total), f"已用 {self._human_size(used)} / 剩余 {self._human_size(free)}", "mdi-harddisk", self._usage_color(pct), 3),
             ]},
-            {"component": "VCard", "props": {"variant": "tonal", "color": "blue-grey", "class": "mb-3"}, "content": [
-                {"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"}, "text": "运行信息"},
-                {"component": "VTable", "props": {"density": "compact"}, "content": [{"component": "tbody", "content": [
-                    {"component": "tr", "content": [{"component": "td", "text": "连接地址"}, {"component": "td", "text": status.get("endpoint") or "-"}]},
-                    {"component": "tr", "content": [{"component": "td", "text": "产品名称"}, {"component": "td", "text": runtime.get("product_name") or "-"}]},
-                    {"component": "tr", "content": [{"component": "td", "text": "产品版本"}, {"component": "td", "text": runtime.get("product_version") or "-"}]},
-                    {"component": "tr", "content": [{"component": "td", "text": "CloudAPI 版本"}, {"component": "td", "text": runtime.get("cloud_api_version") or "-"}]},
-                    {"component": "tr", "content": [{"component": "td", "text": "本地 proto 版本"}, {"component": "td", "text": status.get("proto_version") or "-"}]},
-                    {"component": "tr", "content": [{"component": "td", "text": "系统信息"}, {"component": "td", "text": runtime.get("os_info") or "-"}]},
-                ]}]},
-            ]},
             {"component": "VCard", "props": {"variant": "flat", "class": "mb-3"}, "content": [
-                {"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"}, "text": "云盘容量（已过滤 WebDAV）"},
-                *( [{"component": "VTable", "props": {"density": "compact"}, "content": [
+                {"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"}, "text": "云盘列表"},
+                *([{"component": "VTable", "props": {"density": "compact"}, "content": [
                     {"component": "thead", "content": [{"component": "tr", "content": [
                         {"component": "th", "text": "名称"},
                         {"component": "th", "text": "类型"},
@@ -486,7 +488,7 @@ class CloudDrive2Disk(_PluginBase):
                         {"component": "th", "text": "占用"},
                     ]}]},
                     {"component": "tbody", "content": drive_rows},
-                ]}] if drive_rows else [{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "density": "compact", "class": "ma-3", "text": "暂无可展示云盘。请确认插件已启用、API key 有 allow_list 权限，且 WebDAV 盘不会计入统计。"}}]),
+                ]}] if drive_rows else [{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "density": "compact", "class": "ma-3", "text": "暂无可展示云盘。请确认插件已启用且 API key 权限正确。"}}]),
             ]},
         ]
 

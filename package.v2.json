@@ -66,11 +66,12 @@
     "name": "CloudDrive2 存储",
     "description": "基于 baranwang/cd2disk，通过 CloudDrive2 gRPC 直连与 API 令牌接入 CloudDrive2，提供 MoviePilot 存储模块能力",
     "labels": "云盘,CloudDrive2,存储",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.3": "详情页去掉运行信息表格；WebDAV 云盘显示名称但容量显示 N/A；移除所有 WebDAV 字眼提示",
       "v1.0.2": "美化数据面板、新增详情页（连接性/版本/proto版本/运行信息/各云盘容量表格）",
       "v1.0.1": "新增数据面板（连接状态、版本、各云盘空间进度条）、/status API 端点；空间统计过滤 WebDAV；补全 link/softlink stub 满足 V2 存储合约",
       "v1.0.0": "切换至 baranwang/cd2disk 实现：使用官方 clouddrive.proto，bare-name shim 解决热重载 descriptor pool 冲突，支持浏览、上传（CreateFile/WriteToFile/CloseFile + 云端上传等待）、下载、删除、重命名、移动、复制与空间统计"
