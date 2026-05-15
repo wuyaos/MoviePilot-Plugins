@@ -309,84 +309,39 @@ class AutoPtCheckin(_PluginBase):
             {
                 'component': 'VForm',
                 'content': [
+                    # ── 开关行 ──────────────────────────────────────────
                     {
                         'component': 'VRow',
                         'content': [
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'enabled',
-                                            'label': '启用插件',
-                                        }
-                                    }
-                                ]
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [{'component': 'VSwitch', 'props': {'model': 'enabled', 'label': '启用插件'}}]
                             },
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'notify',
-                                            'label': '发送通知',
-                                        }
-                                    }
-                                ]
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [{'component': 'VSwitch', 'props': {'model': 'notify', 'label': '发送通知'}}]
                             },
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'onlyonce',
-                                            'label': '立即运行一次',
-                                        }
-                                    }
-                                ]
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [{'component': 'VSwitch', 'props': {'model': 'onlyonce', 'label': '立即运行一次'}}]
                             },
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'clean',
-                                            'label': '清理本日缓存',
-                                        }
-                                    }
-                                ]
-                            }
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [{'component': 'VSwitch', 'props': {'model': 'clean', 'label': '清理本日缓存'}}]
+                            },
                         ]
                     },
+                    # ── 调度 & 参数行 ────────────────────────────────────
                     {
                         'component': 'VRow',
                         'content': [
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 6
-                                },
+                                'props': {'cols': 12, 'md': 6},
                                 'content': [
                                     {
                                         'component': 'VCronField',
@@ -400,26 +355,17 @@ class AutoPtCheckin(_PluginBase):
                             },
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 6
-                                },
+                                'props': {'cols': 12, 'md': 6},
                                 'content': [
                                     {
                                         'component': 'VTextField',
-                                        'props': {
-                                            'model': 'queue_cnt',
-                                            'label': '队列数量'
-                                        }
+                                        'props': {'model': 'queue_cnt', 'label': '队列数量'}
                                     }
                                 ]
                             },
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 6
-                                },
+                                'props': {'cols': 12, 'md': 6},
                                 'content': [
                                     {
                                         'component': 'VTextField',
@@ -433,10 +379,7 @@ class AutoPtCheckin(_PluginBase):
                             },
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 6
-                                },
+                                'props': {'cols': 12, 'md': 6},
                                 'content': [
                                     {
                                         'component': 'VTextField',
@@ -447,9 +390,10 @@ class AutoPtCheckin(_PluginBase):
                                         }
                                     }
                                 ]
-                            }
+                            },
                         ]
                     },
+                    # ── 站点选择 ─────────────────────────────────────────
                     {
                         'component': 'VRow',
                         'content': [
@@ -490,16 +434,14 @@ class AutoPtCheckin(_PluginBase):
                             }
                         ]
                     },
+                    # ── 分割线 ───────────────────────────────────────────
                     {
                         'component': 'VRow',
                         'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [{'component': 'VDivider'}]
-                            }
+                            {'component': 'VCol', 'props': {'cols': 12}, 'content': [{'component': 'VDivider'}]}
                         ]
                     },
+                    # ── 自定义站点 ───────────────────────────────────────
                     {
                         'component': 'VRow',
                         'content': [
@@ -542,6 +484,7 @@ class AutoPtCheckin(_PluginBase):
                             }
                         ]
                     },
+                    # ── 说明 & 警告 ──────────────────────────────────────
                     {
                         'component': 'VRow',
                         'content': [
@@ -585,7 +528,7 @@ class AutoPtCheckin(_PluginBase):
                                 ]
                             }
                         ]
-                    }
+                    },
                 ]
             }
         ], {
