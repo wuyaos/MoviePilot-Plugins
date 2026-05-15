@@ -167,3 +167,26 @@ def get_item_by_id(service, item_id: str) -> Optional[dict]:
     except Exception as err:
         logger.warning(f"{LOG_PREFIX} get_item_by_id 失败: {err}")
     return None
+
+
+def get_parent_library_id(service, item_id: str) -> Optional[str]:
+    """通过 item_id 向上查找所属库 ID（遍历 ParentId 直到匹配已知库）。"""
+    if not service or not item_id:
+        return None
+    libraries = get_libraries(service)
+    if not libraries:
+        return None
+    lib_ids = {str(get_library_id(service, lib)) for lib in libraries if get_library_id(service, lib)}
+    # 向上遍历 parent 链（最多 5 层）
+    current_id = item_id
+    for _ in range(5):
+        item = get_item_by_id(service, current_id)
+        if not item:
+            break
+        parent_id = item.get("ParentId") or ""
+        if not parent_id:
+            break
+        if str(parent_id) in lib_ids:
+            return str(parent_id)
+        current_id = parent_id
+    return None

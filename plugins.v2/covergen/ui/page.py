@@ -115,22 +115,45 @@ def _build_run_status(run_history, last_run=None) -> list:
     def _get(obj, key, default=None):
         return obj.get(key, default) if isinstance(obj, dict) else getattr(obj, key, default)
 
+    def _trigger_label(trigger: str, dry_run: bool) -> str:
+        labels = {"cron": "定时", "transfer": "入库", "webhook": "Webhook入库",
+                  "command": "命令", "manual": "手动"}
+        label = labels.get(trigger, "手动")
+        return f"{label} / 模拟" if dry_run else label
+
+    def _duration(started: str, finished: str) -> str:
+        try:
+            from datetime import datetime as _dt
+            s = _dt.fromisoformat(started[:19])
+            f = _dt.fromisoformat(finished[:19])
+            secs = int((f - s).total_seconds())
+            if secs < 60:
+                return f"{secs}s"
+            return f"{secs // 60}m{secs % 60:02d}s"
+        except Exception:
+            return "-"
+
     history = run_history or []
     if history:
         rows = []
         for run in history:
             started = str(_get(run, "started_at", ""))[:19] or "-"
             finished = str(_get(run, "finished_at", ""))[:19] or started
-            mode = _get(run, "mode", "") or "all"
+            trigger = _get(run, "trigger", "") or ""
             dry_run = _get(run, "dry_run", False)
             success = _get(run, "success", 0)
             failed = _get(run, "failed", 0)
             skipped = _get(run, "skipped", 0)
+            libs = _get(run, "libraries", []) or []
+            lib_count = len(libs) if libs else "-"
+            dur = _duration(started, finished)
             status = "成功" if failed == 0 else "部分失败"
             status_color = "success" if failed == 0 else "error"
             rows.append({"component": "tr", "content": [
                 {"component": "td", "text": finished},
-                {"component": "td", "text": f"{mode}{' / 模拟' if dry_run else ''}"},
+                {"component": "td", "text": _trigger_label(trigger, dry_run)},
+                {"component": "td", "text": str(lib_count)},
+                {"component": "td", "text": dur},
                 {"component": "td", "text": f"成 {success} 败 {failed} 跳 {skipped}"},
                 {"component": "td", "content": [{"component": "VChip", "props": {
                     "color": status_color, "variant": "tonal", "size": "small",
@@ -139,7 +162,9 @@ def _build_run_status(run_history, last_run=None) -> list:
         table = {"component": "VTable", "props": {"density": "compact", "class": "mt-2"}, "content": [
             {"component": "thead", "content": [{"component": "tr", "content": [
                 {"component": "th", "text": "时间"},
-                {"component": "th", "text": "模式"},
+                {"component": "th", "text": "触发"},
+                {"component": "th", "text": "库数"},
+                {"component": "th", "text": "耗时"},
                 {"component": "th", "text": "统计"},
                 {"component": "th", "text": "状态"},
             ]}]},

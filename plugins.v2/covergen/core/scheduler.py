@@ -30,16 +30,18 @@ class Scheduler:
 
     def build_services(self, *, enabled: bool, cron: str, run_fn: Callable,
                        stop_fn: Callable, service_id: str, stop_id: str,
+                       run_kwargs: Optional[dict] = None,
                        legacy_id: str = "", legacy_stop_id: str = "") -> list:
         """构建 get_service() 的服务列表。"""
         services = []
+        kw = run_kwargs or {}
         if enabled and cron:
             services.append({
                 "id": service_id,
                 "name": "媒体库封面更新服务",
                 "trigger": CronTrigger.from_crontab(cron),
                 "func": run_fn,
-                "kwargs": {},
+                "kwargs": kw,
             })
             if legacy_id and legacy_id != service_id:
                 services.append({
@@ -84,17 +86,19 @@ class Scheduler:
 
     # ---- TransferComplete 防抖 ----
 
-    def debounce_transfer(self, key: str, fn: Callable, *args, **kwargs):
-        """防抖处理 TransferComplete 事件（同 key 仅执行最后一次）。"""
+    def debounce_transfer(self, key: str, fn: Callable, *args,
+                          delay_override: int = 0, **kwargs):
+        """防抖处理事件（同 key 仅执行最后一次）。delay_override 可覆盖默认延迟。"""
+        actual_delay = delay_override if delay_override > 0 else self.delay
         with self._timer_lock:
             old = self._timers.pop(key, None)
             if old:
                 old.cancel()
-            timer = threading.Timer(self.delay, fn, args=args, kwargs=kwargs)
+            timer = threading.Timer(actual_delay, fn, args=args, kwargs=kwargs)
             timer.daemon = True
             self._timers[key] = timer
             timer.start()
-            logger.info(f"{LOG_PREFIX} [防抖] {key} 延迟 {self.delay}s 后执行")
+            logger.info(f"{LOG_PREFIX} [防抖] {key} 延迟 {actual_delay}s 后执行")
 
     # ---- 停止 ----
 

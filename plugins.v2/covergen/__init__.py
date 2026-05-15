@@ -33,7 +33,7 @@ class CoverGen(_PluginBase):
     plugin_name = "媒体库封面生成"
     plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
-    plugin_version = "1.1.0"
+    plugin_version = "1.3.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "covergen_"
@@ -100,14 +100,14 @@ class CoverGen(_PluginBase):
 
     def _reset_engine_then_run(self):
         try:
-            self._engine.run(self._servers)
+            self._engine.run(self._servers, trigger="manual")
         finally:
             # 运行后恢复 engine.cfg 到当前已清开关的 cfg
             self._engine.cfg = self._cfg
 
-    def _run_all(self):
+    def _run_all(self, *, trigger: str = ""):
         if self._engine:
-            self._engine.run(self._servers)
+            self._engine.run(self._servers, trigger=trigger)
 
     def _update_config(self):
         self._cfg.cover_style = self._cfg.compose_style()
@@ -161,7 +161,8 @@ class CoverGen(_PluginBase):
         return self._scheduler.build_services(
             enabled=self._cfg.enabled, cron=self._cfg.cron,
             run_fn=self._run_all, stop_fn=self.stop_task,
-            service_id=self.SERVICE_ID, stop_id=self.STOP_SERVICE_ID)
+            service_id=self.SERVICE_ID, stop_id=self.STOP_SERVICE_ID,
+            run_kwargs={"trigger": "cron"})
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -267,7 +268,7 @@ class CoverGen(_PluginBase):
             return
         action = event.event_data.get("action")
         if action == "update_covers":
-            self._run_all()
+            self._run_all(trigger="command")
         elif action == "clean_images":
             self.api_clean_images()
         elif action == "clean_fonts":
@@ -282,8 +283,68 @@ class CoverGen(_PluginBase):
         media = event.event_data.get("mediainfo")
         if not media:
             return
-        key = f"{getattr(media, 'tmdb_id', '')}:{getattr(media, 'title', '')}"
-        self._scheduler.debounce_transfer(key, self._run_all)
+        title = getattr(media, "title", "") or "unknown"
+        tmdb_id = getattr(media, "tmdb_id", "") or ""
+        key = f"cover:{tmdb_id}:{title}"
+        if self._cfg.transfer_source == "webhook":
+            # Webhook 模式下 TransferComplete 作为兜底，延迟加倍
+            self._scheduler.debounce_transfer(
+                key, self._run_all, trigger="transfer",
+                delay_override=self._cfg.delay * 5)
+        else:
+            # 默认模式：正常延迟，全部库更新
+            self._scheduler.debounce_transfer(key, self._run_all, trigger="transfer")
+
+    @eventmanager.register(EventType.WebhookMessage)
+    def on_webhook_message(self, event: Event):
+        """监听媒体服务器 Webhook 入库事件，精确更新对应库。"""
+        if not self._cfg.enabled or not self._cfg.transfer_monitor or not self._scheduler:
+            return
+        if self._cfg.transfer_source != "webhook":
+            return
+        if not event or not event.event_data:
+            return
+        event_info = event.event_data
+        event_type = getattr(event_info, "event_type", "") or ""
+        if event_type != "library.new":
+            return
+        item_name = getattr(event_info, "item_name", "") or "unknown"
+        item_id = getattr(event_info, "item_id", "") or ""
+        item_type = getattr(event_info, "item_type", "") or ""
+        # 用相同 key 格式取消 TransferComplete 的兜底定时器
+        tmdb_id = ""  # webhook 事件无 tmdb_id，用 item_name 匹配
+        key = f"cover:{tmdb_id}:{item_name}"
+        # 查找对应库并定向更新
+        target_server, target_library_id = self._resolve_webhook_library(item_id)
+        if target_server and target_library_id:
+            self._scheduler.debounce_transfer(
+                key, self._run_targeted,
+                target_server=target_server, target_library_id=target_library_id,
+                trigger="webhook")
+        else:
+            # 无法定位库，回退全量
+            self._scheduler.debounce_transfer(key, self._run_all, trigger="webhook")
+
+    def _run_targeted(self, *, target_server: str = "", target_library_id: str = "",
+                      trigger: str = ""):
+        """定向更新指定服务器的指定库。"""
+        if self._engine:
+            self._engine.run(self._servers, trigger=trigger,
+                             target_server=target_server,
+                             target_library_id=target_library_id)
+
+    def _resolve_webhook_library(self, item_id: str) -> Tuple[str, str]:
+        """通过 item_id 查询媒体服务器，定位所属库。返回 (server_name, library_id)。"""
+        if not item_id or not self._servers:
+            return "", ""
+        for sname, service in self._servers.items():
+            try:
+                lib_id = srv.get_parent_library_id(service, item_id)
+                if lib_id:
+                    return sname, lib_id
+            except Exception:
+                continue
+        return "", ""
 
     # ---- 辅助 ----
 

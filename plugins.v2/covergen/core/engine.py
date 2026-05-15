@@ -38,6 +38,7 @@ class RunStats(BaseModel):
     started_at: str = ""
     finished_at: str = ""
     mode: str = "all"
+    trigger: str = ""  # cron / transfer / manual / command
     dry_run: bool = False
     success: int = 0
     failed: int = 0
@@ -83,14 +84,15 @@ class CoverEngine:
 
     # ---- 主调度 ----
 
-    def run(self, servers: dict, *, mode: str = "all", target_server: str = "",
-            target_library_id: str = "", target_item_id: str = "") -> RunStats:
+    def run(self, servers: dict, *, mode: str = "all", trigger: str = "",
+            target_server: str = "", target_library_id: str = "",
+            target_item_id: str = "") -> RunStats:
         stats = RunStats(started_at=datetime.datetime.now().isoformat(), mode=mode,
-                         dry_run=self.cfg.dry_run)
+                         trigger=trigger, dry_run=self.cfg.dry_run)
         self.stop_event.clear()
         self._title_cache = render.parse_title_config(self.cfg.title_config) if self.cfg.title_config else {}
-        logger.info(f"{LOG_PREFIX} ═══ 开始封面更新任务 ═══ 模式={mode} 风格={self.cfg.cover_style} "
-                    f"dry_run={self.cfg.dry_run} 服务器数={len(servers)}")
+        logger.info(f"{LOG_PREFIX} ═══ 开始封面更新任务 ═══ 模式={mode} 触发={trigger or 'manual'} "
+                    f"风格={self.cfg.cover_style} dry_run={self.cfg.dry_run} 服务器数={len(servers)}")
 
         for sname, service in servers.items():
             if target_server and sname != target_server:
