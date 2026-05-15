@@ -27,11 +27,15 @@ def _find_by_file(filepath: Path):
     return None
 
 
-def _load_once(key: str, filename: str):
+def _load_once(key: str, filename: str, sentinel: str = ""):
     """Load a proto module from *filename* once, cached under bare *key*.
 
     Robustness layers (in order):
     1. sys.modules hit  — bare key survives MP hot-reload; just return it.
+                          If *sentinel* is given, verify the cached module
+                          actually has that attribute; if not, the entry is
+                          a stale incomplete module (left by an older code
+                          version's failed reconstruct) — evict and reload.
     2. Pre-scan         — another key in sys.modules already holds the same
                           file (e.g. full package path from an older code
                           version); alias it under the bare key and return.
@@ -40,7 +44,11 @@ def _load_once(key: str, filename: str):
                           always returns a fully-initialised module.
     """
     if key in sys.modules:
-        return sys.modules[key]
+        mod = sys.modules[key]
+        if not sentinel or hasattr(mod, sentinel):
+            return mod
+        # Cached module is incomplete (missing sentinel attr) — evict it.
+        del sys.modules[key]
 
     filepath = _HERE / filename
 
@@ -62,5 +70,5 @@ def _load_once(key: str, filename: str):
     return mod
 
 
-cd2_pb2 = _load_once("cd2_pb2", "cd2_pb2.py")
+cd2_pb2 = _load_once("cd2_pb2", "cd2_pb2.py", sentinel="GetTokenRequest")
 cd2_pb2_grpc = _load_once("cd2_pb2_grpc", "cd2_pb2_grpc.py")
