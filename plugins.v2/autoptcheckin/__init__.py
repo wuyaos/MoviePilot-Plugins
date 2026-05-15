@@ -231,15 +231,29 @@ class AutoPtCheckin(_PluginBase):
                             # 23
                             self._end_time = int(times[1])
                         if self._start_time is not None and self._end_time is not None:
-                            return [{
-                                "id": "AutoSignIn",
-                                "name": "站点自动签到服务",
-                                "trigger": "interval",
-                                "func": self.sign_in,
-                                "kwargs": {
-                                    "hours": float(str(cron).strip()),
-                                }
-                            }]
+                            hours_f = float(str(cron).strip())
+                            window = self._end_time - self._start_time
+                            num = max(1, int(window / hours_f))
+                            triggers = TimerUtils.random_scheduler(
+                                num_executions=num,
+                                begin_hour=self._start_time,
+                                end_hour=self._end_time,
+                                max_interval=int(hours_f * 60),
+                                min_interval=max(30, int(hours_f * 60 * 0.5)),
+                            )
+                            ret_jobs = []
+                            for trigger in triggers:
+                                ret_jobs.append({
+                                    "id": f"AutoSignIn|{trigger.hour}:{trigger.minute}",
+                                    "name": "站点自动签到服务",
+                                    "trigger": "cron",
+                                    "func": self.sign_in,
+                                    "kwargs": {
+                                        "hour": trigger.hour,
+                                        "minute": trigger.minute,
+                                    }
+                                })
+                            return ret_jobs
                         else:
                             logger.error("站点自动签到服务启动失败，周期格式错误")
                     else:
