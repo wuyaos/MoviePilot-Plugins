@@ -85,7 +85,7 @@ class CloudDrive2Disk(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png"
     # 插件版本
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -271,108 +271,153 @@ class CloudDrive2Disk(_PluginBase):
 
     def api_status(self) -> Dict[str, Any]:
         """GET /api/v1/plugin/CloudDrive2Disk/status — 返回连接状态与云盘列表"""
+        return self._collect_status()
+
+    def _collect_status(self) -> Dict[str, Any]:
+        proto_version = self._proto_version()
         if not self._cd2_api:
-            return {"connected": False, "drives": [], "runtime": None}
+            return {
+                "connected": False,
+                "enabled": bool(self._enabled),
+                "endpoint": self._cd2_url or "",
+                "proto_version": proto_version,
+                "runtime": None,
+                "drives": [],
+                "summary": {"total": 0, "used": 0, "free": 0, "count": 0},
+            }
+
         drives = self._cd2_api.get_cloud_drives_info()
         runtime = self._cd2_api.get_runtime_info()
-        return {"connected": True, "drives": drives, "runtime": runtime}
+        total = sum(int(d.get("total", 0) or 0) for d in drives)
+        used = sum(int(d.get("used", 0) or 0) for d in drives)
+        free = sum(int(d.get("free", 0) or 0) for d in drives)
+        return {
+            "connected": True,
+            "enabled": bool(self._enabled),
+            "endpoint": self._cd2_url or "",
+            "proto_version": proto_version,
+            "runtime": runtime,
+            "drives": drives,
+            "summary": {"total": total, "used": used, "free": free, "count": len(drives)},
+        }
+
+    @staticmethod
+    def _proto_version() -> str:
+        try:
+            proto_file = Path(__file__).resolve().parent / "clouddrive.proto"
+            for line in proto_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("option (version)"):
+                    return line.split("=", 1)[1].strip().strip('";')
+        except Exception:
+            pass
+        return "未知"
+
+    @staticmethod
+    def _usage_percent(used: int, total: int) -> float:
+        return round(used / total * 100, 1) if total > 0 else 0.0
+
+    @staticmethod
+    def _usage_color(pct: float) -> str:
+        if pct >= 90:
+            return "error"
+        if pct >= 75:
+            return "warning"
+        return "success"
+
+    def _stat_card(self, label: str, value: str, subtitle: str, icon: str, color: str, cols: int = 3) -> dict:
+        return {
+            "component": "VCol",
+            "props": {"cols": 6, "md": cols},
+            "content": [{
+                "component": "VCard",
+                "props": {"variant": "tonal", "color": color, "density": "compact", "class": "fill-height"},
+                "content": [{
+                    "component": "VCardText",
+                    "props": {"class": "pa-3"},
+                    "content": [
+                        {"component": "div", "props": {"class": "d-flex align-center mb-1"}, "content": [
+                            {"component": "VIcon", "props": {"icon": icon, "size": "small", "class": "mr-1"}},
+                            {"component": "span", "props": {"class": "text-caption"}, "text": label},
+                        ]},
+                        {"component": "div", "props": {"class": "text-subtitle-1 font-weight-bold"}, "text": value},
+                        {"component": "div", "props": {"class": "text-caption text-medium-emphasis"}, "text": subtitle or "\u00a0"},
+                    ],
+                }],
+            }],
+        }
+
+    def _drive_progress(self, drive: Dict[str, Any]) -> dict:
+        total = int(drive.get("total", 0) or 0)
+        used = int(drive.get("used", 0) or 0)
+        free = int(drive.get("free", 0) or 0)
+        pct = self._usage_percent(used, total)
+        color = self._usage_color(pct)
+        cloud_name = drive.get("cloud_name") or "Cloud"
+        name = drive.get("name") or drive.get("path") or "未命名云盘"
+        return {
+            "component": "VCard",
+            "props": {"variant": "flat", "class": "pa-2 mb-2 border"},
+            "content": [
+                {"component": "div", "props": {"class": "d-flex align-center justify-space-between mb-1"}, "content": [
+                    {"component": "div", "props": {"class": "text-body-2 font-weight-medium text-truncate"}, "text": name},
+                    {"component": "VChip", "props": {"size": "x-small", "variant": "tonal", "color": "primary"}, "text": cloud_name},
+                ]},
+                {"component": "VProgressLinear", "props": {
+                    "model-value": pct,
+                    "color": color,
+                    "height": 8,
+                    "rounded": True,
+                    "class": "mb-1",
+                }},
+                {"component": "div", "props": {"class": "d-flex justify-space-between text-caption text-medium-emphasis"}, "content": [
+                    {"component": "span", "text": f"已用 {self._human_size(used)}"},
+                    {"component": "span", "text": f"剩余 {self._human_size(free)} / 总计 {self._human_size(total)} ({pct}%)"},
+                ]},
+            ],
+        }
 
     def get_dashboard(self) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], List[dict]]]:
-        """
-        数据面板，显示 CD2 连接状态、版本、各云盘空间占用。
-        返回 (cols, attrs, elements)
-        """
-        if not self._cd2_api:
-            return None
+        """首页数据面板：显示 CD2 连接状态、版本、proto 版本、云盘空间。"""
+        status = self._collect_status()
+        runtime = status.get("runtime") or {}
+        summary = status.get("summary") or {}
+        drives = status.get("drives") or []
+        connected = bool(status.get("connected"))
+        total = int(summary.get("total", 0) or 0)
+        used = int(summary.get("used", 0) or 0)
+        pct = self._usage_percent(used, total)
 
-        drives = self._cd2_api.get_cloud_drives_info()
-        runtime = self._cd2_api.get_runtime_info()
-
-        # 版本信息行
-        version_text = ""
-        if runtime:
-            version_text = (
-                f"{runtime.get('product_name', 'CloudDrive2')} "
-                f"{runtime.get('product_version', '')} | "
-                f"{runtime.get('os_info', '')}"
-            ).strip(" |")
-
-        # 构造云盘卡片列表
-        drive_rows = []
-        for d in drives:
-            total = d.get("total", 0)
-            used = d.get("used", 0)
-            free = d.get("free", 0)
-            available = free if free > 0 else max(total - used, 0)
-            pct = round(used / total * 100, 1) if total > 0 else 0
-            drive_rows.append({
-                "component": "VRow",
-                "props": {"class": "mb-1 align-center"},
-                "content": [
-                    {
-                        "component": "VCol",
-                        "props": {"cols": 5},
-                        "content": [{"component": "span", "text": f"{d.get('name', '')} ({d.get('cloud_name', '')})"}],
-                    },
-                    {
-                        "component": "VCol",
-                        "props": {"cols": 7},
-                        "content": [
-                            {
-                                "component": "VProgressLinear",
-                                "props": {
-                                    "value": pct,
-                                    "color": "primary",
-                                    "bg-color": "grey-darken-3",
-                                    "height": 6,
-                                    "rounded": True,
-                                },
-                            },
-                            {
-                                "component": "div",
-                                "props": {"class": "text-caption text-right mt-n1"},
-                                "text": f"{self._human_size(used)} / {self._human_size(total)} ({pct}%)",
-                            },
-                        ],
-                    },
-                ],
-            })
-
-        elements = [
-            {
-                "component": "VCard",
-                "props": {"variant": "tonal", "class": "pa-3"},
-                "content": [
-                    {
-                        "component": "div",
-                        "props": {"class": "text-subtitle-2 mb-2"},
-                        "text": "CloudDrive2 存储",
-                    },
-                    *([{
-                        "component": "div",
-                        "props": {"class": "text-caption text-medium-emphasis mb-2"},
-                        "text": version_text,
-                    }] if version_text else []),
-                    *(drive_rows if drive_rows else [{
-                        "component": "div",
-                        "props": {"class": "text-caption"},
-                        "text": "暂无云盘数据",
-                    }]),
-                ],
-            }
+        cards = [
+            self._stat_card("连接状态", "已连接" if connected else "未连接", status.get("endpoint", ""), "mdi-lan-connect", "success" if connected else "grey", 3),
+            self._stat_card("CD2 版本", runtime.get("product_version") or "未知", runtime.get("product_name") or "CloudDrive2", "mdi-cloud", "info", 3),
+            self._stat_card("Proto 版本", status.get("proto_version") or "未知", runtime.get("cloud_api_version") or "CloudAPI 未知", "mdi-code-json", "primary", 3),
+            self._stat_card("云盘空间", f"{pct}%", f"{len(drives)} 个云盘 / {self._human_size(used)} 已用", "mdi-harddisk", self._usage_color(pct), 3),
         ]
 
-        return (
-            {"cols": 12, "md": 6},
-            {"border": False, "flat": True},
-            elements,
-        )
+        elements = [{
+            "component": "VCard",
+            "props": {"variant": "flat", "class": "pa-3"},
+            "content": [
+                {"component": "div", "props": {"class": "d-flex align-center justify-space-between mb-3"}, "content": [
+                    {"component": "div", "props": {"class": "text-subtitle-2 font-weight-bold"}, "text": "CloudDrive2 存储"},
+                    {"component": "VChip", "props": {"size": "small", "variant": "tonal", "color": "success" if connected else "grey", "prepend-icon": "mdi-circle"}, "text": "在线" if connected else "离线"},
+                ]},
+                {"component": "VRow", "props": {"dense": True, "class": "mb-1"}, "content": cards},
+                *([{"component": "VDivider", "props": {"class": "my-2"}}] if drives else []),
+                *(self._drive_progress(d) for d in drives[:4]),
+                *([{"component": "div", "props": {"class": "text-caption text-medium-emphasis text-right"}, "text": f"还有 {len(drives) - 4} 个云盘，详情页查看全部"}] if len(drives) > 4 else []),
+                *([{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "density": "compact", "text": "暂无可统计云盘数据（WebDAV 已过滤）"}}] if not drives else []),
+            ],
+        }]
+
+        return ({"cols": 12, "md": 6}, {"border": False, "flat": True}, elements)
 
     @staticmethod
     def _human_size(size_bytes: int) -> str:
         if size_bytes <= 0:
             return "0 B"
-        units = ["B", "KB", "MB", "GB", "TB"]
+        units = ["B", "KB", "MB", "GB", "TB", "PB"]
         i, v = 0, float(size_bytes)
         while v >= 1024 and i < len(units) - 1:
             v /= 1024
@@ -380,7 +425,70 @@ class CloudDrive2Disk(_PluginBase):
         return f"{v:.1f} {units[i]}"
 
     def get_page(self) -> List[dict]:
-        return []
+        """插件详情页：展示连接性、版本、proto 版本与云盘容量。"""
+        status = self._collect_status()
+        runtime = status.get("runtime") or {}
+        summary = status.get("summary") or {}
+        drives = status.get("drives") or []
+        connected = bool(status.get("connected"))
+        total = int(summary.get("total", 0) or 0)
+        used = int(summary.get("used", 0) or 0)
+        free = int(summary.get("free", 0) or 0)
+        pct = self._usage_percent(used, total)
+
+        drive_rows = []
+        for d in drives:
+            d_total = int(d.get("total", 0) or 0)
+            d_used = int(d.get("used", 0) or 0)
+            d_free = int(d.get("free", 0) or 0)
+            d_pct = self._usage_percent(d_used, d_total)
+            drive_rows.append({"component": "tr", "content": [
+                {"component": "td", "text": d.get("name") or "-"},
+                {"component": "td", "content": [{"component": "VChip", "props": {"size": "small", "variant": "tonal", "color": "primary"}, "text": d.get("cloud_name") or "-"}]},
+                {"component": "td", "text": d.get("path") or "-"},
+                {"component": "td", "text": self._human_size(d_total)},
+                {"component": "td", "text": self._human_size(d_used)},
+                {"component": "td", "text": self._human_size(d_free)},
+                {"component": "td", "content": [
+                    {"component": "VProgressLinear", "props": {"model-value": d_pct, "color": self._usage_color(d_pct), "height": 8, "rounded": True}},
+                    {"component": "div", "props": {"class": "text-caption text-right"}, "text": f"{d_pct}%"},
+                ]},
+            ]})
+
+        return [
+            {"component": "VRow", "props": {"class": "mb-3", "align": "stretch"}, "content": [
+                self._stat_card("连接状态", "已连接" if connected else "未连接", status.get("endpoint", ""), "mdi-lan-connect", "success" if connected else "grey", 3),
+                self._stat_card("CD2 版本", runtime.get("product_version") or "未知", runtime.get("product_name") or "CloudDrive2", "mdi-cloud", "info", 3),
+                self._stat_card("Proto 版本", status.get("proto_version") or "未知", runtime.get("cloud_api_version") or "CloudAPI 未知", "mdi-code-json", "primary", 3),
+                self._stat_card("总空间", self._human_size(total), f"已用 {self._human_size(used)} / 剩余 {self._human_size(free)}", "mdi-harddisk", self._usage_color(pct), 3),
+            ]},
+            {"component": "VCard", "props": {"variant": "tonal", "color": "blue-grey", "class": "mb-3"}, "content": [
+                {"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"}, "text": "运行信息"},
+                {"component": "VTable", "props": {"density": "compact"}, "content": [{"component": "tbody", "content": [
+                    {"component": "tr", "content": [{"component": "td", "text": "连接地址"}, {"component": "td", "text": status.get("endpoint") or "-"}]},
+                    {"component": "tr", "content": [{"component": "td", "text": "产品名称"}, {"component": "td", "text": runtime.get("product_name") or "-"}]},
+                    {"component": "tr", "content": [{"component": "td", "text": "产品版本"}, {"component": "td", "text": runtime.get("product_version") or "-"}]},
+                    {"component": "tr", "content": [{"component": "td", "text": "CloudAPI 版本"}, {"component": "td", "text": runtime.get("cloud_api_version") or "-"}]},
+                    {"component": "tr", "content": [{"component": "td", "text": "本地 proto 版本"}, {"component": "td", "text": status.get("proto_version") or "-"}]},
+                    {"component": "tr", "content": [{"component": "td", "text": "系统信息"}, {"component": "td", "text": runtime.get("os_info") or "-"}]},
+                ]}]},
+            ]},
+            {"component": "VCard", "props": {"variant": "flat", "class": "mb-3"}, "content": [
+                {"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"}, "text": "云盘容量（已过滤 WebDAV）"},
+                *( [{"component": "VTable", "props": {"density": "compact"}, "content": [
+                    {"component": "thead", "content": [{"component": "tr", "content": [
+                        {"component": "th", "text": "名称"},
+                        {"component": "th", "text": "类型"},
+                        {"component": "th", "text": "路径"},
+                        {"component": "th", "text": "总量"},
+                        {"component": "th", "text": "已用"},
+                        {"component": "th", "text": "剩余"},
+                        {"component": "th", "text": "占用"},
+                    ]}]},
+                    {"component": "tbody", "content": drive_rows},
+                ]}] if drive_rows else [{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "density": "compact", "class": "ma-3", "text": "暂无可展示云盘。请确认插件已启用、API key 有 allow_list 权限，且 WebDAV 盘不会计入统计。"}}]),
+            ]},
+        ]
 
     def get_module(self) -> Dict[str, Any]:
         """
