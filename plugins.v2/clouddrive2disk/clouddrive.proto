@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package cd2;
+package clouddrive;
 
 option csharp_namespace = "CloudDriveSrv.Protos";
 

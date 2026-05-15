@@ -1,104 +1,156 @@
-# input: MoviePilot 存储模块调用、CloudDrive2 gRPC 地址与 API 令牌配置
-# output: CloudDrive2Disk 插件类，注册 CloudDrive2 存储并暴露文件管理覆盖方法
-# pos: clouddrive2disk 插件入口，负责 MoviePilot V2 插件生命周期与存储适配
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlsplit
+import importlib.util
+import sys
+import types
 
-from app.core.event import Event, eventmanager
+from app.core.event import eventmanager, Event
 from app.helper.storage import StorageHelper
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import FileItem, StorageOperSelectionEventData, StorageUsage
 from app.schemas.types import ChainEventType
 
+def _load_local_module(module_name: str, file_path: Path):
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if not spec or not spec.loader:
+        raise ImportError(f"无法加载模块: {module_name}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _install_clouddrive_shim():
+    """
+    兼容旧导入路径：from clouddrive.proto import CloudDrive_pb2
+    返回注入的信息，供后续清理使用
+    """
+    plugin_dir = Path(__file__).resolve().parent
+    pb2_file = plugin_dir / "clouddrive_pb2.py"
+    pb2_grpc_file = plugin_dir / "clouddrive_pb2_grpc.py"
+
+    injected_modules = []
+    injected_sys_path = None
+
+    if not pb2_file.exists() or not pb2_grpc_file.exists():
+        return injected_modules, injected_sys_path
+
+    plugin_dir_str = str(plugin_dir)
+    if plugin_dir_str not in sys.path:
+        sys.path.insert(0, plugin_dir_str)
+        injected_sys_path = plugin_dir_str
+
+    pb2_module = _load_local_module("clouddrive_pb2", pb2_file)
+    pb2_grpc_module = _load_local_module("clouddrive_pb2_grpc", pb2_grpc_file)
+
+    clouddrive_pkg = sys.modules.get("clouddrive") or types.ModuleType("clouddrive")
+    proto_pkg = sys.modules.get("clouddrive.proto") or types.ModuleType("clouddrive.proto")
+
+    setattr(proto_pkg, "CloudDrive_pb2", pb2_module)
+    setattr(proto_pkg, "CloudDrive_pb2_grpc", pb2_grpc_module)
+    setattr(clouddrive_pkg, "proto", proto_pkg)
+
+    shim_keys = [
+        "clouddrive",
+        "clouddrive.proto",
+        "clouddrive.proto.CloudDrive_pb2",
+        "clouddrive.proto.CloudDrive_pb2_grpc",
+    ]
+    sys.modules["clouddrive"] = clouddrive_pkg
+    sys.modules["clouddrive.proto"] = proto_pkg
+    sys.modules["clouddrive.proto.CloudDrive_pb2"] = pb2_module
+    sys.modules["clouddrive.proto.CloudDrive_pb2_grpc"] = pb2_grpc_module
+
+    return shim_keys, injected_sys_path
+
+
+_shim_modules, _shim_sys_path = _install_clouddrive_shim()
+
 try:
-    from .core.cd2_api import Cd2Api
-except Exception as err:
-    logger.error(f"【CloudDrive2Disk】加载 CloudDrive2 gRPC 模块失败: {err}")
-    Cd2Api = None
+    from .cd2_api import Cd2Api
+except Exception:
+    from cd2_api import Cd2Api
 
 
-class CloudDrive2Disk(_PluginBase):
-    """CloudDrive2 存储插件。"""
-
+class Cd2Disk(_PluginBase):
+    # 插件名称
     plugin_name = "CloudDrive2 存储"
-    plugin_desc = "基于 clouddrivedisk/cd2disk 修改而成，通过 CloudDrive2 proto 1.0.7 / gRPC 直连与 API 令牌接入 CloudDrive2，提供 MoviePilot 存储模块能力。"
+    # 插件描述
+    plugin_desc = "基于 baranwang/cd2disk，通过 CloudDrive2 gRPC 直连与 API 令牌接入，提供 MoviePilot 存储模块能力。"
+    # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png"
-    plugin_version = "0.3.0"
+    # 插件版本
+    plugin_version = "1.0.0"
+    # 插件作者
     plugin_author = "wuyaos"
+    # 作者主页
     author_url = "https://github.com/wuyaos"
+    # 插件配置项 ID 前缀
     plugin_config_prefix = "clouddrive2disk_"
+    # 加载顺序
     plugin_order = 99
+    # 可使用的用户级别
     auth_level = 1
 
     _enabled = False
     _disk_name = "CloudDrive2"
-    _cd2_url = "http://127.0.0.1:19798"
-    _api_token = ""
-    _upload_mode = "direct_write"
-    _cd2_api: Optional[Cd2Api] = None if Cd2Api else None
 
-    def init_plugin(self, config: dict = None):
-        global Cd2Api
-        if Cd2Api is None:
-            try:
-                from .core.cd2_api import Cd2Api as _cls
-                Cd2Api = _cls
-            except Exception:
-                pass
+    def __init__(self):
+        super().__init__()
+        self._disk_name = "CloudDrive2"
+        self._cd2_api: Optional[Cd2Api] = None
+        self._cd2_url = None
+        self._cd2_api_key = None
 
-        config = config or {}
+    def init_plugin(self, config: Optional[dict] = None):
+        """
+        初始化插件
+        """
         self.stop_service()
 
-        self._enabled = bool(config.get("enabled", False))
-        self._disk_name = (config.get("disk_name") or "CloudDrive2").strip() or "CloudDrive2"
-        self._ensure_plugin_log_file()
-        self._cd2_url = self._normalize_cd2_url(config.get("cd2_url") or "http://127.0.0.1:19798")
-        if not self._cd2_url:
-            logger.warning("【CloudDrive2Disk】CloudDrive2 gRPC 地址格式错误，必须为 http(s)://host:port")
-            self._register_storage()
+        if not config:
             return
-        self._api_token = config.get("api_token") or config.get("cd2_api_key") or ""
-        self._upload_mode = (config.get("upload_mode") or "direct_write").strip() or "direct_write"
 
-        self._register_storage()
+        storage_helper = StorageHelper()
+        storages = storage_helper.get_storagies()
+        if not any(s.type == self._disk_name and s.name == self._disk_name for s in storages):
+            storage_helper.add_storage(storage=self._disk_name, name=self._disk_name, conf={})
+
+        self._enabled = config.get("enabled", False)
+        self._cd2_url = config.get("cd2_url")
+        self._cd2_api_key = config.get("cd2_api_key")
 
         if not self._enabled:
-            logger.info("【CloudDrive2Disk】插件未启用")
             return
-        if not self._api_token:
-            logger.warning("【CloudDrive2Disk】未配置 API 令牌，暂不初始化 CloudDrive2 连接")
-            return
-        if not Cd2Api:
-            logger.error("【CloudDrive2Disk】gRPC API 模块不可用，请检查依赖与 proto 文件")
+
+        if not self._cd2_url or not self._cd2_api_key:
+            logger.error("【Cd2Disk】CloudDrive2 配置不完整，请检查地址和 API key")
             return
 
         try:
             self._cd2_api = Cd2Api(
                 cd2_url=self._cd2_url,
-                api_key=self._api_token,
+                api_key=self._cd2_api_key,
                 disk_name=self._disk_name,
-                upload_mode=self._upload_mode,
             )
-            logger.info(f"【CloudDrive2Disk】初始化完成: url={self._cd2_url}, storage={self._disk_name}")
-        except Exception as err:
+        except Exception as e:
+            logger.error(f"【Cd2Disk】CloudDrive2 客户端创建失败: {e}")
             self._cd2_api = None
-            logger.error(f"【CloudDrive2Disk】初始化 CloudDrive2 连接失败: {err}")
-
-    @staticmethod
-    def _normalize_cd2_url(value: str) -> Optional[str]:
-        text = (value or "").strip()
-        parsed = urlsplit(text)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc:
-            return None
-        host_part = parsed.netloc.rsplit("@", 1)[-1]
-        if ":" not in host_part:
-            return None
-        return f"{parsed.scheme}://{parsed.netloc}"
 
     def get_state(self) -> bool:
-        return bool(self._enabled)
+        return bool(self._enabled and self._cd2_api)
+
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        return []
+
+    def get_api(self) -> List[Dict[str, Any]]:
+        return []
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return [
@@ -121,39 +173,6 @@ class CloudDrive2Disk(_PluginBase):
                                     }
                                 ],
                             },
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
-                                "content": [
-                                    {
-                                        "component": "VTextField",
-                                        "props": {
-                                            "model": "disk_name",
-                                            "label": "存储名称",
-                                            "placeholder": "CloudDrive2",
-                                        },
-                                    }
-                                ],
-                            },
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
-                                "content": [
-                                    {
-                                        "component": "VSelect",
-                                        "props": {
-                                            "model": "upload_mode",
-                                            "label": "上传模式",
-                                            "items": [
-                                                {"title": "直接上传", "value": "direct_write"},
-                                                {"title": "远程上传", "value": "remote_upload"},
-                                            ],
-                                            "hint": "直接上传通过 gRPC 写入远端文件；远程上传由 CloudDrive2 服务端拉取本地文件数据（支持秒传）。",
-                                            "persistent-hint": True,
-                                        },
-                                    }
-                                ],
-                            },
                         ],
                     },
                     {
@@ -161,33 +180,28 @@ class CloudDrive2Disk(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 12},
                                 "content": [
                                     {
                                         "component": "VTextField",
                                         "props": {
                                             "model": "cd2_url",
-                                            "label": "CloudDrive2 gRPC 地址",
+                                            "label": "CloudDrive2 地址",
                                             "placeholder": "http://127.0.0.1:19798",
-                                            "hint": "必须使用 http(s)://host:port，填写 gRPC 地址，不是 Web UI 端口",
-                                            "persistent-hint": True,
                                         },
                                     }
                                 ],
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 12},
                                 "content": [
                                     {
                                         "component": "VTextField",
                                         "props": {
-                                            "model": "api_token",
-                                            "label": "API 令牌",
-                                            "placeholder": "粘贴 API 令牌",
+                                            "model": "cd2_api_key",
+                                            "label": "CloudDrive2 API key",
                                             "type": "password",
-                                            "hint": "API 令牌",
-                                            "persistent-hint": True,
                                         },
                                     }
                                 ],
@@ -206,9 +220,36 @@ class CloudDrive2Disk(_PluginBase):
                                         "props": {
                                             "type": "info",
                                             "variant": "tonal",
-                                            "text": "直接上传：CreateFile → 3MB 分块 WriteToFile → CloseFile，并等待 CloudDrive2 云端上传完成；远程上传：CloudDrive2 通过本地 URL 拉取文件，当前仅预留未实现。",
+                                            "density": "compact",
+                                            "class": "mt-2",
                                         },
-                                    }
+                                        "content": [
+                                            {
+                                                "component": "div",
+                                                "text": "说明：",
+                                            },
+                                            {
+                                                "component": "div",
+                                                "text": "• 仅支持已在 CloudDrive2 中挂载的网盘路径",
+                                            },
+                                            {
+                                                "component": "div",
+                                                "text": "• 请填写 CloudDrive2 服务地址与 API key",
+                                            },
+                                            {
+                                                "component": "div",
+                                                "text": "• API key 支持直接粘贴 token，或粘贴 Authorization: Bearer <token>",
+                                            },
+                                            {
+                                                "component": "div",
+                                                "text": "• 请确认 API key 具备目标目录访问权限",
+                                            },
+                                            {
+                                                "component": "div",
+                                                "text": "• 如连接失败，请先在 CloudDrive2 中测试该 API key",
+                                            },
+                                        ],
+                                    },
                                 ],
                             },
                         ],
@@ -217,42 +258,17 @@ class CloudDrive2Disk(_PluginBase):
             }
         ], {
             "enabled": False,
-            "disk_name": "CloudDrive2",
             "cd2_url": "http://127.0.0.1:19798",
-            "api_token": "",
-            "upload_mode": "direct_write",
+            "cd2_api_key": "",
         }
 
     def get_page(self) -> List[dict]:
-        try:
-            status = "已启用" if self._enabled else "未启用"
-            api_status = "已连接" if self._cd2_api else "未连接"
-            return [
-                {
-                    "component": "VCard",
-                    "props": {"variant": "tonal"},
-                    "content": [
-                        {
-                            "component": "VCardText",
-                            "text": f"CloudDrive2Disk：{status}，存储：{self._disk_name}，gRPC：{self._cd2_url}，状态：{api_status}",
-                        }
-                    ],
-                }
-            ]
-        except Exception as err:
-            logger.error(f"【CloudDrive2Disk】渲染页面失败: {err}")
-            return [{"component": "VAlert", "props": {"type": "error", "text": str(err)}}]
-
-    def get_api(self) -> List[Dict[str, Any]]:
-        return []
-
-    def get_service(self) -> List[Dict[str, Any]]:
-        return []
-
-    def get_command(self) -> List[Dict[str, Any]]:
         return []
 
     def get_module(self) -> Dict[str, Any]:
+        """
+        获取插件模块声明，用于接管系统存储模块实现
+        """
         return {
             "list_files": self.list_files,
             "any_files": self.any_files,
@@ -272,46 +288,98 @@ class CloudDrive2Disk(_PluginBase):
 
     @eventmanager.register(ChainEventType.StorageOperSelection)
     def storage_oper_selection(self, event: Event):
-        if not self.get_state() or not self._cd2_api:
+        """
+        监听存储选择事件，返回当前类为操作对象
+        """
+        if not self.get_state():
             return
 
         event_data: StorageOperSelectionEventData = event.event_data
         if event_data.storage == self._disk_name:
-            event_data.storage_oper = self._cd2_api
+            event_data.storage_oper = self._cd2_api  # noqa
 
     def list_files(self, fileitem: FileItem, recursion: bool = False) -> Optional[List[FileItem]]:
+        """
+        查询当前目录下所有目录和文件
+        """
         if fileitem.storage != self._disk_name:
             return None
         if not self._cd2_api:
             return []
-        return self._cd2_api.iter_files(fileitem) if recursion else self._cd2_api.list(fileitem)
 
-    def any_files(self, fileitem: FileItem, extensions: list = None) -> Optional[bool]:
+        api = self._cd2_api
+
+        if recursion:
+            result = api.iter_files(fileitem)
+            if result is not None:
+                return result
+
+        def __get_files(_item: FileItem, _r: Optional[bool] = False):
+            _items = api.list(_item)
+            if _items:
+                if _r:
+                    for t in _items:
+                        if t.type == "dir":
+                            __get_files(t, _r)
+                        else:
+                            result_items.append(t)
+                else:
+                    result_items.extend(_items)
+
+        result_items: List[FileItem] = []
+        __get_files(fileitem, recursion)
+        return result_items
+
+    def any_files(self, fileitem: FileItem, extensions: Optional[List[str]] = None) -> Optional[bool]:
+        """
+        查询当前目录下是否存在指定扩展名任意文件
+        """
         if fileitem.storage != self._disk_name:
             return None
-        files = self.list_files(fileitem)
-        if files is None:
-            return None
-        if not extensions:
-            return bool(files)
-        return any(
-            f.type == "file" and f.extension and f".{f.extension.lower()}" in extensions
-            for f in files
-        )
+        if not self._cd2_api:
+            return False
 
-    def download_file(self, fileitem: FileItem, path: Path = None) -> Optional[Path]:
+        api = self._cd2_api
+
+        def __any_file(_item: FileItem):
+            _items = api.list(_item)
+            if _items:
+                if not extensions:
+                    return True
+                for t in _items:
+                    if t.type == "file" and t.extension and f".{t.extension.lower()}" in extensions:
+                        return True
+                    if t.type == "dir" and __any_file(t):
+                        return True
+            return False
+
+        return __any_file(fileitem)
+
+    def create_folder(self, fileitem: FileItem, name: str) -> Optional[FileItem]:
+        if fileitem.storage != self._disk_name:
+            return None
+        if not self._cd2_api:
+            return None
+        return self._cd2_api.create_folder(fileitem=fileitem, name=name)
+
+    def download_file(self, fileitem: FileItem, path: Optional[Path] = None) -> Optional[Path]:
         if fileitem.storage != self._disk_name:
             return None
         if not self._cd2_api:
             return None
         return self._cd2_api.download(fileitem, path)
 
-    def upload_file(self, fileitem: FileItem, path: Path, new_name: str = None) -> Optional[FileItem]:
+    def upload_file(
+        self,
+        fileitem: FileItem,
+        path: Path,
+        new_name: Optional[str] = None,
+    ) -> Optional[FileItem]:
         if fileitem.storage != self._disk_name:
             return None
         if not self._cd2_api:
             return None
-        return self._cd2_api.upload(fileitem, Path(path), new_name)
+        return self._cd2_api.upload(fileitem, path, new_name)
 
     def delete_file(self, fileitem: FileItem) -> Optional[bool]:
         if fileitem.storage != self._disk_name:
@@ -327,6 +395,16 @@ class CloudDrive2Disk(_PluginBase):
             return False
         return self._cd2_api.rename(fileitem, name)
 
+    def exists(self, fileitem: FileItem) -> Optional[bool]:
+        if fileitem.storage != self._disk_name:
+            return None
+        return True if self.get_item(fileitem) else False
+
+    def get_item(self, fileitem: FileItem) -> Optional[FileItem]:
+        if fileitem.storage != self._disk_name:
+            return None
+        return self.get_file_item(storage=fileitem.storage, path=Path(fileitem.path))
+
     def get_file_item(self, storage: str, path: Path) -> Optional[FileItem]:
         if storage != self._disk_name:
             return None
@@ -341,16 +419,58 @@ class CloudDrive2Disk(_PluginBase):
             return None
         return self._cd2_api.get_parent(fileitem)
 
-    def snapshot_storage(self, storage: str, path: Path) -> Optional[Dict[str, float]]:
+    def snapshot_storage(
+        self,
+        storage: str,
+        path: Path,
+        last_snapshot_time: Optional[float] = None,
+        max_depth: int = 5,
+    ) -> Optional[Dict[str, Dict]]:
+        """
+        快照存储
+        """
         if storage != self._disk_name:
             return None
         if not self._cd2_api:
             return {}
-        fileitem = self._cd2_api.get_item(path)
+
+        api = self._cd2_api
+        files_info: Dict[str, Dict] = {}
+
+        def __snapshot_file(_fileitm: FileItem, current_depth: int = 0):
+            try:
+                if _fileitm.type == "dir":
+                    if current_depth >= max_depth:
+                        return
+
+                    if (
+                        getattr(self, "snapshot_check_folder_modtime", False)
+                        and last_snapshot_time
+                        and _fileitm.modify_time
+                        and _fileitm.modify_time <= last_snapshot_time
+                    ):
+                        return
+
+                    sub_files = api.list(_fileitm)
+                    for sub_file in sub_files:
+                        __snapshot_file(sub_file, current_depth + 1)
+                else:
+                    modify_time = getattr(_fileitm, "modify_time", 0) or 0
+                    if not last_snapshot_time or modify_time > last_snapshot_time:
+                        files_info[_fileitm.path] = {
+                            "size": _fileitm.size or 0,
+                            "modify_time": modify_time,
+                            "type": _fileitm.type,
+                        }
+            except Exception as e:
+                logger.debug(f"【Cd2Disk】Snapshot error for {_fileitm.path}: {e}")
+
+        fileitem = api.get_item(path)
         if not fileitem:
             return {}
-        files = self._cd2_api.iter_files(fileitem) or []
-        return {f.path: f.size for f in files if f.type == "file"}
+
+        __snapshot_file(fileitem)
+        return files_info
 
     def storage_usage(self, storage: str) -> Optional[StorageUsage]:
         if storage != self._disk_name:
@@ -359,49 +479,22 @@ class CloudDrive2Disk(_PluginBase):
             return None
         return self._cd2_api.usage()
 
-    @staticmethod
-    def support_transtype(storage: str) -> Optional[dict]:
+    def support_transtype(self, storage: str) -> Optional[dict]:
+        if storage != self._disk_name:
+            return None
         return {"move": "移动", "copy": "复制"}
-
-    def create_folder(self, fileitem: FileItem, name: str) -> Optional[FileItem]:
-        if fileitem.storage != self._disk_name:
-            return None
-        if not self._cd2_api:
-            return None
-        return self._cd2_api.create_folder(fileitem, name)
-
-    def exists(self, fileitem: FileItem) -> Optional[bool]:
-        if fileitem.storage != self._disk_name:
-            return None
-        if not self._cd2_api:
-            return False
-        return bool(self._cd2_api.get_item(Path(fileitem.path)))
-
-    def get_item(self, storage: str, path: Path) -> Optional[FileItem]:
-        return self.get_file_item(storage, path)
-
-    def _register_storage(self):
-        try:
-            storage_helper = StorageHelper()
-            storages = storage_helper.get_storagies()
-            if not any(one.type == self._disk_name and one.name == self._disk_name for one in storages):
-                storage_helper.add_storage(storage=self._disk_name, name=self._disk_name, conf={})
-                logger.info(f"【CloudDrive2Disk】已注册存储: {self._disk_name}")
-        except Exception as err:
-            logger.error(f"【CloudDrive2Disk】注册存储失败: {err}")
-
-    @staticmethod
-    def _ensure_plugin_log_file():
-        try:
-            from app.core.config import settings
-
-            path = settings.LOG_PATH / "plugins" / "clouddrive2disk.log"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.touch(exist_ok=True)
-        except Exception:
-            pass
 
     def stop_service(self):
         if self._cd2_api:
             self._cd2_api.close()
         self._cd2_api = None
+
+        # 清理 _install_clouddrive_shim 注入的 sys.modules 和 sys.path
+        global _shim_modules, _shim_sys_path
+        if _shim_modules:
+            for key in _shim_modules:
+                sys.modules.pop(key, None)
+            _shim_modules = []
+        if _shim_sys_path and _shim_sys_path in sys.path:
+            sys.path.remove(_shim_sys_path)
+            _shim_sys_path = None
