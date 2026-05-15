@@ -300,13 +300,7 @@ class CoverGen(_PluginBase):
         if not event or not event.event_data:
             return
         event_info = event.event_data
-        logger.debug(f"【CoverGen】收到 WebhookMessage: event={getattr(event_info, 'event', '')}, "
-                     f"server_name={getattr(event_info, 'server_name', '')}, "
-                     f"channel={getattr(event_info, 'channel', '')}, "
-                     f"item_type={getattr(event_info, 'item_type', '')}, "
-                     f"item_name={getattr(event_info, 'item_name', '')}, "
-                     f"item_id={getattr(event_info, 'item_id', '')}, "
-                     f"tmdb_id={getattr(event_info, 'tmdb_id', '')}")
+        logger.debug(f"【CoverGen】收到 WebhookMessage: {event_info}")
         # 检查是否为新入库事件
         event_type = getattr(event_info, "event", "") or ""
         if event_type != "library.new":
