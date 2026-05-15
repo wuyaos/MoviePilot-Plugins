@@ -1,3 +1,6 @@
+# input: MoviePilot 配置、站点数据、签到/登录任务参数与 TimerUtils 调度能力
+# output: AutoPtCheckin 插件入口、调度注册与站点自动签到执行逻辑
+# pos: MoviePilot V2 PT 站点自动签到的入口与编排层
 import re
 import traceback
 from datetime import datetime, timedelta
@@ -86,6 +89,10 @@ class AutoPtCheckin(_PluginBase):
 
         # 停止现有任务
         self.stop_service()
+
+        # 每次重新初始化都重置定时窗口，避免切换配置后残留旧的 X/Y-Z 时间段
+        self._start_time = None
+        self._end_time = None
 
         # 配置
         if config:
@@ -254,19 +261,10 @@ class AutoPtCheckin(_PluginBase):
                                     }
                                 })
                             return ret_jobs
-                        else:
-                            logger.error("站点自动签到服务启动失败，周期格式错误")
-                    else:
-                        # 默认0-24 按照周期运行
-                        return [{
-                            "id": "AutoSignIn",
-                            "name": "站点自动签到服务",
-                            "trigger": "interval",
-                            "func": self.sign_in,
-                            "kwargs": {
-                                "hours": float(str(self._cron).strip()),
-                            }
-                        }]
+                        logger.error("站点自动签到服务启动失败，周期格式错误，仅支持 5 位 cron、X/Y-Z 或空值")
+                        return []
+                    logger.error("站点自动签到服务启动失败，周期格式错误，仅支持 5 位 cron、X/Y-Z 或空值")
+                    return []
             except Exception as err:
                 logger.error(f"定时任务配置错误：{str(err)}")
         elif self._enabled:
@@ -543,27 +541,6 @@ class AutoPtCheckin(_PluginBase):
                         'content': [
                             {
                                 'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'warning',
-                                            'variant': 'tonal',
-                                            'text': '不是所有的站点都会把程序自动登录/签到定义为用户活跃（比如馒头），提示签到/登录成功仍然存在掉号风险！请结合站点公告说明自行把握。'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
                                 'props': {'cols': 12},
                                 'content': [{'component': 'VDivider'}]
                             }
@@ -605,6 +582,26 @@ class AutoPtCheckin(_PluginBase):
                                             'placeholder': '每行一个站点，格式：\n'
                                                            '站点名称|站点地址|是否仿真(Y/N)\n'
                                                            '例如：思齐|https://si-qi.xyz/|N'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'warning',
+                                            'variant': 'tonal',
+                                            'text': '不是所有的站点都会把程序自动登录/签到定义为用户活跃（比如馒头），'
+                                                    '提示签到/登录成功仍然存在掉号风险！请结合站点公告说明自行把握。'
                                         }
                                     }
                                 ]
