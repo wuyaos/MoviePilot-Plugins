@@ -300,46 +300,44 @@ class CoverGen(_PluginBase):
         if not event or not event.event_data:
             return
         event_info = event.event_data
-        event_type = getattr(event_info, "event_type", "") or ""
+        # 检查是否为新入库事件
+        event_type = getattr(event_info, "event", "") or ""
         if event_type != "library.new":
+            return
+        # 检查是否来自已选中的媒体服务器
+        server_name = getattr(event_info, "server_name", "") or ""
+        if not server_name or server_name not in self._servers:
+            logger.debug(f"【CoverGen】Webhook 来源 {server_name!r} 不在已选服务器中，忽略")
             return
         item_name = getattr(event_info, "item_name", "") or "unknown"
         item_id = getattr(event_info, "item_id", "") or ""
-        item_type = getattr(event_info, "item_type", "") or ""
-        # 用相同 key 格式取消 TransferComplete 的兜底定时器
-        tmdb_id = ""  # webhook 事件无 tmdb_id，用 item_name 匹配
-        key = f"cover:{tmdb_id}:{item_name}"
-        # 查找对应库并定向更新
-        target_server, target_library_id = self._resolve_webhook_library(item_id)
-        if target_server and target_library_id:
+        tmdb_id = getattr(event_info, "tmdb_id", "") or ""
+        key = f"cover:{tmdb_id or item_name}:{server_name}"
+        # 通过 item_id 定位所属库
+        target_library_id = ""
+        if item_id:
+            service = self._servers.get(server_name)
+            if service:
+                target_library_id = srv.get_parent_library_id(service, item_id) or ""
+        if target_library_id:
             self._scheduler.debounce_transfer(
                 key, self._run_targeted,
-                target_server=target_server, target_library_id=target_library_id,
+                target_server=server_name, target_library_id=target_library_id,
                 trigger="webhook")
         else:
-            # 无法定位库，回退全量
-            self._scheduler.debounce_transfer(key, self._run_all, trigger="webhook")
+            # 无法定位库，仅更新该服务器的全部库
+            self._scheduler.debounce_transfer(
+                key, self._run_targeted,
+                target_server=server_name, target_library_id="",
+                trigger="webhook")
 
     def _run_targeted(self, *, target_server: str = "", target_library_id: str = "",
                       trigger: str = ""):
-        """定向更新指定服务器的指定库。"""
+        """定向更新指定服务器（可选指定库）。"""
         if self._engine:
             self._engine.run(self._servers, trigger=trigger,
                              target_server=target_server,
                              target_library_id=target_library_id)
-
-    def _resolve_webhook_library(self, item_id: str) -> Tuple[str, str]:
-        """通过 item_id 查询媒体服务器，定位所属库。返回 (server_name, library_id)。"""
-        if not item_id or not self._servers:
-            return "", ""
-        for sname, service in self._servers.items():
-            try:
-                lib_id = srv.get_parent_library_id(service, item_id)
-                if lib_id:
-                    return sname, lib_id
-            except Exception:
-                continue
-        return "", ""
 
     # ---- 辅助 ----
 
