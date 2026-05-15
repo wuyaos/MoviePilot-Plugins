@@ -321,22 +321,26 @@ class CoverGen(_PluginBase):
             if service:
                 target_library_id = srv.get_parent_library_id(service, item_id) or ""
         if target_library_id:
+            logger.info(f"【CoverGen】Webhook 定位到库: server={server_name}, "
+                        f"library_id={target_library_id}, item={item_name}")
             self._scheduler.debounce_transfer(
                 key, self._run_targeted,
                 target_server=server_name, target_library_id=target_library_id,
-                trigger="webhook")
+                trigger="webhook", mode="webhook_library")
         else:
-            # 无法定位库，仅更新该服务器的全部库
+            logger.info(f"【CoverGen】Webhook 未定位到具体库（item_id={item_id}），"
+                        f"将更新 {server_name} 全部库")
             self._scheduler.debounce_transfer(
                 key, self._run_targeted,
                 target_server=server_name, target_library_id="",
-                trigger="webhook")
+                trigger="webhook", mode="webhook_server")
 
     def _run_targeted(self, *, target_server: str = "", target_library_id: str = "",
-                      trigger: str = ""):
+                      trigger: str = "", mode: str = ""):
         """定向更新指定服务器（可选指定库）。"""
         if self._engine:
             self._engine.run(self._servers, trigger=trigger,
+                             mode=mode or "targeted",
                              target_server=target_server,
                              target_library_id=target_library_id)
 
