@@ -1,48 +1,29 @@
 # input: none
 # output: cd2_pb2, cd2_pb2_grpc modules
-# pos: proto package for CloudDrive2Disk plugin; patches descriptor pool before
-#      import to tolerate MoviePilot hot-reloads (same Python process, pool persists)
+# pos: proto package for CloudDrive2Disk plugin; caches loaded modules in sys
+#      across MoviePilot hot-reloads so AddSerializedFile is never called twice
 
-from google.protobuf import descriptor_pool as _dp
+import sys
 
+# Use sys as a process-lifetime store — survives plugin module reloads.
+_CACHE_KEY = "_clouddrive2disk_proto_cache"
+if not hasattr(sys, _CACHE_KEY):
+    setattr(sys, _CACHE_KEY, {})
 
-def _patch_pool_for_hot_reload() -> None:
-    """
-    MoviePilot reloads plugin modules inside the same Python interpreter.
-    The global protobuf descriptor pool retains all previously registered entries,
-    so on a second load AddSerializedFile raises 'duplicate file name' or
-    'duplicate extension entry'.  We patch it once to return the already-registered
-    FileDescriptor instead of raising, making the import idempotent.
-    """
-    pool = _dp.Default()
-    # Avoid double-wrapping across multiple reloads of this module.
-    if getattr(pool, "_cd2disk_patched", False):
-        return
-    orig = pool.AddSerializedFile
+_cache: dict = getattr(sys, _CACHE_KEY)
 
-    def _tolerant(serialized: bytes):
-        try:
-            return orig(serialized)
-        except TypeError as exc:
-            if "duplicate" not in str(exc).lower():
-                raise
-            # File or extension already registered — return the existing descriptor.
-            try:
-                from google.protobuf import descriptor_pb2 as _dpb2
-                fd_proto = _dpb2.FileDescriptorProto()
-                fd_proto.ParseFromString(serialized)
-                return pool.FindFileByName(fd_proto.name)
-            except Exception:
-                pass   # Can't retrieve — swallow so imports don't crash MP
-
-    try:
-        pool.AddSerializedFile = _tolerant
-        pool._cd2disk_patched = True
-    except (AttributeError, TypeError):
-        pass  # Read-only C extension slot; skip patch, hope pool is clean
-
-
-_patch_pool_for_hot_reload()
-
-from . import cd2_pb2  # noqa: F401
-from . import cd2_pb2_grpc  # noqa: F401
+if "cd2_pb2" not in _cache:
+    # First load: import normally and cache the module objects.
+    from . import cd2_pb2  # noqa: F401
+    from . import cd2_pb2_grpc  # noqa: F401
+    _cache["cd2_pb2"] = cd2_pb2
+    _cache["cd2_pb2_grpc"] = cd2_pb2_grpc
+else:
+    # Hot-reload: restore cached modules into sys.modules so that the
+    # 'from . import' below finds them without re-executing the pb2 code
+    # (which would call AddSerializedFile again and raise a duplicate error).
+    _pkg = __name__
+    sys.modules[f"{_pkg}.cd2_pb2"] = _cache["cd2_pb2"]
+    sys.modules[f"{_pkg}.cd2_pb2_grpc"] = _cache["cd2_pb2_grpc"]
+    from . import cd2_pb2  # noqa: F401  — resolved from sys.modules, no re-exec
+    from . import cd2_pb2_grpc  # noqa: F401

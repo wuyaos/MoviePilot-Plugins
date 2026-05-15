@@ -278,9 +278,18 @@ class CloudDrive2Disk(_PluginBase):
             return []
         return self._cd2_api.iter_files(fileitem) if recursion else self._cd2_api.list(fileitem)
 
-    def any_files(self, fileitem: FileItem) -> Optional[bool]:
+    def any_files(self, fileitem: FileItem, extensions: list = None) -> Optional[bool]:
+        if fileitem.storage != self._disk_name:
+            return None
         files = self.list_files(fileitem)
-        return None if files is None else bool(files)
+        if files is None:
+            return None
+        if not extensions:
+            return bool(files)
+        return any(
+            f.type == "file" and f.extension and f".{f.extension.lower()}" in extensions
+            for f in files
+        )
 
     def download_file(self, fileitem: FileItem, path: Path = None) -> Optional[Path]:
         if fileitem.storage != self._disk_name:
@@ -324,12 +333,16 @@ class CloudDrive2Disk(_PluginBase):
             return None
         return self._cd2_api.get_parent(fileitem)
 
-    def snapshot_storage(self, storage: str, fileitem: FileItem) -> Optional[List[FileItem]]:
-        if storage != self._disk_name or fileitem.storage != self._disk_name:
+    def snapshot_storage(self, storage: str, path: Path) -> Optional[Dict[str, float]]:
+        if storage != self._disk_name:
             return None
         if not self._cd2_api:
-            return []
-        return self._cd2_api.iter_files(fileitem) or []
+            return {}
+        fileitem = self._cd2_api.get_item(path)
+        if not fileitem:
+            return {}
+        files = self._cd2_api.iter_files(fileitem) or []
+        return {f.path: f.size for f in files if f.type == "file"}
 
     def storage_usage(self, storage: str) -> Optional[StorageUsage]:
         if storage != self._disk_name:
@@ -338,12 +351,9 @@ class CloudDrive2Disk(_PluginBase):
             return None
         return self._cd2_api.usage()
 
-    def support_transtype(self, storage: str, transtype: str) -> Optional[bool]:
-        if storage != self._disk_name:
-            return None
-        if not self._cd2_api:
-            return False
-        return self._cd2_api.is_support_transtype(transtype)
+    @staticmethod
+    def support_transtype(storage: str) -> Optional[dict]:
+        return {"move": "移动", "copy": "复制"}
 
     def create_folder(self, fileitem: FileItem, name: str) -> Optional[FileItem]:
         if fileitem.storage != self._disk_name:
