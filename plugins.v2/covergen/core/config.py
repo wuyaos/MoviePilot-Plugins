@@ -65,7 +65,6 @@ class PluginConfig:
     enabled: bool = False
     update_now: bool = False
     transfer_monitor: bool = True
-    transfer_source: str = "transfer"  # transfer = TransferComplete, webhook = WebhookMessage(library.new)
     cron: str = ""
     delay: int = 60
 

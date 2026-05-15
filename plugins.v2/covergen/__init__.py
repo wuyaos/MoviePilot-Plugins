@@ -33,7 +33,7 @@ class CoverGen(_PluginBase):
     plugin_name = "媒体库封面生成"
     plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
-    plugin_version = "1.3.1"
+    plugin_version = "1.2.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "covergen_"
@@ -278,8 +278,6 @@ class CoverGen(_PluginBase):
     def on_transfer_complete(self, event: Event):
         if not self._cfg.enabled or not self._cfg.transfer_monitor or not self._scheduler:
             return
-        if self._cfg.transfer_source != "transfer":
-            return
         if not event or not event.event_data:
             return
         media = event.event_data.get("mediainfo")
@@ -289,60 +287,6 @@ class CoverGen(_PluginBase):
         tmdb_id = getattr(media, "tmdb_id", "") or ""
         key = f"cover:{tmdb_id}:{title}"
         self._scheduler.debounce_transfer(key, self._run_all, trigger="transfer")
-
-    @eventmanager.register(EventType.WebhookMessage)
-    def on_webhook_message(self, event: Event):
-        """监听媒体服务器 Webhook 入库事件，精确更新对应库。"""
-        if not self._cfg.enabled or not self._cfg.transfer_monitor or not self._scheduler:
-            return
-        if self._cfg.transfer_source != "webhook":
-            return
-        if not event or not event.event_data:
-            return
-        event_info = event.event_data
-        logger.info(f"【CoverGen】收到 WebhookMessage: {event_info}")
-        # 检查是否为新入库事件
-        event_type = getattr(event_info, "event", "") or ""
-        if event_type != "library.new":
-            return
-        # 检查是否来自已选中的媒体服务器
-        server_name = getattr(event_info, "server_name", "") or ""
-        if not server_name or server_name not in self._servers:
-            logger.debug(f"【CoverGen】Webhook 来源 {server_name!r} 不在已选服务器中，忽略")
-            return
-        item_name = getattr(event_info, "item_name", "") or "unknown"
-        item_id = getattr(event_info, "item_id", "") or ""
-        tmdb_id = getattr(event_info, "tmdb_id", "") or ""
-        key = f"cover:{tmdb_id or item_name}:{server_name}"
-        # 通过 item_id 定位所属库
-        target_library_id = ""
-        if item_id:
-            service = self._servers.get(server_name)
-            if service:
-                target_library_id = srv.get_parent_library_id(service, item_id) or ""
-        if target_library_id:
-            logger.info(f"【CoverGen】Webhook 定位到库: server={server_name}, "
-                        f"library_id={target_library_id}, item={item_name}")
-            self._scheduler.debounce_transfer(
-                key, self._run_targeted,
-                target_server=server_name, target_library_id=target_library_id,
-                trigger="webhook", mode="webhook_library")
-        else:
-            logger.info(f"【CoverGen】Webhook 未定位到具体库（item_id={item_id}），"
-                        f"将更新 {server_name} 全部库")
-            self._scheduler.debounce_transfer(
-                key, self._run_targeted,
-                target_server=server_name, target_library_id="",
-                trigger="webhook", mode="webhook_server")
-
-    def _run_targeted(self, *, target_server: str = "", target_library_id: str = "",
-                      trigger: str = "", mode: str = ""):
-        """定向更新指定服务器（可选指定库）。"""
-        if self._engine:
-            self._engine.run(self._servers, trigger=trigger,
-                             mode=mode or "targeted",
-                             target_server=target_server,
-                             target_library_id=target_library_id)
 
     # ---- 辅助 ----
 

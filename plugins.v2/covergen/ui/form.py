@@ -25,24 +25,6 @@ def _build_basic_tab(server_items: list) -> list:
             v_col(6, v_cron("cron", "执行周期", "留空则不定期执行，仅入库触发或手动运行")),
         ]),
         v_row([
-            v_col(4, v_select("transfer_source", "入库触发源", [
-                {"title": "MP整理完成", "value": "transfer"},
-                {"title": "Webhook新入库", "value": "webhook"},
-            ])),
-            v_col(8, {"component": "VAlert", "props": {
-                "type": "info", "variant": "tonal", "density": "compact", "class": "mt-1",
-            }, "content": [{"component": "div", "props": {"class": "text-body-2"}, "content": [
-                {"component": "div", "text": "• MP整理完成：文件整理后全部库更新，无需额外配置"},
-                {"component": "div", "text": "• Webhook新入库：媒体服务器实际入库后仅更新对应库（未配置时自动兜底为全量更新）"},
-                {"component": "VDivider", "props": {"class": "my-2"}},
-                {"component": "div", "props": {"class": "font-weight-medium"}, "text": "Webhook 配置方法："},
-                {"component": "div", "text": "① 地址：http://{MP地址}:3001/api/v1/webhook/?token={API_TOKEN}&source={服务器名}"},
-                {"component": "div", "text": "② 消息类型勾选「新入库」(library.new / Item Added)"},
-                {"component": "div", "text": "③ API_TOKEN = MoviePilot 设置中的 API密钥；source = MP中配置的媒体服务器名称"},
-                {"component": "div", "text": "④ 多个媒体服务器各自配置独立的 Webhook（source 不同）"},
-            ]}]}),
-        ]),
-        v_row([
             v_col(4, v_select("sort_by", "排序方式", [
                 {"title": "随机", "value": "Random"},
                 {"title": "最新添加", "value": "DateCreated"},
@@ -252,7 +234,7 @@ def build_form(*, server_items: list, library_options: list, user_options: list,
     }]
     defaults = {
         "tab": "basic-tab", "enabled": False, "update_now": False,
-        "transfer_monitor": True, "transfer_source": "transfer", "cron": "", "delay": 60, "selected_servers": [],
+        "transfer_monitor": True, "cron": "", "delay": 60, "selected_servers": [],
         "sort_by": "Random", "cover_style_base": "static_1", "cover_style_variant": "static",
         "resolution": "480p", "blur_size": 50, "color_ratio": 0.8,
         "use_primary": False, "multi_1_blur": True, "title_scale": 1.0,
