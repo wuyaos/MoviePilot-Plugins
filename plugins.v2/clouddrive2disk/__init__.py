@@ -77,7 +77,7 @@ except Exception:
     from cd2_api import Cd2Api
 
 
-class Cd2Disk(_PluginBase):
+class CloudDrive2Disk(_PluginBase):
     # 插件名称
     plugin_name = "CloudDrive2 存储"
     # 插件描述
@@ -498,3 +498,7 @@ class Cd2Disk(_PluginBase):
         if _shim_sys_path and _shim_sys_path in sys.path:
             sys.path.remove(_shim_sys_path)
             _shim_sys_path = None
+
+
+# Backward-compatible alias
+Cd2Disk = CloudDrive2Disk
