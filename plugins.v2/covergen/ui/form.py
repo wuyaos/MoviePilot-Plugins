@@ -196,10 +196,6 @@ def _build_filter_tab(library_options: list, user_options: list) -> list:
 def _build_other_tab() -> list:
     return [
         v_row([
-            v_col(6, v_text("covers_input", "自定义图片输入目录")),
-            v_col(6, v_text("covers_output", "历史封面输出目录")),
-        ]),
-        v_row([
             v_col(4, v_switch("save_recent_covers", "保存历史封面")),
             v_col(4, v_text("covers_history_limit_per_library", "每库保留数", input_type="number")),
             v_col(4, v_text("covers_page_history_limit", "页面显示数", input_type="number")),
