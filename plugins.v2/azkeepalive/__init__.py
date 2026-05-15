@@ -18,7 +18,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.4.0"
+    plugin_version = "2.4.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -136,7 +136,7 @@ class AzKeepAlive(_PluginBase):
             return []
         if self._cron:
             try:
-                return [{"id": "cron", "name": "AnimeZ保活",
+                return [{"id": "AzKeepAlive", "name": "AnimeZ保活",
                          "trigger": CronTrigger.from_crontab(self._cron),
                          "func": self._run_task, "kwargs": {}}]
             except Exception as e:
@@ -144,7 +144,7 @@ class AzKeepAlive(_PluginBase):
         # 无 cron 时每天随机执行一次（9-23点间）
         triggers = TimerUtils.random_scheduler(
             num_executions=1, begin_hour=9, end_hour=23, min_interval=60, max_interval=120)
-        return [{"id": "cron", "name": "AnimeZ保活",
+        return [{"id": "AzKeepAlive", "name": "AnimeZ保活",
                  "trigger": "cron", "func": self._run_task,
                  "kwargs": {"hour": t.hour, "minute": t.minute}} for t in triggers]
 
