@@ -14,7 +14,8 @@
 - `requirements.txt` — 插件运行依赖。
 - `core/cd2_helpers.py` — 纯静态工具函数：路径规范化、FileItem 转换、gRPC 错误文本、human_size 等；无 I/O，无副作用。
 - `core/cd2_client.py` — gRPC 连接与鉴权层（Cd2Client）：建立 channel、Bearer token 元数据、基础 RPC 调用、下载 URL 解析。
-- `core/cd2_upload.py` — 上传策略层：DirectUploader（CreateFile/WriteToFile/CloseFile + 等待云端上传）、RemoteUploadManager（协议骨架，当前回退到直接上传）。
-- `core/cd2_api.py` — MoviePilot 存储适配器（Cd2Api）：薄层，委托给 Cd2Client 与 DirectUploader，实现 list/iter_files/create_folder/get_item/delete/rename/move/copy/download/upload/usage。
+- `core/cd2_upload.py` — 直接上传策略：DirectUploader（CreateFile/WriteToFile/CloseFile + 轮询云端上传队列）；共享 _wait_upload_complete 辅助函数。
+- `core/cd2_remote_upload.py` — 远程上传策略：RemoteUploadManager，实现完整 StartRemoteUpload + RemoteUploadChannel 协议（服务端拉取、哈希计算、进度上报、秒传支持）。
+- `core/cd2_api.py` — MoviePilot 存储适配器（Cd2Api）：薄层，委托给 Cd2Client 与 DirectUploader 或 RemoteUploadManager（由 upload_mode 参数决定），实现 list/iter_files/create_folder/get_item/delete/rename/move/copy/download/upload/usage。
 - `proto/cd2_pb2.py` — 由 cd2.proto（package cd2）生成的消息类型代码，descriptor pool key 为 `cd2.proto`，不与其他插件冲突。
 - `proto/cd2_pb2_grpc.py` — 由 cd2.proto 生成的 gRPC stub 代码，方法路径已修正为 `/clouddrive.CloudDriveFileSrv/…`。

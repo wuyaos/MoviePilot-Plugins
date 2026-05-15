@@ -1,8 +1,7 @@
 # input: Cd2Client instance, local file Path, remote dir path
-# output: DirectUploader (gRPC write), RemoteUploadManager (server-pull flow)
-# pos: upload strategies for cd2_api.py; keeps upload logic out of the main adapter
+# output: DirectUploader — gRPC direct write (CreateFile → WriteToFile → CloseFile)
+# pos: direct upload strategy for cd2_api.py; see cd2_remote_upload.py for server-pull
 import time
-import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -76,29 +75,6 @@ class DirectUploader:
                 except Exception:
                     pass
 
-
-class RemoteUploadManager:
-    """
-    Server-pull upload: tell CD2 to fetch a local HTTP URL.
-
-    Protocol: StartRemoteUpload → RemoteUploadChannel (server-streaming)
-              → RemoteReadData (client provides data on demand) or track RemoteUploadStatusChanged.
-    """
-
-    def __init__(self, client: Cd2Client):
-        self._c = client
-        self._device_id = str(uuid.uuid4())
-
-    def upload(self, remote_dir: str, target_name: str, local_path: Path) -> bool:
-        """
-        Currently falls back to DirectUploader — RemoteUploadChannel requires a server
-        that can push data back on demand (bidirectional stream) which is complex to host
-        from within MoviePilot. The protocol skeleton is retained for future use.
-        """
-        logger.info(
-            "【CloudDrive2Disk】远程上传回退到直接上传 (RemoteUploadChannel 需要本地 HTTP 服务端)"
-        )
-        return DirectUploader(self._c).upload(remote_dir, target_name, local_path)
 
 
 # ---------------------------------------------------------------------------

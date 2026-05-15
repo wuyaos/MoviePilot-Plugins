@@ -1,5 +1,5 @@
-# input: CloudDrive2 gRPC 地址、API 令牌、disk_name、MoviePilot FileItem 操作请求
-# output: Cd2Api — MoviePilot 存储适配器，委托给 Cd2Client / DirectUploader
+# input: CloudDrive2 gRPC 地址、API 令牌、disk_name、upload_mode、MoviePilot FileItem 操作请求
+# output: Cd2Api — MoviePilot 存储适配器，委托给 Cd2Client / DirectUploader / RemoteUploadManager
 # pos: clouddrive2disk 的 MP 存储适配器；薄层，不含 gRPC 连接或上传逻辑
 from pathlib import Path, PurePosixPath
 from typing import List, Optional
@@ -22,19 +22,23 @@ from .cd2_helpers import (
     to_file_item,
 )
 from .cd2_upload import DirectUploader
+from .cd2_remote_upload import RemoteUploadManager
 from ..proto import cd2_pb2 as pb2
 
 
 class Cd2Api:
-    """MoviePilot 存储适配器：委托给 Cd2Client 和 DirectUploader。"""
+    """MoviePilot 存储适配器：委托给 Cd2Client、DirectUploader 或 RemoteUploadManager。"""
 
-    def __init__(self, cd2_url: str, api_key: str, disk_name: str):
+    def __init__(self, cd2_url: str, api_key: str, disk_name: str, upload_mode: str = "direct_write"):
         self._disk_name = disk_name
         self._client = Cd2Client(cd2_url, api_key)
-        self._uploader = DirectUploader(self._client)
+        if upload_mode == "remote_upload":
+            self._uploader = RemoteUploadManager(self._client)
+        else:
+            self._uploader = DirectUploader(self._client)
         logger.info(
             f"【CloudDrive2Disk】Cd2Api 初始化完成: host={self._client.host}, "
-            f"token_root={self._client.token_root}, storage={disk_name}"
+            f"token_root={self._client.token_root}, storage={disk_name}, mode={upload_mode}"
         )
 
     def close(self):

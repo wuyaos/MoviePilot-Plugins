@@ -53,9 +53,6 @@ class CloudDrive2Disk(_PluginBase):
             return
         self._api_token = config.get("api_token") or config.get("cd2_api_key") or ""
         self._upload_mode = (config.get("upload_mode") or "direct_write").strip() or "direct_write"
-        if self._upload_mode != "direct_write":
-            logger.warning("【CloudDrive2Disk】当前仅支持 direct_write，已忽略 remote_upload 选择")
-            self._upload_mode = "direct_write"
 
         self._register_storage()
 
@@ -74,6 +71,7 @@ class CloudDrive2Disk(_PluginBase):
                 cd2_url=self._cd2_url,
                 api_key=self._api_token,
                 disk_name=self._disk_name,
+                upload_mode=self._upload_mode,
             )
             logger.info(f"【CloudDrive2Disk】初始化完成: url={self._cd2_url}, storage={self._disk_name}")
         except Exception as err:
@@ -142,7 +140,7 @@ class CloudDrive2Disk(_PluginBase):
                                                 {"title": "直接上传", "value": "direct_write"},
                                                 {"title": "远程上传", "value": "remote_upload"},
                                             ],
-                                            "hint": "直接上传会通过 gRPC 写入远端文件；远程上传会由 CloudDrive2 拉取本地文件，当前仅保留选项未实现。",
+                                            "hint": "直接上传通过 gRPC 写入远端文件；远程上传由 CloudDrive2 服务端拉取本地文件数据（支持秒传）。",
                                             "persistent-hint": True,
                                         },
                                     }
