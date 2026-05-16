@@ -90,24 +90,15 @@ class HDSky(_ISiteSigninHandler):
             # 完整验证码url
             img_get_url = 'https://hdsky.me/image.php?action=regimage&imagehash=%s' % img_hash
             logger.info(f"获取到 {site} 验证码链接：{img_get_url}")
-            # ocr识别多次，获取6位验证码
-            times = 0
-            ocr_result = None
-            # 识别几次
-            while times <= 3:
-                # ddddocr优先识别
-                ocr_result = recognize_captcha(image_url=img_get_url,
-                                               cookie=site_cookie,
-                                               ua=ua,
-                                               min_len=6)
-                logger.info(f"OCR识别 {site} 验证码：{ocr_result}")
-                if ocr_result and len(ocr_result) == 6:
-                    logger.info(f"OCR识别 {site} 验证码成功：{ocr_result}")
-                    break
-                ocr_result = None
-                times += 1
-                logger.info(f"OCR识别 {site} 验证码失败，正在进行重试，目前重试次数：{times}")
-                time.sleep(1)
+
+            # OCR 识别（ocr_helper 内置重试机制）
+            ocr_result = recognize_captcha(
+                image_url=img_get_url,
+                cookie=site_cookie,
+                ua=ua,
+                min_len=6,
+                retry_times=3
+            )
 
             if ocr_result:
                 # 组装请求参数
