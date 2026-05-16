@@ -56,11 +56,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点和验证码识别",
     "labels": "签到,PT",
-    "version": "1.1.3",
+    "version": "1.1.4",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.1.4": "优化 ddddocr 验证码识别率：beta 模型 + 数字限制 + 多次识别取众数",
       "v1.1.3": "回滚 v1.1.2 错误修复：MoviePilot 将 plugins.v2/ 映射到 app.plugins/，模块路径应为 app.plugins.autoptcheckin.sites",
       "v1.1.2": "错误修复已回滚",
       "v1.1.1": "修复调度配置持久化问题：cron_mode、interval_hours、begin_hour、end_hour 重新打开后不再丢失；统一变量命名与代码优化",
