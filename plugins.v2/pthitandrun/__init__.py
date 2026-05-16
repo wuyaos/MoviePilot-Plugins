@@ -280,9 +280,16 @@ class PtHitAndRun(_PluginBase):
                         "model": "site_config_str", "label": "站点独立配置 (YAML)",
                         "rows": 10,
                         "placeholder": "- site_name: '站点名'\n  hr_duration: 48\n  hr_deadline_days: 14\n  hr_ratio: 1.0",
-                        "hint": "每站一个条目（- 开头），未设置字段继承全局配置。详见 https://github.com/wuyaos/MoviePilot-Plugins/blob/main/plugins.v2/pthitandrun/rule.yaml",
+                        "hint": "每站一个条目（- 开头），未设置字段继承全局配置",
                         "persistent-hint": True,
                     }}),
+                ]),
+                _row([
+                    _col(12, {"component": "a", "props": {
+                        "href": "https://github.com/wuyaos/MoviePilot-Plugins/blob/main/plugins.v2/pthitandrun/rule.yaml",
+                        "target": "_blank",
+                        "class": "text-caption text-decoration-none ml-1 mb-2",
+                    }, "text": "查看示例配置"}),
                 ]),
             ]},
         ], {
