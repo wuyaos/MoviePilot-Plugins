@@ -2,12 +2,14 @@
 # output: 识别结果字符串
 # pos: helper 层，ddddocr 优先，MoviePilot OcrHelper 回退
 
+from collections import Counter
 from app.log import logger
 
 try:
     import ddddocr
-    _ocr = ddddocr.DdddOcr(show_ad=False)
-    logger.info("ddddocr 加载成功")
+    _ocr = ddddocr.DdddOcr(show_ad=False, beta=True)
+    _ocr.set_ranges(0)  # 限制为数字 0-9
+    logger.info("ddddocr 加载成功（beta 模型 + 数字模式）")
 except ImportError:
     _ocr = None
     logger.warning("ddddocr 未安装，将使用 OcrHelper 回退")
@@ -25,6 +27,7 @@ def recognize_captcha(
     ua: str = None,
     min_len: int = 4,
     proxy: bool = False,
+    retry_times: int = 3,
 ) -> str | None:
     """识别验证码：ddddocr 优先，OcrHelper 回退
 
@@ -35,6 +38,7 @@ def recognize_captcha(
         ua: User-Agent
         min_len: 最小识别长度
         proxy: 是否使用代理
+        retry_times: 识别重试次数（取众数）
     """
     # 获取图片数据
     if image_bytes is None and image_url:
@@ -42,16 +46,23 @@ def recognize_captcha(
     if not image_bytes:
         return None
 
-    # 1. ddddocr
+    # 1. ddddocr 多次识别取众数
     if _ocr is not None:
-        try:
-            code = _ocr.classification(image_bytes)
-            if code and len(code.strip()) >= min_len:
-                logger.info(f"ddddocr 识别结果: {code.strip()}")
-                return code.strip()
-            logger.debug(f"ddddocr 结果过短: {code}")
-        except Exception as e:
-            logger.warning(f"ddddocr 识别失败: {e}")
+        results = []
+        for i in range(retry_times):
+            try:
+                code = _ocr.classification(image_bytes)
+                if code and len(code.strip()) >= min_len:
+                    results.append(code.strip())
+            except Exception as e:
+                logger.debug(f"ddddocr 第 {i+1} 次识别失败: {e}")
+
+        if results:
+            # 取出现次数最多的结果
+            most_common = Counter(results).most_common(1)[0]
+            result_code, count = most_common
+            logger.info(f"ddddocr 识别结果: {result_code} (出现 {count}/{retry_times} 次)")
+            return result_code
 
     # 2. OcrHelper 回退
     if OcrHelper is not None and image_url:
