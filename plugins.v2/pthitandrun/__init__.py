@@ -254,8 +254,11 @@ class PtHitAndRun(_PluginBase):
                 # 全局 H&R 规则
                 _row([
                     _col(3, _text("hr_duration", "做种时间(小时)")),
+                    _col(3, _text("additional_seed_time", "附加做种时间(小时)")),
                     _col(3, _text("hr_deadline_days", "考核期(天)")),
                     _col(3, _text("hr_ratio", "分享率")),
+                ]),
+                _row([
                     _col(3, _text("hr_upload_multiplier", "上传倍数")),
                 ]),
                 # 说明
@@ -289,6 +292,7 @@ class PtHitAndRun(_PluginBase):
             "check_period": 10, "hit_and_run_tag": "H&R",
             "auto_cleanup_days": 15,
             "hr_duration": 48, "hr_deadline_days": 14,
+            "additional_seed_time": 24,
             "hr_ratio": "", "hr_upload_multiplier": "",
             "site_config_str": "",
         }

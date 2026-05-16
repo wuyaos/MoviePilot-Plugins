@@ -34,7 +34,7 @@ class BaseConfig(BaseModel):
     """站点 H&R 规则基础字段。所有条件为 OR 关系，满足任一即通过。"""
     # ---- 做种时间条件 ----
     hr_duration: Optional[float] = None         # 要求做种时间（小时）
-    additional_seed_time: Optional[float] = None # 附加做种时间（小时）
+    additional_seed_time: Optional[float] = 24   # 附加做种时间（小时）
     # ---- 考核期 ----
     hr_deadline_days: Optional[float] = None     # 考核期（天），超期未满足则 OVERDUE
     # ---- 分享率条件 ----
