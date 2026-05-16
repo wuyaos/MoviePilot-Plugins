@@ -34,7 +34,7 @@ class PtHitAndRun(_PluginBase):
     plugin_name = "H&R助手Pro"
     plugin_desc = "PT站H&R种子自动标签管理，支持多条件OR判定、按大小分级、自动发现。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hitandrun.png"
-    plugin_version = "1.1.0"
+    plugin_version = "1.2.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pthitandrun_"

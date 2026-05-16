@@ -298,11 +298,20 @@ class HNRChecker:
             return
         if self._cfg.notify == NotifyMode.ON_ERROR and not warn:
             return
-        msg = (f"站点: {task.site_name}\n"
-               f"种子: {task.identifier}\n"
-               f"做种: {(task.seeding_time or 0) / 3600:.1f}h\n"
-               f"分享率: {task.ratio:.2f}\n"
-               f"截止: {task.formatted_deadline()}")
+        seeding_h = (task.seeding_time or 0) / 3600
+        additional = self._cfg.get_site_config(task.site_name or "").additional_seed_time or 0
+        required_h = (task.hr_duration or 0) + additional
+        remain = task.remain_time(additional)
+        remain_str = f"{remain:.1f}h" if remain is not None else "已满足"
+        msg = (f"站点：{task.site_name or '-'}\n"
+               f"种子：{task.identifier}\n"
+               f"下载器：{task.downloader or '-'}\n"
+               f"做种时间：{seeding_h:.1f}h / {required_h}h\n"
+               f"分享率：{task.ratio:.2f}"
+               + (f" / 要求≥{task.hr_ratio}" if task.hr_ratio else "") + "\n"
+               f"剩余：{remain_str}\n"
+               f"截止日期：{task.formatted_deadline()}\n"
+               f"状态：{task.hr_status.to_chinese() if task.hr_status else '-'}")
         self._send_message(title=title, text=msg)
 
     # ---- 持久化 ----
