@@ -87,6 +87,20 @@ class CoverEngine:
     def run(self, servers: dict, *, mode: str = "all", trigger: str = "",
             target_server: str = "", target_library_id: str = "",
             target_item_id: str = "") -> RunStats:
+        if not self._lock.acquire(blocking=False):
+            logger.info(f"{LOG_PREFIX} 已有任务运行中，跳过本次触发（trigger={trigger or 'manual'}）")
+            return RunStats(trigger=trigger, mode=mode)
+        try:
+            return self._run_inner(servers, mode=mode, trigger=trigger,
+                                   target_server=target_server,
+                                   target_library_id=target_library_id,
+                                   target_item_id=target_item_id)
+        finally:
+            self._lock.release()
+
+    def _run_inner(self, servers: dict, *, mode: str = "all", trigger: str = "",
+                   target_server: str = "", target_library_id: str = "",
+                   target_item_id: str = "") -> RunStats:
         stats = RunStats(started_at=datetime.datetime.now().isoformat(), mode=mode,
                          trigger=trigger, dry_run=self.cfg.dry_run)
         self.stop_event.clear()

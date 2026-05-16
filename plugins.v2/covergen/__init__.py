@@ -284,9 +284,8 @@ class CoverGen(_PluginBase):
         if not media:
             return
         title = getattr(media, "title", "") or "unknown"
-        tmdb_id = getattr(media, "tmdb_id", "") or ""
-        key = f"cover:{tmdb_id}:{title}"
-        self._scheduler.debounce_transfer(key, self._run_all, trigger="transfer")
+        logger.info(f"【CoverGen】TransferComplete 触发：{title}，合并到全局防抖队列")
+        self._scheduler.debounce_transfer("cover:transfer:batch", self._run_all, trigger="transfer")
 
     # ---- 辅助 ----
 
