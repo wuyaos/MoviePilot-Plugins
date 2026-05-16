@@ -78,14 +78,14 @@ class SiteConfig(BaseConfig):
 class HNRConfig(BaseConfig):
     """全局配置，包含插件开关、调度、站点列表等运行时配置。"""
     enabled: Optional[bool] = False
-    check_period: int = 5                        # 检查间隔（分钟）
+    check_period: int = 10                       # 检查间隔（分钟）
     sites: List[int] = Field(default_factory=list)
     site_infos: Dict = Field(default_factory=dict)
     onlyonce: Optional[bool] = False
     notify: NotifyMode = NotifyMode.ALWAYS
     downloader: Optional[List[str]] = Field(default_factory=list)  # 下载器列表（支持多个）
     hit_and_run_tag: Optional[str] = "H&R"
-    auto_cleanup_days: float = 7
+    auto_cleanup_days: float = 15
     auto_discover: Optional[bool] = False        # 自动发现下载器中未纳管的种子
     auto_monitor: Optional[bool] = False
     brush_plugin: Optional[str] = None
@@ -104,7 +104,7 @@ class HNRConfig(BaseConfig):
 
     @validator("auto_cleanup_days", pre=True, allow_reuse=True)
     def _default_cleanup(cls, v):
-        return 7 if v is None else v
+        return 15 if v is None else v
 
     def __init__(self, **data):
         # 预处理：空字符串转 None（让 Optional[float] 等字段取默认值）

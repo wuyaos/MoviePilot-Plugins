@@ -247,9 +247,9 @@ class PtHitAndRun(_PluginBase):
                 # 参数行
                 _row([
                     _col(3, _select("notify", "通知方式", notify_opts)),
-                    _col(3, _text("check_period", "检查间隔(分钟)")),
+                    _col(3, _text("check_period", "扫描间隔(分钟)")),
                     _col(3, _text("hit_and_run_tag", "H&R标签")),
-                    _col(3, _text("auto_cleanup_days", "清理天数")),
+                    _col(3, _text("auto_cleanup_days", "自动清理天数")),
                 ]),
                 # 全局 H&R 规则
                 _row([
@@ -286,8 +286,8 @@ class PtHitAndRun(_PluginBase):
             "enabled": False, "auto_discover": False,
             "enable_site_config": False, "onlyonce": False,
             "downloader": [], "sites": [], "notify": "always",
-            "check_period": 5, "hit_and_run_tag": "H&R",
-            "auto_cleanup_days": 7,
+            "check_period": 10, "hit_and_run_tag": "H&R",
+            "auto_cleanup_days": 15,
             "hr_duration": 48, "hr_deadline_days": 14,
             "hr_ratio": "", "hr_upload_multiplier": "",
             "site_config_str": "",
