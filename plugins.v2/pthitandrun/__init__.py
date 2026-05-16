@@ -381,7 +381,7 @@ class PtHitAndRun(_PluginBase):
 
     def _update_config(self):
         if self._cfg:
-            excludes = {"site_config_str", "site_infos", "site_configs"}
+            excludes = {"site_infos", "site_configs"}
             self.update_config(self._cfg.to_dict(exclude=excludes))
 
     def stop_service(self):
