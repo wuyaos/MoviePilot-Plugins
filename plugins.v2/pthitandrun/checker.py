@@ -52,6 +52,17 @@ class HNRChecker:
         with lock:
             self._do_discover()
 
+    def full_scan(self):
+        """全量扫描：先发现未纳管种子，再检查所有任务状态（立即运行一次时调用）。"""
+        if not self._helpers:
+            logger.warning(f"{LOG_PREFIX}无可用下载器，跳过全量扫描")
+            return
+        with lock:
+            logger.info(f"{LOG_PREFIX}═══ 开始全量扫描 ═══ 下载器: {list(self._helpers.keys())}")
+            self._do_discover()
+            self._do_check()
+            logger.info(f"{LOG_PREFIX}═══ 全量扫描完成 ═══")
+
     # ---- 内部：检查 ----
 
     def _do_check(self):
@@ -65,7 +76,9 @@ class HNRChecker:
         torrent_map: Dict[str, Any] = {}
         hash_to_dl: Dict[str, str] = {}  # hash -> downloader_name
         for dl_name, th in self._helpers.items():
-            for t in (th.get_torrents() or []):
+            dl_torrents = th.get_torrents() or []
+            logger.info(f"{LOG_PREFIX}下载器 {dl_name}: {len(dl_torrents)} 个种子")
+            for t in dl_torrents:
                 h = th.get_torrent_hash(t)
                 if h:
                     torrent_map[h] = t
@@ -73,6 +86,7 @@ class HNRChecker:
 
         logger.info(f"{LOG_PREFIX}共 {len(tasks)} 个 H&R 任务，下载器共 {len(torrent_map)} 个种子")
 
+        updated = 0
         for h, task in tasks.items():
             torrent = torrent_map.get(h)
             if torrent:
@@ -86,15 +100,22 @@ class HNRChecker:
             elif not task.deleted:
                 task.deleted = True
                 task.deleted_time = time.time()
-                logger.info(f"{LOG_PREFIX}种子已从下载器删除: {task.identifier}")
+                logger.warning(f"{LOG_PREFIX}种子已从下载器删除: [{task.site_name}] {task.identifier}")
 
+            old_status = task.hr_status
             self._update_hr_status(task)
+            if task.hr_status != old_status:
+                updated += 1
 
         # 清理过期记录
         self._auto_cleanup(tasks)
         # 保存
         self._save_tasks(tasks)
-        logger.info(f"{LOG_PREFIX}H&R 检查完成")
+        in_progress = sum(1 for t in tasks.values() if t.hr_status == HNRStatus.IN_PROGRESS)
+        compliant = sum(1 for t in tasks.values() if t.hr_status == HNRStatus.COMPLIANT)
+        overdue = sum(1 for t in tasks.values() if t.hr_status == HNRStatus.OVERDUE)
+        logger.info(f"{LOG_PREFIX}H&R 检查完成: 总{len(tasks)} 进行中{in_progress} "
+                    f"已满足{compliant} 已过期{overdue} 本次状态变更{updated}")
 
     def _update_task_stats(self, task: TorrentTask, torrent: Any, th: TorrentHelper):
         """从下载器更新种子的实时统计。"""
@@ -120,20 +141,32 @@ class HNRChecker:
             task.hr_duration = tier.hr_duration
             task.hr_deadline_days = tier.hr_deadline_days
 
+        seeding_h = (task.seeding_time or 0) / 3600
+        required_h = (task.hr_duration or 0) + additional
+        remain = task.remain_time(additional)
+        deadline_str = task.formatted_deadline()
+
         if task.meets_hr(additional_seed_time=additional):
             task.hr_status = HNRStatus.COMPLIANT
             task.hr_met_time = time.time()
             self._remove_tag(task)
-            logger.info(f"{LOG_PREFIX}已满足 H&R: {task.identifier}")
+            logger.info(f"{LOG_PREFIX}✓ 已满足: [{task.site_name}] {task.identifier} "
+                        f"做种{seeding_h:.1f}h/{required_h}h 率{task.ratio:.2f}")
             self._notify(task, "【H&R 已完成】")
         elif time.time() > task.deadline_time:
             task.hr_status = HNRStatus.OVERDUE
-            logger.warning(f"{LOG_PREFIX}H&R 已过期: {task.identifier}")
+            logger.warning(f"{LOG_PREFIX}✗ 已过期: [{task.site_name}] {task.identifier} "
+                           f"做种{seeding_h:.1f}h/{required_h}h 截止{deadline_str}")
             self._notify(task, "【H&R 已过期】", warn=True)
         elif task.deleted:
             task.hr_status = HNRStatus.NEEDS_SEEDING
-            logger.warning(f"{LOG_PREFIX}需要做种: {task.identifier}")
+            logger.warning(f"{LOG_PREFIX}⚠ 需做种: [{task.site_name}] {task.identifier} "
+                           f"做种{seeding_h:.1f}h/{required_h}h 剩余{remain:.1f}h 已从下载器删除")
             self._notify(task, "【H&R 需要做种】", warn=True)
+        else:
+            logger.debug(f"{LOG_PREFIX}→ 进行中: [{task.site_name}] {task.identifier} "
+                         f"做种{seeding_h:.1f}h/{required_h}h 率{task.ratio:.2f} "
+                         f"剩余{remain:.1f}h 截止{deadline_str}")
 
     # ---- 内部：自动发现 ----
 
@@ -142,14 +175,21 @@ class HNRChecker:
         tasks = self._load_tasks()
         known_hashes: Set[str] = set(tasks.keys())
         discovered = 0
+        skipped_site = 0
+        skipped_known = 0
 
         for dl_name, th in self._helpers.items():
-            for torrent in (th.get_torrents() or []):
+            dl_torrents = th.get_torrents() or []
+            logger.info(f"{LOG_PREFIX}扫描下载器 {dl_name}: {len(dl_torrents)} 个种子")
+            for torrent in dl_torrents:
                 h = th.get_torrent_hash(torrent)
                 if not h or h in known_hashes:
+                    if h:
+                        skipped_known += 1
                     continue
                 site_id, site_name = TorrentHelper.get_site_by_torrent(torrent)
                 if not site_id or site_id not in self._cfg.sites:
+                    skipped_site += 1
                     continue
                 info = th.get_torrent_info(torrent)
                 site_cfg = self._cfg.get_site_config(site_name or "")
@@ -175,12 +215,13 @@ class HNRChecker:
                 self._set_tag(task)
                 known_hashes.add(h)
                 discovered += 1
+                logger.info(f"{LOG_PREFIX}发现: [{dl_name}] [{site_name}] {task.title} "
+                            f"做种{(task.seeding_time or 0) / 3600:.1f}h "
+                            f"要求{task.hr_duration}h/{task.hr_deadline_days}天")
 
         if discovered:
             self._save_tasks(tasks)
-            logger.info(f"{LOG_PREFIX}自动发现 {discovered} 个新种子纳入 H&R 管理")
-        else:
-            logger.info(f"{LOG_PREFIX}未发现新的未纳管种子")
+        logger.info(f"{LOG_PREFIX}自动发现完成: 新增{discovered} 已管理{skipped_known} 非目标站{skipped_site}")
 
     # ---- 初始化 H&R 参数 ----
 

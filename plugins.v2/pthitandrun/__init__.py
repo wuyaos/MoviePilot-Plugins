@@ -76,8 +76,9 @@ class PtHitAndRun(_PluginBase):
             self._cfg.onlyonce = False
             self._update_config()
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-            self._scheduler.add_job(self._checker.check, "date",
-                                    run_date=datetime.now(pytz.timezone(settings.TZ)) + timedelta(seconds=3))
+            self._scheduler.add_job(self._checker.full_scan, "date",
+                                    run_date=datetime.now(pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                                    name="H&R全量扫描")
             self._scheduler.start()
 
     # ---- 下载器 ----
