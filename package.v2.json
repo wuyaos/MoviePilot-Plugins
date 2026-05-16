@@ -56,11 +56,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点和验证码识别",
     "labels": "签到,PT",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.1.0": "调度模式切换：Cron表达式/间隔随机两种模式独立配置，移除旧 X/Y-Z 格式",
       "v1.0.1": "修复 X/Y-Z 格式调度问题：改用 random_scheduler 生成 cron 触发器，避免插件重载后 interval 计时器重置导致签到不执行",
       "v1.0.0": "初始版本：基于 autosignin，支持自定义站点与 ddddocr 验证码识别"
     }

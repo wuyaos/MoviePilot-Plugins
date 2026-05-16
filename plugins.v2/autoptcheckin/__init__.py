@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.0.1"
+    plugin_version = "1.1.0"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -80,6 +80,10 @@ class AutoPtCheckin(_PluginBase):
     _start_time: int = None
     _end_time: int = None
     _auto_cf: int = 0
+    _cron_mode: str = "cron"        # cron / interval
+    _interval_hours: float = 2.0
+    _begin_hour: int = 9
+    _end_hour_cfg: int = 23
 
     def init_plugin(self, config: dict = None):
         self.sites = SitesHelper()
@@ -98,6 +102,10 @@ class AutoPtCheckin(_PluginBase):
         if config:
             self._enabled = config.get("enabled")
             self._cron = config.get("cron")
+            self._cron_mode = config.get("cron_mode") or "cron"
+            self._interval_hours = float(config.get("interval_hours") or 2.0)
+            self._begin_hour = int(config.get("begin_hour") or 9)
+            self._end_hour_cfg = int(config.get("end_hour") or 23)
             self._onlyonce = config.get("onlyonce")
             self._notify = config.get("notify")
             self._queue_cnt = config.get("queue_cnt") or 5
@@ -205,75 +213,47 @@ class AutoPtCheckin(_PluginBase):
 
     def get_service(self) -> List[Dict[str, Any]]:
         """
-        注册插件公共服务
-        [{
-            "id": "服务ID",
-            "name": "服务名称",
-            "trigger": "触发器：cron/interval/date/CronTrigger.from_crontab()",
-            "func": self.xxx,
-            "kwargs": {} # 定时器参数
-        }]
+        注册插件公共服务。
+        cron 模式：5 位 cron 表达式
+        interval 模式：在 begin_hour~end_hour 范围内按 interval_hours 随机调度
         """
-        if self._enabled and self._cron:
+        if not self._enabled:
+            return []
+
+        if self._cron_mode == "cron" and self._cron:
             try:
-                if str(self._cron).strip().count(" ") == 4:
+                cron_str = str(self._cron).strip()
+                if cron_str.count(" ") == 4:
                     return [{
                         "id": "AutoSignIn",
                         "name": "站点自动签到服务",
-                        "trigger": CronTrigger.from_crontab(self._cron),
+                        "trigger": CronTrigger.from_crontab(cron_str),
                         "func": self.sign_in,
                         "kwargs": {}
                     }]
                 else:
-                    # 2.3/9-23
-                    crons = str(self._cron).strip().split("/")
-                    if len(crons) == 2:
-                        # 2.3
-                        cron = crons[0]
-                        # 9-23
-                        times = crons[1].split("-")
-                        if len(times) == 2:
-                            # 9
-                            self._start_time = int(times[0])
-                            # 23
-                            self._end_time = int(times[1])
-                        if self._start_time is not None and self._end_time is not None:
-                            hours_f = float(str(cron).strip())
-                            window = self._end_time - self._start_time
-                            num = max(1, int(window / hours_f))
-                            triggers = TimerUtils.random_scheduler(
-                                num_executions=num,
-                                begin_hour=self._start_time,
-                                end_hour=self._end_time,
-                                max_interval=int(hours_f * 60),
-                                min_interval=max(30, int(hours_f * 60 * 0.5)),
-                            )
-                            ret_jobs = []
-                            for trigger in triggers:
-                                ret_jobs.append({
-                                    "id": f"AutoSignIn|{trigger.hour}:{trigger.minute}",
-                                    "name": "站点自动签到服务",
-                                    "trigger": "cron",
-                                    "func": self.sign_in,
-                                    "kwargs": {
-                                        "hour": trigger.hour,
-                                        "minute": trigger.minute,
-                                    }
-                                })
-                            return ret_jobs
-                        logger.error("站点自动签到服务启动失败，周期格式错误，仅支持 5 位 cron、X/Y-Z 或空值")
-                        return []
-                    logger.error("站点自动签到服务启动失败，周期格式错误，仅支持 5 位 cron、X/Y-Z 或空值")
+                    logger.error("站点自动签到服务启动失败，cron 格式错误，需要 5 位 cron 表达式")
                     return []
             except Exception as err:
-                logger.error(f"定时任务配置错误：{str(err)}")
-        elif self._enabled:
-            # 随机时间
-            triggers = TimerUtils.random_scheduler(num_executions=2,
-                                                   begin_hour=9,
-                                                   end_hour=23,
-                                                   max_interval=6 * 60,
-                                                   min_interval=2 * 60)
+                logger.error(f"定时任务配置错误：{err}")
+                return []
+
+        if self._cron_mode == "interval":
+            self._start_time = self._begin_hour
+            self._end_time = self._end_hour_cfg
+            hours_f = max(0.5, self._interval_hours)
+            window = self._end_time - self._start_time
+            if window <= 0:
+                logger.error("触发时间范围无效，end_hour 必须大于 begin_hour")
+                return []
+            num = max(1, int(window / hours_f))
+            triggers = TimerUtils.random_scheduler(
+                num_executions=num,
+                begin_hour=self._start_time,
+                end_hour=self._end_time,
+                max_interval=int(hours_f * 60),
+                min_interval=max(30, int(hours_f * 60 * 0.5)),
+            )
             ret_jobs = []
             for trigger in triggers:
                 ret_jobs.append({
@@ -283,11 +263,30 @@ class AutoPtCheckin(_PluginBase):
                     "func": self.sign_in,
                     "kwargs": {
                         "hour": trigger.hour,
-                        "minute": trigger.minute
+                        "minute": trigger.minute,
                     }
                 })
             return ret_jobs
-        return []
+
+        # 未配置 cron 且不是 interval 模式 → 随机2次
+        triggers = TimerUtils.random_scheduler(num_executions=2,
+                                               begin_hour=9,
+                                               end_hour=23,
+                                               max_interval=6 * 60,
+                                               min_interval=2 * 60)
+        ret_jobs = []
+        for trigger in triggers:
+            ret_jobs.append({
+                "id": f"AutoSignIn|{trigger.hour}:{trigger.minute}",
+                "name": "站点自动签到服务",
+                "trigger": "cron",
+                "func": self.sign_in,
+                "kwargs": {
+                    "hour": trigger.hour,
+                    "minute": trigger.minute,
+                }
+            })
+        return ret_jobs
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
@@ -341,28 +340,70 @@ class AutoPtCheckin(_PluginBase):
                         'content': [
                             {
                                 'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
+                                'props': {'cols': 12, 'md': 3},
                                 'content': [
                                     {
-                                        'component': 'VCronField',
+                                        'component': 'VSelect',
                                         'props': {
-                                            'model': 'cron',
-                                            'label': '执行周期',
-                                            'placeholder': '5位cron / 2.3/9-23 / 留空随机'
+                                            'model': 'cron_mode',
+                                            'label': '调度模式',
+                                            'items': [
+                                                {'title': 'Cron表达式', 'value': 'cron'},
+                                                {'title': '间隔随机', 'value': 'interval'},
+                                            ]
                                         }
                                     }
                                 ]
                             },
                             {
                                 'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
+                                'props': {'cols': 12, 'md': 3},
                                 'content': [
                                     {
-                                        'component': 'VTextField',
-                                        'props': {'model': 'queue_cnt', 'label': '队列数量'}
+                                        'component': 'VCronField',
+                                        'props': {
+                                            'model': 'cron',
+                                            'label': 'Cron表达式',
+                                            'placeholder': '0 9 * * *'
+                                        }
                                     }
                                 ]
                             },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 2},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {'model': 'interval_hours', 'label': '间隔(小时)', 'placeholder': '2'}
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 2},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {'model': 'begin_hour', 'label': '开始时', 'placeholder': '9'}
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 2},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {'model': 'end_hour', 'label': '结束时', 'placeholder': '23'}
+                                    }
+                                ]
+                            },
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
                             {
                                 'component': 'VCol',
                                 'props': {'cols': 12, 'md': 6},
@@ -497,10 +538,10 @@ class AutoPtCheckin(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '执行周期：'
-                                                    '1、5位cron表达式；'
-                                                    '2、间隔/时间段，如 2.3/9-23（9-23点每隔2.3小时执行一次）；'
-                                                    '3、留空默认9-23点随机执行2次。'
+                                            'text': '调度模式说明：'
+                                                    '1、Cron表达式：填写 5 位 cron（如 0 9 * * *），精确控制执行时间；'
+                                                    '2、间隔随机：在开始时~结束时范围内，按间隔小时数随机生成多个执行点；'
+                                                    '3、两种模式都不配置时默认 9-23 点随机执行 2 次。'
                                                     '每天首次全量执行，后续仅重试命中关键词的站点。'
                                         }
                                     }
@@ -567,6 +608,10 @@ class AutoPtCheckin(_PluginBase):
             "enabled": False,
             "notify": True,
             "cron": "",
+            "cron_mode": "cron",
+            "interval_hours": 2,
+            "begin_hour": 9,
+            "end_hour": 23,
             "auto_cf": 0,
             "onlyonce": False,
             "clean": False,
