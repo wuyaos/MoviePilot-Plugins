@@ -99,6 +99,7 @@ class TorrentTask(TorrentHistory):
     deleted: Optional[bool] = False
     deleted_time: Optional[float] = None
     hr_met_time: Optional[float] = None       # 满足 H&R 的时间戳
+    downloader: Optional[str] = None          # 所属下载器名称
 
     @property
     def identifier(self) -> str:

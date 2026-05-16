@@ -45,7 +45,7 @@ class PtHitAndRun(_PluginBase):
         super().__init__()
         self._cfg: Optional[HNRConfig] = None
         self._checker: Optional[HNRChecker] = None
-        self._th: Optional[TorrentHelper] = None
+        self._helpers: Dict[str, TorrentHelper] = {}  # downloader_name -> TorrentHelper
         self._scheduler: Optional[BackgroundScheduler] = None
         self._event = threading.Event()
         self._downloader_helper = DownloaderHelper()
@@ -66,10 +66,9 @@ class PtHitAndRun(_PluginBase):
         downloaders = self._get_downloaders()
         if not downloaders:
             return
-        # 用第一个可用下载器初始化 helper（check 时遍历全部）
-        self._th = TorrentHelper(downloaders[0])
+        self._helpers = downloaders
         self._checker = HNRChecker(
-            config=self._cfg, torrent_helper=self._th,
+            config=self._cfg, helpers=self._helpers,
             get_data=self.get_data, save_data=self.save_data,
             send_message=self._send_message,
         )
@@ -83,18 +82,18 @@ class PtHitAndRun(_PluginBase):
 
     # ---- 下载器 ----
 
-    def _get_downloaders(self) -> List[Any]:
-        """获取所有已配置的可用下载器实例。"""
+    def _get_downloaders(self) -> Dict[str, TorrentHelper]:
+        """获取所有已配置的可用下载器，返回 {name: TorrentHelper}。"""
         if not self._cfg or not self._cfg.downloader:
-            return []
-        instances = []
+            return {}
+        helpers: Dict[str, TorrentHelper] = {}
         for name in self._cfg.downloader:
             svc = self._downloader_helper.get_service(name=name, type_filter="qbittorrent")
             if svc and not svc.instance.is_inactive():
-                instances.append(svc.instance)
+                helpers[name] = TorrentHelper(svc.instance)
             else:
                 logger.warning(f"{LOG_PREFIX}下载器 {name} 不可用")
-        return instances
+        return helpers
 
     # ---- 事件监听 ----
 
@@ -113,8 +112,8 @@ class PtHitAndRun(_PluginBase):
             return
         ti = context.torrent_info
         task_type = TaskType.NORMAL if ti.description else TaskType.RSS_SUBSCRIBE
-        logger.info(f"{LOG_PREFIX}下载事件: {ti.title} [{task_type.to_chinese()}]")
-        self._process_new_torrent(torrent_hash, ti, task_type)
+        logger.info(f"{LOG_PREFIX}下载事件: {ti.title} [{task_type.to_chinese()}] @ {downloader}")
+        self._process_new_torrent(torrent_hash, ti, task_type, downloader_name=downloader)
 
     @eventmanager.register(EventType.PluginTriggered)
     def on_brush_download(self, event: Event = None):
@@ -131,15 +130,18 @@ class PtHitAndRun(_PluginBase):
         torrent_data = event.event_data.get("data")
         if not torrent_hash or not torrent_data:
             return
-        logger.info(f"{LOG_PREFIX}刷流事件: {torrent_hash}")
-        self._process_new_torrent(torrent_hash, torrent_data, TaskType.BRUSH)
+        logger.info(f"{LOG_PREFIX}刷流事件: {torrent_hash} @ {downloader}")
+        self._process_new_torrent(torrent_hash, torrent_data, TaskType.BRUSH, downloader_name=downloader)
 
     def _process_new_torrent(self, torrent_hash: str, torrent_data: Union[dict, TorrentInfo],
-                             task_type: TaskType):
+                             task_type: TaskType, downloader_name: str = ""):
         """处理新种子：创建任务、初始化 H&R 参数、打标签、保存。"""
-        if not self._th or not self._checker:
+        if not self._helpers or not self._checker:
             return
-        torrents = self._th.get_torrents(hashes=torrent_hash)
+        th = self._helpers.get(downloader_name) or next(iter(self._helpers.values()), None)
+        if not th:
+            return
+        torrents = th.get_torrents(hashes=torrent_hash)
         if not torrents:
             logger.warning(f"{LOG_PREFIX}下载器中未找到种子 {torrent_hash}")
             return
@@ -148,7 +150,7 @@ class PtHitAndRun(_PluginBase):
         if site_id not in (self._cfg.sites or []):
             logger.debug(f"{LOG_PREFIX}站点 {site_name} 未启用 H&R，跳过")
             return
-        info = self._th.get_torrent_info(torrent)
+        info = th.get_torrent_info(torrent)
         # 从 torrent_data 提取基本信息
         if isinstance(torrent_data, TorrentInfo):
             title = torrent_data.title or info.get("title", "")
@@ -170,6 +172,7 @@ class PtHitAndRun(_PluginBase):
             ratio=info.get("ratio", 0),
             uploaded=info.get("uploaded", 0),
             downloaded=info.get("downloaded", 0),
+            downloader=downloader_name,
         )
         if not self._checker.init_task(task):
             logger.info(f"{LOG_PREFIX}{site_name}: {task.identifier} 未命中 H&R")

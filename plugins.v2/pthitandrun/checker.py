@@ -19,29 +19,35 @@ lock = threading.Lock()
 
 
 class HNRChecker:
-    """H&R 状态检查与自动发现。"""
+    """H&R 状态检查与自动发现（多下载器）。"""
 
-    def __init__(self, *, config: HNRConfig, torrent_helper: TorrentHelper,
+    def __init__(self, *, config: HNRConfig, helpers: Dict[str, TorrentHelper],
                  get_data: Callable, save_data: Callable,
                  send_message: Optional[Callable] = None):
         self._cfg = config
-        self._th = torrent_helper
+        self._helpers = helpers  # downloader_name -> TorrentHelper
         self._get_data = get_data
         self._save_data = save_data
         self._send_message = send_message
+
+    def _get_helper(self, name: str) -> Optional[TorrentHelper]:
+        """按名称获取 helper，兜底返回第一个。"""
+        if name and name in self._helpers:
+            return self._helpers[name]
+        return next(iter(self._helpers.values()), None) if self._helpers else None
 
     # ---- 公开接口 ----
 
     def check(self):
         """定时检查所有 H&R 任务状态。"""
-        if not self._th.downloader:
+        if not self._helpers:
             return
         with lock:
             self._do_check()
 
     def auto_discover(self):
-        """扫描下载器，将未纳管的种子纳入 H&R 管理。"""
-        if not self._cfg.auto_discover or not self._th.downloader:
+        """扫描所有下载器，将未纳管的种子纳入 H&R 管理。"""
+        if not self._cfg.auto_discover or not self._helpers:
             return
         with lock:
             self._do_discover()
@@ -55,16 +61,28 @@ class HNRChecker:
             logger.info(f"{LOG_PREFIX}无 H&R 任务需要检查")
             return
 
-        # 获取下载器全部种子
-        all_torrents = self._th.get_torrents() or []
-        torrent_map = {self._th.get_torrent_hash(t): t for t in all_torrents}
+        # 汇总所有下载器的种子
+        torrent_map: Dict[str, Any] = {}
+        hash_to_dl: Dict[str, str] = {}  # hash -> downloader_name
+        for dl_name, th in self._helpers.items():
+            for t in (th.get_torrents() or []):
+                h = th.get_torrent_hash(t)
+                if h:
+                    torrent_map[h] = t
+                    hash_to_dl[h] = dl_name
 
-        logger.info(f"{LOG_PREFIX}共 {len(tasks)} 个 H&R 任务，下载器 {len(torrent_map)} 个种子")
+        logger.info(f"{LOG_PREFIX}共 {len(tasks)} 个 H&R 任务，下载器共 {len(torrent_map)} 个种子")
 
         for h, task in tasks.items():
             torrent = torrent_map.get(h)
             if torrent:
-                self._update_task_stats(task, torrent)
+                dl_name = hash_to_dl.get(h, "")
+                th = self._get_helper(dl_name)
+                if th:
+                    self._update_task_stats(task, torrent, th)
+                # 补填历史任务缺失的 downloader
+                if not task.downloader and dl_name:
+                    task.downloader = dl_name
             elif not task.deleted:
                 task.deleted = True
                 task.deleted_time = time.time()
@@ -78,9 +96,9 @@ class HNRChecker:
         self._save_tasks(tasks)
         logger.info(f"{LOG_PREFIX}H&R 检查完成")
 
-    def _update_task_stats(self, task: TorrentTask, torrent: Any):
+    def _update_task_stats(self, task: TorrentTask, torrent: Any, th: TorrentHelper):
         """从下载器更新种子的实时统计。"""
-        info = self._th.get_torrent_info(torrent)
+        info = th.get_torrent_info(torrent)
         task.seeding_time = info.get("seeding_time", 0)
         task.ratio = info.get("ratio", 0)
         task.uploaded = info.get("uploaded", 0)
@@ -123,40 +141,40 @@ class HNRChecker:
         logger.info(f"{LOG_PREFIX}开始自动发现未纳管种子...")
         tasks = self._load_tasks()
         known_hashes: Set[str] = set(tasks.keys())
-
-        all_torrents = self._th.get_torrents() or []
         discovered = 0
 
-        for torrent in all_torrents:
-            h = self._th.get_torrent_hash(torrent)
-            if not h or h in known_hashes:
-                continue
-            site_id, site_name = TorrentHelper.get_site_by_torrent(torrent)
-            if not site_id or site_id not in self._cfg.sites:
-                continue
-            # 属于已配置站点，纳入管理
-            info = self._th.get_torrent_info(torrent)
-            site_cfg = self._cfg.get_site_config(site_name or "")
+        for dl_name, th in self._helpers.items():
+            for torrent in (th.get_torrents() or []):
+                h = th.get_torrent_hash(torrent)
+                if not h or h in known_hashes:
+                    continue
+                site_id, site_name = TorrentHelper.get_site_by_torrent(torrent)
+                if not site_id or site_id not in self._cfg.sites:
+                    continue
+                info = th.get_torrent_info(torrent)
+                site_cfg = self._cfg.get_site_config(site_name or "")
 
-            task = TorrentTask(
-                hash=h,
-                site=site_id,
-                site_name=site_name,
-                title=info.get("title", ""),
-                size=info.get("total_size", 0),
-                time=info.get("add_on", 0) or time.time(),
-                hit_and_run=True,
-                task_type=TaskType.DISCOVERED,
-                seeding_time=info.get("seeding_time", 0),
-                ratio=info.get("ratio", 0),
-                uploaded=info.get("uploaded", 0),
-                downloaded=info.get("downloaded", 0),
-            )
-            self._init_hr_params(task, site_cfg)
-            task.hr_status = HNRStatus.IN_PROGRESS
-            tasks[h] = task
-            self._set_tag(task)
-            discovered += 1
+                task = TorrentTask(
+                    hash=h,
+                    site=site_id,
+                    site_name=site_name,
+                    title=info.get("title", ""),
+                    size=info.get("total_size", 0),
+                    time=info.get("add_on", 0) or time.time(),
+                    hit_and_run=True,
+                    task_type=TaskType.DISCOVERED,
+                    seeding_time=info.get("seeding_time", 0),
+                    ratio=info.get("ratio", 0),
+                    uploaded=info.get("uploaded", 0),
+                    downloaded=info.get("downloaded", 0),
+                    downloader=dl_name,
+                )
+                self._init_hr_params(task, site_cfg)
+                task.hr_status = HNRStatus.IN_PROGRESS
+                tasks[h] = task
+                self._set_tag(task)
+                known_hashes.add(h)
+                discovered += 1
 
         if discovered:
             self._save_tasks(tasks)
@@ -198,12 +216,16 @@ class HNRChecker:
     def _set_tag(self, task: TorrentTask):
         tag = self._cfg.hit_and_run_tag
         if tag and task.hash:
-            self._th.set_torrent_tag(task.hash, [tag])
+            th = self._get_helper(task.downloader or "")
+            if th:
+                th.set_torrent_tag(task.hash, [tag])
 
     def _remove_tag(self, task: TorrentTask):
         tag = self._cfg.hit_and_run_tag
         if tag and task.hash:
-            self._th.remove_torrent_tag(task.hash, [tag])
+            th = self._get_helper(task.downloader or "")
+            if th:
+                th.remove_torrent_tag(task.hash, [tag])
 
     # ---- 清理 ----
 
