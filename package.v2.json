@@ -79,5 +79,17 @@
       "v1.0.1": "新增数据面板（连接状态、版本、各云盘空间进度条）、/status API 端点；空间统计过滤 WebDAV；补全 link/softlink stub 满足 V2 存储合约",
       "v1.0.0": "切换至 baranwang/cd2disk 实现：使用官方 clouddrive.proto，bare-name shim 解决热重载 descriptor pool 冲突，支持浏览、上传（CreateFile/WriteToFile/CloseFile + 云端上传等待）、下载、删除、重命名、移动、复制与空间统计"
     }
+  },
+  "PtHitAndRun": {
+    "name": "H&R助手Pro",
+    "description": "PT站H&R种子自动标签管理，支持多条件OR判定（做种时间/分享率/上传倍数）、按种子大小分级、自动发现下载器种子",
+    "labels": "H&R,PT,做种",
+    "version": "1.0.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hitandrun.png",
+    "author": "wuyaos",
+    "level": 2,
+    "history": {
+      "v1.0.0": "基于 InfinityPacer/hitandrun 魔改：多条件OR判定、按种子大小分级规则（北洋园）、自动发现下载器未纳管种子、模块化拆分5文件"
+    }
   }
 }
