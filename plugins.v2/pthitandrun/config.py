@@ -152,9 +152,15 @@ def _is_float_type(ft) -> bool:
 
 
 def _clean_empty_strings(data: dict):
-    """将空字符串转为 None，避免 Pydantic V2 float 解析失败。"""
+    """将空字符串转为 None，避免 Pydantic V2 float/bool 解析失败。保留 str 字段的空字符串。"""
+    # 需要转 None 的字段类型
+    _numeric_fields = {
+        "hr_duration", "additional_seed_time", "hr_deadline_days",
+        "hr_ratio", "hr_upload_multiplier", "check_period",
+        "auto_cleanup_days",
+    }
     for k, v in data.items():
-        if v == "":
+        if v == "" and k in _numeric_fields:
             data[k] = None
 
 
