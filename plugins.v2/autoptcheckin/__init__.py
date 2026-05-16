@@ -80,7 +80,7 @@ class AutoPtCheckin(_PluginBase):
     _start_time: int = None
     _end_time: int = None
     _auto_cf: int = 0
-    _cron_mode: str = "cron"        # cron / interval
+    _cron_mode: str = "interval"        # cron / interval
     _interval_hours: float = 2.0
     _begin_hour: int = 9
     _end_hour_cfg: int = 23
@@ -608,7 +608,7 @@ class AutoPtCheckin(_PluginBase):
             "enabled": False,
             "notify": True,
             "cron": "",
-            "cron_mode": "cron",
+            "cron_mode": "interval",
             "interval_hours": 2,
             "begin_hour": 9,
             "end_hour": 23,
