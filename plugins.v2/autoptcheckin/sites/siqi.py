@@ -11,7 +11,7 @@ from app.utils.string import StringUtils
 
 class SiQi(_ISiteSigninHandler):
     """
-    思齐 OCR 验证码签到
+    思齐 OCR 验证码签到：ddddocr 优先，失败后切换 OcrHelper
     """
     site_url = "si-qi.xyz"
 
@@ -45,7 +45,6 @@ class SiQi(_ISiteSigninHandler):
         if "login.php" in html:
             return False, '签到失败，Cookie已失效'
 
-        # 已签到
         if self.sign_in_result(html, self._succeed_regex):
             logger.info(f"{site} 今日已签到")
             return True, '今日已签到'
@@ -59,12 +58,30 @@ class SiQi(_ISiteSigninHandler):
         image_hash = hash_m.group(1)
         img_url = urljoin("https://si-qi.xyz/", img_m.group(1).replace("&amp;", "&"))
 
-        # 3. 下载 + OCR
+        # 3. 下载图片（ddddocr 用 bytes；OcrHelper 用 URL）
         img_bytes = client.get_bytes(img_url)
         if not img_bytes:
             return False, '签到失败，获取验证码图片失败'
 
-        code = recognize_captcha(image_bytes=img_bytes, min_len=4)
+        # ddddocr 优先（内部多次重试），失败后切换 OcrHelper
+        code = recognize_captcha(
+            image_bytes=img_bytes,
+            image_url=img_url,
+            cookie=site_cookie,
+            ua=ua,
+            min_len=4,
+            engine='ddddocr',
+        )
+        if not code:
+            logger.info(f"{site} ddddocr 识别失败，切换 OcrHelper")
+            code = recognize_captcha(
+                image_url=img_url,
+                cookie=site_cookie,
+                ua=ua,
+                min_len=4,
+                engine='ocrhelper',
+            )
+
         if not code:
             return False, '签到失败，验证码识别失败'
         logger.info(f"{site} 验证码识别: {code}")

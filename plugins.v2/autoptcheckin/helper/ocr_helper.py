@@ -28,26 +28,35 @@ def recognize_captcha(
     min_len: int = 4,
     proxy: bool = False,
     retry_times: int = 3,
+    engine: str = 'auto',
 ) -> str | None:
-    """识别验证码：ddddocr 优先，OcrHelper 回退
+    """识别验证码
 
     Args:
-        image_url: 验证码图片 URL（与 image_bytes 二选一）
+        image_url: 验证码图片 URL（与 image_bytes 二选一，OcrHelper 必须有 URL）
         image_bytes: 验证码图片二进制（优先使用）
         cookie: 下载图片用的 cookie
         ua: User-Agent
         min_len: 最小识别长度
         proxy: 是否使用代理
-        retry_times: 识别重试次数（取众数）
+        retry_times: ddddocr 重试次数（取众数）
+        engine: 引擎选择
+            'auto'      — ddddocr 优先，失败后回退 OcrHelper（默认）
+            'ddddocr'   — 仅 ddddocr，不回退
+            'ocrhelper' — 仅 OcrHelper
     """
-    # 获取图片数据
-    if image_bytes is None and image_url:
-        image_bytes = _download_image(image_url, cookie, ua, proxy)
-    if not image_bytes:
-        return None
+    # 获取图片数据（ocrhelper 直接传 URL，不需要预下载）
+    if engine != 'ocrhelper':
+        if image_bytes is None and image_url:
+            image_bytes = _download_image(image_url, cookie, ua, proxy)
+        if not image_bytes:
+            if engine == 'ddddocr':
+                logger.warning("ddddocr：无法获取图片数据")
+                return None
+            # auto 模式下没有 bytes 也可以尝试 OcrHelper（via URL）
 
-    # 1. ddddocr 多次识别取众数
-    if _ocr is not None:
+    # 1. ddddocr
+    if engine in ('auto', 'ddddocr') and _ocr is not None and image_bytes:
         results = []
         for i in range(retry_times):
             try:
@@ -58,14 +67,17 @@ def recognize_captcha(
                 logger.debug(f"ddddocr 第 {i+1} 次识别失败: {e}")
 
         if results:
-            # 取出现次数最多的结果
-            most_common = Counter(results).most_common(1)[0]
-            result_code, count = most_common
+            result_code, count = Counter(results).most_common(1)[0]
             logger.info(f"ddddocr 识别结果: {result_code} (出现 {count}/{retry_times} 次)")
             return result_code
 
-    # 2. OcrHelper 回退
-    if OcrHelper is not None and image_url:
+        logger.warning(f"ddddocr {retry_times} 次均无有效结果")
+        if engine == 'ddddocr':
+            return None
+        # auto 模式继续尝试 OcrHelper
+
+    # 2. OcrHelper
+    if engine in ('auto', 'ocrhelper') and OcrHelper is not None and image_url:
         try:
             result = OcrHelper().get_captcha_text(
                 image_url=image_url, cookie=cookie, ua=ua
@@ -73,8 +85,11 @@ def recognize_captcha(
             if result and len(result.strip()) >= min_len:
                 logger.info(f"OcrHelper 识别结果: {result.strip()}")
                 return result.strip()
+            logger.warning("OcrHelper 识别结果无效")
         except Exception as e:
             logger.warning(f"OcrHelper 识别失败: {e}")
+    elif engine == 'ocrhelper' and not image_url:
+        logger.warning("OcrHelper 需要 image_url，但未提供")
 
     return None
 

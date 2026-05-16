@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Tuple
+from typing import Tuple, Optional
 
 from ruamel.yaml import CommentedMap
 
@@ -14,29 +14,16 @@ from app.utils.string import StringUtils
 
 class HDSky(_ISiteSigninHandler):
     """
-    天空ocr签到
+    天空ocr签到：ddddocr 优先，失败后切换 OcrHelper，每轮获取新验证码
     """
-    # 匹配的站点Url，每一个实现类都需要设置为自己的站点Url
     site_url = "hdsky.me"
-
-    # 已签到
     _sign_regex = ['已签到']
 
     @classmethod
     def match(cls, url: str) -> bool:
-        """
-        根据站点Url判断是否匹配当前站点签到类，大部分情况使用默认实现即可
-        :param url: 站点Url
-        :return: 是否匹配，如匹配则会调用该类的signin方法
-        """
         return True if StringUtils.url_equal(url, cls.site_url) else False
 
     def signin(self, site_info: CommentedMap) -> Tuple[bool, str]:
-        """
-        执行签到操作
-        :param site_info: 站点信息，含有站点Url、站点Cookie、UA等信息
-        :return: 签到结果信息
-        """
         site = site_info.get("name")
         site_cookie = site_info.get("cookie")
         ua = site_info.get("ua")
@@ -58,73 +45,101 @@ class HDSky(_ISiteSigninHandler):
             logger.error(f"{site} 签到失败，Cookie已失效")
             return False, '签到失败，Cookie已失效'
 
-        sign_status = self.sign_in_result(html_res=html_text,
-                                          regexs=self._sign_regex)
-        if sign_status:
+        if self.sign_in_result(html_res=html_text, regexs=self._sign_regex):
             logger.info(f"{site} 今日已签到")
             return True, '今日已签到'
 
-        # 获取验证码请求，考虑到网络问题获取失败，多获取几次试试
-        res_times = 0
-        img_hash = None
-        while not img_hash and res_times <= 3:
-            image_res = RequestUtils(cookies=site_cookie,
-                                     ua=ua,
-                                     content_type='application/x-www-form-urlencoded; charset=UTF-8',
-                                     referer="https://hdsky.me/index.php",
-                                     accept_type="*/*",
-                                     proxies=settings.PROXY if proxy else None
-                                     ).post_res(url='https://hdsky.me/image_code_ajax.php',
-                                                data={'action': 'new'})
-            if image_res and image_res.status_code == 200:
-                image_json = json.loads(image_res.text)
-                if image_json["success"]:
-                    img_hash = image_json["code"]
-                    break
-                res_times += 1
-                logger.info(f"获取 {site} 验证码失败，正在进行重试，目前重试次数：{res_times}")
-                time.sleep(1)
+        # 按顺序尝试引擎：ddddocr → OcrHelper
+        for engine in ('ddddocr', 'ocrhelper'):
+            outcome = self._try_engine(engine, site, site_cookie, ua, proxy, referer)
+            if outcome == 'success':
+                logger.info(f"{site} 签到成功（引擎: {engine}）")
+                return True, '签到成功'
+            if outcome == 'already':
+                return True, '今日已签到'
+            if outcome == 'wrong_captcha':
+                logger.warning(f"{site} {engine} 验证码错误，切换下一引擎")
+                continue
+            if outcome == 'no_result':
+                logger.warning(f"{site} {engine} 识别无结果，切换下一引擎")
+                continue
+            # 'error' 或其他 — 不可重试的错误，直接失败
+            return False, '签到失败'
 
-        # 获取到二维码hash
-        if img_hash:
-            # 完整验证码url
-            img_get_url = 'https://hdsky.me/image.php?action=regimage&imagehash=%s' % img_hash
-            logger.info(f"获取到 {site} 验证码链接：{img_get_url}")
+        logger.error(f"{site} 所有引擎均未能识别验证码，签到失败")
+        return False, '签到失败：验证码识别失败'
 
-            # OCR 识别（ocr_helper 内置重试机制）
-            ocr_result = recognize_captcha(
-                image_url=img_get_url,
-                cookie=site_cookie,
+    # ------------------------------------------------------------------
+    def _try_engine(self, engine: str, site: str, cookie: str,
+                    ua: str, proxy: bool, referer: str) -> str:
+        """
+        使用指定引擎尝试一次签到。
+        返回值: 'success' | 'already' | 'wrong_captcha' | 'no_result' | 'error'
+        """
+        img_hash = self._fetch_captcha_hash(site, cookie, ua, proxy)
+        if not img_hash:
+            return 'error'
+
+        img_url = 'https://hdsky.me/image.php?action=regimage&imagehash=%s' % img_hash
+        logger.info(f"{site} [{engine}] 验证码链接: {img_url}")
+
+        code = recognize_captcha(
+            image_url=img_url,
+            cookie=cookie,
+            ua=ua,
+            min_len=6,
+            retry_times=3,
+            engine=engine,
+        )
+        if not code:
+            return 'no_result'
+
+        logger.info(f"{site} [{engine}] 识别结果: {code}")
+        return self._submit(img_hash, code, cookie, ua, proxy, referer)
+
+    def _fetch_captcha_hash(self, site: str, cookie: str,
+                             ua: str, proxy: bool) -> Optional[str]:
+        """获取验证码 hash，最多重试 3 次"""
+        for attempt in range(1, 4):
+            res = RequestUtils(
+                cookies=cookie,
                 ua=ua,
-                min_len=6,
-                retry_times=3
-            )
+                content_type='application/x-www-form-urlencoded; charset=UTF-8',
+                referer="https://hdsky.me/index.php",
+                accept_type="*/*",
+                proxies=settings.PROXY if proxy else None,
+            ).post_res(url='https://hdsky.me/image_code_ajax.php', data={'action': 'new'})
 
-            if ocr_result:
-                # 组装请求参数
-                data = {
-                    'action': 'showup',
-                    'imagehash': img_hash,
-                    'imagestring': ocr_result
-                }
-                # 访问签到链接
-                res = RequestUtils(cookies=site_cookie,
-                                   ua=ua,
-                                   referer=referer,
-                                   proxies=settings.PROXY if proxy else None
-                                   ).post_res(url='https://hdsky.me/showup.php', data=data)
-                if res and res.status_code == 200:
-                    if json.loads(res.text)["success"]:
-                        logger.info(f"{site} 签到成功")
-                        return True, '签到成功'
-                    elif str(json.loads(res.text)["message"]) == "date_unmatch":
-                        # 重复签到
-                        logger.warn(f"{site} 重复成功")
-                        return True, '今日已签到'
-                    elif str(json.loads(res.text)["message"]) == "invalid_imagehash":
-                        # 验证码错误
-                        logger.warn(f"{site} 签到失败：验证码错误")
-                        return False, '签到失败：验证码错误'
+            if res and res.status_code == 200:
+                data = json.loads(res.text)
+                if data.get("success"):
+                    return data["code"]
+            logger.info(f"获取 {site} 验证码失败，第 {attempt}/3 次重试")
+            time.sleep(1)
+        return None
 
-        logger.error(f'{site} 签到失败：未获取到验证码')
-        return False, '签到失败：未获取到验证码'
+    def _submit(self, img_hash: str, code: str, cookie: str,
+                ua: str, proxy: bool, referer: str) -> str:
+        """提交签到，返回语义结果字符串"""
+        res = RequestUtils(
+            cookies=cookie,
+            ua=ua,
+            referer=referer,
+            proxies=settings.PROXY if proxy else None,
+        ).post_res(
+            url='https://hdsky.me/showup.php',
+            data={'action': 'showup', 'imagehash': img_hash, 'imagestring': code},
+        )
+        if not res or res.status_code != 200:
+            return 'error'
+
+        resp = json.loads(res.text)
+        if resp.get("success"):
+            return 'success'
+        msg = str(resp.get("message", ""))
+        if msg == "date_unmatch":
+            return 'already'
+        if msg == "invalid_imagehash":
+            return 'wrong_captcha'
+        logger.warning(f"HDSky 未知响应: {resp}")
+        return 'error'
