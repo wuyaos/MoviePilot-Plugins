@@ -63,10 +63,11 @@ class PtHitAndRun(_PluginBase):
             logger.error(f"{LOG_PREFIX}配置解析失败: {e}")
             return
 
-        dl = self._get_downloader()
-        if not dl:
+        downloaders = self._get_downloaders()
+        if not downloaders:
             return
-        self._th = TorrentHelper(dl)
+        # 用第一个可用下载器初始化 helper（check 时遍历全部）
+        self._th = TorrentHelper(downloaders[0])
         self._checker = HNRChecker(
             config=self._cfg, torrent_helper=self._th,
             get_data=self.get_data, save_data=self.save_data,
@@ -82,15 +83,18 @@ class PtHitAndRun(_PluginBase):
 
     # ---- 下载器 ----
 
-    def _get_downloader(self) -> Optional[Any]:
+    def _get_downloaders(self) -> List[Any]:
+        """获取所有已配置的可用下载器实例。"""
         if not self._cfg or not self._cfg.downloader:
-            return None
-        svc = self._downloader_helper.get_service(
-            name=self._cfg.downloader, type_filter="qbittorrent")
-        if not svc or svc.instance.is_inactive():
-            logger.warning(f"{LOG_PREFIX}下载器 {self._cfg.downloader} 不可用")
-            return None
-        return svc.instance
+            return []
+        instances = []
+        for name in self._cfg.downloader:
+            svc = self._downloader_helper.get_service(name=name, type_filter="qbittorrent")
+            if svc and not svc.instance.is_inactive():
+                instances.append(svc.instance)
+            else:
+                logger.warning(f"{LOG_PREFIX}下载器 {name} 不可用")
+        return instances
 
     # ---- 事件监听 ----
 
@@ -101,7 +105,7 @@ class PtHitAndRun(_PluginBase):
         if not event or not event.event_data:
             return
         downloader = event.event_data.get("downloader")
-        if not downloader or (self._cfg.downloader and self._cfg.downloader != downloader):
+        if not downloader or (self._cfg.downloader and downloader not in self._cfg.downloader):
             return
         torrent_hash = event.event_data.get("hash")
         context: Context = event.event_data.get("context")
@@ -121,7 +125,7 @@ class PtHitAndRun(_PluginBase):
         if event.event_data.get("event_name") != "brushflow_download_added":
             return
         downloader = event.event_data.get("downloader")
-        if not downloader or (self._cfg.downloader and self._cfg.downloader != downloader):
+        if not downloader or (self._cfg.downloader and downloader not in self._cfg.downloader):
             return
         torrent_hash = event.event_data.get("hash")
         torrent_data = event.event_data.get("data")
@@ -233,7 +237,7 @@ class PtHitAndRun(_PluginBase):
                 ]),
                 # 下载器 + 站点
                 _row([
-                    _col(4, _select("downloader", "下载器", dl_opts)),
+                    _col(4, _select("downloader", "下载器", dl_opts, multiple=True)),
                     _col(8, _select("sites", "站点列表", site_opts, multiple=True)),
                 ]),
                 # 参数行
@@ -250,6 +254,19 @@ class PtHitAndRun(_PluginBase):
                     _col(3, _text("hr_ratio", "分享率")),
                     _col(3, _text("hr_upload_multiplier", "上传倍数")),
                 ]),
+                # 说明
+                _row([
+                    _col(12, {"component": "VAlert", "props": {
+                        "type": "info", "variant": "tonal", "density": "compact", "class": "mt-1 mb-2",
+                    }, "content": [{"component": "div", "props": {"class": "text-body-2"}, "content": [
+                        {"component": "div", "props": {"class": "font-weight-medium"}, "text": "配置说明："},
+                        {"component": "div", "text": "• 全局规则：上方的做种时间/考核期/分享率/上传倍数为所有站点的默认值"},
+                        {"component": "div", "text": "• 站点独立配置：开启后在下方 YAML 中为每个站点设置独立规则，未设置的字段自动继承全局值"},
+                        {"component": "div", "text": "• 满足条件（OR 关系）：做种时间达标 / 分享率达标 / 上传量>=种子大小*N倍 / 上传量>=下载量，满足任一即通过"},
+                        {"component": "div", "text": "• 自动发现：开启后定时扫描下载器，将直接在下载器中添加的种子也纳入 H&R 管理"},
+                        {"component": "div", "text": "• H&R标签：满足前打标签保护种子不被删种插件删除，满足后自动移除标签"},
+                    ]}]}),
+                ]),
                 # 站点配置 YAML
                 _row([
                     _col(12, {"component": "VTextarea", "props": {
@@ -264,7 +281,7 @@ class PtHitAndRun(_PluginBase):
         ], {
             "enabled": False, "auto_discover": False,
             "enable_site_config": False, "onlyonce": False,
-            "downloader": "", "sites": [], "notify": "always",
+            "downloader": [], "sites": [], "notify": "always",
             "check_period": 5, "hit_and_run_tag": "H&R",
             "auto_cleanup_days": 7,
             "hr_duration": 48, "hr_deadline_days": 14,

@@ -83,7 +83,7 @@ class HNRConfig(BaseConfig):
     site_infos: Dict = Field(default_factory=dict)
     onlyonce: Optional[bool] = False
     notify: NotifyMode = NotifyMode.ALWAYS
-    downloader: Optional[str] = None
+    downloader: Optional[List[str]] = Field(default_factory=list)  # 下载器列表（支持多个）
     hit_and_run_tag: Optional[str] = "H&R"
     auto_cleanup_days: float = 7
     auto_discover: Optional[bool] = False        # 自动发现下载器中未纳管的种子
