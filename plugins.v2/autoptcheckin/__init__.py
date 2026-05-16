@@ -77,13 +77,13 @@ class AutoPtCheckin(_PluginBase):
     _login_sites: list = []
     _retry_keyword = None
     _clean: bool = False
-    _start_time: int = None
-    _end_time: int = None
+    _start_time: Optional[int] = None
+    _end_time: Optional[int] = None
     _auto_cf: int = 0
     _cron_mode: str = "interval"        # cron / interval
     _interval_hours: float = 2.0
     _begin_hour: int = 9
-    _end_hour_cfg: int = 23
+    _end_hour: int = 23
 
     def init_plugin(self, config: dict = None):
         self.sites = SitesHelper()
@@ -94,18 +94,14 @@ class AutoPtCheckin(_PluginBase):
         # 停止现有任务
         self.stop_service()
 
-        # 每次重新初始化都重置定时窗口，避免切换配置后残留旧的 X/Y-Z 时间段
-        self._start_time = None
-        self._end_time = None
-
         # 配置
         if config:
             self._enabled = config.get("enabled")
             self._cron = config.get("cron")
-            self._cron_mode = config.get("cron_mode") or "cron"
+            self._cron_mode = config.get("cron_mode") or "interval"
             self._interval_hours = float(config.get("interval_hours") or 2.0)
             self._begin_hour = int(config.get("begin_hour") or 9)
-            self._end_hour_cfg = int(config.get("end_hour") or 23)
+            self._end_hour = int(config.get("end_hour") or 23)
             self._onlyonce = config.get("onlyonce")
             self._notify = config.get("notify")
             self._queue_cnt = config.get("queue_cnt") or 5
@@ -165,6 +161,10 @@ class AutoPtCheckin(_PluginBase):
                 "enabled": self._enabled,
                 "notify": self._notify,
                 "cron": self._cron,
+                "cron_mode": self._cron_mode,
+                "interval_hours": self._interval_hours,
+                "begin_hour": self._begin_hour,
+                "end_hour": self._end_hour,
                 "onlyonce": self._onlyonce,
                 "queue_cnt": self._queue_cnt,
                 "sign_sites": self._sign_sites,
@@ -240,7 +240,7 @@ class AutoPtCheckin(_PluginBase):
 
         if self._cron_mode == "interval":
             self._start_time = self._begin_hour
-            self._end_time = self._end_hour_cfg
+            self._end_time = self._end_hour
             hours_f = max(0.5, self._interval_hours)
             window = self._end_time - self._start_time
             if window <= 0:
