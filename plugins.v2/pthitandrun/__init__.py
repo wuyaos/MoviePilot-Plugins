@@ -188,16 +188,16 @@ class PtHitAndRun(_PluginBase):
     # ---- 服务注册 ----
 
     def get_service(self) -> List[Dict[str, Any]]:
-        if not self._cfg or not self._cfg.enabled:
+        if not self._cfg or not self._cfg.enabled or not self._checker:
             return []
         services = [{
             "id": "PtHitAndRunCheck",
             "name": "H&R状态检查",
             "trigger": "interval",
-            "func": self._checker.check if self._checker else lambda: None,
+            "func": self._checker.check,
             "kwargs": {"minutes": self._cfg.check_period},
         }]
-        if self._cfg.auto_discover and self._checker:
+        if self._cfg.auto_discover:
             services.append({
                 "id": "PtHitAndRunDiscover",
                 "name": "H&R自动发现",
@@ -212,10 +212,31 @@ class PtHitAndRun(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        pass
+        return [
+            {"cmd": "/hnr_check", "event": EventType.PluginAction,
+             "desc": "立即检查 H&R 任务状态", "category": "H&R",
+             "data": {"action": "hnr_check"}},
+            {"cmd": "/hnr_scan", "event": EventType.PluginAction,
+             "desc": "全量扫描（发现 + 检查）", "category": "H&R",
+             "data": {"action": "hnr_scan"}},
+        ]
 
     def get_api(self) -> List[Dict[str, Any]]:
         pass
+
+    @eventmanager.register(EventType.PluginAction)
+    def on_plugin_action(self, event: Event = None):
+        if not event or not event.event_data:
+            return
+        if not self._cfg or not self._cfg.enabled or not self._checker:
+            return
+        action = event.event_data.get("action")
+        if action == "hnr_check":
+            logger.info(f"{LOG_PREFIX}收到远程命令: 检查 H&R 任务")
+            self._checker.check()
+        elif action == "hnr_scan":
+            logger.info(f"{LOG_PREFIX}收到远程命令: 全量扫描")
+            self._checker.full_scan()
 
     # ---- 配置表单 ----
 
