@@ -348,6 +348,7 @@ class PtHitAndRun(_PluginBase):
                 remain = task.remain_time()
                 remain_str = f"{remain:.1f}h" if remain is not None else "-"
                 rows.append({"component": "tr", "content": [
+                    {"component": "td", "text": task.downloader or "-"},
                     {"component": "td", "text": task.site_name or "-"},
                     {"component": "td", "text": (task.title or "-")[:40]},
                     {"component": "td", "text": f"{(task.seeding_time or 0) / 3600:.1f}h"},
@@ -361,7 +362,7 @@ class PtHitAndRun(_PluginBase):
             table = {"component": "VTable", "props": {"density": "compact"}, "content": [
                 {"component": "thead", "content": [{"component": "tr", "content": [
                     {"component": "th", "text": h} for h in
-                    ["站点", "种子", "做种", "分享率", "剩余", "截止", "状态"]
+                    ["下载器", "站点", "种子", "做种", "分享率", "剩余", "截止", "状态"]
                 ]}]},
                 {"component": "tbody", "content": rows},
             ]}
