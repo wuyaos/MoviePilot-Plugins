@@ -102,25 +102,13 @@ class HNRConfig(BaseConfig):
             values["notify"] = NotifyMode.ALWAYS
         return values
 
-    @validator("*", pre=True, allow_reuse=True)
-    def _empty_to_float(cls, v, values, **kwargs):
-        info = kwargs.get("info") or kwargs.get("field")
-        ft = getattr(info, "type_", None)
-        if ft is None:
-            fn = getattr(info, "field_name", None)
-            if fn:
-                mf = getattr(cls, "model_fields", None) or getattr(cls, "__fields__", {})
-                fi = mf.get(fn)
-                ft = getattr(fi, "annotation", None) or getattr(fi, "type_", None)
-        if _is_float_type(ft) and (v is None or v == ""):
-            return 0.0
-        return v
-
     @validator("auto_cleanup_days", pre=True, allow_reuse=True)
     def _default_cleanup(cls, v):
         return 7 if v is None else v
 
     def __init__(self, **data):
+        # 预处理：空字符串转 None（让 Optional[float] 等字段取默认值）
+        _clean_empty_strings(data)
         super().__init__(**data)
         self._process_site_configs()
 
@@ -161,6 +149,13 @@ def _is_float_type(ft) -> bool:
     if get_origin(ft) is Union:
         return float in get_args(ft)
     return False
+
+
+def _clean_empty_strings(data: dict):
+    """将空字符串转为 None，避免 Pydantic V2 float 解析失败。"""
+    for k, v in data.items():
+        if v == "":
+            data[k] = None
 
 
 def _parse_yaml(yaml_str: str) -> Optional[Dict[str, SiteConfig]]:
