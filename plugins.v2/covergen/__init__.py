@@ -4,7 +4,7 @@
 """CoverGen — 媒体库封面自动生成插件（模块化重构版）。"""
 from __future__ import annotations
 
-import base64
+import datetime as dt
 import mimetypes
 import os
 import re
@@ -12,6 +12,7 @@ import shutil
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.parse import quote
 
 from app.core.event import eventmanager, Event
 from app.helper.mediaserver import MediaServerHelper
@@ -34,7 +35,7 @@ class CoverGen(_PluginBase):
     plugin_name = "媒体库封面生成"
     plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
-    plugin_version = "1.4.2"
+    plugin_version = "1.4.3"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "covergen_"
@@ -398,39 +399,44 @@ class CoverGen(_PluginBase):
         return ""
 
     def _get_recent_covers(self) -> List[Dict[str, Any]]:
-        """扫描历史封面输出目录，返回最近 N 张（base64 data URI）。"""
+        """扫描历史封面输出目录，返回最近 N 张元数据和异步图片地址。"""
         covers_dir = self._cfg.covers_output
         if not covers_dir:
             data_path = self.get_data_path()
             covers_dir = str(data_path / "covers")
         os.makedirs(covers_dir, exist_ok=True)
-        _mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-                 ".gif": "image/gif", ".webp": "image/webp", ".apng": "image/apng"}
+        image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".apng"}
         results = []
         hidden_lib_ids = self._history_hidden_lib_ids()
+
+        def _size_label(size: int) -> str:
+            if size >= 1024 * 1024:
+                return f"{size / 1024 / 1024:.1f} MB"
+            return f"{max(1, size // 1024)} KB"
+
         try:
             files = []
             for p in Path(covers_dir).iterdir():
                 if not p.is_file():
                     continue
                 ext = p.suffix.lower()
-                if ext not in _mime:
+                if ext not in image_exts:
                     continue
                 lib_value = self._history_library_value(p.name)
-                files.append((p, lib_value, p.stat().st_mtime))
+                stat = p.stat()
+                files.append((p, lib_value, stat.st_mtime, stat.st_size))
             files.sort(key=lambda x: (1 if x[1] in hidden_lib_ids else 0, -x[2]))
-            for f, lib_value, _ in files:
+            for f, lib_value, mtime, size in files:
                 ext = f.suffix.lower()
-                try:
-                    data = base64.b64encode(f.read_bytes()).decode("utf-8")
-                    results.append({
-                        "file": f.name,
-                        "label": f.stem,
-                        "library_value": lib_value,
-                        "src": f"data:{_mime[ext]};base64,{data}",
-                    })
-                except Exception as e:
-                    logger.debug(f"【CoverGen】读取封面文件失败: {f} -> {e}")
+                results.append({
+                    "file": f.name,
+                    "label": f.stem,
+                    "library_value": lib_value,
+                    "src": f"/api/v1/plugin/{self.SERVICE_ID}/saved_cover_image?file={quote(f.name)}",
+                    "ext": ext.lstrip(".").upper(),
+                    "size": _size_label(size),
+                    "mtime": dt.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M"),
+                })
                 if len(results) >= self._cfg.covers_page_history_limit:
                     break
         except Exception as e:

@@ -39,7 +39,7 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
         ("set_page_tab_generate", plugin.api_set_page_tab_generate, "bear", ["POST"], "切换到生成页"),
         ("set_page_tab_history", plugin.api_set_page_tab_history, "bear", ["POST"], "切换到历史页"),
         ("set_page_tab_clean", plugin.api_set_page_tab_clean, "bear", ["POST"], "切换到清理页"),
-        ("saved_cover_image", plugin.api_saved_cover_image, "bear", ["GET"], "获取已保存封面图片"),
+        ("saved_cover_image", plugin.api_saved_cover_image, None, ["GET"], "获取已保存封面图片"),
     ]
     routes = []
     for suffix, endpoint, auth, methods, summary in specs:

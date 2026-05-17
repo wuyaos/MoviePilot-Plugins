@@ -48,16 +48,22 @@ def _cover_card(c: Dict[str, Any]) -> dict:
             "content": [
                 {"component": "VImg", "props": {
                     "src": src, "aspect-ratio": "16/9", "cover": True, "height": 120,
+                    "lazy-src": "",
                 }},
-                {"component": "VCardText", "props": {"class": "py-1 text-caption text-truncate"},
-                 "text": c.get("label", "")},
+                {"component": "VCardText", "props": {"class": "py-2"},
+                 "content": [
+                     {"component": "div", "props": {"class": "text-caption font-weight-medium text-truncate"},
+                      "text": c.get("label", "")},
+                     {"component": "div", "props": {"class": "text-caption text-medium-emphasis"},
+                      "text": f"{c.get('size', '-')} · {c.get('mtime', '-')}"},
+                 ]},
             ],
         }],
     }
 
 
 def _build_history(covers: List[Dict[str, Any]], plugin_id: str) -> list:
-    valid_covers = [c for c in covers if c.get("src")]
+    valid_covers = [c for c in covers if c.get("file")]
     title = {"component": "div", "props": {
         "class": "text-subtitle-2 font-weight-medium text-medium-emphasis mt-2 mb-1",
     }, "text": f"📚 历史封面（{len(valid_covers)} 张）"}
@@ -95,19 +101,29 @@ def _build_history(covers: List[Dict[str, Any]], plugin_id: str) -> list:
 def _build_clean(plugin_id: str) -> list:
     clean_img = {
         "component": "VBtn",
-        "props": {"color": "warning", "variant": "tonal", "size": "small",
-                  "prependIcon": "mdi-image-remove"},
+        "props": {"color": "warning", "variant": "tonal", "size": "small", "block": True,
+                  "prependIcon": "mdi-image-remove", "class": "justify-start"},
         "events": {"click": {"api": f"plugin/{plugin_id}/clean_images", "method": "post"}},
         "text": "清理图片缓存",
     }
     clean_font = {
         "component": "VBtn",
-        "props": {"color": "warning", "variant": "tonal", "size": "small",
-                  "prependIcon": "mdi-format-clear", "class": "ml-2"},
+        "props": {"color": "warning", "variant": "tonal", "size": "small", "block": True,
+                  "prependIcon": "mdi-format-clear", "class": "justify-start"},
         "events": {"click": {"api": f"plugin/{plugin_id}/clean_fonts", "method": "post"}},
         "text": "清理字体缓存",
     }
-    return [v_row([v_col(6, clean_img), v_col(6, clean_font)])]
+    hint = {"component": "VAlert", "props": {
+        "type": "warning", "variant": "tonal", "density": "compact",
+        "class": "mb-2", "border": "start",
+    }, "text": "清理仅影响插件缓存：图片缓存会删除临时下载素材，字体缓存会在下次生成时重新下载。"}
+    return [
+        v_row([v_col(12, hint)]),
+        {"component": "VRow", "props": {"dense": True}, "content": [
+            v_col(6, clean_img),
+            v_col(6, clean_font),
+        ]},
+    ]
 
 
 def _build_run_status(run_history, last_run=None) -> list:
