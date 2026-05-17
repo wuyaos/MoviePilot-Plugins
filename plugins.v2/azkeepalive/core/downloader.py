@@ -70,8 +70,13 @@ def dl_add_torrent(
             import base64
             b64 = base64.b64encode(torrent_data).decode()
             kwargs = {}
+            labels = []
             if category:
-                kwargs["labels"] = [category]
+                labels.append(category)
+            if tags:
+                labels.extend(t.strip() for t in tags.split(",") if t.strip())
+            if labels:
+                kwargs["labels"] = list(dict.fromkeys(labels))
             result = trc.add_torrent(metainfo=b64, **kwargs)
             if result:
                 logger.info(f"种子已提交 Transmission: {torrent_path.name}")

@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.core.config import settings as app_settings
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas.types import NotificationType
+from app.schemas import NotificationType
 from app.utils.timer import TimerUtils
 
 from .core.form_utils import v_col, v_cron, v_row, v_select, v_switch, v_text
@@ -18,7 +18,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.4.1"
+    plugin_version = "2.4.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -106,7 +106,7 @@ class AzKeepAlive(_PluginBase):
             logger.warning("AnimeZ保活: 缺少站点地址"); return
         dl_instance = get_downloader_instance(self._downloader)
         if not dl_instance:
-            logger.warning("AnimeZ保活: 下载器未配置或不可用"); return
+            logger.warning("AnimeZ保活: 下载器未配置或不可用，仅执行站点访问保活")
         state = self.get_data("state") or {}
         cookie = get_site_cookie(self._site_url)
         status, message, state = run_keepalive(

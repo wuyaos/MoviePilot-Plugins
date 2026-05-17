@@ -32,13 +32,14 @@ def run_keepalive(
         if not cookie:
             logger.warning("AZ保活: CookieCloud 未获取到 Cookie，用户信息无法抓取")
         vr = visit_site(site_url, cookie=cookie, timeout=timeout, proxies=proxies)
-        state["last_visit_at"] = _ts(now)
         if vr.get("ok") and cookie:
             found = False
             for k in ("upload", "download", "ratio", "buffer", "seeds", "leeches", "bonus", "hnr", "reseed", "name"):
                 if k in vr:
                     state[f"user_{k}"] = vr[k]; found = True
-            if not found:
+            if found:
+                state["last_visit_at"] = _ts(now)
+            else:
                 logger.warning("AZ保活: 访问成功但未解析到用户信息")
 
     # H&R 检查：满足做种时限则移除标签，可选删除
@@ -52,14 +53,18 @@ def run_keepalive(
         _append(state, "skipped", now, reason=reason)
         return "skipped", _skip_msg(state, keepalive_days, now, reason), state
 
+    if not downloader_instance:
+        msg = "下载器未配置或不可用，已跳过下载保活；站点访问已尝试执行"
+        _append(state, "failed", now, reason=msg)
+        return "failed", msg, state
+    if not cookie:
+        msg = "CookieCloud 未获取到 AnimeZ Cookie，无法执行下载保活"
+        _append(state, "failed", now, reason=msg)
+        return "failed", msg, state
+
     try:
         submit_tags = f"{tags},H&R" if tags else "H&R"
-        # 渐进策略：Free小体积 → Free不限 → 全部小体积
-        strategies = [
-            (f"Free<={max_size_gb}GB", require_free, max_size_gb),
-            ("Free不限体积", require_free, 999999),
-            (f"全部<={max_size_gb}GB", False, max_size_gb),
-        ]
+        strategies = _build_strategies(max_size_gb, require_free)
         for label, free, size in strategies:
             r = _scan_pages(site_url, cookie, timeout, proxies, free, size,
                             min_seeders, downloader_instance, category, submit_tags,
@@ -109,6 +114,7 @@ def _try_one(
 ) -> tuple[str, str] | None:
     """尝试下载并提交单个种子"""
     from app.utils.http import RequestUtils
+    tmp_path: Path | None = None
     try:
         headers = {"User-Agent": UA, "Referer": "https://animez.to/"}
         if cookie:
@@ -131,11 +137,9 @@ def _try_one(
         infohash = torrent_infohash(tmp_path)
         if dl_has_hash(dl_inst, infohash):
             logger.debug(f"下载器已有: {item.title} ({infohash[:8]})")
-            tmp_path.unlink(missing_ok=True)
             return None
 
         if dl_add_torrent(dl_inst, tmp_path, category=category, tags=tags):
-            tmp_path.unlink(missing_ok=True)
             _append(state, "success", now, item=item, infohash=infohash)
             free_tag = "🆓 Free" if item.is_free else "付费"
             msg = (f"✅ 保活下载成功\n"
@@ -147,11 +151,27 @@ def _try_one(
             logger.info(f"AZ保活: 成功 {item.title}")
             return "success", msg
 
-        tmp_path.unlink(missing_ok=True)
         logger.warning(f"提交失败: {item.title}")
     except Exception as e:
         logger.warning(f"候选异常: {item.title} - {e}")
+    finally:
+        if tmp_path:
+            tmp_path.unlink(missing_ok=True)
     return None
+
+
+def _build_strategies(max_size_gb: float, require_free: bool) -> list[tuple[str, bool, float]]:
+    """构建扫描策略标签，避免关闭 Free 限制时日志仍显示 Free。"""
+    if require_free:
+        return [
+            (f"Free<={max_size_gb}GB", True, max_size_gb),
+            ("Free不限体积", True, 999999),
+            (f"全部<={max_size_gb}GB", False, max_size_gb),
+        ]
+    return [
+        (f"全部<={max_size_gb}GB", False, max_size_gb),
+        ("全部不限体积", False, 999999),
+    ]
 
 
 def _looks_like_torrent(body: bytes, content_type: str) -> bool:
