@@ -22,30 +22,46 @@ def run_keepalive(
     max_size_gb: float, require_free: bool, timeout: int,
     use_proxy: bool, cookie: str = "", state: dict[str, Any],
     force: bool = False, auto_delete_hnr: bool = False,
+    skip_interval_check: bool = False,
 ) -> tuple[str, str, dict[str, Any]]:
     """执行一次保活检查"""
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
     proxies = app_settings.PROXY if use_proxy else None
 
-    should, reason = _should_run(state, keepalive_days, now, force=force)
-    if not should:
-        _append(state, "skipped", now, reason=reason, checked=False)
-        return "skipped", _skip_msg(state, keepalive_days, now, reason), state
+    if not skip_interval_check:
+        visit_due, _ = _should_run(
+            state, "last_visit_at", keepalive_days, now, action="访问", force=force,
+        )
+        download_due, _ = _should_run(
+            state, "last_download_at", keepalive_days, now, action="下载", force=force,
+        )
+        if not visit_due and not download_due:
+            reason = "访问和下载均未到插件保活间隔"
+            _append(state, "skipped", now, reason=reason, checked=False)
+            return "skipped", _skip_msg(state, keepalive_days, now, reason), state
 
-    # 每次访问站点（模拟登录 + 抓取用户信息）
-    if site_url:
-        if not cookie:
-            logger.warning("AZ保活: CookieCloud 未获取到 Cookie，用户信息无法抓取")
+    visit_message = ""
+    if not cookie:
+        logger.warning("AZ保活: CookieCloud 未获取到 Cookie，用户信息无法抓取")
+        visit_message = "CookieCloud 未获取到 AnimeZ Cookie，无法执行访问保活"
+    else:
         vr = visit_site(site_url, cookie=cookie, timeout=timeout, proxies=proxies)
-        if vr.get("ok") and cookie:
-            found = False
-            for k in ("upload", "download", "ratio", "buffer", "seeds", "leeches", "bonus", "hnr", "reseed", "name"):
+        found = False
+        if vr.get("ok"):
+            for k in ("upload", "download", "ratio", "buffer", "seeds",
+                      "leeches", "bonus", "hnr", "reseed", "name"):
                 if k in vr:
-                    state[f"user_{k}"] = vr[k]; found = True
+                    state[f"user_{k}"] = vr[k]
+                    found = True
             if found:
-                state["last_visit_at"] = _ts(now)
+                _append(state, "visit_success", now, reason="访问保活成功")
+                visit_message = "访问保活成功"
             else:
-                logger.warning("AZ保活: 访问成功但未解析到用户信息")
+                visit_message = "访问成功但未解析到用户信息"
+                logger.warning(f"AZ保活: {visit_message}")
+        else:
+            visit_message = "访问 AnimeZ 失败，未更新访问保活时间"
+            logger.warning(f"AZ保活: {visit_message}")
 
     # H&R 检查：满足做种时限则移除标签，可选删除
     if downloader_instance:
@@ -54,7 +70,8 @@ def run_keepalive(
             logger.info(f"AZ保活: H&R完成 {len(done)} 个: {', '.join(done[:3])}")
 
     if not downloader_instance:
-        msg = "下载器未配置或不可用，已跳过下载保活；站点访问已尝试执行"
+        msg = "下载器未配置或不可用，无法执行下载保活"
+        msg = f"{visit_message or '站点访问已尝试执行'}；{msg}"
         _append(state, "failed", now, reason=msg)
         return "failed", msg, state
     if not cookie:
@@ -140,7 +157,7 @@ def _try_one(
             return None
 
         if dl_add_torrent(dl_inst, tmp_path, category=category, tags=tags):
-            _append(state, "success", now, item=item, infohash=infohash)
+            _append(state, "download_success", now, item=item, infohash=infohash)
             free_tag = "🆓 Free" if item.is_free else "付费"
             msg = (f"✅ 保活下载成功\n"
                    f"━━━━━━━━━━━━━\n"
@@ -149,7 +166,7 @@ def _try_one(
                    f"🌱 做种: {item.seeders}  |  {free_tag}\n"
                    f"📁 分类: {category}")
             logger.info(f"AZ保活: 成功 {item.title}")
-            return "success", msg
+            return "download_success", msg
 
         logger.warning(f"提交失败: {item.title}")
     except Exception as e:
@@ -180,16 +197,16 @@ def _looks_like_torrent(body: bytes, content_type: str) -> bool:
     return body.lstrip().startswith(b"d") and b"announce" in body[:4096]
 
 
-def _should_run(state: dict[str, Any], days: int, now: dt.datetime,
-                force: bool = False) -> tuple[bool, str]:
+def _should_run(state: dict[str, Any], field: str, days: int, now: dt.datetime,
+                action: str, force: bool = False) -> tuple[bool, str]:
     if force:
-        return True, "强制保活"
-    last = _last_keepalive_base(state)
+        return True, f"强制{action}保活"
+    last = _parse_ts(state.get(field))
     if last is None:
-        return True, "首次运行"
+        return True, f"{action}首次运行"
     if now - last >= dt.timedelta(days=days):
-        return True, "已到插件保活间隔"
-    return False, "未到插件保活间隔"
+        return True, f"{action}已到插件保活间隔"
+    return False, f"{action}未到插件保活间隔"
 
 
 def _append(
@@ -210,8 +227,10 @@ def _append(
     history.append(ev)
     del history[:-MAX_HISTORY]
     state["last_status"] = status
-    if status == "success":
-        state["last_success_at"] = _ts(now)
+    if status == "visit_success":
+        state["last_visit_at"] = _ts(now)
+    if status == "download_success":
+        state["last_download_at"] = _ts(now)
         if item:
             state["last_title"] = item.title
     if checked:
@@ -219,21 +238,18 @@ def _append(
 
 
 def _skip_msg(state: dict[str, Any], days: int, now: dt.datetime, reason: str) -> str:
-    last = _last_keepalive_base(state)
-    nxt = _ts(last + dt.timedelta(days=days)) if last else "未知"
+    last_visit = _parse_ts(state.get("last_visit_at"))
+    next_visit = _ts(last_visit + dt.timedelta(days=days)) if last_visit else "未知"
+    last_download = _parse_ts(state.get("last_download_at"))
+    next_download = _ts(last_download + dt.timedelta(days=days)) if last_download else "未知"
     return (f"⏭ 跳过本次执行\n━━━━━━━━━━━━━\n"
             f"📋 原因: {reason}\n"
-            f"🕒 上次保活: {state.get('last_checked_at') or state.get('last_success_at') or '无'}\n"
-            f"📅 下次保活: {nxt}")
+            f"🌐 下次访问保活: {next_visit}\n"
+            f"📥 下次下载保活: {next_download}")
 
 
 def _ts(t: dt.datetime) -> str:
     return t.isoformat().replace("+00:00", "Z")
-
-
-def _last_keepalive_base(state: dict[str, Any]) -> dt.datetime | None:
-    """插件保活间隔基准；兼容旧版本只保存 last_success_at 的状态。"""
-    return _parse_ts(state.get("last_checked_at")) or _parse_ts(state.get("last_success_at"))
 
 
 def _parse_ts(val: str | None) -> dt.datetime | None:

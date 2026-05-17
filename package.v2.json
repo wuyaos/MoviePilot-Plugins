@@ -41,11 +41,12 @@
     "name": "AnimeZ保活",
     "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
     "labels": "保活,AnimeZ",
-    "version": "2.4.5",
+    "version": "2.4.6",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v2.4.6": "插件保活间隔按last_visit_at/last_download_at分别计算；访问/下载成功状态拆分记录；保活未成功最多重试3次后通知；详情页卡片化美化并保留运行锁防止并发触发",
       "v2.4.5": "兼容旧状态用上次下载作为插件保活间隔基准，并新增运行锁避免多触发并发下载；下载器种子仅用于去重和展示",
       "v2.4.4": "普通/定时/立即运行统一按插件保活间隔执行，未到间隔不访问不下载；强制保活绕过间隔，面板单独显示AZ访问/下载剩余和下次插件保活",
       "v2.4.3": "规范插件服务与定时任务注册：cron无效时停止注册，随机任务使用唯一ID和CronTrigger，并新增立即运行/强制保活服务项",

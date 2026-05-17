@@ -128,21 +128,22 @@ def dl_list_category(instance: Any, category: str) -> list[dict[str, Any]]:
 
 def dl_check_hnr(instance: Any, category: str, hnr_tag: str = "H&R",
                  auto_delete: bool = False) -> list[str]:
-    """扫描带 H&R 标签的种子，满足做种时限后移除标签；auto_delete=True 时同时删除种子"""
+    """扫描带 H&R 标签的种子，满足做种时限后移除标签；auto_delete=True 时删除任务和文件。"""
     from .models import hnr_required_hours
     completed: list[str] = []
     try:
         qbc = getattr(instance, "qbc", None)
         if qbc:
             for t in qbc.torrents_info(category=category, tag=hnr_tag):
-                req_h = hnr_required_hours(t.size)
-                done_h = (getattr(t, "seeding_time", 0) or 0) // 3600
-                if done_h >= req_h + 24:
+                base_required_hours = hnr_required_hours(t.size)
+                required_hours = base_required_hours + 24
+                seeded_hours = (getattr(t, "seeding_time", 0) or 0) // 3600
+                if seeded_hours >= required_hours:
                     qbc.torrents_remove_tags(tags=hnr_tag, torrent_hashes=t.hash)
-                    logger.info(f"H&R满足，移除标签: {t.name} ({done_h}h/{req_h}h)")
+                    logger.info(f"H&R满足，移除标签: {t.name} ({seeded_hours}h/{required_hours}h，含额外24h)")
                     if auto_delete:
-                        qbc.torrents_delete(delete_files=False, torrent_hashes=t.hash)
-                        logger.info(f"H&R完成，已删除: {t.name}")
+                        qbc.torrents_delete(delete_files=True, torrent_hashes=t.hash)
+                        logger.info(f"H&R完成，已删除任务和文件: {t.name}")
                     completed.append(t.name)
             return completed
         trc = getattr(instance, "trc", None)
@@ -152,15 +153,16 @@ def dl_check_hnr(instance: Any, category: str, hnr_tag: str = "H&R",
                 labels = getattr(t, "labels", []) or []
                 if hnr_tag not in labels:
                     continue
-                req_h = hnr_required_hours(getattr(t, "total_size", 0) or 0)
-                done_h = (getattr(t, "secondsSeeding", 0) or 0) // 3600
-                if done_h >= req_h + 24:
+                base_required_hours = hnr_required_hours(getattr(t, "total_size", 0) or 0)
+                required_hours = base_required_hours + 24
+                seeded_hours = (getattr(t, "secondsSeeding", 0) or 0) // 3600
+                if seeded_hours >= required_hours:
                     trc.change_torrent([t.hashString],
                                        labels=[l for l in labels if l != hnr_tag])
-                    logger.info(f"H&R满足，移除标签: {t.name} ({done_h}h/{req_h}h)")
+                    logger.info(f"H&R满足，移除标签: {t.name} ({seeded_hours}h/{required_hours}h，含额外24h)")
                     if auto_delete:
-                        trc.remove_torrent(t.hashString, delete_data=False)
-                        logger.info(f"H&R完成，已删除: {t.name}")
+                        trc.remove_torrent(t.hashString, delete_data=True)
+                        logger.info(f"H&R完成，已删除任务和文件: {t.name}")
                     completed.append(t.name)
     except Exception as e:
         logger.warning(f"H&R检查失败: {e}")

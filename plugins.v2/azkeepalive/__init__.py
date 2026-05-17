@@ -19,7 +19,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.4.5"
+    plugin_version = "2.4.6"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -118,19 +118,26 @@ class AzKeepAlive(_PluginBase):
         dl_instance = get_downloader_instance(self._downloader)
         if not dl_instance:
             logger.warning("AnimeZ保活: 下载器未配置或不可用，仅执行站点访问保活")
-        state = self.get_data("state") or {}
-        cookie = get_site_cookie(self._site_url)
-        status, message, state = run_keepalive(
-            site_url=self._site_url, downloader_instance=dl_instance,
-            category=self._qb_category, tags=self._qb_tags,
-            keepalive_days=self._keepalive_days, min_seeders=self._min_seeders,
-            max_size_gb=self._max_size_gb, require_free=self._require_free,
-            timeout=self._timeout, use_proxy=self._use_proxy,
-            cookie=cookie, state=state, force=force,
-            auto_delete_hnr=self._auto_delete_hnr,
-        )
-        self.save_data("state", state)
-        logger.info(f"AnimeZ保活: [{status}] {message}")
+        status, message = "failed", "保活未执行"
+        for attempt in range(1, 4):
+            state = self.get_data("state") or {}
+            cookie = get_site_cookie(self._site_url)
+            status, message, state = run_keepalive(
+                site_url=self._site_url, downloader_instance=dl_instance,
+                category=self._qb_category, tags=self._qb_tags,
+                keepalive_days=self._keepalive_days, min_seeders=self._min_seeders,
+                max_size_gb=self._max_size_gb, require_free=self._require_free,
+                timeout=self._timeout, use_proxy=self._use_proxy,
+                cookie=cookie, state=state, force=force,
+                auto_delete_hnr=self._auto_delete_hnr,
+                skip_interval_check=attempt > 1,
+            )
+            self.save_data("state", state)
+            logger.info(f"AnimeZ保活: [{status}] {message}")
+            if status in ("download_success", "skipped"):
+                break
+            if attempt < 3:
+                logger.warning(f"AnimeZ保活: 第 {attempt} 次未成功，准备重试")
         if self._notify and status != "skipped":
             self.post_message(title="【AnimeZ保活】",
                               mtype=NotificationType.SiteMessage, text=message)
@@ -232,7 +239,7 @@ class AzKeepAlive(_PluginBase):
                 v_col(3, v_switch("auto_delete_hnr", "H&R到期自动删除")),
                 v_col(6, {"component": "VAlert", "props": {
                     "type": "warning", "variant": "tonal", "density": "compact",
-                    "text": "开启后，满足做种时限的H&R种子将被自动删除（保留文件）",
+                    "text": "开启后，满足做种时限的H&R种子将从下载器删除，同时删除文件",
                 }}),
             ]),
             # ── 说明 ──────────────────────────────
@@ -241,7 +248,7 @@ class AzKeepAlive(_PluginBase):
                 "text": "AZ保活策略：① 每 60 天至少登录一次，否则账号删除；"
                         "② 每 90 天至少下载 1 个种子，否则账号禁用。"
                         "插件按保活间隔执行访问和下载，默认30天冗余保活；"
-                        "种子自动打 H&R 标签，到期后自动移除（可选删除）。"
+                        "种子自动打 H&R 标签，到期后自动移除标签（可选删除任务和文件）。"
             }})]),
         ]}], {
             "enabled": False, "notify": True, "cron": "", "onlyonce": False, "force_keepalive": False,
