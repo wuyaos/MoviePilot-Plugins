@@ -122,7 +122,7 @@ class TorrentTask(TorrentHistory):
             return "已删除"
         state = (self.state or "").lower()
         if not state:
-            return "-"
+            return "未知"
         if state in {"uploading", "stalledup", "forcedup", "checkingup", "queuedup"}:
             return "做种"
         if state in {"downloading", "stalleddl", "forceddl", "checkingdl", "queueddl", "metadl"}:

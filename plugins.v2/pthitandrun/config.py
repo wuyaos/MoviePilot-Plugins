@@ -90,7 +90,7 @@ class HNRConfig(BaseConfig):
     auto_cleanup_days: float = 15
     auto_discover: Optional[bool] = False        # 自动发现下载器中未纳管的种子
     auto_monitor: Optional[bool] = False
-    brush_plugin: Optional[str] = "brushflow"
+    brush_plugin: Optional[str] = "BrushFlow"
     # ---- 站点独立配置 ----
     enable_site_config: Optional[bool] = False
     site_config_str: Optional[str] = None

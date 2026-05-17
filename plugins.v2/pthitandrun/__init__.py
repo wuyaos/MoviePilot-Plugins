@@ -15,6 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app.core.config import settings
 from app.core.context import Context, TorrentInfo
 from app.core.event import Event, eventmanager
+from app.core.plugin import PluginManager
 from app.helper.downloader import DownloaderHelper
 from app.helper.sites import SitesHelper
 from app.log import logger
@@ -34,7 +35,7 @@ class PtHitAndRun(_PluginBase):
     plugin_name = "H&R助手Pro"
     plugin_desc = "PT站H&R种子自动标签管理，支持多条件OR判定、按大小分级、自动发现。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hitandrun.png"
-    plugin_version = "1.2.1"
+    plugin_version = "1.2.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pthitandrun_"
@@ -50,6 +51,7 @@ class PtHitAndRun(_PluginBase):
         self._event = threading.Event()
         self._downloader_helper = DownloaderHelper()
         self._sites_helper = SitesHelper()
+        self._plugin_manager = PluginManager()
 
     # ---- 初始化 ----
 
@@ -235,28 +237,28 @@ class PtHitAndRun(_PluginBase):
                 "endpoint": self.api_clear_task,
                 "auth": "bear",
                 "methods": ["POST", "GET"],
-                "summary": "清除单个需要做种任务",
+                "summary": "从 H&R 任务列表清除单个记录",
             },
             {
                 "path": "clear_task",
                 "endpoint": self.api_clear_task,
                 "auth": "bear",
                 "methods": ["POST", "GET"],
-                "summary": "清除单个需要做种任务(兼容)",
+                "summary": "从 H&R 任务列表清除单个记录(兼容)",
             },
             {
                 "path": "/clear_task/{torrent_hash}",
                 "endpoint": self.api_clear_task_by_hash,
                 "auth": "bear",
                 "methods": ["POST", "GET"],
-                "summary": "清除单个需要做种任务",
+                "summary": "从 H&R 任务列表清除单个记录",
             },
             {
                 "path": "clear_task/{torrent_hash}",
                 "endpoint": self.api_clear_task_by_hash,
                 "auth": "bear",
                 "methods": ["POST", "GET"],
-                "summary": "清除单个需要做种任务(兼容)",
+                "summary": "从 H&R 任务列表清除单个记录(兼容)",
             },
         ]
 
@@ -277,8 +279,8 @@ class PtHitAndRun(_PluginBase):
                 send_message=self._send_message,
             )
         if self._checker.clear_task(torrent_hash):
-            return {"code": 0, "msg": "已清除需要做种任务"}
-        return {"code": 1, "msg": "任务不存在或不是需要做种状态"}
+            return {"code": 0, "msg": "已从 H&R 任务列表清除记录"}
+        return {"code": 1, "msg": "任务不存在或当前状态不允许清除"}
 
     @eventmanager.register(EventType.PluginAction)
     def on_plugin_action(self, event: Event = None):
@@ -307,10 +309,7 @@ class PtHitAndRun(_PluginBase):
             {"title": "仅异常", "value": "on_error"},
             {"title": "全部", "value": "always"},
         ]
-        brush_opts = [
-            {"title": "不监听刷流插件", "value": ""},
-            {"title": "BrushFlow 刷流", "value": "brushflow"},
-        ]
+        brush_opts = self._get_brush_plugin_options()
         return [
             {"component": "VForm", "content": [
                 # 开关行
@@ -323,14 +322,16 @@ class PtHitAndRun(_PluginBase):
                 # 下载器 + 站点
                 _row([
                     _col(4, _select("downloader", "下载器", dl_opts, multiple=True)),
-                    _col(4, _select("sites", "站点列表", site_opts, multiple=True)),
-                    _col(4, _select("brush_plugin", "刷流插件", brush_opts)),
+                    _col(8, _select("sites", "站点列表", site_opts, multiple=True)),
                 ]),
                 # 参数行
                 _row([
                     _col(3, _select("notify", "通知方式", notify_opts)),
+                    _col(3, _select("brush_plugin", "刷流插件", brush_opts)),
                     _col(3, _text("check_period", "扫描间隔(分钟)")),
                     _col(3, _text("hit_and_run_tag", "H&R标签")),
+                ]),
+                _row([
                     _col(3, _text("auto_cleanup_days", "自动清理天数")),
                 ]),
                 # 全局 H&R 规则
@@ -383,7 +384,7 @@ class PtHitAndRun(_PluginBase):
             "hr_duration": 48, "hr_deadline_days": 14,
             "additional_seed_time": 24,
             "hr_ratio": "", "hr_upload_multiplier": "",
-            "brush_plugin": "brushflow", "site_config_str": "",
+            "brush_plugin": "BrushFlow", "site_config_str": "",
         }
 
     # ---- 详情页 ----
@@ -407,6 +408,7 @@ class PtHitAndRun(_PluginBase):
                     tasks[k] = TorrentTask(**v) if isinstance(v, dict) else TorrentTask.parse_raw(v)
                 except Exception:
                     continue
+        self._refresh_page_task_states(tasks)
 
         total = len(tasks)
         in_progress = sum(1 for t in tasks.values() if t.hr_status == HNRStatus.IN_PROGRESS)
@@ -452,11 +454,11 @@ class PtHitAndRun(_PluginBase):
                         "color": status_color, "variant": "tonal", "size": "small",
                     }, "text": task.hr_status.to_chinese() if task.hr_status else "-"}]},
                 ]
-                if task.hr_status == HNRStatus.NEEDS_SEEDING and task.hash:
+                if task.hr_status in (HNRStatus.NEEDS_SEEDING, HNRStatus.COMPLIANT, HNRStatus.OVERDUE) and task.hash:
                     cells.append({"component": "td", "content": [{
                         "component": "VBtn",
                         "props": {
-                            "color": "warning", "variant": "tonal", "size": "small",
+                            "color": status_color, "variant": "tonal", "size": "small",
                             "prependIcon": "mdi-delete-clock",
                         },
                         "events": {"click": {
@@ -492,6 +494,50 @@ class PtHitAndRun(_PluginBase):
         if self._cfg:
             excludes = {"site_infos", "site_configs"}
             self.update_config(self._cfg.to_dict(exclude=excludes))
+
+    def _get_brush_plugin_options(self) -> List[Dict[str, Any]]:
+        opts = [{"title": "不监听刷流插件", "value": ""}]
+        try:
+            running_plugins = set(self._plugin_manager.get_running_plugin_ids() or [])
+            local_plugins = self._plugin_manager.get_local_plugins() or []
+        except Exception as e:
+            logger.warning(f"{LOG_PREFIX}获取刷流插件列表失败: {e}")
+            return opts
+        filter_plugins = {"BrushFlow", "BrushFlowLowFreq"}
+        for plugin in local_plugins:
+            plugin_id = getattr(plugin, "id", "")
+            if plugin_id not in running_plugins or plugin_id not in filter_plugins:
+                continue
+            title = f"{getattr(plugin, 'plugin_name', plugin_id)} v{getattr(plugin, 'plugin_version', '')}".strip()
+            opts.append({"title": f"{len(opts)}. {title}", "value": plugin_id})
+        return opts
+
+    def _refresh_page_task_states(self, tasks: Dict[str, TorrentTask]):
+        if not tasks or not self._helpers:
+            return
+        for task in tasks.values():
+            if not task.hash:
+                continue
+            th = self._helpers.get(task.downloader or "")
+            if not th:
+                th = next(iter(self._helpers.values()), None)
+            if not th:
+                continue
+            try:
+                torrents = th.get_torrents(hashes=task.hash)
+                if not torrents:
+                    task.deleted = True
+                    task.state = ""
+                    continue
+                info = th.get_torrent_info(torrents[0])
+                task.state = info.get("state", "")
+                task.seeding_time = info.get("seeding_time", task.seeding_time)
+                task.ratio = info.get("ratio", task.ratio)
+                task.uploaded = info.get("uploaded", task.uploaded)
+                task.downloaded = info.get("downloaded", task.downloaded)
+                task.deleted = False
+            except Exception as e:
+                logger.debug(f"{LOG_PREFIX}详情页刷新种子状态失败 {task.hash}: {e}")
 
     def stop_service(self):
         try:

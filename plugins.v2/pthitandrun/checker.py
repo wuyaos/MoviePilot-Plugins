@@ -347,13 +347,14 @@ class HNRChecker:
         self._save_tasks(tasks)
 
     def clear_task(self, torrent_hash: str) -> bool:
-        """清除单个需要做种任务。"""
+        """从插件任务列表清除单个已结束或异常任务，不删除下载器种子。"""
         with lock:
             tasks = self._load_tasks()
             task = tasks.get(torrent_hash)
-            if not task or task.hr_status != HNRStatus.NEEDS_SEEDING:
+            clearable = {HNRStatus.NEEDS_SEEDING, HNRStatus.COMPLIANT, HNRStatus.OVERDUE}
+            if not task or task.hr_status not in clearable:
                 return False
             del tasks[torrent_hash]
             self._save_tasks(tasks)
-            logger.info(f"{LOG_PREFIX}已清除需要做种任务: [{task.site_name}] {task.identifier}")
+            logger.info(f"{LOG_PREFIX}已从任务列表清除记录: [{task.site_name}] {task.identifier}")
             return True
