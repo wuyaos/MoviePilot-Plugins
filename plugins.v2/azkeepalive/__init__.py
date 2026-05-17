@@ -18,7 +18,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.4.3"
+    plugin_version = "2.4.4"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -209,7 +209,7 @@ class AzKeepAlive(_PluginBase):
             # ── 筛选参数 ───────────────────────────
             _sec("🔍 筛选参数"),
             v_row([
-                v_col(3, v_text("keepalive_days", "保活间隔(天)")),
+                v_col(3, v_text("keepalive_days", "插件保活间隔(天)")),
                 v_col(3, v_text("min_seeders", "最小做种数")),
                 v_col(3, v_text("max_size_gb", "最大体积(GB)")),
                 v_col(3, v_text("timeout", "超时(秒)")),
@@ -229,7 +229,7 @@ class AzKeepAlive(_PluginBase):
                 "type": "info", "variant": "tonal",
                 "text": "AZ保活策略：① 每 60 天至少登录一次，否则账号删除；"
                         "② 每 90 天至少下载 1 个种子，否则账号禁用。"
-                        "插件每次运行访问站点满足登录要求，到期前自动选种提交下载器，"
+                        "插件按保活间隔执行访问和下载，默认30天冗余保活；"
                         "种子自动打 H&R 标签，到期后自动移除（可选删除）。"
             }})]),
         ]}], {

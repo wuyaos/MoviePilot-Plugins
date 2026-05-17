@@ -59,10 +59,14 @@ def _build_status_row(state: dict[str, Any], keepalive_days: int) -> dict:
     v_days, v_text = _remain_days(last_v, 60, now)
     last_s = state.get("last_success_at", "")
     s_days, s_text = _remain_days(last_s, 90, now)
-    next_window = "未知"
-    if last_s:
+    last_checked = state.get("last_checked_at", "")
+    k_days, k_text = _remain_days(last_checked, keepalive_days, now)
+    next_window = "立即"
+    if not last_checked:
+        k_text = "首次运行"
+    if last_checked:
         try:
-            ts = dt.datetime.fromisoformat(last_s.replace("Z", "+00:00"))
+            ts = dt.datetime.fromisoformat(last_checked.replace("Z", "+00:00"))
             next_window = _fmt_time((ts + dt.timedelta(days=keepalive_days)).isoformat())
         except ValueError:
             pass
@@ -72,7 +76,8 @@ def _build_status_row(state: dict[str, Any], keepalive_days: int) -> dict:
                     "mdi-web", 3, v_text),
         _tonal_card("上次下载", _fmt_time(last_s), _urgency_color(s_days, "success"),
                     "mdi-download-circle", 3, s_text),
-        _tonal_card("下次窗口", next_window, "info", "mdi-calendar-clock", 3),
+        _tonal_card("下次保活", next_window, _urgency_color(k_days, "info"),
+                    "mdi-calendar-clock", 3, k_text),
     ]}
 
 

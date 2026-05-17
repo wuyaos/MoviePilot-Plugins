@@ -41,11 +41,12 @@
     "name": "AnimeZ保活",
     "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
     "labels": "保活,AnimeZ",
-    "version": "2.4.3",
+    "version": "2.4.4",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v2.4.4": "普通/定时/立即运行统一按插件保活间隔执行，未到间隔不访问不下载；强制保活绕过间隔，面板单独显示AZ访问/下载剩余和下次插件保活",
       "v2.4.3": "规范插件服务与定时任务注册：cron无效时停止注册，随机任务使用唯一ID和CronTrigger，并新增立即运行/强制保活服务项",
       "v2.4.2": "修复通知类型导入；无下载器时仍尝试站点访问保活；登录态确认后才更新上次访问；Transmission 提交种子附带 H&R 标签；清理临时种子文件并修正非 Free 策略日志",
       "v2.4.1": "修复服务 ID 由通用 \"cron\" 改为 \"AzKeepAlive\"，避免多插件 job ID 冲突导致定时任务不触发",

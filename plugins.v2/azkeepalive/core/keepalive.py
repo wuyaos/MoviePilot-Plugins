@@ -27,6 +27,11 @@ def run_keepalive(
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
     proxies = app_settings.PROXY if use_proxy else None
 
+    should, reason = _should_run(state, keepalive_days, now, force=force)
+    if not should:
+        _append(state, "skipped", now, reason=reason, checked=False)
+        return "skipped", _skip_msg(state, keepalive_days, now, reason), state
+
     # 每次访问站点（模拟登录 + 抓取用户信息）
     if site_url:
         if not cookie:
@@ -47,11 +52,6 @@ def run_keepalive(
         done = dl_check_hnr(downloader_instance, category, auto_delete=auto_delete_hnr)
         if done:
             logger.info(f"AZ保活: H&R完成 {len(done)} 个: {', '.join(done[:3])}")
-
-    should, reason = _should_run(state, keepalive_days, now, force=force)
-    if not should:
-        _append(state, "skipped", now, reason=reason)
-        return "skipped", _skip_msg(state, keepalive_days, now, reason), state
 
     if not downloader_instance:
         msg = "下载器未配置或不可用，已跳过下载保活；站点访问已尝试执行"
@@ -184,17 +184,18 @@ def _should_run(state: dict[str, Any], days: int, now: dt.datetime,
                 force: bool = False) -> tuple[bool, str]:
     if force:
         return True, "强制保活"
-    last = _parse_ts(state.get("last_success_at"))
+    last = _parse_ts(state.get("last_checked_at"))
     if last is None:
-        return True, "无历史成功记录"
+        return True, "首次运行"
     if now - last >= dt.timedelta(days=days):
-        return True, "已到保活窗口"
-    return False, "未到保活窗口"
+        return True, "已到插件保活间隔"
+    return False, "未到插件保活间隔"
 
 
 def _append(
     state: dict[str, Any], status: str, now: dt.datetime,
     reason: str = "", item: FeedItem | None = None, infohash: str = "",
+    checked: bool = True,
 ) -> None:
     ev: dict[str, Any] = {"time": _ts(now), "status": status}
     if reason:
@@ -213,17 +214,17 @@ def _append(
         state["last_success_at"] = _ts(now)
         if item:
             state["last_title"] = item.title
-    if status in {"success", "no_candidate", "skipped"}:
+    if checked:
         state["last_checked_at"] = _ts(now)
 
 
 def _skip_msg(state: dict[str, Any], days: int, now: dt.datetime, reason: str) -> str:
-    last = _parse_ts(state.get("last_success_at"))
+    last = _parse_ts(state.get("last_checked_at"))
     nxt = _ts(last + dt.timedelta(days=days)) if last else "未知"
     return (f"⏭ 跳过本次执行\n━━━━━━━━━━━━━\n"
             f"📋 原因: {reason}\n"
-            f"✅ 上次成功: {state.get('last_success_at', '无')}\n"
-            f"📅 下次窗口: {nxt}")
+            f"🕒 上次保活: {state.get('last_checked_at', '无')}\n"
+            f"📅 下次保活: {nxt}")
 
 
 def _ts(t: dt.datetime) -> str:
