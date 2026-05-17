@@ -5,14 +5,16 @@
 from __future__ import annotations
 
 import datetime as dt
+import base64
+import hashlib
 import mimetypes
 import os
 import re
 import shutil
 import threading
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import quote
 
 from app.core.event import eventmanager, Event
 from app.helper.mediaserver import MediaServerHelper
@@ -35,7 +37,7 @@ class CoverGen(_PluginBase):
     plugin_name = "媒体库封面生成"
     plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
-    plugin_version = "1.4.3"
+    plugin_version = "1.4.4"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "covergen_"
@@ -347,7 +349,7 @@ class CoverGen(_PluginBase):
         return target if target.is_file() else None
 
     def _image_cache_dirs(self) -> List[Path]:
-        return [self.get_data_path() / "input"]
+        return [self.get_data_path() / "input", self._history_thumbs_dir()]
 
     def _clean_directory(self, directory: Path) -> int:
         removed = 0
@@ -398,8 +400,50 @@ class CoverGen(_PluginBase):
                 return value
         return ""
 
+    def _history_thumbs_dir(self) -> Path:
+        return self.get_data_path() / "history_thumbs"
+
+    @staticmethod
+    def _history_thumb_key(path: Path, *, size: int, mtime_ns: int) -> str:
+        raw = f"{path.name}|{size}|{mtime_ns}".encode("utf-8", "ignore")
+        return hashlib.md5(raw).hexdigest()
+
+    def _history_thumb_src(self, path: Path, *, size: int, mtime_ns: int) -> str:
+        """返回历史封面缩略图 data URI，避免详情页请求受保护的插件图片接口。"""
+        thumbs_dir = self._history_thumbs_dir()
+        thumb = thumbs_dir / f"{self._history_thumb_key(path, size=size, mtime_ns=mtime_ns)}.jpg"
+        try:
+            if not thumb.is_file():
+                thumbs_dir.mkdir(parents=True, exist_ok=True)
+                from PIL import Image, ImageOps
+
+                with Image.open(path) as img:
+                    try:
+                        img.seek(0)
+                    except Exception:
+                        pass
+                    img = ImageOps.exif_transpose(img)
+                    if img.mode in ("RGBA", "LA", "P"):
+                        img = img.convert("RGBA")
+                        background = Image.new("RGBA", img.size, (24, 24, 24, 255))
+                        background.alpha_composite(img)
+                        img = background.convert("RGB")
+                    elif img.mode != "RGB":
+                        img = img.convert("RGB")
+                    img.thumbnail((480, 270), Image.LANCZOS)
+                    buffer = BytesIO()
+                    img.save(buffer, format="JPEG", quality=82, optimize=True)
+                    thumb.write_bytes(buffer.getvalue())
+            data = thumb.read_bytes()
+            if not data:
+                return ""
+            return f"data:image/jpeg;base64,{base64.b64encode(data).decode('ascii')}"
+        except Exception as e:
+            logger.warning(f"【CoverGen】生成历史封面缩略图失败: {path.name} -> {e}")
+            return ""
+
     def _get_recent_covers(self) -> List[Dict[str, Any]]:
-        """扫描历史封面输出目录，返回最近 N 张元数据和异步图片地址。"""
+        """扫描历史封面输出目录，返回最近 N 张元数据和本地缩略图。"""
         covers_dir = self._cfg.covers_output
         if not covers_dir:
             data_path = self.get_data_path()
@@ -424,15 +468,15 @@ class CoverGen(_PluginBase):
                     continue
                 lib_value = self._history_library_value(p.name)
                 stat = p.stat()
-                files.append((p, lib_value, stat.st_mtime, stat.st_size))
+                files.append((p, lib_value, stat.st_mtime, stat.st_mtime_ns, stat.st_size))
             files.sort(key=lambda x: (1 if x[1] in hidden_lib_ids else 0, -x[2]))
-            for f, lib_value, mtime, size in files:
+            for f, lib_value, mtime, mtime_ns, size in files:
                 ext = f.suffix.lower()
                 results.append({
                     "file": f.name,
                     "label": f.stem,
                     "library_value": lib_value,
-                    "src": f"/api/v1/plugin/{self.SERVICE_ID}/saved_cover_image?file={quote(f.name)}",
+                    "src": self._history_thumb_src(f, size=size, mtime_ns=mtime_ns),
                     "ext": ext.lstrip(".").upper(),
                     "size": _size_label(size),
                     "mtime": dt.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M"),

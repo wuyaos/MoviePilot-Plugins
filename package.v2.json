@@ -3,11 +3,12 @@
     "name": "媒体库封面生成",
     "description": "自动生成媒体库封面（模块化重构版），支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin",
     "labels": "封面,媒体库",
-    "version": "1.4.3",
+    "version": "1.4.4",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png",
     "author": "wuyaos",
     "level": 1,
     "history": {
+      "v1.4.4": "历史封面改为本地缩略图缓存+base64展示，保留真实历史图片并避免插件图片接口鉴权导致不显示",
       "v1.4.3": "详情页历史封面改为元数据+图片URL异步加载，移除设置页清理缓存区块并美化详情页清理操作区，减少页面加载时的大图读取",
       "v1.4.2": "修复内部子模块使用绝对 app.plugins.covergen 路径导致 MoviePilot 运行时找不到 core/font 的加载失败",
       "v1.4.1": "修复风格选择持久化、清理/删除封面缓存实际执行、历史封面保存开关生效，并加强历史封面读取校验",
