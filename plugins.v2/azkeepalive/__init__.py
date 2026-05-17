@@ -18,7 +18,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.4.2"
+    plugin_version = "2.4.3"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -124,6 +124,9 @@ class AzKeepAlive(_PluginBase):
             self.post_message(title="【AnimeZ保活】",
                               mtype=NotificationType.SiteMessage, text=message)
 
+    def _run_force_task(self):
+        self._run_task(force=True)
+
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
         return []
@@ -134,19 +137,39 @@ class AzKeepAlive(_PluginBase):
     def get_service(self) -> List[Dict[str, Any]]:
         if not self._enabled:
             return []
+        services = []
         if self._cron:
             try:
-                return [{"id": "AzKeepAlive", "name": "AnimeZ保活",
-                         "trigger": CronTrigger.from_crontab(self._cron),
-                         "func": self._run_task, "kwargs": {}}]
+                if self._cron.count(" ") != 4:
+                    logger.error("AnimeZ保活 cron 错误: 需要 5 位 cron 表达式")
+                    return []
+                services.append({"id": "AzKeepAlive", "name": "AnimeZ保活定时任务",
+                                 "trigger": CronTrigger.from_crontab(self._cron),
+                                 "func": self._run_task, "kwargs": {}})
             except Exception as e:
                 logger.error(f"AnimeZ保活 cron 错误: {e}")
-        # 无 cron 时每天随机执行一次（9-23点间）
-        triggers = TimerUtils.random_scheduler(
-            num_executions=1, begin_hour=9, end_hour=23, min_interval=60, max_interval=120)
-        return [{"id": "AzKeepAlive", "name": "AnimeZ保活",
-                 "trigger": "cron", "func": self._run_task,
-                 "kwargs": {"hour": t.hour, "minute": t.minute}} for t in triggers]
+                return []
+        else:
+            # 无 cron 时每天随机执行一次（9-23点间）
+            triggers = TimerUtils.random_scheduler(
+                num_executions=1, begin_hour=9, end_hour=23, min_interval=60, max_interval=120)
+            if not triggers:
+                logger.error("AnimeZ保活未生成有效随机定时任务")
+                return []
+            logger.info("AnimeZ保活随机触发时间：%s" %
+                        ", ".join([f"{t.hour:02d}:{t.minute:02d}" for t in triggers]))
+            for t in triggers:
+                services.append({"id": f"AzKeepAlive.{t.hour:02d}{t.minute:02d}",
+                                 "name": f"AnimeZ保活定时任务 {t.hour:02d}:{t.minute:02d}",
+                                 "trigger": CronTrigger(hour=t.hour, minute=t.minute),
+                                 "func": self._run_task, "kwargs": {}})
+        services.extend([
+            {"id": "AzKeepAliveRunNow", "name": "AnimeZ保活-立即运行",
+             "trigger": None, "func": self._run_task, "kwargs": {}},
+            {"id": "AzKeepAliveForceRun", "name": "AnimeZ保活-强制保活",
+             "trigger": None, "func": self._run_force_task, "kwargs": {}},
+        ])
+        return services
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         try:
