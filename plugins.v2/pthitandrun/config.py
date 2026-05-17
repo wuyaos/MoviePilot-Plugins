@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Dict, List, Optional, Union, get_args, get_origin
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, root_validator, validator
 from ruamel.yaml import YAML, YAMLError
@@ -67,6 +67,8 @@ class BaseConfig(BaseModel):
         return None
 
     def to_dict(self, **kwargs) -> dict:
+        if hasattr(self, "model_dump"):
+            return self.model_dump(mode="json", **kwargs)
         return json.loads(self.json(**kwargs))
 
 
@@ -88,7 +90,7 @@ class HNRConfig(BaseConfig):
     auto_cleanup_days: float = 15
     auto_discover: Optional[bool] = False        # 自动发现下载器中未纳管的种子
     auto_monitor: Optional[bool] = False
-    brush_plugin: Optional[str] = None
+    brush_plugin: Optional[str] = "brushflow"
     # ---- 站点独立配置 ----
     enable_site_config: Optional[bool] = False
     site_config_str: Optional[str] = None
@@ -143,14 +145,6 @@ class HNRConfig(BaseConfig):
         return SiteConfig(**base, site_name=site_name)
 
 
-def _is_float_type(ft) -> bool:
-    if ft is float:
-        return True
-    if get_origin(ft) is Union:
-        return float in get_args(ft)
-    return False
-
-
 def _clean_empty_strings(data: dict):
     """将空字符串转为 None，避免 Pydantic V2 float/bool 解析失败。保留 str 字段的空字符串。"""
     # 需要转 None 的字段类型
@@ -168,15 +162,22 @@ def _parse_yaml(yaml_str: str) -> Optional[Dict[str, SiteConfig]]:
     yaml = YAML(typ="safe")
     try:
         data = yaml.load(yaml_str)
+        if not isinstance(data, list):
+            logger.error("YAML 顶层必须是列表，每个站点配置以 '-' 开头")
+            return None
         configs: Dict[str, SiteConfig] = {}
         for item in data:
+            if not isinstance(item, dict):
+                logger.error("YAML 站点配置必须是键值对象，已跳过非对象条目")
+                continue
             name = item.get("site_name")
             if not name:
                 continue
             try:
                 # 处理 size_tiers
-                tiers_raw = item.pop("hr_size_tiers", None)
-                cfg = SiteConfig(**item)
+                item_data = dict(item)
+                tiers_raw = item_data.pop("hr_size_tiers", None)
+                cfg = SiteConfig(**item_data)
                 if tiers_raw and isinstance(tiers_raw, list):
                     cfg.hr_size_tiers = [SizeTier(**t) for t in tiers_raw]
                 configs[name] = cfg
@@ -185,4 +186,7 @@ def _parse_yaml(yaml_str: str) -> Optional[Dict[str, SiteConfig]]:
         return configs
     except YAMLError as e:
         logger.error(f"YAML 解析错误: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"YAML 配置无效: {e}")
         return None

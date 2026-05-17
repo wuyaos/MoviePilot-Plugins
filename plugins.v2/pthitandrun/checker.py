@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 from app.log import logger
 
 from app.plugins.pthitandrun.config import HNRConfig, SiteConfig
-from app.plugins.pthitandrun.entities import HNRStatus, TaskType, TorrentHistory, TorrentTask
+from app.plugins.pthitandrun.entities import HNRStatus, TaskType, TorrentTask
 from app.plugins.pthitandrun.helper import TorrentHelper
 
 LOG_PREFIX = "【PtH&R】"
@@ -94,6 +94,12 @@ class HNRChecker:
                 th = self._get_helper(dl_name)
                 if th:
                     self._update_task_stats(task, torrent, th)
+                if task.deleted:
+                    task.deleted = False
+                    task.deleted_time = None
+                    if task.hr_status == HNRStatus.NEEDS_SEEDING:
+                        task.hr_status = HNRStatus.IN_PROGRESS
+                    logger.info(f"{LOG_PREFIX}种子已恢复做种: [{task.site_name}] {task.identifier}")
                 # 补填历史任务缺失的 downloader
                 if not task.downloader and dl_name:
                     task.downloader = dl_name
@@ -124,12 +130,13 @@ class HNRChecker:
         task.ratio = info.get("ratio", 0)
         task.uploaded = info.get("uploaded", 0)
         task.downloaded = info.get("downloaded", 0)
+        task.state = info.get("state", "")
 
     def _update_hr_status(self, task: TorrentTask):
         """根据当前统计更新 H&R 状态。"""
         if not task.hit_and_run:
             return
-        if task.hr_status != HNRStatus.IN_PROGRESS:
+        if task.hr_status not in (HNRStatus.IN_PROGRESS, HNRStatus.NEEDS_SEEDING):
             return
 
         site_cfg = self._cfg.get_site_config(task.site_name or "")
@@ -153,7 +160,7 @@ class HNRChecker:
             logger.info(f"{LOG_PREFIX}✓ 已满足: [{task.site_name}] {task.identifier} "
                         f"做种{seeding_h:.1f}h/{required_h}h 率{task.ratio:.2f}")
             self._notify(task, "【H&R 已完成】")
-        elif time.time() > task.deadline_time:
+        elif task.hr_deadline_days and task.hr_deadline_days > 0 and time.time() > task.deadline_time:
             task.hr_status = HNRStatus.OVERDUE
             logger.warning(f"{LOG_PREFIX}✗ 已过期: [{task.site_name}] {task.identifier} "
                            f"做种{seeding_h:.1f}h/{required_h}h 截止{deadline_str}")
@@ -207,6 +214,7 @@ class HNRChecker:
                     ratio=info.get("ratio", 0),
                     uploaded=info.get("uploaded", 0),
                     downloaded=info.get("downloaded", 0),
+                    state=info.get("state", ""),
                     downloader=dl_name,
                 )
                 self._init_hr_params(task, site_cfg)
@@ -337,3 +345,15 @@ class HNRChecker:
         if task.hash:
             tasks[task.hash] = task
         self._save_tasks(tasks)
+
+    def clear_task(self, torrent_hash: str) -> bool:
+        """清除单个需要做种任务。"""
+        with lock:
+            tasks = self._load_tasks()
+            task = tasks.get(torrent_hash)
+            if not task or task.hr_status != HNRStatus.NEEDS_SEEDING:
+                return False
+            del tasks[torrent_hash]
+            self._save_tasks(tasks)
+            logger.info(f"{LOG_PREFIX}已清除需要做种任务: [{task.site_name}] {task.identifier}")
+            return True

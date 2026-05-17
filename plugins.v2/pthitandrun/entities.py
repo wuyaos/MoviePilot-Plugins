@@ -96,6 +96,7 @@ class TorrentTask(TorrentHistory):
     downloaded: Optional[float] = 0.0
     uploaded: Optional[float] = 0.0
     seeding_time: Optional[float] = 0.0      # 做种时间（秒）
+    state: Optional[str] = None              # 下载器原始状态
     deleted: Optional[bool] = False
     deleted_time: Optional[float] = None
     hr_met_time: Optional[float] = None       # 满足 H&R 的时间戳
@@ -111,8 +112,26 @@ class TorrentTask(TorrentHistory):
         return self.time + (self.hr_deadline_days or 0) * 86400
 
     def formatted_deadline(self) -> str:
+        if not self.hr_deadline_days or self.hr_deadline_days <= 0:
+            return "-"
         dt = datetime.fromtimestamp(self.deadline_time, pytz.timezone(settings.TZ))
         return dt.strftime("%Y-%m-%d %H:%M")
+
+    def state_to_chinese(self) -> str:
+        if self.deleted:
+            return "已删除"
+        state = (self.state or "").lower()
+        if not state:
+            return "-"
+        if state in {"uploading", "stalledup", "forcedup", "checkingup", "queuedup"}:
+            return "做种"
+        if state in {"downloading", "stalleddl", "forceddl", "checkingdl", "queueddl", "metadl"}:
+            return "下载"
+        if state in {"pausedup", "pauseddl", "stoppedup", "stoppeddl"}:
+            return "暂停"
+        if state in {"error", "missingfiles"}:
+            return "错误"
+        return self.state or "-"
 
     def remain_time(self, additional_seed_time: float = 0.0) -> Optional[float]:
         """剩余做种时间（小时），已满足返回 None。"""

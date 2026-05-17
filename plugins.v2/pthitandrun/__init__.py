@@ -19,12 +19,12 @@ from app.helper.downloader import DownloaderHelper
 from app.helper.sites import SitesHelper
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas import NotificationType, ServiceInfo
+from app.schemas import NotificationType
 from app.schemas.types import EventType
 
 from app.plugins.pthitandrun.checker import HNRChecker
-from app.plugins.pthitandrun.config import HNRConfig, NotifyMode
-from app.plugins.pthitandrun.entities import HNRStatus, TaskType, TorrentHistory, TorrentTask
+from app.plugins.pthitandrun.config import HNRConfig
+from app.plugins.pthitandrun.entities import HNRStatus, TaskType, TorrentTask
 from app.plugins.pthitandrun.helper import TorrentHelper
 
 LOG_PREFIX = "【PtH&R】"
@@ -34,7 +34,7 @@ class PtHitAndRun(_PluginBase):
     plugin_name = "H&R助手Pro"
     plugin_desc = "PT站H&R种子自动标签管理，支持多条件OR判定、按大小分级、自动发现。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hitandrun.png"
-    plugin_version = "1.2.0"
+    plugin_version = "1.2.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pthitandrun_"
@@ -56,15 +56,19 @@ class PtHitAndRun(_PluginBase):
     def init_plugin(self, config: dict = None):
         self.stop_service()
         if not config:
+            self._reset_runtime()
             return
         try:
             self._cfg = HNRConfig(**config)
         except Exception as e:
+            self._reset_runtime()
             logger.error(f"{LOG_PREFIX}配置解析失败: {e}")
             return
 
         downloaders = self._get_downloaders()
         if not downloaders:
+            self._checker = None
+            self._helpers = {}
             return
         self._helpers = downloaders
         self._checker = HNRChecker(
@@ -122,6 +126,8 @@ class PtHitAndRun(_PluginBase):
             return
         if not event or not event.event_data:
             return
+        if not self._cfg.brush_plugin:
+            return
         if event.event_data.get("event_name") != "brushflow_download_added":
             return
         downloader = event.event_data.get("downloader")
@@ -173,6 +179,7 @@ class PtHitAndRun(_PluginBase):
             ratio=info.get("ratio", 0),
             uploaded=info.get("uploaded", 0),
             downloaded=info.get("downloaded", 0),
+            state=info.get("state", ""),
             downloader=downloader_name,
         )
         if not self._checker.init_task(task):
@@ -222,7 +229,56 @@ class PtHitAndRun(_PluginBase):
         ]
 
     def get_api(self) -> List[Dict[str, Any]]:
-        pass
+        return [
+            {
+                "path": "/clear_task",
+                "endpoint": self.api_clear_task,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "清除单个需要做种任务",
+            },
+            {
+                "path": "clear_task",
+                "endpoint": self.api_clear_task,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "清除单个需要做种任务(兼容)",
+            },
+            {
+                "path": "/clear_task/{torrent_hash}",
+                "endpoint": self.api_clear_task_by_hash,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "清除单个需要做种任务",
+            },
+            {
+                "path": "clear_task/{torrent_hash}",
+                "endpoint": self.api_clear_task_by_hash,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "清除单个需要做种任务(兼容)",
+            },
+        ]
+
+    def api_clear_task(self, hash: str = "", body: dict = None) -> Dict[str, Any]:
+        torrent_hash = (hash or "").strip()
+        if not torrent_hash and isinstance(body, dict):
+            torrent_hash = str(body.get("hash") or "").strip()
+        return self.api_clear_task_by_hash(torrent_hash)
+
+    def api_clear_task_by_hash(self, torrent_hash: str = "") -> Dict[str, Any]:
+        torrent_hash = (torrent_hash or "").strip()
+        if not torrent_hash:
+            return {"code": 1, "msg": "缺少种子 Hash"}
+        if not self._checker:
+            self._checker = HNRChecker(
+                config=self._cfg or HNRConfig(), helpers=self._helpers,
+                get_data=self.get_data, save_data=self.save_data,
+                send_message=self._send_message,
+            )
+        if self._checker.clear_task(torrent_hash):
+            return {"code": 0, "msg": "已清除需要做种任务"}
+        return {"code": 1, "msg": "任务不存在或不是需要做种状态"}
 
     @eventmanager.register(EventType.PluginAction)
     def on_plugin_action(self, event: Event = None):
@@ -251,6 +307,10 @@ class PtHitAndRun(_PluginBase):
             {"title": "仅异常", "value": "on_error"},
             {"title": "全部", "value": "always"},
         ]
+        brush_opts = [
+            {"title": "不监听刷流插件", "value": ""},
+            {"title": "BrushFlow 刷流", "value": "brushflow"},
+        ]
         return [
             {"component": "VForm", "content": [
                 # 开关行
@@ -263,7 +323,8 @@ class PtHitAndRun(_PluginBase):
                 # 下载器 + 站点
                 _row([
                     _col(4, _select("downloader", "下载器", dl_opts, multiple=True)),
-                    _col(8, _select("sites", "站点列表", site_opts, multiple=True)),
+                    _col(4, _select("sites", "站点列表", site_opts, multiple=True)),
+                    _col(4, _select("brush_plugin", "刷流插件", brush_opts)),
                 ]),
                 # 参数行
                 _row([
@@ -322,7 +383,7 @@ class PtHitAndRun(_PluginBase):
             "hr_duration": 48, "hr_deadline_days": 14,
             "additional_seed_time": 24,
             "hr_ratio": "", "hr_upload_multiplier": "",
-            "site_config_str": "",
+            "brush_plugin": "brushflow", "site_config_str": "",
         }
 
     # ---- 详情页 ----
@@ -373,12 +434,16 @@ class PtHitAndRun(_PluginBase):
                     HNRStatus.IN_PROGRESS: "info", HNRStatus.COMPLIANT: "success",
                     HNRStatus.OVERDUE: "error", HNRStatus.NEEDS_SEEDING: "warning",
                 }.get(task.hr_status, "grey")
-                remain = task.remain_time()
+                additional = 0.0
+                if self._cfg:
+                    additional = self._cfg.get_site_config(task.site_name or "").additional_seed_time or 0.0
+                remain = task.remain_time(additional)
                 remain_str = f"{remain:.1f}h" if remain is not None else "-"
-                rows.append({"component": "tr", "content": [
+                cells = [
                     {"component": "td", "text": task.downloader or "-"},
                     {"component": "td", "text": task.site_name or "-"},
                     {"component": "td", "text": (task.title or "-")[:40]},
+                    {"component": "td", "text": task.state_to_chinese()},
                     {"component": "td", "text": f"{(task.seeding_time or 0) / 3600:.1f}h"},
                     {"component": "td", "text": f"{task.ratio:.2f}"},
                     {"component": "td", "text": remain_str},
@@ -386,11 +451,27 @@ class PtHitAndRun(_PluginBase):
                     {"component": "td", "content": [{"component": "VChip", "props": {
                         "color": status_color, "variant": "tonal", "size": "small",
                     }, "text": task.hr_status.to_chinese() if task.hr_status else "-"}]},
-                ]})
+                ]
+                if task.hr_status == HNRStatus.NEEDS_SEEDING and task.hash:
+                    cells.append({"component": "td", "content": [{
+                        "component": "VBtn",
+                        "props": {
+                            "color": "warning", "variant": "tonal", "size": "small",
+                            "prependIcon": "mdi-delete-clock",
+                        },
+                        "events": {"click": {
+                            "api": f"plugin/{self.__class__.__name__}/clear_task/{task.hash}",
+                            "method": "post",
+                        }},
+                        "text": "清除",
+                    }]})
+                else:
+                    cells.append({"component": "td", "text": "-"})
+                rows.append({"component": "tr", "content": cells})
             table = {"component": "VTable", "props": {"density": "compact"}, "content": [
                 {"component": "thead", "content": [{"component": "tr", "content": [
                     {"component": "th", "text": h} for h in
-                    ["下载器", "站点", "种子", "做种", "分享率", "剩余", "截止", "状态"]
+                    ["下载器", "站点", "种子", "状态", "做种", "分享率", "剩余", "截止", "H&R", "操作"]
                 ]}]},
                 {"component": "tbody", "content": rows},
             ]}
@@ -423,6 +504,12 @@ class PtHitAndRun(_PluginBase):
                 self._scheduler = None
         except Exception:
             pass
+        self._reset_runtime()
+
+    def _reset_runtime(self):
+        self._cfg = None
+        self._checker = None
+        self._helpers = {}
 
 
 # ---- UI 工具函数 ----
@@ -446,8 +533,15 @@ def _text(model: str, label: str) -> dict:
     return {"component": "VTextField", "props": {"model": model, "label": label}}
 
 def _stat_card(title: str, value: str, icon: str, color: str) -> dict:
-    return {"component": "VCard", "props": {"variant": "tonal", "class": "pa-3 text-center"}, "content": [
-        {"component": "VIcon", "props": {"icon": icon, "color": color, "size": "28"}},
-        {"component": "div", "props": {"class": "text-h6 mt-1"}, "text": value},
-        {"component": "div", "props": {"class": "text-caption"}, "text": title},
+    return {"component": "VCard", "props": {
+        "variant": "tonal", "color": color,
+        "class": "pa-3 text-center fill-height d-flex flex-column align-center justify-center",
+    }, "content": [
+        {"component": "div", "props": {
+            "class": f"text-subtitle-1 font-weight-medium text-{color}",
+        }, "text": title},
+        {"component": "div", "props": {
+            "class": f"text-h5 font-weight-bold mt-1 text-{color}",
+        }, "text": value},
+        {"component": "VIcon", "props": {"icon": icon, "color": color, "size": "28", "class": "mt-1"}},
     ]}
