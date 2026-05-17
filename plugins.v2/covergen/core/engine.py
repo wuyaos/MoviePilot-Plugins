@@ -40,6 +40,7 @@ class RunStats(BaseModel):
     mode: str = "all"
     trigger: str = ""  # cron / transfer / manual / command
     dry_run: bool = False
+    message: str = ""
     success: int = 0
     failed: int = 0
     skipped: int = 0
@@ -88,8 +89,12 @@ class CoverEngine:
             target_server: str = "", target_library_id: str = "",
             target_item_id: str = "") -> RunStats:
         if not self._lock.acquire(blocking=False):
-            logger.info(f"{LOG_PREFIX} 已有任务运行中，跳过本次触发（trigger={trigger or 'manual'}）")
-            return RunStats(trigger=trigger, mode=mode)
+            msg = f"已有任务运行中，跳过本次触发（trigger={trigger or 'manual'}）"
+            logger.info(f"{LOG_PREFIX} {msg}")
+            stats = RunStats(trigger=trigger, mode=mode, message=msg)
+            stats.record(target_server or "", target_library_id or "", "", "skipped", "running")
+            stats.finish()
+            return stats
         try:
             return self._run_inner(servers, mode=mode, trigger=trigger,
                                    target_server=target_server,
@@ -190,7 +195,8 @@ class CoverEngine:
                 Path(fp).write_bytes(b64mod.b64decode(b64))
                 self._cleanup_history_covers(covers_dir, safe_s, safe_l)
                 logger.info(f"{LOG_PREFIX} 封面已保存: {fp}")
-            ok = image_io.upload_library_image(service, lib, data, on_save_local=_save_cb)
+            save_cb = _save_cb if self.cfg.save_recent_covers else None
+            ok = image_io.upload_library_image(service, lib, data, on_save_local=save_cb)
             return ok, "updated" if ok else "upload_failed"
         return False, "generate_failed"
 

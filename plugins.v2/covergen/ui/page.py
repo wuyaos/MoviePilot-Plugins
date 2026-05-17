@@ -208,6 +208,8 @@ def build_page(*, enabled: bool, has_servers: bool, cover_style: str,
             *_build_generate(enabled=enabled, has_servers=has_servers,
                              cover_style=cover_style, plugin_id=plugin_id),
             *_build_history(covers, plugin_id),
+            v_divider_section("🧹 清理缓存"),
+            *_build_clean(plugin_id),
             v_divider_section("📊 最近执行"),
             *_build_run_status(run_history, last_run),
         ]

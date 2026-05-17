@@ -8,6 +8,7 @@ import base64
 import mimetypes
 import os
 import re
+import shutil
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -33,7 +34,7 @@ class CoverGen(_PluginBase):
     plugin_name = "媒体库封面生成"
     plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
-    plugin_version = "1.4.0"
+    plugin_version = "1.4.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "covergen_"
@@ -63,6 +64,14 @@ class CoverGen(_PluginBase):
 
         self._font_mgr = FontManager(data_path / "fonts")
         self._scheduler = Scheduler(stop_event=self._event, delay=self._cfg.delay)
+        if self._cfg.clean_images or self._cfg.clean_fonts:
+            if self._cfg.clean_images:
+                self.api_clean_images()
+            if self._cfg.clean_fonts:
+                self.api_clean_fonts()
+            self._cfg.clean_images = False
+            self._cfg.clean_fonts = False
+            self._update_config()
 
         # 初始化服务器
         if self._cfg.selected_servers:
@@ -191,7 +200,10 @@ class CoverGen(_PluginBase):
     # ---- API 处理方法 ----
 
     def api_clean_images(self):
-        return {"code": 0, "msg": "图片缓存清理完成"}
+        removed = 0
+        for directory in self._image_cache_dirs():
+            removed += self._clean_directory(directory)
+        return {"code": 0, "msg": f"图片缓存清理完成，删除 {removed} 项"}
 
     def api_clean_fonts(self):
         if self._font_mgr:
@@ -199,31 +211,59 @@ class CoverGen(_PluginBase):
         return {"code": 0, "msg": "字体缓存清理完成"}
 
     def api_delete_saved_cover(self, file: str = ""):
-        return {"code": 0, "msg": "删除成功"}
+        target = self._safe_saved_cover_path(file)
+        if not target:
+            return {"code": 1, "msg": "图片不存在或路径非法"}
+        try:
+            target.unlink(missing_ok=True)
+            return {"code": 0, "msg": "删除成功"}
+        except Exception as e:
+            logger.warning(f"【CoverGen】删除历史封面失败: {target} -> {e}")
+            return {"code": 1, "msg": "删除失败"}
 
     def api_generate_now(self, style: str = ""):
         if not self._engine or not self._cfg.enabled:
             return {"code": 1, "msg": "插件未启用"}
         stats = self._engine.run(self._servers)
-        return {"code": 0, "msg": stats.finish()}
+        return {"code": 0, "msg": stats.message or stats.finish()}
 
     def api_generate_library_now(self, server: str = "", library_id: str = "", item_id: str = "", style: str = ""):
         if not self._engine or not self._cfg.enabled:
             return {"code": 1, "msg": "插件未启用"}
         stats = self._engine.run(self._servers, mode="manual_single",
                                  target_server=server, target_library_id=library_id, target_item_id=item_id)
-        return {"code": 0, "msg": stats.finish()}
+        return {"code": 0, "msg": stats.message or stats.finish()}
 
     def api_set_cover_style(self, style: str = ""):
-        return {"code": 0, "msg": f"已保存风格: {style}"}
+        from app.plugins.covergen.core.config import VALID_STYLES
+        style = (style or "").strip()
+        if style not in VALID_STYLES:
+            return {"code": 1, "msg": "不支持的风格"}
+        if style.startswith("animated_"):
+            self._cfg.cover_style_base = f"static_{style.rsplit('_', 1)[-1]}"
+            self._cfg.cover_style_variant = "animated"
+        else:
+            self._cfg.cover_style_base = style
+            self._cfg.cover_style_variant = "static"
+        self._cfg.cover_style = self._cfg.compose_style()
+        if self._engine:
+            self._engine.cfg = self._cfg
+        self._update_config()
+        return {"code": 0, "msg": f"已保存风格: {self._cfg.cover_style}"}
 
     def api_toggle_style_variant(self):
-        return {"code": 0, "msg": "已切换"}
+        self._cfg.cover_style_variant = "animated" if self._cfg.cover_style_variant == "static" else "static"
+        self._cfg.cover_style = self._cfg.compose_style()
+        if self._engine:
+            self._engine.cfg = self._cfg
+        self._update_config()
+        return {"code": 0, "msg": f"已切换为 {self._cfg.cover_style}"}
 
     def api_select_style_1(self): return self.api_set_cover_style("static_1")
     def api_select_style_2(self): return self.api_set_cover_style("static_2")
     def api_select_style_3(self): return self.api_set_cover_style("static_3")
     def api_select_style_4(self): return self.api_set_cover_style("static_4")
+    def api_select_style_5(self): return self.api_set_cover_style("static_5")
     def api_set_page_tab_generate(self): return self._set_tab("generate-tab")
     def api_set_page_tab_history(self): return self._set_tab("history-tab")
     def api_set_page_tab_clean(self): return self._set_tab("clean-tab")
@@ -236,15 +276,8 @@ class CoverGen(_PluginBase):
     def api_saved_cover_image(self, file: str = ""):
         if not file:
             return {"code": 1, "msg": "参数缺失"}
-        covers_dir = self._cfg.covers_output
-        if not covers_dir:
-            covers_dir = str(self.get_data_path() / "covers")
-        # 只接受文件名（无路径分隔符），防止路径穿越
-        safe_name = os.path.basename(file)
-        if not safe_name or safe_name != file:
-            return {"code": 1, "msg": "非法路径"}
-        target = Path(covers_dir) / safe_name
-        if not target.is_file():
+        target = self._safe_saved_cover_path(file)
+        if not target:
             return {"code": 1, "msg": "图片不存在"}
         mime_type, _ = mimetypes.guess_type(str(target))
         if not mime_type:
@@ -288,6 +321,49 @@ class CoverGen(_PluginBase):
         self._scheduler.debounce_transfer("cover:transfer:batch", self._run_all, trigger="transfer")
 
     # ---- 辅助 ----
+
+    @staticmethod
+    def _is_image_filename(name: str) -> bool:
+        return Path(name).suffix.lower() in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".apng"}
+
+    def _covers_dir(self) -> Path:
+        return Path(self._cfg.covers_output) if self._cfg.covers_output else self.get_data_path() / "covers"
+
+    def _safe_saved_cover_path(self, file: str = "") -> Optional[Path]:
+        if not file:
+            return None
+        safe_name = os.path.basename(file)
+        if safe_name != file or not self._is_image_filename(safe_name):
+            return None
+        target = self._covers_dir() / safe_name
+        try:
+            base = self._covers_dir().resolve()
+            resolved = target.resolve()
+            if base not in resolved.parents and resolved != base:
+                return None
+        except Exception:
+            return None
+        return target if target.is_file() else None
+
+    def _image_cache_dirs(self) -> List[Path]:
+        return [self.get_data_path() / "input"]
+
+    def _clean_directory(self, directory: Path) -> int:
+        removed = 0
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            for entry in directory.iterdir():
+                try:
+                    if entry.is_dir():
+                        shutil.rmtree(entry)
+                    else:
+                        entry.unlink(missing_ok=True)
+                    removed += 1
+                except Exception as e:
+                    logger.warning(f"【CoverGen】清理缓存失败: {entry} -> {e}")
+        except Exception as e:
+            logger.warning(f"【CoverGen】扫描缓存目录失败: {directory} -> {e}")
+        return removed
 
     @staticmethod
     def _sanitize_history_name(name: str) -> str:

@@ -55,6 +55,16 @@ def _pick(value: Any, allowed: Tuple[str, ...], default: str) -> str:
     return value if value in allowed else default
 
 
+def _style_parts(style: str) -> tuple[str, str]:
+    """从完整风格名推导 base + variant，用于迁移旧 cover_style 配置。"""
+    style = LEGACY_STYLE_MAP.get(style, style)
+    if style.startswith("animated_"):
+        return f"static_{style.rsplit('_', 1)[-1]}", "animated"
+    if style.startswith("static_"):
+        return style, "static"
+    return "static_1", "static"
+
+
 # ---------- 主配置 ----------
 
 @dataclass
@@ -200,6 +210,7 @@ class PluginConfig:
         self.manual_server = (self.manual_server or "").strip()
         self.manual_library_id = (self.manual_library_id or "").strip()
         self.manual_item_id = (self.manual_item_id or "").strip()
+        self.cover_style = self.compose_style()
 
     # ---------- 派生属性 ----------
 
@@ -224,7 +235,6 @@ class PluginConfig:
         if variant == "static":
             return base
         candidate = f"animated_{suffix}"
-        # animated_5 暂未实现，回落到 static_5
         return candidate if candidate in VALID_STYLES else base
 
     # ---------- 序列化 ----------
@@ -236,6 +246,12 @@ class PluginConfig:
             return cls()
         known = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in data.items() if k in known}
+        if "cover_style" in filtered and (
+            "cover_style_base" not in data or "cover_style_variant" not in data
+        ):
+            base, variant = _style_parts(str(filtered.get("cover_style") or ""))
+            filtered.setdefault("cover_style_base", base)
+            filtered.setdefault("cover_style_variant", variant)
         return cls(**filtered)
 
     def to_dict(self) -> Dict[str, Any]:
