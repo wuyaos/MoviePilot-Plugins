@@ -19,14 +19,14 @@ from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import EventType
 
-from app.plugins.covergen.core.config import PluginConfig
-from app.plugins.covergen.core.font import FontManager
-from app.plugins.covergen.core.engine import CoverEngine
-from app.plugins.covergen.core.scheduler import Scheduler
-from app.plugins.covergen.core import server as srv
-from app.plugins.covergen.api.endpoints import build_api_routes
-from app.plugins.covergen.ui.form import build_form
-from app.plugins.covergen.ui.page import build_page
+from .core.config import PluginConfig
+from .core.font import FontManager
+from .core.engine import CoverEngine
+from .core.scheduler import Scheduler
+from .core import server as srv
+from .api.endpoints import build_api_routes
+from .ui.form import build_form
+from .ui.page import build_page
 
 
 class CoverGen(_PluginBase):
@@ -34,7 +34,7 @@ class CoverGen(_PluginBase):
     plugin_name = "媒体库封面生成"
     plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
-    plugin_version = "1.4.1"
+    plugin_version = "1.4.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "covergen_"
@@ -153,7 +153,7 @@ class CoverGen(_PluginBase):
             saved = self.get_data("last_run_stats")
             if saved and isinstance(saved, dict):
                 try:
-                    from app.plugins.covergen.core.engine import RunStats
+                    from .core.engine import RunStats
                     last_run = RunStats(**saved)
                 except Exception:
                     pass
@@ -235,7 +235,7 @@ class CoverGen(_PluginBase):
         return {"code": 0, "msg": stats.message or stats.finish()}
 
     def api_set_cover_style(self, style: str = ""):
-        from app.plugins.covergen.core.config import VALID_STYLES
+        from .core.config import VALID_STYLES
         style = (style or "").strip()
         if style not in VALID_STYLES:
             return {"code": 1, "msg": "不支持的风格"}

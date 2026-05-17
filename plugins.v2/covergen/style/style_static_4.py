@@ -5,11 +5,11 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from app.log import logger
-from app.plugins.covergen.style.style_static_2 import (
+from .style_static_2 import (
     darken_color,
     find_dominant_vibrant_colors,
 )
-from app.plugins.covergen.utils.color_helper import ColorHelper
+from ..utils.color_helper import ColorHelper
 
 
 def _wrap_english(draw, text, font, max_width):

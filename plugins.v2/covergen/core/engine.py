@@ -15,11 +15,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from pydantic import BaseModel, Field
 
-from app.plugins.covergen.core.config import PluginConfig
-from app.plugins.covergen.core import server as srv
-from app.plugins.covergen.core import image_io
-from app.plugins.covergen.core import render
-from app.plugins.covergen.utils.image_manager import ResolutionConfig
+from .config import PluginConfig
+from . import server as srv
+from . import image_io
+from . import render
+from ..utils.image_manager import ResolutionConfig
 
 LOG_PREFIX = "【CoverGen】"
 

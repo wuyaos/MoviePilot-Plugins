@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-from app.plugins.covergen.ui.form_utils import (
+from .form_utils import (
     v_row, v_col, v_switch, v_select, v_text, v_alert, v_textarea, v_cron,
     v_tab, v_window_item, v_divider_section,
 )

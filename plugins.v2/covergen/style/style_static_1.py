@@ -10,13 +10,13 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from app.log import logger
-from app.plugins.covergen.utils.image_manager import (
+from ..utils.image_manager import (
     ResolutionConfig, ImageResourceManager, managed_image, managed_images
 )
-from app.plugins.covergen.utils.performance_helper import (
+from ..utils.performance_helper import (
     OptimizedImageProcessor, PerformanceMonitor, memory_efficient_operation
 )
-from app.plugins.covergen.utils.color_helper import ColorHelper
+from ..utils.color_helper import ColorHelper
 
 
 # ========== 配置 ==========

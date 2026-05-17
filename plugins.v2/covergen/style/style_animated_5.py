@@ -19,8 +19,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from app.log import logger
-from app.plugins.covergen.utils.color_helper import ColorHelper
-from app.plugins.covergen.utils.image_manager import (
+from ..utils.color_helper import ColorHelper
+from ..utils.image_manager import (
     ResolutionConfig, align_image_right, create_diagonal_mask, create_shadow_mask,
 )
 

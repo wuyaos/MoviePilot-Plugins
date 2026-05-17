@@ -11,16 +11,16 @@ from typing import Callable, Dict, Optional, Tuple
 
 import yaml
 
-from app.plugins.covergen.style.style_static_1 import create_style_static_1
-from app.plugins.covergen.style.style_static_2 import create_style_static_2
-from app.plugins.covergen.style.style_static_3 import create_style_static_3
-from app.plugins.covergen.style.style_static_4 import create_style_static_4
-from app.plugins.covergen.style.style_static_5 import create_style_static_5
-from app.plugins.covergen.style.style_animated_1 import create_style_animated_1
-from app.plugins.covergen.style.style_animated_2 import create_style_animated_2
-from app.plugins.covergen.style.style_animated_3 import create_style_animated_3
-from app.plugins.covergen.style.style_animated_4 import create_style_animated_4
-from app.plugins.covergen.style.style_animated_5 import create_style_animated_5
+from ..style.style_static_1 import create_style_static_1
+from ..style.style_static_2 import create_style_static_2
+from ..style.style_static_3 import create_style_static_3
+from ..style.style_static_4 import create_style_static_4
+from ..style.style_static_5 import create_style_static_5
+from ..style.style_animated_1 import create_style_animated_1
+from ..style.style_animated_2 import create_style_animated_2
+from ..style.style_animated_3 import create_style_animated_3
+from ..style.style_animated_4 import create_style_animated_4
+from ..style.style_animated_5 import create_style_animated_5
 
 LOG_PREFIX = "【CoverGen】"
 

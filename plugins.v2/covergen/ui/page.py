@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.plugins.covergen.ui.form_utils import v_row, v_col, v_alert, v_divider_section
+from .form_utils import v_row, v_col, v_alert, v_divider_section
 
 
 def _build_generate(*, enabled: bool, has_servers: bool, cover_style: str, plugin_id: str) -> list:
