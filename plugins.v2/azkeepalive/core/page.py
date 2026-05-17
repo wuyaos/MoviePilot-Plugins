@@ -59,7 +59,7 @@ def _build_status_row(state: dict[str, Any], keepalive_days: int) -> dict:
     v_days, v_text = _remain_days(last_v, 60, now)
     last_s = state.get("last_success_at", "")
     s_days, s_text = _remain_days(last_s, 90, now)
-    last_checked = state.get("last_checked_at", "")
+    last_checked = state.get("last_checked_at") or state.get("last_success_at", "")
     k_days, k_text = _remain_days(last_checked, keepalive_days, now)
     next_window = "立即"
     if not last_checked:

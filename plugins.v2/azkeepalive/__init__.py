@@ -1,5 +1,6 @@
 # input: MoviePilot _PluginBase | output: AnimeZ 保活插件 | pos: 插件入口
 from __future__ import annotations
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -18,7 +19,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.4.4"
+    plugin_version = "2.4.5"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -42,6 +43,7 @@ class AzKeepAlive(_PluginBase):
     _use_proxy = False
     _auto_delete_hnr = False
     _scheduler: Optional[BackgroundScheduler] = None
+    _run_lock = threading.Lock()
 
     def init_plugin(self, config: dict = None):
         self.stop_service()
@@ -99,6 +101,15 @@ class AzKeepAlive(_PluginBase):
         })
 
     def _run_task(self, force: bool = False):
+        if not self._run_lock.acquire(blocking=False):
+            logger.warning("AnimeZ保活: 已有任务运行中，跳过本次触发")
+            return
+        try:
+            self._run_task_locked(force=force)
+        finally:
+            self._run_lock.release()
+
+    def _run_task_locked(self, force: bool = False):
         from .core.keepalive import run_keepalive
         from .core.downloader import get_downloader_instance
         from .core.scraper import get_site_cookie

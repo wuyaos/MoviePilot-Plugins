@@ -184,7 +184,7 @@ def _should_run(state: dict[str, Any], days: int, now: dt.datetime,
                 force: bool = False) -> tuple[bool, str]:
     if force:
         return True, "强制保活"
-    last = _parse_ts(state.get("last_checked_at"))
+    last = _last_keepalive_base(state)
     if last is None:
         return True, "首次运行"
     if now - last >= dt.timedelta(days=days):
@@ -219,16 +219,21 @@ def _append(
 
 
 def _skip_msg(state: dict[str, Any], days: int, now: dt.datetime, reason: str) -> str:
-    last = _parse_ts(state.get("last_checked_at"))
+    last = _last_keepalive_base(state)
     nxt = _ts(last + dt.timedelta(days=days)) if last else "未知"
     return (f"⏭ 跳过本次执行\n━━━━━━━━━━━━━\n"
             f"📋 原因: {reason}\n"
-            f"🕒 上次保活: {state.get('last_checked_at', '无')}\n"
+            f"🕒 上次保活: {state.get('last_checked_at') or state.get('last_success_at') or '无'}\n"
             f"📅 下次保活: {nxt}")
 
 
 def _ts(t: dt.datetime) -> str:
     return t.isoformat().replace("+00:00", "Z")
+
+
+def _last_keepalive_base(state: dict[str, Any]) -> dt.datetime | None:
+    """插件保活间隔基准；兼容旧版本只保存 last_success_at 的状态。"""
+    return _parse_ts(state.get("last_checked_at")) or _parse_ts(state.get("last_success_at"))
 
 
 def _parse_ts(val: str | None) -> dt.datetime | None:
