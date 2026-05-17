@@ -78,9 +78,13 @@ class Opencd(_ISiteSigninHandler):
             image_url=img_get_url,
             cookie=site_cookie,
             ua=ua,
+            referer='https://www.open.cd/plugin_sign-in.php',
             min_len=6,
-            retry_times=3,
+            max_len=6,
+            retry_times=1,
             engine='ddddocr',
+            charset='alnum',
+            proxy=proxy,
         )
         if not ocr_result or len(ocr_result) != 6:
             logger.info(f"{site} ddddocr 识别失败，切换 OcrHelper")
@@ -88,8 +92,12 @@ class Opencd(_ISiteSigninHandler):
                 image_url=img_get_url,
                 cookie=site_cookie,
                 ua=ua,
+                referer='https://www.open.cd/plugin_sign-in.php',
                 min_len=6,
+                max_len=6,
                 engine='ocrhelper',
+                charset='alnum',
+                proxy=proxy,
             )
             if ocr_result and len(ocr_result) != 6:
                 ocr_result = None

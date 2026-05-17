@@ -69,8 +69,11 @@ class SiQi(_ISiteSigninHandler):
             image_url=img_url,
             cookie=site_cookie,
             ua=ua,
+            referer="https://si-qi.xyz/attendance.php",
             min_len=4,
+            retry_times=1,
             engine='ddddocr',
+            charset='alnum',
         )
         if not code:
             logger.info(f"{site} ddddocr 识别失败，切换 OcrHelper")
@@ -78,8 +81,10 @@ class SiQi(_ISiteSigninHandler):
                 image_url=img_url,
                 cookie=site_cookie,
                 ua=ua,
+                referer="https://si-qi.xyz/attendance.php",
                 min_len=4,
                 engine='ocrhelper',
+                charset='alnum',
             )
 
         if not code:

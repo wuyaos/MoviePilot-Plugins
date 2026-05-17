@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.1.6"
+    plugin_version = "1.1.7"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -99,16 +99,16 @@ class AutoPtCheckin(_PluginBase):
             self._enabled = config.get("enabled")
             self._cron = config.get("cron")
             self._cron_mode = config.get("cron_mode") or "interval"
-            self._interval_hours = float(config.get("interval_hours") or 2.0)
-            self._begin_hour = int(config.get("begin_hour") or 9)
-            self._end_hour = int(config.get("end_hour") or 23)
+            self._interval_hours = self.__safe_float(config.get("interval_hours"), 2.0, min_value=0.5)
+            self._begin_hour = self.__safe_int(config.get("begin_hour"), 9, min_value=0, max_value=23)
+            self._end_hour = self.__safe_int(config.get("end_hour"), 23, min_value=0, max_value=23)
             self._onlyonce = config.get("onlyonce")
             self._notify = config.get("notify")
-            self._queue_cnt = config.get("queue_cnt") or 5
+            self._queue_cnt = self.__safe_int(config.get("queue_cnt"), 5, min_value=1)
             self._sign_sites = config.get("sign_sites") or []
             self._login_sites = config.get("login_sites") or []
             self._retry_keyword = config.get("retry_keyword")
-            self._auto_cf = config.get("auto_cf")
+            self._auto_cf = self.__safe_int(config.get("auto_cf"), 0, min_value=0)
             self._clean = config.get("clean")
 
             self._custom_site_urls = config.get("custom_site_urls") or ""
@@ -153,6 +153,30 @@ class AutoPtCheckin(_PluginBase):
 
     def get_state(self) -> bool:
         return self._enabled
+
+    @staticmethod
+    def __safe_float(value, default: float, min_value: float = None, max_value: float = None) -> float:
+        try:
+            ret = float(value)
+        except (TypeError, ValueError):
+            ret = default
+        if min_value is not None:
+            ret = max(min_value, ret)
+        if max_value is not None:
+            ret = min(max_value, ret)
+        return ret
+
+    @staticmethod
+    def __safe_int(value, default: int, min_value: int = None, max_value: int = None) -> int:
+        try:
+            ret = int(value)
+        except (TypeError, ValueError):
+            ret = default
+        if min_value is not None:
+            ret = max(min_value, ret)
+        if max_value is not None:
+            ret = min(max_value, ret)
+        return ret
 
     def __update_config(self):
         # 保存配置
@@ -207,6 +231,7 @@ class AutoPtCheckin(_PluginBase):
             "path": "/signin_by_domain",
             "endpoint": self.signin_by_domain,
             "methods": ["GET"],
+            "auth": "apikey",
             "summary": "站点签到",
             "description": "使用站点域名签到站点",
         }]
@@ -254,17 +279,20 @@ class AutoPtCheckin(_PluginBase):
                 max_interval=int(hours_f * 60),
                 min_interval=max(30, int(hours_f * 60 * 0.5)),
             )
+            if not triggers:
+                logger.error(f"未生成有效触发时间，请检查间隔配置：interval_hours={hours_f}, "
+                             f"begin_hour={self._start_time}, end_hour={self._end_time}")
+                return []
+            logger.info("站点自动签到随机触发时间：%s" %
+                        ", ".join([f"{trigger.hour:02d}:{trigger.minute:02d}" for trigger in triggers]))
             ret_jobs = []
             for trigger in triggers:
                 ret_jobs.append({
-                    "id": f"AutoSignIn|{trigger.hour}:{trigger.minute}",
-                    "name": "站点自动签到服务",
-                    "trigger": "cron",
+                    "id": f"AutoSignIn.{trigger.hour:02d}{trigger.minute:02d}",
+                    "name": f"站点自动签到服务 {trigger.hour:02d}:{trigger.minute:02d}",
+                    "trigger": CronTrigger(hour=trigger.hour, minute=trigger.minute),
                     "func": self.sign_in,
-                    "kwargs": {
-                        "hour": trigger.hour,
-                        "minute": trigger.minute,
-                    }
+                    "kwargs": {}
                 })
             return ret_jobs
 
@@ -274,17 +302,17 @@ class AutoPtCheckin(_PluginBase):
                                                end_hour=23,
                                                max_interval=6 * 60,
                                                min_interval=2 * 60)
+        if not triggers:
+            logger.error("未生成有效触发时间，请检查默认随机调度配置")
+            return []
         ret_jobs = []
         for trigger in triggers:
             ret_jobs.append({
-                "id": f"AutoSignIn|{trigger.hour}:{trigger.minute}",
-                "name": "站点自动签到服务",
-                "trigger": "cron",
+                "id": f"AutoSignIn.{trigger.hour:02d}{trigger.minute:02d}",
+                "name": f"站点自动签到服务 {trigger.hour:02d}:{trigger.minute:02d}",
+                "trigger": CronTrigger(hour=trigger.hour, minute=trigger.minute),
                 "func": self.sign_in,
-                "kwargs": {
-                    "hour": trigger.hour,
-                    "minute": trigger.minute,
-                }
+                "kwargs": {}
             })
         return ret_jobs
 

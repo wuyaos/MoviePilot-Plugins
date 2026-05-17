@@ -15,7 +15,7 @@ except ImportError:
 class CffiClient:
     """curl-cffi Chrome 指纹 HTTP 客户端"""
 
-    def __init__(self, cookie: str = "", ua: str = None, proxy: str = None):
+    def __init__(self, cookie: str = "", ua: str = None, proxy: str = None, referer: str = None):
         if not _CFFI_AVAILABLE:
             raise ImportError("curl-cffi 未安装")
         self._session = cffi_requests.Session(impersonate="chrome")
@@ -23,6 +23,8 @@ class CffiClient:
             self._session.headers["Cookie"] = cookie
         if ua:
             self._session.headers["User-Agent"] = ua
+        if referer:
+            self._session.headers["Referer"] = referer
         self._proxy = proxy
 
     def get(self, url: str, timeout: int = 60) -> tuple[int, str]:

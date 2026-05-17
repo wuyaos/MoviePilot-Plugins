@@ -87,9 +87,13 @@ class HDSky(_ISiteSigninHandler):
             image_url=img_url,
             cookie=cookie,
             ua=ua,
+            referer=referer,
             min_len=6,
-            retry_times=3,
+            max_len=6,
+            retry_times=1,
             engine=engine,
+            charset='alnum',
+            proxy=proxy,
         )
         if not code:
             return 'no_result'
