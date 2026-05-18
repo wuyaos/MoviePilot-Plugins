@@ -111,7 +111,17 @@ class LLMRecognizer(_PluginBase):
         self._sample_lock = threading.Lock()
         self._chain_lock = threading.Lock()
         self._identifiers_lock = threading.Lock()
+        self._ensure_plugin_log_file()
         self._register_events()
+
+    def _ensure_plugin_log_file(self) -> None:
+        """确保插件日志文件存在，避免前端日志页 404。"""
+        try:
+            path = settings.LOG_PATH / "plugins" / "llmrecognizer.log"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch(exist_ok=True)
+        except Exception:
+            pass
 
     def get_state(self) -> bool:
         return self._enabled
@@ -1386,6 +1396,7 @@ AI 识别增强结果：
 
     def get_page(self) -> List[dict]:
         llm_ready = bool(getattr(settings, "LLM_API_KEY", None))
+        samples = self._read_failed_samples(limit=20)
         failed_count = len(self._read_failed_samples(limit=200))
         id_count = len(self._get_custom_identifiers())
 
@@ -1398,6 +1409,49 @@ AI 识别增强结果：
                 content.append({"component": "div", "props": {"class": "text-caption text-medium-emphasis mt-1"}, "text": subtitle})
             return {"component": "VCard", "props": {"variant": "tonal", "class": "pa-4 h-100"}, "content": content}
 
+        _reason_map = {
+            "low_confidence_or_empty_name": "低置信度",
+            "llm_error": "LLM错误",
+        }
+
+        def _fmt_reason(reason: Any) -> str:
+            tag = self._normalize_reason_tag(reason)
+            return _reason_map.get(tag, tag)
+
+        sample_rows = []
+        for s in samples:
+            summary = self._summarize_sample(s)
+            conf = summary.get("guess_confidence", 0.0)
+            sample_rows.append({
+                "title": summary.get("title") or "-",
+                "guess": summary.get("guess_name") or "-",
+                "confidence": f"{conf:.0%}" if conf else "-",
+                "reason": _fmt_reason(summary.get("reason")),
+            })
+
+        samples_section = {"component": "VRow", "props": {"class": "mt-2"}, "content": [
+            {"component": "VCol", "props": {"cols": 12}, "content": [
+                {"component": "VCard", "props": {"variant": "outlined"}, "content": [
+                    {"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3 pb-1"},
+                     "text": f"最近识别失败样本（共 {failed_count} 条，显示最新 {len(sample_rows)} 条）"},
+                    {"component": "VDivider"},
+                    {"component": "VDataTable", "props": {
+                        "headers": [
+                            {"title": "原始标题", "key": "title", "sortable": False},
+                            {"title": "LLM猜测名", "key": "guess", "sortable": False},
+                            {"title": "置信度", "key": "confidence", "sortable": False, "width": "80px"},
+                            {"title": "原因", "key": "reason", "sortable": False, "width": "100px"},
+                        ],
+                        "items": sample_rows,
+                        "density": "compact",
+                        "items-per-page": -1,
+                        "hide-default-footer": True,
+                        "no-data-text": "暂无失败样本",
+                    }},
+                ]},
+            ]},
+        ]}
+
         return [{"component": "VContainer", "props": {"fluid": True, "class": "pa-0"}, "content": [
             {"component": "VAlert", "props": {"type": "info", "variant": "tonal", "class": "mb-4",
              "title": "本地 LLM 识别兜底",
@@ -1409,6 +1463,7 @@ AI 识别增强结果：
                 {"component": "VCol", "props": {"cols": 12, "md": 3}, "content": [stat_card("失败样本", f"{failed_count} 条", f"上限 {self._max_failed_samples} 条")]},
                 {"component": "VCol", "props": {"cols": 12, "md": 3}, "content": [stat_card("自定义识别词", f"{id_count} 条", "系统 CustomIdentifiers")]},
             ]},
+            samples_section,
         ]}]
 
     @staticmethod
@@ -1423,7 +1478,7 @@ AI 识别增强结果：
             {"component": "VRow", "content": [
                 {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "enabled", "label": "启用 AI识别增强"}}]},
                 {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "debug", "label": "调试模式"}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "save_failed_samples", "label": "保存低置信度样本"}}]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "save_failed_samples", "label": "保存识别失败样本", "hint": "LLM调用失败或置信度不足时保存样本，供后续生成识别词", "persistent-hint": True}}]},
             ]},
             {"component": "VRow", "content": [
                 {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "verify_tmdb", "label": "启用 TMDB 二次校验", "hint": "关闭可消除「共享媒体识别失败」500 日志噪音", "persistent-hint": True}}]},
