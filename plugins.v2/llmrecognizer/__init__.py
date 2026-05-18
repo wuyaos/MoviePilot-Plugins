@@ -1477,7 +1477,7 @@ AI 识别增强结果：
                         ],
                         "items": sample_rows,
                         "density": "compact",
-                        "items-per-page": -1,
+                        "items-per-page": 20,
                         "hide-default-footer": True,
                         "no-data-text": "暂无失败样本",
                     }},
