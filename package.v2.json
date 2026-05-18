@@ -3,11 +3,12 @@
     "name": "AI识别增强",
     "description": "复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。默认不调用 TMDB（消除 500 日志噪音）。",
     "labels": "识别,LLM,AI",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png",
     "author": "wuyaos",
     "level": 1,
     "history": {
+      "v1.1.0": "详情页新增识别失败样本列表；init时touch日志文件修复前端404；配置标签「保存识别失败样本」附说明hint；统一命名约定（中文AI识别增强/英文llmrecognizer）",
       "v1.0.0": "Fork自 liuyuexi1987/airecognizerenhancer：重命名为 LLMRecognizer，修复 plugin_config_prefix，默认关闭 TMDB 二次校验消除 500 日志，chain 懒初始化缓存，事件处理有界超时，JSONL 线程安全"
     }
   },
