@@ -124,6 +124,7 @@ class LLMRecognizer(_PluginBase):
         self._identifiers_lock = threading.Lock()
         self._ensure_plugin_log_file()
         self._register_events()
+        logger.info(f"[AI识别增强] 插件已加载 v{self.plugin_version}，状态: {'已启用' if self._enabled else '未启用'}")
 
     def _ensure_plugin_log_file(self) -> None:
         """确保插件日志文件存在，避免前端日志页 404。"""
@@ -1428,6 +1429,14 @@ AI 识别增强结果：
         ]
 
     def get_page(self) -> List[dict]:
+        try:
+            return self._build_page()
+        except Exception as exc:
+            logger.warning(f"[AI识别增强] get_page 渲染失败: {exc}")
+            return [{"component": "VAlert", "props": {"type": "error", "variant": "tonal",
+                     "text": f"详情页渲染失败: {exc}"}}]
+
+    def _build_page(self) -> List[dict]:
         llm_ready = bool(getattr(settings, "LLM_API_KEY", None))
         samples = self._read_failed_samples(limit=20)
         failed_count = len(self._read_failed_samples(limit=200))
