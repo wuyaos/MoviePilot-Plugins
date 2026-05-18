@@ -57,7 +57,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.1.0"
+    plugin_version = "1.2.0"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -78,6 +78,13 @@ class LLMRecognizer(_PluginBase):
     _verify_tmdb: bool = False
     # 新增：是否要求 TMDB 校验通过才注入
     _require_tmdb_verify: bool = False
+    # 自定义 LLM：不影响系统配置
+    #   方案A（custom_model）：bind() 返回新包装对象，不修改系统 LLM 实例
+    #   方案B（三项均填）：直接 new ChatOpenAI，完全独立，系统 LLM 实例不共享
+    _custom_model: str = ""           # 方案A：仅覆盖模型名，复用系统 key/url
+    _custom_llm_base_url: str = ""    # 方案B：自定义 Base URL（OpenAI 兼容）
+    _custom_llm_api_key: str = ""     # 方案B：自定义 API Key
+    _custom_llm_model: str = ""       # 方案B：自定义模型名
     _systemconfig: Optional[SystemConfigOper] = None
 
     # ---- 线程安全 ----
@@ -99,6 +106,10 @@ class LLMRecognizer(_PluginBase):
         self._auto_remove_applied_sample = bool(config.get("auto_remove_applied_sample", True))
         self._verify_tmdb = bool(config.get("verify_tmdb", False))
         self._require_tmdb_verify = bool(config.get("require_tmdb_verify", False))
+        self._custom_model = str(config.get("custom_model") or "").strip()
+        self._custom_llm_base_url = str(config.get("custom_llm_base_url") or "").strip()
+        self._custom_llm_api_key = str(config.get("custom_llm_api_key") or "").strip()
+        self._custom_llm_model = str(config.get("custom_llm_model") or "").strip()
         self._systemconfig = SystemConfigOper()
         # 配置变更时重置 chain 缓存，须在旧锁内置 None 再换锁，避免竞态
         if self._chain_lock:
@@ -242,8 +253,25 @@ class LLMRecognizer(_PluginBase):
         return result.get("value")
 
     def _get_llm(self):
+        # 方案B：三项均填时使用完全独立的 ChatOpenAI 实例，不共享系统 LLM 对象
+        if self._custom_llm_base_url and self._custom_llm_api_key and self._custom_llm_model:
+            try:
+                from langchain_openai import ChatOpenAI
+                return ChatOpenAI(
+                    base_url=self._custom_llm_base_url,
+                    api_key=self._custom_llm_api_key,
+                    model=self._custom_llm_model,
+                    timeout=self._request_timeout,
+                )
+            except Exception as exc:
+                logger.warning(f"[AI识别增强] 自定义 LLM 初始化失败，回退系统配置: {exc}")
+        # 方案A / 默认：从 LLMHelper 获取系统 LLM
         llm = LLMHelper.get_llm(streaming=False)
-        return self._run_async_compatible(llm, timeout=self._request_timeout + 2)
+        llm = self._run_async_compatible(llm, timeout=self._request_timeout + 2)
+        # bind() 返回新 RunnableBinding 包装，不修改系统 LLM 实例
+        if self._custom_model:
+            llm = llm.bind(model=self._custom_model)
+        return llm
 
     def _get_recognize_chain(self):
         """懒初始化并缓存识别 chain，线程安全。"""
@@ -1233,6 +1261,11 @@ AI 识别增强结果：
             "request_timeout": self._request_timeout,
             "verify_tmdb": self._verify_tmdb,
             "require_tmdb_verify": self._require_tmdb_verify,
+            "custom_model": self._custom_model or None,
+            "custom_llm_model": self._custom_llm_model or None,
+            "custom_llm_base_url": self._custom_llm_base_url or None,
+            "llm_mode": "custom_full" if (self._custom_llm_base_url and self._custom_llm_api_key and self._custom_llm_model)
+                        else "custom_model" if self._custom_model else "system",
         }}
 
     async def api_recognize(self, request: Request):
@@ -1493,10 +1526,25 @@ AI 识别增强结果：
             {"component": "VRow", "content": [
                 {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VTextField", "props": {"model": "max_failed_samples", "label": "失败样本保留上限", "type": "number", "hint": "默认 200 条，重复样本自动去重", "persistent-hint": True}}]},
             ]},
+            {"component": "VRow", "content": [
+                {"component": "VCol", "props": {"cols": 12}, "content": [
+                    {"component": "VAlert", "props": {"type": "info", "variant": "tonal",
+                     "text": "自定义 LLM（可选）：方案A 仅填「覆盖模型名」，复用系统 API Key/URL，适合同一服务商换模型；方案B 三项全填，完全独立实例，适合接入不同服务商。两种方式均不修改系统 LLM 配置。"}}
+                ]},
+            ]},
+            {"component": "VRow", "content": [
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "custom_model", "label": "方案A：覆盖模型名", "hint": "留空则用系统默认，如 gpt-4o-mini", "persistent-hint": True, "placeholder": "如 gpt-4o-mini、deepseek-chat"}}]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "custom_llm_model", "label": "方案B：自定义模型名", "hint": "需同时填 Base URL 和 API Key", "persistent-hint": True}}]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "custom_llm_api_key", "label": "方案B：自定义 API Key", "type": "password", "hint": "独立 Key，不影响系统配置", "persistent-hint": True}}]},
+            ]},
+            {"component": "VRow", "content": [
+                {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VTextField", "props": {"model": "custom_llm_base_url", "label": "方案B：自定义 Base URL（OpenAI 兼容）", "hint": "如 https://api.deepseek.com/v1", "persistent-hint": True, "placeholder": "https://api.deepseek.com/v1"}}]},
+            ]},
         ]}]
         return form, {
             "enabled": False, "debug": False, "confidence_threshold": 0.65,
             "request_timeout": 25, "max_retries": 2, "save_failed_samples": True,
             "max_failed_samples": 200, "auto_remove_applied_sample": True,
             "verify_tmdb": False, "require_tmdb_verify": False,
+            "custom_model": "", "custom_llm_model": "", "custom_llm_api_key": "", "custom_llm_base_url": "",
         }
