@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.1.8"
+    plugin_version = "1.1.9"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -50,6 +50,13 @@ class AutoPtCheckin(_PluginBase):
     plugin_order = 0
     # 可使用的用户级别
     auth_level = 2
+    # 站点异常关键词（服务器繁忙/维护/403/网关错误等，命中时不报 Cookie 失效）
+    _SITE_ERROR_KEYWORDS = [
+        "服务器负载过高", "正在重试，请稍后", "服务器繁忙", "系统维护", "网站维护",
+        "暂停服务", "访问被拒绝", "访问受限", "forbidden", "access denied",
+        "server is busy", "overloaded", "temporarily unavailable",
+        "under maintenance", "Bad Gateway", "Service Unavailable", "Gateway Timeout",
+    ]
 
     # 私有属性
     sites: SitesHelper = None
@@ -1740,6 +1747,8 @@ class AutoPtCheckin(_PluginBase):
                 if not SiteUtils.is_logged_in(page_source):
                     if under_challenge(page_source):
                         return False, f"无法通过Cloudflare！"
+                    elif any(kw in (page_source or "").lower() for kw in self._SITE_ERROR_KEYWORDS):
+                        return False, f"仿真签到失败，站点服务器异常，稍后重试！"
                     return False, f"仿真登录失败，Cookie已失效！"
                 else:
                     # 判断是否已签到
@@ -1763,6 +1772,8 @@ class AutoPtCheckin(_PluginBase):
                     if not SiteUtils.is_logged_in(res.text):
                         if under_challenge(res.text):
                             msg = "站点被Cloudflare防护，请打开站点浏览器仿真"
+                        elif any(kw in res.text.lower() for kw in self._SITE_ERROR_KEYWORDS):
+                            msg = "站点服务器异常，稍后重试"
                         elif res.status_code == 200:
                             msg = "Cookie已失效"
                         else:
@@ -1839,6 +1850,8 @@ class AutoPtCheckin(_PluginBase):
                 if not SiteUtils.is_logged_in(page_source):
                     if under_challenge(page_source):
                         return False, f"无法通过Cloudflare！"
+                    elif any(kw in (page_source or "").lower() for kw in self._SITE_ERROR_KEYWORDS):
+                        return False, f"仿真登录失败，站点服务器异常，稍后重试！"
                     return False, f"仿真登录失败，Cookie已失效！"
                 else:
                     return True, "模拟登录成功"
@@ -1880,6 +1893,8 @@ class AutoPtCheckin(_PluginBase):
                 if not SiteUtils.is_logged_in(page_text):
                     if under_challenge(page_text):
                         msg = "站点被Cloudflare防护，请打开站点浏览器仿真"
+                    elif any(kw in page_text.lower() for kw in AutoPtCheckin._SITE_ERROR_KEYWORDS):
+                        msg = "站点服务器异常，稍后重试"
                     else:
                         msg = "Cookie已失效"
                     logger.warn(f"{site} 模拟登录失败，{msg}")
