@@ -1843,30 +1843,50 @@ class AutoPtCheckin(_PluginBase):
                 else:
                     return True, "模拟登录成功"
             else:
-                res = RequestUtils(cookies=site_cookie,
-                                   ua=ua,
-                                   proxies=proxies
-                                   ).get_res(url=site_url)
+                page_text = None
+                try:
+                    res = RequestUtils(cookies=site_cookie,
+                                       ua=ua,
+                                       proxies=proxies
+                                       ).get_res(url=site_url)
+                    if res and res.status_code == 200:
+                        page_text = res.text
+                    elif res is not None and res.status_code not in [200, 500, 403]:
+                        logger.warn(f"{site} 模拟登录失败，状态码：{res.status_code}")
+                        return False, f"模拟登录失败，状态码：{res.status_code}！"
+                except Exception as req_err:
+                    logger.warn(f"{site} RequestUtils 请求失败，尝试 CffiClient 回退：{req_err}")
+
+                # CffiClient 回退（WAF / gzip 异常等场景）
+                if page_text is None:
+                    try:
+                        from app.plugins.autoptcheckin.helper.http_helper import CffiClient
+                        status, page_text = CffiClient(
+                            cookie=site_cookie or "",
+                            ua=ua,
+                            proxy=proxy_server,
+                        ).get(site_url)
+                        if status not in [200, 500, 403]:
+                            logger.warn(f"{site} 模拟登录失败，状态码：{status}")
+                            return False, f"模拟登录失败，状态码：{status}！"
+                    except Exception as cffi_err:
+                        logger.warn(f"{site} 模拟登录失败，无法打开网站：{cffi_err}")
+                        return False, f"模拟登录失败，无法打开网站！"
+
                 # 判断登录状态
-                if res and res.status_code in [200, 500, 403]:
-                    if not SiteUtils.is_logged_in(res.text):
-                        if under_challenge(res.text):
-                            msg = "站点被Cloudflare防护，请打开站点浏览器仿真"
-                        elif res.status_code == 200:
-                            msg = "Cookie已失效"
-                        else:
-                            msg = f"状态码：{res.status_code}"
-                        logger.warn(f"{site} 模拟登录失败，{msg}")
-                        return False, f"模拟登录失败，{msg}！"
-                    else:
-                        logger.info(f"{site} 模拟登录成功")
-                        return True, f"模拟登录成功"
-                elif res is not None:
-                    logger.warn(f"{site} 模拟登录失败，状态码：{res.status_code}")
-                    return False, f"模拟登录失败，状态码：{res.status_code}！"
-                else:
+                if not page_text:
                     logger.warn(f"{site} 模拟登录失败，无法打开网站")
                     return False, f"模拟登录失败，无法打开网站！"
+                if not SiteUtils.is_logged_in(page_text):
+                    if under_challenge(page_text):
+                        msg = "站点被Cloudflare防护，请打开站点浏览器仿真"
+                    else:
+                        msg = "Cookie已失效"
+                    logger.warn(f"{site} 模拟登录失败，{msg}")
+                    return False, f"模拟登录失败，{msg}！"
+                else:
+                    logger.info(f"{site} 模拟登录成功")
+                    return True, f"模拟登录成功"
         except Exception as e:
             logger.warn("%s 模拟登录失败：%s" % (site, str(e)))
             traceback.print_exc()
