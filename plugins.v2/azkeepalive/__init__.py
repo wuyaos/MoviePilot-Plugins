@@ -175,7 +175,7 @@ class AzKeepAlive(_PluginBase):
             minute = random.randint(0, 59)
             cron_str = f"{minute} {hour} * * *"
             logger.info(f"AnimeZ保活随机触发时间：{hour:02d}:{minute:02d}")
-            services.append({"id": f"AzKeepAlive.{hour:02d}{minute:02d}",
+            services.append({"id": "AzKeepAlive",
                              "name": f"AnimeZ保活定时任务 {hour:02d}:{minute:02d}",
                              "trigger": CronTrigger.from_crontab(cron_str),
                              "func": self._run_task, "kwargs": {}})
