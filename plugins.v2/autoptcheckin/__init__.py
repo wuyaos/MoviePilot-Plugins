@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.1.9"
+    plugin_version = "1.2.0"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -293,11 +293,11 @@ class AutoPtCheckin(_PluginBase):
             logger.info("站点自动签到随机触发时间：%s" %
                         ", ".join([f"{trigger.hour:02d}:{trigger.minute:02d}" for trigger in triggers]))
             ret_jobs = []
-            for trigger in triggers:
+            for i, trigger in enumerate(triggers):
                 ret_jobs.append({
-                    "id": f"AutoSignIn.{trigger.hour:02d}{trigger.minute:02d}",
+                    "id": f"AutoSignIn.{i}",
                     "name": f"站点自动签到服务 {trigger.hour:02d}:{trigger.minute:02d}",
-                    "trigger": CronTrigger(hour=trigger.hour, minute=trigger.minute),
+                    "trigger": CronTrigger.from_crontab(f"{trigger.minute} {trigger.hour} * * *"),
                     "func": self.sign_in,
                     "kwargs": {}
                 })
@@ -313,11 +313,11 @@ class AutoPtCheckin(_PluginBase):
             logger.error("未生成有效触发时间，请检查默认随机调度配置")
             return []
         ret_jobs = []
-        for trigger in triggers:
+        for i, trigger in enumerate(triggers):
             ret_jobs.append({
-                "id": f"AutoSignIn.{trigger.hour:02d}{trigger.minute:02d}",
+                "id": f"AutoSignIn.{i}",
                 "name": f"站点自动签到服务 {trigger.hour:02d}:{trigger.minute:02d}",
-                "trigger": CronTrigger(hour=trigger.hour, minute=trigger.minute),
+                "trigger": CronTrigger.from_crontab(f"{trigger.minute} {trigger.hour} * * *"),
                 "func": self.sign_in,
                 "kwargs": {}
             })

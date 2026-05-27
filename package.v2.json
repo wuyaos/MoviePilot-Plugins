@@ -84,11 +84,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
     "labels": "签到,PT",
-    "version": "1.1.9",
+    "version": "1.2.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.2.0": "修复interval/默认模式定时任务：CronTrigger改用from_crontab消除每分钟执行退化；service ID改为索引序号（AutoSignIn.0/1）确保重载时旧任务被替换而非累积",
       "v1.1.9": "新增 _SITE_ERROR_KEYWORDS 类常量统一覆盖服务器繁忙/维护/403/网关错误等场景；4 处判断分支（render/非render × signin/login）命中时报「站点服务器异常」而非 Cookie 失效",
       "v1.1.8": "修复 HDCity 英文语言签到误报失败；模拟登录增加 CffiClient 回退，解决 SafeLine WAF / gzip NoneType 报错",
       "v1.1.7": "修复间隔随机调度服务ID冲突；优化OCR字符集策略、代理/Referer传递与验证码图片校验",
