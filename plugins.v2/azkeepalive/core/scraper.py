@@ -33,7 +33,8 @@ def fetch_torrents(
     ).get_res(url=url)
     if not res or res.status_code != 200:
         code = res.status_code if res else "无响应"
-        raise RuntimeError(f"种子页请求失败: [{code}] {url}")
+        logger.warning(f"AZ保活: 种子页请求失败: [{code}] {url}")
+        return []
     res.encoding = res.encoding or "utf-8"
     items = _parse_torrent_rows(res.text, site_url)
     logger.debug(f"第{page}页解析: {len(items)} 条种子")

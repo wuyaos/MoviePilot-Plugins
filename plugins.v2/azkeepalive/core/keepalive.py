@@ -57,6 +57,8 @@ def run_keepalive(
                 _append(state, "visit_success", now, reason="访问保活成功")
                 visit_message = "访问保活成功"
             else:
+                # P0 fix: HTTP 200 = 登录态有效，即使用户信息解析失败也推进 last_visit_at
+                _append(state, "visit_ok", now, reason="访问成功但未解析到用户信息")
                 visit_message = "访问成功但未解析到用户信息"
                 logger.warning(f"AZ保活: {visit_message}")
         else:
@@ -227,7 +229,7 @@ def _append(
     history.append(ev)
     del history[:-MAX_HISTORY]
     state["last_status"] = status
-    if status == "visit_success":
+    if status in ("visit_success", "visit_ok"):
         state["last_visit_at"] = _ts(now)
     if status == "download_success":
         state["last_download_at"] = _ts(now)

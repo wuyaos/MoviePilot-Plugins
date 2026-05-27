@@ -19,7 +19,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.4.6"
+    plugin_version = "2.5.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -118,10 +118,11 @@ class AzKeepAlive(_PluginBase):
         dl_instance = get_downloader_instance(self._downloader)
         if not dl_instance:
             logger.warning("AnimeZ保活: 下载器未配置或不可用，仅执行站点访问保活")
+        # Cookie 只获取一次，重试时复用
+        cookie = get_site_cookie(self._site_url)
         status, message = "failed", "保活未执行"
         for attempt in range(1, 4):
             state = self.get_data("state") or {}
-            cookie = get_site_cookie(self._site_url)
             status, message, state = run_keepalive(
                 site_url=self._site_url, downloader_instance=dl_instance,
                 category=self._qb_category, tags=self._qb_tags,
@@ -134,7 +135,8 @@ class AzKeepAlive(_PluginBase):
             )
             self.save_data("state", state)
             logger.info(f"AnimeZ保活: [{status}] {message}")
-            if status in ("download_success", "skipped"):
+            # no_candidate 表示无可用种子，重试无意义；skipped/download_success 同样直接退出
+            if status in ("download_success", "skipped", "no_candidate"):
                 break
             if attempt < 3:
                 logger.warning(f"AnimeZ保活: 第 {attempt} 次未成功，准备重试")
