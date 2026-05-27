@@ -119,11 +119,12 @@
     "name": "H&R助手Pro",
     "description": "PT站H&R种子自动标签管理，支持多条件OR判定（做种时间/分享率/上传倍数）、按种子大小分级、自动发现下载器种子",
     "labels": "H&R,PT,做种",
-    "version": "1.2.3",
+    "version": "1.2.4",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hitandrun.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.2.4": "详情页新增批量操作按钮：有已满足记录时显示「清除已满足」，有缺失种子记录时显示「清除缺失种子」；新增对应 API 端点 /clear_compliant 和 /clear_missing",
       "v1.2.3": "新增命令 /hnr_clear_compliant（批量清除已满足H&R记录）和 /hnr_clear_missing（批量清除H&R未满足且种子已不在下载器的记录）",
       "v1.2.2": "详情页打开时实时补查下载器状态；操作列支持清除需要做种/已满足/已过期记录；刷流插件选择改为参考原版动态列出运行中的 BrushFlow/BrushFlowLowFreq 并调整配置位置",
       "v1.2.1": "修复 V2 API 契约、停用残留运行态、补种恢复和无考核期过期判断；详情页新增下载器状态列并将原状态列改为 H&R，支持单条清除需要做种任务；配置页新增刷流插件选择",

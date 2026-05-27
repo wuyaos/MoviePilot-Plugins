@@ -35,7 +35,7 @@ class PtHitAndRun(_PluginBase):
     plugin_name = "H&R助手Pro"
     plugin_desc = "PT站H&R种子自动标签管理，支持多条件OR判定、按大小分级、自动发现。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hitandrun.png"
-    plugin_version = "1.2.3"
+    plugin_version = "1.2.4"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pthitandrun_"
@@ -266,6 +266,20 @@ class PtHitAndRun(_PluginBase):
                 "methods": ["POST", "GET"],
                 "summary": "从 H&R 任务列表清除单个记录(兼容)",
             },
+            {
+                "path": "/clear_compliant",
+                "endpoint": self.api_clear_compliant,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "批量清除所有已满足 H&R 的记录",
+            },
+            {
+                "path": "/clear_missing",
+                "endpoint": self.api_clear_missing,
+                "auth": "bear",
+                "methods": ["POST", "GET"],
+                "summary": "批量清除 H&R 未满足且种子已不在下载器的记录",
+            },
         ]
 
     def api_clear_task(self, hash: str = "", body: dict = None) -> Dict[str, Any]:
@@ -287,6 +301,26 @@ class PtHitAndRun(_PluginBase):
         if self._checker.clear_task(torrent_hash):
             return {"code": 0, "msg": "已从 H&R 任务列表清除记录"}
         return {"code": 1, "msg": "任务不存在或当前状态不允许清除"}
+
+    def api_clear_compliant(self) -> Dict[str, Any]:
+        if not self._checker:
+            self._checker = HNRChecker(
+                config=self._cfg or HNRConfig(), helpers=self._helpers,
+                get_data=self.get_data, save_data=self.save_data,
+                send_message=self._send_message,
+            )
+        n = self._checker.clear_compliant_tasks()
+        return {"code": 0, "msg": f"已清除 {n} 条已满足 H&R 的记录"}
+
+    def api_clear_missing(self) -> Dict[str, Any]:
+        if not self._checker:
+            self._checker = HNRChecker(
+                config=self._cfg or HNRConfig(), helpers=self._helpers,
+                get_data=self.get_data, save_data=self.save_data,
+                send_message=self._send_message,
+            )
+        n = self._checker.clear_missing_tasks()
+        return {"code": 0, "msg": f"已清除 {n} 条 H&R 未满足且种子已不在下载器的记录"}
 
     @eventmanager.register(EventType.PluginAction)
     def on_plugin_action(self, event: Event = None):
@@ -428,6 +462,7 @@ class PtHitAndRun(_PluginBase):
         in_progress = sum(1 for t in tasks.values() if t.hr_status == HNRStatus.IN_PROGRESS)
         compliant = sum(1 for t in tasks.values() if t.hr_status == HNRStatus.COMPLIANT)
         overdue = sum(1 for t in tasks.values() if t.hr_status == HNRStatus.OVERDUE)
+        needs_seeding = sum(1 for t in tasks.values() if t.hr_status == HNRStatus.NEEDS_SEEDING)
 
         # 统计卡片
         stat_row = _row([
@@ -492,10 +527,46 @@ class PtHitAndRun(_PluginBase):
                 {"component": "tbody", "content": rows},
             ]}
 
+        # 批量操作按钮
+        action_btns = []
+        if compliant > 0:
+            action_btns.append({
+                "component": "VBtn",
+                "props": {"color": "success", "variant": "tonal", "size": "small",
+                          "prependIcon": "mdi-check-all", "class": "mr-2"},
+                "events": {"click": {
+                    "api": f"plugin/{self.__class__.__name__}/clear_compliant",
+                    "method": "get",
+                }},
+                "text": f"清除已满足（{compliant}）",
+            })
+        if needs_seeding > 0:
+            action_btns.append({
+                "component": "VBtn",
+                "props": {"color": "warning", "variant": "tonal", "size": "small",
+                          "prependIcon": "mdi-delete-sweep"},
+                "events": {"click": {
+                    "api": f"plugin/{self.__class__.__name__}/clear_missing",
+                    "method": "get",
+                }},
+                "text": f"清除缺失种子（{needs_seeding}）",
+            })
+
+        title_row = {
+            "component": "VRow", "props": {"align": "center", "class": "pa-3 pb-1"}, "content": [
+                {"component": "VCol", "props": {"cols": "auto"}, "content": [
+                    {"component": "div", "props": {"class": "text-subtitle-2"}, "text": "H&R 任务列表"},
+                ]},
+                {"component": "VSpacer"},
+                *[{"component": "VCol", "props": {"cols": "auto"}, "content": [btn]}
+                  for btn in action_btns],
+            ],
+        }
+
         return [stat_row, {"component": "VCard", "props": {
             "variant": "flat", "class": "mb-3",
         }, "content": [
-            {"component": "VCardTitle", "props": {"class": "text-subtitle-2 pa-3"}, "text": "H&R 任务列表"},
+            title_row,
             table,
         ]}]
 
