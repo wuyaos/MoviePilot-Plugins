@@ -358,3 +358,27 @@ class HNRChecker:
             self._save_tasks(tasks)
             logger.info(f"{LOG_PREFIX}已从任务列表清除记录: [{task.site_name}] {task.identifier}")
             return True
+
+    def clear_compliant_tasks(self) -> int:
+        """批量清除所有已满足 H&R（COMPLIANT）的记录，返回清除数量。"""
+        with lock:
+            tasks = self._load_tasks()
+            to_remove = [h for h, t in tasks.items() if t.hr_status == HNRStatus.COMPLIANT]
+            for h in to_remove:
+                logger.info(f"{LOG_PREFIX}批量清除已满足记录: [{tasks[h].site_name}] {tasks[h].identifier}")
+                del tasks[h]
+            if to_remove:
+                self._save_tasks(tasks)
+            return len(to_remove)
+
+    def clear_missing_tasks(self) -> int:
+        """批量清除 H&R 未满足且种子已不在下载器（NEEDS_SEEDING）的记录，返回清除数量。"""
+        with lock:
+            tasks = self._load_tasks()
+            to_remove = [h for h, t in tasks.items() if t.hr_status == HNRStatus.NEEDS_SEEDING]
+            for h in to_remove:
+                logger.info(f"{LOG_PREFIX}批量清除缺失种子记录: [{tasks[h].site_name}] {tasks[h].identifier}")
+                del tasks[h]
+            if to_remove:
+                self._save_tasks(tasks)
+            return len(to_remove)

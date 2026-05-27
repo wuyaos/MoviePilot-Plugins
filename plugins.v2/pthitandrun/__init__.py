@@ -35,7 +35,7 @@ class PtHitAndRun(_PluginBase):
     plugin_name = "H&R助手Pro"
     plugin_desc = "PT站H&R种子自动标签管理，支持多条件OR判定、按大小分级、自动发现。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hitandrun.png"
-    plugin_version = "1.2.2"
+    plugin_version = "1.2.3"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pthitandrun_"
@@ -228,6 +228,12 @@ class PtHitAndRun(_PluginBase):
             {"cmd": "/hnr_scan", "event": EventType.PluginAction,
              "desc": "全量扫描（发现 + 检查）", "category": "H&R",
              "data": {"action": "hnr_scan"}},
+            {"cmd": "/hnr_clear_compliant", "event": EventType.PluginAction,
+             "desc": "清除所有已满足 H&R 的记录", "category": "H&R",
+             "data": {"action": "hnr_clear_compliant"}},
+            {"cmd": "/hnr_clear_missing", "event": EventType.PluginAction,
+             "desc": "清除已不在下载器且 H&R 未满足的记录", "category": "H&R",
+             "data": {"action": "hnr_clear_missing"}},
         ]
 
     def get_api(self) -> List[Dict[str, Any]]:
@@ -295,6 +301,14 @@ class PtHitAndRun(_PluginBase):
         elif action == "hnr_scan":
             logger.info(f"{LOG_PREFIX}收到远程命令: 全量扫描")
             self._checker.full_scan()
+        elif action == "hnr_clear_compliant":
+            logger.info(f"{LOG_PREFIX}收到远程命令: 清除已满足 H&R 记录")
+            n = self._checker.clear_compliant_tasks()
+            logger.info(f"{LOG_PREFIX}已清除 {n} 条已满足 H&R 的记录")
+        elif action == "hnr_clear_missing":
+            logger.info(f"{LOG_PREFIX}收到远程命令: 清除缺失种子记录")
+            n = self._checker.clear_missing_tasks()
+            logger.info(f"{LOG_PREFIX}已清除 {n} 条 H&R 未满足且种子已不在下载器的记录")
 
     # ---- 配置表单 ----
 
