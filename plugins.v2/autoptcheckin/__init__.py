@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.2.1"
+    plugin_version = "1.2.2"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1479,9 +1479,12 @@ class AutoPtCheckin(_PluginBase):
                               title="开始站点签到 ...",
                               userid=event.event_data.get("user"))
 
+        _force = self._clean
         if self._sign_sites:
+            self._clean = _force
             self.__do(today=today, type_str="签到", do_sites=self._sign_sites, event=event)
         if self._login_sites:
+            self._clean = _force
             self.__do(today=today, type_str="登录", do_sites=self._login_sites, event=event)
 
     def __do(self, today: datetime, type_str: str, do_sites: list, event: Event = None):
