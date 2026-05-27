@@ -3,11 +3,12 @@
     "name": "AI识别增强",
     "description": "复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。默认不调用 TMDB（消除 500 日志噪音）。",
     "labels": "识别,LLM,AI",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png",
     "author": "wuyaos",
     "level": 1,
     "history": {
+      "v1.2.3": "配置页重构：4 分区标题隔断；自定义 LLM 合并为三字段平铺（模型名/Base URL/API Key），去除冗余 custom_llm_model，仅填模型名=方案A，三项全填=方案B",
       "v1.2.2": "识别注入/跳过均输出 info 日志（不再依赖 debug 模式）；修复 meta_hint type 字段始终为空（to_agent 不存在）；识别 chain 与识别词 chain 使用独立锁；_build_page 合并两次 JSONL 读取为一次",
       "v1.2.1": "修复详情页失败样本列表行不显示（items-per-page -1→20）；修复日志页「等待日志输出」（init_plugin 写入启动日志）；get_page 包裹 try/except 防止渲染崩溃",
       "v1.2.0": "新增自定义 LLM 配置：方案A仅覆盖模型名（bind，不修改系统实例），方案B完整独立实例（ChatOpenAI，三项全填）；两种方式均不影响系统 LLM 配置",

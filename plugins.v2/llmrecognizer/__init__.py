@@ -57,7 +57,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.2"
+    plugin_version = "1.2.3"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -78,13 +78,12 @@ class LLMRecognizer(_PluginBase):
     _verify_tmdb: bool = False
     # 新增：是否要求 TMDB 校验通过才注入
     _require_tmdb_verify: bool = False
-    # 自定义 LLM：不影响系统配置
-    #   方案A（custom_model）：bind() 返回新包装对象，不修改系统 LLM 实例
-    #   方案B（三项均填）：直接 new ChatOpenAI，完全独立，系统 LLM 实例不共享
-    _custom_model: str = ""           # 方案A：仅覆盖模型名，复用系统 key/url
-    _custom_llm_base_url: str = ""    # 方案B：自定义 Base URL（OpenAI 兼容）
-    _custom_llm_api_key: str = ""     # 方案B：自定义 API Key
-    _custom_llm_model: str = ""       # 方案B：自定义模型名
+    # 自定义 LLM（不影响系统配置）
+    #   仅填 custom_model   → 方案A：bind() 新包装，不修改系统 LLM 实例
+    #   三项全填             → 方案B：独立 ChatOpenAI 实例，优先级高于方案A
+    _custom_model: str = ""           # 模型名（方案A/B 共用）
+    _custom_llm_base_url: str = ""    # 方案B：Base URL（OpenAI 兼容）
+    _custom_llm_api_key: str = ""     # 方案B：API Key
     _systemconfig: Optional[SystemConfigOper] = None
 
     # ---- 线程安全 ----
@@ -110,7 +109,6 @@ class LLMRecognizer(_PluginBase):
         self._custom_model = str(config.get("custom_model") or "").strip()
         self._custom_llm_base_url = str(config.get("custom_llm_base_url") or "").strip()
         self._custom_llm_api_key = str(config.get("custom_llm_api_key") or "").strip()
-        self._custom_llm_model = str(config.get("custom_llm_model") or "").strip()
         self._systemconfig = SystemConfigOper()
         # 配置变更时重置 chain 缓存，须在旧锁内置 None 再换锁，避免竞态
         if self._chain_lock:
@@ -258,14 +256,14 @@ class LLMRecognizer(_PluginBase):
         return result.get("value")
 
     def _get_llm(self):
-        # 方案B：三项均填时使用完全独立的 ChatOpenAI 实例，不共享系统 LLM 对象
-        if self._custom_llm_base_url and self._custom_llm_api_key and self._custom_llm_model:
+        # 方案B：Base URL + API Key + 模型名 三项全填时使用完全独立的 ChatOpenAI 实例
+        if self._custom_llm_base_url and self._custom_llm_api_key and self._custom_model:
             try:
                 from langchain_openai import ChatOpenAI
                 return ChatOpenAI(
                     base_url=self._custom_llm_base_url,
                     api_key=self._custom_llm_api_key,
-                    model=self._custom_llm_model,
+                    model=self._custom_model,
                     timeout=self._request_timeout,
                 )
             except Exception as exc:
@@ -1270,9 +1268,8 @@ AI 识别增强结果：
             "verify_tmdb": self._verify_tmdb,
             "require_tmdb_verify": self._require_tmdb_verify,
             "custom_model": self._custom_model or None,
-            "custom_llm_model": self._custom_llm_model or None,
             "custom_llm_base_url": self._custom_llm_base_url or None,
-            "llm_mode": "custom_full" if (self._custom_llm_base_url and self._custom_llm_api_key and self._custom_llm_model)
+            "llm_mode": "custom_full" if (self._custom_llm_base_url and self._custom_llm_api_key and self._custom_model)
                         else "custom_model" if self._custom_model else "system",
         }}
 
@@ -1521,41 +1518,136 @@ AI 识别增强结果：
         return "vuetify", None
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        def _section(label: str) -> list:
+            return [
+                {"component": "VDivider", "props": {"class": "mt-4 mb-2"}},
+                {"component": "div",
+                 "props": {"class": "text-subtitle-2 text-medium-emphasis mb-2 px-1"},
+                 "text": label},
+            ]
+
         form = [{"component": "VForm", "content": [
+            # 顶部说明
             {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
-                {"component": "VAlert", "props": {"type": "info", "variant": "tonal",
-                 "text": "复用 MoviePilot 当前启用的 LLM 配置，在原生识别失败后做本地结构化兜底。默认不启用 TMDB 二次校验（避免 500 日志噪音）。"}}]}]},
+                {"component": "VAlert", "props": {
+                    "type": "info", "variant": "tonal",
+                    "text": "复用 MoviePilot 当前启用的 LLM 配置，在原生识别失败后做本地结构化兜底。"
+                            "默认不启用 TMDB 二次校验（避免「共享媒体识别失败」500 日志噪音）。"
+                }}
+            ]}]},
+
+            # ── 基本设置 ──
+            *[{"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [c]}]}
+              for c in _section("基本设置")],
             {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "enabled", "label": "启用 AI识别增强"}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "debug", "label": "调试模式"}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "save_failed_samples", "label": "保存识别失败样本", "hint": "LLM调用失败或置信度不足时保存样本，供后续生成识别词", "persistent-hint": True}}]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VSwitch", "props": {"model": "enabled", "label": "启用 AI识别增强"}}
+                ]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VSwitch", "props": {
+                        "model": "debug", "label": "调试模式",
+                        "hint": "输出原生已填充、置信度不低等细节日志", "persistent-hint": True,
+                    }}
+                ]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VSwitch", "props": {
+                        "model": "save_failed_samples", "label": "保存识别失败样本",
+                        "hint": "LLM 调用失败或置信度不足时保存样本，供后续生成识别词", "persistent-hint": True,
+                    }}
+                ]},
             ]},
+
+            # ── 识别参数 ──
+            *[{"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [c]}]}
+              for c in _section("识别参数")],
             {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "verify_tmdb", "label": "启用 TMDB 二次校验", "hint": "关闭可消除「共享媒体识别失败」500 日志噪音", "persistent-hint": True}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "require_tmdb_verify", "label": "要求 TMDB 校验通过才注入", "hint": "需同时开启「TMDB 二次校验」", "persistent-hint": True}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSwitch", "props": {"model": "auto_remove_applied_sample", "label": "写入识别词后自动移除样本"}}]},
-            ]},
-            {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "confidence_threshold", "label": "置信度阈值", "type": "number", "hint": "低于该值不注入，默认 0.65", "persistent-hint": True}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "request_timeout", "label": "LLM 请求超时（秒）", "type": "number", "hint": "默认 25 秒", "persistent-hint": True}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "max_retries", "label": "结构化输出重试次数", "type": "number", "hint": "默认 2 次", "persistent-hint": True}}]},
-            ]},
-            {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VTextField", "props": {"model": "max_failed_samples", "label": "失败样本保留上限", "type": "number", "hint": "默认 200 条，重复样本自动去重", "persistent-hint": True}}]},
-            ]},
-            {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12}, "content": [
-                    {"component": "VAlert", "props": {"type": "info", "variant": "tonal",
-                     "text": "自定义 LLM（可选）：方案A 仅填「覆盖模型名」，复用系统 API Key/URL，适合同一服务商换模型；方案B 三项全填，完全独立实例，适合接入不同服务商。两种方式均不修改系统 LLM 配置。"}}
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VTextField", "props": {
+                        "model": "confidence_threshold", "label": "置信度阈值", "type": "number",
+                        "hint": "低于该值不注入，默认 0.65", "persistent-hint": True,
+                    }}
+                ]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VTextField", "props": {
+                        "model": "request_timeout", "label": "LLM 请求超时（秒）", "type": "number",
+                        "hint": "默认 25 秒", "persistent-hint": True,
+                    }}
+                ]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VTextField", "props": {
+                        "model": "max_retries", "label": "结构化输出重试次数", "type": "number",
+                        "hint": "默认 2 次", "persistent-hint": True,
+                    }}
                 ]},
             ]},
             {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "custom_model", "label": "方案A：覆盖模型名", "hint": "留空则用系统默认，如 gpt-4o-mini", "persistent-hint": True, "placeholder": "如 gpt-4o-mini、deepseek-chat"}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "custom_llm_model", "label": "方案B：自定义模型名", "hint": "需同时填 Base URL 和 API Key", "persistent-hint": True}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "custom_llm_api_key", "label": "方案B：自定义 API Key", "type": "password", "hint": "独立 Key，不影响系统配置", "persistent-hint": True}}]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VTextField", "props": {
+                        "model": "max_failed_samples", "label": "失败样本保留上限", "type": "number",
+                        "hint": "默认 200 条，重复样本自动去重", "persistent-hint": True,
+                    }}
+                ]},
             ]},
+
+            # ── 样本管理 ──
+            *[{"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [c]}]}
+              for c in _section("样本管理")],
             {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VTextField", "props": {"model": "custom_llm_base_url", "label": "方案B：自定义 Base URL（OpenAI 兼容）", "hint": "如 https://api.deepseek.com/v1", "persistent-hint": True, "placeholder": "https://api.deepseek.com/v1"}}]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VSwitch", "props": {
+                        "model": "verify_tmdb", "label": "启用 TMDB 二次校验",
+                        "hint": "关闭可消除「共享媒体识别失败」500 日志", "persistent-hint": True,
+                    }}
+                ]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VSwitch", "props": {
+                        "model": "require_tmdb_verify", "label": "要求 TMDB 校验通过才注入",
+                        "hint": "需同时开启「TMDB 二次校验」", "persistent-hint": True,
+                    }}
+                ]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VSwitch", "props": {
+                        "model": "auto_remove_applied_sample", "label": "写入识别词后自动移除样本",
+                        "hint": "写入 CustomIdentifiers 成功后自动清除对应失败样本", "persistent-hint": True,
+                    }}
+                ]},
+            ]},
+
+            # ── 自定义大模型（可选）──
+            *[{"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [c]}]}
+              for c in _section("自定义大模型（可选，留空使用系统配置）")],
+            {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
+                {"component": "VAlert", "props": {
+                    "type": "info", "variant": "tonal", "density": "compact",
+                    "text": "仅填「模型名」时复用系统 Key / URL（适合同服务商换模型）；"
+                            "三项全填时使用完全独立实例（适合接入不同服务商）。两种方式均不修改系统 LLM 配置。",
+                }}
+            ]}]},
+            {"component": "VRow", "content": [
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VTextField", "props": {
+                        "model": "custom_model",
+                        "label": "模型名",
+                        "placeholder": "如 gpt-4o-mini、deepseek-chat",
+                        "hint": "留空则使用系统默认模型", "persistent-hint": True,
+                    }}
+                ]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VTextField", "props": {
+                        "model": "custom_llm_base_url",
+                        "label": "Base URL（OpenAI 兼容）",
+                        "placeholder": "https://api.deepseek.com/v1",
+                        "hint": "留空则复用系统 Base URL", "persistent-hint": True,
+                    }}
+                ]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VTextField", "props": {
+                        "model": "custom_llm_api_key",
+                        "label": "API Key",
+                        "type": "password",
+                        "hint": "留空则复用系统 API Key", "persistent-hint": True,
+                    }}
+                ]},
             ]},
         ]}]
         return form, {
@@ -1563,5 +1655,6 @@ AI 识别增强结果：
             "request_timeout": 25, "max_retries": 2, "save_failed_samples": True,
             "max_failed_samples": 200, "auto_remove_applied_sample": True,
             "verify_tmdb": False, "require_tmdb_verify": False,
-            "custom_model": "", "custom_llm_model": "", "custom_llm_api_key": "", "custom_llm_base_url": "",
+            "custom_model": "", "custom_llm_api_key": "", "custom_llm_base_url": "",
         }
+
