@@ -57,7 +57,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.1"
+    plugin_version = "1.2.2"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -89,7 +89,8 @@ class LLMRecognizer(_PluginBase):
 
     # ---- 线程安全 ----
     _sample_lock: Optional[threading.Lock] = None       # 保护 JSONL 文件读写
-    _chain_lock: Optional[threading.Lock] = None        # 保护 LLM chain 懒初始化
+    _chain_lock: Optional[threading.Lock] = None        # 保护识别 chain 懒初始化
+    _identifier_chain_lock: Optional[threading.Lock] = None  # 保护识别词建议 chain 懒初始化（与识别 chain 独立）
     _identifiers_lock: Optional[threading.Lock] = None  # 保护 CustomIdentifiers 读写
     _llm_chain = None                                   # 识别 chain 缓存
     _identifier_chain = None                            # 识别词建议 chain 缓存
@@ -115,12 +116,14 @@ class LLMRecognizer(_PluginBase):
         if self._chain_lock:
             with self._chain_lock:
                 self._llm_chain = None
+            with (self._identifier_chain_lock or self._chain_lock):
                 self._identifier_chain = None
         else:
             self._llm_chain = None
             self._identifier_chain = None
         self._sample_lock = threading.Lock()
         self._chain_lock = threading.Lock()
+        self._identifier_chain_lock = threading.Lock()
         self._identifiers_lock = threading.Lock()
         self._ensure_plugin_log_file()
         self._register_events()
@@ -220,7 +223,8 @@ class LLMRecognizer(_PluginBase):
         return {
             "name": getattr(meta, "name", "") or "",
             "year": getattr(meta, "year", "") or "",
-            "type": getattr(getattr(meta, "type", None), "to_agent", lambda: None)() or "",
+            "type": ("movie" if getattr(meta, "type", None) == MediaType.MOVIE
+                     else "tv" if getattr(meta, "type", None) == MediaType.TV else ""),
             "season": getattr(meta, "begin_season", None) or 0,
             "episode": getattr(meta, "begin_episode", None) or 0,
         }
@@ -287,8 +291,8 @@ class LLMRecognizer(_PluginBase):
             return self._llm_chain
 
     def _get_identifier_chain(self):
-        """懒初始化并缓存识别词建议 chain，线程安全。"""
-        with self._chain_lock:
+        """懒初始化并缓存识别词建议 chain，线程安全（与识别 chain 锁独立）。"""
+        with self._identifier_chain_lock:
             if self._identifier_chain is None:
                 llm = self._get_llm()
                 self._identifier_chain = (
@@ -794,8 +798,7 @@ AI 识别增强结果：
 
         result = result_holder.get("result") or {}
         if not result.get("success"):
-            if self._debug:
-                logger.info(f"[AI识别增强] 跳过注入: {title or path} - {result.get('message')}")
+            logger.info(f"[AI识别增强] 跳过注入: {title or path} - {result.get('message')}")
             return
 
         guess = result.get("guess") or {}
@@ -823,6 +826,10 @@ AI 识别增强结果：
             event_data["source_plugin"] = "LLMRecognizer"
             event_data["confidence"] = guess.get("confidence", 0)
             event_data["reason"] = guess.get("reason", "")
+            logger.info(
+                f"[AI识别增强] 识别注入: {title or path!r} → {guess.get('name')!r} "
+                f"({our_confidence:.0%}) {guess.get('reason') or ''}"
+            )
 
     # ---- 识别词建议 ----
 
@@ -1438,8 +1445,9 @@ AI 识别增强结果：
 
     def _build_page(self) -> List[dict]:
         llm_ready = bool(getattr(settings, "LLM_API_KEY", None))
-        samples = self._read_failed_samples(limit=20)
-        failed_count = len(self._read_failed_samples(limit=200))
+        _all_samples = self._read_failed_samples(limit=200)
+        failed_count = len(_all_samples)
+        samples = _all_samples[:20]
         id_count = len(self._get_custom_identifiers())
 
         def stat_card(title: str, value: Any, subtitle: str = "") -> dict:
