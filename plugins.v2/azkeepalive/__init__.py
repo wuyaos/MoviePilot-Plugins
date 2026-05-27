@@ -9,7 +9,6 @@ from app.core.config import settings as app_settings
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import NotificationType
-from app.utils.timer import TimerUtils
 
 from .core.form_utils import v_col, v_cron, v_row, v_select, v_switch, v_text
 from .core.page import build_page
@@ -19,7 +18,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.5.0"
+    plugin_version = "2.5.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -157,32 +156,30 @@ class AzKeepAlive(_PluginBase):
     def get_service(self) -> List[Dict[str, Any]]:
         if not self._enabled:
             return []
+        import random
         services = []
         if self._cron:
             try:
                 if self._cron.count(" ") != 4:
-                    logger.error("AnimeZ保活 cron 错误: 需要 5 位 cron 表达式")
-                    return []
-                services.append({"id": "AzKeepAlive", "name": "AnimeZ保活定时任务",
-                                 "trigger": CronTrigger.from_crontab(self._cron),
-                                 "func": self._run_task, "kwargs": {}})
+                    logger.error("AnimeZ保活 cron 错误: 需要 5 位 cron 表达式，跳过定时注册")
+                else:
+                    services.append({"id": "AzKeepAlive", "name": "AnimeZ保活定时任务",
+                                     "trigger": CronTrigger.from_crontab(self._cron),
+                                     "func": self._run_task, "kwargs": {}})
+                    logger.info(f"AnimeZ保活已注册定时任务: {self._cron}")
             except Exception as e:
-                logger.error(f"AnimeZ保活 cron 错误: {e}")
-                return []
+                logger.error(f"AnimeZ保活 cron 错误: {e}，跳过定时注册")
         else:
-            # 无 cron 时每天随机执行一次（9-23点间）
-            triggers = TimerUtils.random_scheduler(
-                num_executions=1, begin_hour=9, end_hour=23, min_interval=60, max_interval=120)
-            if not triggers:
-                logger.error("AnimeZ保活未生成有效随机定时任务")
-                return []
-            logger.info("AnimeZ保活随机触发时间：%s" %
-                        ", ".join([f"{t.hour:02d}:{t.minute:02d}" for t in triggers]))
-            for t in triggers:
-                services.append({"id": f"AzKeepAlive.{t.hour:02d}{t.minute:02d}",
-                                 "name": f"AnimeZ保活定时任务 {t.hour:02d}:{t.minute:02d}",
-                                 "trigger": CronTrigger(hour=t.hour, minute=t.minute),
-                                 "func": self._run_task, "kwargs": {}})
+            # 无 cron 时每天随机执行一次（9-22点间），用 from_crontab 确保调度器正确识别
+            hour = random.randint(9, 22)
+            minute = random.randint(0, 59)
+            cron_str = f"{minute} {hour} * * *"
+            logger.info(f"AnimeZ保活随机触发时间：{hour:02d}:{minute:02d}")
+            services.append({"id": f"AzKeepAlive.{hour:02d}{minute:02d}",
+                             "name": f"AnimeZ保活定时任务 {hour:02d}:{minute:02d}",
+                             "trigger": CronTrigger.from_crontab(cron_str),
+                             "func": self._run_task, "kwargs": {}})
+        # 手动服务始终注册，不受 cron 错误影响
         services.extend([
             {"id": "AzKeepAliveRunNow", "name": "AnimeZ保活-立即运行",
              "trigger": None, "func": self._run_task, "kwargs": {}},
