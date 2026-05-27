@@ -37,7 +37,7 @@ class CoverGen(_PluginBase):
     plugin_name = "媒体库封面生成"
     plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
-    plugin_version = "1.4.5"
+    plugin_version = "1.4.6"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "covergen_"

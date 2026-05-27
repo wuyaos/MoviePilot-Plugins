@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.2.0"
+    plugin_version = "1.2.1"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1464,13 +1464,14 @@ class AutoPtCheckin(_PluginBase):
             if action not in ("checkin_now", "checkin_force"):
                 return
             if action == "checkin_force":
-                self._clear_today_cache()
+                self._clean = True
         # 日期
         today = datetime.today()
         if self._start_time is not None and self._end_time is not None:
             if int(datetime.today().hour) < self._start_time or int(datetime.today().hour) > self._end_time:
                 logger.error(
                     f"当前时间 {int(datetime.today().hour)} 不在 {self._start_time}-{self._end_time} 范围内，暂不执行任务")
+                self._clean = False
                 return
         if event:
             logger.info("收到命令，开始站点签到 ...")
@@ -1908,18 +1909,6 @@ class AutoPtCheckin(_PluginBase):
             logger.warn("%s 模拟登录失败：%s" % (site, str(e)))
             traceback.print_exc()
             return False, f"模拟登录失败：{str(e)}！"
-
-    def _clear_today_cache(self):
-        """清除今日签到/登录缓存，使 checkin_force 可重新执行"""
-        from datetime import date
-        today_str = date.today().strftime('%Y-%m-%d')
-        for type_str in ("签到", "登录"):
-            key = type_str + "-" + today_str
-            try:
-                self.save_data(key, None)
-                logger.info(f"已清除今日缓存: {key}")
-            except Exception as e:
-                logger.warning(f"清除缓存失败 {key}: {e}")
 
     def stop_service(self):
         """
