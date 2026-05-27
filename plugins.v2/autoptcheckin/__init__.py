@@ -214,15 +214,14 @@ class AutoPtCheckin(_PluginBase):
         定义远程控制命令
         :return: 命令关键字、事件、描述、附带数据
         """
-        return [{
-            "cmd": "/site_signin",
-            "event": EventType.PluginAction,
-            "desc": "站点签到",
-            "category": "站点",
-            "data": {
-                "action": "site_signin"
-            }
-        }]
+        return [
+            {"cmd": "/checkin_now", "event": EventType.PluginAction,
+             "desc": "立即对所有站点执行一次签到", "category": "签到",
+             "data": {"action": "checkin_now"}},
+            {"cmd": "/checkin_force", "event": EventType.PluginAction,
+             "desc": "强制重新签到（清理本日缓存）", "category": "签到",
+             "data": {"action": "checkin_force"}},
+        ]
 
     def get_api(self) -> List[Dict[str, Any]]:
         """
@@ -1461,8 +1460,11 @@ class AutoPtCheckin(_PluginBase):
         """
         if event:
             event_data = event.event_data
-            if not event_data or event_data.get("action") != "site_signin":
+            action = (event_data or {}).get("action")
+            if action not in ("checkin_now", "checkin_force"):
                 return
+            if action == "checkin_force":
+                self._clear_today_cache()
         # 日期
         today = datetime.today()
         if self._start_time is not None and self._end_time is not None:
@@ -1906,6 +1908,18 @@ class AutoPtCheckin(_PluginBase):
             logger.warn("%s 模拟登录失败：%s" % (site, str(e)))
             traceback.print_exc()
             return False, f"模拟登录失败：{str(e)}！"
+
+    def _clear_today_cache(self):
+        """清除今日签到/登录缓存，使 checkin_force 可重新执行"""
+        from datetime import date
+        today_str = date.today().strftime('%Y-%m-%d')
+        for type_str in ("签到", "登录"):
+            key = type_str + "-" + today_str
+            try:
+                self.save_data(key, None)
+                logger.info(f"已清除今日缓存: {key}")
+            except Exception as e:
+                logger.warning(f"清除缓存失败 {key}: {e}")
 
     def stop_service(self):
         """

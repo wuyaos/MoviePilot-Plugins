@@ -37,7 +37,7 @@ class CoverGen(_PluginBase):
     plugin_name = "媒体库封面生成"
     plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
-    plugin_version = "1.4.4"
+    plugin_version = "1.4.5"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "covergen_"
@@ -180,9 +180,9 @@ class CoverGen(_PluginBase):
     def get_command() -> List[Dict[str, Any]]:
         """注册远程命令（如 Bot 或 Webhook 触发）。"""
         return [
-            {"cmd": "/update_covers", "event": EventType.PluginAction,
+            {"cmd": "/cover_update", "event": EventType.PluginAction,
              "desc": "立即更新所有媒体库封面", "category": "媒体",
-             "data": {"action": "update_covers"}},
+             "data": {"action": "cover_update"}},
             {"cmd": "/cover_clean_images", "event": EventType.PluginAction,
              "desc": "清理封面图片缓存", "category": "媒体",
              "data": {"action": "clean_images"}},
@@ -303,7 +303,7 @@ class CoverGen(_PluginBase):
         if not event or not event.event_data:
             return
         action = event.event_data.get("action")
-        if action == "update_covers":
+        if action == "cover_update":
             self._run_all(trigger="command")
         elif action == "clean_images":
             self.api_clean_images()

@@ -6,9 +6,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.core.config import settings as app_settings
+from app.core.event import eventmanager, Event
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import NotificationType
+from app.schemas.types import EventType
 
 from .core.form_utils import v_col, v_cron, v_row, v_select, v_switch, v_text
 from .core.page import build_page
@@ -18,7 +20,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.5.1"
+    plugin_version = "2.5.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -148,7 +150,14 @@ class AzKeepAlive(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        return []
+        return [
+            {"cmd": "/az_run", "event": EventType.PluginAction,
+             "desc": "立即运行保活（遵守间隔）", "category": "保活",
+             "data": {"action": "az_run"}},
+            {"cmd": "/az_force", "event": EventType.PluginAction,
+             "desc": "强制保活（绕过间隔）", "category": "保活",
+             "data": {"action": "az_force"}},
+        ]
 
     def get_api(self) -> List[Dict[str, Any]]:
         return []
@@ -275,6 +284,16 @@ class AzKeepAlive(_PluginBase):
             return [{"component": "VAlert", "props": {
                 "type": "error", "variant": "tonal", "text": f"详情页加载失败: {e}"
             }}]
+
+    @eventmanager.register(EventType.PluginAction)
+    def on_plugin_action(self, event: Event):
+        if not event or not event.event_data:
+            return
+        action = event.event_data.get("action")
+        if action == "az_run":
+            self._run_task()
+        elif action == "az_force":
+            self._run_force_task()
 
     def stop_service(self):
         try:
