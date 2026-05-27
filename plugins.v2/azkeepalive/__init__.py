@@ -20,7 +20,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.5.4"
+    plugin_version = "2.5.5"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -43,6 +43,7 @@ class AzKeepAlive(_PluginBase):
     _timeout = 30
     _use_proxy = False
     _auto_delete_hnr = False
+    _random_cron = ""
     _scheduler: Optional[BackgroundScheduler] = None
     _run_lock = threading.Lock()
 
@@ -66,6 +67,13 @@ class AzKeepAlive(_PluginBase):
         self._timeout = int(config.get("timeout") or 30)
         self._use_proxy = bool(config.get("use_proxy"))
         self._auto_delete_hnr = bool(config.get("auto_delete_hnr"))
+        self._random_cron = str(config.get("random_cron") or "").strip()
+        # 无用户 cron 时生成固定随机时间（仅首次），避免每次重载漂移
+        if not self._cron and not self._random_cron:
+            import random
+            h, m = random.randint(9, 22), random.randint(0, 59)
+            self._random_cron = f"{m} {h} * * *"
+            self._save_config()
         if self._onlyonce or self._force_keepalive:
             force = self._force_keepalive
             self._scheduler = BackgroundScheduler(timezone=app_settings.TZ)
@@ -99,6 +107,7 @@ class AzKeepAlive(_PluginBase):
             "max_size_gb": self._max_size_gb, "require_free": self._require_free,
             "timeout": self._timeout, "use_proxy": self._use_proxy,
             "auto_delete_hnr": self._auto_delete_hnr,
+            "random_cron": self._random_cron,
         })
 
     def _run_task(self, force: bool = False):
@@ -165,7 +174,6 @@ class AzKeepAlive(_PluginBase):
     def get_service(self) -> List[Dict[str, Any]]:
         if not self._enabled:
             return []
-        import random
         services = []
         if self._cron:
             try:
@@ -179,13 +187,11 @@ class AzKeepAlive(_PluginBase):
             except Exception as e:
                 logger.error(f"AnimeZ保活 cron 错误: {e}，跳过定时注册")
         else:
-            # 无 cron 时每天随机执行一次（9-22点间），用 from_crontab 确保调度器正确识别
-            hour = random.randint(9, 22)
-            minute = random.randint(0, 59)
-            cron_str = f"{minute} {hour} * * *"
-            logger.info(f"AnimeZ保活随机触发时间：{hour:02d}:{minute:02d}")
+            # 使用 init_plugin 已持久化的随机时间，避免每次重载漂移
+            cron_str = self._random_cron
+            logger.info(f"AnimeZ保活随机触发时间：{cron_str}")
             services.append({"id": "AzKeepAlive",
-                             "name": f"AnimeZ保活定时任务 {hour:02d}:{minute:02d}",
+                             "name": f"AnimeZ保活定时任务 {cron_str}",
                              "trigger": CronTrigger.from_crontab(cron_str),
                              "func": self._run_task, "kwargs": {}})
         # 手动服务始终注册，不受 cron 错误影响

@@ -61,11 +61,12 @@
     "name": "AnimeZ保活",
     "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
     "labels": "保活,AnimeZ",
-    "version": "2.5.4",
+    "version": "2.5.5",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v2.5.5": "修复随机触发时间每次重载漂移：init_plugin 首次生成后持久化到 config（random_cron），get_service 直接复用，点击「立即运行一次」不再重新抽签",
       "v2.5.4": "版本对齐",
       "v2.5.3": "版本对齐",
       "v2.5.2": "新增 /az_run（遵守间隔立即运行）和 /az_force（强制保活绕过间隔）Bot 远程命令；修复 stop_service 缺少 try/if 保护导致的启动异常",
