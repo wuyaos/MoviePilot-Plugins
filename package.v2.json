@@ -91,11 +91,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
     "labels": "签到,PT",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.2.3": "修复 @staticmethod 中误用 self._SITE_ERROR_KEYWORDS（改为类名引用）；修复 u2.py 参数守卫 `not re` → `not req`；修复 HDCity 签到检查顺序（成功判断前置，login 检测收窄）；空 Cookie 返回具体错误消息；新增 _fetch_cookie_cloud 自动从 CookieCloud 补取缺失 Cookie（支持 API 模式站点）",
       "v1.2.2": "修复 checkin_force 仅对第一个 __do（签到）生效：保存 _force 标志并在每次 __do 调用前还原，确保「签到」和「登录」均被强制重新执行",
       "v1.2.1": "修复 checkin_force 在时间窗口外触发时 _clean 标志未复位导致下次定时签到意外跳过缓存；改用 _clean=True 复用现有跳过逻辑，移除独立 _clear_today_cache 方法",
       "v1.2.0": "修复interval/默认模式定时任务：CronTrigger改用from_crontab消除每分钟执行退化；service ID改为索引序号（AutoSignIn.0/1）确保重载时旧任务被替换而非累积",
