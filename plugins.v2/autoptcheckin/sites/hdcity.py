@@ -50,17 +50,18 @@ class HDCity(_ISiteSigninHandler):
             logger.error(f"{site} 签到失败，请检查站点连通性")
             return False, '签到失败，请检查站点连通性'
 
-        if "login" in html_text:
-            logger.error(f"{site} 签到失败，Cookie已失效")
-            return False, '签到失败，Cookie已失效'
-
-        # 判断是否已签到
-        # '已连续签到278天，此次签到您获得了100魔力值奖励!'
+        # 优先判断签到结果，避免页面含 login 字样时误判 Cookie 失效
         if any(t in html_text for t in self._success_texts):
             logger.info(f"{site} 签到成功")
             return True, '签到成功'
         if any(t in html_text for t in self._repeat_texts):
             logger.info(f"{site} 今日已签到")
             return True, '今日已签到'
-        logger.error(f"{site} 签到失败，签到接口返回 {html_text}")
+
+        # 再判断是否未登录（跳转到登录页）
+        if "login.php" in html_text or "/login" in html_text:
+            logger.error(f"{site} 签到失败，Cookie已失效")
+            return False, '签到失败，Cookie已失效'
+
+        logger.error(f"{site} 签到失败，签到接口返回 {html_text[:200]}")
         return False, '签到失败'

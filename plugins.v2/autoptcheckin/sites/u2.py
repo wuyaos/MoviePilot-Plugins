@@ -90,7 +90,7 @@ class U2(_ISiteSigninHandler):
         form = html.xpath("//form//td/input[@name='form']/@value")[0]
         submit_name = html.xpath("//form//td/input[@type='submit']/@name")
         submit_value = html.xpath("//form//td/input[@type='submit']/@value")
-        if not re or not hash_str or not form or not submit_name or not submit_value:
+        if not req or not hash_str or not form or not submit_name or not submit_value:
             logger.error("{site} 签到失败，未获取到相关签到参数")
             return False, '签到失败'
 

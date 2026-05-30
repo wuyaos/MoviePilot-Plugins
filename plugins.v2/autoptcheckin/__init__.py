@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.2.2"
+    plugin_version = "1.2.3"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1694,10 +1694,32 @@ class AutoPtCheckin(_PluginBase):
                 message=f"站点【{site_name}】{message or '签到成功'}"
             )
 
+    @staticmethod
+    def _fetch_cookie_cloud(site_url: str) -> str:
+        """Cookie 为空时从 CookieCloud 按域名补取"""
+        try:
+            from urllib.parse import urlparse
+            from app.helper.cookiecloud import CookieCloudHelper
+            cookies, _ = CookieCloudHelper().download()
+            if not cookies:
+                return ""
+            site_domain = urlparse(site_url).netloc
+            for domain, cookie in cookies.items():
+                if site_domain and site_domain.endswith(domain):
+                    return cookie
+        except Exception as e:
+            logger.debug(f"CookieCloud 补取 Cookie 失败: {e}")
+        return ""
+
     def signin_site(self, site_info: CommentedMap) -> Tuple[str, str]:
         """
         签到一个站点
         """
+        if not site_info.get("cookie"):
+            cookie = self._fetch_cookie_cloud(site_info.get("url", ""))
+            if cookie:
+                logger.info(f"{site_info.get('name')} Cookie 为空，已从 CookieCloud 补取")
+                site_info["cookie"] = cookie
         site_module = self.__build_class(site_info.get("url"))
         # 开始记时
         start_time = datetime.now()
@@ -1736,7 +1758,7 @@ class AutoPtCheckin(_PluginBase):
         proxy_server = settings.PROXY_SERVER if site_info.get("proxy") else None
         if not site_url or not site_cookie:
             logger.warn(f"未配置 {site} 的站点地址或Cookie，无法签到")
-            return False, ""
+            return False, "签到失败，未配置站点地址或Cookie"
         # 模拟登录
         try:
             # 访问链接
@@ -1753,9 +1775,9 @@ class AutoPtCheckin(_PluginBase):
                 if not SiteUtils.is_logged_in(page_source):
                     if under_challenge(page_source):
                         return False, f"无法通过Cloudflare！"
-                    elif any(kw in (page_source or "").lower() for kw in self._SITE_ERROR_KEYWORDS):
+                    elif any(kw in (page_source or "").lower() for kw in AutoPtCheckin._SITE_ERROR_KEYWORDS):
                         return False, f"仿真签到失败，站点服务器异常，稍后重试！"
-                    return False, f"仿真登录失败，Cookie已失效！"
+                    return False, f"仿真签到失败，Cookie已失效！"
                 else:
                     # 判断是否已签到
                     if re.search(r'已签|签到已得', page_source, re.IGNORECASE) \
@@ -1778,7 +1800,7 @@ class AutoPtCheckin(_PluginBase):
                     if not SiteUtils.is_logged_in(res.text):
                         if under_challenge(res.text):
                             msg = "站点被Cloudflare防护，请打开站点浏览器仿真"
-                        elif any(kw in res.text.lower() for kw in self._SITE_ERROR_KEYWORDS):
+                        elif any(kw in res.text.lower() for kw in AutoPtCheckin._SITE_ERROR_KEYWORDS):
                             msg = "站点服务器异常，稍后重试"
                         elif res.status_code == 200:
                             msg = "Cookie已失效"
@@ -1804,6 +1826,11 @@ class AutoPtCheckin(_PluginBase):
         """
         模拟登录一个站点
         """
+        if not site_info.get("cookie"):
+            cookie = self._fetch_cookie_cloud(site_info.get("url", ""))
+            if cookie:
+                logger.info(f"{site_info.get('name')} Cookie 为空，已从 CookieCloud 补取")
+                site_info["cookie"] = cookie
         site_module = self.__build_class(site_info.get("url"))
         # 开始记时
         start_time = datetime.now()
@@ -1841,8 +1868,8 @@ class AutoPtCheckin(_PluginBase):
         proxies = settings.PROXY if site_info.get("proxy") else None
         proxy_server = settings.PROXY_SERVER if site_info.get("proxy") else None
         if not site_url or not site_cookie:
-            logger.warn(f"未配置 {site} 的站点地址或Cookie，无法签到")
-            return False, ""
+            logger.warn(f"未配置 {site} 的站点地址或Cookie，无法登录")
+            return False, "模拟登录失败，未配置站点地址或Cookie"
         # 模拟登录
         try:
             # 访问链接
@@ -1856,7 +1883,7 @@ class AutoPtCheckin(_PluginBase):
                 if not SiteUtils.is_logged_in(page_source):
                     if under_challenge(page_source):
                         return False, f"无法通过Cloudflare！"
-                    elif any(kw in (page_source or "").lower() for kw in self._SITE_ERROR_KEYWORDS):
+                    elif any(kw in (page_source or "").lower() for kw in AutoPtCheckin._SITE_ERROR_KEYWORDS):
                         return False, f"仿真登录失败，站点服务器异常，稍后重试！"
                     return False, f"仿真登录失败，Cookie已失效！"
                 else:
