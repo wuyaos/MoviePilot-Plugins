@@ -58,7 +58,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.5"
+    plugin_version = "1.2.6"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -937,7 +937,7 @@ AI 识别增强结果：
             event_data["reason"] = guess.get("reason", "")
             logger.info(
                 f"[AI识别增强] 识别注入: {title or path!r} → {guess.get('name')!r} "
-                f"({our_confidence:.0%}) {guess.get('reason') or ''}"
+                f"({guess.get('confidence', 0):.0%}) {guess.get('reason') or ''}"
             )
 
     # ---- 识别词建议 ----
