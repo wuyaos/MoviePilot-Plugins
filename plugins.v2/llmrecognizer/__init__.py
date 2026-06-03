@@ -58,7 +58,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.11"
+    plugin_version = "1.2.12"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -81,11 +81,10 @@ class LLMRecognizer(_PluginBase):
     # 新增：是否要求 TMDB 校验通过才注入
     _require_tmdb_verify: bool = False
     # 自定义 LLM（不影响系统配置）
-    #   仅填 custom_model   → 方案A：bind() 新包装，不修改系统 LLM 实例
-    #   三项全填             → 方案B：独立 ChatOpenAI 实例，优先级高于方案A
-    _custom_model: str = ""           # 模型名（方案A/B 共用）
-    _custom_llm_base_url: str = ""    # 方案B：Base URL（OpenAI 兼容）
-    _custom_llm_api_key: str = ""     # 方案B：API Key
+    #   三项全填 → 独立 ChatOpenAI 实例；否则直接使用系统 LLM
+    _custom_model: str = ""           # 模型名
+    _custom_llm_base_url: str = ""    # Base URL（OpenAI 兼容）
+    _custom_llm_api_key: str = ""     # API Key
     _systemconfig: Optional[SystemConfigOper] = None
 
     # ---- 线程安全 ----
@@ -290,7 +289,7 @@ class LLMRecognizer(_PluginBase):
         return result.get("value")
 
     def _get_llm(self):
-        # 方案B：Base URL + API Key + 模型名 三项全填时使用完全独立的 ChatOpenAI 实例
+        # 三项全填：使用独立 ChatOpenAI 实例，模型名可靠生效
         if self._custom_llm_base_url and self._custom_llm_api_key and self._custom_model:
             try:
                 from langchain_openai import ChatOpenAI
@@ -302,13 +301,9 @@ class LLMRecognizer(_PluginBase):
                 )
             except Exception as exc:
                 logger.warning(f"[AI识别增强] 自定义 LLM 初始化失败，回退系统配置: {exc}")
-        # 方案A / 默认：从 LLMHelper 获取系统 LLM
+        # 其余情况：直接使用系统 LLM，不尝试 bind(model=...)
         llm = LLMHelper.get_llm(streaming=False)
-        llm = self._run_async_compatible(llm, timeout=self._request_timeout + 2)
-        # bind() 返回新 RunnableBinding 包装，不修改系统 LLM 实例
-        if self._custom_model:
-            llm = llm.bind(model=self._custom_model)
-        return llm
+        return self._run_async_compatible(llm, timeout=self._request_timeout + 2)
 
     def _get_recognize_chain(self):
         """懒初始化并缓存识别 chain，线程安全。"""
@@ -928,6 +923,17 @@ AI 识别增强结果：
 
         # 在独立线程中执行 LLM 调用，以 request_timeout+2s 为上限等待
         # 保留对 event_data 的写能力（chain 事件同步读取），但限制最长阻塞时间
+
+        # MetaInfo 预检：原生正则能提取到 name 说明标准命名，不需要 AI 兜底
+        try:
+            _meta = MetaInfo(title=title, path=path)
+            if _meta.name and _meta.name.strip():
+                if self._debug:
+                    logger.info(f"[AI识别增强] MetaInfo 可识别({_meta.name!r})，跳过 AI 兜底: {title or path}")
+                return
+        except Exception:
+            pass  # MetaInfo 解析异常则继续走 AI
+
         result_holder: Dict[str, Any] = {}
 
         provenance = self._extract_provenance(event_data)
@@ -1406,8 +1412,8 @@ AI 识别增强结果：
             "require_tmdb_verify": self._require_tmdb_verify,
             "custom_model": self._custom_model or None,
             "custom_llm_base_url": self._custom_llm_base_url or None,
-            "llm_mode": "custom_full" if (self._custom_llm_base_url and self._custom_llm_api_key and self._custom_model)
-                        else "custom_model" if self._custom_model else "system",
+            "llm_mode": "custom" if (self._custom_llm_base_url and self._custom_llm_api_key and self._custom_model)
+                        else "system",
         }}
 
     async def api_recognize(self, request: Request):
@@ -1781,7 +1787,7 @@ AI 识别增强结果：
                         "model": "custom_model",
                         "label": "模型名",
                         "placeholder": "如 gpt-4o-mini、deepseek-chat",
-                        "hint": "留空则使用系统默认模型", "persistent-hint": True,
+                        "hint": "需与 Base URL+API Key 同时填写，三项全填才会生效", "persistent-hint": True,
                     }}
                 ]},
                 {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
