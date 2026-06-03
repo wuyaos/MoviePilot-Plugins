@@ -58,7 +58,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.6"
+    plugin_version = "1.2.7"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -899,6 +899,18 @@ AI 识别增强结果：
         title, path = self._extract_title_path(event_data)
         if not title and not path:
             return
+
+        # 兜底守门：原生识别已填充 name 或其他插件已处理 → 跳过 LLM 调用
+        if isinstance(event_data, dict):
+            existing_name = str(event_data.get("name") or "").strip()
+            if existing_name and not event_data.get("source_plugin"):
+                if self._debug:
+                    logger.info(f"[AI识别增强] 原生识别已填充结果，跳过兜底: {existing_name}")
+                return
+            if event_data.get("source_plugin"):
+                if self._debug:
+                    logger.info(f"[AI识别增强] 已有插件处理，跳过: {event_data.get('source_plugin')}")
+                return
 
         # 在独立线程中执行 LLM 调用，以 request_timeout+2s 为上限等待
         # 保留对 event_data 的写能力（chain 事件同步读取），但限制最长阻塞时间
