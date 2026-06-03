@@ -3,11 +3,12 @@
     "name": "AI识别增强",
     "description": "复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。默认不调用 TMDB（消除 500 日志噪音）。",
     "labels": "识别,LLM,AI",
-    "version": "1.2.9",
+    "version": "1.2.10",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png",
     "author": "wuyaos",
     "level": 1,
     "history": {
+      "v1.2.10": "修复 _record_llm_error 中换行符被写成字面换行导致语法错误",
       "v1.2.9": "修复缓存存储失败结果：只缓存 success=True 的识别结果，失败不入缓存以允许重试",
       "v1.2.8": "暴露 GET /llm_errors 和 POST /clear_llm_errors API 端点",
       "v1.2.7": "修复兜底逻辑：将原生识别已填充/其他插件已处理的守门移至 LLM 线程启动前，避免无效 API 调用",
