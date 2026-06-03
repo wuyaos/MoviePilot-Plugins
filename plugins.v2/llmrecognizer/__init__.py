@@ -8,6 +8,7 @@ import inspect
 import json
 import re
 import threading
+from collections import OrderedDict
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -57,7 +58,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.3"
+    plugin_version = "1.2.4"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -93,6 +94,9 @@ class LLMRecognizer(_PluginBase):
     _identifiers_lock: Optional[threading.Lock] = None  # 保护 CustomIdentifiers 读写
     _llm_chain = None                                   # 识别 chain 缓存
     _identifier_chain = None                            # 识别词建议 chain 缓存
+    _recognize_cache: "OrderedDict[tuple, dict]" = None # 识别结果 LRU 缓存
+    _recognize_cache_lock: Optional[threading.Lock] = None
+    _RECOGNIZE_CACHE_MAX = 512
 
     def init_plugin(self, config: Optional[Dict[str, Any]] = None):
         config = config or {}
@@ -123,6 +127,8 @@ class LLMRecognizer(_PluginBase):
         self._chain_lock = threading.Lock()
         self._identifier_chain_lock = threading.Lock()
         self._identifiers_lock = threading.Lock()
+        self._recognize_cache = OrderedDict()
+        self._recognize_cache_lock = threading.Lock()
         self._ensure_plugin_log_file()
         self._register_events()
         logger.info(f"[AI识别增强] 插件已加载 v{self.plugin_version}，状态: {'已启用' if self._enabled else '未启用'}")
@@ -737,6 +743,13 @@ AI 识别增强结果：
         if not title:
             return {"success": False, "message": "标题为空"}
 
+        # 结果缓存：同一 (title, path) 不重复调 LLM
+        _cache_key = (title, path)
+        with self._recognize_cache_lock:
+            if _cache_key in self._recognize_cache:
+                self._recognize_cache.move_to_end(_cache_key)
+                return self._recognize_cache[_cache_key]
+
         try:
             guess = self._invoke_llm(title, path)
         except Exception as exc:
@@ -764,12 +777,17 @@ AI 识别增强结果：
                 "verified_media_info": self._compact_verified_summary(verified),
                 "reason": "low_confidence_or_empty_name",
             })
-        return {
+        _result = {
             "success": passed,
             "message": "success" if passed else "识别结果置信度不足，已放弃注入",
             "guess": guess.model_dump(),
             "verified_media_info": verified,
         }
+        with self._recognize_cache_lock:
+            self._recognize_cache[_cache_key] = _result
+            if len(self._recognize_cache) > self._RECOGNIZE_CACHE_MAX:
+                self._recognize_cache.popitem(last=False)
+        return _result
 
     def on_chain_name_recognize(self, event) -> None:
         if not self._enabled:
