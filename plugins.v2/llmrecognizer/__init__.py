@@ -58,7 +58,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.7"
+    plugin_version = "1.2.8"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -1464,6 +1464,19 @@ AI 识别增强结果：
         return {"success": True, "message": "success",
                 "data": self._append_custom_identifiers([str(l or "") for l in identifiers])}
 
+    async def api_llm_errors(self, request: Request):
+        ok, message = self._check_api_access(request)
+        if not ok:
+            return {"success": False, "message": message}
+        return {"success": True, "message": "success", "data": self._read_llm_errors(limit=200)}
+
+    async def api_clear_llm_errors(self, request: Request):
+        ok, message = self._check_api_access(request)
+        if not ok:
+            return {"success": False, "message": message}
+        self._clear_llm_errors()
+        return {"success": True, "message": "success"}
+
     async def api_clear_failed_samples(self, request: Request):
         ok, message = self._check_api_access(request)
         if not ok:
@@ -1547,6 +1560,8 @@ AI 识别增强结果：
             {"path": "/suggest_identifiers_from_sample", "endpoint": self.api_suggest_identifiers_from_sample, "methods": ["POST"], "summary": "基于样本生成识别词建议"},
             {"path": "/suggest_identifiers_for_failed_samples", "endpoint": self.api_suggest_identifiers_for_failed_samples, "methods": ["POST"], "summary": "批量生成识别词建议"},
             {"path": "/apply_identifiers", "endpoint": self.api_apply_identifiers, "methods": ["POST"], "summary": "追加写入 CustomIdentifiers"},
+            {"path": "/llm_errors", "endpoint": self.api_llm_errors, "methods": ["GET"], "summary": "查看 LLM 诊断错误记录"},
+            {"path": "/clear_llm_errors", "endpoint": self.api_clear_llm_errors, "methods": ["POST"], "summary": "清空 LLM 错误诊断记录"},
             {"path": "/clear_failed_samples", "endpoint": self.api_clear_failed_samples, "methods": ["POST"], "summary": "清空失败样本"},
             {"path": "/remove_failed_sample", "endpoint": self.api_remove_failed_sample, "methods": ["POST"], "summary": "移除单条失败样本"},
             {"path": "/replay_failed_sample", "endpoint": self.api_replay_failed_sample, "methods": ["POST"], "summary": "复查单条失败样本"},
