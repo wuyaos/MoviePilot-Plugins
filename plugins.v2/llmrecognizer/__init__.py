@@ -11,7 +11,7 @@ import threading
 from collections import OrderedDict
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import Request
 from langchain_core.prompts import ChatPromptTemplate
@@ -58,7 +58,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.10"
+    plugin_version = "1.2.11"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -98,6 +98,8 @@ class LLMRecognizer(_PluginBase):
     _recognize_cache: "OrderedDict[tuple, dict]" = None # 识别结果 LRU 缓存
     _recognize_cache_lock: Optional[threading.Lock] = None
     _RECOGNIZE_CACHE_MAX = 512
+    _in_flight: "Set[tuple]" = None                      # 正在处理中的请求 key 集合
+    _in_flight_lock: Optional[threading.Lock] = None
 
     def init_plugin(self, config: Optional[Dict[str, Any]] = None):
         config = config or {}
@@ -131,6 +133,8 @@ class LLMRecognizer(_PluginBase):
         self._identifiers_lock = threading.Lock()
         self._recognize_cache = OrderedDict()
         self._recognize_cache_lock = threading.Lock()
+        self._in_flight = set()
+        self._in_flight_lock = threading.Lock()
         self._ensure_plugin_log_file()
         self._register_events()
         logger.info(f"[AI识别增强] 插件已加载 v{self.plugin_version}，状态: {'已启用' if self._enabled else '未启用'}")
@@ -844,9 +848,17 @@ AI 识别增强结果：
         provenance = provenance or {}
         is_title_only = not path or path == title or ("/" not in path and "\\" not in path)
 
+        # 并发去重：同一 key 正在处理中时跳过，避免重复打 LLM
+        with self._in_flight_lock:
+            if _cache_key in self._in_flight:
+                return {"success": False, "message": "重复识别请求，已跳过"}
+            self._in_flight.add(_cache_key)
+
         try:
             guess = self._invoke_llm(title, path)
         except Exception as exc:
+            with self._in_flight_lock:
+                self._in_flight.discard(_cache_key)
             if record_failed_sample:
                 if is_title_only and not self._save_title_only_samples:
                     if self._debug:
@@ -890,6 +902,8 @@ AI 识别增强结果：
                 self._recognize_cache[_cache_key] = _result
                 if len(self._recognize_cache) > self._RECOGNIZE_CACHE_MAX:
                     self._recognize_cache.popitem(last=False)
+        with self._in_flight_lock:
+            self._in_flight.discard(_cache_key)
         return _result
 
     def on_chain_name_recognize(self, event) -> None:
