@@ -58,7 +58,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.4"
+    plugin_version = "1.2.5"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -74,6 +74,7 @@ class LLMRecognizer(_PluginBase):
     _max_retries = 2
     _save_failed_samples = True
     _max_failed_samples = 200
+    _save_title_only_samples = False
     _auto_remove_applied_sample = True
     # 新增：是否调用 TMDB 二次校验
     _verify_tmdb: bool = False
@@ -106,6 +107,7 @@ class LLMRecognizer(_PluginBase):
         self._request_timeout = self._safe_int(config.get("request_timeout"), 25)
         self._max_retries = max(1, min(5, self._safe_int(config.get("max_retries"), 2)))
         self._save_failed_samples = bool(config.get("save_failed_samples", True))
+        self._save_title_only_samples = bool(config.get("save_title_only_samples", False))
         self._max_failed_samples = max(20, min(1000, self._safe_int(config.get("max_failed_samples"), 200)))
         self._auto_remove_applied_sample = bool(config.get("auto_remove_applied_sample", True))
         self._verify_tmdb = bool(config.get("verify_tmdb", False))
@@ -217,6 +219,28 @@ class LLMRecognizer(_PluginBase):
             path = (getattr(event_data, "path", "") or getattr(event_data, "file_path", "")
                     or getattr(event_data, "org_string", "") or "")
         return str(title or "").strip(), str(path or "").strip()
+
+    @staticmethod
+    def _extract_provenance(event_data) -> Dict[str, str]:
+        """提取事件来源元数据，用于样本分类（path_backed / title_only）。"""
+        source_plugin = ""
+        if isinstance(event_data, dict):
+            source_plugin = str(event_data.get("source_plugin") or "").strip()
+        else:
+            source_plugin = str(getattr(event_data, "source_plugin", "") or "").strip()
+        path = ""
+        title = ""
+        if isinstance(event_data, dict):
+            title = str(event_data.get("title") or event_data.get("name") or event_data.get("org_string") or "").strip()
+            path = str(event_data.get("path") or event_data.get("file_path") or event_data.get("org_string") or "").strip()
+        else:
+            title = str(getattr(event_data, "title", "") or getattr(event_data, "name", "") or getattr(event_data, "org_string", "") or "").strip()
+            path = str(getattr(event_data, "path", "") or getattr(event_data, "file_path", "") or getattr(event_data, "org_string", "") or "").strip()
+        is_path_backed = bool(path) and path != title and ("/" in path or "\\" in path)
+        return {
+            "sample_source_kind": "path_backed" if is_path_backed else "title_only",
+            "sample_source_plugin": source_plugin,
+        }
 
     def _build_meta_hint(self, raw_text: str) -> Dict[str, Any]:
         try:
@@ -397,8 +421,16 @@ AI 识别增强结果：
         )
         return bundle
 
+    @staticmethod
+    def _clean_guess_name(name: str) -> str:
+        text = str(name or "").strip()
+        if not text:
+            return ""
+        text = text.split("/")[0].strip().replace(".", " ")
+        return " ".join(text.split())
+
     def _normalize_guess(self, guess: AIRecognitionGuess) -> AIRecognitionGuess:
-        name = str(guess.name or "").strip()
+        name = self._clean_guess_name(guess.name)
         year = str(guess.year or "").strip()
         if len(year) != 4 or not year.isdigit():
             year = ""
@@ -416,6 +448,66 @@ AI 识别增强结果：
 
     def _sample_path(self) -> Path:
         return self.get_data_path() / "failed_samples.jsonl"
+
+    def _llm_errors_path(self) -> Path:
+        return self.get_data_path() / "llm_errors.jsonl"
+
+    def _record_llm_error(self, title: str, path: str, meta_hint: Dict[str, Any],
+                          error: Any, provenance: Optional[Dict[str, str]] = None) -> None:
+        try:
+            import datetime as _dt
+            error_path = self._llm_errors_path()
+            error_path.parent.mkdir(parents=True, exist_ok=True)
+            provenance = provenance or {}
+            entry = {
+                "title": title, "path": path, "meta_hint": meta_hint,
+                "reason": f"llm_error:{error}",
+                "timestamp": _dt.datetime.now().isoformat(),
+                "sample_source_kind": provenance.get("sample_source_kind", "unknown"),
+                "sample_source_plugin": provenance.get("sample_source_plugin", ""),
+            }
+            with self._sample_lock:
+                existing = self._read_llm_errors(limit=1000)
+                existing.reverse()
+                identity = {"title": title, "path": path, "reason": entry["reason"]}
+                existing = [r for r in existing if
+                            {"title": r.get("title"), "path": r.get("path"), "reason": r.get("reason")} != identity]
+                existing.append(entry)
+                trimmed = existing[-self._max_failed_samples:]
+                error_path.write_text(
+                    "
+".join(json.dumps(r, ensure_ascii=False) for r in trimmed) + "
+",
+                    encoding="utf-8"
+                )
+        except Exception as exc:
+            logger.debug(f"[AI识别增强] 记录 LLM 错误失败: {exc}")
+
+    def _read_llm_errors(self, limit: int = 200) -> List[Dict[str, Any]]:
+        try:
+            p = self._llm_errors_path()
+            if not p.exists():
+                return []
+            lines = p.read_text(encoding="utf-8").splitlines()
+            rows = []
+            for line in lines:
+                line = line.strip()
+                if line:
+                    try:
+                        rows.append(json.loads(line))
+                    except Exception:
+                        pass
+            return rows[-limit:]
+        except Exception:
+            return []
+
+    def _clear_llm_errors(self) -> None:
+        try:
+            p = self._llm_errors_path()
+            if p.exists():
+                p.unlink()
+        except Exception as exc:
+            logger.debug(f"[AI识别增强] 清除 LLM 错误失败: {exc}")
 
     @staticmethod
     def _sample_identity(payload: Dict[str, Any]) -> str:
@@ -735,7 +827,8 @@ AI 识别增强结果：
             logger.debug(f"[AI识别增强] TMDB 二次校验失败: {exc}")
             return None
 
-    def _recognize(self, title: str, path: str = "", record_failed_sample: bool = True) -> Dict[str, Any]:
+    def _recognize(self, title: str, path: str = "", record_failed_sample: bool = True,
+                   provenance: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         title = str(title or "").strip()
         path = str(path or "").strip()
         if not title and path:
@@ -750,15 +843,19 @@ AI 识别增强结果：
                 self._recognize_cache.move_to_end(_cache_key)
                 return self._recognize_cache[_cache_key]
 
+        provenance = provenance or {}
+        is_title_only = not path or path == title or ("/" not in path and "\\" not in path)
+
         try:
             guess = self._invoke_llm(title, path)
         except Exception as exc:
             if record_failed_sample:
-                self._record_failed_sample({
-                    "title": title, "path": path,
-                    "meta_hint": self._build_meta_hint(path or title),
-                    "reason": f"llm_error:{exc}",
-                })
+                if is_title_only and not self._save_title_only_samples:
+                    if self._debug:
+                        logger.info(f"[AI识别增强] 跳过保存仅标题 LLM 错误: {title}")
+                else:
+                    self._record_llm_error(title, path, self._build_meta_hint(path or title),
+                                           exc, provenance=provenance)
             return {"success": False, "message": f"LLM 调用失败: {exc}"}
 
         # 仅在配置要求时才调 TMDB，避免 "共享媒体识别失败" 500 日志
@@ -770,13 +867,19 @@ AI 识别增强结果：
             passed = verified is not None
 
         if not passed and record_failed_sample:
-            self._record_failed_sample({
-                "title": title, "path": path,
-                "meta_hint": self._build_meta_hint(path or title),
-                "guess": guess.model_dump(),
-                "verified_media_info": self._compact_verified_summary(verified),
-                "reason": "low_confidence_or_empty_name",
-            })
+            if is_title_only and not self._save_title_only_samples:
+                if self._debug:
+                    logger.info(f"[AI识别增强] 跳过保存仅标题样本: {title}")
+            else:
+                self._record_failed_sample({
+                    "title": title, "path": path,
+                    "meta_hint": self._build_meta_hint(path or title),
+                    "guess": guess.model_dump(),
+                    "verified_media_info": self._compact_verified_summary(verified),
+                    "reason": "low_confidence_or_empty_name",
+                    "sample_source_kind": provenance.get("sample_source_kind", "unknown"),
+                    "sample_source_plugin": provenance.get("sample_source_plugin", ""),
+                })
         _result = {
             "success": passed,
             "message": "success" if passed else "识别结果置信度不足，已放弃注入",
@@ -801,8 +904,10 @@ AI 识别增强结果：
         # 保留对 event_data 的写能力（chain 事件同步读取），但限制最长阻塞时间
         result_holder: Dict[str, Any] = {}
 
+        provenance = self._extract_provenance(event_data)
+
         def _run():
-            result_holder["result"] = self._recognize(title=title, path=path)
+            result_holder["result"] = self._recognize(title=title, path=path, provenance=provenance)
 
         t = threading.Thread(target=_run, daemon=True)
         t.start()
@@ -819,21 +924,9 @@ AI 识别增强结果：
 
         guess = result.get("guess") or {}
         if isinstance(event_data, dict):
-            existing_name = str(event_data.get("name") or "").strip()
-            existing_confidence = self._safe_float(event_data.get("confidence"), 0.0)
-            our_confidence = self._safe_float(guess.get("confidence"), 0.0)
-            # 原生识别已填充结果（有 name 且无 source_plugin），本插件作为兜底不覆盖
-            if existing_name and not event_data.get("source_plugin"):
+            if event_data.get("source_plugin"):
                 if self._debug:
-                    logger.info(f"[AI识别增强] 原生识别已填充结果，跳过兜底: {existing_name}")
-                return
-            # 其他插件已处理且置信度不低，不覆盖
-            if event_data.get("source_plugin") and existing_confidence >= our_confidence:
-                if self._debug:
-                    logger.info(
-                        f"[AI识别增强] 已有插件处理且置信度不低，跳过覆盖: "
-                        f"{event_data.get('source_plugin')} ({existing_confidence:.2f} >= {our_confidence:.2f})"
-                    )
+                    logger.info(f"[AI识别增强] 已有插件处理识别结果，跳过覆盖: {event_data.get('source_plugin')}")
                 return
             event_data["name"] = guess.get("name", "")
             event_data["year"] = guess.get("year", "")
