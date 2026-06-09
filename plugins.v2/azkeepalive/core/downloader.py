@@ -134,7 +134,11 @@ def dl_check_hnr(instance: Any, category: str, hnr_tag: str = "H&R",
     try:
         qbc = getattr(instance, "qbc", None)
         if qbc:
-            for t in qbc.torrents_info(category=category, tag=hnr_tag):
+            # 只按 category 取，tag 在本地过滤：避免 "H&R" 中的 & 在 server-side tag 查询里编码失败导致漏扫
+            for t in qbc.torrents_info(category=category):
+                tags = [x.strip() for x in (getattr(t, "tags", "") or "").split(",")]
+                if hnr_tag not in tags:
+                    continue
                 base_required_hours = hnr_required_hours(t.size)
                 required_hours = base_required_hours + 24
                 seeded_hours = (getattr(t, "seeding_time", 0) or 0) // 3600

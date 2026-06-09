@@ -21,7 +21,7 @@ def run_keepalive(
     category: str, tags: str, keepalive_days: int, min_seeders: int,
     max_size_gb: float, require_free: bool, timeout: int,
     use_proxy: bool, cookie: str = "", state: dict[str, Any],
-    force: bool = False, auto_delete_hnr: bool = False,
+    force: bool = False, auto_delete: bool = False,
     skip_interval_check: bool = False,
 ) -> tuple[str, str, dict[str, Any]]:
     """执行一次保活检查"""
@@ -67,7 +67,7 @@ def run_keepalive(
 
     # H&R 检查：满足做种时限则移除标签，可选删除
     if downloader_instance:
-        done = dl_check_hnr(downloader_instance, category, auto_delete=auto_delete_hnr)
+        done = dl_check_hnr(downloader_instance, category, auto_delete=auto_delete)
         if done:
             logger.info(f"AZ保活: H&R完成 {len(done)} 个: {', '.join(done[:3])}")
 

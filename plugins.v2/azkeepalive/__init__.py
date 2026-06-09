@@ -20,7 +20,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.5.5"
+    plugin_version = "2.5.6"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -42,7 +42,7 @@ class AzKeepAlive(_PluginBase):
     _require_free = True
     _timeout = 30
     _use_proxy = False
-    _auto_delete_hnr = False
+    _auto_delete = False
     _random_cron = ""
     _scheduler: Optional[BackgroundScheduler] = None
     _run_lock = threading.Lock()
@@ -66,7 +66,7 @@ class AzKeepAlive(_PluginBase):
         self._require_free = bool(config.get("require_free", True))
         self._timeout = int(config.get("timeout") or 30)
         self._use_proxy = bool(config.get("use_proxy"))
-        self._auto_delete_hnr = bool(config.get("auto_delete_hnr"))
+        self._auto_delete = bool(config.get("auto_delete"))
         self._random_cron = str(config.get("random_cron") or "").strip()
         # 无用户 cron 时生成固定随机时间（仅首次），避免每次重载漂移
         if not self._cron and not self._random_cron:
@@ -106,7 +106,7 @@ class AzKeepAlive(_PluginBase):
             "keepalive_days": self._keepalive_days, "min_seeders": self._min_seeders,
             "max_size_gb": self._max_size_gb, "require_free": self._require_free,
             "timeout": self._timeout, "use_proxy": self._use_proxy,
-            "auto_delete_hnr": self._auto_delete_hnr,
+            "auto_delete": self._auto_delete,
             "random_cron": self._random_cron,
         })
 
@@ -140,7 +140,7 @@ class AzKeepAlive(_PluginBase):
                 max_size_gb=self._max_size_gb, require_free=self._require_free,
                 timeout=self._timeout, use_proxy=self._use_proxy,
                 cookie=cookie, state=state, force=force,
-                auto_delete_hnr=self._auto_delete_hnr,
+                auto_delete=self._auto_delete,
                 skip_interval_check=attempt > 1,
             )
             self.save_data("state", state)
@@ -250,7 +250,7 @@ class AzKeepAlive(_PluginBase):
             _sec("⏱ H&R 控制"),
             v_row([
                 v_col(3, v_switch("require_free", "仅Free种子")),
-                v_col(3, v_switch("auto_delete_hnr", "H&R到期自动删除")),
+                v_col(3, v_switch("auto_delete", "H&R达标后删除种子和数据")),
                 v_col(6, {"component": "VAlert", "props": {
                     "type": "warning", "variant": "tonal", "density": "compact",
                     "text": "开启后，满足做种时限的H&R种子将从下载器删除，同时删除文件",
@@ -268,7 +268,7 @@ class AzKeepAlive(_PluginBase):
             "enabled": False, "notify": True, "cron": "", "onlyonce": False, "force_keepalive": False,
             "site_url": "https://animez.to/",
             "downloader": "", "qb_category": "AnimeZ", "qb_tags": "keepalive",
-            "require_free": True, "auto_delete_hnr": False,
+            "require_free": True, "auto_delete": False,
             "keepalive_days": 30, "min_seeders": 5,
             "max_size_gb": 10.0, "timeout": 30, "use_proxy": False,
         }
