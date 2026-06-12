@@ -1,3 +1,6 @@
+# input: PTTime 站点 Cookie、UA、代理配置与 attendance.php 响应
+# output: PTTime 签到处理器，区分成功、已签到与 Cookie 失效
+# pos: AutoPtCheckin 站点适配层，处理 PTTime 签到接口语义
 from typing import Tuple
 
 from ruamel.yaml import CommentedMap
@@ -14,8 +17,9 @@ class PTTime(_ISiteSigninHandler):
     # 匹配的站点Url，每一个实现类都需要设置为自己的站点Url
     site_url = "pttime.org"
 
-    # 签到成功
+    # 签到成功 / 重复签到
     _succeed_regex = ['签到成功']
+    _repeat_texts = ['已签到', '无需再签']
 
     @classmethod
     def match(cls, url: str) -> bool:
@@ -53,6 +57,10 @@ class PTTime(_ISiteSigninHandler):
         if "login.php" in html_text:
             logger.error(f"{site} 签到失败，Cookie已失效")
             return False, '签到失败，Cookie已失效'
+
+        if any(text in html_text for text in self._repeat_texts):
+            logger.info(f"{site} 今日已签到")
+            return True, '今日已签到'
 
         sign_status = self.sign_in_result(html_res=html_text,
                                           regexs=self._succeed_regex)
