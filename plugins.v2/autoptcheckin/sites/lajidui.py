@@ -1,10 +1,10 @@
 # input: 垃圾堆 Cookie、UA、代理配置与 attendance.php 验证码表单
 # output: 垃圾堆签到处理器，自动识别验证码并提交签到
 # pos: AutoPtCheckin 站点适配层，处理 NexusPHP 验证码签到页
-import re
 from typing import Tuple
 from urllib.parse import urljoin
 
+from lxml import etree
 from ruamel.yaml import CommentedMap
 
 from app.core.config import settings
@@ -38,14 +38,20 @@ class LaJiDui(_ISiteSigninHandler):
         except ImportError as e:
             return False, f"签到失败：依赖缺失 {e}"
 
-        client = CffiClient(
-            cookie=site_cookie,
-            ua=ua,
-            proxy=settings.PROXY_SERVER if proxy else None,
-            referer="https://pt.lajidui.top/attendance.php",
-        )
+        try:
+            client = CffiClient(
+                cookie=site_cookie,
+                ua=ua,
+                proxy=settings.PROXY_SERVER if proxy else None,
+                referer="https://pt.lajidui.top/attendance.php",
+            )
+        except ImportError as e:
+            return False, f"签到失败：依赖缺失 {e}"
 
         status, html_text = client.get("https://pt.lajidui.top/attendance.php")
+        if status != 200:
+            logger.error(f"{site} 签到失败，状态码：{status}")
+            return False, f"签到失败，状态码：{status}"
         if not html_text:
             logger.error(f"{site} 签到失败，请检查站点连通性")
             return False, "签到失败，请检查站点连通性"
@@ -56,14 +62,19 @@ class LaJiDui(_ISiteSigninHandler):
             logger.info(f"{site} 今日已签到")
             return True, "今日已签到"
 
-        hash_match = re.search(r'name=["\']imagehash["\']\s+value=["\']([^"\']+)', html_text)
-        image_match = re.search(r'<img[^>]+src=["\']([^"\']*image\.php[^"\']*)', html_text)
-        if not hash_match or not image_match:
+        html = etree.HTML(html_text)
+        image_hash = ""
+        image_src = ""
+        if html is not None:
+            hash_values = html.xpath('//input[@name="imagehash"]/@value')
+            image_values = html.xpath('//form//img[contains(@src, "image.php")]/@src')
+            image_hash = hash_values[0] if hash_values else ""
+            image_src = image_values[0] if image_values else ""
+        if not image_hash or not image_src:
             logger.error(f"{site} 签到失败，获取验证码参数失败")
             return False, "签到失败，获取验证码参数失败"
 
-        image_hash = hash_match.group(1)
-        image_url = urljoin("https://pt.lajidui.top/", image_match.group(1).replace("&amp;", "&"))
+        image_url = urljoin("https://pt.lajidui.top/", image_src.replace("&amp;", "&"))
         image_bytes = client.get_bytes(image_url)
         if not image_bytes:
             logger.error(f"{site} 签到失败，获取验证码图片失败")
@@ -104,6 +115,9 @@ class LaJiDui(_ISiteSigninHandler):
             "https://pt.lajidui.top/attendance.php",
             data={"imagehash": image_hash, "imagestring": code},
         )
+        if status != 200:
+            logger.error(f"{site} 签到失败，状态码：{status}")
+            return False, f"签到失败，状态码：{status}"
         if not resp_text:
             logger.error(f"{site} 签到失败，提交签到请求失败")
             return False, "签到失败，提交签到请求失败"

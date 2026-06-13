@@ -101,11 +101,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
     "labels": "签到,PT",
-    "version": "1.2.5",
+    "version": "1.2.6",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.2.6": "修复垃圾堆签到适配：CffiClient GET/POST 增加状态码判断，初始化依赖异常本地处理，imagehash 改为 XPath 解析提升表单兼容性",
       "v1.2.5": "新增垃圾堆 pt.lajidui.top 站点适配：attendance.php 验证码表单签到，自动识别 imagehash/imagestring 并识别成功/重复签到/Cookie 失效",
       "v1.2.4": "新增 HDBao 站点适配：attendance.php 改为 POST 签到并识别成功/重复签到，避免通用 GET 签到仅校验登录态导致误报成功",
       "v1.2.3": "修复 @staticmethod 中误用 self._SITE_ERROR_KEYWORDS（改为类名引用）；修复 u2.py 参数守卫 `not re` → `not req`；修复 HDCity 签到检查顺序（成功判断前置，login 检测收窄）；空 Cookie 返回具体错误消息；新增 _fetch_cookie_cloud 自动从 CookieCloud 补取缺失 Cookie（支持 API 模式站点）",
