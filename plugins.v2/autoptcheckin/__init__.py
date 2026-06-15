@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.2.6"
+    plugin_version = "1.2.7"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1583,20 +1583,24 @@ class AutoPtCheckin(_PluginBase):
             failed_msg = []
 
             sites = {site.get('name'): site.get("id") for site in self.sites.get_indexers() if not site.get("public")}
+            custom_site_names = {site.get("name") for site in self.__custom_sites() if site.get("name")}
             for s in status:
                 site_name = s[0]
                 site_id = None
                 if site_name:
                     site_id = sites.get(site_name)
 
-                if 'Cookie已失效' in str(s) and site_id:
-                    # 触发自动登录插件登录
-                    logger.info(f"触发站点 {site_name} 自动登录更新Cookie和Ua")
-                    self.eventmanager.send_event(EventType.PluginAction,
-                                                 {
-                                                     "site_id": site_id,
-                                                     "action": "site_refresh"
-                                                 })
+                if 'Cookie已失效' in str(s):
+                    if site_id:
+                        # 触发自动登录插件登录
+                        logger.info(f"触发站点 {site_name} 自动登录更新Cookie和Ua")
+                        self.eventmanager.send_event(EventType.PluginAction,
+                                                     {
+                                                         "site_id": site_id,
+                                                         "action": "site_refresh"
+                                                     })
+                    elif site_name in custom_site_names:
+                        logger.info(f"自定义站点 {site_name} Cookie已失效，但不在 MoviePilot 站点表，SiteRefresh 无法回写 Cookie/UA")
                 # 记录本次命中重试关键词的站点
                 if self._retry_keyword:
                     if site_id:

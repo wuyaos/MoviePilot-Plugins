@@ -101,11 +101,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
     "labels": "签到,PT",
-    "version": "1.2.6",
+    "version": "1.2.7",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.2.7": "配合 SiteRefresh V2：Cookie 失效时若为自定义站点，明确记录无法通过 SiteRefresh 回写 Cookie/UA，避免静默漏触发",
       "v1.2.6": "修复垃圾堆签到适配：CffiClient GET/POST 增加状态码判断，初始化依赖异常本地处理，imagehash 改为 XPath 解析提升表单兼容性",
       "v1.2.5": "新增垃圾堆 pt.lajidui.top 站点适配：attendance.php 验证码表单签到，自动识别 imagehash/imagestring 并识别成功/重复签到/Cookie 失效",
       "v1.2.4": "新增 HDBao 站点适配：attendance.php 改为 POST 签到并识别成功/重复签到，避免通用 GET 签到仅校验登录态导致误报成功",
@@ -124,6 +125,18 @@
       "v1.1.0": "调度模式切换：Cron表达式/间隔随机两种模式独立配置，移除旧 X/Y-Z 格式",
       "v1.0.1": "修复 X/Y-Z 格式调度问题：改用 random_scheduler 生成 cron 触发器，避免插件重载后 interval 计时器重置导致签到不执行",
       "v1.0.0": "初始版本：基于 autosignin，支持自定义站点与 ddddocr 验证码识别"
+    }
+  },
+  "SiteRefresh": {
+    "name": "站点自动更新（自用版）",
+    "description": "接收 Cookie 失效事件，从 KeePass WebDAV 或手动配置获取登录凭据，刷新选中站点 Cookie/UA 并同步 CookieCloud",
+    "labels": "站点,Cookie",
+    "version": "1.3.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
+    "author": "thsrite",
+    "level": 2,
+    "history": {
+      "v1.3.0": "迁移为 V2 专用插件：接收 AutoPtCheckin 的 site_refresh 事件，优先从 KeePass WebDAV 只读 KDBX 按 URL 域名获取登录凭据，委托当前 SiteChain.update_cookie/CookieHelper 刷新 Cookie/UA；新增刷新站点下拉选择和刷新后同步 CookieCloud，保留手动凭据兜底"
     }
   },
   "CloudDrive2Disk": {
