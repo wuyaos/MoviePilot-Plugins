@@ -61,6 +61,10 @@ class LaJiDui(_ISiteSigninHandler):
         if any(text in html_text for text in self._repeat_texts):
             logger.info(f"{site} 今日已签到")
             return True, "今日已签到"
+        # 已签到页面可能直接显示签到结果文本而非重复提示
+        if any(text in html_text for text in self._success_texts):
+            logger.info(f"{site} 今日已签到（页面已显示签到结果）")
+            return True, "今日已签到"
 
         html = etree.HTML(html_text)
         image_hash = ""
