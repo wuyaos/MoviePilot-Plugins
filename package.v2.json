@@ -133,7 +133,7 @@
     "labels": "站点,Cookie",
     "version": "1.3.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
-    "author": "thsrite",
+    "author": "wuyaos, thsrite",
     "level": 2,
     "history": {
       "v1.3.0": "迁移为 V2 专用插件：接收 AutoPtCheckin 的 site_refresh 事件，优先从 KeePass WebDAV 只读 KDBX 按 URL 域名获取登录凭据，委托当前 SiteChain.update_cookie/CookieHelper 刷新 Cookie/UA；新增刷新站点下拉选择和刷新后同步 CookieCloud，保留手动凭据兜底"
