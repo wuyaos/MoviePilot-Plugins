@@ -15,4 +15,5 @@ MoviePilot V2 专用插件目录；每个子目录是独立插件实现，元数
 - `llmrecognizer/`: AI 识别增强插件。
 - `pthitandrun/`: PT H&R 助手插件。
 - `siterefresh/`: 站点 Cookie/UA 自动刷新插件。
+- `tanglottery/`: 不可躺自动抽奖助手，本地修正版增强定时服务注册稳定性。
 - `strmmanage/`: 云盘 STRM 管理插件。

@@ -139,6 +139,19 @@
       "v1.3.0": "迁移为 V2 专用插件：接收 AutoPtCheckin 的 site_refresh 事件，优先从 KeePass WebDAV 只读 KDBX 按 URL 域名获取登录凭据，委托当前 SiteChain.update_cookie/CookieHelper 刷新 Cookie/UA；新增刷新站点下拉选择和刷新后同步 CookieCloud，保留手动凭据兜底"
     }
   },
+  "TangLottery": {
+    "name": "不可躺自动抽奖助手",
+    "description": "按每日目标次数自动拆解并执行不可躺抽奖；本地修正版增强定时服务注册稳定性和 Cron 诊断日志",
+    "labels": "站点,抽奖",
+    "version": "3.0.2",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tanglottery.png",
+    "author": "jiangbkvir,bfjy,wuyaos",
+    "level": 1,
+    "history": {
+      "v3.0.2": "本地修正版：配置重载时保留已启用状态，Cron 安全规范化并增强服务未注册原因日志；移除 authenticated 请求的 TLS verify=False；Cookie 固定从站点管理读取且配置页不再提供填写框；限制目标次数上限为1000",
+      "v1.0.1": "按每日目标次数自动拆解并执行不可躺抽奖"
+    }
+  },
   "CloudDrive2Disk": {
     "name": "CloudDrive2 存储",
     "description": "基于 baranwang/cd2disk，通过 CloudDrive2 gRPC 直连与 API 令牌接入 CloudDrive2，提供 MoviePilot 存储模块能力",
