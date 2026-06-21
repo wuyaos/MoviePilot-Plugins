@@ -119,9 +119,15 @@ class TangLottery(_PluginBase):
             {
                 "id": "TangLottery",
                 "name": "不可躺自动抽奖",
-                "trigger": trigger,
+                "trigger": "cron",
                 "func": self.run_lottery_task,
-                "kwargs": {}
+                "kwargs": {
+                    "minute": str(trigger.fields[6]),
+                    "hour": str(trigger.fields[5]),
+                    "day": str(trigger.fields[2]),
+                    "month": str(trigger.fields[1]),
+                    "day_of_week": str(trigger.fields[4])
+                }
             }
         ]
 
