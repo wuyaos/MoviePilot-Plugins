@@ -216,10 +216,10 @@ class AutoPtCheckin(_PluginBase):
         """
         return [
             {"cmd": "/checkin_now", "event": EventType.PluginAction,
-             "desc": "立即对所有站点执行一次签到", "category": "签到",
+             "desc": "立即对所有站点执行一次签到/模拟登录", "category": "签到",
              "data": {"action": "checkin_now"}},
             {"cmd": "/checkin_force", "event": EventType.PluginAction,
-             "desc": "强制重新签到（清理本日缓存）", "category": "签到",
+             "desc": "强制重新签到/模拟登录（清理本日缓存）", "category": "签到",
              "data": {"action": "checkin_force"}},
         ]
 
