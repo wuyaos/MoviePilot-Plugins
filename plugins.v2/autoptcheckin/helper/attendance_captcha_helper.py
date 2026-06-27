@@ -28,8 +28,20 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
     site_url = ""
     _signin_url = ""
 
-    _success_texts = ["签到成功", "签到已得", "获得", "连续签到"]
-    _repeat_texts = ["今天已经签到过", "请勿重复刷新", "已经签到", "今天已经签到"]
+    # 简繁兼容：覆盖 NexusPHP attendance.php 的成功/重复签到文案
+    _success_texts = [
+        "签到成功", "簽到成功",
+        "签到已得", "簽到已得",
+        "获得", "獲得",
+        "连续签到", "連續簽到",
+    ]
+    _repeat_texts = [
+        "今天已经签到过", "今天已經簽到過",
+        "请勿重复刷新", "請勿重複刷新",
+        "已经签到", "已經簽到",
+        "今天已经签到", "今天已經簽到",
+        "今天已簽到", "今日已簽到", "今日已签到",
+    ]
 
     @classmethod
     def match(cls, url: str) -> bool:
