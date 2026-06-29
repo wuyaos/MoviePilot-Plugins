@@ -101,11 +101,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
     "labels": "签到,PT",
-    "version": "1.2.8",
+    "version": "1.2.9",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.2.9": "修复 CffiClient 在 MoviePilot 容器缺 CA 证书时 curl-cffi 报 (60) SSL certificate problem 导致签到失败：get/post/get_bytes 命中 SSL 证书错误后回退 verify=False 重试一次；_AttendanceCaptchaHandler 补全繁体签到文案（簽到成功/簽到已得/連續簽到/今天已經簽到過 等）覆盖 TU88 等繁体 NexusPHP 站点",
       "v1.2.8": "新增 TU88/OshenPT/凤凰PT/VC-Lib 四站 attendance.php 验证码签到适配，抽取 _AttendanceCaptchaHandler 通用基类复用 NexusPHP 验证码签到流程（GET 页面→已签到检测→解析 imagehash/image.php→ddddocr 优先 OcrHelper 回退→POST 提交）",
       "v1.2.6": "修复垃圾堆签到适配：CffiClient GET/POST 增加状态码判断，初始化依赖异常本地处理，imagehash 改为 XPath 解析提升表单兼容性",
       "v1.2.5": "新增垃圾堆 pt.lajidui.top 站点适配：attendance.php 验证码表单签到，自动识别 imagehash/imagestring 并识别成功/重复签到/Cookie 失效",
