@@ -186,5 +186,17 @@
       "v1.1.0": "多下载器完整支持；任务记录所属下载器；配置面板增加说明",
       "v1.0.0": "基于 InfinityPacer/hitandrun 魔改：多条件OR判定、按种子大小分级规则（北洋园）、自动发现下载器未纳管种子、模块化拆分5文件"
     }
+  },
+  "ForumSignin": {
+    "name": "论坛签到",
+    "description": "论坛站点签到（蜂巢 pting.club + 药丸 invites.fun），单插件双站调度，支持 Cookie/账号登录、失败重试与历史记录",
+    "labels": "签到,论坛,蜂巢,药丸",
+    "version": "1.0.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
+    "author": "wuyaos",
+    "level": 2,
+    "history": {
+      "v1.0.0": "初始版本：基于 madrays/fengchaosignin 架构融合上游 invitessignin 药丸签到，单插件同时支持蜂巢(pting.club)与药丸(invites.fun)双站签到；完整迁移蜂巢登录/签到/用户信息更新/PT人生数据推送(mp_push)/定时更新及重试；药丸签到采用 Cookie 优先+登录回退，Cookie 自动刷新 flarum_session 并持久化；修复上游药丸整点拥塞缺陷——首页取 session 校验 200、429/502/503/504 指数退避、签到 429 单独限流退避、分钟级重试加随机抖动、默认 cron 7 9 * * * 避开整点；双站异常隔离互不影响；历史记录按 site+日期 维度合并展示"
+    }
   }
 }
