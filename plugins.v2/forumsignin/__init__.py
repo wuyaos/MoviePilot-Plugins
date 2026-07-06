@@ -46,6 +46,8 @@ class ForumSignin(_PluginBase):
     _retry_count = 0
     _retry_interval = 10
     _use_proxy = True
+    _fengchao_enabled = True
+    _invites_enabled = True
 
     _fengchao_username = None
     _fengchao_password = None
@@ -92,6 +94,8 @@ class ForumSignin(_PluginBase):
         self._retry_count = int(config.get("retry_count") or 0)
         self._retry_interval = int(config.get("retry_interval") or 10)
         self._use_proxy = config.get("use_proxy", True)
+        self._fengchao_enabled = config.get("fengchao_enabled", True)
+        self._invites_enabled = config.get("invites_enabled", True)
 
         self._fengchao_username = config.get("fengchao_username", "")
         self._fengchao_password = config.get("fengchao_password", "")
@@ -199,6 +203,8 @@ class ForumSignin(_PluginBase):
             "retry_count": self._retry_count,
             "retry_interval": self._retry_interval,
             "use_proxy": self._use_proxy,
+            "fengchao_enabled": self._fengchao_enabled,
+            "invites_enabled": self._invites_enabled,
             "fengchao_username": self._fengchao_username,
             "fengchao_password": self._fengchao_password,
             "fengchao_cookie": self._fengchao_cookie,
@@ -381,18 +387,27 @@ class ForumSignin(_PluginBase):
         self._dual_signing_in = True
         results = {}
         try:
-            try:
-                logger.info("开始执行蜂巢签到")
-                results["fengchao"] = self.__fengchao_signin(retry_count=retry_count, max_retries=max_retries)
-            except Exception as e:
-                logger.error(f"蜂巢签到异常已隔离，不影响药丸签到: {e}")
-                results["fengchao"] = False
-            try:
-                logger.info("开始执行药丸签到")
-                results["invites"] = self.__invites_signin(retry_count=retry_count, max_retries=max_retries)
-            except Exception as e:
-                logger.error(f"药丸签到异常已隔离: {e}")
-                results["invites"] = False
+            if not self._fengchao_enabled:
+                logger.info("蜂巢签到未启用，跳过")
+                results["fengchao"] = True
+            else:
+                try:
+                    logger.info("开始执行蜂巢签到")
+                    results["fengchao"] = self.__fengchao_signin(retry_count=retry_count, max_retries=max_retries)
+                except Exception as e:
+                    logger.error(f"蜂巢签到异常已隔离，不影响药丸签到: {e}")
+                    results["fengchao"] = False
+
+            if not self._invites_enabled:
+                logger.info("药丸签到未启用，跳过")
+                results["invites"] = True
+            else:
+                try:
+                    logger.info("开始执行药丸签到")
+                    results["invites"] = self.__invites_signin(retry_count=retry_count, max_retries=max_retries)
+                except Exception as e:
+                    logger.error(f"药丸签到异常已隔离: {e}")
+                    results["invites"] = False
             return bool(results.get("fengchao") or results.get("invites"))
         finally:
             self._dual_signing_in = False
@@ -1961,7 +1976,9 @@ class ForumSignin(_PluginBase):
                     {'component': 'VCard', 'props': {'variant': 'outlined', 'class': 'mt-3'}, 'content': [
                         {'component': 'VCardTitle', 'props': {'class': 'd-flex align-center'}, 'content': [
                             {'component': 'VIcon', 'props': {'style': 'color: #FF9800;', 'class': 'mr-2'}, 'text': 'mdi-flower'},
-                            {'component': 'span', 'text': '蜂巢账号设置'}
+                            {'component': 'span', 'text': '蜂巢账号设置'},
+                            {'component': 'VSpacer'},
+                            {'component': 'VSwitch', 'props': {'model': 'fengchao_enabled', 'label': '启用蜂巢签到', 'color': 'warning', 'hide-details': True}}
                         ]},
                         {'component': 'VDivider'},
                         {'component': 'VCardText', 'content': [
@@ -1975,7 +1992,9 @@ class ForumSignin(_PluginBase):
                     {'component': 'VCard', 'props': {'variant': 'outlined', 'class': 'mt-3'}, 'content': [
                         {'component': 'VCardTitle', 'props': {'class': 'd-flex align-center'}, 'content': [
                             {'component': 'VIcon', 'props': {'style': 'color: #9C27B0;', 'class': 'mr-2'}, 'text': 'mdi-pill'},
-                            {'component': 'span', 'text': '药丸账号设置'}
+                            {'component': 'span', 'text': '药丸账号设置'},
+                            {'component': 'VSpacer'},
+                            {'component': 'VSwitch', 'props': {'model': 'invites_enabled', 'label': '启用药丸签到', 'color': '#9C27B0', 'hide-details': True}}
                         ]},
                         {'component': 'VDivider'},
                         {'component': 'VCardText', 'content': [
@@ -2058,6 +2077,8 @@ class ForumSignin(_PluginBase):
             "retry_interval": 10,
             "use_proxy": True,
             "_update_info_now": False,
+            "fengchao_enabled": True,
+            "invites_enabled": True,
             "fengchao_username": "",
             "fengchao_password": "",
             "fengchao_cookie": "",
