@@ -1481,22 +1481,40 @@ class AutoPtCheckin(_PluginBase):
 
         _force = self._clean
         refresh_triggered_site_ids = set()
+        failed_sites = []
         if self._sign_sites:
             self._clean = _force
             self.__do(today=today, type_str="签到", do_sites=self._sign_sites, event=event,
-                      refresh_triggered_site_ids=refresh_triggered_site_ids)
+                      refresh_triggered_site_ids=refresh_triggered_site_ids, failed_sites=failed_sites)
         if self._login_sites:
             self._clean = _force
             self.__do(today=today, type_str="登录", do_sites=self._login_sites, event=event,
-                      refresh_triggered_site_ids=refresh_triggered_site_ids)
+                      refresh_triggered_site_ids=refresh_triggered_site_ids, failed_sites=failed_sites)
+        if failed_sites:
+            refreshed_site_ids = set()
+            refreshed_site_names = []
+            for site in failed_sites:
+                site_id = site.get("site_id")
+                if site_id in refreshed_site_ids:
+                    continue
+                refreshed_site_ids.add(site_id)
+                refreshed_site_names.append(site.get("site_name"))
+                self.eventmanager.send_event(EventType.PluginAction,
+                                             {
+                                                 "site_id": site_id,
+                                                 "action": "site_refresh"
+                                             })
+            logger.info(f"共 {len(refreshed_site_ids)} 个站点 Cookie 失效，触发 site_refresh: {refreshed_site_names}")
 
     def __do(self, today: datetime, type_str: str, do_sites: list, event: Event = None,
-             refresh_triggered_site_ids: set = None):
+             refresh_triggered_site_ids: set = None, failed_sites: list = None):
         """
         签到逻辑
         """
         if refresh_triggered_site_ids is None:
             refresh_triggered_site_ids = set()
+        if failed_sites is None:
+            failed_sites = []
         last_day = today - timedelta(days=4)
         last_day_str = last_day.strftime('%Y-%m-%d')
         # 删除昨天历史
@@ -1599,15 +1617,10 @@ class AutoPtCheckin(_PluginBase):
                 if 'Cookie已失效' in str(s):
                     if site_id and site_id not in refresh_triggered_site_ids:
                         refresh_triggered_site_ids.add(site_id)
-                        # 触发自动登录插件登录
-                        logger.info(f"触发站点 {site_name} 自动登录更新Cookie和Ua")
-                        self.eventmanager.send_event(EventType.PluginAction,
-                                                     {
-                                                         "site_id": site_id,
-                                                         "action": "site_refresh"
-                                                     })
+                        failed_sites.append({"site_id": site_id, "site_name": site_name})
+                        logger.info(f"站点 {site_name} Cookie 失效，待汇总触发 site_refresh")
                     elif site_id:
-                        logger.info(f"站点 {site_name} 本轮已触发 site_refresh，跳过重复触发")
+                        logger.info(f"站点 {site_name} 本轮已加入 site_refresh 汇总，跳过重复加入")
                     elif site_name in custom_site_names:
                         logger.info(f"自定义站点 {site_name} Cookie已失效，但不在 MoviePilot 站点表，SiteRefresh 无法回写 Cookie/UA")
                 status_text = str(s)
