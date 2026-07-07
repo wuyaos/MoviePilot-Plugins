@@ -33,6 +33,7 @@ class SiteRefresh(_PluginBase):
     _enabled: bool = False
     _notify: bool = False
     _sync_cookiecloud: bool = True
+    _browser_headless: bool = False
     _refresh_sites: list = []
     _config: Dict[str, Any] = {}
     _last_result: Dict[str, Any] = {}
@@ -45,6 +46,7 @@ class SiteRefresh(_PluginBase):
         self._enabled = bool(config.get("enabled"))
         self._notify = bool(config.get("notify"))
         self._sync_cookiecloud = bool(config.get("sync_cookiecloud", True))
+        self._browser_headless = bool(config.get("browser_headless", False))
         self._refresh_sites = config.get("refresh_sites") or []
         self._last_result = self.get_data("last_result") or {}
         self._refresh_history = self.get_data("refresh_history") or []
@@ -102,7 +104,7 @@ class SiteRefresh(_PluginBase):
         login_xpaths = CookieHelper._SITE_LOGIN_XPATH
 
         def page_handler(page):
-            logger.debug(f"SiteRefresh: 等待页面加载 {site.url}")
+            logger.info(f"SiteRefresh: 等待页面加载 {site.url}")
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=30 * 1000)
             except Exception:
@@ -115,14 +117,16 @@ class SiteRefresh(_PluginBase):
             html_text = page.content()
             if not html_text:
                 return None, None, "获取源码失败"
+            logger.info(f"SiteRefresh: 登录页源码长度 {len(html_text)}，当前 URL {page.url}")
 
             from lxml import etree
             html = etree.HTML(html_text)
             try:
                 username_xpath = next((x for x in login_xpaths["username"] if html.xpath(x)), None)
                 if not username_xpath:
+                    logger.warning(f"SiteRefresh: 未找到用户名输入框，页面标题: {html.xpath('//title/text()')}")
                     return None, None, "未找到用户名输入框"
-                logger.debug(f"SiteRefresh: 命中 xpath {username_xpath}")
+                logger.info(f"SiteRefresh: 命中用户名 xpath {username_xpath}")
                 password_xpath = next((x for x in login_xpaths["password"] if html.xpath(x)), None)
                 if not password_xpath:
                     return None, None, "未找到密码输入框"
@@ -139,8 +143,40 @@ class SiteRefresh(_PluginBase):
                     twostep_xpath = next((x for x in login_xpaths["twostep"] if html.xpath(x)), None)
 
                 captcha_xpath = next((x for x in login_xpaths["captcha"] if html.xpath(x)), None)
+                captcha_img_xpath = next((x for x in login_xpaths.get("captcha_img", []) if html.xpath(x)), None)
                 if captcha_xpath:
-                    return None, None, "站点需要验证码，浏览器自动登录暂不支持"
+                    if not captcha_img_xpath:
+                        return None, None, "站点需要验证码，未找到验证码图片"
+                    img_src = html.xpath(captcha_img_xpath)
+                    img_src = img_src[0] if img_src else ""
+                    if hasattr(img_src, "get"):
+                        img_src = img_src.get("src") or ""
+                    if img_src:
+                        from urllib.parse import urljoin
+                        captcha_url = urljoin(site.url, str(img_src))
+                        cookie = CookieHelper.parse_cookies(page.context.cookies())
+                        ua = page.evaluate("() => window.navigator.userAgent")
+                        try:
+                            from app.plugins.autoptcheckin.helper.ocr_helper import recognize_captcha
+                            captcha_code = recognize_captcha(
+                                image_url=captcha_url,
+                                cookie=cookie,
+                                ua=ua,
+                                referer=page.url or site.url,
+                                proxy=bool(getattr(site, "proxy", 0))
+                            ) or ""
+                        except Exception as e:
+                            logger.warning(f"SiteRefresh: 验证码识别异常: {e}")
+                            captcha_code = ""
+                        if captcha_code:
+                            logger.info(f"SiteRefresh: 验证码识别结果: {captcha_code}")
+                            captcha_el = page.query_selector(captcha_xpath)
+                            if captcha_el:
+                                captcha_el.fill(captcha_code)
+                        else:
+                            return None, None, "验证码识别失败"
+                    else:
+                        return None, None, "未获取到验证码图片地址"
 
                 submit_xpath = next((x for x in login_xpaths["submit"] if html.xpath(x)), None)
                 if not submit_xpath:
@@ -152,13 +188,21 @@ class SiteRefresh(_PluginBase):
                     page.fill(password_xpath, password)
                     if twostep_xpath:
                         page.fill(twostep_xpath, otp_code)
-                    logger.debug(f"SiteRefresh: 点击登录按钮 {submit_xpath}")
+                    logger.info(f"SiteRefresh: 点击登录按钮 {submit_xpath}")
                     page.click(submit_xpath)
                     try:
-                        page.wait_for_load_state("networkidle", timeout=30 * 1000)
+                        page.wait_for_url(lambda url: "login" not in url.lower(), timeout=15 * 1000)
+                    except Exception:
+                        try:
+                            page.locator(password_xpath).press("Enter")
+                            page.wait_for_url(lambda url: "login" not in url.lower(), timeout=15 * 1000)
+                        except Exception:
+                            pass
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=10 * 1000)
                     except Exception:
                         pass
-                    logger.debug(f"SiteRefresh: 登录后 URL {page.url}")
+                    logger.info(f"SiteRefresh: 登录后 URL {page.url}")
                 except Exception as e:
                     return None, None, f"仿真登录失败：{e}"
 
@@ -182,11 +226,17 @@ class SiteRefresh(_PluginBase):
                     page.wait_for_load_state("domcontentloaded", timeout=10 * 1000)
                 except Exception:
                     pass
+                final_url = page.url or ""
                 final_html = page.content() or ""
                 if not final_html:
                     return None, None, "获取登录后源码失败"
-                if SiteUtils.is_logged_in(final_html):
-                    cookie = CookieHelper.parse_cookies(page.context.cookies())
+                cookie = CookieHelper.parse_cookies(page.context.cookies())
+                url_left = "login" not in final_url.lower()
+                logged_html = SiteUtils.is_logged_in(final_html)
+                has_uid_pass = ("uid=" in cookie) or ("pass=" in cookie)
+                success = logged_html or (url_left and has_uid_pass)
+                logger.info(f"SiteRefresh: 登录态判定 {success}，源码判定 {logged_html}，URL离开登录页 {url_left}，Cookie含uid/pass {has_uid_pass}，登录后 URL {final_url}")
+                if success:
                     ua = page.evaluate("() => window.navigator.userAgent")
                     return cookie, ua, ""
                 final_doc = etree.HTML(final_html)
@@ -208,7 +258,7 @@ class SiteRefresh(_PluginBase):
                 cookies=None,
                 ua=None,
                 proxies=proxies,
-                headless=True,
+                headless=self._browser_headless,
                 timeout=timeout
             )
         except Exception as e:
@@ -220,6 +270,22 @@ class SiteRefresh(_PluginBase):
         if result and len(result) == 3:
             return False, result[2] or "登录失败", None, None
         return False, "浏览器登录无返回", None, None
+
+    def get_config_dict(self) -> Dict[str, Any]:
+        return {
+            "enabled": self._enabled,
+            "notify": self._notify,
+            "sync_cookiecloud": self._sync_cookiecloud,
+            "browser_headless": self._browser_headless,
+            "refresh_sites": self._refresh_sites,
+            "keepass_enabled": self._config.get("keepass_enabled", True),
+            "keepass_webdav_url": self._config.get("keepass_webdav_url", ""),
+            "keepass_webdav_username": self._config.get("keepass_webdav_username", ""),
+            "keepass_webdav_password": self._config.get("keepass_webdav_password", ""),
+            "keepass_master_password": self._config.get("keepass_master_password", ""),
+            "keepass_cache_minutes": self._config.get("keepass_cache_minutes", 5),
+            "siteconf": self._config.get("siteconf", "")
+        }
 
     def _refresh_site_by_id(self, site_id: Any) -> Dict[str, Any]:
         started_at = time.monotonic()
@@ -300,6 +366,10 @@ class SiteRefresh(_PluginBase):
                             {"component": "VSwitch", "props": {"model": "notify", "label": "开启通知", "color": "info"}}]},
                         {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
                             {"component": "VSwitch", "props": {"model": "sync_cookiecloud", "label": "同步 CookieCloud", "color": "success"}}]}]},
+                    {"component": "VRow", "content": [
+                        {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                            {"component": "VSwitch", "props": {"model": "browser_headless", "label": "无头模式（关闭更稳定）", "color": "warning",
+                                                              "hint": "关闭无头模式可绕过部分站点自动化检测；服务器无显示器时需开启"}}]}]},
                     {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
                         {"component": "VSelect", "props": {"chips": True, "multiple": True, "model": "refresh_sites",
                                                              "label": "刷新站点（为空则全部）", "items": self._site_options(),
@@ -361,7 +431,7 @@ class SiteRefresh(_PluginBase):
                         {"component": "template", "props": {"v-slot:prepend": ""}, "content": [{"component": "VIcon", "props": {"color": "info"}, "text": "mdi-cloud-sync"}]},
                         {"component": "VListItemTitle", "text": "CookieCloud 同步"},
                         {"component": "VListItemSubtitle", "text": "刷新成功后可同步 CookieCloud"}]}]}]}]}
-        ]}], {"enabled": False, "notify": False, "sync_cookiecloud": True, "refresh_sites": [],
+        ]}], {"enabled": False, "notify": False, "sync_cookiecloud": True, "browser_headless": False, "refresh_sites": [],
               "keepass_enabled": True, "keepass_webdav_url": "", "keepass_webdav_username": "",
               "keepass_webdav_password": "", "keepass_master_password": "", "keepass_cache_minutes": 5,
               "siteconf": ""}
