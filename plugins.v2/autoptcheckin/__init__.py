@@ -1492,19 +1492,17 @@ class AutoPtCheckin(_PluginBase):
                       refresh_triggered_site_ids=refresh_triggered_site_ids, failed_sites=failed_sites)
         if failed_sites:
             refreshed_site_ids = set()
-            refreshed_site_names = []
             for site in failed_sites:
                 site_id = site.get("site_id")
                 if site_id in refreshed_site_ids:
                     continue
                 refreshed_site_ids.add(site_id)
-                refreshed_site_names.append(site.get("site_name"))
-                self.eventmanager.send_event(EventType.PluginAction,
-                                             {
-                                                 "site_id": site_id,
-                                                 "action": "site_refresh"
-                                             })
-            logger.info(f"共 {len(refreshed_site_ids)} 个站点 Cookie 失效，触发 site_refresh: {refreshed_site_names}")
+            if refreshed_site_ids:
+                self.eventmanager.send_event(EventType.PluginAction, {
+                    "site_ids": list(refreshed_site_ids),
+                    "action": "site_refresh"
+                })
+                logger.info(f"共 {len(refreshed_site_ids)} 个站点 Cookie 失效，批量触发 site_refresh: {refreshed_site_ids}")
 
     def __do(self, today: datetime, type_str: str, do_sites: list, event: Event = None,
              refresh_triggered_site_ids: set = None, failed_sites: list = None):

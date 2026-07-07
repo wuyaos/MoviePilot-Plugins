@@ -43,8 +43,9 @@ class SiteRefresh(_PluginBase):
     _refreshing_site_ids: set = set()
     _last_refresh_at: dict = {}
     _refresh_lock = threading.Lock()
-    _global_refresh_lock = threading.Lock()  # 跨站串行锁，确保全局只有一个站点在刷新
+    _batch_refresh_lock = threading.Lock()  # 批量刷新锁，确保全局只有一批站点在刷新
     _refresh_cooldown: int = 600
+    _browser_site_timeout: int = 60
 
     def init_plugin(self, config: dict = None):
         self._ensure_plugin_log_file()
@@ -56,6 +57,7 @@ class SiteRefresh(_PluginBase):
         self._browser_headless = bool(config.get("browser_headless", False))
         self._refresh_sites = config.get("refresh_sites") or []
         self._refresh_cooldown = int(config.get("refresh_cooldown", 600))
+        self._browser_site_timeout = int(config.get("browser_site_timeout", 60))
         self._last_result = self.get_data("last_result") or {}
         self._refresh_history = self.get_data("refresh_history") or []
 
@@ -83,88 +85,60 @@ class SiteRefresh(_PluginBase):
             return
         if event.event_data.get("action") != "site_refresh":
             return
-        site_id = event.event_data.get("site_id")
-        if not site_id:
-            logger.error("SiteRefresh: 未获取到 site_id")
+        site_ids = event.event_data.get("site_ids") or ([event.event_data.get("site_id")] if event.event_data.get("site_id") else [])
+        if not site_ids:
+            logger.error("SiteRefresh: 未获取到 site_ids/site_id")
             return
-        logger.info(f"SiteRefresh: 收到 site_refresh 事件，站点 ID={site_id}")
-        site = SiteOper().get(site_id)
-        site_name = getattr(site, "name", "") if site else ""
-        site_label = f"{site_name}（ID={site_id}）" if site_name else f"ID={site_id}"
-        if self._refresh_sites and str(site_id) not in {str(x) for x in self._refresh_sites}:
-            logger.info(f"SiteRefresh: 站点 {site_label} 未在刷新站点选择中，跳过")
-            return
-        sid = str(site_id)
-        now = time.time()
-        with self._refresh_lock:
-            if sid in self._refreshing_site_ids:
-                logger.info(f"SiteRefresh: 站点 {site_label} 正在刷新中，跳过重复事件")
-                return
-            last = self._last_refresh_at.get(sid, 0)
-            if self._refresh_cooldown > 0 and (now - last) < self._refresh_cooldown:
-                logger.info(f"SiteRefresh: 站点 {site_label} 冷却中（剩余 {int(self._refresh_cooldown - (now - last))}s），跳过")
-                return
-            self._refreshing_site_ids.add(sid)
-        try:
-            # 全局串行锁：跨站严格排队，避免多站点并发浏览器登录吃内存
-            logger.debug(f"SiteRefresh: 站点 {site_label} 等待全局串行锁...")
-            with self._global_refresh_lock:
-                result = self._refresh_site_by_id(site_id)
-            if self._notify and result.get("site"):
-                self.post_message(mtype=NotificationType.SiteMessage, title=f"站点 {result.get('site')} Cookie 已失效。",
-                                  text=f"自动更新 Cookie 和 UA {'成功' if result.get('success') else '失败'}{('：' + result.get('message')) if result.get('message') else ''}")
-        finally:
-            with self._refresh_lock:
-                self._refreshing_site_ids.discard(sid)
-                self._last_refresh_at[sid] = time.time()
+        logger.info(f"SiteRefresh: 收到 site_refresh 事件，站点 IDs={site_ids}")
+        with self._batch_refresh_lock:
+            self._refresh_sites_batch(site_ids, force=False)
 
     def refresh_site_api(self, site_id: Any, force: bool = False) -> schemas.Response:
-        sid = str(site_id)
-        site = SiteOper().get(site_id)
-        site_name = getattr(site, "name", "") if site else ""
-        site_label = f"{site_name}（ID={site_id}）" if site_name else f"ID={site_id}"
-        now = time.time()
-        with self._refresh_lock:
-            if sid in self._refreshing_site_ids:
-                msg = f"站点 {site_label} 正在刷新，跳过重复请求"
-                logger.info(f"SiteRefresh: {msg}")
-                return schemas.Response(success=False, message=msg)
-            last = self._last_refresh_at.get(sid, 0)
-            if not force and self._refresh_cooldown > 0 and (now - last) < self._refresh_cooldown:
-                msg = f"站点 {site_label} 冷却中（{int(self._refresh_cooldown - (now - last))}s 后可刷新），跳过"
-                logger.info(f"SiteRefresh: {msg}")
-                return schemas.Response(success=False, message=msg)
-            self._refreshing_site_ids.add(sid)
-        try:
-            result = self._refresh_site_by_id(site_id)
-            return schemas.Response(success=result.get("success"), message=result.get("message"))
-        finally:
-            with self._refresh_lock:
-                self._refreshing_site_ids.discard(sid)
-                self._last_refresh_at[sid] = time.time()
+        with self._batch_refresh_lock:
+            results = self._refresh_sites_batch([site_id], force=force)
+        result = results[0] if results else {"success": False, "message": "站点未刷新"}
+        return schemas.Response(success=result.get("success"), message=result.get("message"))
 
-    def _login_with_browser(self, site, username: str, password: str,
-                            two_step_code: Optional[str]) -> Tuple[bool, str, Optional[str], Optional[str]]:
-        """自实现浏览器登录，带 wait_for_load_state，绕开 CookieHelper navigation bug"""
+    def _launch_login_context(self, proxies=None):
         from app.core.config import settings
-        from app.helper.browser import PlaywrightHelper
+        from cloakbrowser import launch_context
+
+        return launch_context(
+            headless=self._browser_headless,
+            proxy=proxies,
+            user_agent=None,
+            humanize=getattr(settings, "CLOAKBROWSER_HUMANIZE", False),
+            human_preset=getattr(settings, "CLOAKBROWSER_HUMAN_PRESET", None),
+        )
+
+    def _login_in_context(self, context, site, username: str, password: str,
+                          two_step_code: Optional[str]) -> Tuple[bool, str, Optional[str], Optional[str]]:
+        """在复用浏览器上下文中登录单站点，每站独立 tab 和 cookie。"""
         from app.helper.cookie import CookieHelper
         from app.utils.site import SiteUtils
         from app.utils.twofa import TwoFactorAuth
         from lxml import etree
 
-        proxies = settings.PROXY_SERVER if getattr(site, "proxy", 0) else None
-        timeout = getattr(site, "timeout", 0) or 60
         login_xpaths = CookieHelper._SITE_LOGIN_XPATH
+        deadline = time.monotonic() + self._browser_site_timeout
+        page = None
 
-        def page_handler(page):
+        def remaining_timeout() -> int:
+            return max(1000, int(deadline - time.monotonic()) * 1000)
+
+        try:
+            context.clear_cookies()
+            page = context.new_page()
+            page.set_default_timeout(self._browser_site_timeout * 1000)
+            logger.info(f"SiteRefresh: 打开登录页 {site.url}")
+            page.goto(site.url, timeout=remaining_timeout())
             logger.info(f"SiteRefresh: 等待页面加载 {site.url}")
             try:
-                page.wait_for_load_state("domcontentloaded", timeout=30 * 1000)
+                page.wait_for_load_state("domcontentloaded", timeout=remaining_timeout())
             except Exception:
                 pass
             try:
-                page.wait_for_load_state("networkidle", timeout=10 * 1000)
+                page.wait_for_load_state("networkidle", timeout=remaining_timeout())
             except Exception:
                 pass
 
@@ -172,7 +146,7 @@ class SiteRefresh(_PluginBase):
             if not html_text:
                 msg = f"获取源码失败（URL={page.url}, 加载后 HTML 为空）"
                 logger.warning(f"SiteRefresh: {msg}")
-                return None, None, msg
+                return False, msg, None, None
             logger.info(f"SiteRefresh: 登录页源码长度 {len(html_text)}，当前 URL {page.url}")
 
             html = etree.HTML(html_text)
@@ -181,13 +155,13 @@ class SiteRefresh(_PluginBase):
                 title = html.xpath('//title/text()')
                 msg = f"未找到用户名输入框（页面标题={title}, URL={page.url}）"
                 logger.warning(f"SiteRefresh: {msg}")
-                return None, None, msg
+                return False, msg, None, None
             logger.info(f"SiteRefresh: 命中用户名 xpath {username_xpath}")
             password_xpath = next((x for x in login_xpaths["password"] if html.xpath(x)), None)
             if not password_xpath:
                 msg = f"未找到密码输入框（URL={page.url}）"
                 logger.warning(f"SiteRefresh: {msg}")
-                return None, None, msg
+                return False, msg, None, None
 
             otp_code = ""
             if two_step_code:
@@ -205,14 +179,13 @@ class SiteRefresh(_PluginBase):
                 if not captcha_img_xpath:
                     msg = f"站点 {site.name} 需要验证码但未找到图片（captcha_xpath 命中，captcha_img_xpath 未命中，URL={page.url}）"
                     logger.warning(f"SiteRefresh: {msg}")
-                    return None, None, msg
+                    return False, msg, None, None
                 img_src = html.xpath(captcha_img_xpath)
                 img_src = img_src[0] if img_src else ""
                 if hasattr(img_src, "get"):
                     img_src = img_src.get("src") or ""
                 if img_src:
                     captcha_url = urljoin(site.url, str(img_src))
-                    # 用浏览器 fetch 取验证码图片（带 session cookie，最可靠）
                     image_bytes = None
                     try:
                         b64 = page.evaluate(
@@ -251,20 +224,20 @@ class SiteRefresh(_PluginBase):
                     else:
                         msg = f"验证码识别失败（站点={site.name}, 图片URL={captcha_url}, 图片字节={len(image_bytes) if image_bytes else 0}）"
                         logger.warning(f"SiteRefresh: {msg}")
-                        return None, None, msg
+                        return False, msg, None, None
                 else:
                     msg = "未获取到验证码图片地址（img_src 为空）"
                     logger.warning(f"SiteRefresh: {msg}")
-                    return None, None, msg
+                    return False, msg, None, None
 
             submit_xpath = next((x for x in login_xpaths["submit"] if html.xpath(x)), None)
             if not submit_xpath:
                 msg = f"未找到登录按钮（URL={page.url}）"
                 logger.warning(f"SiteRefresh: {msg}")
-                return None, None, msg
+                return False, msg, None, None
 
             try:
-                page.wait_for_selector(submit_xpath, timeout=10 * 1000)
+                page.wait_for_selector(submit_xpath, timeout=remaining_timeout())
                 page.fill(username_xpath, username)
                 page.fill(password_xpath, password)
                 if twostep_xpath:
@@ -272,28 +245,28 @@ class SiteRefresh(_PluginBase):
                 logger.info(f"SiteRefresh: 点击登录按钮 {submit_xpath}")
                 page.click(submit_xpath)
                 try:
-                    page.wait_for_url(lambda url: "login" not in url.lower(), timeout=15 * 1000)
+                    page.wait_for_url(lambda url: "login" not in url.lower(), timeout=remaining_timeout())
                 except Exception:
                     try:
                         page.locator(password_xpath).press("Enter")
-                        page.wait_for_url(lambda url: "login" not in url.lower(), timeout=15 * 1000)
+                        page.wait_for_url(lambda url: "login" not in url.lower(), timeout=remaining_timeout())
                     except Exception:
                         pass
                 try:
-                    page.wait_for_load_state("networkidle", timeout=10 * 1000)
+                    page.wait_for_load_state("networkidle", timeout=remaining_timeout())
                 except Exception:
                     pass
                 logger.info(f"SiteRefresh: 登录后 URL {page.url}")
             except Exception as e:
                 msg = f"仿真登录失败（URL={page.url}）：{e}"
                 logger.warning(f"SiteRefresh: {msg}")
-                return None, None, msg
+                return False, msg, None, None
 
             if "verify" in (page.url or ""):
                 if not otp_code:
                     msg = f"需要二次验证码（站点={site.name}）"
                     logger.warning(f"SiteRefresh: {msg}")
-                    return None, None, msg
+                    return False, msg, None, None
                 html2 = etree.HTML(page.content() or "")
                 for xpath in login_xpaths["twostep"]:
                     if html2.xpath(xpath):
@@ -301,15 +274,15 @@ class SiteRefresh(_PluginBase):
                             otp_code = TwoFactorAuth(two_step_code).get_code()
                             page.fill(xpath, otp_code)
                             page.click(submit_xpath)
-                            page.wait_for_load_state("networkidle", timeout=30 * 1000)
+                            page.wait_for_load_state("networkidle", timeout=remaining_timeout())
                         except Exception as e:
                             msg = f"二次验证码输入失败：{e}"
                             logger.warning(f"SiteRefresh: {msg}")
-                            return None, None, msg
+                            return False, msg, None, None
                         break
 
             try:
-                page.wait_for_load_state("domcontentloaded", timeout=10 * 1000)
+                page.wait_for_load_state("domcontentloaded", timeout=remaining_timeout())
             except Exception:
                 pass
             final_url = page.url or ""
@@ -317,8 +290,8 @@ class SiteRefresh(_PluginBase):
             if not final_html:
                 msg = f"获取登录后源码失败（URL={page.url}）"
                 logger.warning(f"SiteRefresh: {msg}")
-                return None, None, msg
-            cookie = CookieHelper.parse_cookies(page.context.cookies())
+                return False, msg, None, None
+            cookie = CookieHelper.parse_cookies(context.cookies([site.url]))
             url_left = "login" not in final_url.lower()
             logged_html = SiteUtils.is_logged_in(final_html)
             has_uid_pass = ("uid=" in cookie) or ("pass=" in cookie)
@@ -326,7 +299,7 @@ class SiteRefresh(_PluginBase):
             logger.info(f"SiteRefresh: 登录态判定 {success}，源码判定 {logged_html}，URL离开登录页 {url_left}，Cookie含uid/pass {has_uid_pass}，登录后 URL {final_url}")
             if success:
                 ua = page.evaluate("() => window.navigator.userAgent")
-                return cookie, ua, ""
+                return True, "登录成功", cookie, ua
             final_doc = etree.HTML(final_html)
             error_xpath = next((x for x in login_xpaths["error"]
                                 if html.xpath(x) or (final_doc is not None and final_doc.xpath(x))), None)
@@ -335,30 +308,18 @@ class SiteRefresh(_PluginBase):
                        or html.xpath(error_xpath) or ["登录失败"])[0]
                 msg = str(err)
                 logger.warning(f"SiteRefresh: 登录失败，站点返回错误：{msg}")
-                return None, None, msg
+                return False, msg, None, None
             snippet = (final_html[:500] if final_html else "").replace('\n', ' ')
             logger.warning(f"SiteRefresh: 登录失败兜底，站点={site.name} URL={final_url} 登录后HTML片段: {snippet}")
-            return None, None, f"登录失败（站点={site.name}, 登录后URL={final_url}, 离开登录页={url_left}, cookie含uid/pass={has_uid_pass}）"
-
-        try:
-            result = PlaywrightHelper().action(
-                url=site.url,
-                callback=page_handler,
-                cookies=None,
-                ua=None,
-                proxies=proxies,
-                headless=self._browser_headless,
-                timeout=timeout
-            )
+            return False, f"登录失败（站点={site.name}, 登录后URL={final_url}, 离开登录页={url_left}, cookie含uid/pass={has_uid_pass}）", None, None
         except Exception as e:
             return False, f"浏览器操作异常：{e}", None, None
-
-        if result and len(result) == 3 and result[0]:
-            cookie, ua, msg = result
-            return True, msg or "登录成功", cookie, ua
-        if result and len(result) == 3:
-            return False, result[2] or "登录失败", None, None
-        return False, "浏览器登录无返回", None, None
+        finally:
+            if page:
+                try:
+                    page.close()
+                except Exception as e:
+                    logger.warning(f"SiteRefresh: 关闭站点 {site.name} 页面失败：{e}")
 
     def get_config_dict(self) -> Dict[str, Any]:
         return {
@@ -368,6 +329,7 @@ class SiteRefresh(_PluginBase):
             "browser_headless": self._browser_headless,
             "refresh_sites": self._refresh_sites,
             "refresh_cooldown": self._refresh_cooldown,
+            "browser_site_timeout": self._browser_site_timeout,
             "keepass_enabled": self._config.get("keepass_enabled", True),
             "keepass_webdav_url": self._config.get("keepass_webdav_url", ""),
             "keepass_webdav_username": self._config.get("keepass_webdav_username", ""),
@@ -377,7 +339,7 @@ class SiteRefresh(_PluginBase):
             "siteconf": self._config.get("siteconf", "")
         }
 
-    def _refresh_site_by_id(self, site_id: Any) -> Dict[str, Any]:
+    def _refresh_site_in_context(self, context, site_id: Any) -> Dict[str, Any]:
         started_at = time.monotonic()
         site = SiteOper().get(site_id)
         if not site:
@@ -393,8 +355,8 @@ class SiteRefresh(_PluginBase):
             logger.warning(f"SiteRefresh: 站点 {site.name} 刷新失败（耗时 {time.monotonic() - started_at:.1f}s）：{msg}")
             return {"success": False, "message": msg, "site": site.name}
         try:
-            state, message, cookie, ua = self._login_with_browser(
-                site, credential.username, credential.password, credential.two_step_code
+            state, message, cookie, ua = self._login_in_context(
+                context, site, credential.username, credential.password, credential.two_step_code
             )
         except Exception as exc:
             state, message = False, str(exc)
@@ -426,7 +388,88 @@ class SiteRefresh(_PluginBase):
             logger.info(f"SiteRefresh: 站点 {site.name} 刷新成功（耗时 {elapsed:.1f}s）")
         else:
             logger.warning(f"SiteRefresh: 站点 {site.name} 刷新失败（耗时 {elapsed:.1f}s）：{message}")
-        return {"success": bool(state), "message": message or "", "site": site.name}
+        result = {"success": bool(state), "message": message or "", "site": site.name}
+        if self._notify:
+            self.post_message(mtype=NotificationType.SiteMessage, title=f"站点 {result.get('site')} Cookie 已失效。",
+                              text=f"自动更新 Cookie 和 UA {'成功' if result.get('success') else '失败'}{('：' + result.get('message')) if result.get('message') else ''}")
+        return result
+
+    def _reserve_site_ids(self, site_ids, force: bool = False):
+        reserved = []
+        allowed_sites = {str(x) for x in self._refresh_sites}
+        now = time.time()
+        with self._refresh_lock:
+            for site_id in site_ids:
+                site = SiteOper().get(site_id)
+                site_name = getattr(site, "name", "") if site else ""
+                site_label = f"{site_name}（ID={site_id}）" if site_name else f"ID={site_id}"
+                sid = str(site_id)
+                if allowed_sites and sid not in allowed_sites:
+                    logger.info(f"SiteRefresh: 站点 {site_label} 未在刷新站点选择中，跳过")
+                    continue
+                if sid in self._refreshing_site_ids:
+                    logger.info(f"SiteRefresh: 站点 {site_label} 正在刷新中，跳过重复事件")
+                    continue
+                last = self._last_refresh_at.get(sid, 0)
+                if not force and self._refresh_cooldown > 0 and (now - last) < self._refresh_cooldown:
+                    logger.info(f"SiteRefresh: 站点 {site_label} 冷却中（剩余 {int(self._refresh_cooldown - (now - last))}s），跳过")
+                    continue
+                self._refreshing_site_ids.add(sid)
+                reserved.append(site_id)
+        return reserved
+
+    def _refresh_sites_batch(self, site_ids, force: bool = False) -> List[Dict[str, Any]]:
+        from app.core.config import settings
+
+        reserved_site_ids = self._reserve_site_ids(site_ids, force=force)
+        if not reserved_site_ids:
+            return []
+        results = []
+        groups = {False: [], True: []}
+        try:
+            for site_id in reserved_site_ids:
+                site = SiteOper().get(site_id)
+                if not site:
+                    results.append(self._refresh_missing_site(site_id))
+                    continue
+                groups[bool(getattr(site, "proxy", 0))].append(site_id)
+            for use_proxy, group_site_ids in groups.items():
+                if not group_site_ids:
+                    continue
+                context = None
+                proxies = settings.PROXY_SERVER if use_proxy else None
+                try:
+                    context = self._launch_login_context(proxies=proxies)
+                    logger.info(f"SiteRefresh: 启动{'代理' if use_proxy else '直连'}浏览器上下文，站点数={len(group_site_ids)}")
+                    for site_id in group_site_ids:
+                        results.append(self._refresh_site_in_context(context, site_id))
+                except Exception as exc:
+                    msg = f"启动{'代理' if use_proxy else '直连'}浏览器上下文异常：{exc}"
+                    logger.error(f"SiteRefresh: {msg}")
+                    for site_id in group_site_ids:
+                        site = SiteOper().get(site_id)
+                        site_name = getattr(site, "name", "") if site else ""
+                        site_url = getattr(site, "url", "") if site else ""
+                        self._record_result(site_name=site_name, site_id=site_id, site_url=site_url, success=False, message=msg)
+                        results.append({"success": False, "message": msg, "site": site_name})
+                finally:
+                    if context:
+                        try:
+                            context.close()
+                        except Exception as exc:
+                            logger.warning(f"SiteRefresh: 关闭浏览器上下文失败：{exc}")
+        finally:
+            with self._refresh_lock:
+                for site_id in reserved_site_ids:
+                    sid = str(site_id)
+                    self._refreshing_site_ids.discard(sid)
+                    self._last_refresh_at[sid] = time.time()
+        return results
+
+    def _refresh_missing_site(self, site_id: Any) -> Dict[str, Any]:
+        msg = f"未获取到 site_id {site_id} 对应的站点数据"
+        logger.error(f"SiteRefresh: {msg}")
+        return {"success": False, "message": msg, "site": ""}
 
     def _record_result(self, site_name: str, site_id: Any, site_url: str = "", success: bool = False,
                        message: str = ""):
@@ -466,7 +509,10 @@ class SiteRefresh(_PluginBase):
                                                               "hint": "关闭无头模式可绕过部分站点自动化检测；服务器无显示器时需开启"}}]},
                         {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
                             {"component": "VTextField", "props": {"model": "refresh_cooldown", "label": "刷新冷却(秒)", "type": "number",
-                                                                 "placeholder": "600", "hint": "同一站点冷却期内不重复刷新，0=不冷却"}}]}]},
+                                                                 "placeholder": "600", "hint": "同一站点冷却期内不重复刷新，0=不冷却"}}]},
+                        {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                            {"component": "VTextField", "props": {"model": "browser_site_timeout", "label": "单站超时(秒)", "type": "number",
+                                                                 "placeholder": "60", "hint": "单站浏览器登录总超时，超时只关该站 tab 不影响其他站"}}]}]},
                     {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
                         {"component": "VSelect", "props": {"chips": True, "multiple": True, "model": "refresh_sites",
                                                              "label": "刷新站点（为空则全部）", "items": self._site_options(),
@@ -529,7 +575,7 @@ class SiteRefresh(_PluginBase):
                         {"component": "VListItemTitle", "text": "CookieCloud 同步"},
                         {"component": "VListItemSubtitle", "text": "刷新成功后可同步 CookieCloud"}]}]}]}]}
         ]}], {"enabled": False, "notify": False, "sync_cookiecloud": True, "browser_headless": False, "refresh_sites": [],
-              "refresh_cooldown": 600,
+              "refresh_cooldown": 600, "browser_site_timeout": 60,
               "keepass_enabled": True, "keepass_webdav_url": "", "keepass_webdav_username": "",
               "keepass_webdav_password": "", "keepass_master_password": "", "keepass_cache_minutes": 5,
               "siteconf": ""}
