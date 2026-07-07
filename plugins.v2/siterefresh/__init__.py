@@ -99,8 +99,12 @@ class SiteRefresh(_PluginBase):
         return schemas.Response(success=result.get("success"), message=result.get("message"))
 
     def _login_in_tab(self, context, site, username: str, password: str,
-                      two_step_code: Optional[str]) -> Tuple[bool, str, Optional[str], Optional[str]]:
+                      two_step_code: Optional[str], entry_page=None) -> Tuple[bool, str, Optional[str], Optional[str]]:
         """在复用浏览器上下文中登录单站点，每站独立 tab 和 cookie。"""
+        try:
+            from app.helper.cloudflare import under_challenge
+        except Exception:
+            under_challenge = None
         from app.helper.cookie import CookieHelper
         from app.utils.site import SiteUtils
         from app.utils.twofa import TwoFactorAuth
@@ -108,14 +112,15 @@ class SiteRefresh(_PluginBase):
 
         login_xpaths = CookieHelper._SITE_LOGIN_XPATH
         deadline = time.monotonic() + self._browser_site_timeout
-        page = None
+        page = entry_page
+        own_page = entry_page is None
 
         def remaining_timeout() -> int:
             return max(1000, int(deadline - time.monotonic()) * 1000)
 
         try:
-            context.clear_cookies()
-            page = context.new_page()
+            if own_page:
+                page = context.new_page()
             page.set_default_timeout(self._browser_site_timeout * 1000)
             login_url = getattr(site, "login_url", None) or site.url
             logger.info(f"SiteRefresh: 打开登录页 {login_url}")
@@ -131,6 +136,17 @@ class SiteRefresh(_PluginBase):
                 pass
 
             html_text = page.content()
+            is_under_challenge = False
+            if under_challenge:
+                try:
+                    is_under_challenge = under_challenge(html_text or "")
+                except Exception:
+                    is_under_challenge = False
+            cf_keywords = ["security service to protect against malicious bots", "Checking your browser", "Just a moment", "Cloudflare"]
+            if is_under_challenge or any(kw.lower() in (html_text or "").lower() for kw in cf_keywords):
+                msg = "站点被Cloudflare防护，请打开站点浏览器仿真"
+                logger.warning(f"SiteRefresh: {msg}（URL={page.url}）")
+                return False, msg, None, None
             if not html_text:
                 msg = f"获取源码失败（URL={page.url}, 加载后 HTML 为空）"
                 logger.warning(f"SiteRefresh: {msg}")
@@ -303,7 +319,7 @@ class SiteRefresh(_PluginBase):
         except Exception as e:
             return False, f"浏览器操作异常：{e}", None, None
         finally:
-            if page:
+            if own_page and page:
                 try:
                     page.close()
                 except Exception as e:
@@ -327,7 +343,7 @@ class SiteRefresh(_PluginBase):
             "siteconf": self._config.get("siteconf", "")
         }
 
-    def _refresh_site_in_context(self, context, site_id: Any) -> Dict[str, Any]:
+    def _refresh_site_in_context(self, context, site_id: Any, entry_page=None) -> Dict[str, Any]:
         started_at = time.monotonic()
         site = SiteOper().get(site_id)
         if not site:
@@ -344,7 +360,7 @@ class SiteRefresh(_PluginBase):
             return {"success": False, "message": msg, "site": site.name}
         try:
             state, message, cookie, ua = self._login_in_tab(
-                context, site, credential.username, credential.password, credential.two_step_code
+                context, site, credential.username, credential.password, credential.two_step_code, entry_page=entry_page
             )
         except Exception as exc:
             state, message = False, str(exc)
@@ -425,11 +441,7 @@ class SiteRefresh(_PluginBase):
 
         def batch_handler(page):
             context = page.context
-            try:
-                page.close()
-            except Exception:
-                pass
-            for site_id in reserved_site_ids:
+            for idx, site_id in enumerate(reserved_site_ids):
                 site = SiteOper().get(site_id)
                 if site and bool(getattr(site, "proxy", 0)):
                     msg = "该站需代理，跳过批量模式"
@@ -438,7 +450,10 @@ class SiteRefresh(_PluginBase):
                     results.append({"success": False, "message": msg, "site": site.name})
                     continue
                 try:
-                    result = self._refresh_site_in_context(context, site_id)
+                    if idx == 0:
+                        result = self._refresh_site_in_context(context, site_id, entry_page=page)
+                    else:
+                        result = self._refresh_site_in_context(context, site_id)
                     results.append(result)
                 except Exception as exc:
                     site_name = getattr(site, "name", "") if site else ""
