@@ -157,13 +157,11 @@ class SiteRefresh(_PluginBase):
                         cookie = CookieHelper.parse_cookies(page.context.cookies())
                         ua = page.evaluate("() => window.navigator.userAgent")
                         try:
-                            from app.plugins.autoptcheckin.helper.ocr_helper import recognize_captcha
-                            captcha_code = recognize_captcha(
+                            from app.helper.ocr import OcrHelper
+                            captcha_code = OcrHelper().get_captcha_text(
                                 image_url=captcha_url,
                                 cookie=cookie,
-                                ua=ua,
-                                referer=page.url or site.url,
-                                proxy=bool(getattr(site, "proxy", 0))
+                                ua=ua
                             ) or ""
                         except Exception as e:
                             logger.warning(f"SiteRefresh: 验证码识别异常: {e}")
