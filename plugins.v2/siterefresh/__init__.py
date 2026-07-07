@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from app import schemas
 from app.chain.site import SiteChain
@@ -88,6 +88,134 @@ class SiteRefresh(_PluginBase):
         result = self._refresh_site_by_id(site_id)
         return schemas.Response(success=result.get("success"), message=result.get("message"))
 
+    def _login_with_browser(self, site, username: str, password: str,
+                            two_step_code: Optional[str]) -> Tuple[bool, str, Optional[str], Optional[str]]:
+        """自实现浏览器登录，带 wait_for_load_state，绕开 CookieHelper navigation bug"""
+        from app.core.config import settings
+        from app.helper.browser import PlaywrightHelper
+        from app.helper.cookie import CookieHelper
+        from app.utils.site import SiteUtils
+
+        proxies = settings.PROXY_SERVER if getattr(site, "proxy", 0) else None
+        timeout = getattr(site, "timeout", 0) or 60
+        login_xpaths = CookieHelper._SITE_LOGIN_XPATH
+
+        def page_handler(page):
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=30 * 1000)
+            except Exception:
+                pass
+            try:
+                page.wait_for_load_state("networkidle", timeout=10 * 1000)
+            except Exception:
+                pass
+
+            html_text = page.content()
+            if not html_text:
+                return None, None, "获取源码失败"
+
+            from lxml import etree
+            html = etree.HTML(html_text)
+            try:
+                username_xpath = next((x for x in login_xpaths["username"] if html.xpath(x)), None)
+                if not username_xpath:
+                    return None, None, "未找到用户名输入框"
+                password_xpath = next((x for x in login_xpaths["password"] if html.xpath(x)), None)
+                if not password_xpath:
+                    return None, None, "未找到密码输入框"
+
+                otp_code = ""
+                if two_step_code:
+                    try:
+                        from app.utils.twofa import TwoFactorAuth
+                        otp_code = TwoFactorAuth(two_step_code).get_code()
+                    except Exception:
+                        otp_code = ""
+                twostep_xpath = None
+                if otp_code:
+                    twostep_xpath = next((x for x in login_xpaths["twostep"] if html.xpath(x)), None)
+
+                captcha_xpath = next((x for x in login_xpaths["captcha"] if html.xpath(x)), None)
+                if captcha_xpath:
+                    return None, None, "站点需要验证码，浏览器自动登录暂不支持"
+
+                submit_xpath = next((x for x in login_xpaths["submit"] if html.xpath(x)), None)
+                if not submit_xpath:
+                    return None, None, "未找到登录按钮"
+
+                try:
+                    page.wait_for_selector(submit_xpath, timeout=10 * 1000)
+                    page.fill(username_xpath, username)
+                    page.fill(password_xpath, password)
+                    if twostep_xpath:
+                        page.fill(twostep_xpath, otp_code)
+                    page.click(submit_xpath)
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=30 * 1000)
+                    except Exception:
+                        pass
+                except Exception as e:
+                    return None, None, f"仿真登录失败：{e}"
+
+                if "verify" in (page.url or ""):
+                    if not otp_code:
+                        return None, None, "需要二次验证码"
+                    html2 = etree.HTML(page.content() or "")
+                    for xpath in login_xpaths["twostep"]:
+                        if html2.xpath(xpath):
+                            try:
+                                from app.utils.twofa import TwoFactorAuth
+                                otp_code = TwoFactorAuth(two_step_code).get_code()
+                                page.fill(xpath, otp_code)
+                                page.click(submit_xpath)
+                                page.wait_for_load_state("networkidle", timeout=30 * 1000)
+                            except Exception as e:
+                                return None, None, f"二次验证码输入失败：{e}"
+                            break
+
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=10 * 1000)
+                except Exception:
+                    pass
+                final_html = page.content() or ""
+                if not final_html:
+                    return None, None, "获取登录后源码失败"
+                if SiteUtils.is_logged_in(final_html):
+                    cookie = CookieHelper.parse_cookies(page.context.cookies())
+                    ua = page.evaluate("() => window.navigator.userAgent")
+                    return cookie, ua, ""
+                final_doc = etree.HTML(final_html)
+                error_xpath = next((x for x in login_xpaths["error"]
+                                    if html.xpath(x) or (final_doc is not None and final_doc.xpath(x))), None)
+                if error_xpath:
+                    err = ((final_doc.xpath(error_xpath) if final_doc is not None else None)
+                           or html.xpath(error_xpath) or ["登录失败"])[0]
+                    return None, None, str(err)
+                return None, None, "登录失败"
+            finally:
+                if html is not None:
+                    del html
+
+        try:
+            result = PlaywrightHelper().action(
+                url=site.url,
+                callback=page_handler,
+                cookies=None,
+                ua=None,
+                proxies=proxies,
+                headless=True,
+                timeout=timeout
+            )
+        except Exception as e:
+            return False, f"浏览器操作异常：{e}", None, None
+
+        if result and len(result) == 3 and result[0]:
+            cookie, ua, msg = result
+            return True, msg or "登录成功", cookie, ua
+        if result and len(result) == 3:
+            return False, result[2] or "登录失败", None, None
+        return False, "浏览器登录无返回", None, None
+
     def _refresh_site_by_id(self, site_id: Any) -> Dict[str, Any]:
         site = SiteOper().get(site_id)
         if not site:
@@ -102,19 +230,25 @@ class SiteRefresh(_PluginBase):
             return {"success": False, "message": msg, "site": site.name}
         logger.info(f"SiteRefresh: 开始尝试登录站点 {site.name}，匹配域名 {credential.domain}")
         try:
-            state, message = SiteChain().update_cookie(site_info=site, username=credential.username,
-                                                       password=credential.password,
-                                                       two_step_code=credential.two_step_code)
+            state, message, cookie, ua = self._login_with_browser(
+                site, credential.username, credential.password, credential.two_step_code
+            )
         except Exception as exc:
             state, message = False, str(exc)
+            cookie = ua = None
             logger.exception(f"SiteRefresh: 站点 {site.name} 自动更新 Cookie 和 UA 异常")
+        if state and cookie:
+            try:
+                SiteOper().update(site.id, {"cookie": cookie, "ua": ua})
+            except Exception as exc:
+                logger.error(f"SiteRefresh: 站点 {site.name} 回写 Cookie/UA 失败：{exc}")
         logger.info(f"SiteRefresh: 站点 {site.name} 自动更新 Cookie 和 UA {'成功' if state else '失败'}")
         if not state and message:
             logger.error(f"SiteRefresh: 失败原因：{message}")
         if state and self._sync_cookiecloud:
             try:
                 updated_site = SiteOper().get(site_id) or site
-                ok, cc_msg = sync_cookie_to_cookiecloud(updated_site.url, getattr(updated_site, "cookie", "") or "")
+                ok, cc_msg = sync_cookie_to_cookiecloud(updated_site.url, cookie or getattr(updated_site, "cookie", "") or "")
             except Exception as exc:
                 ok, cc_msg = False, f"CookieCloud 同步异常：{exc}"
             logger.info(f"SiteRefresh: CookieCloud 同步{'成功' if ok else '失败'}：{cc_msg}")
