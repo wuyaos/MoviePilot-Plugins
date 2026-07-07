@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import threading
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -39,6 +40,10 @@ class SiteRefresh(_PluginBase):
     _config: Dict[str, Any] = {}
     _last_result: Dict[str, Any] = {}
     _refresh_history: List[Dict[str, Any]] = []
+    _refreshing_site_ids: set = set()
+    _last_refresh_at: dict = {}
+    _refresh_lock = threading.Lock()
+    _refresh_cooldown: int = 600
 
     def init_plugin(self, config: dict = None):
         self._ensure_plugin_log_file()
@@ -49,6 +54,7 @@ class SiteRefresh(_PluginBase):
         self._sync_cookiecloud = bool(config.get("sync_cookiecloud", True))
         self._browser_headless = bool(config.get("browser_headless", False))
         self._refresh_sites = config.get("refresh_sites") or []
+        self._refresh_cooldown = int(config.get("refresh_cooldown", 600))
         self._last_result = self.get_data("last_result") or {}
         self._refresh_history = self.get_data("refresh_history") or []
 
@@ -83,14 +89,48 @@ class SiteRefresh(_PluginBase):
         if self._refresh_sites and str(site_id) not in {str(x) for x in self._refresh_sites}:
             logger.info(f"SiteRefresh: 站点 {site_id} 未在刷新站点选择中，跳过")
             return
-        result = self._refresh_site_by_id(site_id)
-        if self._notify and result.get("site"):
-            self.post_message(mtype=NotificationType.SiteMessage, title=f"站点 {result.get('site')} Cookie 已失效。",
-                              text=f"自动更新 Cookie 和 UA {'成功' if result.get('success') else '失败'}{('：' + result.get('message')) if result.get('message') else ''}")
+        sid = str(site_id)
+        now = time.time()
+        with self._refresh_lock:
+            if sid in self._refreshing_site_ids:
+                logger.info(f"SiteRefresh: 站点 {sid} 正在刷新，跳过重复事件")
+                return
+            last = self._last_refresh_at.get(sid, 0)
+            if self._refresh_cooldown > 0 and (now - last) < self._refresh_cooldown:
+                logger.info(f"SiteRefresh: 站点 {sid} 冷却中（{int(self._refresh_cooldown - (now - last))}s 后可刷新），跳过")
+                return
+            self._refreshing_site_ids.add(sid)
+        try:
+            result = self._refresh_site_by_id(site_id)
+            if self._notify and result.get("site"):
+                self.post_message(mtype=NotificationType.SiteMessage, title=f"站点 {result.get('site')} Cookie 已失效。",
+                                  text=f"自动更新 Cookie 和 UA {'成功' if result.get('success') else '失败'}{('：' + result.get('message')) if result.get('message') else ''}")
+        finally:
+            with self._refresh_lock:
+                self._refreshing_site_ids.discard(sid)
+                self._last_refresh_at[sid] = time.time()
 
-    def refresh_site_api(self, site_id: Any) -> schemas.Response:
-        result = self._refresh_site_by_id(site_id)
-        return schemas.Response(success=result.get("success"), message=result.get("message"))
+    def refresh_site_api(self, site_id: Any, force: bool = False) -> schemas.Response:
+        sid = str(site_id)
+        now = time.time()
+        with self._refresh_lock:
+            if sid in self._refreshing_site_ids:
+                msg = f"站点 {sid} 正在刷新，跳过重复请求"
+                logger.info(f"SiteRefresh: {msg}")
+                return schemas.Response(success=False, message=msg)
+            last = self._last_refresh_at.get(sid, 0)
+            if not force and self._refresh_cooldown > 0 and (now - last) < self._refresh_cooldown:
+                msg = f"站点 {sid} 冷却中（{int(self._refresh_cooldown - (now - last))}s 后可刷新），跳过"
+                logger.info(f"SiteRefresh: {msg}")
+                return schemas.Response(success=False, message=msg)
+            self._refreshing_site_ids.add(sid)
+        try:
+            result = self._refresh_site_by_id(site_id)
+            return schemas.Response(success=result.get("success"), message=result.get("message"))
+        finally:
+            with self._refresh_lock:
+                self._refreshing_site_ids.discard(sid)
+                self._last_refresh_at[sid] = time.time()
 
     def _login_with_browser(self, site, username: str, password: str,
                             two_step_code: Optional[str]) -> Tuple[bool, str, Optional[str], Optional[str]]:
@@ -316,6 +356,7 @@ class SiteRefresh(_PluginBase):
             "sync_cookiecloud": self._sync_cookiecloud,
             "browser_headless": self._browser_headless,
             "refresh_sites": self._refresh_sites,
+            "refresh_cooldown": self._refresh_cooldown,
             "keepass_enabled": self._config.get("keepass_enabled", True),
             "keepass_webdav_url": self._config.get("keepass_webdav_url", ""),
             "keepass_webdav_username": self._config.get("keepass_webdav_username", ""),
@@ -407,7 +448,10 @@ class SiteRefresh(_PluginBase):
                     {"component": "VRow", "content": [
                         {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
                             {"component": "VSwitch", "props": {"model": "browser_headless", "label": "无头模式（关闭更稳定）", "color": "warning",
-                                                              "hint": "关闭无头模式可绕过部分站点自动化检测；服务器无显示器时需开启"}}]}]},
+                                                              "hint": "关闭无头模式可绕过部分站点自动化检测；服务器无显示器时需开启"}}]},
+                        {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                            {"component": "VTextField", "props": {"model": "refresh_cooldown", "label": "刷新冷却(秒)", "type": "number",
+                                                                 "placeholder": "600", "hint": "同一站点冷却期内不重复刷新，0=不冷却"}}]}]},
                     {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
                         {"component": "VSelect", "props": {"chips": True, "multiple": True, "model": "refresh_sites",
                                                              "label": "刷新站点（为空则全部）", "items": self._site_options(),
@@ -470,6 +514,7 @@ class SiteRefresh(_PluginBase):
                         {"component": "VListItemTitle", "text": "CookieCloud 同步"},
                         {"component": "VListItemSubtitle", "text": "刷新成功后可同步 CookieCloud"}]}]}]}]}
         ]}], {"enabled": False, "notify": False, "sync_cookiecloud": True, "browser_headless": False, "refresh_sites": [],
+              "refresh_cooldown": 600,
               "keepass_enabled": True, "keepass_webdav_url": "", "keepass_webdav_username": "",
               "keepass_webdav_password": "", "keepass_master_password": "", "keepass_cache_minutes": 5,
               "siteconf": ""}

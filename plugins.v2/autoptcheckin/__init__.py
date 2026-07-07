@@ -1480,17 +1480,22 @@ class AutoPtCheckin(_PluginBase):
                               userid=event.event_data.get("user"))
 
         _force = self._clean
+        refresh_triggered_site_ids = set()
         if self._sign_sites:
             self._clean = _force
-            self.__do(today=today, type_str="签到", do_sites=self._sign_sites, event=event)
+            self.__do(today=today, type_str="签到", do_sites=self._sign_sites, event=event,
+                      refresh_triggered_site_ids=refresh_triggered_site_ids)
         if self._login_sites:
             self._clean = _force
-            self.__do(today=today, type_str="登录", do_sites=self._login_sites, event=event)
+            self.__do(today=today, type_str="登录", do_sites=self._login_sites, event=event,
+                      refresh_triggered_site_ids=refresh_triggered_site_ids)
 
-    def __do(self, today: datetime, type_str: str, do_sites: list, event: Event = None):
+    def __do(self, today: datetime, type_str: str, do_sites: list, event: Event = None,
+             refresh_triggered_site_ids: set = None):
         """
         签到逻辑
         """
+        refresh_triggered_site_ids = refresh_triggered_site_ids or set()
         last_day = today - timedelta(days=4)
         last_day_str = last_day.strftime('%Y-%m-%d')
         # 删除昨天历史
@@ -1591,7 +1596,8 @@ class AutoPtCheckin(_PluginBase):
                     site_id = sites.get(site_name)
 
                 if 'Cookie已失效' in str(s):
-                    if site_id:
+                    if site_id and site_id not in refresh_triggered_site_ids:
+                        refresh_triggered_site_ids.add(site_id)
                         # 触发自动登录插件登录
                         logger.info(f"触发站点 {site_name} 自动登录更新Cookie和Ua")
                         self.eventmanager.send_event(EventType.PluginAction,
@@ -1599,6 +1605,8 @@ class AutoPtCheckin(_PluginBase):
                                                          "site_id": site_id,
                                                          "action": "site_refresh"
                                                      })
+                    elif site_id:
+                        logger.info(f"站点 {site_name} 本轮已触发 site_refresh，跳过重复触发")
                     elif site_name in custom_site_names:
                         logger.info(f"自定义站点 {site_name} Cookie已失效，但不在 MoviePilot 站点表，SiteRefresh 无法回写 Cookie/UA")
                 # 记录本次命中重试关键词的站点
@@ -1727,14 +1735,26 @@ class AutoPtCheckin(_PluginBase):
         site_module = self.__build_class(site_info.get("url"))
         # 开始记时
         start_time = datetime.now()
-        if site_module and hasattr(site_module, "signin"):
-            try:
-                state, message = site_module().signin(site_info)
-            except Exception as e:
-                traceback.print_exc()
-                state, message = False, f"签到失败：{str(e)}"
-        else:
-            state, message = self.__signin_base(site_info)
+        def do_signin() -> Tuple[bool, str]:
+            if site_module and hasattr(site_module, "signin"):
+                try:
+                    return site_module().signin(site_info)
+                except Exception as e:
+                    traceback.print_exc()
+                    return False, f"签到失败：{str(e)}"
+            return self.__signin_base(site_info)
+
+        state, message = do_signin()
+        if "Cookie已失效" in str(message):
+            old_cookie = site_info.get("cookie") or ""
+            cookie = self._fetch_cookie_cloud(site_info.get("url", ""))
+            if cookie and cookie != old_cookie:
+                logger.info(f"{site_info.get('name')} Cookie已失效，已从 CookieCloud 补取并重试签到")
+                site_info["cookie"] = cookie
+                site_id = site_info.get("id")
+                if site_id and self.siteoper.get(site_id):
+                    SiteOper().update(site_id, {"cookie": cookie})
+                state, message = do_signin()
         # 统计
         seconds = (datetime.now() - start_time).seconds
         domain = StringUtils.get_url_domain(site_info.get('url'))
@@ -1838,14 +1858,26 @@ class AutoPtCheckin(_PluginBase):
         site_module = self.__build_class(site_info.get("url"))
         # 开始记时
         start_time = datetime.now()
-        if site_module and hasattr(site_module, "login"):
-            try:
-                state, message = site_module().login(site_info)
-            except Exception as e:
-                traceback.print_exc()
-                state, message = False, f"模拟登录失败：{str(e)}"
-        else:
-            state, message = self.__login_base(site_info)
+        def do_login() -> Tuple[bool, str]:
+            if site_module and hasattr(site_module, "login"):
+                try:
+                    return site_module().login(site_info)
+                except Exception as e:
+                    traceback.print_exc()
+                    return False, f"模拟登录失败：{str(e)}"
+            return self.__login_base(site_info)
+
+        state, message = do_login()
+        if "Cookie已失效" in str(message):
+            old_cookie = site_info.get("cookie") or ""
+            cookie = self._fetch_cookie_cloud(site_info.get("url", ""))
+            if cookie and cookie != old_cookie:
+                logger.info(f"{site_info.get('name')} Cookie已失效，已从 CookieCloud 补取并重试登录")
+                site_info["cookie"] = cookie
+                site_id = site_info.get("id")
+                if site_id and self.siteoper.get(site_id):
+                    SiteOper().update(site_id, {"cookie": cookie})
+                state, message = do_login()
         # 统计
         seconds = (datetime.now() - start_time).seconds
         domain = StringUtils.get_url_domain(site_info.get('url'))
