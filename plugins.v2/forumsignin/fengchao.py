@@ -218,9 +218,11 @@ class FengchaoService:
 
                 logger.info(f"成功获取有效cookie")
 
+                client = ForumSigninHttpClient(cookies=cookie, proxy_url=proxies, proxy_enabled=self.config.use_proxy, timeout=30)
+
                 # 使用获取的cookie访问蜂巢
                 try:
-                    res = ForumSigninHttpClient(cookies=cookie, proxy_url=proxies, proxy_enabled=self.config.use_proxy, timeout=30).get_res(url="https://pting.club")
+                    res = client.get_res(url="https://pting.club")
                 except Exception as e:
                     logger.error(f"请求蜂巢出错: {str(e)}")
                     if attempt < max_retries:
@@ -247,15 +249,13 @@ class FengchaoService:
                     logger.warning(f"签到前解析用户状态失败，将依赖API原始判断: {e}")
 
                 # 获取csrfToken
-                pattern = r'"csrfToken":"(.*?)"'
-                csrfToken = re.findall(pattern, res.text)
+                csrfToken = res.headers.get("x-csrf-token") or (re.findall(r'"csrfToken":"(.*?)"', res.text) or [None])[0]
                 if not csrfToken:
                     logger.error("请求csrfToken失败")
                     if attempt < max_retries:
                         continue
                     raise Exception("无法获取CSRF令牌")
 
-                csrfToken = csrfToken[0]
                 logger.info(f"获取csrfToken成功 {csrfToken}")
 
                 # 获取userid
@@ -268,7 +268,7 @@ class FengchaoService:
 
                     # 如果开启了蜂巢论坛PT人生数据更新，尝试更新数据
                     if self.config.mp_push_enabled:
-                        self.__push_mp_stats(user_id=userId, csrf_token=csrfToken, cookie=cookie)
+                        self.__push_mp_stats(user_id=userId, csrf_token=csrfToken, cookie=cookie, client=client)
                 else:
                     logger.error("未找到userId")
                     if attempt < max_retries:
@@ -278,8 +278,7 @@ class FengchaoService:
                 # 准备签到请求
                 headers = {
                     "X-Csrf-Token": csrfToken,
-                    "X-Http-Method-Override": "PATCH",
-                    "Cookie": cookie
+                    "X-Http-Method-Override": "PATCH"
                 }
 
                 data = {
@@ -295,9 +294,10 @@ class FengchaoService:
 
                 # 开始签到
                 try:
-                    res = ForumSigninHttpClient(headers=headers, proxy_url=proxies, proxy_enabled=self.config.use_proxy, timeout=30).post_res(
+                    res = client.post_res(
                         url=f"https://pting.club/api/users/{userId}",
                         json=data,
+                        headers=headers,
                         raise_exception=True
                     )
                 except Exception as e:
@@ -505,33 +505,50 @@ class FengchaoService:
             if not cookie:
                 logger.error("登录失败，无法获取cookie进行PT人生数据更新")
                 return
+            client = ForumSigninHttpClient(cookies=cookie, proxy_url=proxies, proxy_enabled=self.config.use_proxy, timeout=30)
             try:
-                res = ForumSigninHttpClient(cookies=cookie, proxy_url=proxies, proxy_enabled=self.config.use_proxy, timeout=30).get_res(url="https://pting.club")
+                res = client.get_res(url="https://pting.club")
             except Exception as e:
                 logger.error(f"请求蜂巢出错: {str(e)}")
                 return
             if not res or res.status_code != 200:
                 logger.error(f"请求蜂巢返回错误状态码: {res.status_code if res else '无响应'}")
                 return
-            csrf_matches = re.findall(r'"csrfToken":"(.*?)"', res.text)
-            if not csrf_matches:
+            csrf_token = res.headers.get("x-csrf-token") or (re.findall(r'"csrfToken":"(.*?)"', res.text) or [None])[0]
+            if not csrf_token:
                 logger.error("获取CSRF令牌失败，无法进行PT人生数据更新")
                 return
-            csrf_token = csrf_matches[0]
             user_matches = re.search(r'"userId":(\d+)', res.text)
             if not user_matches:
                 logger.error("获取用户ID失败，无法进行PT人生数据更新")
                 return
             user_id = user_matches.group(1)
-            self.__push_mp_stats(user_id=user_id, csrf_token=csrf_token, cookie=cookie)
+            self.__push_mp_stats(user_id=user_id, csrf_token=csrf_token, cookie=cookie, client=client)
         finally:
             self._pushing_stats = False
 
-    def __push_mp_stats(self, user_id=None, csrf_token=None, cookie=None, retry_count=0, max_retries=3):
+    def __push_mp_stats(self, user_id=None, csrf_token=None, cookie=None, client=None, retry_count=0, max_retries=3):
         """更新蜂巢论坛PT人生数据"""
         if not self.config.mp_push_enabled: return
-        if not all([user_id, csrf_token, cookie]):
-            logger.error("用户ID、CSRF令牌或Cookie为空，无法更新PT人生数据")
+        if not cookie and client:
+            cookie = client.get_cookie_string()
+        if not all([user_id, cookie]):
+            logger.error("用户ID或Cookie为空，无法更新PT人生数据")
+            return
+        proxies = self.callbacks.get_proxy_url()
+        if client is None:
+            client = ForumSigninHttpClient(cookies=cookie, proxy_url=proxies, proxy_enabled=self.config.use_proxy, timeout=60)
+            try:
+                res = client.get_res(url="https://pting.club")
+            except Exception as e:
+                logger.error(f"请求蜂巢出错: {str(e)}")
+                return
+            if not res or res.status_code != 200:
+                logger.error(f"请求蜂巢返回错误状态码: {res.status_code if res else '无响应'}")
+                return
+            csrf_token = res.headers.get("x-csrf-token") or (re.findall(r'"csrfToken":"(.*?)"', res.text) or [None])[0]
+        if not csrf_token:
+            logger.error("获取CSRF令牌失败，无法进行PT人生数据更新")
             return
         for attempt in range(retry_count, max_retries + 1):
             if attempt > retry_count:
@@ -581,7 +598,7 @@ class FengchaoService:
                     sites.sort(key=lambda x: x.get("seeding", 0), reverse=True)
                     formatted_stats["sites"] = sites[:300]
                 headers = {"X-Csrf-Token": csrf_token, "X-Http-Method-Override": "PATCH",
-                           "Content-Type": "application/json", "Cookie": cookie}
+                           "Content-Type": "application/json"}
                 data = {"data": {"type": "users", "attributes": {
                     "mpStatsSummary": json.dumps(formatted_stats.get("summary", {})),
                     "mpStatsSites": json.dumps(formatted_stats.get("sites", []))}, "id": user_id}}
@@ -595,11 +612,10 @@ class FengchaoService:
                     logger.info(f"推送的JSON数据: {json_data}")
                     logger.info(f"推送数据大小约为: {len(json_data)/1024:.2f} KB")
 
-                proxies = self.callbacks.get_proxy_url()
                 url = f"https://pting.club/api/users/{user_id}"
                 logger.info(f"准备更新蜂巢论坛PT人生数据: {len(formatted_stats.get('sites', []))} 个站点")
                 try:
-                    res = ForumSigninHttpClient(headers=headers, proxy_url=proxies, proxy_enabled=self.config.use_proxy, timeout=60).post_res(url=url, json=data, raise_exception=True)
+                    res = client.post_res(url=url, json=data, headers=headers, raise_exception=True)
                 except Exception as e:
                     import traceback
                     logger.error(f"更新请求出错: {str(e)}\n{traceback.format_exc()}")
@@ -822,15 +838,8 @@ class FengchaoService:
             if not csrf_token:
                 logger.error(f"无法获取CSRF令牌 (使用{proxy_info})")
                 return None
-            set_cookie_header = res.headers.get('set-cookie')
-            if not set_cookie_header or not (
-                    session_match := re.search(r'flarum_session=([^;]+)', set_cookie_header)):
-                logger.error(f"无法从set-cookie中提取session cookie (使用{proxy_info})")
-                return None
-            session_cookie = session_match.group(1)
             login_data = {"identification": self.config.fengchao_username, "password": self.config.fengchao_password, "remember": True}
-            login_headers = {"Content-Type": "application/json", "X-CSRF-Token": csrf_token,
-                             "Cookie": f"flarum_session={session_cookie}", **headers}
+            login_headers = {"Content-Type": "application/json", "X-CSRF-Token": csrf_token, **headers}
             try:
                 login_res = req.post_res(url="https://pting.club/login", json=login_data, headers=login_headers)
                 if not login_res or login_res.status_code != 200:
@@ -840,13 +849,13 @@ class FengchaoService:
             except Exception as e:
                 logger.error(f"登录请求异常 (使用{proxy_info}): {str(e)}")
                 return None
-            cookie_dict = {}
+            jar_cookies = req.get_cookies_dict()
+            cookie_dict = {k: jar_cookies[k] for k in ("flarum_session", "flarum_remember") if k in jar_cookies}
             if set_cookie_header := login_res.headers.get('set-cookie'):
-                if session_match := re.search(r'flarum_session=([^;]+)', set_cookie_header):
+                if 'flarum_session' not in cookie_dict and (session_match := re.search(r'flarum_session=([^;]+)', set_cookie_header)):
                     cookie_dict['flarum_session'] = session_match.group(1)
-                if remember_match := re.search(r'flarum_remember=([^;]+)', set_cookie_header):
+                if 'flarum_remember' not in cookie_dict and (remember_match := re.search(r'flarum_remember=([^;]+)', set_cookie_header)):
                     cookie_dict['flarum_remember'] = remember_match.group(1)
-            if 'flarum_session' not in cookie_dict: cookie_dict['flarum_session'] = session_cookie
             cookie_str = "; ".join([f"{k}={v}" for k, v in cookie_dict.items()])
             return self._verify_cookie(req, cookie_str, proxy_info)
         except Exception as e:
@@ -859,9 +868,11 @@ class FengchaoService:
         """验证cookie是否有效"""
         if not cookie_str: return None
         logger.info(f"验证cookie有效性 (使用{proxy_info})...")
-        headers = {"Cookie": cookie_str,
-                   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
                    "Accept": "*/*", "Cache-Control": "no-cache"}
+        if cookie_str:
+            req = ForumSigninHttpClient(cookies=cookie_str, proxy_url=getattr(req, "_proxy_url", None),
+                                        proxy_enabled=getattr(req, "_proxy_enabled", False), timeout=getattr(req, "_timeout", 30))
         for attempt in range(3):
             try:
                 if attempt > 0:

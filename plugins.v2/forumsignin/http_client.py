@@ -1,4 +1,5 @@
 import traceback
+from http.cookies import SimpleCookie
 from typing import Optional
 
 from app.log import logger
@@ -23,15 +24,25 @@ class ForumSigninHttpClient:
             self._session.headers.update(headers)
         if cookies:
             if isinstance(cookies, str):
-                self._session.headers["Cookie"] = cookies
+                parsed_cookies = SimpleCookie()
+                parsed_cookies.load(cookies)
+                for key, morsel in parsed_cookies.items():
+                    self._session.cookies.set(key, morsel.value)
             else:
-                self._session.cookies.update(cookies)
+                for key, value in cookies.items():
+                    self._session.cookies.set(key, value)
         self._proxy_url = proxy_url if proxy_enabled else None
         self._proxy_enabled = proxy_enabled
         self._timeout = timeout
 
     def _proxies(self):
         return {"https": self._proxy_url, "http": self._proxy_url} if self._proxy_url else None
+
+    def get_cookie_string(self) -> str:
+        return "; ".join([f"{cookie.name}={cookie.value}" for cookie in self._session.cookies.jar])
+
+    def get_cookies_dict(self) -> dict:
+        return {cookie.name: cookie.value for cookie in self._session.cookies.jar}
 
     @staticmethod
     def _is_ssl_error(err: Exception) -> bool:
