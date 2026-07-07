@@ -1495,7 +1495,8 @@ class AutoPtCheckin(_PluginBase):
         """
         签到逻辑
         """
-        refresh_triggered_site_ids = refresh_triggered_site_ids or set()
+        if refresh_triggered_site_ids is None:
+            refresh_triggered_site_ids = set()
         last_day = today - timedelta(days=4)
         last_day_str = last_day.strftime('%Y-%m-%d')
         # 删除昨天历史
@@ -1714,13 +1715,15 @@ class AutoPtCheckin(_PluginBase):
             from app.helper.cookiecloud import CookieCloudHelper
             cookies, _ = CookieCloudHelper().download()
             if not cookies:
+                logger.info(f"CookieCloud 未配置或无数据，跳过补取（{site_url}）")
                 return ""
             site_domain = urlparse(site_url).netloc
             for domain, cookie in cookies.items():
                 if site_domain and site_domain.endswith(domain):
                     return cookie
+            logger.info(f"CookieCloud 未匹配到 {site_domain} 的 Cookie")
         except Exception as e:
-            logger.debug(f"CookieCloud 补取 Cookie 失败: {e}")
+            logger.info(f"CookieCloud 补取失败（可能未配置）：{e}")
         return ""
 
     def signin_site(self, site_info: CommentedMap) -> Tuple[str, str]:
@@ -1753,7 +1756,7 @@ class AutoPtCheckin(_PluginBase):
                 site_info["cookie"] = cookie
                 site_id = site_info.get("id")
                 if site_id and self.siteoper.get(site_id):
-                    SiteOper().update(site_id, {"cookie": cookie})
+                    self.siteoper.update(site_id, {"cookie": cookie})
                 state, message = do_signin()
         # 统计
         seconds = (datetime.now() - start_time).seconds
@@ -1876,7 +1879,7 @@ class AutoPtCheckin(_PluginBase):
                 site_info["cookie"] = cookie
                 site_id = site_info.get("id")
                 if site_id and self.siteoper.get(site_id):
-                    SiteOper().update(site_id, {"cookie": cookie})
+                    self.siteoper.update(site_id, {"cookie": cookie})
                 state, message = do_login()
         # 统计
         seconds = (datetime.now() - start_time).seconds

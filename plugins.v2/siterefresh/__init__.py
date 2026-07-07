@@ -43,6 +43,7 @@ class SiteRefresh(_PluginBase):
     _refreshing_site_ids: set = set()
     _last_refresh_at: dict = {}
     _refresh_lock = threading.Lock()
+    _global_refresh_lock = threading.Lock()  # 跨站串行锁，确保全局只有一个站点在刷新
     _refresh_cooldown: int = 600
 
     def init_plugin(self, config: dict = None):
@@ -101,7 +102,9 @@ class SiteRefresh(_PluginBase):
                 return
             self._refreshing_site_ids.add(sid)
         try:
-            result = self._refresh_site_by_id(site_id)
+            # 全局串行锁：跨站严格排队，避免多站点并发浏览器登录吃内存
+            with self._global_refresh_lock:
+                result = self._refresh_site_by_id(site_id)
             if self._notify and result.get("site"):
                 self.post_message(mtype=NotificationType.SiteMessage, title=f"站点 {result.get('site')} Cookie 已失效。",
                                   text=f"自动更新 Cookie 和 UA {'成功' if result.get('success') else '失败'}{('：' + result.get('message')) if result.get('message') else ''}")
