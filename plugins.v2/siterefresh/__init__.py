@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List
 
+from app import schemas
 from app.chain.site import SiteChain
 from app.core.event import Event, eventmanager
 from app.db.site_oper import SiteOper
@@ -34,6 +35,7 @@ class SiteRefresh(_PluginBase):
     _refresh_sites: list = []
     _config: Dict[str, Any] = {}
     _last_result: Dict[str, Any] = {}
+    _refresh_history: List[Dict[str, Any]] = []
 
     def init_plugin(self, config: dict = None):
         self._ensure_plugin_log_file()
@@ -44,6 +46,7 @@ class SiteRefresh(_PluginBase):
         self._sync_cookiecloud = bool(config.get("sync_cookiecloud", True))
         self._refresh_sites = config.get("refresh_sites") or []
         self._last_result = self.get_data("last_result") or {}
+        self._refresh_history = self.get_data("refresh_history") or []
 
     def get_state(self) -> bool:
         return self._enabled
@@ -53,7 +56,12 @@ class SiteRefresh(_PluginBase):
         return []
 
     def get_api(self) -> List[Dict[str, Any]]:
-        return []
+        return [{
+            "path": "/refresh/{site_id}",
+            "summary": "手动触发指定站点刷新",
+            "endpoint": self.refresh_site_api,
+            "methods": ["GET"],
+        }]
 
     def get_service(self) -> List[Dict[str, Any]]:
         return []
@@ -71,16 +79,27 @@ class SiteRefresh(_PluginBase):
         if self._refresh_sites and str(site_id) not in {str(x) for x in self._refresh_sites}:
             logger.info(f"SiteRefresh: 站点 {site_id} 未在刷新站点选择中，跳过")
             return
+        result = self._refresh_site_by_id(site_id)
+        if self._notify and result.get("site"):
+            self.post_message(mtype=NotificationType.SiteMessage, title=f"站点 {result.get('site')} Cookie 已失效。",
+                              text=f"自动更新 Cookie 和 UA {'成功' if result.get('success') else '失败'}{('：' + result.get('message')) if result.get('message') else ''}")
+
+    def refresh_site_api(self, site_id: Any) -> schemas.Response:
+        result = self._refresh_site_by_id(site_id)
+        return schemas.Response(success=result.get("success"), message=result.get("message"))
+
+    def _refresh_site_by_id(self, site_id: Any) -> Dict[str, Any]:
         site = SiteOper().get(site_id)
         if not site:
-            logger.error(f"SiteRefresh: 未获取到 site_id {site_id} 对应的站点数据")
-            return
+            msg = f"未获取到 site_id {site_id} 对应的站点数据"
+            logger.error(f"SiteRefresh: {msg}")
+            return {"success": False, "message": msg, "site": ""}
         credential, msg = resolve_credential(self._config, site.name, site.url)
         if not credential:
             msg = f"未获取到站点 {site.name} 登录凭据：{msg}"
             logger.error(f"SiteRefresh: {msg}")
             self._record_result(site_name=site.name, site_id=site_id, success=False, message=msg)
-            return
+            return {"success": False, "message": msg, "site": site.name}
         logger.info(f"SiteRefresh: 开始尝试登录站点 {site.name}，匹配域名 {credential.domain}")
         try:
             state, message = SiteChain().update_cookie(site_info=site, username=credential.username,
@@ -101,14 +120,15 @@ class SiteRefresh(_PluginBase):
             logger.info(f"SiteRefresh: CookieCloud 同步{'成功' if ok else '失败'}：{cc_msg}")
             message = f"{message or '成功'}；{cc_msg}"
         self._record_result(site_name=site.name, site_id=site_id, success=state, message=message)
-        if self._notify:
-            self.post_message(mtype=NotificationType.SiteMessage, title=f"站点 {site.name} Cookie 已失效。",
-                              text=f"自动更新 Cookie 和 UA {'成功' if state else '失败'}{f'：{message}' if message else ''}")
+        return {"success": bool(state), "message": message or "", "site": site.name}
 
     def _record_result(self, site_name: str, site_id: Any, success: bool, message: str = ""):
         self._last_result = {"site": site_name, "site_id": site_id, "success": bool(success),
                              "message": message or "", "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        self._refresh_history = [self._last_result] + (self.get_data("refresh_history") or self._refresh_history or [])
+        self._refresh_history = self._refresh_history[:50]
         self.save_data("last_result", self._last_result)
+        self.save_data("refresh_history", self._refresh_history)
 
     @staticmethod
     def _site_options() -> List[Dict[str, Any]]:
@@ -120,48 +140,105 @@ class SiteRefresh(_PluginBase):
 
     def get_form(self) -> tuple[List[dict], Dict[str, Any]]:
         return [{"component": "VForm", "content": [
-            {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
-                    {"component": "VSwitch", "props": {"model": "enabled", "label": "启用插件"}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
-                    {"component": "VSwitch", "props": {"model": "notify", "label": "开启通知"}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
-                    {"component": "VSwitch", "props": {"model": "sync_cookiecloud", "label": "同步 CookieCloud"}}]}]},
-            {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
-                {"component": "VSelect", "props": {"chips": True, "multiple": True, "model": "refresh_sites",
-                                                     "label": "刷新站点（为空则全部）", "items": self._site_options()}}]}]},
-            {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
-                    {"component": "VSwitch", "props": {"model": "keepass_enabled", "label": "启用 KeePass"}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 8}, "content": [
-                    {"component": "VTextField", "props": {"model": "keepass_webdav_url", "label": "KDBX WebDAV URL"}}]}]},
-            {"component": "VRow", "content": [
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
-                    {"component": "VTextField", "props": {"model": "keepass_webdav_username", "label": "WebDAV 用户名"}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
-                    {"component": "VTextField", "props": {"model": "keepass_webdav_password", "label": "WebDAV 密码", "type": "password"}}]},
-                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
-                    {"component": "VTextField", "props": {"model": "keepass_master_password", "label": "KDBX 主密码", "type": "password"}}]}]},
-            {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
-                {"component": "VTextField", "props": {"model": "keepass_cache_minutes", "label": "KDBX 缓存分钟", "placeholder": "5"}}]}]},
-            {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
-                {"component": "VTextarea", "props": {"model": "siteconf", "label": "手动站点凭据（KeePass 未命中时兜底）", "rows": 5,
-                                                     "placeholder": "每行一个站点：\n域名domain|用户名|用户密码(|二次验证验证码或密钥)"}}]}]},
-            {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
-                {"component": "VAlert", "props": {"type": "info", "variant": "tonal",
-                                                   "text": "KeePass 条目按 URL 域名自动匹配 MoviePilot 站点域名；KDBX 仅通过 WebDAV GET 只读下载到内存，不写入磁盘。"}}]}]},
+            {"component": "VCard", "props": {"variant": "outlined", "class": "mt-3"}, "content": [
+                {"component": "VCardTitle", "props": {"class": "d-flex align-center"}, "content": [
+                    {"component": "VIcon", "props": {"color": "primary", "class": "mr-2"}, "text": "mdi-tune"},
+                    {"component": "span", "text": "通用设置"}]},
+                {"component": "VDivider"},
+                {"component": "VCardText", "content": [
+                    {"component": "VRow", "content": [
+                        {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                            {"component": "VSwitch", "props": {"model": "enabled", "label": "启用插件", "color": "primary"}}]},
+                        {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                            {"component": "VSwitch", "props": {"model": "notify", "label": "开启通知", "color": "info"}}]},
+                        {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                            {"component": "VSwitch", "props": {"model": "sync_cookiecloud", "label": "同步 CookieCloud", "color": "success"}}]}]},
+                    {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
+                        {"component": "VSelect", "props": {"chips": True, "multiple": True, "model": "refresh_sites",
+                                                             "label": "刷新站点（为空则全部）", "items": self._site_options(),
+                                                             "hint": "为空时刷新全部站点；选择后仅响应这些站点的失效事件"}}]}]}]}]},
+            {"component": "VCard", "props": {"variant": "outlined", "class": "mt-3"}, "content": [
+                {"component": "VCardTitle", "props": {"class": "d-flex align-center"}, "content": [
+                    {"component": "VIcon", "props": {"color": "success", "class": "mr-2"}, "text": "mdi-database-lock"},
+                    {"component": "span", "text": "KeePass WebDAV 凭据"},
+                    {"component": "VSpacer"},
+                    {"component": "VSwitch", "props": {"model": "keepass_enabled", "label": "启用 KeePass", "color": "success", "hide-details": True}}]},
+                {"component": "VDivider"},
+                {"component": "VCardText", "content": [
+                    {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12}, "content": [
+                        {"component": "VTextField", "props": {"model": "keepass_webdav_url", "label": "KDBX WebDAV URL",
+                                                             "placeholder": "https://example.com/dav/passwords.kdbx",
+                                                             "hint": "通过 WebDAV GET 只读下载 KDBX；不会写入磁盘", "clearable": True}}]}]},
+                    {"component": "VRow", "content": [
+                        {"component": "VCol", "props": {"cols": 12, "md": 6}, "content": [
+                            {"component": "VTextField", "props": {"model": "keepass_webdav_username", "label": "WebDAV 用户名",
+                                                                 "placeholder": "WebDAV 登录用户名", "autocomplete": "new-username", "clearable": True}}]},
+                        {"component": "VCol", "props": {"cols": 12, "md": 6}, "content": [
+                            {"component": "VTextField", "props": {"model": "keepass_webdav_password", "label": "WebDAV 密码", "type": "password",
+                                                                 "autocomplete": "new-password", "clearable": True}}]}]},
+                    {"component": "VRow", "content": [
+                        {"component": "VCol", "props": {"cols": 12, "md": 6}, "content": [
+                            {"component": "VTextField", "props": {"model": "keepass_master_password", "label": "KDBX 主密码", "type": "password",
+                                                                 "hint": "KDBX 数据库主密码", "autocomplete": "new-password", "clearable": True}}]},
+                        {"component": "VCol", "props": {"cols": 12, "md": 6}, "content": [
+                            {"component": "VTextField", "props": {"model": "keepass_cache_minutes", "label": "KDBX 缓存分钟", "type": "number",
+                                                                 "placeholder": "5", "hint": "内存缓存分钟数，减少 WebDAV 请求；建议 5 分钟"}}]}]}]}]},
+            {"component": "VCard", "props": {"variant": "outlined", "class": "mt-3"}, "content": [
+                {"component": "VCardTitle", "props": {"class": "d-flex align-center"}, "content": [
+                    {"component": "VIcon", "props": {"color": "warning", "class": "mr-2"}, "text": "mdi-file-key"},
+                    {"component": "span", "text": "手动凭据兜底"}]},
+                {"component": "VDivider"},
+                {"component": "VCardText", "content": [{"component": "VTextarea", "props": {
+                    "model": "siteconf", "label": "手动站点凭据（KeePass 未命中时兜底）", "rows": 6,
+                    "auto-grow": True, "placeholder": "# 每行一个站点，支持 # 注释\nexample.com|username|password\npt.example.com|username|password|2FA密钥或验证码",
+                    "hint": "KeePass 未命中或未启用时使用；域名不要带路径；格式：域名|用户名|密码(|二步验证码或密钥)"}}]}]},
+            {"component": "VCard", "props": {"variant": "outlined", "class": "mt-3"}, "content": [
+                {"component": "VCardTitle", "props": {"class": "d-flex align-center"}, "content": [
+                    {"component": "VIcon", "props": {"color": "info", "class": "mr-2"}, "text": "mdi-information"},
+                    {"component": "span", "text": "使用说明"}]},
+                {"component": "VDivider"},
+                {"component": "VCardText", "content": [{"component": "VList", "props": {"density": "comfortable", "lines": "two"}, "content": [
+                    {"component": "VListItem", "content": [
+                        {"component": "template", "props": {"v-slot:prepend": ""}, "content": [{"component": "VIcon", "props": {"color": "success"}, "text": "mdi-database-search"}]},
+                        {"component": "VListItemTitle", "text": "凭据优先级"},
+                        {"component": "VListItemSubtitle", "text": "启用 KeePass 时优先按站点域名匹配 KDBX，未命中再使用手动凭据"}]},
+                    {"component": "VListItem", "content": [
+                        {"component": "template", "props": {"v-slot:prepend": ""}, "content": [{"component": "VIcon", "props": {"color": "warning"}, "text": "mdi-file-key"}]},
+                        {"component": "VListItemTitle", "text": "手动格式"},
+                        {"component": "VListItemSubtitle", "text": "域名|用户名|密码(|二步验证码或密钥)，支持 # 注释"}]},
+                    {"component": "VListItem", "content": [
+                        {"component": "template", "props": {"v-slot:prepend": ""}, "content": [{"component": "VIcon", "props": {"color": "primary"}, "text": "mdi-web"}]},
+                        {"component": "VListItemTitle", "text": "域名匹配"},
+                        {"component": "VListItemSubtitle", "text": "填写根域名或站点 host，不要带路径"}]},
+                    {"component": "VListItem", "content": [
+                        {"component": "template", "props": {"v-slot:prepend": ""}, "content": [{"component": "VIcon", "props": {"color": "info"}, "text": "mdi-cloud-sync"}]},
+                        {"component": "VListItemTitle", "text": "CookieCloud 同步"},
+                        {"component": "VListItemSubtitle", "text": "刷新成功后可同步 CookieCloud"}]}]}]}]}
         ]}], {"enabled": False, "notify": False, "sync_cookiecloud": True, "refresh_sites": [],
               "keepass_enabled": True, "keepass_webdav_url": "", "keepass_webdav_username": "",
               "keepass_webdav_password": "", "keepass_master_password": "", "keepass_cache_minutes": 5,
               "siteconf": ""}
 
     def get_page(self) -> List[dict]:
-        data = self.get_data("last_result") or self._last_result
+        history = self.get_data("refresh_history") or self._refresh_history or []
+        data = (history[0] if history else None) or self.get_data("last_result") or self._last_result
         if not data:
             return [{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "text": "暂无刷新记录。"}}]
+        history = history or [data]
         text = f"最近刷新：{data.get('site')} | {data.get('time')} | {data.get('message') or ('成功' if data.get('success') else '失败')}"
-        return [{"component": "VAlert", "props": {"type": "success" if data.get("success") else "error",
-                                                    "variant": "tonal", "text": text}}]
+        return [{"component": "VCard", "props": {"variant": "outlined", "class": "mt-3"}, "content": [
+            {"component": "VCardTitle", "props": {"class": "d-flex align-center"}, "content": [
+                {"component": "VIcon", "props": {"class": "mr-2"}, "text": "mdi-history"},
+                {"component": "span", "text": "最近刷新结果"}]},
+            {"component": "VDivider"},
+            {"component": "VCardText", "content": [
+                {"component": "VAlert", "props": {"type": "success" if data.get("success") else "error", "variant": "tonal", "text": text, "class": "mb-2"}},
+                {"component": "VList", "props": {"density": "comfortable", "lines": "two"}, "content": [
+                    {"component": "VListItem", "props": {"class": "font-weight-bold" if index == 0 else ""}, "content": [
+                        {"component": "template", "props": {"v-slot:prepend": ""}, "content": [{"component": "VIcon", "props": {"color": "success" if item.get("success") else "error"}, "text": "mdi-check-circle" if item.get("success") else "mdi-alert-circle"}]},
+                        {"component": "VListItemTitle", "text": f"{item.get('site') or '-'}（ID: {item.get('site_id') or '-'}） | {item.get('time') or '-'}"},
+                        {"component": "VListItemSubtitle", "text": item.get("message") or ("成功" if item.get("success") else "失败")}]}
+                    for index, item in enumerate(history[:10])]}]}]}]
 
     def stop_service(self):
         pass
