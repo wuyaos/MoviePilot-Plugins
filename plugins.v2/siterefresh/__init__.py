@@ -3,12 +3,13 @@
 # pos: AutoPtCheckin Cookie 失效后的事件消费者，委托 SiteChain 使用当前 V2 浏览器登录实现
 from __future__ import annotations
 
+import base64
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urljoin
 
 from app import schemas
-from app.chain.site import SiteChain
 from app.core.event import Event, eventmanager
 from app.db.site_oper import SiteOper
 from app.log import logger
@@ -98,6 +99,8 @@ class SiteRefresh(_PluginBase):
         from app.helper.browser import PlaywrightHelper
         from app.helper.cookie import CookieHelper
         from app.utils.site import SiteUtils
+        from app.utils.twofa import TwoFactorAuth
+        from lxml import etree
 
         proxies = settings.PROXY_SERVER if getattr(site, "proxy", 0) else None
         timeout = getattr(site, "timeout", 0) or 60
@@ -116,138 +119,175 @@ class SiteRefresh(_PluginBase):
 
             html_text = page.content()
             if not html_text:
-                return None, None, "获取源码失败"
+                msg = f"获取源码失败（URL={page.url}, 加载后 HTML 为空）"
+                logger.warning(f"SiteRefresh: {msg}")
+                return None, None, msg
             logger.info(f"SiteRefresh: 登录页源码长度 {len(html_text)}，当前 URL {page.url}")
 
-            from lxml import etree
             html = etree.HTML(html_text)
-            try:
-                username_xpath = next((x for x in login_xpaths["username"] if html.xpath(x)), None)
-                if not username_xpath:
-                    logger.warning(f"SiteRefresh: 未找到用户名输入框，页面标题: {html.xpath('//title/text()')}")
-                    return None, None, "未找到用户名输入框"
-                logger.info(f"SiteRefresh: 命中用户名 xpath {username_xpath}")
-                password_xpath = next((x for x in login_xpaths["password"] if html.xpath(x)), None)
-                if not password_xpath:
-                    return None, None, "未找到密码输入框"
+            username_xpath = next((x for x in login_xpaths["username"] if html.xpath(x)), None)
+            if not username_xpath:
+                title = html.xpath('//title/text()')
+                msg = f"未找到用户名输入框（页面标题={title}, URL={page.url}）"
+                logger.warning(f"SiteRefresh: {msg}")
+                return None, None, msg
+            logger.info(f"SiteRefresh: 命中用户名 xpath {username_xpath}")
+            password_xpath = next((x for x in login_xpaths["password"] if html.xpath(x)), None)
+            if not password_xpath:
+                msg = f"未找到密码输入框（URL={page.url}）"
+                logger.warning(f"SiteRefresh: {msg}")
+                return None, None, msg
 
-                otp_code = ""
-                if two_step_code:
-                    try:
-                        from app.utils.twofa import TwoFactorAuth
-                        otp_code = TwoFactorAuth(two_step_code).get_code()
-                    except Exception:
-                        otp_code = ""
-                twostep_xpath = None
-                if otp_code:
-                    twostep_xpath = next((x for x in login_xpaths["twostep"] if html.xpath(x)), None)
-
-                captcha_xpath = next((x for x in login_xpaths["captcha"] if html.xpath(x)), None)
-                captcha_img_xpath = next((x for x in login_xpaths.get("captcha_img", []) if html.xpath(x)), None)
-                if captcha_xpath:
-                    if not captcha_img_xpath:
-                        return None, None, "站点需要验证码，未找到验证码图片"
-                    img_src = html.xpath(captcha_img_xpath)
-                    img_src = img_src[0] if img_src else ""
-                    if hasattr(img_src, "get"):
-                        img_src = img_src.get("src") or ""
-                    if img_src:
-                        from urllib.parse import urljoin
-                        captcha_url = urljoin(site.url, str(img_src))
-                        cookie = CookieHelper.parse_cookies(page.context.cookies())
-                        ua = page.evaluate("() => window.navigator.userAgent")
-                        try:
-                            from app.helper.ocr import OcrHelper
-                            captcha_code = OcrHelper().get_captcha_text(
-                                image_url=captcha_url,
-                                cookie=cookie,
-                                ua=ua
-                            ) or ""
-                        except Exception as e:
-                            logger.warning(f"SiteRefresh: 验证码识别异常: {e}")
-                            captcha_code = ""
-                        if captcha_code:
-                            logger.info(f"SiteRefresh: 验证码识别结果: {captcha_code}")
-                            captcha_el = page.query_selector(captcha_xpath)
-                            if captcha_el:
-                                captcha_el.fill(captcha_code)
-                        else:
-                            return None, None, "验证码识别失败"
-                    else:
-                        return None, None, "未获取到验证码图片地址"
-
-                submit_xpath = next((x for x in login_xpaths["submit"] if html.xpath(x)), None)
-                if not submit_xpath:
-                    return None, None, "未找到登录按钮"
-
+            otp_code = ""
+            if two_step_code:
                 try:
-                    page.wait_for_selector(submit_xpath, timeout=10 * 1000)
-                    page.fill(username_xpath, username)
-                    page.fill(password_xpath, password)
-                    if twostep_xpath:
-                        page.fill(twostep_xpath, otp_code)
-                    logger.info(f"SiteRefresh: 点击登录按钮 {submit_xpath}")
-                    page.click(submit_xpath)
+                    otp_code = TwoFactorAuth(two_step_code).get_code()
+                except Exception:
+                    otp_code = ""
+            twostep_xpath = None
+            if otp_code:
+                twostep_xpath = next((x for x in login_xpaths["twostep"] if html.xpath(x)), None)
+
+            captcha_xpath = next((x for x in login_xpaths["captcha"] if html.xpath(x)), None)
+            captcha_img_xpath = next((x for x in login_xpaths.get("captcha_img", []) if html.xpath(x)), None)
+            if captcha_xpath:
+                if not captcha_img_xpath:
+                    msg = f"站点 {site.name} 需要验证码但未找到图片（captcha_xpath 命中，captcha_img_xpath 未命中，URL={page.url}）"
+                    logger.warning(f"SiteRefresh: {msg}")
+                    return None, None, msg
+                img_src = html.xpath(captcha_img_xpath)
+                img_src = img_src[0] if img_src else ""
+                if hasattr(img_src, "get"):
+                    img_src = img_src.get("src") or ""
+                if img_src:
+                    captcha_url = urljoin(site.url, str(img_src))
+                    # 用浏览器 fetch 取验证码图片（带 session cookie，最可靠）
+                    image_bytes = None
                     try:
+                        b64 = page.evaluate(
+                            """async (url) => {
+                                try {
+                                    const r = await fetch(url, {credentials: 'include'});
+                                    const buf = await r.arrayBuffer();
+                                    const bytes = new Uint8Array(buf);
+                                    let binary = '';
+                                    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                                    return btoa(binary);
+                                } catch (e) { return ''; }
+                            }""",
+                            captcha_url,
+                        )
+                        if b64:
+                            image_bytes = base64.b64decode(b64)
+                            logger.info(f"SiteRefresh: 浏览器取得验证码图片 {len(image_bytes)} 字节")
+                    except Exception as e:
+                        logger.warning(f"SiteRefresh: 浏览器取验证码图片失败: {e}")
+                    try:
+                        from .helper.ocr_helper import recognize_captcha
+                        captcha_code = recognize_captcha(
+                            image_bytes=image_bytes,
+                            image_url=captcha_url if not image_bytes else None,
+                            retry_times=3,
+                        ) or ""
+                    except Exception as e:
+                        logger.warning(f"SiteRefresh: 验证码识别异常: {e}")
+                        captcha_code = ""
+                    if captcha_code:
+                        logger.info(f"SiteRefresh: 验证码识别结果: {captcha_code}")
+                        captcha_el = page.query_selector(captcha_xpath)
+                        if captcha_el:
+                            captcha_el.fill(captcha_code)
+                    else:
+                        msg = f"验证码识别失败（站点={site.name}, 图片URL={captcha_url}, 图片字节={len(image_bytes) if image_bytes else 0}）"
+                        logger.warning(f"SiteRefresh: {msg}")
+                        return None, None, msg
+                else:
+                    msg = "未获取到验证码图片地址（img_src 为空）"
+                    logger.warning(f"SiteRefresh: {msg}")
+                    return None, None, msg
+
+            submit_xpath = next((x for x in login_xpaths["submit"] if html.xpath(x)), None)
+            if not submit_xpath:
+                msg = f"未找到登录按钮（URL={page.url}）"
+                logger.warning(f"SiteRefresh: {msg}")
+                return None, None, msg
+
+            try:
+                page.wait_for_selector(submit_xpath, timeout=10 * 1000)
+                page.fill(username_xpath, username)
+                page.fill(password_xpath, password)
+                if twostep_xpath:
+                    page.fill(twostep_xpath, otp_code)
+                logger.info(f"SiteRefresh: 点击登录按钮 {submit_xpath}")
+                page.click(submit_xpath)
+                try:
+                    page.wait_for_url(lambda url: "login" not in url.lower(), timeout=15 * 1000)
+                except Exception:
+                    try:
+                        page.locator(password_xpath).press("Enter")
                         page.wait_for_url(lambda url: "login" not in url.lower(), timeout=15 * 1000)
                     except Exception:
-                        try:
-                            page.locator(password_xpath).press("Enter")
-                            page.wait_for_url(lambda url: "login" not in url.lower(), timeout=15 * 1000)
-                        except Exception:
-                            pass
-                    try:
-                        page.wait_for_load_state("networkidle", timeout=10 * 1000)
-                    except Exception:
                         pass
-                    logger.info(f"SiteRefresh: 登录后 URL {page.url}")
-                except Exception as e:
-                    return None, None, f"仿真登录失败：{e}"
-
-                if "verify" in (page.url or ""):
-                    if not otp_code:
-                        return None, None, "需要二次验证码"
-                    html2 = etree.HTML(page.content() or "")
-                    for xpath in login_xpaths["twostep"]:
-                        if html2.xpath(xpath):
-                            try:
-                                from app.utils.twofa import TwoFactorAuth
-                                otp_code = TwoFactorAuth(two_step_code).get_code()
-                                page.fill(xpath, otp_code)
-                                page.click(submit_xpath)
-                                page.wait_for_load_state("networkidle", timeout=30 * 1000)
-                            except Exception as e:
-                                return None, None, f"二次验证码输入失败：{e}"
-                            break
-
                 try:
-                    page.wait_for_load_state("domcontentloaded", timeout=10 * 1000)
+                    page.wait_for_load_state("networkidle", timeout=10 * 1000)
                 except Exception:
                     pass
-                final_url = page.url or ""
-                final_html = page.content() or ""
-                if not final_html:
-                    return None, None, "获取登录后源码失败"
-                cookie = CookieHelper.parse_cookies(page.context.cookies())
-                url_left = "login" not in final_url.lower()
-                logged_html = SiteUtils.is_logged_in(final_html)
-                has_uid_pass = ("uid=" in cookie) or ("pass=" in cookie)
-                success = logged_html or (url_left and has_uid_pass)
-                logger.info(f"SiteRefresh: 登录态判定 {success}，源码判定 {logged_html}，URL离开登录页 {url_left}，Cookie含uid/pass {has_uid_pass}，登录后 URL {final_url}")
-                if success:
-                    ua = page.evaluate("() => window.navigator.userAgent")
-                    return cookie, ua, ""
-                final_doc = etree.HTML(final_html)
-                error_xpath = next((x for x in login_xpaths["error"]
-                                    if html.xpath(x) or (final_doc is not None and final_doc.xpath(x))), None)
-                if error_xpath:
-                    err = ((final_doc.xpath(error_xpath) if final_doc is not None else None)
-                           or html.xpath(error_xpath) or ["登录失败"])[0]
-                    return None, None, str(err)
-                return None, None, "登录失败"
-            finally:
-                if html is not None:
-                    del html
+                logger.info(f"SiteRefresh: 登录后 URL {page.url}")
+            except Exception as e:
+                msg = f"仿真登录失败（URL={page.url}）：{e}"
+                logger.warning(f"SiteRefresh: {msg}")
+                return None, None, msg
+
+            if "verify" in (page.url or ""):
+                if not otp_code:
+                    msg = f"需要二次验证码（站点={site.name}）"
+                    logger.warning(f"SiteRefresh: {msg}")
+                    return None, None, msg
+                html2 = etree.HTML(page.content() or "")
+                for xpath in login_xpaths["twostep"]:
+                    if html2.xpath(xpath):
+                        try:
+                            otp_code = TwoFactorAuth(two_step_code).get_code()
+                            page.fill(xpath, otp_code)
+                            page.click(submit_xpath)
+                            page.wait_for_load_state("networkidle", timeout=30 * 1000)
+                        except Exception as e:
+                            msg = f"二次验证码输入失败：{e}"
+                            logger.warning(f"SiteRefresh: {msg}")
+                            return None, None, msg
+                        break
+
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=10 * 1000)
+            except Exception:
+                pass
+            final_url = page.url or ""
+            final_html = page.content() or ""
+            if not final_html:
+                msg = f"获取登录后源码失败（URL={page.url}）"
+                logger.warning(f"SiteRefresh: {msg}")
+                return None, None, msg
+            cookie = CookieHelper.parse_cookies(page.context.cookies())
+            url_left = "login" not in final_url.lower()
+            logged_html = SiteUtils.is_logged_in(final_html)
+            has_uid_pass = ("uid=" in cookie) or ("pass=" in cookie)
+            success = logged_html or (url_left and has_uid_pass)
+            logger.info(f"SiteRefresh: 登录态判定 {success}，源码判定 {logged_html}，URL离开登录页 {url_left}，Cookie含uid/pass {has_uid_pass}，登录后 URL {final_url}")
+            if success:
+                ua = page.evaluate("() => window.navigator.userAgent")
+                return cookie, ua, ""
+            final_doc = etree.HTML(final_html)
+            error_xpath = next((x for x in login_xpaths["error"]
+                                if html.xpath(x) or (final_doc is not None and final_doc.xpath(x))), None)
+            if error_xpath:
+                err = ((final_doc.xpath(error_xpath) if final_doc is not None else None)
+                       or html.xpath(error_xpath) or ["登录失败"])[0]
+                msg = str(err)
+                logger.warning(f"SiteRefresh: 登录失败，站点返回错误：{msg}")
+                return None, None, msg
+            snippet = (final_html[:500] if final_html else "").replace('\n', ' ')
+            logger.warning(f"SiteRefresh: 登录失败兜底，站点={site.name} URL={final_url} 登录后HTML片段: {snippet}")
+            return None, None, f"登录失败（站点={site.name}, 登录后URL={final_url}, 离开登录页={url_left}, cookie含uid/pass={has_uid_pass}）"
 
         try:
             result = PlaywrightHelper().action(
