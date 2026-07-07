@@ -107,7 +107,7 @@ class SiteRefresh(_PluginBase):
             under_challenge = None
         from app.helper.cookie import CookieHelper
         from app.utils.site import SiteUtils
-        from app.utils.twofa import TwoFactorAuth
+        from app.helper.twofa import TwoFactorAuth
         from lxml import etree
 
         login_xpaths = CookieHelper._SITE_LOGIN_XPATH
