@@ -3,6 +3,7 @@
 # pos: AutoPtCheckin Cookie 失效后的事件消费者，委托 SiteChain 使用当前 V2 浏览器登录实现
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -101,6 +102,7 @@ class SiteRefresh(_PluginBase):
         login_xpaths = CookieHelper._SITE_LOGIN_XPATH
 
         def page_handler(page):
+            logger.debug(f"SiteRefresh: 等待页面加载 {site.url}")
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=30 * 1000)
             except Exception:
@@ -120,6 +122,7 @@ class SiteRefresh(_PluginBase):
                 username_xpath = next((x for x in login_xpaths["username"] if html.xpath(x)), None)
                 if not username_xpath:
                     return None, None, "未找到用户名输入框"
+                logger.debug(f"SiteRefresh: 命中 xpath {username_xpath}")
                 password_xpath = next((x for x in login_xpaths["password"] if html.xpath(x)), None)
                 if not password_xpath:
                     return None, None, "未找到密码输入框"
@@ -149,11 +152,13 @@ class SiteRefresh(_PluginBase):
                     page.fill(password_xpath, password)
                     if twostep_xpath:
                         page.fill(twostep_xpath, otp_code)
+                    logger.debug(f"SiteRefresh: 点击登录按钮 {submit_xpath}")
                     page.click(submit_xpath)
                     try:
                         page.wait_for_load_state("networkidle", timeout=30 * 1000)
                     except Exception:
                         pass
+                    logger.debug(f"SiteRefresh: 登录后 URL {page.url}")
                 except Exception as e:
                     return None, None, f"仿真登录失败：{e}"
 
@@ -217,18 +222,20 @@ class SiteRefresh(_PluginBase):
         return False, "浏览器登录无返回", None, None
 
     def _refresh_site_by_id(self, site_id: Any) -> Dict[str, Any]:
+        started_at = time.monotonic()
         site = SiteOper().get(site_id)
         if not site:
             msg = f"未获取到 site_id {site_id} 对应的站点数据"
             logger.error(f"SiteRefresh: {msg}")
             return {"success": False, "message": msg, "site": ""}
+        logger.info(f"SiteRefresh: 开始刷新站点 {site.name}（{site.url}，ID={site.id}）")
         credential, msg = resolve_credential(self._config, site.name, site.url)
         if not credential:
             msg = f"未获取到站点 {site.name} 登录凭据：{msg}"
-            logger.error(f"SiteRefresh: {msg}")
-            self._record_result(site_name=site.name, site_id=site_id, success=False, message=msg)
+            logger.warning(f"SiteRefresh: 站点 {site.name} 登录失败：{msg}")
+            self._record_result(site_name=site.name, site_id=site_id, site_url=site.url, success=False, message=msg)
+            logger.info(f"SiteRefresh: 站点 {site.name} 刷新失败（耗时 {time.monotonic() - started_at:.1f}s）")
             return {"success": False, "message": msg, "site": site.name}
-        logger.info(f"SiteRefresh: 开始尝试登录站点 {site.name}，匹配域名 {credential.domain}")
         try:
             state, message, cookie, ua = self._login_with_browser(
                 site, credential.username, credential.password, credential.two_step_code
@@ -237,27 +244,33 @@ class SiteRefresh(_PluginBase):
             state, message = False, str(exc)
             cookie = ua = None
             logger.exception(f"SiteRefresh: 站点 {site.name} 自动更新 Cookie 和 UA 异常")
+        if state:
+            logger.info(f"SiteRefresh: 站点 {site.name} 浏览器登录成功")
+        else:
+            logger.warning(f"SiteRefresh: 站点 {site.name} 登录失败：{message}")
         if state and cookie:
             try:
                 SiteOper().update(site.id, {"cookie": cookie, "ua": ua})
+                logger.info(f"SiteRefresh: 站点 {site.name} Cookie/UA 已更新")
             except Exception as exc:
-                logger.error(f"SiteRefresh: 站点 {site.name} 回写 Cookie/UA 失败：{exc}")
-        logger.info(f"SiteRefresh: 站点 {site.name} 自动更新 Cookie 和 UA {'成功' if state else '失败'}")
-        if not state and message:
-            logger.error(f"SiteRefresh: 失败原因：{message}")
+                state = False
+                message = f"回写 Cookie/UA 失败：{exc}"
+                logger.error(f"SiteRefresh: 站点 {site.name} {message}")
         if state and self._sync_cookiecloud:
             try:
                 updated_site = SiteOper().get(site_id) or site
                 ok, cc_msg = sync_cookie_to_cookiecloud(updated_site.url, cookie or getattr(updated_site, "cookie", "") or "")
             except Exception as exc:
                 ok, cc_msg = False, f"CookieCloud 同步异常：{exc}"
-            logger.info(f"SiteRefresh: CookieCloud 同步{'成功' if ok else '失败'}：{cc_msg}")
+            logger.info(f"SiteRefresh: 站点 {site.name} CookieCloud 同步{'成功' if ok else '失败'}：{cc_msg}")
             message = f"{message or '成功'}；{cc_msg}"
-        self._record_result(site_name=site.name, site_id=site_id, success=state, message=message)
+        self._record_result(site_name=site.name, site_id=site_id, site_url=site.url, success=state, message=message)
+        logger.info(f"SiteRefresh: 站点 {site.name} 刷新{'成功' if state else '失败'}（耗时 {time.monotonic() - started_at:.1f}s）")
         return {"success": bool(state), "message": message or "", "site": site.name}
 
-    def _record_result(self, site_name: str, site_id: Any, success: bool, message: str = ""):
-        self._last_result = {"site": site_name, "site_id": site_id, "success": bool(success),
+    def _record_result(self, site_name: str, site_id: Any, site_url: str = "", success: bool = False,
+                       message: str = ""):
+        self._last_result = {"site": site_name, "site_id": site_id, "site_url": site_url or "", "success": bool(success),
                              "message": message or "", "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         self._refresh_history = [self._last_result] + (self.get_data("refresh_history") or self._refresh_history or [])
         self._refresh_history = self._refresh_history[:50]
@@ -355,24 +368,104 @@ class SiteRefresh(_PluginBase):
 
     def get_page(self) -> List[dict]:
         history = self.get_data("refresh_history") or self._refresh_history or []
+        if not isinstance(history, list):
+            history = [history]
+        history = sorted(history, key=lambda x: x.get("time", "") if isinstance(x, dict) else "", reverse=True)
         data = (history[0] if history else None) or self.get_data("last_result") or self._last_result
-        if not data:
-            return [{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "text": "暂无刷新记录。"}}]
-        history = history or [data]
-        text = f"最近刷新：{data.get('site')} | {data.get('time')} | {data.get('message') or ('成功' if data.get('success') else '失败')}"
-        return [{"component": "VCard", "props": {"variant": "outlined", "class": "mt-3"}, "content": [
+        if data and not history:
+            history = [data]
+
+        frost_style = 'background-color: rgba(var(--v-theme-surface), 0.75); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); outline: 1px solid rgba(var(--v-theme-on-surface), 0.12); border-radius: 8px; box-sizing: border-box;'
+        total = len(history)
+        success_count = sum(1 for item in history if isinstance(item, dict) and item.get("success"))
+        success_rate = f"{(success_count / total * 100):.0f}%" if total else "0%"
+        is_success = bool(data and data.get("success"))
+
+        def stat_block(icon: str, color: str, value: Any, label: str) -> dict:
+            return {"component": "VCol", "props": {"cols": 12, "md": 4, "class": "pa-2"}, "content": [
+                {"component": "div", "props": {"class": "text-center pa-3 d-flex flex-column justify-center", "style": frost_style}, "content": [
+                    {"component": "div", "props": {"class": "d-flex justify-center align-center mb-1"}, "content": [
+                        {"component": "VIcon", "props": {"style": f"color: {color};", "class": "mr-1"}, "text": icon},
+                        {"component": "span", "props": {"class": "text-h6 font-weight-bold"}, "text": str(value) if value not in (None, "") else "—"}
+                    ]},
+                    {"component": "div", "props": {"class": "text-caption text-medium-emphasis"}, "text": label}
+                ]}
+            ]}
+
+        rows = []
+        for item in history[:30]:
+            if not isinstance(item, dict):
+                continue
+            row_success = bool(item.get("success"))
+            rows.append({"component": "tr", "content": [
+                {"component": "td", "content": [{"component": "div", "content": [
+                    {"component": "div", "props": {"class": "font-weight-medium"}, "text": item.get("site") or "—"},
+                    {"component": "div", "props": {"class": "text-caption text-medium-emphasis"}, "text": item.get("site_url") or "—"}
+                ]}]},
+                {"component": "td", "props": {"class": "text-caption"}, "text": str(item.get("site_id") or "—")},
+                {"component": "td", "props": {"class": "text-caption"}, "text": item.get("time") or "—"},
+                {"component": "td", "content": [{"component": "VChip", "props": {"color": "success" if row_success else "error", "size": "small", "variant": "elevated"}, "content": [
+                    {"component": "VIcon", "props": {"start": True, "size": "small"}, "text": "mdi-check-circle" if row_success else "mdi-alert-circle"},
+                    {"component": "span", "text": "成功" if row_success else "失败"}
+                ]}]},
+                {"component": "td", "content": [{"component": "div", "props": {"class": "text-caption"}, "text": item.get("message") or ("成功" if row_success else "失败")}]}
+            ]})
+
+        components = [{"component": "VCard", "props": {"variant": "outlined", "class": "mt-3 mb-4", "style": frost_style}, "content": [
             {"component": "VCardTitle", "props": {"class": "d-flex align-center"}, "content": [
-                {"component": "VIcon", "props": {"class": "mr-2"}, "text": "mdi-history"},
-                {"component": "span", "text": "最近刷新结果"}]},
+                {"component": "VIcon", "props": {"color": "primary", "class": "mr-2"}, "text": "mdi-history"},
+                {"component": "span", "props": {"class": "text-h6 font-weight-bold"}, "text": "刷新记录"},
+                {"component": "VSpacer"},
+                {"component": "VChip", "props": {"color": "success" if is_success else "error", "size": "small", "variant": "elevated"}, "content": [
+                    {"component": "VIcon", "props": {"start": True, "size": "small"}, "text": "mdi-check-circle" if is_success else "mdi-alert-circle"},
+                    {"component": "span", "text": "成功" if is_success else "失败"}
+                ]} if data else {"component": "span", "text": ""}
+            ]},
             {"component": "VDivider"},
-            {"component": "VCardText", "content": [
-                {"component": "VAlert", "props": {"type": "success" if data.get("success") else "error", "variant": "tonal", "text": text, "class": "mb-2"}},
-                {"component": "VList", "props": {"density": "comfortable", "lines": "two"}, "content": [
-                    {"component": "VListItem", "props": {"class": "font-weight-bold" if index == 0 else ""}, "content": [
-                        {"component": "template", "props": {"v-slot:prepend": ""}, "content": [{"component": "VIcon", "props": {"color": "success" if item.get("success") else "error"}, "text": "mdi-check-circle" if item.get("success") else "mdi-alert-circle"}]},
-                        {"component": "VListItemTitle", "text": f"{item.get('site') or '-'}（ID: {item.get('site_id') or '-'}） | {item.get('time') or '-'}"},
-                        {"component": "VListItemSubtitle", "text": item.get("message") or ("成功" if item.get("success") else "失败")}]}
-                    for index, item in enumerate(history[:10])]}]}]}]
+            {"component": "VCardText", "props": {"class": "pa-2"}, "content": [
+                {"component": "VRow", "props": {"no-gutters": True}, "content": [
+                    stat_block("mdi-web", "#1976D2", data.get("site") if data else "—", "最近刷新站点"),
+                    stat_block("mdi-check-circle" if is_success else "mdi-alert", "#4CAF50" if is_success else "#F44336", "成功" if is_success else "失败" if data else "—", "最近结果状态"),
+                    stat_block("mdi-counter", "#7E57C2", total, "刷新总次数")
+                ]},
+                {"component": "div", "props": {"class": "d-flex justify-center mt-2"}, "content": [
+                    {"component": "VChip", "props": {"color": "success" if total and success_count == total else "primary", "variant": "tonal"}, "content": [
+                        {"component": "VIcon", "props": {"start": True, "size": "small"}, "text": "mdi-percent"},
+                        {"component": "span", "text": f"成功率：{success_count}/{total}（{success_rate}）"}
+                    ]}
+                ]}
+            ]}
+        ]}]
+
+        if not rows:
+            components.append({"component": "VAlert", "props": {"type": "info", "variant": "tonal", "text": "暂无刷新记录", "prepend-icon": "mdi-information"}})
+            return components
+
+        components.extend([
+            {"component": "VCard", "props": {"variant": "outlined", "class": "mb-4", "style": frost_style}, "content": [
+                {"component": "VCardTitle", "props": {"class": "d-flex align-center"}, "content": [
+                    {"component": "VIcon", "props": {"color": "primary", "class": "mr-2"}, "text": "mdi-table-clock"},
+                    {"component": "span", "props": {"class": "text-h6 font-weight-bold"}, "text": "历史记录"}
+                ]},
+                {"component": "VDivider"},
+                {"component": "VCardText", "props": {"class": "pa-0 pa-md-2"}, "content": [
+                    {"component": "VResponsive", "content": [
+                        {"component": "VTable", "props": {"hover": True, "density": "comfortable"}, "content": [
+                            {"component": "thead", "content": [{"component": "tr", "content": [
+                                {"component": "th", "text": "站点"},
+                                {"component": "th", "text": "站点ID"},
+                                {"component": "th", "text": "时间"},
+                                {"component": "th", "text": "状态"},
+                                {"component": "th", "text": "消息"}
+                            ]}]},
+                            {"component": "tbody", "content": rows}
+                        ]}
+                    ]}
+                ]}
+            ]},
+            {"component": "style", "text": ".v-table { border-radius: 8px; overflow: hidden; } .v-table th { background-color: rgba(var(--v-theme-primary), 0.05); color: rgb(var(--v-theme-primary)); font-weight: 600; }"}
+        ])
+        return components
 
     def stop_service(self):
         pass
