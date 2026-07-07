@@ -13,6 +13,7 @@ from urllib.parse import urljoin
 from app import schemas
 from app.core.event import Event, eventmanager
 from app.db.site_oper import SiteOper
+from app.helper.browser import PlaywrightHelper
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import EventType, NotificationType
@@ -90,29 +91,15 @@ class SiteRefresh(_PluginBase):
             logger.error("SiteRefresh: 未获取到 site_ids/site_id")
             return
         logger.info(f"SiteRefresh: 收到 site_refresh 事件，站点 IDs={site_ids}")
-        with self._batch_refresh_lock:
-            self._refresh_sites_batch(site_ids, force=False)
+        self._refresh_sites_batch(site_ids, force=False)
 
     def refresh_site_api(self, site_id: Any, force: bool = False) -> schemas.Response:
-        with self._batch_refresh_lock:
-            results = self._refresh_sites_batch([site_id], force=force)
+        results = self._refresh_sites_batch([site_id], force=force)
         result = results[0] if results else {"success": False, "message": "站点未刷新"}
         return schemas.Response(success=result.get("success"), message=result.get("message"))
 
-    def _launch_login_context(self, proxies=None):
-        from app.core.config import settings
-        from cloakbrowser import launch_context
-
-        return launch_context(
-            headless=self._browser_headless,
-            proxy=proxies,
-            user_agent=None,
-            humanize=getattr(settings, "CLOAKBROWSER_HUMANIZE", False),
-            human_preset=getattr(settings, "CLOAKBROWSER_HUMAN_PRESET", None),
-        )
-
-    def _login_in_context(self, context, site, username: str, password: str,
-                          two_step_code: Optional[str]) -> Tuple[bool, str, Optional[str], Optional[str]]:
+    def _login_in_tab(self, context, site, username: str, password: str,
+                      two_step_code: Optional[str]) -> Tuple[bool, str, Optional[str], Optional[str]]:
         """在复用浏览器上下文中登录单站点，每站独立 tab 和 cookie。"""
         from app.helper.cookie import CookieHelper
         from app.utils.site import SiteUtils
@@ -130,8 +117,9 @@ class SiteRefresh(_PluginBase):
             context.clear_cookies()
             page = context.new_page()
             page.set_default_timeout(self._browser_site_timeout * 1000)
-            logger.info(f"SiteRefresh: 打开登录页 {site.url}")
-            page.goto(site.url, timeout=remaining_timeout())
+            login_url = getattr(site, "login_url", None) or site.url
+            logger.info(f"SiteRefresh: 打开登录页 {login_url}")
+            page.goto(login_url, timeout=remaining_timeout())
             logger.info(f"SiteRefresh: 等待页面加载 {site.url}")
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=remaining_timeout())
@@ -355,13 +343,13 @@ class SiteRefresh(_PluginBase):
             logger.warning(f"SiteRefresh: 站点 {site.name} 刷新失败（耗时 {time.monotonic() - started_at:.1f}s）：{msg}")
             return {"success": False, "message": msg, "site": site.name}
         try:
-            state, message, cookie, ua = self._login_in_context(
+            state, message, cookie, ua = self._login_in_tab(
                 context, site, credential.username, credential.password, credential.two_step_code
             )
         except Exception as exc:
             state, message = False, str(exc)
             cookie = ua = None
-            logger.exception(f"SiteRefresh: 站点 {site.name} 自动更新 Cookie 和 UA 异常")
+            logger.error(f"SiteRefresh: 站点 {site.name} 自动更新 Cookie 和 UA 异常：{exc}")
         if state:
             logger.info(f"SiteRefresh: 站点 {site.name} 浏览器登录成功")
         else:
@@ -419,51 +407,71 @@ class SiteRefresh(_PluginBase):
         return reserved
 
     def _refresh_sites_batch(self, site_ids, force: bool = False) -> List[Dict[str, Any]]:
-        from app.core.config import settings
-
         reserved_site_ids = self._reserve_site_ids(site_ids, force=force)
         if not reserved_site_ids:
             return []
+
         results = []
-        groups = {False: [], True: []}
-        try:
-            for site_id in reserved_site_ids:
-                site = SiteOper().get(site_id)
-                if not site:
-                    results.append(self._refresh_missing_site(site_id))
-                    continue
-                groups[bool(getattr(site, "proxy", 0))].append(site_id)
-            for use_proxy, group_site_ids in groups.items():
-                if not group_site_ids:
-                    continue
-                context = None
-                proxies = settings.PROXY_SERVER if use_proxy else None
-                try:
-                    context = self._launch_login_context(proxies=proxies)
-                    logger.info(f"SiteRefresh: 启动{'代理' if use_proxy else '直连'}浏览器上下文，站点数={len(group_site_ids)}")
-                    for site_id in group_site_ids:
-                        results.append(self._refresh_site_in_context(context, site_id))
-                except Exception as exc:
-                    msg = f"启动{'代理' if use_proxy else '直连'}浏览器上下文异常：{exc}"
-                    logger.error(f"SiteRefresh: {msg}")
-                    for site_id in group_site_ids:
-                        site = SiteOper().get(site_id)
-                        site_name = getattr(site, "name", "") if site else ""
-                        site_url = getattr(site, "url", "") if site else ""
-                        self._record_result(site_name=site_name, site_id=site_id, site_url=site_url, success=False, message=msg)
-                        results.append({"success": False, "message": msg, "site": site_name})
-                finally:
-                    if context:
-                        try:
-                            context.close()
-                        except Exception as exc:
-                            logger.warning(f"SiteRefresh: 关闭浏览器上下文失败：{exc}")
-        finally:
+        first_site = SiteOper().get(reserved_site_ids[0])
+        if not first_site:
+            result = self._refresh_missing_site(reserved_site_ids[0])
             with self._refresh_lock:
                 for site_id in reserved_site_ids:
                     sid = str(site_id)
                     self._refreshing_site_ids.discard(sid)
                     self._last_refresh_at[sid] = time.time()
+            return [result]
+        entry_url = first_site.url
+
+        def batch_handler(page):
+            context = page.context
+            try:
+                page.close()
+            except Exception:
+                pass
+            for site_id in reserved_site_ids:
+                site = SiteOper().get(site_id)
+                if site and bool(getattr(site, "proxy", 0)):
+                    msg = "该站需代理，跳过批量模式"
+                    logger.warning(f"SiteRefresh: 站点 {site.name} {msg}")
+                    self._record_result(site_name=site.name, site_id=site_id, site_url=site.url, success=False, message=msg)
+                    results.append({"success": False, "message": msg, "site": site.name})
+                    continue
+                try:
+                    result = self._refresh_site_in_context(context, site_id)
+                    results.append(result)
+                except Exception as exc:
+                    site_name = getattr(site, "name", "") if site else ""
+                    site_url = getattr(site, "url", "") if site else ""
+                    msg = f"刷新异常: {exc}"
+                    self._record_result(site_name=site_name, site_id=site_id, site_url=site_url, success=False, message=msg)
+                    results.append({"success": False, "message": str(exc), "site": site_name})
+            return None
+
+        with self._batch_refresh_lock:
+            try:
+                PlaywrightHelper().action(
+                    url=entry_url,
+                    callback=batch_handler,
+                    headless=self._browser_headless,
+                    timeout=max(60, self._browser_site_timeout * max(1, len(reserved_site_ids))),
+                    proxies=None
+                )
+            except Exception as exc:
+                logger.error(f"SiteRefresh: 批量刷新浏览器异常: {exc}")
+                for site_id in reserved_site_ids:
+                    site = SiteOper().get(site_id)
+                    site_name = getattr(site, "name", "") if site else ""
+                    site_url = getattr(site, "url", "") if site else ""
+                    msg = f"浏览器异常: {exc}"
+                    self._record_result(site_name=site_name, site_id=site_id, site_url=site_url, success=False, message=msg)
+                    results.append({"success": False, "message": str(exc), "site": site_name})
+            finally:
+                with self._refresh_lock:
+                    for site_id in reserved_site_ids:
+                        sid = str(site_id)
+                        self._refreshing_site_ids.discard(sid)
+                        self._last_refresh_at[sid] = time.time()
         return results
 
     def _refresh_missing_site(self, site_id: Any) -> Dict[str, Any]:
