@@ -1610,9 +1610,12 @@ class AutoPtCheckin(_PluginBase):
                         logger.info(f"站点 {site_name} 本轮已触发 site_refresh，跳过重复触发")
                     elif site_name in custom_site_names:
                         logger.info(f"自定义站点 {site_name} Cookie已失效，但不在 MoviePilot 站点表，SiteRefresh 无法回写 Cookie/UA")
-                # 记录本次命中重试关键词的站点
+                status_text = str(s)
+                is_success = any(keyword in status_text for keyword in ("登录成功", "仿真签到成功", "签到成功", "已签到"))
+
+                # 记录本次命中重试关键词的站点，成功站点不再续期重试
                 if self._retry_keyword:
-                    if site_id:
+                    if site_id and not is_success:
                         match = re.search(self._retry_keyword, s[1])
                         if match:
                             logger.debug(f"站点 {site_name} 命中重试关键词 {self._retry_keyword}")
@@ -1621,14 +1624,14 @@ class AutoPtCheckin(_PluginBase):
                             retry_msg.append(s)
                             continue
 
-                if "登录成功" in str(s):
+                if "登录成功" in status_text:
                     login_success_msg.append(s)
-                elif "仿真签到成功" in str(s):
+                elif "仿真签到成功" in status_text:
                     fz_sign_msg.append(s)
                     continue
-                elif "签到成功" in str(s):
+                elif "签到成功" in status_text:
                     sign_success_msg.append(s)
-                elif '已签到' in str(s):
+                elif '已签到' in status_text:
                     already_sign_msg.append(s)
                 else:
                     failed_msg.append(s)
