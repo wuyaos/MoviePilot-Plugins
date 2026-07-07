@@ -25,7 +25,7 @@ class ForumSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
     # 插件版本
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -582,8 +582,9 @@ class ForumSignin(_PluginBase):
             # 使用循环而非递归实现重试
             for attempt in range(max_retries + 1):
                 if attempt > 0:
-                    logger.info(f"正在进行第 {attempt}/{max_retries} 次重试...")
-                    time.sleep(3)  # 重试前等待3秒
+                    backoff = min(60, 3 * (2 ** (attempt - 1)))
+                    logger.info(f"正在进行第 {attempt}/{max_retries} 次重试，退避 {backoff} 秒...")
+                    time.sleep(backoff)
 
                 # 获取代理设置
                 proxies = self._get_proxies()
@@ -681,13 +682,23 @@ class ForumSignin(_PluginBase):
                         json=data
                     )
                 except Exception as e:
-                    logger.error(f"签到请求出错: {str(e)}")
+                    import traceback
+                    logger.error(f"签到请求出错: {str(e)}\n{traceback.format_exc()}")
                     if attempt < max_retries:
                         continue
                     raise Exception("签到请求异常")
 
                 if not res or res.status_code != 200:
-                    logger.error(f"蜂巢签到失败，状态码: {res.status_code if res else '无响应'}")
+                    detail = ""
+                    if res:
+                        try:
+                            detail = res.text[:200] if hasattr(res, "text") else ""
+                        except Exception:
+                            detail = ""
+                    logger.error(
+                        f"蜂巢签到失败，状态码: {res.status_code if res else '无响应(请求被吞)'} "
+                        f"detail={detail or '无'}"
+                    )
                     if attempt < max_retries:
                         continue
                     raise Exception("API请求错误")
@@ -905,8 +916,9 @@ class ForumSignin(_PluginBase):
             return
         for attempt in range(retry_count, max_retries + 1):
             if attempt > retry_count:
-                logger.info(f"更新失败，正在进行第 {attempt - retry_count}/{max_retries - retry_count} 次重试...")
-                time.sleep(3)
+                backoff = min(120, 5 * (2 ** (attempt - retry_count - 1)))
+                logger.info(f"更新失败，正在进行第 {attempt - retry_count}/{max_retries - retry_count} 次重试，退避 {backoff} 秒...")
+                time.sleep(backoff)
             try:
                 now = datetime.now()
                 logger.info(f"开始获取站点统计数据以更新蜂巢论坛PT人生数据 (用户ID: {user_id})")
@@ -970,7 +982,8 @@ class ForumSignin(_PluginBase):
                 try:
                     res = RequestUtils(headers=headers, proxies=proxies, timeout=60).post_res(url=url, json=data)
                 except Exception as e:
-                    logger.error(f"更新请求出错: {str(e)}")
+                    import traceback
+                    logger.error(f"更新请求出错: {str(e)}\n{traceback.format_exc()}")
                     if attempt < max_retries: continue
                     logger.error("所有重试都失败，放弃更新")
                     return
@@ -997,7 +1010,14 @@ class ForumSignin(_PluginBase):
                         )
                     return True
                 else:
-                    logger.error(f"更新蜂巢论坛PT人生数据失败：{res.status_code if res else '请求失败'}, 响应: {res.text[:100] if res and hasattr(res, 'text') else '无响应内容'}")
+                    if res:
+                        try:
+                            detail = res.text[:100] if hasattr(res, "text") else "无响应内容"
+                        except Exception:
+                            detail = "无响应内容"
+                        logger.error(f"更新蜂巢论坛PT人生数据失败：状态码 {res.status_code}, 响应: {detail}")
+                    else:
+                        logger.error("更新蜂巢论坛PT人生数据失败：无响应(请求异常被 RequestUtils 吞掉，见上方 traceback)")
                     if attempt < max_retries:
                         continue
 
