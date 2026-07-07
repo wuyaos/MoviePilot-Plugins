@@ -25,7 +25,7 @@ class SiteRefresh(_PluginBase):
     plugin_name = "站点自动更新（自用版）"
     plugin_desc = "接收 Cookie 失效事件，使用当前 MoviePilot V2 浏览器登录流程刷新站点 Cookie 和 UA。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "1.3.0"
+    plugin_version = "1.3.1"
     plugin_author = "wuyaos, thsrite"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siterefresh_"
@@ -87,22 +87,27 @@ class SiteRefresh(_PluginBase):
         if not site_id:
             logger.error("SiteRefresh: 未获取到 site_id")
             return
+        logger.info(f"SiteRefresh: 收到 site_refresh 事件，站点 ID={site_id}")
+        site = SiteOper().get(site_id)
+        site_name = getattr(site, "name", "") if site else ""
+        site_label = f"{site_name}（ID={site_id}）" if site_name else f"ID={site_id}"
         if self._refresh_sites and str(site_id) not in {str(x) for x in self._refresh_sites}:
-            logger.info(f"SiteRefresh: 站点 {site_id} 未在刷新站点选择中，跳过")
+            logger.info(f"SiteRefresh: 站点 {site_label} 未在刷新站点选择中，跳过")
             return
         sid = str(site_id)
         now = time.time()
         with self._refresh_lock:
             if sid in self._refreshing_site_ids:
-                logger.info(f"SiteRefresh: 站点 {sid} 正在刷新，跳过重复事件")
+                logger.info(f"SiteRefresh: 站点 {site_label} 正在刷新中，跳过重复事件")
                 return
             last = self._last_refresh_at.get(sid, 0)
             if self._refresh_cooldown > 0 and (now - last) < self._refresh_cooldown:
-                logger.info(f"SiteRefresh: 站点 {sid} 冷却中（{int(self._refresh_cooldown - (now - last))}s 后可刷新），跳过")
+                logger.info(f"SiteRefresh: 站点 {site_label} 冷却中（剩余 {int(self._refresh_cooldown - (now - last))}s），跳过")
                 return
             self._refreshing_site_ids.add(sid)
         try:
             # 全局串行锁：跨站严格排队，避免多站点并发浏览器登录吃内存
+            logger.debug(f"SiteRefresh: 站点 {site_label} 等待全局串行锁...")
             with self._global_refresh_lock:
                 result = self._refresh_site_by_id(site_id)
             if self._notify and result.get("site"):
@@ -115,15 +120,18 @@ class SiteRefresh(_PluginBase):
 
     def refresh_site_api(self, site_id: Any, force: bool = False) -> schemas.Response:
         sid = str(site_id)
+        site = SiteOper().get(site_id)
+        site_name = getattr(site, "name", "") if site else ""
+        site_label = f"{site_name}（ID={site_id}）" if site_name else f"ID={site_id}"
         now = time.time()
         with self._refresh_lock:
             if sid in self._refreshing_site_ids:
-                msg = f"站点 {sid} 正在刷新，跳过重复请求"
+                msg = f"站点 {site_label} 正在刷新，跳过重复请求"
                 logger.info(f"SiteRefresh: {msg}")
                 return schemas.Response(success=False, message=msg)
             last = self._last_refresh_at.get(sid, 0)
             if not force and self._refresh_cooldown > 0 and (now - last) < self._refresh_cooldown:
-                msg = f"站点 {sid} 冷却中（{int(self._refresh_cooldown - (now - last))}s 后可刷新），跳过"
+                msg = f"站点 {site_label} 冷却中（{int(self._refresh_cooldown - (now - last))}s 后可刷新），跳过"
                 logger.info(f"SiteRefresh: {msg}")
                 return schemas.Response(success=False, message=msg)
             self._refreshing_site_ids.add(sid)
@@ -382,7 +390,7 @@ class SiteRefresh(_PluginBase):
             msg = f"未获取到站点 {site.name} 登录凭据：{msg}"
             logger.warning(f"SiteRefresh: 站点 {site.name} 登录失败：{msg}")
             self._record_result(site_name=site.name, site_id=site_id, site_url=site.url, success=False, message=msg)
-            logger.info(f"SiteRefresh: 站点 {site.name} 刷新失败（耗时 {time.monotonic() - started_at:.1f}s）")
+            logger.warning(f"SiteRefresh: 站点 {site.name} 刷新失败（耗时 {time.monotonic() - started_at:.1f}s）：{msg}")
             return {"success": False, "message": msg, "site": site.name}
         try:
             state, message, cookie, ua = self._login_with_browser(
@@ -413,7 +421,11 @@ class SiteRefresh(_PluginBase):
             logger.info(f"SiteRefresh: 站点 {site.name} CookieCloud 同步{'成功' if ok else '失败'}：{cc_msg}")
             message = f"{message or '成功'}；{cc_msg}"
         self._record_result(site_name=site.name, site_id=site_id, site_url=site.url, success=state, message=message)
-        logger.info(f"SiteRefresh: 站点 {site.name} 刷新{'成功' if state else '失败'}（耗时 {time.monotonic() - started_at:.1f}s）")
+        elapsed = time.monotonic() - started_at
+        if state:
+            logger.info(f"SiteRefresh: 站点 {site.name} 刷新成功（耗时 {elapsed:.1f}s）")
+        else:
+            logger.warning(f"SiteRefresh: 站点 {site.name} 刷新失败（耗时 {elapsed:.1f}s）：{message}")
         return {"success": bool(state), "message": message or "", "site": site.name}
 
     def _record_result(self, site_name: str, site_id: Any, site_url: str = "", success: bool = False,

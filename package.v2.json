@@ -101,11 +101,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
     "labels": "签到,PT",
-    "version": "1.3.0",
+    "version": "1.3.1",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.3.1": "Cookie 失效协作优化：CookieCloud 优先补取+单次重试+写回站点表；同轮签到+登录共享 refresh_triggered_site_ids 去重(同站只发一次 site_refresh)；修复签到成功仍标记重试(retry_keyword 在成功判定前匹配导致成功消息误命中)；_fetch_cookie_cloud 日志改 info 提示未配置/未匹配/失败原因",
       "v1.3.0": "新增 LuckPT (pt.luckpt.de) attendance.php 纯 POST 签到适配（无验证码）",
       "v1.2.9": "修复 CffiClient 在 MoviePilot 容器缺 CA 证书时 curl-cffi 报 (60) SSL certificate problem 导致签到失败：get/post/get_bytes 命中 SSL 证书错误后回退 verify=False 重试一次；_AttendanceCaptchaHandler 补全繁体签到文案（簽到成功/簽到已得/連續簽到/今天已經簽到過 等）覆盖 TU88 等繁体 NexusPHP 站点",
       "v1.2.8": "新增 TU88/OshenPT/凤凰PT/VC-Lib 四站 attendance.php 验证码签到适配，抽取 _AttendanceCaptchaHandler 通用基类复用 NexusPHP 验证码签到流程（GET 页面→已签到检测→解析 imagehash/image.php→ddddocr 优先 OcrHelper 回退→POST 提交）",
@@ -133,11 +134,12 @@
     "name": "站点自动更新（自用版）",
     "description": "接收 Cookie 失效事件，从 KeePass WebDAV 或手动配置获取登录凭据，刷新选中站点 Cookie/UA 并同步 CookieCloud",
     "labels": "站点,Cookie",
-    "version": "1.3.0",
+    "version": "1.3.1",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
     "author": "wuyaos, thsrite",
     "level": 2,
     "history": {
+      "v1.3.1": "日志优化：刷新开始/成功/失败/跳过(冷却/in-flight)输出站点名+耗时+原因；登录失败分支补充上下文(站点名/URL/页面标题/验证码图片字节)；新增 per-site in-flight 锁+10min 可配置冷却防止签到/登录重复触发；全局串行锁跨站排队；手动刷新 API 支持 force 绕过冷却；浏览器登录 click 后 wait_for_url+Enter fallback；浏览器内 fetch 取验证码图片+ddddocr 多次取众数识别；KeePass WebDAV KDBX 凭据源；CookieCloud 同步写回；详情页重构为双站概览卡+签到日历+历史表(说明列)",
       "v1.3.0": "迁移为 V2 专用插件：接收 AutoPtCheckin 的 site_refresh 事件，优先从 KeePass WebDAV 只读 KDBX 按 URL 域名获取登录凭据，委托当前 SiteChain.update_cookie/CookieHelper 刷新 Cookie/UA；新增刷新站点下拉选择和刷新后同步 CookieCloud，保留手动凭据兜底"
     }
   },
