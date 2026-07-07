@@ -25,7 +25,7 @@ class ForumSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
     # 插件版本
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1190,12 +1190,13 @@ class ForumSignin(_PluginBase):
                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
                        "Cache-Control": "no-cache"}
             try:
-                res = req.get_res("https://pting.club", headers=headers)
+                res = req.get_res("https://pting.club", headers=headers, raise_exception=True)
                 if not res or res.status_code != 200:
                     logger.error(f"GET请求失败，状态码: {res.status_code if res else '无响应'} (使用{proxy_info})")
                     return None
             except Exception as e:
-                logger.error(f"GET请求异常 (使用{proxy_info}): {str(e)}")
+                import traceback
+                logger.error(f"GET请求异常 (使用{proxy_info}): {str(e)}\n{traceback.format_exc()}")
                 return None
             csrf_token = res.headers.get('x-csrf-token') or (re.findall(r'"csrfToken":"(.*?)"', res.text) or [None])[
                 0]
