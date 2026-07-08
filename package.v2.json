@@ -97,6 +97,18 @@
       "v1.0.0": "初始版本：从青龙脚本转换为MoviePilot插件"
     }
   },
+  "TorrentTransfer": {
+    "name": "自动转移做种(自用)",
+    "description": "定期转移下载器中已完成的做种任务到另一个下载器，先暂停源再做种迁移避免双端同时下载",
+    "labels": "转移,做种",
+    "version": "2.0.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
+    "author": "wuyaos",
+    "level": 2,
+    "history": {
+      "v2.0.0": "基于官方 TorrentTransfer v1.10.3 简化增强：迁移前先暂停源端做种避免双端同时下载；支持已完成暂停状态种子迁移；scan_limit 截断大量种子；目的端做种确认后才删源；失败自动恢复源端做种（原做种恢复做种原暂停保持暂停）；适配 qB add_torrent 新返回值"
+    }
+  },
   "AutoPtCheckin": {
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
