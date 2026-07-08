@@ -101,11 +101,12 @@
     "name": "自动转移做种(自用)",
     "description": "定期转移下载器中已完成的做种任务到另一个下载器，先暂停源再做种迁移避免双端同时下载",
     "labels": "转移,做种",
-    "version": "2.0.0",
-    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
+    "version": "2.0.1",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/seedtransfer.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v2.0.1": "放宽目的端可做种判定：qB 认 uploading/stalledUP/forcedUP，TR 认 seeding/seed_pending（不再只认暂停态，避免目的端校验后自动做种时迁移卡住）；换迁移语义图标 seedtransfer.png",
       "v2.0.0": "基于官方 TorrentTransfer v1.10.3 简化增强：迁移前先暂停源端做种避免双端同时下载；支持已完成暂停状态种子迁移；scan_limit 截断大量种子；目的端做种确认后才删源；失败自动恢复源端做种（原做种恢复做种原暂停保持暂停）；适配 qB add_torrent 新返回值"
     }
   },

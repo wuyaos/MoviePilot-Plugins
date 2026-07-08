@@ -26,9 +26,9 @@ class TorrentTransfer(_PluginBase):
     # 插件描述
     plugin_desc = "定期转移下载器中的做种任务到另一个下载器。"
     # 插件图标
-    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
+    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/seedtransfer.png"
     # 插件版本
-    plugin_version = "2.0.0"
+    plugin_version = "2.0.1"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1292,11 +1292,19 @@ class TorrentTransfer(_PluginBase):
     @staticmethod
     def __can_seeding(torrent: Any, dl_type: str):
         """
-        判断种子是否可以做种并处于暂停状态
+        判断目的端种子是否已可做种（校验完成、文件完整，无论暂停还是正在做种）
+        qB: pausedUP/stoppedUP(已完成暂停) 或 uploading/stalledUP/forcedUP(正在做种)
+        TR: stopped + percent_done==1(已完成暂停) 或 seeding/seed_pending(正在做种/排队)
         """
         try:
-            return (torrent.get("state") in ["pausedUP", "stoppedUP"]) if dl_type == "qbittorrent" \
-                else (torrent.status == "stopped" and torrent.percent_done == 1)
+            if dl_type == "qbittorrent":
+                return torrent.get("state") in (
+                    "pausedUP", "stoppedUP", "uploading", "stalledUP", "forcedUP")
+            # TR：暂停且完整，或正在做种/排队做种
+            st = torrent.status
+            if st == "stopped":
+                return torrent.percent_done == 1
+            return st in ("seeding", "seed_pending")
         except Exception as e:
             logger.error(str(e))
             return False
