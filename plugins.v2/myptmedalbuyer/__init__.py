@@ -84,6 +84,13 @@ class MyPTMedalBuyer(_PluginBase):
     def get_state(self) -> bool:
         return self._enabled
 
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        return []
+
+    def get_api(self) -> List[Dict[str, Any]]:
+        return []
+
     def get_service(self) -> List[Dict[str, Any]]:
         if not self._enabled or not self._cron:
             return []
