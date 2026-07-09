@@ -218,7 +218,9 @@ class MyPTMedalBuyer(_PluginBase):
             button_text = self._clean_text((buy_button.xpath("./@value") or [""])[0]) if buy_button is not None else ""
             disabled = bool(buy_button.xpath("./@disabled")) if buy_button is not None else False
             medal_name = self._extract_medal_name(row, medal_id)
-            expire_at = self._extract_expire_time(row)
+            # medal.php 不显示到期日期，用 MEDAL_MAP 的 valid 字段作为有效期
+            medal_def = self.MEDAL_MAP.get(medal_id, {})
+            expire_at = medal_def.get("valid", "")
             status = self._button_status(button_text, disabled)
             medals[medal_id] = {
                 "id": medal_id,
@@ -435,7 +437,11 @@ class MyPTMedalBuyer(_PluginBase):
 
     def _parse_magic(self, html: str) -> str:
         text = self._html_to_text(html)
-        patterns = [r"魔力值?\s*[:：]?\s*([\d,]+(?:\.\d+)?)", r"Bonus\s*[:：]?\s*([\d,]+(?:\.\d+)?)"]
+        # myPT 格式：魔力值 [使用]: 14,229.6
+        patterns = [
+            r"魔力值.*?([\d,]+(?:\.\d+)?)",
+            r"Bonus\s*[:：]?\s*([\d,]+(?:\.\d+)?)",
+        ]
         for pattern in patterns:
             match = re.search(pattern, text, flags=re.IGNORECASE)
             if match:
