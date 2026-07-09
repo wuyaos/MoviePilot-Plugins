@@ -70,7 +70,7 @@
     "name": "AnimeZ保活",
     "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
     "labels": "保活,AnimeZ",
-    "version": "2.5.7",
+    "version": "2.5.8",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
     "author": "wuyaos",
     "level": 2,
@@ -95,7 +95,8 @@
       "v2.1.0": "面板重构：紧凑用户信息条、tonal状态卡片、中文时间、分页扫描种子",
       "v2.0.0": "重构：页面解析替代RSS，支持qB/TR多下载器，freeleech筛选，体积上限",
       "v1.1.0": "使用MP下载器选择，站点定时访问，每天随机执行，保活策略说明",
-      "v1.0.0": "初始版本：从青龙脚本转换为MoviePilot插件"
+      "v1.0.0": "初始版本：从青龙脚本转换为MoviePilot插件",
+      "v2.5.8": "修复访问保活到期连带下载 bug：run_keepalive 访问 due 时不检查 download_due 直接下载，导致 reload/访问到期也触发下载；拆分 visit_due 与 download_due，只有 download_due 或 force 才执行下载；retry 时下载仍尊重间隔；新增间隔决策日志"
     }
   },
   "TorrentTransfer": {
