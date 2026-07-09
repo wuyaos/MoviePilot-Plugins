@@ -1,10 +1,12 @@
 # input: MoviePilot _PluginBase | output: AnimeZ 保活插件 | pos: 插件入口
 from __future__ import annotations
+from datetime import datetime, timedelta
 import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+import pytz
 from app.core.config import settings as app_settings
 from app.core.event import eventmanager, Event
 from app.log import logger
@@ -78,6 +80,7 @@ class AzKeepAlive(_PluginBase):
             force = self._force_keepalive
             self._scheduler = BackgroundScheduler(timezone=app_settings.TZ)
             self._scheduler.add_job(lambda: self._run_task(force=force), "date",
+                                    run_date=datetime.now(tz=pytz.timezone(app_settings.TZ)) + timedelta(seconds=10),
                                     name="AnimeZ保活-立即执行")
             self._scheduler.start()
             self._onlyonce = False
@@ -133,6 +136,9 @@ class AzKeepAlive(_PluginBase):
         status, message = "failed", "保活未执行"
         for attempt in range(1, 4):
             state = self.get_data("state") or {}
+            if not state:
+                logger.info("AnimeZ保活: state 未就绪（可能 reload 中），跳过本次执行")
+                return
             status, message, state = run_keepalive(
                 site_url=self._site_url, downloader_instance=dl_instance,
                 category=self._qb_category, tags=self._qb_tags,
@@ -156,6 +162,14 @@ class AzKeepAlive(_PluginBase):
 
     def _run_force_task(self):
         self._run_task(force=True)
+
+    def _safe_run_task(self):
+        """cron 触发时先检查 state 就绪"""
+        state = self.get_data("state") or {}
+        if not state:
+            logger.info("AnimeZ保活: state 未就绪，跳过本次 cron 触发")
+            return
+        self._run_task(force=False)
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -182,7 +196,7 @@ class AzKeepAlive(_PluginBase):
                 else:
                     services.append({"id": "AzKeepAlive", "name": "AnimeZ保活定时任务",
                                      "trigger": CronTrigger.from_crontab(self._cron),
-                                     "func": self._run_task, "kwargs": {}})
+                                     "func": self._safe_run_task, "kwargs": {}})
                     logger.info(f"AnimeZ保活已注册定时任务: {self._cron}")
             except Exception as e:
                 logger.error(f"AnimeZ保活 cron 错误: {e}，跳过定时注册")
@@ -193,7 +207,7 @@ class AzKeepAlive(_PluginBase):
             services.append({"id": "AzKeepAlive",
                              "name": f"AnimeZ保活定时任务 {cron_str}",
                              "trigger": CronTrigger.from_crontab(cron_str),
-                             "func": self._run_task, "kwargs": {}})
+                             "func": self._safe_run_task, "kwargs": {}})
         # 手动服务始终注册，不受 cron 错误影响
         services.extend([
             {"id": "AzKeepAliveRunNow", "name": "AnimeZ保活-立即运行",
