@@ -4,7 +4,7 @@ import threading
 from datetime import datetime, timedelta
 from html import unescape
 from typing import Any, Dict, List, Tuple, Optional
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin
 
 import pytz
 from apscheduler.triggers.cron import CronTrigger
@@ -127,6 +127,13 @@ class MyPTMedalBuyer(_PluginBase):
 
             html = self._fetch_medal_page(cookie, site)
             medals = self._parse_medals(html)
+            uid = self._parse_uid_from_cookie(cookie) or self._parse_uid_from_html(html)
+            if uid:
+                user_html = self._fetch_user_details(cookie, uid, site)
+                user_medals = self._parse_user_medals(user_html)
+                for mid, expire in user_medals.items():
+                    if mid in medals:
+                        medals[mid]["expire_at"] = expire
             self._save_overview(site, medals, html)
 
             for medal_id in self._medal_ids:
@@ -218,9 +225,6 @@ class MyPTMedalBuyer(_PluginBase):
             button_text = self._clean_text((buy_button.xpath("./@value") or [""])[0]) if buy_button is not None else ""
             disabled = bool(buy_button.xpath("./@disabled")) if buy_button is not None else False
             medal_name = self._extract_medal_name(row, medal_id)
-            # medal.php 不显示到期日期，用 MEDAL_MAP 的 valid 字段作为有效期
-            medal_def = self.MEDAL_MAP.get(medal_id, {})
-            expire_at = medal_def.get("valid", "")
             status = self._button_status(button_text, disabled)
             medals[medal_id] = {
                 "id": medal_id,
@@ -228,11 +232,40 @@ class MyPTMedalBuyer(_PluginBase):
                 "button_text": button_text,
                 "disabled": disabled,
                 "status": status,
-                "expire_at": expire_at,
+                "expire_at": "",
+                "buy_time": cells_text[3] if len(cells_text) > 3 else "",
+                "valid_days": cells_text[4] if len(cells_text) > 4 else "",
                 "cells": cells_text,
             }
         logger.info(f"myPT 勋章页面解析完成：{len(medals)} 个勋章")
         return medals
+
+    def _fetch_user_details(self, cookie: str, uid: str, site=None) -> str:
+        """获取 userdetails.php 页面"""
+        url = urljoin(self._base_url(site) + "/", f"userdetails.php?id={uid}")
+        res = RequestUtils(
+            headers=self._page_headers(cookie, site),
+            proxies=settings.PROXY if self._use_proxy else None,
+            timeout=self.REQUEST_TIMEOUT
+        ).get_res(url=url)
+        if not res:
+            raise RuntimeError("请求 userdetails.php 失败：无响应")
+        if res.status_code in [401, 403]:
+            raise RuntimeError(f"Cookie 失效或无权限：HTTP {res.status_code}")
+        if res.status_code >= 500:
+            raise RuntimeError(f"站点服务异常：HTTP {res.status_code}")
+        return res.text or ""
+
+    def _parse_user_medals(self, html: str) -> Dict[str, str]:
+        """从 userdetails.php 解析勋章过期时间，按魔力加成系数匹配 medal_id"""
+        user_medals: Dict[str, str] = {}
+        text = self._html_to_text(html)
+        factor_map = {10: "8", 1: "7", 3: "6", 5: "5", 8: "4", 1000: "3"}
+        for expire_at, factor in re.findall(r"过期时间:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}).*?魔力加成系数:\s*(\d+)", text):
+            medal_id = factor_map.get(self._safe_int(factor, -1))
+            if medal_id:
+                user_medals[medal_id] = expire_at
+        return user_medals
 
     def _buy_medal(self, cookie: str, medal_id: str, site=None) -> Tuple[bool, str]:
         url = urljoin(self._base_url(site) + "/", self.AJAX_PATH.lstrip("/"))
@@ -429,11 +462,25 @@ class MyPTMedalBuyer(_PluginBase):
         return cells[2].split(" ")[0] if len(cells) > 2 and cells[2] else self.MEDAL_MAP.get(medal_id, {}).get("name", "")
 
     def _extract_expire_time(self, row) -> str:
-        text = self._clean_text(" ".join(row.xpath(".//text()")))
-        matches = re.findall(r"\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}(?::\d{2})?)?", text)
-        if not matches:
+        return ""
+
+    def _parse_uid_from_cookie(self, cookie: str) -> str:
+        """从 c_secure_pass cookie 解析 user_id"""
+        import base64
+        match = re.search(r"c_secure_pass=([^;]+)", cookie or "")
+        if not match:
             return ""
-        return matches[-1]
+        try:
+            decoded = base64.b64decode(unquote(match.group(1)))
+            data = json.loads(decoded)
+            return str(data.get("user_id", ""))
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _parse_uid_from_html(html: str) -> str:
+        matches = re.findall(r"userdetails\.php\?id=(\d+)", html or "")
+        return matches[0] if matches else ""
 
     def _parse_magic(self, html: str) -> str:
         text = self._html_to_text(html)
