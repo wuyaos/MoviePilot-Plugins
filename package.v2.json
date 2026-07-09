@@ -1,4 +1,16 @@
 {
+  "MyPTMedalBuyer": {
+    "name": "myPT勋章续购",
+    "description": "自动续购 myPT(cc.mypt.cc) 勋章，避免到期后忘记手动购买",
+    "labels": "myPT,勋章,续购",
+    "version": "1.0.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png",
+    "author": "wuyaos",
+    "level": 2,
+    "history": {
+      "v1.0.0": "初始版本：自动续购 myPT(cc.mypt.cc) 勋章；从 MP 站点表读 cookie；解析 medal.php 按钮状态；POST ajax.php action=buyMedal 购买；支持勾选多个勋章；到期前 N 天开始尝试续购；frost_style 详情页"
+    }
+  },
   "LLMRecognizer": {
     "name": "AI识别增强",
     "description": "复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。默认不调用 TMDB（消除 500 日志噪音）。",
