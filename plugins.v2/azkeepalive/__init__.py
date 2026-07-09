@@ -76,15 +76,15 @@ class AzKeepAlive(_PluginBase):
             h, m = random.randint(9, 22), random.randint(0, 59)
             self._random_cron = f"{m} {h} * * *"
             self._save_config()
-        if self._onlyonce or self._force_keepalive:
-            force = self._force_keepalive
+        if self._onlyonce:
+            # onlyonce 只立即运行一次，遵守间隔（force=False），不强制下载
             self._scheduler = BackgroundScheduler(timezone=app_settings.TZ)
-            self._scheduler.add_job(lambda: self._run_task(force=force), "date",
+            self._scheduler.add_job(lambda: self._run_task(force=False), "date",
                                     run_date=datetime.now(tz=pytz.timezone(app_settings.TZ)) + timedelta(seconds=10),
                                     name="AnimeZ保活-立即执行")
             self._scheduler.start()
             self._onlyonce = False
-            self._force_keepalive = False
+            self._force_keepalive = False  # 同时清掉 force_keepalive 残留
             self._save_config()
 
     def get_state(self) -> bool:
@@ -208,13 +208,6 @@ class AzKeepAlive(_PluginBase):
                              "name": f"AnimeZ保活定时任务 {cron_str}",
                              "trigger": CronTrigger.from_crontab(cron_str),
                              "func": self._safe_run_task, "kwargs": {}})
-        # 手动服务始终注册，不受 cron 错误影响
-        services.extend([
-            {"id": "AzKeepAliveRunNow", "name": "AnimeZ保活-立即运行",
-             "trigger": None, "func": self._run_task, "kwargs": {}},
-            {"id": "AzKeepAliveForceRun", "name": "AnimeZ保活-强制保活",
-             "trigger": None, "func": self._run_force_task, "kwargs": {}},
-        ])
         return services
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
