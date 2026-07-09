@@ -403,10 +403,9 @@ class MyPTMedalBuyer(_PluginBase):
                 {"component": "td", "text": item.get("name") or "—"},
                 {"component": "td", "text": item.get("valid_days") or "—"},
                 {"component": "td", "text": item.get("expire_at") or "—"},
-                {"component": "td", "content": [{"component": "VChip", "props": {"color": self._status_color(status), "size": "small", "variant": "tonal"}, "text": self._status_text(status)}]},
-                {"component": "td", "text": item.get("button_text") or "—"}
+                {"component": "td", "content": [{"component": "VChip", "props": {"color": self._status_color(status), "size": "small", "variant": "tonal"}, "text": self._status_text(status)}]}
             ]})
-        components.append(self._table_card("当前勋章", ["ID", "名称", "有效期(天)", "过期时间", "状态", "按钮"], medal_rows, frost_style, "暂无勋章页面解析数据"))
+        components.append(self._table_card("当前勋章", ["ID", "名称", "有效期(天)", "过期时间", "状态"], medal_rows, frost_style, "暂无勋章页面解析数据"))
 
         history_rows = []
         for item in history[:30]:
