@@ -35,10 +35,17 @@ def run_keepalive(
         download_due, _ = _should_run(
             state, "last_download_at", keepalive_days, now, action="下载", force=force,
         )
-        if not visit_due and not download_due:
-            reason = "访问和下载均未到插件保活间隔"
-            _append(state, "skipped", now, reason=reason, checked=False)
-            return "skipped", _skip_msg(state, keepalive_days, now, reason), state
+    else:
+        # retry 时：force 已含意图；非 force 时仍尊重下载间隔
+        visit_due = True  # retry 时访问可以做
+        download_due, _ = _should_run(
+            state, "last_download_at", keepalive_days, now, action="下载", force=force,
+        )
+    logger.info(f"AZ保活: 间隔判断 skip_check={skip_interval_check} force={force} visit_due={visit_due} download_due={download_due} last_visit={state.get('last_visit_at')} last_download={state.get('last_download_at')}")
+    if not visit_due and not download_due:
+        reason = "访问和下载均未到插件保活间隔"
+        _append(state, "skipped", now, reason=reason, checked=False)
+        return "skipped", _skip_msg(state, keepalive_days, now, reason), state
 
     visit_message = ""
     if not cookie:
@@ -80,6 +87,12 @@ def run_keepalive(
         msg = "CookieCloud 未获取到 AnimeZ Cookie，无法执行下载保活"
         _append(state, "failed", now, reason=msg)
         return "failed", msg, state
+
+    if not download_due and not force:
+        # 访问保活已完成，但下载未到间隔，不执行下载
+        if visit_message:
+            _append(state, "visit_only", now, reason="访问保活完成，下载未到间隔")
+            return "visit_success", visit_message, state
 
     try:
         submit_tags = f"{tags},H&R" if tags else "H&R"
