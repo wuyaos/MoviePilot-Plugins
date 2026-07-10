@@ -213,11 +213,12 @@
     "name": "论坛签到",
     "description": "论坛站点签到（蜂巢 pting.club + 药丸 invites.fun），单插件双站调度，支持 Cookie/账号登录、失败重试与历史记录",
     "labels": "签到,论坛,蜂巢,药丸",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.8": "修复奖励显示：蜂巢/药丸 success_already（已签到）时保留接口真实 lastCheckinMoney，不再强制写0覆盖当日奖励；日历移除颜色状态图例仅保留蜂巢/药丸图标说明",
       "v1.0.7": "code review 修复：日历图例补全 7 种 day_color 状态色（仅蜂巢橙/仅药丸紫/单站失败浅红等），day_rewards 改为成功优先扫描避免重试奖励丢失，零值字符串(0.0/0.00)数值化判断跳过，补位空单元格高度 24px→40px 与实际单元格一致",
       "v1.0.6": "同步上游 madrays/fengchaosignin 日历增强：日历单元格应用 day_color 颜色逻辑（失败标红/成功标绿），显示当日奖励数字（蜂巢/药丸分站），日历卡下方新增状态图例；保持双站架构不新增接口",
       "v1.0.5": "修复 curl-cffi 下 csrf_token_mismatch——cookie 走 session jar 不走 header，蜂巢链路复用同一 client，登录后持久化以 jar 为准",
@@ -232,11 +233,12 @@
     "name": "不可躺自动领红包",
     "description": "自动发现并串行领取不可躺(tangpt.top)红包,支持 fast 模式、限流感知、Cookie 过期熔断和历史统计",
     "labels": "不可躺,红包,自动领取",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacket.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.1": "每日领取上限感知：解析 claim 达上限响应「今天已经领取X个，每天最多领Y个」得到站点权威累计/上限；无上限响应时按本插件当日 claim_ok 事件统计「本插件今日已领」并以上限100估算剩余；页面/通知区分本站/本插件统计；同日纯达上限轮通知去重；移除每天最多作为红包终态避免误入 dead_ids；修复达上限分支 NameError",
       "v1.0.0": "初始版本:从 MoviePilot 站点表读 www.tangpt.top Cookie;GET /api/redpacket/latest 发现可领红包;GET /api/redpacket/detail 预览剩余(领取前可见总池/个数);POST /api/redpacket/claim 表单 packet_id 领取;fast 模式跳过 detail 直领;限流 x-ratelimit-remaining 感知自适应 sleep;Cookie 401/403 熔断;串行不并发;事件存 save_data + summary 统计;详情页待后续阶段"
     }
   }
