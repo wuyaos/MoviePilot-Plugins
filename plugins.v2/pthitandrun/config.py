@@ -91,6 +91,9 @@ class HNRConfig(BaseConfig):
     auto_discover: Optional[bool] = False        # 自动发现下载器中未纳管的种子
     auto_monitor: Optional[bool] = False
     brush_plugin: Optional[str] = "BrushFlow"
+    exclude_tags: List[str] = Field(default_factory=list)        # 排除标签（任一命中即跳过）
+    exclude_categories: List[str] = Field(default_factory=list)  # 排除分类（仅 qBittorrent 生效）
+    notify_summary_cron: str = "0 8 * * *"                    # 通知汇总 cron（分 时 日 月 周）
     # ---- 站点独立配置 ----
     enable_site_config: Optional[bool] = False
     site_config_str: Optional[str] = None
@@ -153,9 +156,12 @@ def _clean_empty_strings(data: dict):
         "hr_ratio", "hr_upload_multiplier", "check_period",
         "auto_cleanup_days",
     }
+    _list_fields = {"exclude_tags", "exclude_categories"}
     for k, v in data.items():
         if v == "" and k in _numeric_fields:
             data[k] = None
+        elif k in _list_fields and isinstance(v, str):
+            data[k] = [item.strip() for item in v.split(",") if item.strip()]
 
 
 def _parse_yaml(yaml_str: str) -> Optional[Dict[str, SiteConfig]]:

@@ -86,6 +86,7 @@ class TorrentHelper:
             "total_size": t.get("total_size", 0),
             "add_on": added,
             "tags": t.get("tags", ""),
+            "category": t.get("category", ""),
             "tracker": t.get("tracker", ""),
             "state": t.get("state", ""),
         }
@@ -105,6 +106,7 @@ class TorrentHelper:
             "total_size": t.total_size,
             "add_on": int(t.date_added.timestamp()) if t.date_added else 0,
             "tags": getattr(t, "labels", []) or [],
+            "category": "",
             "tracker": (t.trackers[0].get("announce", "") if t.trackers else ""),
             "state": "",
         }
@@ -124,6 +126,11 @@ class TorrentHelper:
         if self.dl_type == "qbittorrent":
             return torrent.get("hash", "") if isinstance(torrent, dict) else ""
         return getattr(torrent, "hashString", "")
+
+    def get_torrent_category(self, torrent: Any) -> str:
+        if self.dl_type == "qbittorrent" and isinstance(torrent, dict):
+            return torrent.get("category", "") or ""
+        return ""
 
     # ---- 标签操作 ----
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import time
 import threading
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from app.log import logger
 
@@ -184,6 +184,7 @@ class HNRChecker:
         discovered = 0
         skipped_site = 0
         skipped_known = 0
+        skipped_excluded = 0
 
         for dl_name, th in self._helpers.items():
             dl_torrents = th.get_torrents() or []
@@ -197,6 +198,11 @@ class HNRChecker:
                 site_id, site_name = TorrentHelper.get_site_by_torrent(torrent)
                 if not site_id or site_id not in self._cfg.sites:
                     skipped_site += 1
+                    continue
+                excluded, reason = self.is_excluded_torrent(torrent, th)
+                if excluded:
+                    skipped_excluded += 1
+                    logger.info(f"{LOG_PREFIX}跳过排除种子: [{dl_name}] [{site_name}] {h} {reason}")
                     continue
                 info = th.get_torrent_info(torrent)
                 site_cfg = self._cfg.get_site_config(site_name or "")
@@ -229,7 +235,8 @@ class HNRChecker:
 
         if discovered:
             self._save_tasks(tasks)
-        logger.info(f"{LOG_PREFIX}自动发现完成: 新增{discovered} 已管理{skipped_known} 非目标站{skipped_site}")
+        logger.info(f"{LOG_PREFIX}自动发现完成: 新增{discovered} 已管理{skipped_known} "
+                    f"非目标站{skipped_site} 已排除{skipped_excluded}")
 
     # ---- 初始化 H&R 参数 ----
 
@@ -259,6 +266,21 @@ class HNRChecker:
         task.hr_ratio = site_cfg.hr_ratio
         task.hr_upload_multiplier = site_cfg.hr_upload_multiplier
         task.hr_upload_gte_download = site_cfg.hr_upload_gte_download
+
+    # ---- 排除 ----
+
+    def is_excluded_torrent(self, torrent: Any, th: TorrentHelper) -> Tuple[bool, str]:
+        exclude_tags = {t.strip().casefold() for t in (self._cfg.exclude_tags or []) if t and t.strip()}
+        exclude_categories = {c.strip().casefold() for c in (self._cfg.exclude_categories or []) if c and c.strip()}
+        if exclude_tags:
+            for tag in th.get_torrent_tags(torrent):
+                if tag.strip().casefold() in exclude_tags:
+                    return True, f"标签={tag}"
+        if exclude_categories:
+            category = th.get_torrent_category(torrent)
+            if category and category.strip().casefold() in exclude_categories:
+                return True, f"分类={category}"
+        return False, ""
 
     # ---- 标签 ----
 
@@ -299,28 +321,75 @@ class HNRChecker:
     # ---- 通知 ----
 
     def _notify(self, task: TorrentTask, title: str, warn: bool = False):
-        if not self._send_message:
-            return
         from app.plugins.pthitandrun.config import NotifyMode
         if self._cfg.notify == NotifyMode.NONE:
             return
         if self._cfg.notify == NotifyMode.ON_ERROR and not warn:
             return
+        self._append_notify_event(task, title, warn=warn)
+
+    def _load_notify_events(self) -> List[Dict[str, Any]]:
+        raw = self._get_data("notify_events")
+        return raw if isinstance(raw, list) else []
+
+    def _save_notify_events(self, events: List[Dict[str, Any]]):
+        self._save_data("notify_events", events)
+
+    def _append_notify_event(self, task: TorrentTask, title: str, warn: bool = False):
         seeding_h = (task.seeding_time or 0) / 3600
         additional = self._cfg.get_site_config(task.site_name or "").additional_seed_time or 0
         required_h = (task.hr_duration or 0) + additional
         remain = task.remain_time(additional)
-        remain_str = f"{remain:.1f}h" if remain is not None else "已满足"
-        msg = (f"站点：{task.site_name or '-'}\n"
-               f"种子：{task.identifier}\n"
-               f"下载器：{task.downloader or '-'}\n"
-               f"做种时间：{seeding_h:.1f}h / {required_h}h\n"
-               f"分享率：{task.ratio:.2f}"
-               + (f" / 要求≥{task.hr_ratio}" if task.hr_ratio else "") + "\n"
-               f"剩余：{remain_str}\n"
-               f"截止日期：{task.formatted_deadline()}\n"
-               f"状态：{task.hr_status.to_chinese() if task.hr_status else '-'}")
-        self._send_message(title=title, text=msg)
+        events = self._load_notify_events()
+        events.append({
+            "title": title,
+            "warn": warn,
+            "site_name": task.site_name or "-",
+            "identifier": task.identifier,
+            "downloader": task.downloader or "-",
+            "seeding_h": f"{seeding_h:.1f}",
+            "required_h": f"{required_h:g}",
+            "ratio": f"{task.ratio:.2f}",
+            "hr_ratio": task.hr_ratio,
+            "remain": f"{remain:.1f}h" if remain is not None else "已满足",
+            "deadline": task.formatted_deadline(),
+            "status": task.hr_status.value if task.hr_status else "",
+            "status_text": task.hr_status.to_chinese() if task.hr_status else "-",
+            "time": time.time(),
+        })
+        self._save_notify_events(events)
+
+    def send_notify_summary(self):
+        if not self._send_message:
+            return
+        events = self._load_notify_events()
+        if not events:
+            return
+        groups = [
+            ("【已完成】", HNRStatus.COMPLIANT.value),
+            ("【已过期】", HNRStatus.OVERDUE.value),
+            ("【需要做种】", HNRStatus.NEEDS_SEEDING.value),
+        ]
+        lines = []
+        for group_title, status in groups:
+            items = [e for e in events if e.get("status") == status]
+            if not items:
+                continue
+            lines.append(f"{group_title} {len(items)} 条")
+            for item in items[:20]:
+                ratio_req = f"/≥{item.get('hr_ratio')}" if item.get("hr_ratio") else ""
+                lines.append(
+                    f"- [{item.get('site_name', '-')}] {item.get('identifier', '-')} "
+                    f"@{item.get('downloader', '-')} 做种{item.get('seeding_h', '0.0')}h/"
+                    f"{item.get('required_h', '0')}h 率{item.get('ratio', '0.00')}{ratio_req} "
+                    f"剩余{item.get('remain', '-')} 截止{item.get('deadline', '-')}"
+                )
+            if len(items) > 20:
+                lines.append(f"... 还有 {len(items) - 20} 条")
+        if not lines:
+            lines = [f"共 {len(events)} 条 H&R 状态变更"]
+        self._send_message(title="【H&R 汇总】", text="\n".join(lines))
+        self._save_notify_events([])
 
     # ---- 持久化 ----
 

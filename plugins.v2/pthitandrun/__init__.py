@@ -78,13 +78,18 @@ class PtHitAndRun(_PluginBase):
             get_data=self.get_data, save_data=self.save_data,
             send_message=self._send_message,
         )
-        if self._cfg.onlyonce:
-            self._cfg.onlyonce = False
-            self._update_config()
+        summary_cron = self._parse_cron(self._cfg.notify_summary_cron)
+        if self._cfg.onlyonce or summary_cron:
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-            self._scheduler.add_job(self._checker.full_scan, "date",
-                                    run_date=datetime.now(pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                    name="H&R全量扫描")
+            if self._cfg.onlyonce:
+                self._cfg.onlyonce = False
+                self._update_config()
+                self._scheduler.add_job(self._checker.full_scan, "date",
+                                        run_date=datetime.now(pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                                        name="H&R全量扫描")
+            if summary_cron:
+                self._scheduler.add_job(self._checker.send_notify_summary, "cron",
+                                        **summary_cron, name="H&R通知汇总")
             self._scheduler.start()
 
     # ---- 下载器 ----
@@ -96,6 +101,8 @@ class PtHitAndRun(_PluginBase):
         helpers: Dict[str, TorrentHelper] = {}
         for name in self._cfg.downloader:
             svc = self._downloader_helper.get_service(name=name, type_filter="qbittorrent")
+            if not svc:
+                svc = self._downloader_helper.get_service(name=name, type_filter="transmission")
             if svc and not svc.instance.is_inactive():
                 helpers[name] = TorrentHelper(svc.instance)
             else:
@@ -158,6 +165,10 @@ class PtHitAndRun(_PluginBase):
         site_id, site_name = TorrentHelper.get_site_by_torrent(torrent)
         if site_id not in (self._cfg.sites or []):
             logger.debug(f"{LOG_PREFIX}站点 {site_name} 未启用 H&R，跳过")
+            return
+        excluded, reason = self._checker.is_excluded_torrent(torrent, th)
+        if excluded:
+            logger.info(f"{LOG_PREFIX}{site_name}: 种子 {torrent_hash} 已排除，跳过 H&R 管理（{reason}）")
             return
         info = th.get_torrent_info(torrent)
         # 从 torrent_data 提取基本信息
@@ -349,7 +360,7 @@ class PtHitAndRun(_PluginBase):
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         dl_opts = [{"title": c.name, "value": c.name}
                    for c in self._downloader_helper.get_configs().values()
-                   if c.type == "qbittorrent"]
+                   if c.type in ("qbittorrent", "transmission")]
         site_opts = [{"title": s.get("name"), "value": s.get("id")}
                      for s in self._sites_helper.get_indexers() if s.get("id")]
         notify_opts = [
@@ -381,6 +392,9 @@ class PtHitAndRun(_PluginBase):
                 ]),
                 _row([
                     _col(3, _text("auto_cleanup_days", "自动清理天数")),
+                    _col(3, _text("notify_summary_cron", "汇总通知Cron")),
+                    _col(3, _text("exclude_tags", "排除标签(逗号分隔)")),
+                    _col(3, _text("exclude_categories", "排除分类(qB,逗号分隔)")),
                 ]),
                 # 全局 H&R 规则
                 _row([
@@ -402,6 +416,7 @@ class PtHitAndRun(_PluginBase):
                         {"component": "div", "text": "• 站点独立配置：开启后在下方 YAML 中为每个站点设置独立规则，未设置的字段自动继承全局值"},
                         {"component": "div", "text": "• 满足条件（OR 关系）：做种时间达标 / 分享率达标 / 上传量>=种子大小*N倍 / 上传量>=下载量，满足任一即通过"},
                         {"component": "div", "text": "• 自动发现：开启后定时扫描下载器，将直接在下载器中添加的种子也纳入 H&R 管理"},
+                        {"component": "div", "text": "• 排除标签/分类：任一标签或分类命中即跳过纳管；分类仅 qBittorrent 生效，Transmission 无分类"},
                         {"component": "div", "text": "• H&R标签：满足前打标签保护种子不被删种插件删除，满足后自动移除标签"},
                     ]}]}),
                 ]),
@@ -429,6 +444,8 @@ class PtHitAndRun(_PluginBase):
             "downloader": [], "sites": [], "notify": "always",
             "check_period": 10, "hit_and_run_tag": "H&R",
             "auto_cleanup_days": 15,
+            "notify_summary_cron": "0 8 * * *",
+            "exclude_tags": [], "exclude_categories": [],
             "hr_duration": 48, "hr_deadline_days": 14,
             "additional_seed_time": 24,
             "hr_ratio": "", "hr_upload_multiplier": "",
@@ -579,6 +596,20 @@ class PtHitAndRun(_PluginBase):
         if self._cfg:
             excludes = {"site_infos", "site_configs"}
             self.update_config(self._cfg.to_dict(exclude=excludes))
+
+    def _parse_cron(self, cron: str) -> dict:
+        value = (cron or "0 8 * * *").strip() or "0 8 * * *"
+        parts = value.split()
+        if len(parts) != 5:
+            logger.warning(f"{LOG_PREFIX}通知汇总 cron 配置无效: {cron}，回退为 0 8 * * *")
+            parts = "0 8 * * *".split()
+        return {
+            "minute": parts[0],
+            "hour": parts[1],
+            "day": parts[2],
+            "month": parts[3],
+            "day_of_week": parts[4],
+        }
 
     def _get_brush_plugin_options(self) -> List[Dict[str, Any]]:
         opts = [{"title": "不监听刷流插件", "value": ""}]
