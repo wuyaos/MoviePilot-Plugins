@@ -52,10 +52,10 @@ class RateLimitState:
 class TangRedPacket(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动发现并串行领取不可躺红包,支持限流感知和历史统计。"
-    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tanglottery.png"
+    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacket.png"
     plugin_version = "1.0.0"
     plugin_author = "wuyaos"
-    author_url = "https://github.com/jiangbkvir/MoviePilot-Plugins"
+    author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacket_"
     plugin_order = 31
     auth_level = 1
@@ -364,6 +364,13 @@ class TangRedPacket(_PluginBase):
                 if isinstance(value, dict)
             ]
             updated_at = str(summary.get("updated_at") or "")[:19]
+            last_round = summary.get("last_round") if isinstance(summary.get("last_round"), dict) else {}
+            remaining_claimable_count = last_round.get("remaining_claimable_count")
+            latest_total_packet_count = last_round.get("latest_total_packet_count")
+            latest_items_count = last_round.get("latest_items_count", 0)
+            remaining_display = remaining_claimable_count
+            if remaining_display is None:
+                remaining_display = latest_total_packet_count if latest_total_packet_count is not None else "-"
             mode_text = []
             if self._fast_mode:
                 mode_text.append("快速模式")
@@ -372,6 +379,7 @@ class TangRedPacket(_PluginBase):
             tip_text = " / ".join(mode_text) if mode_text else "暂无记录"
             if updated_at:
                 tip_text = f"{tip_text}，最近更新时间：{updated_at}" if mode_text else f"最近更新时间：{updated_at}"
+            tip_text = f"{tip_text}，接口待领数 {latest_total_packet_count if latest_total_packet_count is not None else '-'} / items {latest_items_count}"
 
             content = [
                 {
@@ -391,7 +399,7 @@ class TangRedPacket(_PluginBase):
                                         self.__info_col("累计领取数", summary.get("total_claimed")),
                                         self.__info_col("累计失败数", summary.get("total_failed")),
                                         self.__info_col("累计魔力", summary.get("total_magic_gained")),
-                                        self.__info_col("最近更新时间", updated_at),
+                                        self.__info_col("剩余可领红包", remaining_display),
                                     ]
                                 },
                                 {
@@ -618,7 +626,7 @@ class TangRedPacket(_PluginBase):
                 {
                     "component": "div",
                     "props": {"class": "text-h6"},
-                    "text": str(value or "-")
+                    "text": str("-" if value is None or value == "" else value)
                 }
             ]
         }
@@ -716,18 +724,22 @@ class TangRedPacket(_PluginBase):
                 self.__append_event({"event": "round_fail", "message": result["message"]})
                 return result
 
+            items = latest.get("items") or []
+            result.update(self.__build_availability_snapshot(latest, items, claimed_ids, dead_ids))
+            result["total_seen"] = len(items)
+
             if latest.get("enabled") is False:
                 logger.warning("红包功能已被管理员全局关闭，停止本轮处理")
                 result.update({"status": "disabled", "message": "红包功能已被管理员全局关闭"})
                 self.__append_event({"event": "round_disabled", "message": result["message"]})
+                self.__update_summary(last_round=self.__build_last_round(result))
                 return result
 
-            items = latest.get("items") or []
-            result["total_seen"] = len(items)
             if not items:
                 logger.info(f"暂无可领红包：total_packet_count={latest.get('total_packet_count', 0)}")
                 result.update({"status": "empty", "message": "暂无可领红包"})
                 self.__append_event({"event": "round_empty", "total_packet_count": latest.get("total_packet_count", 0)})
+                self.__update_summary(last_round=self.__build_last_round(result))
                 return result
 
             logger.info(
@@ -755,7 +767,7 @@ class TangRedPacket(_PluginBase):
                 result.update({"status": "completed", "message": "领红包任务完成"})
             self.save_data("claimed_ids", sorted(claimed_ids))
             self.save_data("dead_ids", sorted(dead_ids))
-            self.__update_summary()
+            self.__update_summary(last_round=self.__build_last_round(result))
             if self._notify and (result.get("claimed_count") or result.get("failed_count") or result.get("status") == "auth_failed"):
                 self.__send_notification(result)
             elif not self._notify:
@@ -1026,7 +1038,45 @@ class TangRedPacket(_PluginBase):
             "failed_count": 0,
             "skipped_count": 0,
             "bonus_delta": 0.0,
-            "user_bonus_after": "-"
+            "user_bonus_after": "-",
+            "latest_total_packet_count": None,
+            "latest_items_count": 0,
+            "remaining_claimable_count": None,
+            "remaining_claimable_source": ""
+        }
+
+    def __build_availability_snapshot(self, latest: Dict[str, Any], items: List[Dict[str, Any]],
+                                      claimed_ids: set, dead_ids: set) -> Dict[str, Any]:
+        latest_total_packet_count = self.__to_int(latest.get("total_packet_count"))
+        latest_items_count = len(items)
+        remaining_claimable_count = 0
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            packet_id = item.get("id")
+            if packet_id is None:
+                continue
+            packet_key = str(packet_id)
+            if packet_key in claimed_ids or packet_key in dead_ids:
+                continue
+            remain_count = self.__to_int(item.get("remain_count"))
+            if remain_count is not None and remain_count <= 0:
+                continue
+            remaining_claimable_count += 1
+        return {
+            "latest_total_packet_count": latest_total_packet_count,
+            "latest_items_count": latest_items_count,
+            "remaining_claimable_count": remaining_claimable_count,
+            "remaining_claimable_source": "total_packet_count" if latest_total_packet_count is not None else "items_inferred"
+        }
+
+    @staticmethod
+    def __build_last_round(result: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "latest_total_packet_count": result.get("latest_total_packet_count"),
+            "latest_items_count": result.get("latest_items_count", 0),
+            "remaining_claimable_count": result.get("remaining_claimable_count"),
+            "remaining_claimable_source": result.get("remaining_claimable_source", "")
         }
 
     def __append_event(self, record: Dict[str, Any]):
@@ -1065,7 +1115,8 @@ class TangRedPacket(_PluginBase):
         data = self.get_data("dead_ids") or []
         return {str(item) for item in data if item is not None} if isinstance(data, list) else set()
 
-    def __update_summary(self):
+    def __update_summary(self, last_round: Optional[Dict[str, Any]] = None):
+        old_summary = self.__get_summary()
         summary = {
             "updated_at": self.__local_time_iso(),
             "total_claimed": 0,
@@ -1075,6 +1126,7 @@ class TangRedPacket(_PluginBase):
             "by_title": {},
             "by_date": {},
             "recent": [],
+            "last_round": last_round if last_round is not None else old_summary.get("last_round", {}),
         }
         for event in self.__get_events():
             event_name = event.get("event")
@@ -1105,9 +1157,15 @@ class TangRedPacket(_PluginBase):
 
     def __send_notification(self, result: Dict[str, Any]):
         title = "【不可躺自动领红包】"
+        remaining_claimable_count = result.get("remaining_claimable_count")
+        latest_total_packet_count = result.get("latest_total_packet_count")
+        remaining_display = remaining_claimable_count
+        if remaining_display is None:
+            remaining_display = latest_total_packet_count if latest_total_packet_count is not None else "-"
         text = (
             f"任务状态：{result.get('status')}\n"
             f"本轮发现：{result.get('total_seen', 0)} 个红包\n"
+            f"剩余可领：{remaining_display} 个\n"
             f"领取成功：{result.get('claimed_count', 0)} 个，失败：{result.get('failed_count', 0)} 个，跳过：{result.get('skipped_count', 0)} 个\n"
             f"魔力增加：{self.__format_number(result.get('bonus_delta', 0))}，当前魔力：{result.get('user_bonus_after', '-')}\n"
             f"说明：{result.get('message') or '-'}"
