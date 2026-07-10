@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.3.1"
+    plugin_version = "1.3.2"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -758,18 +758,7 @@ class AutoPtCheckin(_PluginBase):
             "login": []  # 登录数据
         }
         sign_dates = set()
-        sites_info = {}  # 记录站点信息
-
-        # 获取站点信息
-        site_indexers = self.sites.get_indexers()
-        for site in site_indexers:
-            if not site.get("public"):
-                sites_info[site.get("id")] = site.get("name")
-
-        # 自定义站点
-        custom_sites = self.__custom_sites()
-        for site in custom_sites:
-            sites_info[site.get("id")] = site.get("name")
+        sites_info = self._build_sites_info()
 
         # 获取常规日期格式数据
         for day in date_list:
@@ -802,8 +791,9 @@ class AutoPtCheckin(_PluginBase):
 
                     # 为所有已完成签到的站点创建记录
                     for site_id in done_sites:
-                        site_id_str = str(site_id)
-                        site_name = sites_info.get(site_id_str) or sites_info.get(site_id) or f"站点ID: {site_id}"
+                        site_name = self._get_site_display_name(site_id=site_id, sites_info=sites_info)
+                        if not site_name:
+                            continue
 
                         # 跳过需要重试的站点
                         if site_id in retry_sites:
@@ -839,8 +829,9 @@ class AutoPtCheckin(_PluginBase):
 
                     # 为所有已完成登录的站点创建记录
                     for site_id in done_sites:
-                        site_id_str = str(site_id)
-                        site_name = sites_info.get(site_id_str) or sites_info.get(site_id) or f"站点ID: {site_id}"
+                        site_name = self._get_site_display_name(site_id=site_id, sites_info=sites_info)
+                        if not site_name:
+                            continue
 
                         # 跳过需要重试的站点
                         if site_id in retry_sites:
@@ -976,13 +967,34 @@ class AutoPtCheckin(_PluginBase):
                     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
                     border-radius: 16px !important;
                     overflow: hidden !important;
-                    border: 1px solid rgba(0,0,0,0.03);
+                    border: 1px solid rgba(var(--v-theme-on-surface), .08);
                     transition: all 0.3s ease;
                 }
                 .v-expansion-panel:hover {
 
                     box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
                     transform: translateY(-2px);
+                }
+                html[data-theme="transparent"] .v-expansion-panel,
+                html[data-theme="transparent"] .signin-card,
+                html[data-theme="transparent"] .login-card,
+                .v-theme--transparent .v-expansion-panel,
+                .v-theme--transparent .signin-card,
+                .v-theme--transparent .login-card {
+                    backdrop-filter: blur(var(--transparent-blur, 10px));
+                    background-color: rgba(var(--v-theme-surface), 0) !important;
+                }
+                html[data-theme="transparent"] .v-expansion-panel-title,
+                html[data-theme="transparent"] .v-expansion-panel-text,
+                html[data-theme="transparent"] .v-expansion-panel-text__wrapper,
+                html[data-theme="transparent"] .v-list,
+                html[data-theme="transparent"] .v-list-item,
+                .v-theme--transparent .v-expansion-panel-title,
+                .v-theme--transparent .v-expansion-panel-text,
+                .v-theme--transparent .v-expansion-panel-text__wrapper,
+                .v-theme--transparent .v-list,
+                .v-theme--transparent .v-list-item {
+                    background-color: transparent !important;
                 }
                 .site-item {
                     border-radius: 10px;
@@ -1096,9 +1108,9 @@ class AutoPtCheckin(_PluginBase):
                                         'props': {
                                             'color': 'light-blue-lighten-3',
                                             'class': 'mr-2',
-                                            'size': 'large',
-                                            'icon': 'mdi-cat'
-                                        }
+                                            'size': 'large'
+                                        },
+                                        'text': 'mdi-cat'
                                     },
                                     {
                                         'component': 'h2',
@@ -1156,9 +1168,9 @@ class AutoPtCheckin(_PluginBase):
                                                 'props': {
                                                     'class': 'mr-2',
                                                     'color': 'teal-lighten-3',
-                                                    'size': 'small',
-                                                    'icon': 'mdi-duck'
-                                                }
+                                                    'size': 'small'
+                                                },
+                                                'text': 'mdi-duck'
                                             },
                                             {
                                                 'component': 'span',
@@ -1239,9 +1251,9 @@ class AutoPtCheckin(_PluginBase):
                                                 'props': {
                                                     'class': 'mr-2',
                                                     'color': 'light-blue-accent-3',
-                                                    'size': 'small',
-                                                    'icon': 'mdi-dog'
-                                                }
+                                                    'size': 'small'
+                                                },
+                                                'text': 'mdi-dog'
                                             },
                                             {
                                                 'component': 'span',
@@ -1299,6 +1311,32 @@ class AutoPtCheckin(_PluginBase):
                 ]
             }
         ]
+
+    @staticmethod
+    def _add_site_info(sites_info: dict, site_id: Any, site_name: Any) -> None:
+        """记录站点ID到名称的映射，兼容历史记录中ID类型不一致的情况。"""
+        if site_id is None or not site_name:
+            return
+        sites_info[site_id] = site_name
+        sites_info[str(site_id)] = site_name
+
+    def _build_sites_info(self) -> dict:
+        """汇总站点名称，供详情页历史记录反查。"""
+        sites_info = {}
+        for site in self.sites.get_indexers():
+            if not site.get("public"):
+                self._add_site_info(sites_info, site.get("id"), site.get("name"))
+        for site in self.siteoper.list_order_by_pri():
+            self._add_site_info(sites_info, getattr(site, "id", None), getattr(site, "name", None))
+        for site in self.__custom_sites():
+            self._add_site_info(sites_info, site.get("id"), site.get("name"))
+        return sites_info
+
+    @staticmethod
+    def _get_site_display_name(site_id, sites_info: dict) -> Optional[str]:
+        """根据站点ID获取详情页中展示的站点名称，查不到时返回空值便于跳过。"""
+        site_id_str = str(site_id)
+        return sites_info.get(site_id_str) or sites_info.get(site_id)
 
     @staticmethod
     def _resolve_status_style(status: str) -> Tuple[str, str]:
