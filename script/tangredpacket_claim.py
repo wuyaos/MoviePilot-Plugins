@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -22,13 +23,15 @@ BASE = "https://www.tangpt.top"
 LATEST = f"{BASE}/api/redpacket/latest"
 CLAIM = f"{BASE}/api/redpacket/claim"
 DETAIL = f"{BASE}/api/redpacket/detail"
-DEFAULT_OUT = "/tmp/pushfulao.log.jsonl"
-DEFAULT_SUMMARY = "/tmp/pushfulao.summary.json"
+DEFAULT_OUT = "/tmp/tangredpacket_claim.log.jsonl"
+DEFAULT_SUMMARY = "/tmp/tangredpacket_claim.summary.json"
 LOOP_INTERVAL = 60.0
 MAX_RETRIES = 3
 
-# ====== 在此内嵌你的 Cookie(从浏览器扩展导出,HttpOnly,JS 抓不到) ======
-COOKIE = "c_secure_pass=eyJ1c2VyX2lkIjoiMTI4MTAiLCJleHBpcmVzIjoxODExNDMwNDg0fS5kMDZkZDVjNGQwMDIyMTdlOWI4MGZkZjRjYzQyMjBiYzVjODYwMWM5MmExNjYxZjNhN2RlNDhjMTkwNzE0YTVh"
+# Cookie 从环境变量 TANGPT_COOKIE 读取(避免凭证硬编码进脚本/仓库)。
+# 形如: c_secure_pass=xxxx;也可含多个键值对以分号分隔。
+# 仍可用 --cookie 命令行参数覆盖;两者都未设置时报错退出。
+COOKIE = os.environ.get("TANGPT_COOKIE", "")
 
 HEADERS = {
     "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -40,7 +43,7 @@ HEADERS = {
     ),
 }
 
-LOG = logging.getLogger("pushfulao")
+LOG = logging.getLogger("tangredpacket_claim")
 
 
 class CookieExpiredError(RuntimeError):
