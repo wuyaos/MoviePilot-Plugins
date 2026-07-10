@@ -2,6 +2,7 @@
 # output: 不可躺红包任务执行、事件记录和通知
 # pos: V2 站点任务插件，按 Cron 自动发现并串行领取不可躺红包
 import json
+import re
 import threading
 import time
 from collections import defaultdict
@@ -53,7 +54,7 @@ class TangRedPacket(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动发现并串行领取不可躺红包,支持限流感知和历史统计。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacket.png"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacket_"
@@ -368,9 +369,11 @@ class TangRedPacket(_PluginBase):
             remaining_claimable_count = last_round.get("remaining_claimable_count")
             latest_total_packet_count = last_round.get("latest_total_packet_count")
             latest_items_count = last_round.get("latest_items_count", 0)
-            remaining_display = remaining_claimable_count
-            if remaining_display is None:
-                remaining_display = latest_total_packet_count if latest_total_packet_count is not None else "-"
+            daily_limit = last_round.get("daily_limit")
+            daily_claimed = last_round.get("daily_claimed")
+            daily_claimed_source = last_round.get("daily_claimed_source")
+            quota_known = daily_limit is not None and daily_claimed is not None
+            remaining_display = remaining_claimable_count if quota_known else "-"
             mode_text = []
             if self._fast_mode:
                 mode_text.append("快速模式")
@@ -380,6 +383,9 @@ class TangRedPacket(_PluginBase):
             if updated_at:
                 tip_text = f"{tip_text}，最近更新时间：{updated_at}" if mode_text else f"最近更新时间：{updated_at}"
             tip_text = f"{tip_text}，接口待领数 {latest_total_packet_count if latest_total_packet_count is not None else '-'} / items {latest_items_count}"
+            if quota_known:
+                claimed_label = "本站今日已领" if daily_claimed_source == "site" else "本插件今日已领"
+                tip_text = f"{tip_text}，每日上限 {daily_limit}，{claimed_label} {daily_claimed}，离上限 {remaining_display}"
 
             content = [
                 {
@@ -399,7 +405,7 @@ class TangRedPacket(_PluginBase):
                                         self.__info_col("累计领取数", summary.get("total_claimed")),
                                         self.__info_col("累计失败数", summary.get("total_failed")),
                                         self.__info_col("累计魔力", summary.get("total_magic_gained")),
-                                        self.__info_col("剩余可领红包", remaining_display),
+                                        self.__info_col("剩余可领(离上限)", remaining_display),
                                     ]
                                 },
                                 {
@@ -698,6 +704,7 @@ class TangRedPacket(_PluginBase):
                 logger.warning("领红包任务终止：缺少包含 c_secure_pass 的 不可躺 Cookie")
                 result.update({"status": "auth_failed", "message": "缺少包含 c_secure_pass 的 不可躺 Cookie"})
                 self.__append_event({"event": "auth_failed", "message": result["message"]})
+                self.__apply_daily_quota(result)
                 if self._notify:
                     self.__send_notification(result)
                 return result
@@ -715,6 +722,7 @@ class TangRedPacket(_PluginBase):
             except CookieExpiredError as err:
                 result.update({"status": "auth_failed", "message": str(err)})
                 self.__append_event({"event": "auth_failed", "message": str(err)})
+                self.__apply_daily_quota(result)
                 if self._notify:
                     self.__send_notification(result)
                 return result
@@ -722,11 +730,14 @@ class TangRedPacket(_PluginBase):
                 logger.error(f"领红包任务请求 latest 失败：{err}")
                 result.update({"status": "failed", "message": f"请求 latest 失败：{err}"})
                 self.__append_event({"event": "round_fail", "message": result["message"]})
+                self.__apply_daily_quota(result)
                 return result
 
             items = latest.get("items") or []
             result.update(self.__build_availability_snapshot(latest, items, claimed_ids, dead_ids))
             result["total_seen"] = len(items)
+            # 空轮/禁用时也展示本插件当天已领取及离每日上限的估算值。
+            self.__apply_daily_quota(result)
 
             if latest.get("enabled") is False:
                 logger.warning("红包功能已被管理员全局关闭，停止本轮处理")
@@ -760,16 +771,30 @@ class TangRedPacket(_PluginBase):
                         "reason": f"处理异常：{err}"
                     })
 
+            # 网站达上限消息可给出权威累计；否则按本插件当日 claim_ok 记录统计
+            reached_limit = self.__apply_daily_quota(result)
             if items and auth_fail_count == len(items):
                 result.update({"status": "auth_failed", "message": "detail/claim 全部返回 401/403，Cookie 可能已过期"})
                 self.__append_event({"event": "auth_failed", "message": result["message"]})
             else:
-                result.update({"status": "completed", "message": "领红包任务完成"})
+                if reached_limit:
+                    result.update({"status": "completed", "message": f"今日领取已达上限（每天最多领 {result.get('daily_limit')} 个）"})
+                else:
+                    result.update({"status": "completed", "message": "领红包任务完成"})
             self.save_data("claimed_ids", sorted(claimed_ids))
             self.save_data("dead_ids", sorted(dead_ids))
             self.__update_summary(last_round=self.__build_last_round(result))
-            if self._notify and (result.get("claimed_count") or result.get("failed_count") or result.get("status") == "auth_failed"):
+            # 达上限去重：同一天只对「纯达上限轮」去重；有成功领取仍通知
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            notified_date = self.get_data("limit_notified_date")
+            pure_limit_round = reached_limit and not result.get("claimed_count")
+            skip_for_limit = pure_limit_round and notified_date == today_str
+            if self._notify and skip_for_limit:
+                logger.info(f"今日已发送过达上限通知，跳过本次重复通知：{today_str}")
+            elif self._notify and (result.get("claimed_count") or result.get("failed_count") or result.get("status") == "auth_failed"):
                 self.__send_notification(result)
+                if pure_limit_round:
+                    self.save_data("limit_notified_date", today_str)
             elif not self._notify:
                 logger.info("领红包任务通知未发送：发送通知开关未开启")
             logger.info(f"领红包任务结束：{self.__to_log_text(result)}")
@@ -878,6 +903,11 @@ class TangRedPacket(_PluginBase):
                 "title_name": title, "title_class": title_class, "reason": fail_message,
                 "http": claim.get("_http")
             })
+            # 解析每日领取上限（如「今天已经领取100个，每天最多领100个。」）
+            parsed_quota = self.__parse_daily_quota(fail_message)
+            if parsed_quota is not None:
+                result["daily_claimed"] = parsed_quota[0]
+                result["daily_limit"] = parsed_quota[1]
             if self.__is_terminal_message(fail_message):
                 dead_ids.add(packet_key)
             return
@@ -983,6 +1013,9 @@ class TangRedPacket(_PluginBase):
             return True
         if body.get("ok") is False:
             return True
+        # 红包 claim/detail 接口用 ret 字段：ret == -1 表示失败
+        if body.get("ret") == -1:
+            return True
         return False
 
     @staticmethod
@@ -991,7 +1024,30 @@ class TangRedPacket(_PluginBase):
 
     @staticmethod
     def __is_terminal_message(message: str) -> bool:
+        # 每日达上限不是红包死亡：明天仍可领取，故不再将「每天最多」视为终态
         return "已领取" in message or "领取过" in message or "抢完" in message
+
+    @staticmethod
+    def __parse_daily_quota(message: str) -> Optional[Tuple[int, int]]:
+        """从 claim 失败 message 解析每日已领数与每日上限。
+
+        匹配「今天已经领取100个，每天最多领100个。」格式，兼容「今日/每日」。
+        解析失败返回 None（不要猜）。
+        """
+        if not message:
+            return None
+        m = re.search(
+            r"(?:今天|今日|每日)已经领取\s*(\d+)\s*个[，,]?\s*(?:每天|每日)最多领?\s*(\d+)\s*个",
+            message,
+        )
+        if m:
+            try:
+                claimed = int(m.group(1))
+                limit = int(m.group(2))
+                return (claimed, limit)
+            except ValueError:
+                return None
+        return None
 
     def __ensure_cookie_alive(self, latest_body: Dict[str, Any]):
         if self.__is_auth_fail(latest_body):
@@ -1042,7 +1098,10 @@ class TangRedPacket(_PluginBase):
             "latest_total_packet_count": None,
             "latest_items_count": 0,
             "remaining_claimable_count": None,
-            "remaining_claimable_source": ""
+            "remaining_claimable_source": "",
+            "daily_limit": None,
+            "daily_claimed": 0,
+            "daily_claimed_source": ""
         }
 
     def __build_availability_snapshot(self, latest: Dict[str, Any], items: List[Dict[str, Any]],
@@ -1076,7 +1135,10 @@ class TangRedPacket(_PluginBase):
             "latest_total_packet_count": result.get("latest_total_packet_count"),
             "latest_items_count": result.get("latest_items_count", 0),
             "remaining_claimable_count": result.get("remaining_claimable_count"),
-            "remaining_claimable_source": result.get("remaining_claimable_source", "")
+            "remaining_claimable_source": result.get("remaining_claimable_source", ""),
+            "daily_limit": result.get("daily_limit"),
+            "daily_claimed": result.get("daily_claimed"),
+            "daily_claimed_source": result.get("daily_claimed_source", "")
         }
 
     def __append_event(self, record: Dict[str, Any]):
@@ -1114,6 +1176,32 @@ class TangRedPacket(_PluginBase):
     def __get_dead_ids(self) -> set:
         data = self.get_data("dead_ids") or []
         return {str(item) for item in data if item is not None} if isinstance(data, list) else set()
+
+    def __get_local_daily_claimed(self) -> int:
+        """统计本插件在本地时区当天成功领取的红包数量。"""
+        today = datetime.now().astimezone().strftime("%Y-%m-%d")
+        return sum(
+            1 for event in self.__get_events()
+            if event.get("event") == "claim_ok" and str(event.get("time") or "").startswith(today)
+        )
+
+    def __apply_daily_quota(self, result: Dict[str, Any]) -> bool:
+        """填充每日领取统计；网站上限消息优先于本插件本地统计。"""
+        site_daily_claimed = result.get("daily_claimed")
+        site_daily_limit = result.get("daily_limit")
+        site_quota_known = site_daily_claimed is not None and site_daily_limit is not None
+        if site_quota_known:
+            daily_claimed = site_daily_claimed
+            daily_limit = site_daily_limit
+            result["daily_claimed_source"] = "site"
+        else:
+            daily_claimed = self.__get_local_daily_claimed()
+            daily_limit = self.MAX_BATCH
+            result["daily_claimed_source"] = "plugin"
+        result["daily_claimed"] = daily_claimed
+        result["daily_limit"] = daily_limit
+        result["remaining_claimable_count"] = max(0, daily_limit - daily_claimed)
+        return site_quota_known and daily_claimed >= daily_limit
 
     def __update_summary(self, last_round: Optional[Dict[str, Any]] = None):
         old_summary = self.__get_summary()
@@ -1159,12 +1247,20 @@ class TangRedPacket(_PluginBase):
         title = "【不可躺自动领红包】"
         remaining_claimable_count = result.get("remaining_claimable_count")
         latest_total_packet_count = result.get("latest_total_packet_count")
-        remaining_display = remaining_claimable_count
-        if remaining_display is None:
-            remaining_display = latest_total_packet_count if latest_total_packet_count is not None else "-"
+        daily_limit = result.get("daily_limit")
+        daily_claimed = result.get("daily_claimed")
+        daily_claimed_source = result.get("daily_claimed_source")
+        quota_known = daily_limit is not None and daily_claimed is not None
+        remaining_display = remaining_claimable_count if quota_known else "-"
+        claimed_label = "本站今日已领" if daily_claimed_source == "site" else "本插件今日已领"
+        quota_text = (
+            f"{claimed_label}：{daily_claimed} 个，每日上限：{daily_limit} 个\n"
+            if quota_known else "本插件今日已领：-（暂无本地成功记录）\n"
+        )
         text = (
             f"任务状态：{result.get('status')}\n"
             f"本轮发现：{result.get('total_seen', 0)} 个红包\n"
+            f"{quota_text}"
             f"剩余可领：{remaining_display} 个\n"
             f"领取成功：{result.get('claimed_count', 0)} 个，失败：{result.get('failed_count', 0)} 个，跳过：{result.get('skipped_count', 0)} 个\n"
             f"魔力增加：{self.__format_number(result.get('bonus_delta', 0))}，当前魔力：{result.get('user_bonus_after', '-')}\n"
