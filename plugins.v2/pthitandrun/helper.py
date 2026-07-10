@@ -92,10 +92,18 @@ class TorrentHelper:
         }
 
     def _tr_info(self, t: Any, now: int) -> Dict[str, Any]:
-        done_ts = int(t.date_done.timestamp()) if t.date_done and t.date_done.timestamp() > 1 else 0
+        # Transmission SDK 字段名在新版中变更，用 getattr 兼容新旧两套字段名
+        done_date = getattr(t, "date_done", None) or getattr(t, "done_date", None)
+        added_date = getattr(t, "date_added", None) or getattr(t, "added_date", None)
+        done_ts = int(done_date.timestamp()) if done_date and done_date.timestamp() > 1 else 0
         seeding_time = (now - done_ts) if done_ts > 0 else 0
         downloaded = int(t.total_size * t.progress / 100)
         uploaded = int(downloaded * t.ratio) if t.ratio else 0
+        trackers = getattr(t, "trackers", None) or []
+        tracker = ""
+        if trackers:
+            first = trackers[0]
+            tracker = first.get("announce", "") if isinstance(first, dict) else getattr(first, "announce", "")
         return {
             "hash": t.hashString,
             "title": t.name,
@@ -104,10 +112,10 @@ class TorrentHelper:
             "uploaded": uploaded,
             "downloaded": downloaded,
             "total_size": t.total_size,
-            "add_on": int(t.date_added.timestamp()) if t.date_added else 0,
+            "add_on": int(added_date.timestamp()) if added_date else 0,
             "tags": getattr(t, "labels", []) or [],
             "category": "",
-            "tracker": (t.trackers[0].get("announce", "") if t.trackers else ""),
+            "tracker": tracker,
             "state": "",
         }
 
