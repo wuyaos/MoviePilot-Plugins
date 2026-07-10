@@ -396,7 +396,7 @@ class FengchaoService:
                     "status_code": "success_new" if is_successful_checkin else "success_already",
                     "money": money,
                     "totalContinuousCheckIn": totalContinuousCheckIn,
-                    "lastCheckinMoney": lastCheckinMoney if is_successful_checkin else 0,
+                    "lastCheckinMoney": lastCheckinMoney,
                     "failure_count": 0
                 }
 

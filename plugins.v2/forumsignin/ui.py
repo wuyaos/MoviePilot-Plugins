@@ -428,38 +428,6 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
             ]},
             {'component': 'div', 'props': {'class': 'd-flex flex-wrap ga-2 mt-2 text-caption align-center'}, 'content': [
                 {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
-                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#2E7D3222;border:1px solid #2E7D32;border-radius:3px;', 'class': 'mr-1'}},
-                    {'component': 'span', 'text': '绿=双站成功'}
-                ]},
-                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
-                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#FF980022;border:1px solid #FF9800;border-radius:3px;', 'class': 'mr-1'}},
-                    {'component': 'span', 'text': '橙=仅蜂巢'}
-                ]},
-                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
-                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#9C27B022;border:1px solid #9C27B0;border-radius:3px;', 'class': 'mr-1'}},
-                    {'component': 'span', 'text': '紫=仅药丸'}
-                ]},
-                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
-                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#FF8F0022;border:1px solid #FF8F00;border-radius:3px;', 'class': 'mr-1'}},
-                    {'component': 'span', 'text': '琥珀=蜂巢成药丸败'}
-                ]},
-                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
-                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#7E57C222;border:1px solid #7E57C2;border-radius:3px;', 'class': 'mr-1'}},
-                    {'component': 'span', 'text': '浅紫=药丸成蜂巢败'}
-                ]},
-                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
-                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#F4433622;border:1px solid #F44336;border-radius:3px;', 'class': 'mr-1'}},
-                    {'component': 'span', 'text': '红=双站失败'}
-                ]},
-                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
-                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#EF535022;border:1px solid #EF5350;border-radius:3px;', 'class': 'mr-1'}},
-                    {'component': 'span', 'text': '浅红=单站失败'}
-                ]},
-                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
-                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:rgba(var(--v-theme-surface),0.45);border:1px solid rgba(var(--v-theme-on-surface),0.08);border-radius:3px;', 'class': 'mr-1'}},
-                    {'component': 'span', 'text': '灰=未签'}
-                ]},
-                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
                     {'component': 'VIcon', 'props': {'size': 12, 'style': 'color: #FF9800;', 'class': 'mr-1'}, 'text': 'mdi-flower'},
                     {'component': 'span', 'text': '蜂巢'}
                 ]},

@@ -422,7 +422,7 @@ class InvitesService:
             "status_code": "success_already" if already_signed else "success_new",
             "money": (state or {}).get("money"),
             "totalContinuousCheckIn": (state or {}).get("totalContinuousCheckIn"),
-            "lastCheckinMoney": (state or {}).get("lastCheckinMoney", 0) if not already_signed else 0,
+            "lastCheckinMoney": (state or {}).get("lastCheckinMoney", 0),
             "failure_count": 0
         }
         self.callbacks.save_history(record)
