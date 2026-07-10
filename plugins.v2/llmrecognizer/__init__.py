@@ -58,7 +58,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.13"
+    plugin_version = "1.2.14"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -127,6 +127,23 @@ class LLMRecognizer(_PluginBase):
         else:
             self._llm_chain = None
             self._identifier_chain = None
+        # 设置页一次性清除失败样本开关：须在 _sample_lock 重新赋值前执行，
+        # 确保使用旧锁与并发读写同步；首次初始化锁可能为 None，需安全补建
+        if self._clear_failed_samples_once:
+            if self._sample_lock is None:
+                self._sample_lock = threading.Lock()
+            try:
+                removed = self._clear_failed_samples()
+                logger.info(f"[AI识别增强] 已一次性清除失败样本 {removed} 条")
+                # 清除成功后复位开关，避免下次加载重复触发；update_config 为整体替换，需合并当前配置
+                try:
+                    current = self.get_config() or {}
+                    current["clear_failed_samples_once"] = False
+                    self.update_config(current)
+                except Exception as exc:
+                    logger.warning(f"[AI识别增强] 复位一次性清除开关持久化失败: {exc}")
+            except Exception as exc:
+                logger.error(f"[AI识别增强] 清除失败样本出错: {exc}")
         self._sample_lock = threading.Lock()
         self._chain_lock = threading.Lock()
         self._identifier_chain_lock = threading.Lock()
@@ -137,20 +154,6 @@ class LLMRecognizer(_PluginBase):
         self._in_flight_lock = threading.Lock()
         self._ensure_plugin_log_file()
         self._register_events()
-        # 设置页一次性清除失败样本开关：触发后立即复位
-        if self._clear_failed_samples_once:
-            try:
-                removed = self._clear_failed_samples()
-                logger.info(f"[AI识别增强] 已一次性清除失败样本 {removed} 条")
-            except Exception as exc:
-                logger.error(f"[AI识别增强] 清除失败样本出错: {exc}")
-            # 复位开关，避免下次加载重复触发；update_config 为整体替换，需合并当前配置
-            try:
-                current = self.get_config() or {}
-                current["clear_failed_samples_once"] = False
-                self.update_config(current)
-            except Exception:
-                pass
         logger.info(f"[AI识别增强] 插件已加载 v{self.plugin_version}，状态: {'已启用' if self._enabled else '未启用'}")
 
     def _ensure_plugin_log_file(self) -> None:
