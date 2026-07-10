@@ -58,7 +58,7 @@ class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
     plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
-    plugin_version = "1.2.12"
+    plugin_version = "1.2.13"
     plugin_author = "wuyaos"
     plugin_level = 1
     author_url = "https://github.com/wuyaos"
@@ -111,6 +111,7 @@ class LLMRecognizer(_PluginBase):
         self._save_title_only_samples = bool(config.get("save_title_only_samples", False))
         self._max_failed_samples = max(20, min(1000, self._safe_int(config.get("max_failed_samples"), 200)))
         self._auto_remove_applied_sample = bool(config.get("auto_remove_applied_sample", True))
+        self._clear_failed_samples_once = bool(config.get("clear_failed_samples_once", False))
         self._verify_tmdb = bool(config.get("verify_tmdb", False))
         self._require_tmdb_verify = bool(config.get("require_tmdb_verify", False))
         self._custom_model = str(config.get("custom_model") or "").strip()
@@ -136,6 +137,20 @@ class LLMRecognizer(_PluginBase):
         self._in_flight_lock = threading.Lock()
         self._ensure_plugin_log_file()
         self._register_events()
+        # 设置页一次性清除失败样本开关：触发后立即复位
+        if self._clear_failed_samples_once:
+            try:
+                removed = self._clear_failed_samples()
+                logger.info(f"[AI识别增强] 已一次性清除失败样本 {removed} 条")
+            except Exception as exc:
+                logger.error(f"[AI识别增强] 清除失败样本出错: {exc}")
+            # 复位开关，避免下次加载重复触发；update_config 为整体替换，需合并当前配置
+            try:
+                current = self.get_config() or {}
+                current["clear_failed_samples_once"] = False
+                self.update_config(current)
+            except Exception:
+                pass
         logger.info(f"[AI识别增强] 插件已加载 v{self.plugin_version}，状态: {'已启用' if self._enabled else '未启用'}")
 
     def _ensure_plugin_log_file(self) -> None:
@@ -1769,6 +1784,12 @@ AI 识别增强结果：
                         "hint": "写入 CustomIdentifiers 成功后自动清除对应失败样本", "persistent-hint": True,
                     }}
                 ]},
+                {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [
+                    {"component": "VSwitch", "props": {
+                        "model": "clear_failed_samples_once", "label": "一次性清除全部失败样本",
+                        "hint": "保存配置后立即清空所有失败样本，完成后自动复位", "persistent-hint": True,
+                    }}
+                ]},
             ]},
 
             # ── 自定义大模型（可选）──
@@ -1812,6 +1833,7 @@ AI 识别增强结果：
             "enabled": False, "debug": False, "confidence_threshold": 0.65,
             "request_timeout": 25, "max_retries": 2, "save_failed_samples": True,
             "max_failed_samples": 200, "auto_remove_applied_sample": True,
+            "clear_failed_samples_once": False,
             "verify_tmdb": False, "require_tmdb_verify": False,
             "custom_model": "", "custom_llm_api_key": "", "custom_llm_base_url": "",
         }
