@@ -328,16 +328,31 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
     def day_rewards(day_str: str) -> List[dict]:
         rewards = []
         for site in ("fengchao", "invites"):
+            site_reward = None
             for item in history:
                 if item.get("site", "fengchao") != site or not item.get("date", "").startswith(day_str):
                     continue
                 reward = item.get("lastCheckinMoney")
-                if reward not in (None, "", 0, "0", 0.0):
-                    rewards.append({'component': 'div', 'props': {'class': 'd-flex align-center justify-center', 'style': 'line-height: 11px;'}, 'content': [
-                        {'component': 'VIcon', 'props': {'size': 9, 'style': f"color: {site_colors[site]};", 'class': 'mr-1'}, 'text': site_icons[site]},
-                        {'component': 'span', 'props': {'class': 'font-weight-bold'}, 'text': format_money(reward)}
-                    ]})
-                break
+                if reward is None or reward == "":
+                    continue
+                try:
+                    if float(reward) <= 0:
+                        if site_reward is None:
+                            site_reward = ""
+                        continue
+                except (ValueError, TypeError):
+                    continue
+                meta = get_status_meta(item)
+                if meta["code"] in ("success_new", "success_already"):
+                    site_reward = reward
+                    break
+                if site_reward is None:
+                    site_reward = reward
+            if site_reward not in (None, "", 0, "0", 0.0):
+                rewards.append({'component': 'div', 'props': {'class': 'd-flex align-center justify-center', 'style': 'line-height: 11px;'}, 'content': [
+                    {'component': 'VIcon', 'props': {'size': 9, 'style': f"color: {site_colors[site]};", 'class': 'mr-1'}, 'text': site_icons[site]},
+                    {'component': 'span', 'props': {'class': 'font-weight-bold'}, 'text': format_money(site_reward)}
+                ]})
         return rewards
 
     def day_color(statuses: dict) -> str:
@@ -372,7 +387,7 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
         cells = []
         for idx, day in enumerate(week):
             if day == 0:
-                cells.append({'component': 'td', 'props': {'class': 'text-center pa-0', 'style': 'height: 24px;'}, 'text': ''})
+                cells.append({'component': 'td', 'props': {'class': 'text-center pa-0', 'style': 'height: 40px;'}, 'text': ''})
             else:
                 day_str = f"{year:04d}-{month:02d}-{day:02d}"
                 statuses = day_status(day_str)
@@ -417,8 +432,28 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
                     {'component': 'span', 'text': '绿=双站成功'}
                 ]},
                 {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#FF980022;border:1px solid #FF9800;border-radius:3px;', 'class': 'mr-1'}},
+                    {'component': 'span', 'text': '橙=仅蜂巢'}
+                ]},
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#9C27B022;border:1px solid #9C27B0;border-radius:3px;', 'class': 'mr-1'}},
+                    {'component': 'span', 'text': '紫=仅药丸'}
+                ]},
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#FF8F0022;border:1px solid #FF8F00;border-radius:3px;', 'class': 'mr-1'}},
+                    {'component': 'span', 'text': '琥珀=蜂巢成药丸败'}
+                ]},
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#7E57C222;border:1px solid #7E57C2;border-radius:3px;', 'class': 'mr-1'}},
+                    {'component': 'span', 'text': '浅紫=药丸成蜂巢败'}
+                ]},
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
                     {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#F4433622;border:1px solid #F44336;border-radius:3px;', 'class': 'mr-1'}},
-                    {'component': 'span', 'text': '红=签到失败'}
+                    {'component': 'span', 'text': '红=双站失败'}
+                ]},
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#EF535022;border:1px solid #EF5350;border-radius:3px;', 'class': 'mr-1'}},
+                    {'component': 'span', 'text': '浅红=单站失败'}
                 ]},
                 {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
                     {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:rgba(var(--v-theme-surface),0.45);border:1px solid rgba(var(--v-theme-on-surface),0.08);border-radius:3px;', 'class': 'mr-1'}},
