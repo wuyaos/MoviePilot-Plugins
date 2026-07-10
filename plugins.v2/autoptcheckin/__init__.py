@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.3.2"
+    plugin_version = "1.3.3"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1035,7 +1035,7 @@ class AutoPtCheckin(_PluginBase):
                     border-radius: 20px !important;
                     overflow: hidden;
                     box-shadow: 0 4px 15px rgba(0,0,0,0.03) !important;
-                    border: 1px solid rgba(0,0,0,0.03);
+                    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
                 }
                 .signin-card:hover, .login-card:hover {
                     transform: translateY(-3px);
