@@ -325,6 +325,21 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
                         result[site] = "failed"
         return result
 
+    def day_rewards(day_str: str) -> List[dict]:
+        rewards = []
+        for site in ("fengchao", "invites"):
+            for item in history:
+                if item.get("site", "fengchao") != site or not item.get("date", "").startswith(day_str):
+                    continue
+                reward = item.get("lastCheckinMoney")
+                if reward not in (None, "", 0, "0", 0.0):
+                    rewards.append({'component': 'div', 'props': {'class': 'd-flex align-center justify-center', 'style': 'line-height: 11px;'}, 'content': [
+                        {'component': 'VIcon', 'props': {'size': 9, 'style': f"color: {site_colors[site]};", 'class': 'mr-1'}, 'text': site_icons[site]},
+                        {'component': 'span', 'props': {'class': 'font-weight-bold'}, 'text': format_money(reward)}
+                    ]})
+                break
+        return rewards
+
     def day_color(statuses: dict) -> str:
         fc, iv = statuses["fengchao"], statuses["invites"]
         fc_ok = fc in ("success_new", "success_already")
@@ -363,16 +378,26 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
                 statuses = day_status(day_str)
                 fc_ok = statuses["fengchao"] in ("success_new", "success_already")
                 iv_ok = statuses["invites"] in ("success_new", "success_already")
+                fc_fail = statuses["fengchao"] == "failed"
+                iv_fail = statuses["invites"] == "failed"
+                color = day_color(statuses)
+                rewards = day_rewards(day_str)
                 is_today = day_str == today.strftime("%Y-%m-%d")
-                border = "border: 2px solid #1976D2;" if is_today else ""
+                border = "border: 2px solid #1976D2;" if is_today else f"border: 1px solid {color if color != 'transparent' else 'rgba(var(--v-theme-on-surface), 0.08)'};"
+                background = f"background-color: {color}22;" if color != "transparent" else "background-color: rgba(var(--v-theme-surface), 0.45);"
                 day_icons = []
                 if fc_ok:
-                    day_icons.append({'component': 'VIcon', 'props': {'size': 12, 'color': '#FF9800'}, 'text': 'mdi-flower'})
+                    day_icons.append({'component': 'VIcon', 'props': {'size': 12, 'style': 'color: #FF9800;'}, 'text': 'mdi-flower'})
+                elif fc_fail:
+                    day_icons.append({'component': 'VIcon', 'props': {'size': 12, 'style': 'color: #F44336;'}, 'text': 'mdi-flower-off'})
                 if iv_ok:
-                    day_icons.append({'component': 'VIcon', 'props': {'size': 12, 'color': '#9C27B0'}, 'text': 'mdi-pill'})
-                cells.append({'component': 'td', 'props': {'class': 'text-center pa-0', 'style': f"height: 24px; {border} border-radius: 4px;"}, 'content': [
-                    {'component': 'div', 'props': {'class': 'text-caption font-weight-bold'}, 'text': str(day)},
-                    {'component': 'div', 'props': {'class': 'd-flex justify-center ga-1', 'style': 'height: 14px; margin-top: 1px;'}, 'content': day_icons}
+                    day_icons.append({'component': 'VIcon', 'props': {'size': 12, 'style': 'color: #9C27B0;'}, 'text': 'mdi-pill'})
+                elif iv_fail:
+                    day_icons.append({'component': 'VIcon', 'props': {'size': 12, 'style': 'color: #F44336;'}, 'text': 'mdi-close-circle'})
+                cells.append({'component': 'td', 'props': {'class': 'text-center pa-0', 'style': f"height: 40px; {background} {border} border-radius: 4px;"}, 'content': [
+                    {'component': 'div', 'props': {'class': 'text-caption font-weight-bold', 'style': 'line-height: 13px;'}, 'text': str(day)},
+                    {'component': 'div', 'props': {'class': 'd-flex justify-center ga-1', 'style': 'height: 13px; margin-top: 1px;'}, 'content': day_icons},
+                    {'component': 'div', 'props': {'class': 'text-caption', 'style': 'min-height: 11px; font-size: 10px;'}, 'content': rewards}
                 ]})
         cal_rows.append({'component': 'tr', 'content': cells})
 
@@ -385,6 +410,28 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
         {'component': 'VCardText', 'props': {'class': 'pa-1'}, 'content': [
             {'component': 'VTable', 'props': {'density': 'compact', 'class': 'text-center'}, 'content': [
                 {'component': 'tbody', 'content': cal_rows}
+            ]},
+            {'component': 'div', 'props': {'class': 'd-flex flex-wrap ga-2 mt-2 text-caption align-center'}, 'content': [
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#2E7D3222;border:1px solid #2E7D32;border-radius:3px;', 'class': 'mr-1'}},
+                    {'component': 'span', 'text': '绿=双站成功'}
+                ]},
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:#F4433622;border:1px solid #F44336;border-radius:3px;', 'class': 'mr-1'}},
+                    {'component': 'span', 'text': '红=签到失败'}
+                ]},
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'span', 'props': {'style': 'display:inline-block;width:10px;height:10px;background-color:rgba(var(--v-theme-surface),0.45);border:1px solid rgba(var(--v-theme-on-surface),0.08);border-radius:3px;', 'class': 'mr-1'}},
+                    {'component': 'span', 'text': '灰=未签'}
+                ]},
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'VIcon', 'props': {'size': 12, 'style': 'color: #FF9800;', 'class': 'mr-1'}, 'text': 'mdi-flower'},
+                    {'component': 'span', 'text': '蜂巢'}
+                ]},
+                {'component': 'span', 'props': {'class': 'd-flex align-center'}, 'content': [
+                    {'component': 'VIcon', 'props': {'size': 12, 'style': 'color: #9C27B0;', 'class': 'mr-1'}, 'text': 'mdi-pill'},
+                    {'component': 'span', 'text': '药丸'}
+                ]}
             ]}
         ]}
     ]}
