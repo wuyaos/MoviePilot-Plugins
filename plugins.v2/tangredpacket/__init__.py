@@ -54,7 +54,7 @@ class TangRedPacket(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动发现并串行领取不可躺红包,支持限流感知和历史统计。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacket.png"
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacket_"
@@ -359,14 +359,14 @@ class TangRedPacket(_PluginBase):
                 )
                 if isinstance(value, dict)
             ]
-            by_date_items = [
-                {"name": name, "count": value.get("magic", 0)}
-                for name, value in sorted((summary.get("by_date") or {}).items())
-                if isinstance(value, dict) and self.__safe_float(value.get("magic"), 0) > 0
-            ]
-            trend_data = [
-                {"x": item.get("name"), "y": self.__safe_float(item.get("count"), 0)}
-                for item in by_date_items
+            log_items = [
+                {
+                    "time": event.get("time"),
+                    "event": event_text_map.get(event.get("event"), event.get("event") or "-"),
+                    "sender": event.get("sender") or "-",
+                    "magic_amount": event.get("magic_amount") if event.get("magic_amount") not in (None, "") else "-"
+                }
+                for event in reversed(events)
             ]
             updated_at = str(summary.get("updated_at") or "")[:19]
             last_round = summary.get("last_round") if isinstance(summary.get("last_round"), dict) else {}
@@ -465,7 +465,8 @@ class TangRedPacket(_PluginBase):
                                         {
                                             "component": "VCardText",
                                             "content": [
-                                                self.__summary_chart("发送者魔力分布", by_sender_items)
+                                                self.__summary_chart("发送者魔力分布", by_sender_items),
+                                                self.__summary_chart("发送者平均单笔魔力", by_sender_items, mode="avg")
                                             ]
                                         }
                                     ]
@@ -487,7 +488,8 @@ class TangRedPacket(_PluginBase):
                                         {
                                             "component": "VCardText",
                                             "content": [
-                                                self.__summary_chart("头衔魔力分布", by_title_items)
+                                                self.__summary_chart("头衔魔力分布", by_title_items),
+                                                self.__summary_chart("头衔平均单笔魔力", by_title_items, mode="avg")
                                             ]
                                         }
                                     ]
@@ -503,28 +505,24 @@ class TangRedPacket(_PluginBase):
                 "content": [
                     {
                         "component": "VCardTitle",
-                        "text": "按日期趋势"
+                        "text": "领取日志"
                     },
                     {
                         "component": "VCardText",
                         "content": [
                             {
-                                "component": "VApexChart",
+                                "component": "VDataTable",
                                 "props": {
-                                    "height": 260,
-                                    "type": "bar",
-                                    "options": {
-                                        "chart": {"type": "bar", "toolbar": {"show": False}},
-                                        "xaxis": {"type": "category"},
-                                        "title": {"text": "每日领取魔力"},
-                                        "noData": {"text": "暂无数据"}
-                                    },
-                                    "series": [
-                                        {
-                                            "name": "魔力",
-                                            "data": trend_data
-                                        }
-                                    ] if trend_data else []
+                                    "headers": [
+                                        {"title": "时间", "key": "time"},
+                                        {"title": "事件", "key": "event"},
+                                        {"title": "发送者", "key": "sender"},
+                                        {"title": "获得魔力", "key": "magic_amount"}
+                                    ],
+                                    "items": log_items,
+                                    "items-per-page": 10,
+                                    "hide-default-footer": False,
+                                    "density": "compact"
                                 }
                             }
                         ]
@@ -632,9 +630,9 @@ class TangRedPacket(_PluginBase):
         }
 
     @staticmethod
-    def __summary_chart(title: str, items: List[dict]) -> Dict[str, Any]:
-        chart_items = []
+    def __summary_chart(title: str, items: List[dict], mode: str = "total") -> Dict[str, Any]:
         labels = []
+        values = []
         for item in items:
             count = item.get("count")
             if not isinstance(count, (int, float)):
@@ -642,13 +640,21 @@ class TangRedPacket(_PluginBase):
             count_value = float(count)
             if count_value <= 0:
                 continue
-            claimed = item.get("claimed") if isinstance(item.get("claimed"), (int, float)) else 0
-            average = count_value / claimed if claimed else 0
-            chart_items.append(item)
-            labels.append(
-                f"{item.get('name')}（总魔力 {TangRedPacket.__format_number(count_value)} / "
-                f"{TangRedPacket.__format_number(claimed)} 个，平均 {TangRedPacket.__format_number(average)}）"
-            )
+            claimed = item.get("claimed")
+            if isinstance(claimed, (int, float)):
+                claimed_value = float(claimed)
+            else:
+                claimed_value = 0
+            if mode == "avg":
+                if claimed_value <= 0:
+                    continue
+                value = count_value / claimed_value
+            else:
+                value = count_value
+            if value <= 0:
+                continue
+            labels.append(str(item.get("name")))
+            values.append(value)
         return {
             "component": "VApexChart",
             "props": {
@@ -664,7 +670,7 @@ class TangRedPacket(_PluginBase):
                     },
                     "legend": {
                         "show": True,
-                        "position": "bottom"
+                        "position": "right"
                     },
                     "plotOptions": {
                         "pie": {
@@ -675,7 +681,7 @@ class TangRedPacket(_PluginBase):
                         "text": "暂无数据"
                     }
                 },
-                "series": [item.get("count") for item in chart_items]
+                "series": values
             }
         }
 
