@@ -54,7 +54,7 @@ class TangRedPacket(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动发现并串行领取不可躺红包,支持限流感知和历史统计。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacket.png"
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacket_"
@@ -364,7 +364,10 @@ class TangRedPacket(_PluginBase):
                 for name, value in sorted((summary.get("by_date") or {}).items())
                 if isinstance(value, dict) and self.__safe_float(value.get("magic"), 0) > 0
             ]
-            trend_data = [self.__safe_float(item.get("count"), 0) for item in by_date_items]
+            trend_data = [
+                {"x": item.get("name"), "y": self.__safe_float(item.get("count"), 0)}
+                for item in by_date_items
+            ]
             updated_at = str(summary.get("updated_at") or "")[:19]
             last_round = summary.get("last_round") if isinstance(summary.get("last_round"), dict) else {}
             remaining_claimable_count = last_round.get("remaining_claimable_count")
@@ -512,7 +515,7 @@ class TangRedPacket(_PluginBase):
                                     "type": "bar",
                                     "options": {
                                         "chart": {"type": "bar", "toolbar": {"show": False}},
-                                        "xaxis": {"categories": [item.get("name") for item in by_date_items]},
+                                        "xaxis": {"type": "category"},
                                         "title": {"text": "每日领取魔力"},
                                         "noData": {"text": "暂无数据"}
                                     },
@@ -660,7 +663,7 @@ class TangRedPacket(_PluginBase):
                         "text": title
                     },
                     "legend": {
-                        "show": False,
+                        "show": True,
                         "position": "bottom"
                     },
                     "plotOptions": {
