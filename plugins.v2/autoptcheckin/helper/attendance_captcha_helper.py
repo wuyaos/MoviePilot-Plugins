@@ -153,6 +153,10 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
         if "login.php" in resp_text:
             logger.error(f"{site} 签到失败，Cookie已失效")
             return False, "签到失败，Cookie已失效"
+        resp_html = etree.HTML(resp_text)
+        if resp_html is not None and resp_html.xpath('//form[contains(@action,"attendance")]//input[@name="imagehash"]'):
+            logger.error(f"{site} 签到失败，验证码错误或被拒")
+            return False, "签到失败：验证码错误或被拒"
         if any(text in resp_text for text in self._repeat_texts):
             logger.info(f"{site} 今日已签到")
             return True, "今日已签到"
