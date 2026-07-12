@@ -247,6 +247,18 @@
       "v1.0.0": "初始版本：rousi.pro JWT Token 手动配置；每日 cron 签到并支持0-3分钟随机抖动；签到前读取 attendance stats 去重；成功后增量拉取站内信并合并推送；解析 JWT exp 做过期提醒；401/登录过期当日通知一次、写历史并自动停用插件；提供配置页、详情页和 POST /RousiCheckin/run 手动触发 API"
     }
   },
+  "YzyySignin": {
+    "name": "yzyy论坛签到",
+    "description": "yzyy论坛每日签到，限定当前用户打卡按钮状态判定，自动获取签到码完成签到",
+    "labels": "yzyy,签到,论坛",
+    "version": "1.2.7",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
+    "author": "bfjy, wuyaos",
+    "level": 2,
+    "history": {
+      "v1.2.7": "移植到本仓库：站点地址改为 site_url 配置（默认 https://yzyy.org）；修复签到成功误判，只检查当前用户 .signbtn 区域并在签到后重新获取签到页验证，不再全局搜索排行榜中的今日已打卡；奖励信息优先从我的记录区域提取；图标改用仓库 signin.png"
+    }
+  },
   "TangRedPacket": {
     "name": "不可躺自动领红包",
     "description": "自动发现并串行领取不可躺(tangpt.top)红包,支持 fast 模式、限流感知、Cookie 过期熔断和历史统计",
