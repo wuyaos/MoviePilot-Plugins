@@ -712,7 +712,7 @@ class YzyySignin(_PluginBase):
             return None
 
         match = re.search(
-            r'<a[^>]*href=["\']([^"\']*plugin\.php\?id=zqlj_sign&sign=[a-f0-9]{8}[^"\']*)["\']',
+            r'<a[^>]*href=["\']([^"\']*plugin\.php\?id=zqlj_sign&(?:amp;)?sign=[a-f0-9]{8}[^"\']*)["\']',
             button_area,
             re.I | re.S
         )
