@@ -3,6 +3,7 @@ import re
 import time
 from datetime import datetime, timedelta
 from typing import Any, List, Dict, Tuple, Optional
+from urllib.parse import urlparse
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -21,7 +22,7 @@ class YzyySignin(_PluginBase):
     plugin_name = "yzyy论坛签到"
     plugin_desc = "yzyy论坛每日签到，自动获取签到码完成签到"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.2.7"
+    plugin_version = "1.2.8"
     plugin_author = "bfjy, wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "yzyysignin_"
@@ -122,8 +123,6 @@ class YzyySignin(_PluginBase):
     def __signin_api(self) -> Dict[str, Any]:
         if not self._enabled:
             return {"success": False, "message": "插件未启用"}
-        if not self._cookie:
-            return {"success": False, "message": "Cookie未配置"}
         logger.info("收到API签到请求，后台启动签到任务")
         self.__signin()
         return {"success": True, "message": "签到任务已执行"}
@@ -267,7 +266,7 @@ class YzyySignin(_PluginBase):
                                             'label': '🔑 yzyy Cookie',
                                             'rows': 2,
                                             'placeholder': 'Chn7_2132_auth=xxxxxx; Chn7_2132_saltkey=xxxxxx;',
-                                            'hint': '请登录yzyy论坛后，在浏览器开发者工具中复制Cookie'
+                                            'hint': '留空则自动从 CookieCloud 按域名获取'
                                         }
                                     }
                                 ]
@@ -555,9 +554,14 @@ class YzyySignin(_PluginBase):
 
     def __signin(self):
         """执行签到任务"""
+        configured_cookie = self._cookie
+        if not configured_cookie:
+            self._cookie = self.__fetch_site_cookie()
         if not self._cookie:
-            logger.error("Cookie未配置，签到任务终止")
-            self.__send_notification("签到失败", "Cookie未配置，请检查插件设置")
+            error_msg = "Cookie未配置且 CookieCloud 未匹配到该域名 Cookie"
+            logger.error(error_msg)
+            self.__save_history(success=False, info=error_msg)
+            self.__send_notification("签到失败", error_msg)
             return
 
         try:
@@ -643,6 +647,9 @@ class YzyySignin(_PluginBase):
             except Exception as history_error:
                 logger.error(f"保存签到异常历史失败: {history_error}")
             self.__send_notification("签到异常", error_msg)
+        finally:
+            if not configured_cookie:
+                self._cookie = ""
 
     def __fetch_sign_page(self) -> Optional[str]:
         """获取签到页面HTML"""
@@ -863,6 +870,27 @@ class YzyySignin(_PluginBase):
         if match:
             return match.group(1)
         return ""
+
+    def __fetch_site_cookie(self) -> str:
+        """Cookie 留空时从 CookieCloud 按 site_url 域名获取"""
+        try:
+            from app.helper.cookiecloud import CookieCloudHelper
+            cookies, _ = CookieCloudHelper().download()
+            if not cookies:
+                logger.info(f"CookieCloud 未配置或无数据，跳过补取（{self._site_url}）")
+                return ""
+            site_domain = urlparse(self._site_url).hostname or ""
+            for domain, cookie in cookies.items():
+                if not cookie:
+                    continue
+                if site_domain and (domain == site_domain or site_domain.endswith(domain) or domain.endswith(site_domain)):
+                    logger.info(f"CookieCloud 匹配到 {site_domain} 的 Cookie")
+                    return cookie
+            logger.info(f"CookieCloud 未匹配到 {site_domain} 的 Cookie")
+            return ""
+        except Exception as e:
+            logger.warning(f"从 CookieCloud 获取 Cookie 失败: {e}")
+            return ""
 
     def __normalize_site_url(self, site_url: str) -> str:
         """规范化站点地址。"""
