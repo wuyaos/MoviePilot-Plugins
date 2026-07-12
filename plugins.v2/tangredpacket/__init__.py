@@ -54,7 +54,7 @@ class TangRedPacket(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动发现并串行领取不可躺红包,支持限流感知和历史统计。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacket.png"
-    plugin_version = "1.0.6"
+    plugin_version = "1.0.7"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacket_"
@@ -360,27 +360,8 @@ class TangRedPacket(_PluginBase):
                 )
                 if isinstance(value, dict)
             ]
-            history_rows = []
-            for event in reversed(events):
-                event_name = event.get("event")
-                if event_name == "round_summary":
-                    history_rows.append({
-                        "time": event.get("time"),
-                        "event": "本轮汇总",
-                        "main": event.get("summary_text") or self.__format_round_summary(event),
-                        "extra": event.get("message") or "-",
-                        "magic_amount": self.__format_number(event.get("bonus_delta", 0)),
-                    })
-                else:
-                    reason_or_message = event.get("reason") or event.get("message") or ""
-                    sender = event.get("sender") or "-"
-                    history_rows.append({
-                        "time": event.get("time"),
-                        "event": event_text_map.get(event_name, event_name or "-"),
-                        "main": f"{sender} / {event.get('title_name') or '-'}",
-                        "extra": reason_or_message,
-                        "magic_amount": event.get("magic_amount") if event.get("magic_amount") not in (None, "") else "-"
-                    })
+            round_rows = [self.__round_history_row(event) for event in reversed(events)
+                          if event.get("event") == "round_summary"]
             updated_at = str(summary.get("updated_at") or "")[:19]
             last_round = summary.get("last_round") if isinstance(summary.get("last_round"), dict) else {}
             remaining_claimable_count = last_round.get("remaining_claimable_count")
@@ -512,18 +493,28 @@ class TangRedPacket(_PluginBase):
                     ]
                 }
             ]
+            if not round_rows and last_round:
+                round_rows = [self.__round_history_row({
+                    **last_round,
+                    "event": "round_summary",
+                    "time": updated_at,
+                    "status": last_round.get("status") or "-",
+                    "message": last_round.get("message") or "最近本轮汇总"
+                })]
             history_table_rows = []
-            for row in history_rows[:50]:
-                event_type = row.get("event") or "-"
-                is_summary = event_type == "本轮汇总"
+            for row in round_rows[:50]:
                 history_table_rows.append({
                     "component": "tr",
                     "content": [
                         {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": row.get("time") or "-"},
-                        {"component": "td", "props": {"class": "text-caption text-no-wrap font-weight-medium"}, "text": event_type},
-                        {"component": "td", "props": {"class": "text-caption", "style": "white-space: normal; min-width: 360px;"}, "text": row.get("main") or "-"},
-                        {"component": "td", "props": {"class": "text-caption", "style": "white-space: normal; min-width: 180px;"}, "text": row.get("extra") or "-"},
-                        {"component": "td", "props": {"class": "text-caption text-no-wrap", "style": "color: rgb(var(--v-theme-success));" if is_summary else ""}, "text": row.get("magic_amount") if row.get("magic_amount") not in (None, "") else "-"}
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": row.get("total_seen")},
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap", "style": "color: rgb(var(--v-theme-success));"}, "text": row.get("claimed_count")},
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap", "style": "color: rgb(var(--v-theme-error));" if row.get("failed_count") not in ("0", 0, "-") else ""}, "text": row.get("failed_count")},
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": row.get("skipped_count")},
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap font-weight-medium"}, "text": row.get("quota_status")},
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap", "style": "color: rgb(var(--v-theme-success));"}, "text": row.get("bonus_delta")},
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": row.get("user_bonus_after")},
+                        {"component": "td", "props": {"class": "text-caption", "style": "white-space: normal; min-width: 180px;"}, "text": row.get("message") or "-"}
                     ]
                 })
             history_body = [
@@ -537,10 +528,14 @@ class TangRedPacket(_PluginBase):
                                 "component": "tr",
                                 "content": [
                                     {"component": "th", "text": "时间"},
-                                    {"component": "th", "text": "类型"},
-                                    {"component": "th", "text": "内容"},
-                                    {"component": "th", "text": "说明"},
-                                    {"component": "th", "text": "魔力"}
+                                    {"component": "th", "text": "本轮红包"},
+                                    {"component": "th", "text": "成功"},
+                                    {"component": "th", "text": "失败"},
+                                    {"component": "th", "text": "跳过"},
+                                    {"component": "th", "text": "状态"},
+                                    {"component": "th", "text": "魔力增加"},
+                                    {"component": "th", "text": "当前魔力"},
+                                    {"component": "th", "text": "说明"}
                                 ]
                             }]
                         },
@@ -551,7 +546,7 @@ class TangRedPacket(_PluginBase):
                 {
                     "component": "VAlert",
                     "props": {"type": "info", "variant": "tonal", "class": "ma-2"},
-                    "text": "暂无领取日志，新一轮领取完成后会显示本轮汇总和逐条领取记录"
+                    "text": "暂无本轮汇总，新一轮领取完成后会显示每轮统计"
                 }
             ]
             content.append({
@@ -563,7 +558,7 @@ class TangRedPacket(_PluginBase):
                         "props": {"class": "d-flex align-center"},
                         "content": [
                             {"component": "VIcon", "props": {"style": "color: #9C27B0;", "class": "mr-2"}, "text": "mdi-history"},
-                            {"component": "span", "props": {"class": "text-h6 font-weight-bold"}, "text": "领取历史"}
+                            {"component": "span", "props": {"class": "text-h6 font-weight-bold"}, "text": "领取历史（本轮汇总）"}
                         ]
                     },
                     {"component": "VDivider"},
@@ -1292,51 +1287,69 @@ class TangRedPacket(_PluginBase):
             summary["total_magic_gained"] = int(summary["total_magic_gained"])
         self.save_data("summary", summary)
 
-    def __format_round_summary(self, result: Dict[str, Any]) -> str:
-        remaining_claimable_count = result.get("remaining_claimable_count")
+    def __quota_status_text(self, result: Dict[str, Any]) -> str:
         daily_limit = result.get("daily_limit")
         daily_claimed = result.get("daily_claimed")
-        daily_claimed_source = result.get("daily_claimed_source")
-        quota_known = daily_limit is not None and daily_claimed is not None
-        remaining_display = remaining_claimable_count if quota_known else "-"
-        claimed_label = "本站今日已领" if daily_claimed_source == "site" else "本插件今日已领"
-        quota_text = (
-            f"{claimed_label}：{daily_claimed} 个，每日上限：{daily_limit} 个"
-            if quota_known else "本插件今日已领：-（暂无本地成功记录）"
-        )
+        if daily_limit is None or daily_claimed is None:
+            return "-"
+        suffix = "" if result.get("daily_claimed_source") == "site" else "（估）"
+        return f"{daily_claimed}/{daily_limit}{suffix}"
+
+    def __round_history_row(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "time": str(result.get("time") or result.get("updated_at") or "")[:19] or "-",
+            "total_seen": result.get("total_seen", 0),
+            "claimed_count": result.get("claimed_count", 0),
+            "failed_count": result.get("failed_count", 0),
+            "skipped_count": result.get("skipped_count", 0),
+            "quota_status": self.__quota_status_text(result),
+            "bonus_delta": self.__format_number(result.get("bonus_delta", 0)),
+            "user_bonus_after": result.get("user_bonus_after") if result.get("user_bonus_after") not in (None, "") else "-",
+            "message": result.get("message") or "-"
+        }
+
+    def __format_round_summary(self, result: Dict[str, Any]) -> str:
+        row = self.__round_history_row(result)
         return (
-            f"任务状态：{result.get('status')}；"
-            f"本轮发现：{result.get('total_seen', 0)} 个红包；"
-            f"{quota_text}；"
-            f"剩余可领：{remaining_display} 个；"
-            f"领取成功：{result.get('claimed_count', 0)} 个，失败：{result.get('failed_count', 0)} 个，跳过：{result.get('skipped_count', 0)} 个；"
-            f"魔力增加：{self.__format_number(result.get('bonus_delta', 0))}，当前魔力：{result.get('user_bonus_after', '-')}；"
-            f"说明：{result.get('message') or '-'}"
+            f"本轮：发现 {row['total_seen']} 个，成功 {row['claimed_count']} 个，"
+            f"失败 {row['failed_count']} 个，跳过 {row['skipped_count']} 个；"
+            f"今日：{row['quota_status']}；"
+            f"收益：+{row['bonus_delta']} 魔力，当前 {row['user_bonus_after']}；"
+            f"说明：{row['message']}"
+        )
+
+    def __format_round_notification(self, result: Dict[str, Any]) -> str:
+        status = result.get("status")
+        claimed = self.__safe_int(result.get("claimed_count"), 0)
+        failed = self.__safe_int(result.get("failed_count"), 0)
+        total_seen = self.__safe_int(result.get("total_seen"), 0)
+        if status == "auth_failed":
+            icon = "❌"
+            summary_title = "不可躺红包领取失败"
+        elif total_seen == 0:
+            icon = "ℹ️"
+            summary_title = "不可躺暂无可领红包"
+        elif failed:
+            icon = "⚠️"
+            summary_title = "不可躺红包领取完成（有失败）"
+        else:
+            icon = "✅"
+            summary_title = "不可躺红包领取完成"
+        remaining = result.get("remaining_claimable_count")
+        remaining_text = f"（剩余 {remaining}）" if remaining is not None else ""
+        row = self.__round_history_row(result)
+        return (
+            f"{icon} {summary_title}\n\n"
+            f"本轮：发现 {row['total_seen']} 个，成功 {row['claimed_count']} 个，"
+            f"失败 {row['failed_count']} 个，跳过 {row['skipped_count']} 个\n"
+            f"今日：{row['quota_status']}{remaining_text}\n"
+            f"收益：+{row['bonus_delta']} 魔力（当前 {row['user_bonus_after']}）\n\n"
+            f"说明：{row['message']}"
         )
 
     def __send_notification(self, result: Dict[str, Any]):
         title = "【不可躺自动领红包】"
-        remaining_claimable_count = result.get("remaining_claimable_count")
-        latest_total_packet_count = result.get("latest_total_packet_count")
-        daily_limit = result.get("daily_limit")
-        daily_claimed = result.get("daily_claimed")
-        daily_claimed_source = result.get("daily_claimed_source")
-        quota_known = daily_limit is not None and daily_claimed is not None
-        remaining_display = remaining_claimable_count if quota_known else "-"
-        claimed_label = "本站今日已领" if daily_claimed_source == "site" else "本插件今日已领"
-        quota_text = (
-            f"{claimed_label}：{daily_claimed} 个，每日上限：{daily_limit} 个\n"
-            if quota_known else "本插件今日已领：-（暂无本地成功记录）\n"
-        )
-        text = (
-            f"任务状态：{result.get('status')}\n"
-            f"本轮发现：{result.get('total_seen', 0)} 个红包\n"
-            f"{quota_text}"
-            f"剩余可领：{remaining_display} 个\n"
-            f"领取成功：{result.get('claimed_count', 0)} 个，失败：{result.get('failed_count', 0)} 个，跳过：{result.get('skipped_count', 0)} 个\n"
-            f"魔力增加：{self.__format_number(result.get('bonus_delta', 0))}，当前魔力：{result.get('user_bonus_after', '-')}\n"
-            f"说明：{result.get('message') or '-'}"
-        )
+        text = self.__format_round_notification(result)
         logger.info(f"准备发送领红包任务通知：title={title}，text={text}")
         self.post_message(mtype=NotificationType.Plugin, title=title, text=text)
 
