@@ -251,11 +251,12 @@
     "name": "yzyy论坛签到",
     "description": "yzyy论坛每日签到，限定当前用户打卡按钮状态判定，自动获取签到码完成签到",
     "labels": "yzyy,签到,论坛",
-    "version": "1.2.8",
+    "version": "1.2.9",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "bfjy, wuyaos",
     "level": 2,
     "history": {
+      "v1.2.9": "修复签到链接正则兼容 lxml 输出的 &amp; 实体编码；CookieCloud 匹配到的 Cookie 保存到插件配置下次复用；Cookie 失效时自动从 CookieCloud 重新获取并重试一次",
       "v1.2.8": "Cookie 留空时自动从 CookieCloud 按 site_url 域名获取 Cookie",
       "v1.2.7": "移植到本仓库：站点地址改为 site_url 配置（默认 https://yzyy.org）；修复签到成功误判，只检查当前用户 .signbtn 区域并在签到后重新获取签到页验证，不再全局搜索排行榜中的今日已打卡；奖励信息优先从我的记录区域提取；图标改用仓库 signin.png"
     }

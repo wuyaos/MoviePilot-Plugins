@@ -22,7 +22,7 @@ class YzyySignin(_PluginBase):
     plugin_name = "yzyy论坛签到"
     plugin_desc = "yzyy论坛每日签到，自动获取签到码完成签到"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.2.8"
+    plugin_version = "1.2.9"
     plugin_author = "bfjy, wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "yzyysignin_"
@@ -557,6 +557,8 @@ class YzyySignin(_PluginBase):
         configured_cookie = self._cookie
         if not configured_cookie:
             self._cookie = self.__fetch_site_cookie()
+            if self._cookie:
+                self.__persist_cookie(self._cookie)
         if not self._cookie:
             error_msg = "Cookie未配置且 CookieCloud 未匹配到该域名 Cookie"
             logger.error(error_msg)
@@ -578,11 +580,24 @@ class YzyySignin(_PluginBase):
 
             # 检查登录状态
             if self.__is_not_logged_in(page_html):
-                error_msg = "Cookie已失效，请重新登录获取"
-                logger.error(f"❌ {error_msg}")
-                self.__save_history(success=False, info=error_msg)
-                self.__send_notification("签到失败", error_msg)
-                return
+                logger.warning("Cookie 失效，尝试从 CookieCloud 重新获取")
+                new_cookie = self.__fetch_site_cookie()
+                if new_cookie and new_cookie != self._cookie:
+                    self._cookie = new_cookie
+                    self.__persist_cookie(self._cookie)
+                    page_html = self.__fetch_sign_page()
+                    if page_html is None or self.__is_not_logged_in(page_html):
+                        error_msg = "Cookie已失效，CookieCloud 重新获取后仍无效"
+                        logger.error(f"❌ {error_msg}")
+                        self.__save_history(success=False, info=error_msg)
+                        self.__send_notification("签到失败", error_msg)
+                        return
+                else:
+                    error_msg = "Cookie已失效，CookieCloud 未匹配到新 Cookie"
+                    logger.error(f"❌ {error_msg}")
+                    self.__save_history(success=False, info=error_msg)
+                    self.__send_notification("签到失败", error_msg)
+                    return
 
             # 【关键修复】先检查签到按钮文本，判断是否已签到
             button_status = self.__check_sign_button_status(page_html)
@@ -891,6 +906,19 @@ class YzyySignin(_PluginBase):
         except Exception as e:
             logger.warning(f"从 CookieCloud 获取 Cookie 失败: {e}")
             return ""
+
+    def __persist_cookie(self, cookie: str):
+        """将 CookieCloud 匹配到的 Cookie 保存到插件配置，下次直接复用"""
+        try:
+            cur = self.get_config() or {}
+            if cur.get("cookie") == cookie:
+                return
+            cur["cookie"] = cookie
+            self.update_config(cur)
+            self._cookie = cookie
+            logger.info("已将 CookieCloud 匹配到的 Cookie 保存到插件配置")
+        except Exception as e:
+            logger.warning(f"保存 Cookie 到配置失败: {e}")
 
     def __normalize_site_url(self, site_url: str) -> str:
         """规范化站点地址。"""
