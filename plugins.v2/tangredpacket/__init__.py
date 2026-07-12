@@ -566,7 +566,7 @@ class TangRedPacket(_PluginBase):
                     {"component": "VDivider"},
                     {
                         "component": "VCardText",
-                        "props": {"class": "pa-0 pa-md-2", "style": "max-height: 520px; overflow-y: auto;"},
+                        "props": {"class": "pa-0 pa-md-2", "style": "height: 400px; overflow-y: auto;"},
                         "content": history_body
                     }
                 ]
