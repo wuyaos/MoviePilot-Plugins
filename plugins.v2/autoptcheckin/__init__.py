@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.3.5"
+    plugin_version = "1.3.6"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1754,9 +1754,10 @@ class AutoPtCheckin(_PluginBase):
             )
         else:
             site_name, message = self.signin_site(site_info)
+            success = "失败" not in str(message) and "错误" not in str(message)
             return schemas.Response(
-                success=True,
-                message=f"站点【{site_name}】{message or '签到成功'}"
+                success=success,
+                message=f"站点【{site_name}】{message}"
             )
 
     @staticmethod
@@ -1800,6 +1801,7 @@ class AutoPtCheckin(_PluginBase):
             return self.__signin_base(site_info)
 
         state, message = do_signin()
+        message = message or ("签到成功" if state else "签到失败")
         if "Cookie已失效" in str(message):
             old_cookie = site_info.get("cookie") or ""
             cookie = self._fetch_cookie_cloud(site_info.get("url", ""))
@@ -1810,6 +1812,7 @@ class AutoPtCheckin(_PluginBase):
                 if site_id and self.siteoper.get(site_id):
                     self.siteoper.update(site_id, {"cookie": cookie})
                 state, message = do_signin()
+                message = message or ("签到成功" if state else "签到失败")
         # 统计
         seconds = (datetime.now() - start_time).seconds
         domain = StringUtils.get_url_domain(site_info.get('url'))

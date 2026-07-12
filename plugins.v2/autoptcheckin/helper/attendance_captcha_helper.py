@@ -42,6 +42,9 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
         "今天已经签到", "今天已經簽到",
         "今天已簽到", "今日已簽到", "今日已签到",
     ]
+    _failure_texts = [
+        "图片代码无效", "圖片代碼無效", "图片验证码无效", "圖片驗證碼無效",
+    ]
 
     @classmethod
     def match(cls, url: str) -> bool:
@@ -157,6 +160,9 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
         if resp_html is not None and resp_html.xpath('//form[contains(@action,"attendance")]//input[@name="imagehash"]'):
             logger.error(f"{site} 签到失败，验证码错误或被拒")
             return False, "签到失败：验证码错误或被拒"
+        if any(text in resp_text for text in self._failure_texts):
+            logger.error(f"{site} 签到失败，验证码无效")
+            return False, "签到失败：验证码无效"
         if any(text in resp_text for text in self._repeat_texts):
             logger.info(f"{site} 今日已签到")
             return True, "今日已签到"
