@@ -110,7 +110,7 @@ class FengchaoService:
                                 "status_code": "success_already",
                                 "money": attrs.get('money', 0),
                                 "totalContinuousCheckIn": attrs.get('totalContinuousCheckIn', 0),
-                                "lastCheckinMoney": attrs.get('lastCheckinMoney', 0),
+                                "lastCheckinMoney": attrs.get('lastCheckinMoney'),
                                 "failure_count": 0
                             }
                             # 保存到历史记录（_save_history 会处理覆盖逻辑）
@@ -235,13 +235,14 @@ class FengchaoService:
                         continue
                     raise Exception("无法连接到站点")
 
+                pre_text = res.text or ""
                 pre_money = None
                 pre_days = None
                 try:
-                    pre_money_match = re.search(r'"money":\s*([\d.]+)', res.text)
+                    pre_money_match = re.search(r'"money":\s*([\d.]+)', pre_text)
                     if pre_money_match:
                         pre_money = float(pre_money_match.group(1))
-                    pre_days_match = re.search(r'"totalContinuousCheckIn":\s*(\d+)', res.text)
+                    pre_days_match = re.search(r'"totalContinuousCheckIn":\s*(\d+)', pre_text)
                     if pre_days_match:
                         pre_days = int(pre_days_match.group(1))
                     logger.info(f"签到前状态检查：当前花粉 -> {pre_money}, 签到天数 -> {pre_days}")
@@ -345,24 +346,24 @@ class FengchaoService:
 
                 money = sign_dict['data']['attributes']['money']
                 totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
-                lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney', 0)
+                lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney')
 
                 formatted_money = self._format_pollen(money)
-                formatted_last_checkin_money = self._format_pollen(lastCheckinMoney)
+                formatted_last_checkin_money = self._format_pollen(lastCheckinMoney or 0)
 
                 is_successful_checkin = False
                 if pre_money is not None and pre_days is not None:
                     if money > pre_money or totalContinuousCheckIn > pre_days:
                         is_successful_checkin = True
                 else:
-                    can_checkin_before = '"canCheckin":true' in res.text
+                    can_checkin_before = '"canCheckin":true' in pre_text
                     logger.info(f"回退到API标志位判断: canCheckin -> {can_checkin_before}")
                     if can_checkin_before:
                         is_successful_checkin = True
 
                 if is_successful_checkin:
                     status_text = "签到成功"
-                    reward_text = f"获得{formatted_last_checkin_money}花粉奖励" if lastCheckinMoney > 0 else "获得奖励"
+                    reward_text = f"获得{formatted_last_checkin_money}花粉奖励" if lastCheckinMoney and lastCheckinMoney > 0 else "获得奖励"
                     logger.info(
                         f"蜂巢签到成功，获得{formatted_last_checkin_money}花粉，当前花粉: {formatted_money}，累计签到: {totalContinuousCheckIn}")
                 else:

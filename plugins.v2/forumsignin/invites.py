@@ -118,7 +118,7 @@ class InvitesService:
             "canCheckin": attrs.get('canCheckin'),
             "lastCheckinTime": attrs.get('lastCheckinTime') or "",
             "totalContinuousCheckIn": attrs.get('totalContinuousCheckIn'),
-            "lastCheckinMoney": attrs.get('lastCheckinMoney', 0),
+            "lastCheckinMoney": attrs.get('lastCheckinMoney'),
             "money": attrs.get('money')
         }
 
@@ -422,7 +422,7 @@ class InvitesService:
             "status_code": "success_already" if already_signed else "success_new",
             "money": (state or {}).get("money"),
             "totalContinuousCheckIn": (state or {}).get("totalContinuousCheckIn"),
-            "lastCheckinMoney": (state or {}).get("lastCheckinMoney", 0),
+            "lastCheckinMoney": (state or {}).get("lastCheckinMoney"),
             "failure_count": 0
         }
         self.callbacks.save_history(record)

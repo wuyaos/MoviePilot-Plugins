@@ -249,7 +249,7 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
         latest_record = records[0] if records else {}
         today_record = next((item for item in records if item.get("date", "").startswith(today_str)), {})
         status_meta = get_status_meta(today_record) if today_record else {"code": "unknown", "label": "今日未签", "color": "#9E9E9E", "icon": "mdi-help-circle"}
-        last_reward = latest_record.get("lastCheckinMoney", attrs.get("lastCheckinMoney", 0)) if latest_record else attrs.get("lastCheckinMoney", 0)
+        last_reward = latest_record.get("lastCheckinMoney", attrs.get("lastCheckinMoney")) if latest_record else attrs.get("lastCheckinMoney")
         display_name = attrs.get('displayName') or attrs.get('username') or attrs.get('nickname') or '—'
         avatar_url = attrs.get('avatarUrl') or ""
         unread_count = attrs.get('unreadNotificationCount') or 0
@@ -460,9 +460,14 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
             retry_text = f"将在{retry.get('interval', config.retry_interval)}{retry.get('unit', '分钟')}后重试 ({retry.get('current', 0)}/{retry.get('max', config.retry_count)})"
         point_name = site_points.get(site, "积分")
         point_icon = site_icons.get(site, "mdi-web")
+        reward = record.get('lastCheckinMoney')
         reward_text = '—'
-        if status_meta["code"] == "success_new" and record.get('lastCheckinMoney', 0):
-            reward_text = f"{format_money(record.get('lastCheckinMoney', 0))}{point_name}"
+        try:
+            has_reward = reward not in (None, "") and float(reward) > 0
+        except (TypeError, ValueError):
+            has_reward = False
+        if status_meta["code"] in ("success_new", "success_already") and has_reward:
+            reward_text = f"{format_money(reward)}{point_name}"
         elif status_meta["code"] == "success_already":
             reward_text = "已领取"
         rows.append({

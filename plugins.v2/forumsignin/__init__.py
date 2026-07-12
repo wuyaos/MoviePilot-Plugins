@@ -26,7 +26,7 @@ class ForumSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
     # 插件版本
-    plugin_version = "1.0.8"
+    plugin_version = "1.0.9"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -350,10 +350,15 @@ class ForumSignin(_PluginBase):
             last_record = history[existing_index]
             is_last_success = get_status_meta(last_record).get("code") in ("success_new", "success_already")
             if is_new_success:
-                if not is_last_success:
-                    record['failure_count'] = last_record.get('failure_count', 0)
-                history[existing_index] = record
-                logger.info(f"更新站点 {site} 日期 {record_date} 的签到记录 (状态: {record.get('status')})")
+                last_status_code = get_status_meta(last_record).get("code")
+                new_status_code = get_status_meta(record).get("code")
+                if last_status_code == "success_new" and new_status_code == "success_already":
+                    logger.info("已有新签到成功记录，忽略重复已签到记录")
+                else:
+                    if not is_last_success:
+                        record['failure_count'] = last_record.get('failure_count', 0)
+                    history[existing_index] = record
+                    logger.info(f"更新站点 {site} 日期 {record_date} 的签到记录 (状态: {record.get('status')})")
             else:
                 if not is_last_success:
                     last_record["failure_count"] = last_record.get("failure_count", 0) + 1
