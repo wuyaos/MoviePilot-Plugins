@@ -251,11 +251,12 @@
     "name": "不可躺自动领红包",
     "description": "自动发现并串行领取不可躺(tangpt.top)红包,支持 fast 模式、限流感知、Cookie 过期熔断和历史统计",
     "labels": "不可躺,红包,自动领取",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacket.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.9": "修复领取历史只显示3条的问题：get_page 之前 events 截断到50条导致 round_summary 只剩最近3轮，改为 round_rows 取全部事件(上限500)，领取明细表格仍保留最近50条",
       "v1.0.8": "修复通知格式化因缺失 __safe_int 方法导致任务执行失败(AttributeError)；__safe_int 补 math.isfinite 与 OverflowError 兜底，避免 inf/nan/超大值导致通知发送中断",
       "v1.0.7": "领取历史重写为仅展示每轮汇总：列为时间/本轮红包/成功/失败/跳过/状态/魔力增加/当前魔力/说明；状态列显示本轮后今日已领/上限；通知消息改为分组式本轮/今日/收益/说明，避免冗余与流水噪音",
       "v1.0.6": "领取历史参考论坛签到：领取日志同时展示本轮汇总和逐条领取事件；每轮结束写入 round_summary 事件，详情页表格列调整为时间/类型/内容/说明/魔力，支持展示类似通知的本轮任务摘要",

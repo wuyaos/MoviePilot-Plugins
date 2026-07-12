@@ -55,7 +55,7 @@ class TangRedPacket(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动发现并串行领取不可躺红包,支持限流感知和历史统计。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacket.png"
-    plugin_version = "1.0.8"
+    plugin_version = "1.0.9"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacket_"
@@ -322,7 +322,8 @@ class TangRedPacket(_PluginBase):
     def get_page(self) -> List[dict]:
         try:
             summary = self.__get_summary()
-            events = self.__get_events()[-50:]
+            events = self.__get_events()
+            recent_events = events[-50:]
             event_text_map = {
                 "claim_ok": "成功",
                 "claim_fail": "失败",
@@ -334,7 +335,7 @@ class TangRedPacket(_PluginBase):
                 "equal": "平均"
             }
             table_items = []
-            for event in reversed(events):
+            for event in reversed(recent_events):
                 item = event.copy()
                 item["event_text"] = event_text_map.get(item.get("event"), item.get("event") or "-")
                 item["packet_type_text"] = packet_type_text_map.get(
