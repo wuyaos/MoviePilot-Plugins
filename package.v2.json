@@ -240,7 +240,7 @@
     "description": "rousi.pro JWT Token 自动签到、站内信增量推送与过期提醒",
     "labels": "肉丝,签到,JWT,站内信",
     "version": "1.0.0",
-    "icon": "https://rousi.pro/favicon.ico",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
