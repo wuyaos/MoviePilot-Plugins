@@ -26,7 +26,7 @@ class ForumSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
     # 插件版本
-    plugin_version = "1.0.9"
+    plugin_version = "1.0.10"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -346,6 +346,24 @@ class ForumSignin(_PluginBase):
                 break
 
         is_new_success = get_status_meta(record).get("code") in ("success_new", "success_already")
+        last_checkin_money = record.get("lastCheckinMoney")
+        if is_new_success and last_checkin_money in (None, "", 0):
+            current_money = record.get("money")
+            if isinstance(current_money, (int, float)) and not isinstance(current_money, bool):
+                for item in reversed(history):
+                    if item.get("site", "fengchao") != site:
+                        continue
+                    if get_status_meta(item).get("code") not in ("success_new", "success_already"):
+                        continue
+                    previous_money = item.get("money")
+                    if not isinstance(previous_money, (int, float)) or isinstance(previous_money, bool):
+                        continue
+                    reward_delta = current_money - previous_money
+                    if reward_delta > 0:
+                        record["lastCheckinMoney"] = reward_delta
+                        logger.info(f"站点 {site} 日期 {record_date} 未取到 lastCheckinMoney，用本次money差值兜底：{reward_delta}")
+                    break
+
         if existing_index != -1:
             last_record = history[existing_index]
             is_last_success = get_status_meta(last_record).get("code") in ("success_new", "success_already")

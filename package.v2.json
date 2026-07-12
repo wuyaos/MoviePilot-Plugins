@@ -215,11 +215,12 @@
     "name": "论坛签到",
     "description": "论坛站点签到（蜂巢 pting.club + 药丸 invites.fun），单插件双站调度，支持 Cookie/账号登录、失败重试与历史记录",
     "labels": "签到,论坛,蜂巢,药丸",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.10": "奖励兜底：lastCheckinMoney 未取到(None/0/空)时，用本次money与同站点上一条成功记录money的差值作为本轮奖励，差值>0 才写入；解决接口未返回 lastCheckinMoney 导致历史奖励全显示0/已领取的问题",
       "v1.0.9": "修复奖励列显示异常(0/已领取/—)：奖励列对 success_new/success_already 有正数奖励均展示真实数值，无奖励的已签到才显示\"已领取\"；lastCheckinMoney 缺省值由 0 改为 None 以区分真实0与未解析；蜂巢 fallback 改用签到前首页文本判断 canCheckin，避免新签到被误判为已签到；当天已有 success_new 时不再被新的 success_already 覆盖",
       "v1.0.8": "修复奖励显示：蜂巢/药丸 success_already（已签到）时保留接口真实 lastCheckinMoney，不再强制写0覆盖当日奖励；日历移除颜色状态图例仅保留蜂巢/药丸图标说明",
       "v1.0.7": "code review 修复：日历图例补全 7 种 day_color 状态色（仅蜂巢橙/仅药丸紫/单站失败浅红等），day_rewards 改为成功优先扫描避免重试奖励丢失，零值字符串(0.0/0.00)数值化判断跳过，补位空单元格高度 24px→40px 与实际单元格一致",
