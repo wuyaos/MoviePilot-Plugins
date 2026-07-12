@@ -2,6 +2,7 @@
 # output: 不可躺红包任务执行、事件记录和通知
 # pos: V2 站点任务插件，按 Cron 自动发现并串行领取不可躺红包
 import json
+import math
 import re
 import threading
 import time
@@ -54,7 +55,7 @@ class TangRedPacket(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动发现并串行领取不可躺红包,支持限流感知和历史统计。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacket.png"
-    plugin_version = "1.0.7"
+    plugin_version = "1.0.8"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacket_"
@@ -1317,6 +1318,17 @@ class TangRedPacket(_PluginBase):
             f"收益：+{row['bonus_delta']} 魔力，当前 {row['user_bonus_after']}；"
             f"说明：{row['message']}"
         )
+
+    def __safe_int(self, value: Any, default: int = 0) -> int:
+        if value is None or isinstance(value, bool):
+            return default
+        try:
+            number = float(value)
+            if not math.isfinite(number):
+                return default
+            return int(number)
+        except (TypeError, ValueError, OverflowError):
+            return default
 
     def __format_round_notification(self, result: Dict[str, Any]) -> str:
         status = result.get("status")

@@ -325,36 +325,6 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
                         result[site] = "failed"
         return result
 
-    def day_rewards(day_str: str) -> List[dict]:
-        rewards = []
-        for site in ("fengchao", "invites"):
-            site_reward = None
-            for item in history:
-                if item.get("site", "fengchao") != site or not item.get("date", "").startswith(day_str):
-                    continue
-                reward = item.get("lastCheckinMoney")
-                if reward is None or reward == "":
-                    continue
-                try:
-                    if float(reward) <= 0:
-                        if site_reward is None:
-                            site_reward = ""
-                        continue
-                except (ValueError, TypeError):
-                    continue
-                meta = get_status_meta(item)
-                if meta["code"] in ("success_new", "success_already"):
-                    site_reward = reward
-                    break
-                if site_reward is None:
-                    site_reward = reward
-            if site_reward not in (None, "", 0, "0", 0.0):
-                rewards.append({'component': 'div', 'props': {'class': 'd-flex align-center justify-center', 'style': 'line-height: 11px;'}, 'content': [
-                    {'component': 'VIcon', 'props': {'size': 9, 'style': f"color: {site_colors[site]};", 'class': 'mr-1'}, 'text': site_icons[site]},
-                    {'component': 'span', 'props': {'class': 'font-weight-bold'}, 'text': format_money(site_reward)}
-                ]})
-        return rewards
-
     def day_color(statuses: dict) -> str:
         fc, iv = statuses["fengchao"], statuses["invites"]
         fc_ok = fc in ("success_new", "success_already")
@@ -387,7 +357,7 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
         cells = []
         for idx, day in enumerate(week):
             if day == 0:
-                cells.append({'component': 'td', 'props': {'class': 'text-center pa-0', 'style': 'height: 40px;'}, 'text': ''})
+                cells.append({'component': 'td', 'props': {'class': 'text-center pa-0', 'style': 'height: 32px;'}, 'text': ''})
             else:
                 day_str = f"{year:04d}-{month:02d}-{day:02d}"
                 statuses = day_status(day_str)
@@ -396,7 +366,6 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
                 fc_fail = statuses["fengchao"] == "failed"
                 iv_fail = statuses["invites"] == "failed"
                 color = day_color(statuses)
-                rewards = day_rewards(day_str)
                 is_today = day_str == today.strftime("%Y-%m-%d")
                 border = "border: 2px solid #1976D2;" if is_today else f"border: 1px solid {color if color != 'transparent' else 'rgba(var(--v-theme-on-surface), 0.08)'};"
                 background = f"background-color: {color}22;" if color != "transparent" else "background-color: rgba(var(--v-theme-surface), 0.45);"
@@ -409,10 +378,9 @@ def build_page(get_data, config: ForumSigninConfig) -> List[dict]:
                     day_icons.append({'component': 'VIcon', 'props': {'size': 12, 'style': 'color: #9C27B0;'}, 'text': 'mdi-pill'})
                 elif iv_fail:
                     day_icons.append({'component': 'VIcon', 'props': {'size': 12, 'style': 'color: #F44336;'}, 'text': 'mdi-close-circle'})
-                cells.append({'component': 'td', 'props': {'class': 'text-center pa-0', 'style': f"height: 40px; {background} {border} border-radius: 4px;"}, 'content': [
+                cells.append({'component': 'td', 'props': {'class': 'text-center pa-0', 'style': f"height: 32px; {background} {border} border-radius: 4px;"}, 'content': [
                     {'component': 'div', 'props': {'class': 'text-caption font-weight-bold', 'style': 'line-height: 13px;'}, 'text': str(day)},
-                    {'component': 'div', 'props': {'class': 'd-flex justify-center ga-1', 'style': 'height: 13px; margin-top: 1px;'}, 'content': day_icons},
-                    {'component': 'div', 'props': {'class': 'text-caption', 'style': 'min-height: 11px; font-size: 10px;'}, 'content': rewards}
+                    {'component': 'div', 'props': {'class': 'd-flex justify-center ga-1', 'style': 'height: 13px; margin-top: 1px;'}, 'content': day_icons}
                 ]})
         cal_rows.append({'component': 'tr', 'content': cells})
 
