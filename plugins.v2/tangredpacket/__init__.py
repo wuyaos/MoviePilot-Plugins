@@ -512,37 +512,65 @@ class TangRedPacket(_PluginBase):
                     ]
                 }
             ]
+            history_table_rows = []
+            for row in history_rows[:50]:
+                event_type = row.get("event") or "-"
+                is_summary = event_type == "本轮汇总"
+                history_table_rows.append({
+                    "component": "tr",
+                    "content": [
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": row.get("time") or "-"},
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap font-weight-medium"}, "text": event_type},
+                        {"component": "td", "props": {"class": "text-caption", "style": "white-space: normal; min-width: 360px;"}, "text": row.get("main") or "-"},
+                        {"component": "td", "props": {"class": "text-caption", "style": "white-space: normal; min-width: 180px;"}, "text": row.get("extra") or "-"},
+                        {"component": "td", "props": {"class": "text-caption text-no-wrap", "style": "color: rgb(var(--v-theme-success));" if is_summary else ""}, "text": row.get("magic_amount") if row.get("magic_amount") not in (None, "") else "-"}
+                    ]
+                })
+            history_body = [
+                {
+                    "component": "VTable",
+                    "props": {"hover": True, "density": "comfortable", "class": "text-no-wrap"},
+                    "content": [
+                        {
+                            "component": "thead",
+                            "content": [{
+                                "component": "tr",
+                                "content": [
+                                    {"component": "th", "text": "时间"},
+                                    {"component": "th", "text": "类型"},
+                                    {"component": "th", "text": "内容"},
+                                    {"component": "th", "text": "说明"},
+                                    {"component": "th", "text": "魔力"}
+                                ]
+                            }]
+                        },
+                        {"component": "tbody", "content": history_table_rows}
+                    ]
+                }
+            ] if history_table_rows else [
+                {
+                    "component": "VAlert",
+                    "props": {"type": "info", "variant": "tonal", "class": "ma-2"},
+                    "text": "暂无领取日志，新一轮领取完成后会显示本轮汇总和逐条领取记录"
+                }
+            ]
             content.append({
                 "component": "VCard",
-                "props": {"variant": "tonal", "class": "mt-4"},
+                "props": {"variant": "outlined", "class": "mt-4"},
                 "content": [
                     {
                         "component": "VCardTitle",
-                        "text": "领取日志"
+                        "props": {"class": "d-flex align-center"},
+                        "content": [
+                            {"component": "VIcon", "props": {"style": "color: #9C27B0;", "class": "mr-2"}, "text": "mdi-history"},
+                            {"component": "span", "props": {"class": "text-h6 font-weight-bold"}, "text": "领取历史"}
+                        ]
                     },
+                    {"component": "VDivider"},
                     {
                         "component": "VCardText",
-                        "content": [
-                            {
-                                "component": "VDataTable",
-                                "props": {
-                                    "headers": [
-                                        {"title": "时间", "key": "time"},
-                                        {"title": "类型", "key": "event"},
-                                        {"title": "内容", "key": "main"},
-                                        {"title": "说明", "key": "extra"},
-                                        {"title": "魔力", "key": "magic_amount"}
-                                    ],
-                                    "items": history_rows,
-                                    "items-per-page": 10,
-                                    "hide-default-footer": False,
-                                    "density": "compact",
-                                    "height": 420,
-                                    "fixed-header": True,
-                                    "no-data-text": "暂无领取日志"
-                                }
-                            }
-                        ]
+                        "props": {"class": "pa-0 pa-md-2", "style": "max-height: 520px; overflow-y: auto;"},
+                        "content": history_body
                     }
                 ]
             })
