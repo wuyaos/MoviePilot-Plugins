@@ -22,7 +22,7 @@ class YzyySignin(_PluginBase):
     plugin_name = "yzyy论坛签到"
     plugin_desc = "yzyy论坛每日签到，自动获取签到码完成签到"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.2.9"
+    plugin_version = "1.2.10"
     plugin_author = "bfjy, wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "yzyysignin_"
@@ -634,16 +634,8 @@ class YzyySignin(_PluginBase):
                 self.__send_notification("签到失败", error_msg)
                 return
 
-            # 签到后重新获取页面，只根据当前用户 .signbtn 区域验证结果
-            verify_html = self.__fetch_sign_page()
-            if verify_html is None:
-                error_msg = "签到后验证页面获取失败"
-                logger.error(f"❌ {error_msg}")
-                self.__save_history(success=False, info=error_msg)
-                self.__send_notification("签到失败", error_msg)
-                return
-
-            success, info = self.__parse_sign_result(verify_html)
+            # 直接判定签到请求响应里的成功/失败提示（alert_info 区域）
+            success, info = self.__parse_sign_result(result_html)
 
             if success:
                 logger.info(f"✅ 签到成功: {info}")
@@ -785,16 +777,30 @@ class YzyySignin(_PluginBase):
 
     def __parse_sign_result(self, html: str) -> Tuple[bool, str]:
         """
-        解析签到结果：只根据当前用户 .signbtn 区域判断，不全局搜索排行榜状态。
+        解析签到结果：优先看签到请求响应里的 alert_info 成功/失败提示，
+        按钮状态仅作兜底（重新打开签到页时按钮可能未及时更新）。
         """
         try:
+            # 1. 优先匹配签到结果页的明确提示（Discuz alert_info 区域）
+            if html and "打卡成功" in html:
+                info = self.__extract_reward_info(html) or "打卡成功"
+                return True, info
+            if html and "恭喜" in html and "打卡" in html:
+                return True, "打卡成功"
+            if html and "请勿重复" in html or (html and "已经打卡" in html):
+                info = self.__extract_reward_info(html)
+                return True, info or "今日已打卡"
+            if html and ("签到失败" in html or "打卡失败" in html):
+                return False, "签到失败"
+
+            # 2. 兜底：看当前用户签到按钮区域
             button_status = self.__check_sign_button_status(html)
             if button_status == "already_signed":
                 info = self.__extract_reward_info(html)
                 return True, info or "今日已打卡"
             if button_status == "need_sign":
                 return False, "签到后按钮仍显示点击打卡"
-            return False, "无法识别当前用户签到按钮状态"
+            return False, "无法识别签到结果"
 
         except Exception as e:
             return False, f"解析签到结果异常: {str(e)}"
