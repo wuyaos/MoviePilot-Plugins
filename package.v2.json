@@ -1,13 +1,14 @@
 {
   "PterMedalBuyer": {
-    "name": "pter勋章自动换领",
+    "name": "pter勋章自动领取",
     "description": "定时检测 pterclub 当前页可换领勋章，按配置自动换领并记录历史",
     "labels": "pter,勋章,自动换领",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.2": "修复猫粮余额解析：正则兼容「猫粮 [使用|站免池]: 数值」格式，之前因 [..] 括号文字阻挡导致未解析",
       "v1.0.1": "文案「换领」改为「领取」（保留购买语境）；init_plugin cron 回落固定默认值；get_service 移除空 kwargs 保留公开无参入口；成功判定增加「已领取/领取成功」关键词；期限正则兼容换领|领取",
       "v1.0.0": "初始版本：从 MoviePilot 站点表读取 pterclub.net Cookie；解析 medal.php?page=page010 的 buymedal 表单和 medalchosen；支持全量/白名单、max_price、dry_run、期限过滤；POST 换领后二次 GET 验证；持久化事件、已拥有勋章、最近轮次和详情页"
     }
