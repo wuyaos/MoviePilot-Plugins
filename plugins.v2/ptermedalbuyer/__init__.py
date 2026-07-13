@@ -21,7 +21,7 @@ class PterMedalBuyer(_PluginBase):
     plugin_name = "pter勋章自动领取"
     plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptermedalbuyer_"
@@ -684,7 +684,7 @@ class PterMedalBuyer(_PluginBase):
     def _parse_cat_food(html: str) -> str:
         text = PterMedalBuyer._html_to_text(html)
         patterns = [
-            r"(?:猫粮|Karma)\s*[:：]?\s*([\d,]+(?:\.\d+)?)",
+            r"(?:猫粮|Karma)\s*(?:\[[^\]]*\]\s*)?[:：]?\s*([\d,]+(?:\.\d+)?)",
             r"([\d,]+(?:\.\d+)?)\s*猫粮",
         ]
         for pattern in patterns:
