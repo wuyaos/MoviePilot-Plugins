@@ -239,11 +239,12 @@
     "name": "肉丝自动签到",
     "description": "rousi.pro JWT Token 自动签到、站内信增量推送与过期提醒",
     "labels": "肉丝,签到,JWT,站内信",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.1": "修复定时任务不触发：get_service 的 service id 从 RousiCheckin.Signin 改为插件级 RousiCheckin，调度入口从私有 __signin+kwargs 改为公开无参 signin() wrapper（内部 manual=False），与仓库内能正常定时的插件惯例对齐；签到逻辑与随机抖动不变",
       "v1.0.0": "初始版本：rousi.pro JWT Token 手动配置；每日 cron 签到并支持0-3分钟随机抖动；签到前读取 attendance stats 去重；成功后增量拉取站内信并合并推送；解析 JWT exp 做过期提醒；401/登录过期当日通知一次、写历史并自动停用插件；提供配置页、详情页和 POST /RousiCheckin/run 手动触发 API"
     }
   },
