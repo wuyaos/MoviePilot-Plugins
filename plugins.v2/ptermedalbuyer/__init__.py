@@ -21,7 +21,7 @@ class PterMedalBuyer(_PluginBase):
     plugin_name = "pter勋章自动领取"
     plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.6"
+    plugin_version = "1.0.7"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptermedalbuyer_"
@@ -648,7 +648,7 @@ class PterMedalBuyer(_PluginBase):
                 note_items.append(f"领取 {medal_text}{result}" + (f"：{reason}" if reason else ""))
             elif event_name == "auth_failed" and reason:
                 note_items.append(reason)
-        note = last_error or "；".join(note_items[:3])
+        note = self._dedup_note(last_error or "；".join(note_items[:3]))
         last_round = {
             "started_at": started_at,
             "ended_at": ended_at,
@@ -929,6 +929,19 @@ class PterMedalBuyer(_PluginBase):
         return f"{text[:max_length]}..." if len(text) > max_length else text
 
     @staticmethod
+    def _dedup_note(note: Any) -> str:
+        """按「；」拆分去重，消除历史 note 中重复堆叠的相同说明。"""
+        text = str(note or "").strip()
+        if not text:
+            return ""
+        seen = []
+        for part in re.split(r"[；;]", text):
+            part = part.strip()
+            if part and part not in seen:
+                seen.append(part)
+        return "；".join(seen)
+
+    @staticmethod
     def _now_text() -> str:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -985,6 +998,7 @@ class PterMedalBuyer(_PluginBase):
         note = item.get("note") or item.get("last_error") or ""
         if not note and events:
             note = "；".join([str(event.get("reason") or "") for event in events if event.get("event") in ["buy_ok", "buy_fail", "auth_failed"] and event.get("reason")][:3])
+        note = self._dedup_note(note)
         status = str(item.get("status") or "")
         return {
             "started_at": item.get("started_at") or item.get("time") or item.get("ended_at") or "—",
@@ -1013,7 +1027,13 @@ class PterMedalBuyer(_PluginBase):
         last_event = events[-1]
         event_names = [str(event.get("event") or "") for event in events]
         status = "success" if "buy_ok" in event_names else "failed" if "buy_fail" in event_names else str(last_event.get("result") or last_event.get("event") or "")
-        notes = [str(event.get("reason") or "") for event in events if event.get("reason")]
+        notes = []
+        for event in events:
+            if event.get("event") not in ["buy_ok", "buy_fail", "auth_failed"]:
+                continue
+            reason = str(event.get("reason") or "")
+            if reason and reason not in notes:
+                notes.append(reason)
         return {
             "started_at": last_event.get("time") or "—",
             "trigger": last_event.get("trigger") or "—",
