@@ -21,7 +21,7 @@ class PterMedalBuyer(_PluginBase):
     plugin_name = "pter勋章自动领取"
     plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptermedalbuyer_"
