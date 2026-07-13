@@ -21,7 +21,7 @@ class PterMedalBuyer(_PluginBase):
     plugin_name = "pter勋章自动领取"
     plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.5"
+    plugin_version = "1.0.6"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptermedalbuyer_"
@@ -172,7 +172,7 @@ class PterMedalBuyer(_PluginBase):
                 if self._dry_run:
                     events.append(self._event(
                         "buy_skip", trigger, medal.get("id"), medal.get("value"), medal.get("price"),
-                        "dry_run 开启，仅检测不购买", cat_food, status="dry_run"
+                        "dry_run 开启，仅检测不购买", cat_food, status="dry_run", medal_name=medal.get("name")
                     ))
                     logger.info(f"pter 勋章购买：id={medal.get('id')}, price={medal.get('price') if medal.get('price') is not None else '未知'}, result=dry_run")
                     continue
@@ -184,7 +184,8 @@ class PterMedalBuyer(_PluginBase):
                 event_name = "buy_ok" if success else "buy_fail"
                 event = self._event(
                     event_name, trigger, medal.get("id"), medal.get("value"), medal.get("price"),
-                    reason, cat_food, status="success" if success else "failed", verify_status=verify_status
+                    reason, cat_food, status="success" if success else "failed", verify_status=verify_status,
+                    medal_name=medal.get("name")
                 )
                 events.append(event)
                 logger.info(f"pter 勋章购买：id={medal.get('id')}, price={medal.get('price') if medal.get('price') is not None else '未知'}, result={event.get('status')}")
@@ -298,6 +299,16 @@ class PterMedalBuyer(_PluginBase):
                     continue
                 medal_id = self._parse_medal_id(value)
                 price = self._parse_price(value)
+                medal_name = self._clean_text(" ".join(
+                    form.xpath("./preceding-sibling::img[1]/@title")
+                    or form.xpath(".././/img[contains(@src, 'storage/uploadpicz/hz/')][1]/@title")
+                    or form.xpath("./preceding::img[contains(@src, 'storage/uploadpicz/hz/')][1]/@title")
+                ))
+                medal_img = self._clean_text(" ".join(
+                    form.xpath("./preceding-sibling::img[1]/@src")
+                    or form.xpath(".././/img[contains(@src, 'storage/uploadpicz/hz/')][1]/@src")
+                    or form.xpath("./preceding::img[contains(@src, 'storage/uploadpicz/hz/')][1]/@src")
+                ))
                 disabled = bool(input_node.xpath("./@disabled"))
                 status = "unavailable" if disabled else "available"
                 if not in_term and not disabled:
@@ -307,6 +318,8 @@ class PterMedalBuyer(_PluginBase):
                     "value": value,
                     "price": price,
                     "price_text": self._parse_price_text(value),
+                    "name": medal_name or medal_id,
+                    "img_src": urljoin(self.BASE_URL + "/", medal_img) if medal_img else "",
                     "disabled": disabled,
                     "status": status,
                     "term_text": term_text,
@@ -354,7 +367,8 @@ class PterMedalBuyer(_PluginBase):
             if reason:
                 medal["skip_reason"] = reason
                 medal["event"] = self._event(
-                    "buy_skip", trigger, medal.get("id"), medal.get("value"), medal.get("price"), reason, cat_food, status=status
+                    "buy_skip", trigger, medal.get("id"), medal.get("value"), medal.get("price"), reason, cat_food,
+                    status=status, medal_name=medal.get("name")
                 )
         return candidates
 
@@ -463,11 +477,11 @@ class PterMedalBuyer(_PluginBase):
         recent_at = last_round.get("started_at") or last_round.get("updated_at")
 
         overview_body = [{"component": "VRow", "props": {"class": "align-stretch ga-2 flex-md-nowrap"}, "content": [
-            self._info_col("用户名", username),
-            self._info_col("UID", uid),
-            self._info_col("猫粮", cat_food),
-            self._info_col("状态", status_text),
-            self._info_col("最近", recent_at),
+            self._info_col("用户名", username, "mdi-account"),
+            self._info_col("UID", uid, "mdi-identifier"),
+            self._info_col("猫粮", cat_food, "mdi-cat"),
+            self._info_col("状态", status_text, "mdi-check-circle-outline"),
+            self._info_col("最近", recent_at, "mdi-clock-outline", split_datetime=True),
         ]}]
         overview_content: List[dict] = []
         overview_content.append({"component": "VCardTitle", "text": "基本信息"})
@@ -484,13 +498,13 @@ class PterMedalBuyer(_PluginBase):
     def _owned_card(self, owned: List[Dict[str, Any]]) -> dict:
         content = []
         if owned:
-            first_line = 12
-            content.append(self._owned_medal_grid(owned[:first_line]))
-            remaining = owned[first_line:]
+            first_line_count = 6
+            content.append(self._owned_medal_grid(owned[:first_line_count]))
+            remaining = owned[first_line_count:]
             if remaining:
                 content.append({"component": "VExpansionPanels", "props": {"variant": "accordion", "class": "mt-2"}, "content": [{
                     "component": "VExpansionPanel", "content": [
-                        {"component": "VExpansionPanelTitle", "text": f"展开剩余（{len(remaining)}个）"},
+                        {"component": "VExpansionPanelTitle", "text": f"展开剩下的（{len(remaining)}个）"},
                         {"component": "VExpansionPanelText", "content": [self._owned_medal_grid(remaining)]}
                     ]
                 }]})
@@ -502,11 +516,11 @@ class PterMedalBuyer(_PluginBase):
     @staticmethod
     def _owned_medal_grid(items: List[Dict[str, Any]]) -> dict:
         return {"component": "div", "props": {"style": "display:flex;flex-wrap:wrap;gap:8px"}, "content": [{
-            "component": "VCol", "props": {"cols": "auto", "style": "width:64px;flex:0 0 64px"}, "content": [{
-                "component": "VCard", "props": {"variant": "tonal", "class": "h-100 rounded-lg border", "width": 64}, "content": [{
+            "component": "VCol", "props": {"cols": "auto", "style": "width:160px;flex:0 0 160px"}, "content": [{
+                "component": "VCard", "props": {"variant": "tonal", "class": "h-100 rounded-lg border"}, "content": [{
                     "component": "VCardText", "props": {"class": "text-center pa-2"}, "content": [
-                        {"component": "VImg", "props": {"src": item.get("img_src") or "", "max-width": 48, "height": 48, "contain": True, "class": "mx-auto flex-grow-0"}},
-                        {"component": "div", "props": {"style": "max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px", "class": "mx-auto mt-1"}, "text": item.get("name") or "—"}
+                        {"component": "img", "props": {"src": item.get("img_src") or "", "style": "width:128px;max-width:128px;height:auto;object-fit:contain;display:block;margin:0 auto;"}},
+                        {"component": "div", "props": {"style": "max-width:128px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px", "class": "mx-auto mt-1"}, "text": item.get("name") or "—"}
                     ]
                 }]
             }]
@@ -515,12 +529,15 @@ class PterMedalBuyer(_PluginBase):
     @staticmethod
     def _recent_purchased_card(items: List[Dict[str, Any]]) -> dict:
         content = [{"component": "VRow", "content": [{
-            "component": "VCol", "props": {"cols": 12, "sm": 6, "md": 4, "lg": 2}, "content": [{
-                "component": "VCard", "props": {"variant": "tonal", "class": "h-100 text-center"}, "content": [
-                    {"component": "VImg", "props": {"src": item.get("img_src") or "", "max-width": 48, "height": 48, "contain": True, "class": "mt-3 mx-auto"}},
+            "component": "VCol", "props": {"cols": "auto", "style": "width:160px;flex:0 0 160px"}, "content": [{
+                "component": "VCard", "props": {"variant": "tonal", "class": "h-100 text-center rounded-lg"}, "content": [
+                    {"component": "img", "props": {"src": item.get("img_src") or "", "style": "width:128px;max-width:128px;height:auto;object-fit:contain;display:block;margin:12px auto 0;"}},
                     {"component": "VCardText", "props": {"class": "py-2"}, "content": [
-                        {"component": "div", "props": {"style": "max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px", "class": "mx-auto"}, "text": item.get("name") or item.get("id") or "—"},
-                        {"component": "div", "props": {"class": "text-caption text-medium-emphasis mt-1"}, "text": item.get("purchased_at") or "—"}
+                        {"component": "div", "props": {"style": "max-width:128px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px", "class": "mx-auto"}, "text": item.get("name") or item.get("id") or "—"},
+                        {"component": "div", "props": {"class": "text-caption text-medium-emphasis mt-1"}, "content": [
+                            {"component": "div", "text": ((item.get("purchased_at") or "—").partition(" ")[0])},
+                            {"component": "div", "text": ((item.get("purchased_at") or "").partition(" ")[2])}
+                        ]}
                     ]}
                 ]
             }]
@@ -533,6 +550,7 @@ class PterMedalBuyer(_PluginBase):
     @staticmethod
     def _history_card(items: List[dict]) -> dict:
         nowrap = "white-space:nowrap"
+        note_style = "white-space:normal;min-width:160px;word-break:break-word;overflow-wrap:anywhere"
         status_colors = {
             "success": "success",
             "failed": "error",
@@ -553,7 +571,7 @@ class PterMedalBuyer(_PluginBase):
                 {"component": "td", "props": {"style": nowrap}, "text": str(item.get("buy_ok") if item.get("buy_ok") is not None else "—")},
                 {"component": "td", "props": {"style": nowrap}, "text": str(item.get("buy_fail") if item.get("buy_fail") is not None else "—")},
                 {"component": "td", "props": {"style": nowrap}, "text": item.get("cat_food") or "—"},
-                {"component": "td", "props": {"style": nowrap}, "text": item.get("note") or "—"},
+                {"component": "td", "props": {"style": note_style}, "text": item.get("note") or "—"},
             ]})
         content = [{"component": "VResponsive", "content": [
             {"component": "VTable", "props": {"hover": True, "density": "comfortable"}, "content": [
@@ -566,7 +584,7 @@ class PterMedalBuyer(_PluginBase):
                     {"component": "th", "props": {"style": nowrap}, "text": "购买成功"},
                     {"component": "th", "props": {"style": nowrap}, "text": "购买失败"},
                     {"component": "th", "props": {"style": nowrap}, "text": "猫粮余额"},
-                    {"component": "th", "props": {"style": nowrap}, "text": "说明"},
+                    {"component": "th", "props": {"style": note_style}, "text": "说明"},
                 ]}]},
                 {"component": "tbody", "content": rows},
             ]}
@@ -581,12 +599,27 @@ class PterMedalBuyer(_PluginBase):
         ]}
 
     @staticmethod
-    def _info_col(label: str, value: Any) -> dict:
+    def _info_col(label: str, value: Any, icon: str, split_datetime: bool = False) -> dict:
+        display = str(value if value not in [None, ""] else "-")
+        value_nodes: List[Dict[str, Any]]
+        if split_datetime and " " in display:
+            date_part, time_part = display.split(" ", 1)
+            value_nodes = [
+                {"component": "div", "props": {"class": "text-h6 font-weight-bold mt-1", "style": "white-space:normal;line-height:1.25;"}, "text": date_part},
+                {"component": "div", "props": {"class": "text-caption text-medium-emphasis", "style": "white-space:normal;line-height:1.2;"}, "text": time_part},
+            ]
+        else:
+            value_nodes = [
+                {"component": "div", "props": {"class": "text-h6 font-weight-bold mt-1", "style": "white-space:normal;word-break:break-all;overflow-wrap:anywhere;line-height:1.25;"}, "text": display}
+            ]
         return {"component": "VCol", "props": {"cols": 12, "md": "auto", "class": "d-flex", "style": "flex:1 1 0;min-width:0"}, "content": [
             {"component": "VCard", "props": {"variant": "tonal", "class": "h-100 w-100 rounded-lg border"}, "content": [
                 {"component": "VCardText", "props": {"class": "h-100 d-flex flex-column justify-center py-4"}, "content": [
-                    {"component": "div", "props": {"class": "text-caption text-medium-emphasis"}, "text": label},
-                    {"component": "div", "props": {"class": "text-h6 font-weight-bold mt-1 text-truncate"}, "text": str(value if value not in [None, ""] else "-")}
+                    {"component": "div", "props": {"class": "d-flex align-center text-caption text-medium-emphasis"}, "content": [
+                        {"component": "VIcon", "props": {"size": "small", "class": "mr-1"}, "text": icon},
+                        {"component": "span", "text": label}
+                    ]},
+                    *value_nodes
                 ]}
             ]}
         ]}
@@ -601,6 +634,21 @@ class PterMedalBuyer(_PluginBase):
         buy_ok = len([item for item in events if item.get("event") == "buy_ok"])
         buy_fail = len([item for item in events if item.get("event") == "buy_fail"])
         buy_skip = len([item for item in events if item.get("event") == "buy_skip"])
+        note_items = []
+        for item in events:
+            event_name = item.get("event")
+            reason = str(item.get("reason") or "")
+            if event_name in ["buy_ok", "buy_fail"]:
+                medal_id = str(item.get("medal_id") or "")
+                medal_name = str(item.get("medal_name") or "")
+                medal_text = medal_id or medal_name or "—"
+                if medal_name and medal_name != medal_id:
+                    medal_text = f"{medal_id}（{medal_name}）" if medal_id else medal_name
+                result = "成功" if event_name == "buy_ok" else "失败"
+                note_items.append(f"领取 {medal_text}{result}" + (f"：{reason}" if reason else ""))
+            elif event_name == "auth_failed" and reason:
+                note_items.append(reason)
+        note = last_error or "；".join(note_items[:3])
         last_round = {
             "started_at": started_at,
             "ended_at": ended_at,
@@ -617,6 +665,7 @@ class PterMedalBuyer(_PluginBase):
             "events": events,
             "status": status,
             "last_error": last_error,
+            "note": self._to_log_text(note or "—", 120),
             "medal_count": len(safe_medals),
             "candidate_count": len(safe_candidates),
             "buy_ok": buy_ok,
@@ -627,8 +676,12 @@ class PterMedalBuyer(_PluginBase):
         last_rounds = self.get_data("last_rounds") or []
         if not isinstance(last_rounds, list):
             last_rounds = []
-        # 只记录有购买结果的轮次（成功/失败/dry_run有可领取）
-        record_round = (buy_ok > 0 or buy_fail > 0) or (status == "dry_run" and buy_skip > 0)
+        # 只记录有购买结果/失败状态的轮次（成功/失败/dry_run有可领取/解析或认证失败）
+        record_round = (
+            buy_ok > 0 or buy_fail > 0
+            or (status == "dry_run" and len(safe_candidates) > 0)
+            or status in ["failed", "parse_failed", "auth_failed"]
+        )
         if record_round:
             last_rounds.append({k: v for k, v in last_round.items() if k not in ["medals", "buy_candidates", "events"]})
         self.save_data("last_rounds", last_rounds[-20:])
@@ -693,7 +746,10 @@ class PterMedalBuyer(_PluginBase):
                 return
             lines = [f"有 {len(candidates)} 枚勋章可领取："]
             for item in candidates:
-                lines.append(f"- {item.get('id')}: {item.get('price') if item.get('price') is not None else '未知'} 猫粮")
+                medal_id = item.get("id") or "—"
+                medal_name = item.get("name") or ""
+                medal_text = f"{medal_id}（{medal_name}）" if medal_name and medal_name != medal_id else medal_id
+                lines.append(f"- {medal_text}: {item.get('price') if item.get('price') is not None else '未知'} 猫粮")
             lines.append(f"当前猫粮：{cat_food or '未知'}")
             self.post_message(mtype=NotificationType.Plugin, title="【pter勋章自动领取】", text="\n".join(lines))
             return
@@ -703,18 +759,29 @@ class PterMedalBuyer(_PluginBase):
         lines = ["本次领取结果："]
         for item in buy_events:
             result = "成功" if item.get("event") == "buy_ok" else "失败"
-            lines.append(f"- {item.get('medal_id')}: {item.get('price') if item.get('price') is not None else '未知'} 猫粮，{result}（{item.get('reason') or '—'}）")
+            medal_id = item.get("medal_id") or "—"
+            medal_name = item.get("medal_name") or ""
+            medal_text = f"{medal_id}（{medal_name}）" if medal_name and medal_name != medal_id else medal_id
+            lines.append(f"- {medal_text}: {item.get('price') if item.get('price') is not None else '未知'} 猫粮，{result}（{item.get('reason') or '—'}）")
         lines.append(f"剩余猫粮：{cat_food or '未知'}")
         self.post_message(mtype=NotificationType.Plugin, title="【pter勋章自动领取】", text="\n".join(lines))
 
     def _event(self, event: str, trigger: str, medal_id: Any, medal_value: Any, price: Any, reason: str,
-               cat_food_after: str = "", status: str = "", verify_status: str = "") -> Dict[str, Any]:
+               cat_food_after: str = "", status: str = "", verify_status: str = "",
+               medal_name: Any = "") -> Dict[str, Any]:
+        medal_value_text = str(medal_value or "")
+        medal_name_text = self._clean_text(medal_name)
+        if not medal_name_text and medal_value_text:
+            medal_name_text = re.sub(r"\s*\([\d,]+\s*猫粮\).*", "", medal_value_text).strip()
+        if not medal_name_text or medal_name_text == str(medal_id or ""):
+            medal_name_text = str(medal_id or "")
         return {
             "time": self._now_text(),
             "event": event,
             "trigger": trigger,
             "medal_id": str(medal_id or ""),
-            "medal_value": str(medal_value or ""),
+            "medal_name": medal_name_text,
+            "medal_value": medal_value_text,
             "price": price,
             "result": status or event,
             "reason": self._to_log_text(reason, 500),
@@ -915,7 +982,7 @@ class PterMedalBuyer(_PluginBase):
             buy_ok = len([event for event in events if event.get("event") == "buy_ok"])
         if buy_fail is None:
             buy_fail = len([event for event in events if event.get("event") == "buy_fail"])
-        note = item.get("last_error") or ""
+        note = item.get("note") or item.get("last_error") or ""
         if not note and events:
             note = "；".join([str(event.get("reason") or "") for event in events if event.get("event") in ["buy_ok", "buy_fail", "auth_failed"] and event.get("reason")][:3])
         status = str(item.get("status") or "")
