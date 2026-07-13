@@ -21,7 +21,7 @@ class PterMedalBuyer(_PluginBase):
     plugin_name = "pter勋章自动领取"
     plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.8"
+    plugin_version = "1.0.10"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptermedalbuyer_"
@@ -648,6 +648,10 @@ class PterMedalBuyer(_PluginBase):
                 note_items.append(f"领取 {medal_text}{result}" + (f"：{reason}" if reason else ""))
             elif event_name == "auth_failed" and reason:
                 note_items.append(reason)
+        if not note_items and status == "no_available":
+            note_items.append(f"无可领取勋章（检测 {len(safe_medals)} 枚均不可领取）")
+        elif not note_items and status == "dry_run" and len(safe_candidates) > 0:
+            note_items.append(f"dry_run 检测到 {len(safe_candidates)} 枚可领取")
         note = self._dedup_note(last_error or "；".join(note_items[:3]))
         last_round = {
             "started_at": started_at,
@@ -676,12 +680,8 @@ class PterMedalBuyer(_PluginBase):
         last_rounds = self.get_data("last_rounds") or []
         if not isinstance(last_rounds, list):
             last_rounds = []
-        # 只记录有购买结果/失败状态的轮次（成功/失败/dry_run有可领取/解析或认证失败）
-        record_round = (
-            buy_ok > 0 or buy_fail > 0
-            or (status == "dry_run" and len(safe_candidates) > 0)
-            or status in ["failed", "parse_failed", "auth_failed"]
-        )
+        # 记录所有真实运行轮次（含 no_available 无可领取），保留检测数与可领取数信息
+        record_round = status in ["success", "failed", "no_available", "parse_failed", "auth_failed", "dry_run"]
         if record_round:
             last_rounds.append({k: v for k, v in last_round.items() if k not in ["medals", "buy_candidates", "events"]})
         self.save_data("last_rounds", last_rounds[-20:])
@@ -975,15 +975,13 @@ class PterMedalBuyer(_PluginBase):
     def _round_history_items(self, last_round: Dict[str, Any], events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         rounds = self.get_data("last_rounds") or []
         if isinstance(rounds, list) and rounds:
-            # 过滤旧版本残留的无意义轮次：no_available（无可领取）当前已不再记录
-            valid = [item for item in rounds[-20:] if isinstance(item, dict) and str(item.get("status") or "") != "no_available"]
-            items = [self._round_history_item(item) for item in reversed(valid)]
+            items = [self._round_history_item(item) for item in reversed(rounds[-20:]) if isinstance(item, dict)]
             if items:
                 return items
+        if isinstance(last_round, dict) and last_round:
+            return [self._round_history_item(last_round)]
         if events:
             return self._event_round_history_items(events)
-        if isinstance(last_round, dict) and last_round and str(last_round.get("status") or "") != "no_available":
-            return [self._round_history_item(last_round)]
         return []
 
     def _round_history_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
@@ -1042,7 +1040,7 @@ class PterMedalBuyer(_PluginBase):
             "status": status,
             "status_text": self._status_text(status),
             "medal_count": "—",
-            "candidate_count": len([event for event in events if event.get("event") in ["buy_ok", "buy_fail", "buy_skip"]]),
+            "candidate_count": len([event for event in events if event.get("event") in ["buy_ok", "buy_fail"]]),
             "buy_ok": len([event for event in events if event.get("event") == "buy_ok"]),
             "buy_fail": len([event for event in events if event.get("event") == "buy_fail"]),
             "cat_food": last_event.get("cat_food_after") or "—",
