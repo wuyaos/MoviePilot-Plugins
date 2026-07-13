@@ -21,7 +21,7 @@ class PterMedalBuyer(_PluginBase):
     plugin_name = "pter勋章自动领取"
     plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.7"
+    plugin_version = "1.0.8"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptermedalbuyer_"
@@ -975,12 +975,14 @@ class PterMedalBuyer(_PluginBase):
     def _round_history_items(self, last_round: Dict[str, Any], events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         rounds = self.get_data("last_rounds") or []
         if isinstance(rounds, list) and rounds:
-            items = [self._round_history_item(item) for item in reversed(rounds[-20:]) if isinstance(item, dict)]
+            # 过滤旧版本残留的无意义轮次：no_available（无可领取）当前已不再记录
+            valid = [item for item in rounds[-20:] if isinstance(item, dict) and str(item.get("status") or "") != "no_available"]
+            items = [self._round_history_item(item) for item in reversed(valid)]
             if items:
                 return items
         if events:
             return self._event_round_history_items(events)
-        if isinstance(last_round, dict) and last_round:
+        if isinstance(last_round, dict) and last_round and str(last_round.get("status") or "") != "no_available":
             return [self._round_history_item(last_round)]
         return []
 

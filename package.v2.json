@@ -3,11 +3,12 @@
     "name": "pter勋章自动领取",
     "description": "定时检测 pterclub 当前页可换领勋章，按配置自动换领并记录历史",
     "labels": "pter,勋章,自动换领",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.8": "修复运行历史旧脏数据：过滤旧版本残留的 no_available（无可领取）轮次，避免显示可领取数=17 的错误行；当前已不再记录此类轮次",
       "v1.0.7": "修复运行历史说明列重复堆叠 disabled 跳过文案：新增 _dedup_note 按「；」去重，_save_round 与历史项渲染均过滤 buy_skip 仅保留 buy_ok/buy_fail/auth_failed 并去重；旧历史数据同样去重显示",
       "v1.0.6": "code review 修复：事件和通知/历史说明使用页面解析勋章名；auth/parse/failed轮次进入运行历史；dry_run历史判定改用候选数；近期领取时间保留完整时间部分；运行历史说明列允许换行",
       "v1.0.5": "运行历史改VTable手动渲染(thead/tbody/tr/td)修复VDataTable不渲染行；时间列nowrap不换行；只记录成功/失败/dry_run有可领取的轮次；最近10条分页",
