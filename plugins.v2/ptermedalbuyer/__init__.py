@@ -21,7 +21,7 @@ class PterMedalBuyer(_PluginBase):
     plugin_name = "pter勋章自动领取"
     plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptermedalbuyer_"
@@ -417,7 +417,7 @@ class PterMedalBuyer(_PluginBase):
                     ]}
                 ]}
             ]},
-            {"component": "VAlert", "props": {"type": "warning", "variant": "tonal", "class": "mt-3", "text": "固定检测 pterclub.net 的 medal.php?page=page010；跳过过期、超价和不可领取勋章；购买后会二次 GET 验证。"}}
+            {"component": "VAlert", "props": {"type": "info", "variant": "tonal", "class": "mt-3", "text": "定时检测 pterclub 当前页可领取勋章，自动领取并通知；已拥有勋章从用户详情页解析。"}}
         ]}], self._config_snapshot(onlyonce=False)
 
     def get_page(self) -> List[dict]:
@@ -488,16 +488,18 @@ class PterMedalBuyer(_PluginBase):
         return components
 
     def _owned_card(self, owned: List[Dict[str, Any]]) -> dict:
-        first_line_count = 10
-        content = [self._owned_medal_grid(owned[:first_line_count])] if owned else []
-        remaining = owned[first_line_count:]
-        if remaining:
-            content.append({"component": "VExpansionPanels", "props": {"variant": "accordion", "class": "mt-2"}, "content": [{
-                "component": "VExpansionPanel", "content": [
-                    {"component": "VExpansionPanelTitle", "text": f"展开剩余（{len(remaining)}个）"},
-                    {"component": "VExpansionPanelText", "content": [self._owned_medal_grid(remaining)]}
-                ]
-            }]})
+        content = []
+        if owned:
+            first_line = 12
+            content.append(self._owned_medal_grid(owned[:first_line]))
+            remaining = owned[first_line:]
+            if remaining:
+                content.append({"component": "VExpansionPanels", "props": {"variant": "accordion", "class": "mt-2"}, "content": [{
+                    "component": "VExpansionPanel", "content": [
+                        {"component": "VExpansionPanelTitle", "text": f"展开剩余（{len(remaining)}个）"},
+                        {"component": "VExpansionPanelText", "content": [self._owned_medal_grid(remaining)]}
+                    ]
+                }]})
         return {"component": "VCard", "props": {"variant": "outlined", "class": "mb-4"}, "content": [
             {"component": "VCardTitle", "text": f"已拥有勋章（{len(owned)}个）"},
             {"component": "VCardText", "content": content or [{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "text": "暂无已拥有勋章数据"}}]}
@@ -505,7 +507,7 @@ class PterMedalBuyer(_PluginBase):
 
     @staticmethod
     def _owned_medal_grid(items: List[Dict[str, Any]]) -> dict:
-        return {"component": "VRow", "props": {"class": "flex-wrap ga-2", "style": "overflow:hidden"}, "content": [{
+        return {"component": "div", "props": {"style": "display:flex;flex-wrap:wrap;gap:8px"}, "content": [{
             "component": "VCol", "props": {"cols": "auto", "style": "width:64px;flex:0 0 64px"}, "content": [{
                 "component": "VCard", "props": {"variant": "tonal", "class": "h-100 rounded-lg border", "width": 64}, "content": [{
                     "component": "VCardText", "props": {"class": "text-center pa-2"}, "content": [
@@ -521,7 +523,7 @@ class PterMedalBuyer(_PluginBase):
         content = [{"component": "VRow", "content": [{
             "component": "VCol", "props": {"cols": 12, "sm": 6, "md": 4, "lg": 2}, "content": [{
                 "component": "VCard", "props": {"variant": "tonal", "class": "h-100 text-center"}, "content": [
-                    {"component": "VImg", "props": {"src": item.get("img_src") or "", "max-width": 48, "contain": True, "class": "mt-3 mx-auto"}},
+                    {"component": "VImg", "props": {"src": item.get("img_src") or "", "max-width": 48, "height": 48, "contain": True, "class": "mt-3 mx-auto"}},
                     {"component": "VCardText", "props": {"class": "py-2"}, "content": [
                         {"component": "div", "props": {"style": "max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px", "class": "mx-auto"}, "text": item.get("name") or item.get("id") or "—"},
                         {"component": "div", "props": {"class": "text-caption text-medium-emphasis mt-1"}, "text": item.get("purchased_at") or "—"}
