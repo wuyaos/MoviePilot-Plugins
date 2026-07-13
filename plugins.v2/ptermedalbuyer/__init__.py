@@ -18,8 +18,8 @@ from app.utils.http import RequestUtils
 
 
 class PterMedalBuyer(_PluginBase):
-    plugin_name = "pter勋章自动换领"
-    plugin_desc = "定时检测 pterclub 当前页可换领勋章，按配置自动换领并记录历史"
+    plugin_name = "pter勋章自动领取"
+    plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
     plugin_version = "1.0.0"
     plugin_author = "wuyaos"
@@ -50,7 +50,7 @@ class PterMedalBuyer(_PluginBase):
         config = config or {}
         self._enabled = bool(config.get("enabled", False))
         self._notify = bool(config.get("notify", True))
-        self._cron = str(config.get("cron") or self._cron).strip()
+        self._cron = str(config.get("cron") or "0 9 * * *").strip()
         self._onlyonce = bool(config.get("onlyonce", False))
         self._site_domain = str(config.get("site_domain") or self.DEFAULT_SITE_DOMAIN).strip() or self.DEFAULT_SITE_DOMAIN
         self._page = str(config.get("page") or self.DEFAULT_PAGE).strip() or self.DEFAULT_PAGE
@@ -60,14 +60,14 @@ class PterMedalBuyer(_PluginBase):
         self._dry_run = bool(config.get("dry_run", False))
         self._ensure_plugin_log_file()
         logger.info(
-            f"pter 勋章自动换领初始化完成：enabled={self._enabled}, cron={self._cron}, "
+            f"pter 勋章自动领取初始化完成：enabled={self._enabled}, cron={self._cron}, "
             f"site_domain={self._site_domain}, page={self._page}, buy_mode={self._buy_mode}, "
             f"target_medals={self._target_medals}, max_price={self._max_price}, dry_run={self._dry_run}"
         )
         if self._onlyonce:
             self._onlyonce = False
             self.update_config(self._config_snapshot(onlyonce=False))
-            logger.info("收到立即运行请求，后台启动 pter 勋章自动换领任务")
+            logger.info("收到立即运行请求，后台启动 pter 勋章自动领取任务")
             threading.Thread(target=self.run_buy_task, kwargs={"force": True, "trigger": "onlyonce"}, daemon=True).start()
 
     def get_state(self) -> bool:
@@ -83,8 +83,8 @@ class PterMedalBuyer(_PluginBase):
             "endpoint": self.run_once_api,
             "methods": ["POST"],
             "auth": "bear",
-            "summary": "立即执行 pter 勋章自动换领",
-            "description": "按当前插件配置立即执行一次 pter 勋章检测与换领任务。"
+            "summary": "立即执行 pter 勋章自动领取",
+            "description": "按当前插件配置立即执行一次 pter 勋章检测与领取任务。"
         }]
 
     def get_service(self) -> List[Dict[str, Any]]:
@@ -93,14 +93,13 @@ class PterMedalBuyer(_PluginBase):
         try:
             trigger = CronTrigger.from_crontab(self._cron, timezone=pytz.timezone(settings.TZ))
         except Exception as err:
-            logger.warning(f"pter 勋章自动换领 cron 表达式无效：{self._cron}，错误：{err}")
+            logger.warning(f"pter 勋章自动领取 cron 表达式无效：{self._cron}，错误：{err}")
             return []
         return [{
             "id": "PterMedalBuyerCron",
-            "name": "pter勋章自动换领",
+            "name": "pter勋章自动领取",
             "trigger": trigger,
-            "func": self.scheduled_run,
-            "kwargs": {}
+            "func": self.scheduled_run
         }]
 
     def stop_service(self):
@@ -114,7 +113,7 @@ class PterMedalBuyer(_PluginBase):
 
     def run_buy_task(self, force: bool = False, trigger: str = "cron") -> Dict[str, Any]:
         if not self._lock.acquire(blocking=False):
-            logger.warning("pter 勋章自动换领任务启动失败：已有任务正在执行")
+            logger.warning("pter 勋章自动领取任务启动失败：已有任务正在执行")
             return {"success": False, "message": "已有任务正在执行"}
         started_at = self._now_text()
         events: List[Dict[str, Any]] = []
@@ -177,10 +176,10 @@ class PterMedalBuyer(_PluginBase):
             status = "success" if any(item.get("event") == "buy_ok" for item in events) else "no_available"
             self._save_round(started_at, trigger, site, medals, candidates, events, cat_food, status)
             self._send_notify(events, cat_food)
-            return {"success": True, "message": f"处理 {len(candidates)} 个可换领勋章", "events": events}
+            return {"success": True, "message": f"处理 {len(candidates)} 个可领取勋章", "events": events}
         except Exception as err:
             last_error = self._to_log_text(err, 500)
-            logger.error(f"pter 勋章自动换领任务异常：{err}")
+            logger.error(f"pter 勋章自动领取任务异常：{err}")
             event = self._event("buy_fail", trigger, "-", "", None, f"任务异常：{err}", cat_food, status="failed")
             self._append_events([event])
             self._save_round(started_at, trigger, site, medals, candidates, [event], cat_food, "failed", last_error)
@@ -281,10 +280,10 @@ class PterMedalBuyer(_PluginBase):
             reason = ""
             status = "skipped"
             if medal.get("disabled"):
-                reason = "页面按钮 disabled，可能已换领/猫粮不足/过换领期"
+                reason = "页面按钮 disabled，可能已领取/猫粮不足/过领取期"
                 status = medal.get("status") or "disabled"
             elif not medal.get("in_term", True):
-                reason = "不在勋章换领期限内"
+                reason = "不在勋章领取期限内"
                 status = "expired"
             elif self._target_medals and not self._target_hit(medal.get("id"), medal.get("value")):
                 reason = "未命中 target_medals 白名单"
@@ -331,12 +330,12 @@ class PterMedalBuyer(_PluginBase):
             verified = self._find_medal(verified_medals, str(medal.get("id") or ""), str(medal.get("value") or ""))
             if verified and verified.get("disabled"):
                 return True, "购买成功，二次 GET 验证勋章已变为 disabled", "disabled_after_post", verify_html
-            success_hint = any(word in post_text for word in ["成功", "已换领", "购买成功", "换领成功"])
+            success_hint = any(word in post_text for word in ["成功", "已换领", "已领取", "购买成功", "换领成功", "领取成功"])
             if success_hint and verified and verified.get("status") in ["owned", "disabled_unknown"]:
                 return True, "购买响应提示成功，且二次 GET 已不可再次提交", "success_text_verified", verify_html
-            return False, "POST 后二次 GET 未确认勋章变为已换领/disabled", "verify_not_changed", verify_html
+            return False, "POST 后二次 GET 未确认勋章变为已领取/disabled", "verify_not_changed", verify_html
         except Exception as err:
-            if any(word in post_text for word in ["成功", "已换领", "购买成功", "换领成功"]):
+            if any(word in post_text for word in ["成功", "已换领", "已领取", "购买成功", "换领成功", "领取成功"]):
                 return False, f"响应疑似成功但二次验证失败：{err}", "unknown", verify_html
             return False, f"购买后验证失败：{err}", "verify_failed", verify_html
 
@@ -373,7 +372,7 @@ class PterMedalBuyer(_PluginBase):
                 {"component": "VCardText", "content": [
                     {"component": "VRow", "content": [
                         {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "page", "label": "勋章页", "placeholder": "page010"}}]},
-                        {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSelect", "props": {"model": "buy_mode", "label": "换领模式", "items": [{"title": "全量可换领", "value": "all_available"}, {"title": "仅白名单", "value": "whitelist"}]}}]},
+                        {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VSelect", "props": {"model": "buy_mode", "label": "领取模式", "items": [{"title": "全量可领取", "value": "all_available"}, {"title": "仅白名单", "value": "whitelist"}]}}]},
                         {"component": "VCol", "props": {"cols": 12, "md": 4}, "content": [{"component": "VTextField", "props": {"model": "max_price", "label": "单枚猫粮上限", "type": "number", "min": 0, "hint": "默认 50；0 表示不限制"}}]}
                     ]},
                     {"component": "VTextarea", "props": {"model": "target_medals", "label": "target_medals 白名单", "placeholder": "045-001\n045-001 (21,600 猫粮)", "rows": 3, "hint": "空=全量；支持每行/逗号分隔勋章编号或完整 medalchosen 值"}}
@@ -386,7 +385,7 @@ class PterMedalBuyer(_PluginBase):
         try:
             return self._build_page()
         except Exception as err:
-            logger.error(f"pter 勋章自动换领详情页渲染失败：{err}")
+            logger.error(f"pter 勋章自动领取详情页渲染失败：{err}")
             return [{"component": "VAlert", "props": {"type": "error", "variant": "tonal", "text": f"详情页渲染失败：{err}"}}]
 
     def _build_page(self) -> List[dict]:
@@ -545,11 +544,11 @@ class PterMedalBuyer(_PluginBase):
         ok_events = [item for item in events if item.get("event") == "buy_ok"]
         if not ok_events:
             return
-        lines = ["本次成功换领："]
+        lines = ["本次成功领取："]
         for item in ok_events:
             lines.append(f"- {item.get('medal_id')}: {item.get('price') if item.get('price') is not None else '未知'} 猫粮")
         lines.append(f"剩余猫粮：{cat_food or '未知'}")
-        self.post_message(mtype=NotificationType.Plugin, title="【pter勋章自动换领】", text="\n".join(lines))
+        self.post_message(mtype=NotificationType.Plugin, title="【pter勋章自动领取】", text="\n".join(lines))
 
     def _event(self, event: str, trigger: str, medal_id: Any, medal_value: Any, price: Any, reason: str,
                cat_food_after: str = "", status: str = "", verify_status: str = "") -> Dict[str, Any]:
@@ -653,7 +652,7 @@ class PterMedalBuyer(_PluginBase):
 
     @staticmethod
     def _extract_term_text(text: str) -> str:
-        match = re.search(r"此徽章仅于[^。；;\n]*?换领", text or "")
+        match = re.search(r"此徽章仅于[^。；;\n]*?(?:换领|领取)", text or "")
         return match.group(0) if match else ""
 
     def _is_in_term(self, term_text: str) -> bool:
@@ -735,15 +734,15 @@ class PterMedalBuyer(_PluginBase):
             "success": "成功",
             "failed": "失败",
             "skipped": "跳过",
-            "no_available": "无可换领",
+            "no_available": "无可领取",
             "parse_failed": "解析失败",
             "auth_failed": "Cookie 失效",
             "dry_run": "仅检测",
             "owned": "已拥有",
-            "available": "可换领",
+            "available": "可领取",
             "insufficient": "猫粮不足",
             "expired": "过期/未到期",
-            "disabled_unknown": "不可换领",
+            "disabled_unknown": "不可领取",
             "price_exceeded": "超价",
             "target_miss": "未命中",
         }.get(status or "", status or "未知")
@@ -773,4 +772,4 @@ class PterMedalBuyer(_PluginBase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch(exist_ok=True)
         except Exception as err:
-            logger.debug(f"确保 pter 勋章自动换领日志文件存在失败：{err}")
+            logger.debug(f"确保 pter 勋章自动领取日志文件存在失败：{err}")
