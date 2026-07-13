@@ -21,7 +21,7 @@ class PterMedalBuyer(_PluginBase):
     plugin_name = "pter勋章自动领取"
     plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.4"
+    plugin_version = "1.0.5"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptermedalbuyer_"
@@ -478,13 +478,7 @@ class PterMedalBuyer(_PluginBase):
 
         components.append(self._owned_card(owned))
         components.append(self._recent_purchased_card([item for item in purchased if item.get("purchased_at")][:5]))
-        components.append(self._data_table("运行历史", [
-            {"title": "时间", "key": "started_at"}, {"title": "触发方式", "key": "trigger"},
-            {"title": "状态", "key": "status_text"}, {"title": "检测勋章数", "key": "medal_count"},
-            {"title": "可领取数", "key": "candidate_count"}, {"title": "购买成功", "key": "buy_ok"},
-            {"title": "购买失败", "key": "buy_fail"}, {"title": "猫粮余额", "key": "cat_food"},
-            {"title": "说明", "key": "note"}
-        ], self._round_history_items(last_round, events)))
+        components.append(self._history_card(self._round_history_items(last_round, events)))
         return components
 
     def _owned_card(self, owned: List[Dict[str, Any]]) -> dict:
@@ -537,13 +531,53 @@ class PterMedalBuyer(_PluginBase):
         ]}
 
     @staticmethod
-    def _data_table(title: str, headers: List[dict], items: List[dict], embedded: bool = False) -> dict:
-        table = {"component": "VDataTable", "props": {"headers": headers, "items": items, "items-per-page": 10, "density": "compact"}}
-        if embedded:
-            return table
+    def _history_card(items: List[dict]) -> dict:
+        nowrap = "white-space:nowrap"
+        status_colors = {
+            "success": "success",
+            "failed": "error",
+            "parse_failed": "error",
+            "auth_failed": "error",
+            "dry_run": "warning",
+            "no_available": "grey",
+        }
+        rows = []
+        for item in items[:10]:
+            status = str(item.get("status") or "")
+            rows.append({"component": "tr", "content": [
+                {"component": "td", "props": {"style": nowrap}, "text": item.get("started_at") or "—"},
+                {"component": "td", "props": {"style": nowrap}, "text": item.get("trigger") or "—"},
+                {"component": "td", "props": {"style": nowrap}, "content": [{"component": "VChip", "props": {"color": status_colors.get(status, "grey"), "size": "small", "variant": "tonal"}, "text": item.get("status_text") or "—"}]},
+                {"component": "td", "props": {"style": nowrap}, "text": str(item.get("medal_count") if item.get("medal_count") is not None else "—")},
+                {"component": "td", "props": {"style": nowrap}, "text": str(item.get("candidate_count") if item.get("candidate_count") is not None else "—")},
+                {"component": "td", "props": {"style": nowrap}, "text": str(item.get("buy_ok") if item.get("buy_ok") is not None else "—")},
+                {"component": "td", "props": {"style": nowrap}, "text": str(item.get("buy_fail") if item.get("buy_fail") is not None else "—")},
+                {"component": "td", "props": {"style": nowrap}, "text": item.get("cat_food") or "—"},
+                {"component": "td", "props": {"style": nowrap}, "text": item.get("note") or "—"},
+            ]})
+        content = [{"component": "VResponsive", "content": [
+            {"component": "VTable", "props": {"hover": True, "density": "comfortable"}, "content": [
+                {"component": "thead", "content": [{"component": "tr", "content": [
+                    {"component": "th", "props": {"style": nowrap}, "text": "时间"},
+                    {"component": "th", "props": {"style": nowrap}, "text": "触发方式"},
+                    {"component": "th", "props": {"style": nowrap}, "text": "状态"},
+                    {"component": "th", "props": {"style": nowrap}, "text": "检测勋章数"},
+                    {"component": "th", "props": {"style": nowrap}, "text": "可领取数"},
+                    {"component": "th", "props": {"style": nowrap}, "text": "购买成功"},
+                    {"component": "th", "props": {"style": nowrap}, "text": "购买失败"},
+                    {"component": "th", "props": {"style": nowrap}, "text": "猫粮余额"},
+                    {"component": "th", "props": {"style": nowrap}, "text": "说明"},
+                ]}]},
+                {"component": "tbody", "content": rows},
+            ]}
+        ]}] if rows else [{"component": "VAlert", "props": {"type": "info", "variant": "tonal", "text": "暂无运行记录"}}]
         return {"component": "VCard", "props": {"variant": "outlined", "class": "mb-4"}, "content": [
-            {"component": "VCardTitle", "text": title},
-            {"component": "VCardText", "content": [table]}
+            {"component": "VCardTitle", "props": {"class": "d-flex align-center"}, "content": [
+                {"component": "VIcon", "props": {"style": "color: #9C27B0;", "class": "mr-2"}, "text": "mdi-history"},
+                {"component": "span", "props": {"class": "text-h6 font-weight-bold"}, "text": "运行历史"},
+            ]},
+            {"component": "VDivider"},
+            {"component": "VCardText", "props": {"class": "pa-0"}, "content": content},
         ]}
 
     @staticmethod
@@ -593,7 +627,10 @@ class PterMedalBuyer(_PluginBase):
         last_rounds = self.get_data("last_rounds") or []
         if not isinstance(last_rounds, list):
             last_rounds = []
-        last_rounds.append({k: v for k, v in last_round.items() if k not in ["medals", "buy_candidates", "events"]})
+        # 只记录有购买结果的轮次（成功/失败/dry_run有可领取）
+        record_round = (buy_ok > 0 or buy_fail > 0) or (status == "dry_run" and buy_skip > 0)
+        if record_round:
+            last_rounds.append({k: v for k, v in last_round.items() if k not in ["medals", "buy_candidates", "events"]})
         self.save_data("last_rounds", last_rounds[-20:])
         self.save_data("summary", {
             "updated_at": ended_at,
@@ -881,10 +918,12 @@ class PterMedalBuyer(_PluginBase):
         note = item.get("last_error") or ""
         if not note and events:
             note = "；".join([str(event.get("reason") or "") for event in events if event.get("event") in ["buy_ok", "buy_fail", "auth_failed"] and event.get("reason")][:3])
+        status = str(item.get("status") or "")
         return {
             "started_at": item.get("started_at") or item.get("time") or item.get("ended_at") or "—",
             "trigger": item.get("trigger") or "—",
-            "status_text": self._status_text(str(item.get("status") or "")),
+            "status": status,
+            "status_text": self._status_text(status),
             "medal_count": item.get("medal_count") if item.get("medal_count") is not None else len(item.get("medals") or []),
             "candidate_count": item.get("candidate_count") if item.get("candidate_count") is not None else len(item.get("buy_candidates") or []),
             "buy_ok": buy_ok,
@@ -911,6 +950,7 @@ class PterMedalBuyer(_PluginBase):
         return {
             "started_at": last_event.get("time") or "—",
             "trigger": last_event.get("trigger") or "—",
+            "status": status,
             "status_text": self._status_text(status),
             "medal_count": "—",
             "candidate_count": len([event for event in events if event.get("event") in ["buy_ok", "buy_fail", "buy_skip"]]),
