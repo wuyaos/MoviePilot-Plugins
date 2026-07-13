@@ -24,7 +24,7 @@ class RousiCheckin(_PluginBase):
     plugin_name = "肉丝自动签到"
     plugin_desc = "rousi.pro JWT Token 自动签到、站内信增量推送与过期提醒"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "rousicheckin_"
@@ -111,12 +111,15 @@ class RousiCheckin(_PluginBase):
             logger.warning(f"肉丝自动签到 Cron 配置无效：cron={repr(self._cron)}，error={err}")
             return []
         return [{
-            "id": "RousiCheckin.Signin",
+            "id": "RousiCheckin",
             "name": "肉丝自动签到服务",
             "trigger": trigger,
-            "func": self.__signin,
-            "kwargs": {"manual": False}
+            "func": self.signin,
+            "kwargs": {}
         }]
+
+    def signin(self) -> Dict[str, Any]:
+        return self.__signin(manual=False)
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return [{
