@@ -1,4 +1,16 @@
 {
+  "PterMedalBuyer": {
+    "name": "pter勋章自动换领",
+    "description": "定时检测 pterclub 当前页可换领勋章，按配置自动换领并记录历史",
+    "labels": "pter,勋章,自动换领",
+    "version": "1.0.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png",
+    "author": "wuyaos",
+    "level": 2,
+    "history": {
+      "v1.0.0": "初始版本：从 MoviePilot 站点表读取 pterclub.net Cookie；解析 medal.php?page=page010 的 buymedal 表单和 medalchosen；支持全量/白名单、max_price、dry_run、期限过滤；POST 换领后二次 GET 验证；持久化事件、已拥有勋章、最近轮次和详情页"
+    }
+  },
   "MyPTMedalBuyer": {
     "name": "myPT勋章续购",
     "description": "自动续购 myPT(cc.mypt.cc) 勋章，避免到期后忘记手动购买",
