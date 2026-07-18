@@ -21,7 +21,7 @@ class PterMedalBuyer(_PluginBase):
     plugin_name = "pter勋章自动领取"
     plugin_desc = "定时检测 pterclub 当前页可领取勋章，按配置自动领取并记录历史"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.10"
+    plugin_version = "1.0.11"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptermedalbuyer_"
@@ -45,6 +45,8 @@ class PterMedalBuyer(_PluginBase):
     _lock = threading.Lock()
 
     def init_plugin(self, config: Optional[dict] = None):
+        # 停止现有任务，避免重载时定时任务残留/丢失（参考 moviepilotupdatenotify）
+        self.stop_service()
         config = config or {}
         self._enabled = bool(config.get("enabled", False))
         self._notify = bool(config.get("notify", True))
@@ -95,7 +97,8 @@ class PterMedalBuyer(_PluginBase):
             "id": "PterMedalBuyerCron",
             "name": "pter勋章自动领取",
             "trigger": trigger,
-            "func": self.scheduled_run
+            "func": self.scheduled_run,
+            "kwargs": {}
         }]
 
     def stop_service(self):
