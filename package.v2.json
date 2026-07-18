@@ -25,11 +25,12 @@
     "name": "myPT勋章续购",
     "description": "自动续购 myPT(cc.mypt.cc) 勋章，避免到期后忘记手动购买",
     "labels": "myPT,勋章,续购",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.1": "为 medal.php/userdetails.php/ajax.php 请求增加 3 次重试，仅对无响应和 HTTP 5xx 退避重试，避免整点短暂无响应直接失败；默认 cron 调整为 09:07 避开整点高峰（仅影响新配置）",
       "v1.0.0": "初始版本：自动续购 myPT(cc.mypt.cc) 勋章；从 MP 站点表读 cookie；解析 medal.php 按钮状态；POST ajax.php action=buyMedal 购买；支持勾选多个勋章；到期前 N 天开始尝试续购；frost_style 详情页"
     }
   },

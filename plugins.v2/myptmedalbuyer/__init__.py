@@ -1,6 +1,7 @@
 import json
 import re
 import threading
+import time
 from datetime import datetime, timedelta
 from html import unescape
 from typing import Any, Dict, List, Tuple, Optional
@@ -22,7 +23,7 @@ class MyPTMedalBuyer(_PluginBase):
     plugin_name = "myPT勋章续购"
     plugin_desc = "自动续购 myPT(cc.mypt.cc) 勋章，避免到期后忘记手动购买"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "myptmedalbuyer_"
@@ -52,7 +53,7 @@ class MyPTMedalBuyer(_PluginBase):
 
     _enabled = False
     _notify = True
-    _cron = "0 9 * * *"
+    _cron = "7 9 * * *"
     _onlyonce = False
     _medal_ids: List[str] = []
     _site_id = ""
@@ -191,14 +192,42 @@ class MyPTMedalBuyer(_PluginBase):
             logger.warning(f"遍历 MoviePilot 站点读取 myPT 失败：{err}")
         return None, ""
 
+    def _request_get_with_retry(self, url, headers, site=None, label="请求"):
+        for attempt in range(1, 4):
+            res = RequestUtils(
+                headers=headers,
+                proxies=settings.PROXY if self._use_proxy else None,
+                timeout=self.REQUEST_TIMEOUT
+            ).get_res(url=url)
+            status_code = getattr(res, "status_code", None) if res is not None else None
+            if res is None or (status_code is not None and status_code >= 500):
+                logger.warning(f"{label}失败：第 {attempt}/3 次，{'无响应' if res is None else f'HTTP {status_code}'}")
+                if attempt < 3:
+                    time.sleep(3 * attempt)
+                    continue
+            return res
+        return None
+
+    def _request_post_with_retry(self, url, headers, data, site=None, label="请求"):
+        for attempt in range(1, 4):
+            res = RequestUtils(
+                headers=headers,
+                proxies=settings.PROXY if self._use_proxy else None,
+                timeout=self.REQUEST_TIMEOUT
+            ).post_res(url=url, data=data)
+            status_code = getattr(res, "status_code", None) if res is not None else None
+            if res is None or (status_code is not None and status_code >= 500):
+                logger.warning(f"{label}失败：第 {attempt}/3 次，{'无响应' if res is None else f'HTTP {status_code}'}")
+                if attempt < 3:
+                    time.sleep(3 * attempt)
+                    continue
+            return res
+        return None
+
     def _fetch_medal_page(self, cookie: str, site=None) -> str:
         url = urljoin(self._base_url(site) + "/", self.MEDAL_PATH.lstrip("/"))
-        res = RequestUtils(
-            headers=self._page_headers(cookie, site),
-            proxies=settings.PROXY if self._use_proxy else None,
-            timeout=self.REQUEST_TIMEOUT
-        ).get_res(url=url)
-        if not res:
+        res = self._request_get_with_retry(url, self._page_headers(cookie, site), site, "请求 medal.php")
+        if res is None:
             raise RuntimeError("请求 medal.php 失败：无响应")
         if res.status_code in [401, 403]:
             raise RuntimeError(f"Cookie 失效或无权限：HTTP {res.status_code}")
@@ -243,12 +272,8 @@ class MyPTMedalBuyer(_PluginBase):
     def _fetch_user_details(self, cookie: str, uid: str, site=None) -> str:
         """获取 userdetails.php 页面"""
         url = urljoin(self._base_url(site) + "/", f"userdetails.php?id={uid}")
-        res = RequestUtils(
-            headers=self._page_headers(cookie, site),
-            proxies=settings.PROXY if self._use_proxy else None,
-            timeout=self.REQUEST_TIMEOUT
-        ).get_res(url=url)
-        if not res:
+        res = self._request_get_with_retry(url, self._page_headers(cookie, site), site, "请求 userdetails.php")
+        if res is None:
             raise RuntimeError("请求 userdetails.php 失败：无响应")
         if res.status_code in [401, 403]:
             raise RuntimeError(f"Cookie 失效或无权限：HTTP {res.status_code}")
@@ -269,12 +294,14 @@ class MyPTMedalBuyer(_PluginBase):
 
     def _buy_medal(self, cookie: str, medal_id: str, site=None) -> Tuple[bool, str]:
         url = urljoin(self._base_url(site) + "/", self.AJAX_PATH.lstrip("/"))
-        res = RequestUtils(
-            headers=self._ajax_headers(cookie, site),
-            proxies=settings.PROXY if self._use_proxy else None,
-            timeout=self.REQUEST_TIMEOUT
-        ).post_res(url=url, data={"action": "buyMedal", "id": medal_id})
-        if not res:
+        res = self._request_post_with_retry(
+            url,
+            self._ajax_headers(cookie, site),
+            {"action": "buyMedal", "id": medal_id},
+            site,
+            "请求 ajax.php"
+        )
+        if res is None:
             return False, "购买请求失败：无响应"
         return self._parse_buy_result(res)
 
@@ -331,7 +358,7 @@ class MyPTMedalBuyer(_PluginBase):
                             {"component": "VSwitch", "props": {"model": "use_proxy", "label": "使用代理", "color": "warning"}}]}]},
                     {"component": "VRow", "content": [
                         {"component": "VCol", "props": {"cols": 12, "md": 6}, "content": [
-                            {"component": "VTextField", "props": {"model": "cron", "label": "检查周期", "placeholder": "0 9 * * *", "hint": "5 位 cron 表达式，默认每天 09:00 检查"}}]},
+                            {"component": "VTextField", "props": {"model": "cron", "label": "检查周期", "placeholder": "7 9 * * *", "hint": "5 位 cron 表达式，默认每天 09:07 检查，避开整点高峰"}}]},
                         {"component": "VCol", "props": {"cols": 12, "md": 6}, "content": [
                             {"component": "VTextField", "props": {"model": "check_days", "label": "到期提前天数", "type": "number", "min": 0, "hint": "仅对可解析到期时间的有限期勋章生效"}}]}]}]}]},
             {"component": "VCard", "props": {"variant": "outlined", "class": "mt-3"}, "content": [
