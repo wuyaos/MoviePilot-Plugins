@@ -22,7 +22,7 @@ class YzyySignin(_PluginBase):
     plugin_name = "yzyy论坛签到"
     plugin_desc = "yzyy论坛每日签到，自动获取签到码完成签到"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.2.10"
+    plugin_version = "1.2.11"
     plugin_author = "bfjy, wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "yzyysignin_"
@@ -569,8 +569,13 @@ class YzyySignin(_PluginBase):
         try:
             logger.info("🔄 开始执行 yzyy 论坛签到任务")
 
+            # 用同一 Session 贯穿签到页 + 签到请求，保证 Set-Cookie（sid 等）连续，
+            # 否则 Discuz zqlj_sign 的 sign token 会因 session 不一致而静默失效（参考 moviepilotupdatenotify 模式）
+            import requests as _requests
+            session = _requests.Session()
+
             # 获取签到页面HTML
-            page_html = self.__fetch_sign_page()
+            page_html = self.__fetch_sign_page(session=session)
             if page_html is None:
                 error_msg = "获取签到页面失败"
                 logger.error(f"❌ {error_msg}")
@@ -585,7 +590,7 @@ class YzyySignin(_PluginBase):
                 if new_cookie and new_cookie != self._cookie:
                     self._cookie = new_cookie
                     self.__persist_cookie(self._cookie)
-                    page_html = self.__fetch_sign_page()
+                    page_html = self.__fetch_sign_page(session=session)
                     if page_html is None or self.__is_not_logged_in(page_html):
                         error_msg = "Cookie已失效，CookieCloud 重新获取后仍无效"
                         logger.error(f"❌ {error_msg}")
@@ -626,7 +631,7 @@ class YzyySignin(_PluginBase):
             logger.info(f"📝 提取到签到链接: {sign_url}")
 
             # 执行签到请求
-            result_html = self.__execute_sign_request(sign_url)
+            result_html = self.__execute_sign_request(sign_url, session=session)
             if result_html is None:
                 error_msg = "签到请求失败"
                 logger.error(f"❌ {error_msg}")
@@ -658,7 +663,7 @@ class YzyySignin(_PluginBase):
             if not configured_cookie:
                 self._cookie = ""
 
-    def __fetch_sign_page(self) -> Optional[str]:
+    def __fetch_sign_page(self, session=None) -> Optional[str]:
         """获取签到页面HTML"""
         try:
             headers = self.__build_headers()
@@ -668,7 +673,8 @@ class YzyySignin(_PluginBase):
             res = RequestUtils(
                 headers=headers,
                 cookies=self._cookie,
-                timeout=self.REQUEST_TIMEOUT
+                timeout=self.REQUEST_TIMEOUT,
+                session=session
             ).get_res(url=sign_page_url)
 
             if not res or res.status_code != 200:
@@ -737,7 +743,7 @@ class YzyySignin(_PluginBase):
         logger.info(f"提取到签到链接: {sign_url}")
         return sign_url
 
-    def __execute_sign_request(self, sign_url: str) -> Optional[str]:
+    def __execute_sign_request(self, sign_url: str, session=None) -> Optional[str]:
         """
         执行签到请求 - 移除allow_redirects参数
         """
@@ -753,7 +759,8 @@ class YzyySignin(_PluginBase):
             res = RequestUtils(
                 headers=headers,
                 cookies=self._cookie,
-                timeout=self.REQUEST_TIMEOUT
+                timeout=self.REQUEST_TIMEOUT,
+                session=session
             ).get_res(url=sign_url)
 
             if not res:
