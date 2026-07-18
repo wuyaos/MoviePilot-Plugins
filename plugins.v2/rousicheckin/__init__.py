@@ -24,7 +24,7 @@ class RousiCheckin(_PluginBase):
     plugin_name = "肉丝自动签到"
     plugin_desc = "rousi.pro JWT Token 自动签到、站内信增量推送与过期提醒"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "rousicheckin_"
@@ -50,6 +50,8 @@ class RousiCheckin(_PluginBase):
     _lock = threading.Lock()
 
     def init_plugin(self, config: dict = None):
+        # 停止现有任务，避免重载时定时任务残留/丢失（参考 moviepilotupdatenotify）
+        self.stop_service()
         config = config or {}
         self._enabled = bool(config.get("enabled", False))
         self._notify = bool(config.get("notify", True))
