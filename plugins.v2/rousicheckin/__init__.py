@@ -24,7 +24,7 @@ class RousiCheckin(_PluginBase):
     plugin_name = "肉丝自动签到"
     plugin_desc = "rousi.pro JWT Token 自动签到、站内信增量推送与过期提醒"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "rousicheckin_"
@@ -47,11 +47,12 @@ class RousiCheckin(_PluginBase):
     _expire_threshold_days = 5
     _random_delay_minutes = 3
     _onlyonce = False
-    _lock = threading.Lock()
 
     def init_plugin(self, config: dict = None):
         # 停止现有任务，避免重载时定时任务残留/丢失（参考 moviepilotupdatenotify）
         self.stop_service()
+        if not hasattr(self, '_lock'):
+            self._lock = threading.Lock()
         config = config or {}
         self._enabled = bool(config.get("enabled", False))
         self._notify = bool(config.get("notify", True))
@@ -163,7 +164,7 @@ class RousiCheckin(_PluginBase):
                         self.__list_item("mdi-login-variant", "Token 获取", "登录 rousi.pro 时建议勾选30天免登录，然后从浏览器 localStorage 复制 JWT Token 填入本插件。"),
                         self.__list_item("mdi-calendar-check", "签到逻辑", "定时触发后先读取 attendance stats 判断今日是否已签，已签则跳过 POST，未签才提交 fixed 模式签到。"),
                         self.__list_item("mdi-message-text-clock", "站内信推送", "首次运行只记录当前最大消息ID不推送；之后仅推送新增站内信，最多展示5条并汇总超出数量。"),
-                        self.__list_item("mdi-shield-alert", "失效处理", "Token 过期或接口返回401时会当日通知一次、写入历史，并自动停用插件。")
+                        self.__list_item("mdi-shield-alert", "失效处理", "Token 过期或接口返回401时会当日通知一次、写入历史；插件保持启用并在下次定时周期自动重试，刷新 token 后无需手动重开。")
                     ]}
                 ])
             ]
@@ -202,7 +203,7 @@ class RousiCheckin(_PluginBase):
             }]
 
     def stop_service(self):
-        pass
+        logger.info("肉丝自动签到插件正在停止，调度任务将由框架清理")
 
     def run_once_api(self) -> Dict[str, Any]:
         if self._lock.locked():
@@ -215,7 +216,10 @@ class RousiCheckin(_PluginBase):
     def __signin(self, manual: bool = False) -> Dict[str, Any]:
         if not self._lock.acquire(blocking=False):
             logger.warning("肉丝签到任务启动失败：已有任务正在执行")
-            return {"status": "running", "message": "任务执行中"}
+            result = self.__new_result(manual=manual)
+            result.update({"status_code": "running", "status": "任务已在执行中", "message": "前次任务未完成，跳过本次触发"})
+            self.__save_run_result(result)
+            return result
         result = self.__new_result(manual=manual)
         try:
             token = (self._token or "").strip()
@@ -239,9 +243,7 @@ class RousiCheckin(_PluginBase):
             )
             self.__check_expire_reminder(token_status)
             if token_status.get("expired"):
-                result.update({"status_code": "auth_failed", "status": "Token失效", "message": "Token 已过期，请更新后重试"})
-                self.__handle_auth_failed(result.get("message"), result)
-                return result
+                logger.warning("肉丝 Token 本地判定已过期，但仍将尝试 API 调用（禁用决策交由 API 实际返回 401）")
 
             session = requests.Session()
             session.headers.update({
@@ -416,29 +418,15 @@ class RousiCheckin(_PluginBase):
                     title="【肉丝自动签到】Token 已失效",
                     text=(
                         f"肉丝签到认证失败：{record.get('message')}\n\n"
-                        "插件已自动停用。请登录 rousi.pro 勾选30天免登录刷新 token，手动填入插件配置后再启用。"
+                        "插件保持启用，将在下次定时周期自动重试。请尽快登录 rousi.pro 勾选30天免登录刷新 token 并更新插件配置。"
                     )
                 )
                 self.save_data("last_auth_failed_notify_date", today)
         except Exception as err:
             logger.warning(f"肉丝认证失败通知处理失败：{err}")
-        self._enabled = False
-        try:
-            cur = self.get_config() or {}
-            cur.update({
-                "enabled": False,
-                "notify": self._notify,
-                "message_notify": self._message_notify,
-                "token": self._token,
-                "cron": self._cron,
-                "expire_threshold_days": self._expire_threshold_days,
-                "random_delay_minutes": self._random_delay_minutes,
-                "onlyonce": False
-            })
-            self.update_config(cur)
-            logger.warning("肉丝 Token 认证失败，已自动停用插件")
-        except Exception as err:
-            logger.warning(f"肉丝认证失败自动停用配置更新失败：{err}")
+        # 不再自动停用插件：Token 失效是临时状态，停用会导致 get_service 注销 cron，
+        # 用户更新 token 后还需手动重开，且下一周期无法自动恢复。保留启用态让 cron 自动重试。
+        logger.warning("肉丝 Token 认证失败，保留插件启用态，等待下次定时周期自动重试")
         return record
 
     def __safe_post_message(self, **kwargs):
@@ -479,7 +467,9 @@ class RousiCheckin(_PluginBase):
 
     @staticmethod
     def __is_auth_failed(body: Dict[str, Any]) -> bool:
-        return body.get("_http") == 401 or body.get("code") == 100
+        # 仅 HTTP 401 视为认证失败；code==100 可能是限流/维护等临时故障，
+        # 需同时伴随 401 才算，避免把临时错误误判为 Token 失效。
+        return body.get("_http") == 401
 
     @staticmethod
     def __auth_message(body: Dict[str, Any]) -> str:
