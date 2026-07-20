@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.3.6"
+    plugin_version = "1.3.7"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
