@@ -136,4 +136,43 @@ I. 最终验证：所有 Python 文件 ast.parse；pytest；插件加载/表单/
 - 本地 MoviePilot 强制重载成功，配置页和数据页接口均返回 200。
 - 重试状态仅存内存（MP 重启丢失）的问题本轮未修复，记录为已知限制，阶段 I 评估是否需要持久化。
 
+## 迭代 11 反思
+- 已完成：阶段 A-H 全部完成，22 个明确站点迁移完成，80/80 测试通过，审查遗留问题（retry_notify/feedback_timeout/图标）已修复。
+- 进展良好：站点迁移+审查修复节奏稳定；本地 MP 加载和接口验证持续通过。
+- 当前风险：重试状态仅存内存未持久化（已知限制，阶段 I 评估）；需最终验证全量 ast/pytest/MP 接口并更新 AGENTS.md/版本历史。
+- 调整：本轮为最终验证轮，重点更新文档与版本历史、运行可外部重跑的最终验证命令、记录残余风险。
+- 下一优先级：更新 siteautotask/AGENTS.md、package.v2.json 版本历史、运行最终验证命令并记录到 task 文件。
+
+## 迭代 11 进度（阶段 I 最终验证）
+- 已更新 `siteautotask/AGENTS.md`：完整 22 站点清单（重叠8/ptautotask独有10/groupchatzone独有4）、模块职责、契约约束、已知限制。
+- 已更新 `package.v2.json` 版本历史：新增 v1.0.1 记录 22 站点适配与修复；同步 `plugin_version` 为 1.0.1。
+- 已运行最终验证命令并全部通过：AST 语法、80/80 unittest、package.v2.json JSON 校验、git diff --check、22 站点文件数、MP form/page 接口 200、日志加载 22 站点。
+
+### 最终验证命令（可外部重跑）
+工作目录：`/mnt/d/work/project/person/MoviePilot-Plugins`
+环境变量：无（MP 验证需本地服务 127.0.0.1:7300 与有效 X-API-KEY）
+```bash
+cd /mnt/d/work/project/person/MoviePilot-Plugins && \
+  find plugins.v2/siteautotask -name '*.py' -print0 | xargs -0 -n1 python3 -c 'import ast,sys; ast.parse(open(sys.argv[1],encoding="utf-8").read())' && echo 'AST OK' && \
+  python3 -m unittest discover -s plugins.v2/siteautotask/tests -q && \
+  python3 -c "import json; json.load(open('package.v2.json')); print('JSON OK')" && \
+  git diff --check && echo 'diff OK' && \
+  ls plugins.v2/siteautotask/sites/*.py | grep -v __init__ | grep -v capabilities | grep -v nexusphp | wc -l
+```
+输出摘要：AST OK；Ran 80 tests OK；JSON OK；diff OK；22（站点数）。
+
+MP 接口验证（需本地服务）：
+```bash
+TOKEN='<X-API-KEY>'; URL='local%3A%2F%2Fsiteautotask%3Fpath%3D%2Fmnt%2Fd%2Fwork%2Fproject%2Fperson%2FMoviePilot-Plugins%26version%3Dv2'; \
+  curl -sS -H "X-API-KEY: $TOKEN" "http://127.0.0.1:7300/api/v1/plugin/install/SiteAutoTask?repo_url=$URL&force=true" >/dev/null; sleep 2; \
+  for p in form page; do curl -sS -H "X-API-KEY: $TOKEN" "http://127.0.0.1:7300/api/v1/plugin/$p/SiteAutoTask" -o /dev/null -w "$p=%{http_code}\n"; done
+```
+输出：form=200；page=200。
+
+### 残余风险
+- 重试状态仅存内存（MP 重启丢失），记录为已知限制，暂不持久化。
+- feedback_timeout 仅在 PTLGS 生效，其他站点反馈轮询为单次请求。
+- 图标为占位 PNG，后续可替换为正式设计。
+- POST 重试幂等性为低风险设计权衡。
+
 当前已存在半成品，必须先审计再改，不要假设已有代码正确。所有对用户的进展使用简体中文。

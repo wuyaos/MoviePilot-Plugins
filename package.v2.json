@@ -354,12 +354,13 @@
     "name": "站点自动任务",
     "description": "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。",
     "labels": "PT,签到,喊话,自动任务",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
-      "v1.0.0": "初始模块化合并版本：统一任务结果、站点能力与运行数据页；首批接入青蛙站点。"
+      "v1.0.0": "初始模块化合并版本：统一任务结果、站点能力与运行数据页；首批接入青蛙站点。",
+      "v1.0.1": "完成 22 个站点适配（8 重叠 + 10 ptautotask 独有 + 4 groupchatzone 独有）；修复重试锁冲突、retry_notify 控制、feedback_timeout 接入、图标资源缺失。"
     }
   }
 }
