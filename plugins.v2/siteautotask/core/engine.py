@@ -108,6 +108,51 @@ class TaskEngine:
         self.plugin.retry_records = failed
         self.plugin.retry_attempt = getattr(self.plugin, "retry_attempt", 0) + 1
 
+    def run_debug(self, site_filter=None, task_filter=None):
+        """调试执行：绕过配置开关与 chat_sites 限制，按过滤器直接执行指定任务。
+
+        用于本地真实调试。写历史但不调度重试、不发通知，避免污染正常运行状态。
+        site_filter: 站点 id（字符串）或域名；为空则执行全部站点。
+        task_filter: 任务 id/name/label 子串（不区分大小写）；为空则执行该站点全部任务。
+        """
+        if not self._lock.acquire(blocking=False):
+            logger.warning("调试执行被跳过：已有站点任务正在执行")
+            return []
+        try:
+            return self._run_debug_locked(site_filter, task_filter)
+        finally:
+            self._lock.release()
+
+    def _run_debug_locked(self, site_filter, task_filter):
+        cfg = self.plugin.config
+        sites = self.plugin.all_sites()
+        if site_filter:
+            sites = [s for s in sites
+                     if str(s.get("id")) == str(site_filter)
+                     or (s.get("domain") or "") == site_filter]
+        if not sites:
+            logger.info(f"调试执行：未匹配到站点 {site_filter!r}")
+            return []
+        records = []
+        for site in sites:
+            handler = self._build_handler(site)
+            if not handler:
+                continue
+            tasks = self.plugin.tasks_for(handler)
+            if task_filter:
+                kw = task_filter.lower()
+                tasks = [t for t in tasks
+                         if kw in t.get("id", "").lower()
+                         or kw in t.get("name", "").lower()
+                         or kw in t.get("label", "").lower()]
+            for task in tasks:
+                task = dict(task)
+                task["config_key"] = site_task_key(site, task)
+                record = self._run_task(handler, task)
+                records.append(record)
+        self.history.append(records, cfg.history_days)
+        return records
+
     def retry_failed(self):
         """只重试最近一次失败任务；站点任务方法会重新构造，避免复用失效 session。"""
         if not getattr(self.plugin, "retry_records", None):

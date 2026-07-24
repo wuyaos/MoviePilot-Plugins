@@ -2,11 +2,15 @@
 
 入口只负责 MoviePilot 生命周期与模块委托；执行、调度、历史、UI 分别位于 core/ 与 ui/。
 """
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.plugins import _PluginBase
 from app.db.site_oper import SiteOper
+from app.log import logger
 from app.schemas import NotificationType
+from app.core.event import Event, eventmanager
+from app.schemas.types import EventType
 
 from .core.config import PluginConfig
 from .core.engine import TaskEngine
@@ -21,7 +25,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -65,6 +69,10 @@ class SiteAutoTask(_PluginBase):
 
     def run_retry(self):
         return self.engine.retry_failed() if self.engine else []
+
+    def run_debug(self, site_filter=None, task_filter=None):
+        """调试执行：绕过配置开关，按站点/任务过滤器直接执行。"""
+        return self.engine.run_debug(site_filter, task_filter) if self.engine else []
 
     def all_sites(self):
         sites = []
@@ -136,10 +144,70 @@ class SiteAutoTask(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        return []
+        return [
+            {
+                "cmd": "/siteautotask_run",
+                "event": EventType.PluginAction,
+                "desc": "立即执行站点自动任务",
+                "category": "站点",
+                "data": {"action": "siteautotask_run"},
+            }
+        ]
 
     def get_api(self) -> List[Dict[str, Any]]:
-        return []
+        return [
+            {
+                "path": "/run",
+                "endpoint": self.api_run,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "执行站点任务（可指定站点和任务用于调试）",
+                "description": (
+                    "site_id 指定站点(id 或域名)，task_name 指定任务名(模糊匹配)；"
+                    "都不传则按配置全量后台执行。调试指定站点/任务时同步返回执行记录。"
+                ),
+            }
+        ]
+
+    def api_run(self, site_id: str = "", task_name: str = "") -> Dict[str, Any]:
+        """立即执行任务。
+
+        - site_id 和 task_name 都为空：按配置全量后台执行（避免 API 超时）。
+        - 指定 site_id：调试执行该站点全部任务，同步返回记录。
+        - 指定 site_id + task_name：调试执行该站点匹配任务，同步返回记录。
+        """
+        if not self.engine:
+            return {"success": False, "message": "插件未初始化"}
+        if not site_id and not task_name:
+            threading.Thread(target=self.run_once, daemon=True).start()
+            return {"success": True, "message": "已后台启动全量任务，结果写入历史记录"}
+        logger.info(f"调试执行请求：site_id={site_id!r}, task_name={task_name!r}")
+        records = self.run_debug(site_filter=site_id or None, task_filter=task_name or None)
+        return {
+            "success": True,
+            "message": f"执行完成，共 {len(records)} 个任务",
+            "records": records,
+        }
+
+    @eventmanager.register(EventType.PluginAction)
+    def run_command(self, event: Event = None):
+        event_data = event.event_data if event else {}
+        if not event_data or event_data.get("action") != "siteautotask_run":
+            return
+        channel = event_data.get("channel")
+        userid = event_data.get("user")
+        if not self.config.enabled:
+            logger.warning("命令执行请求被忽略：插件未启用")
+            self.post_message(
+                channel=channel, userid=userid, mtype=self.notification_type,
+                title="【站点自动任务】", text="插件未启用，无法执行任务。",
+            )
+            return
+        threading.Thread(target=self.run_once, daemon=True).start()
+        self.post_message(
+            channel=channel, userid=userid, mtype=self.notification_type,
+            title="【站点自动任务】", text="已后台启动任务执行，完成后按配置发送通知。",
+        )
 
     def get_service(self):
         return self.scheduler.services()
