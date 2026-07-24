@@ -154,11 +154,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
     "labels": "签到,PT",
-    "version": "1.4.3",
+    "version": "1.4.4",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.4.4": "复用站点签到与登录的 CookieCloud 补取、失效重试和统计外壳，保持两类任务原有消息与处理差异。",
       "v1.4.3": "复用详情页签到与登录历史面板构建逻辑，并避免页面临时字段修改原始历史记录；保持汇总状态覆盖详细文案的现有展示规则。",
       "v1.4.2": "精简站点适配器重复的标准 match()：基类统一按 site_url 精确匹配，保留 M-Team、YemaPT 等特殊匹配规则；不改变任何签到请求或结果判断。",
       "v1.4.1": "提取 HDBao、LuckPT、DStudio 共用的无验证码 attendance.php 空 POST 签到基类；保留三个站点原有完整签到地址、空 POST、成功/重复文案及判断顺序，不改变签到行为。",

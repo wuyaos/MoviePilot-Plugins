@@ -40,7 +40,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.4.3"
+    plugin_version = "1.4.4"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1783,18 +1783,54 @@ class AutoPtCheckin(_PluginBase):
             logger.info(f"CookieCloud 补取失败（可能未配置）：{e}")
         return ""
 
-    def signin_site(self, site_info: CommentedMap, cookie_cache: dict = None) -> Tuple[str, str]:
-        """
-        签到一个站点
-        """
+    def _execute_site_action(self, site_info: CommentedMap, cookie_cache: dict,
+                             action_name: str, execute, normalize_message=None, prepare=None) -> Tuple[str, str]:
+        """执行站点动作，统一处理 CookieCloud 补取、失效重试和站点统计。"""
         if not site_info.get("cookie"):
             cookie = self._fetch_cookie_cloud(site_info.get("url", ""), cookie_cache=cookie_cache)
             if cookie:
                 logger.info(f"{site_info.get('name')} Cookie 为空，已从 CookieCloud 补取")
                 site_info["cookie"] = cookie
-        site_module = self.__build_class(site_info.get("url"))
-        # 开始记时
+
+        if prepare:
+            prepare()
         start_time = datetime.now()
+        state, message = execute()
+        if normalize_message:
+            message = normalize_message(state, message)
+
+        if "Cookie已失效" in str(message):
+            old_cookie = site_info.get("cookie") or ""
+            cookie = self._fetch_cookie_cloud(site_info.get("url", ""), cookie_cache=cookie_cache)
+            if cookie and cookie != old_cookie:
+                logger.info(f"{site_info.get('name')} Cookie已失效，已从 CookieCloud 补取并重试{action_name}")
+                site_info["cookie"] = cookie
+                site_id = site_info.get("id")
+                if site_id and self.siteoper.get(site_id):
+                    self.siteoper.update(site_id, {"cookie": cookie})
+                state, message = execute()
+                if normalize_message:
+                    message = normalize_message(state, message)
+
+        seconds = (datetime.now() - start_time).seconds
+        domain = StringUtils.get_url_domain(site_info.get('url'))
+        if state:
+            self.siteoper.success(domain=domain, seconds=seconds)
+        else:
+            self.siteoper.fail(domain)
+        return site_info.get("name"), message
+
+    def signin_site(self, site_info: CommentedMap, cookie_cache: dict = None) -> Tuple[str, str]:
+        """
+        签到一个站点
+        """
+        site_module = None
+
+        def prepare_signin():
+            """在 Cookie 补取后按原顺序选择签到处理器。"""
+            nonlocal site_module
+            site_module = self.__build_class(site_info.get("url"))
+
         def do_signin() -> Tuple[bool, str]:
             if site_module and hasattr(site_module, "signin"):
                 try:
@@ -1804,27 +1840,14 @@ class AutoPtCheckin(_PluginBase):
                     return False, f"签到失败：{str(e)}"
             return self.__signin_base(site_info)
 
-        state, message = do_signin()
-        message = message or ("签到成功" if state else "签到失败")
-        if "Cookie已失效" in str(message):
-            old_cookie = site_info.get("cookie") or ""
-            cookie = self._fetch_cookie_cloud(site_info.get("url", ""), cookie_cache=cookie_cache)
-            if cookie and cookie != old_cookie:
-                logger.info(f"{site_info.get('name')} Cookie已失效，已从 CookieCloud 补取并重试签到")
-                site_info["cookie"] = cookie
-                site_id = site_info.get("id")
-                if site_id and self.siteoper.get(site_id):
-                    self.siteoper.update(site_id, {"cookie": cookie})
-                state, message = do_signin()
-                message = message or ("签到成功" if state else "签到失败")
-        # 统计
-        seconds = (datetime.now() - start_time).seconds
-        domain = StringUtils.get_url_domain(site_info.get('url'))
-        if state:
-            self.siteoper.success(domain=domain, seconds=seconds)
-        else:
-            self.siteoper.fail(domain)
-        return site_info.get("name"), message
+        return self._execute_site_action(
+            site_info=site_info,
+            cookie_cache=cookie_cache,
+            action_name="签到",
+            execute=do_signin,
+            normalize_message=lambda state, message: message or ("签到成功" if state else "签到失败"),
+            prepare=prepare_signin,
+        )
 
     @staticmethod
     def __signin_base(site_info: CommentedMap) -> Tuple[bool, str]:
@@ -1911,14 +1934,13 @@ class AutoPtCheckin(_PluginBase):
         """
         模拟登录一个站点
         """
-        if not site_info.get("cookie"):
-            cookie = self._fetch_cookie_cloud(site_info.get("url", ""), cookie_cache=cookie_cache)
-            if cookie:
-                logger.info(f"{site_info.get('name')} Cookie 为空，已从 CookieCloud 补取")
-                site_info["cookie"] = cookie
-        site_module = self.__build_class(site_info.get("url"))
-        # 开始记时
-        start_time = datetime.now()
+        site_module = None
+
+        def prepare_login():
+            """在 Cookie 补取后按原顺序选择登录处理器。"""
+            nonlocal site_module
+            site_module = self.__build_class(site_info.get("url"))
+
         def do_login() -> Tuple[bool, str]:
             if site_module and hasattr(site_module, "login"):
                 try:
@@ -1928,25 +1950,14 @@ class AutoPtCheckin(_PluginBase):
                     return False, f"模拟登录失败：{str(e)}"
             return self.__login_base(site_info)
 
-        state, message = do_login()
-        if "Cookie已失效" in str(message):
-            old_cookie = site_info.get("cookie") or ""
-            cookie = self._fetch_cookie_cloud(site_info.get("url", ""), cookie_cache=cookie_cache)
-            if cookie and cookie != old_cookie:
-                logger.info(f"{site_info.get('name')} Cookie已失效，已从 CookieCloud 补取并重试登录")
-                site_info["cookie"] = cookie
-                site_id = site_info.get("id")
-                if site_id and self.siteoper.get(site_id):
-                    self.siteoper.update(site_id, {"cookie": cookie})
-                state, message = do_login()
-        # 统计
-        seconds = (datetime.now() - start_time).seconds
-        domain = StringUtils.get_url_domain(site_info.get('url'))
-        if state:
-            self.siteoper.success(domain=domain, seconds=seconds)
-        else:
-            self.siteoper.fail(domain)
-        return site_info.get("name"), message
+        # 保持现有语义：模拟登录的空消息不补默认文案。
+        return self._execute_site_action(
+            site_info=site_info,
+            cookie_cache=cookie_cache,
+            action_name="登录",
+            execute=do_login,
+            prepare=prepare_login,
+        )
 
     @staticmethod
     def __login_base(site_info: CommentedMap) -> Tuple[bool, str]:
