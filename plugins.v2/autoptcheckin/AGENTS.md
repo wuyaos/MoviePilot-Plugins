@@ -12,7 +12,9 @@
 - Pos: 通用签到/登录逻辑在入口，站点特殊逻辑下沉到 `sites/`。
 
 ## Files
-- `__init__.py`: 插件入口、配置页、调度注册、签到/登录主流程、CookieCloud 补取和事件处理。
+- `__init__.py`: 插件入口、调度注册、签到/登录主流程、CookieCloud 补取和事件处理。
+- `form_builder.py`: 配置页无状态表单结构与默认值构建。
+- `ui_helper.py`: 详情页签到/登录历史分组、状态样式与面板构建。
 - `requirements.txt`: 验证码识别和 HTTP 回退依赖声明。
 - `helper/attendance_captcha_helper.py`: NexusPHP attendance.php 验证码签到通用流程。
 - `helper/http_helper.py`: curl-cffi HTTP 客户端与 SSL 回退处理。
