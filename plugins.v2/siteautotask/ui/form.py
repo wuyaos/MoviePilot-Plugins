@@ -26,7 +26,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
                     "content": [{
                         "component": "VSwitch",
                         "props": {
-                            "model": f"task_switches.{site_task_key(site, task)}",
+                            "model": site_task_key(site, task),
                             "label": task.get("label", task["id"]),
                             "hint": task.get("hint", ""),
                         },
@@ -75,4 +75,9 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             {"component": "VCard", "props": {"variant": "outlined", "class": "mt-3"}, "content": [{"component": "VCardTitle", "text": "站点任务设置"}, {"component": "VCardText", "content": site_sections or [{"component": "div", "text": "请先选择站点"}]}]},
         ],
     }]
-    return form, plugin.config.to_dict()
+    # 预置所有可配置任务开关的默认值，确保前端表单 model 完整
+    model = plugin.config.to_dict()
+    for site in sites:
+        for task in site.get("tasks") or []:
+            model.setdefault(site_task_key(site, task), False)
+    return form, model

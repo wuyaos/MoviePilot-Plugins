@@ -44,22 +44,35 @@ class SiteAutoTask(_PluginBase):
         self.notification_type = NotificationType.SiteMessage
         self.retry_records = []
         self.retry_attempt = 0
+        self._raw_config: dict = {}
 
     def init_plugin(self, config: Optional[dict] = None):
         self.stop_service()
         self.siteoper = SiteOper()
         self.config = PluginConfig.from_dict(config)
+        self._raw_config = dict(config or {})
+        # 兼容旧 task_switches 字典配置，迁移为扁平 key（补 task_ 前缀）
+        legacy = self._raw_config.pop("task_switches", None)
+        if isinstance(legacy, dict):
+            for key, value in legacy.items():
+                new_key = key if str(key).startswith("task_") else f"task_{key}"
+                self._raw_config.setdefault(new_key, value)
         if not self._site_classes:
             self._site_classes = load_site_classes()
             self.handler_classes = [x["handler_cls"] for x in self._site_classes if x.get("handler_cls")]
         self.engine = TaskEngine(self)
         if config is not None:
-            self.update_config(self.config.to_dict())
+            self.update_config(self._raw_config)
         if self.config.enabled or self.config.onlyonce:
             self.scheduler.start()
             if self.config.onlyonce:
                 self.config.onlyonce = False
-                self.update_config(self.config.to_dict())
+                self._raw_config["onlyonce"] = False
+                self.update_config(self._raw_config)
+
+    def task_enabled(self, task_key: str) -> bool:
+        """读取任务开关（扁平顶层配置 key）。"""
+        return bool(self._raw_config.get(task_key, False))
 
     def get_state(self) -> bool:
         return self.config.enabled

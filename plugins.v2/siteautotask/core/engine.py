@@ -46,11 +46,7 @@ class TaskEngine:
                 task_key = site_task_key(site, task)
                 if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
                     continue
-                enabled = cfg.task_switches.get(task_key)
-                if enabled is None:
-                    # 兼容早期以站点文件名生成的旧键
-                    enabled = cfg.task_switches.get(task["id"], False)
-                if not enabled:
+                if not self.plugin.task_enabled(task_key):
                     continue
                 task = dict(task)
                 task["config_key"] = task_key

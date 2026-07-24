@@ -35,28 +35,33 @@ class FakeHistory:
 
 
 class FakePlugin:
-    config = CONFIG.PluginConfig(chat_sites=[1], task_switches={"test_chat": True})
+    config = CONFIG.PluginConfig(chat_sites=[1])
+    _raw_config = {"task_1_chat": True}
     history = FakeHistory()
 
     def support_site_options(self):
         return [{"id": 1, "name": "测试站", "domain": "test.example", "tasks": [{
-            "id": "test_chat", "label": "喊话", "hint": "测试", "task_type": "chat",
+            "id": "test_chat", "name": "chat", "label": "喊话", "hint": "测试", "task_type": "chat",
         }]}]
+
+    def task_enabled(self, key):
+        return bool(self._raw_config.get(key, False))
 
 
 class ModuleTests(unittest.TestCase):
     def test_config_round_trip_and_defaults(self):
-        cfg = CONFIG.PluginConfig.from_dict({"enabled": True, "retry_count": "3", "task_switches": None})
+        cfg = CONFIG.PluginConfig.from_dict({"enabled": True, "retry_count": "3"})
         self.assertTrue(cfg.enabled)
         self.assertEqual(cfg.retry_count, 3)
-        self.assertEqual(cfg.task_switches, {})
         self.assertEqual(CONFIG.PluginConfig.from_dict(cfg.to_dict()).cron, cfg.cron)
+        self.assertNotIn("task_switches", cfg.to_dict())
 
     def test_form_groups_site_tasks(self):
         form, data = FORM.build_form(FakePlugin())
         self.assertEqual(data["chat_sites"], [1])
         text = repr(form)
-        self.assertIn("task_switches.1_chat", text)
+        self.assertIn("task_1_chat", text)
+        self.assertNotIn("task_switches.", text)
         self.assertIn("测试站", text)
 
     def test_page_contains_feedback_reward(self):
