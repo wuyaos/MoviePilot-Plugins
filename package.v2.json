@@ -309,5 +309,17 @@
       "v1.0.1": "每日领取上限感知：解析 claim 达上限响应「今天已经领取X个，每天最多领Y个」得到站点权威累计/上限；无上限响应时按本插件当日 claim_ok 事件统计「本插件今日已领」并以上限100估算剩余；页面/通知区分本站/本插件统计；同日纯达上限轮通知去重；移除每天最多作为红包终态避免误入 dead_ids；修复达上限分支 NameError",
       "v1.0.0": "初始版本:从 MoviePilot 站点表读 www.tangpt.top Cookie;GET /api/redpacket/latest 发现可领红包;GET /api/redpacket/detail 预览剩余(领取前可见总池/个数);POST /api/redpacket/claim 表单 packet_id 领取;fast 模式跳过 detail 直领;限流 x-ratelimit-remaining 感知自适应 sleep;Cookie 401/403 熔断;串行不并发;事件存 save_data + summary 统计;详情页待后续阶段"
     }
+  },
+  "SunnyPTSignin": {
+    "name": "SunnyPT自动签到",
+    "description": "通过用户名密码登录 SunnyPT 获取 token 自动签到，token 缓存复用，无需 Cookie",
+    "labels": "sunnypt,签到,自动登录",
+    "version": "1.0.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
+    "author": "wuyaos",
+    "level": 1,
+    "history": {
+      "v1.0.0": "初始版本:用户名密码 POST /login 获取 token;POST /api/v1/attendance/check-in 签到;token 缓存复用(解码 JWT exp,提前1h刷新);token 失效(code=400000)自动重新登录重试一次;已签到 code=400001;GET /api/v1/attendance/status 丰富历史记录(连续/累计天数/魔力值);独立于 autoptcheckin 的 cookie 体系"
+    }
   }
 }
