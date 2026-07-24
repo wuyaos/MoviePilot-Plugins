@@ -11,7 +11,7 @@ class NexusPHPChatMixin:
     def send_messagebox(self, message: str, callback=None):
         if callback is None:
             callback = lambda response: " ".join(etree.HTML(response.text).xpath("//tr[1]/td//text()"))
-        params = {"shbox_text": message, "shout": "%E6%88%91%E5%96%8A", "sent": "yes", "type": "shoutbox"}
+        params = {"shbox_text": message, "shout": "我喊", "sent": "yes", "type": "shoutbox"}
         result = self._send_get_request(self.site_url + "/shoutbox.php", params=params, rt_method=callback)
         if result is None:
             return False, "发送消息失败"

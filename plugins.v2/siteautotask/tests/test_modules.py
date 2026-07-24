@@ -10,10 +10,13 @@ ROOT = Path(__file__).parents[1]
 def load(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
 CONFIG = load("siteautotask_config", ROOT / "core/config.py")
+TASK_KEYS = load("siteautotask_task_keys", ROOT / "core/task_keys.py")
+sys.modules["siteautotask.core.task_keys"] = TASK_KEYS
 FORM = load("siteautotask_form", ROOT / "ui/form.py")
 FEEDBACK = load("siteautotask_feedback", ROOT / "utils/feedback.py")
 sys.modules["siteautotask_feedback"] = FEEDBACK
@@ -53,7 +56,7 @@ class ModuleTests(unittest.TestCase):
         form, data = FORM.build_form(FakePlugin())
         self.assertEqual(data["chat_sites"], [1])
         text = repr(form)
-        self.assertIn("task_switches.test_chat", text)
+        self.assertIn("task_switches.1_chat", text)
         self.assertIn("测试站", text)
 
     def test_page_contains_feedback_reward(self):

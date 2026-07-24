@@ -1,5 +1,9 @@
 """按站点分组、每任务独立开关的配置页。"""
 from typing import Dict, List, Tuple
+try:
+    from ..core.task_keys import site_task_key
+except ImportError:  # 便于脱离 MoviePilot 包环境做单元测试
+    from siteautotask_task_keys import site_task_key
 
 
 def build_form(plugin) -> Tuple[List[dict], Dict]:
@@ -22,7 +26,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
                     "content": [{
                         "component": "VSwitch",
                         "props": {
-                            "model": f"task_switches.{task['id']}",
+                            "model": f"task_switches.{site_task_key(site, task)}",
                             "label": task.get("label", task["id"]),
                             "hint": task.get("hint", ""),
                         },

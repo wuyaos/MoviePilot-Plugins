@@ -29,7 +29,10 @@ def load_site_classes() -> List[dict]:
     sites_path = Path(__file__).parent
     pkg_prefix = __package__ or "sites"
 
-    for module_info in pkgutil.iter_modules([str(sites_path)]):
+    module_infos = list(pkgutil.iter_modules([str(sites_path)]))
+    # 通用 NexusPHP 必须最后加载，避免抢先匹配所有站点。
+    module_infos.sort(key=lambda item: (item.name == "nexusphp", item.name))
+    for module_info in module_infos:
         module_name = f"{pkg_prefix}.{module_info.name}"
         try:
             module = importlib.import_module(module_name)

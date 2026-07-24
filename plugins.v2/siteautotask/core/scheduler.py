@@ -29,10 +29,9 @@ class TaskScheduler:
         if not (cfg.enabled or cfg.onlyonce):
             return
         self.scheduler = BackgroundScheduler(timezone=settings.TZ)
+        # cron 由 MoviePilot get_service() 统一管理；插件自建调度器只承载一次性任务。
         if cfg.onlyonce:
             self.scheduler.add_job(self.plugin.run_once, "date", run_date=self._after(3), name="siteautotask_once")
-        elif cfg.cron:
-            self.scheduler.add_job(self.plugin.run_once, CronTrigger.from_crontab(str(cfg.cron)), name="siteautotask_cron")
         if self.scheduler.get_jobs():
             self.scheduler.start()
 
@@ -42,12 +41,21 @@ class TaskScheduler:
 
     def services(self):
         cfg = self.plugin.config
-        if not (cfg.enabled and cfg.cron):
-            return []
-        return [{
+        services = []
+        if cfg.enabled and cfg.cron:
+            services.append({
             "id": "siteautotask",
             "name": "站点自动任务",
             "trigger": CronTrigger.from_crontab(str(cfg.cron)),
             "func": self.plugin.run_once,
             "kwargs": {},
-        }]
+        })
+        if cfg.enabled and cfg.retry_count > 0:
+            services.append({
+                "id": "siteautotask_retry",
+                "name": "站点自动任务失败重试",
+                "trigger": "interval",
+                "func": self.plugin.run_retry,
+                "kwargs": {"minutes": cfg.retry_interval},
+            })
+        return services

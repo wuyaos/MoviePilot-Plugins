@@ -11,6 +11,7 @@ from app.log import logger
 from ..base.result import TaskResult
 from ..base.decorator import TaskType
 from .history import HistoryStore
+from .task_keys import site_task_key
 from ..sites import get_site_handler
 
 
@@ -20,34 +21,43 @@ class TaskEngine:
         self.history = plugin.history
         self._lock = threading.Lock()
 
-    def run(self):
+    def run(self, retry_only=False):
         if not self._lock.acquire(blocking=False):
             logger.warning("已有站点任务正在执行，跳过本次调度")
             return []
         try:
-            return self._run_locked()
+            return self._run_locked(retry_only=retry_only)
         finally:
             self._lock.release()
 
-    def _run_locked(self):
+    def _run_locked(self, retry_only=False):
         cfg = self.plugin.config
+        retry_keys = {item.get("task_id") for item in getattr(self.plugin, "retry_records", [])} if retry_only else None
         if not cfg.chat_sites:
             logger.info("未配置需要执行的站点")
             return []
         records = []
         for site in self.plugin.selected_sites():
-            if "织梦" in (site.get("name") or ""):
-                continue
             handler = self._build_handler(site)
             if not handler:
                 continue
             tasks = self.plugin.tasks_for(handler)
             for task in tasks:
-                if not cfg.task_switches.get(task["id"], False):
+                task_key = site_task_key(site, task)
+                if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
                     continue
+                enabled = cfg.task_switches.get(task_key)
+                if enabled is None:
+                    # 兼容早期以站点文件名生成的旧键
+                    enabled = cfg.task_switches.get(task["id"], False)
+                if not enabled:
+                    continue
+                task = dict(task)
+                task["config_key"] = task_key
                 record = self._run_task(handler, task)
                 records.append(record)
         self.history.append(records, cfg.history_days)
+        self._schedule_failed(records)
         from .notify import send_summary
         send_summary(self.plugin, records)
         return records
@@ -89,6 +99,26 @@ class TaskEngine:
                 "task_type": task.get("task_type", TaskType.GENERIC),
                 "success": False, "status": f"执行失败: {e}",
             }
+
+    def _schedule_failed(self, records):
+        """持久化失败任务，交由下一次 date 服务重试。"""
+        failed = [record for record in records if not record.get("success")]
+        if not failed or self.plugin.config.retry_count <= 0:
+            return
+        self.plugin.retry_records = failed
+        self.plugin.retry_attempt = getattr(self.plugin, "retry_attempt", 0) + 1
+
+    def retry_failed(self):
+        """只重试最近一次失败任务；站点任务方法会重新构造，避免复用失效 session。"""
+        if not getattr(self.plugin, "retry_records", None):
+            return []
+        if getattr(self.plugin, "retry_attempt", 0) > self.plugin.config.retry_count:
+            self.plugin.retry_records = []
+            return []
+        records = self.run(retry_only=True)
+        if all(record.get("success") for record in records):
+            self.plugin.retry_records = []
+        return records
 
     @staticmethod
     def normalize_result(raw):

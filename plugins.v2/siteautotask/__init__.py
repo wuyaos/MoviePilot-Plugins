@@ -38,6 +38,8 @@ class SiteAutoTask(_PluginBase):
         self.history = HistoryStore(self)
         self.scheduler = TaskScheduler(self)
         self.notification_type = NotificationType.SiteMessage
+        self.retry_records = []
+        self.retry_attempt = 0
 
     def init_plugin(self, config: Optional[dict] = None):
         self.stop_service()
@@ -60,6 +62,9 @@ class SiteAutoTask(_PluginBase):
 
     def run_once(self):
         return self.engine.run() if self.engine else []
+
+    def run_retry(self):
+        return self.engine.retry_failed() if self.engine else []
 
     def all_sites(self):
         sites = []
@@ -110,6 +115,10 @@ class SiteAutoTask(_PluginBase):
             entry = next((item for item in self._site_classes
                           if item.get("domain") == domain or
                           item.get("site_name") == site.get("name")), None)
+            if not entry:
+                # 未有专用适配的站点使用通用 NexusPHP 任务。
+                entry = next((item for item in self._site_classes
+                              if item.get("handler_cls", object).__name__ == "NexusPHPHandler"), None)
             if not entry:
                 continue
             tasks = [{k: v for k, v in task.items() if k != "func"}
