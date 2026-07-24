@@ -52,6 +52,7 @@ class CapabilityHandler:
         self.session = info.get("session", Mock())
         self._last_message_result = None
         self._blessing_status = {}
+        self.feedback_timeout = int(info.get("feedback_timeout", 5))
 
     def _send_get_request(self, url, params=None, rt_method=None):
         resp = self.session.get(url, params=params)

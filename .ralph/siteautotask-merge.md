@@ -126,4 +126,14 @@ I. 最终验证：所有 Python 文件 ast.parse；pytest；插件加载/表单/
 - 本地 MoviePilot 强制重载成功，日志加载 22 个明确站点（藏宝阁 3 / CARPT 2 / 13City 5 / 蟹黄堡 3 / 财神 2 / 大青虫 2 / 天枢 2 / 自由农场 2 / 好学 2 / 垃圾堆 2 / 柠檬 2 / LongPT 4 / LuckPT 2 / Moment 2 / NovaHD 2 / PTLGS 2 / Ptskit 3 / 青蛙 3 / 躺平 2 / Vc-Lib 3 / 象站 3 / 织梦 2）；配置页和数据页接口均返回 200。
 - 阶段 E（独有站点迁移）全部完成；下一步进入阶段 H code review 修复审查遗留问题（retry_notify 无效、feedback_timeout 未接入、重试状态仅存内存、缺图标资源），再进入阶段 I 最终验证。
 
+## 迭代 10 进度（阶段 H code review 修复）
+- 已修复 retry_notify 无效：`core/notify.py` 的 `send_summary` 新增 `is_retry` 参数，重试时仅当 `retry_notify` 开启才发通知；`core/engine.py` 的 `_run_locked` 传入 `is_retry=retry_only`。
+- 已修复 feedback_timeout 未接入：`sites/ptlgs.py` 的 `_poll_feedback` 轮询间隔现受 `feedback_timeout` 控制（原本硬编码 3 秒）。
+- 已修复图标资源缺失：新增 `icons/siteautotask.png`（64x64 PNG）；`__init__.py` 和 `package.v2.json` 的 icon 引用从 `ptautotask.png` 改为 `siteautotask.png`。
+- 已启动 3 路并行 code review（带 180s 超时），2/3 完成：请求安全审查确认无 verify=False 残留、无 stateless 请求、JSON 容错完整；MP V2 契约审查确认插件类名/ID/前缀一致、图标文件存在且有效、get_form/get_page/get_service 契约全部通过。
+- 审查仅报告 3 个低风险观察项（feedback_timeout 间隔公式偏差、POST 重试幂等性、连接池保守），无阻塞项。
+- 验证：80/80 mock 测试通过；全部 Python AST 解析通过；package.v2.json JSON 校验通过；`git diff --check` 通过。
+- 本地 MoviePilot 强制重载成功，配置页和数据页接口均返回 200。
+- 重试状态仅存内存（MP 重启丢失）的问题本轮未修复，记录为已知限制，阶段 I 评估是否需要持久化。
+
 当前已存在半成品，必须先审计再改，不要假设已有代码正确。所有对用户的进展使用简体中文。

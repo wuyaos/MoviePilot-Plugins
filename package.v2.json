@@ -355,7 +355,7 @@
     "description": "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。",
     "labels": "PT,签到,喊话,自动任务",
     "version": "1.0.0",
-    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/ptautotask.png",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png",
     "author": "wuyaos",
     "level": 2,
     "history": {

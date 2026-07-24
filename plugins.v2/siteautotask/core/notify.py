@@ -25,10 +25,19 @@ def render_records(records):
     return "\n".join(parts)
 
 
-def send_summary(plugin, records):
-    if records and plugin.config.notify:
-        plugin.post_message(
-            mtype=plugin.notification_type,
-            title="站点自动任务执行汇总",
-            text=render_records(records),
-        )
+def send_summary(plugin, records, is_retry=False):
+    """发送任务汇总通知。
+
+    is_retry=True 时仅当 retry_notify 开启才发送，避免重试轰炸。
+    """
+    if not records:
+        return
+    if not plugin.config.notify:
+        return
+    if is_retry and not plugin.config.retry_notify:
+        return
+    plugin.post_message(
+        mtype=plugin.notification_type,
+        title="站点自动任务执行汇总" + ("（重试）" if is_retry else ""),
+        text=render_records(records),
+    )

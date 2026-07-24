@@ -59,7 +59,7 @@ class TaskEngine:
         self.history.append(records, cfg.history_days)
         self._schedule_failed(records)
         from .notify import send_summary
-        send_summary(self.plugin, records)
+        send_summary(self.plugin, records, is_retry=retry_only)
         return records
 
     def _build_handler(self, site):
