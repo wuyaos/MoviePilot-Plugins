@@ -40,7 +40,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.4.2"
+    plugin_version = "1.4.3"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -773,13 +773,17 @@ class AutoPtCheckin(_PluginBase):
                 if isinstance(day_data, list):
                     for record in day_data:
                         if isinstance(record, dict):
-                            record["date"] = day_str
-                            record["day_obj"] = day
+                            # 页面临时字段使用副本，避免修改读取到的历史记录。
+                            page_record = {
+                                **record,
+                                "date": day_str,
+                                "day_obj": day,
+                            }
                             # 区分签到和登录数据
-                            if "登录" in record.get("status", ""):
-                                all_data["login"].append(record)
+                            if "登录" in page_record.get("status", ""):
+                                all_data["login"].append(page_record)
                             else:
-                                all_data["signin"].append(record)
+                                all_data["signin"].append(page_record)
                     sign_dates.add(day_str)
 
             # 获取"签到-yyyy-mm-dd"和"登录-yyyy-mm-dd"格式数据
@@ -878,77 +882,10 @@ class AutoPtCheckin(_PluginBase):
         else:
             sign_dates_list = [f"{date_list[0].month}月{date_list[0].day}日"]
 
-        # 按站点分组并去重数据
-        signin_site_data = {}
-        login_site_data = {}
-
-        # 处理签到数据 - 每个站点每天只保留一条最新记录
-        site_day_records = {}  # 用于去重: {site}_{date} -> record
-        for data in all_data["signin"]:
-            site_name = data.get("site", "未知站点")
-            date_str = data.get("date", "")
-            site_day_key = f"{site_name}_{date_str}"
-
-            # 存储或更新记录（如有多条取最新）
-            site_day_records[site_day_key] = data
-
-        # 整理去重后的数据
-        for key, record in site_day_records.items():
-            site_name = record.get("site", "未知站点")
-            if site_name not in signin_site_data:
-                signin_site_data[site_name] = []
-            signin_site_data[site_name].append(record)
-
-        # 处理登录数据 - 同样去重
-        site_day_records = {}  # 重置去重字典
-        for data in all_data["login"]:
-            site_name = data.get("site", "未知站点")
-            date_str = data.get("date", "")
-            site_day_key = f"{site_name}_{date_str}"
-
-            # 存储或更新记录
-            site_day_records[site_day_key] = data
-
-        # 整理去重后的数据
-        for key, record in site_day_records.items():
-            site_name = record.get("site", "未知站点")
-            if site_name not in login_site_data:
-                login_site_data[site_name] = []
-            login_site_data[site_name].append(record)
-
-        # 创建签到折叠面板
-        signin_panels = []
-        for site_name, records in signin_site_data.items():
-            # 按日期排序，最新的在前面
-            try:
-                records.sort(key=lambda x: x.get("day_obj", datetime.now().date()), reverse=True)
-            except Exception as e:
-                logger.debug(f"签到记录排序失败: {e}")
-
-            # 获取最新的状态作为站点概要
-            latest_status = records[0].get("status", "未知状态")
-            status_color, status_icon = self._resolve_status_style(latest_status)
-
-            # 创建每个站点的折叠面板
-            signin_panels.append(
-                self._create_expansion_panel(site_name, records, status_color, status_icon, latest_status))
-
-        # 创建登录折叠面板
-        login_panels = []
-        for site_name, records in login_site_data.items():
-            # 按日期排序，最新的在前面
-            try:
-                records.sort(key=lambda x: x.get("day_obj", datetime.now().date()), reverse=True)
-            except Exception as e:
-                logger.debug(f"登录记录排序失败: {e}")
-
-            # 获取最新的状态作为站点概要
-            latest_status = records[0].get("status", "未知状态")
-            status_color, status_icon = self._resolve_status_style(latest_status)
-
-            # 创建每个站点的折叠面板
-            login_panels.append(
-                self._create_expansion_panel(site_name, records, status_color, status_icon, latest_status))
+        # 签到和登录均按原始追加顺序去重；同站点同日的汇总状态在后追加，
+        # 因而继续覆盖详细执行文案。
+        signin_site_data, signin_panels = self._build_history_panels(all_data["signin"])
+        login_site_data, login_panels = self._build_history_panels(all_data["login"])
 
         # 添加样式
         return [
@@ -1312,6 +1249,34 @@ class AutoPtCheckin(_PluginBase):
                 ]
             }
         ]
+
+    def _build_history_panels(self, records: List[dict]) -> Tuple[Dict[str, List[dict]], List[dict]]:
+        """按原始追加顺序去重历史记录，分组排序后生成站点折叠面板。"""
+        site_day_records = {}
+        for record in records:
+            site_name = record.get("site", "未知站点")
+            date_str = record.get("date", "")
+            # 不能在去重前排序：后追加的汇总状态必须覆盖详细执行文案。
+            site_day_records[f"{site_name}_{date_str}"] = record
+
+        site_data = {}
+        for record in site_day_records.values():
+            site_name = record.get("site", "未知站点")
+            site_data.setdefault(site_name, []).append(record)
+
+        panels = []
+        for site_name, site_records in site_data.items():
+            try:
+                site_records.sort(key=lambda item: item.get("day_obj", datetime.now().date()), reverse=True)
+            except Exception as e:
+                logger.debug(f"{site_name} 历史记录排序失败: {e}")
+
+            latest_status = site_records[0].get("status", "未知状态")
+            status_color, status_icon = self._resolve_status_style(latest_status)
+            panels.append(self._create_expansion_panel(
+                site_name, site_records, status_color, status_icon, latest_status))
+
+        return site_data, panels
 
     @staticmethod
     def _add_site_info(sites_info: dict, site_id: Any, site_name: Any) -> None:
