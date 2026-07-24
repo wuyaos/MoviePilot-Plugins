@@ -4,7 +4,6 @@ from ruamel.yaml import CommentedMap
 
 from app.log import logger
 from app.plugins.autoptcheckin.sites import _ISiteSigninHandler
-from app.utils.string import StringUtils
 
 
 class BTSchool(_ISiteSigninHandler):
@@ -14,9 +13,6 @@ class BTSchool(_ISiteSigninHandler):
     site_url = "pt.btschool.club"
     _sign_text = '每日签到'
 
-    @classmethod
-    def match(cls, url) -> bool:
-        return True if StringUtils.url_equal(url, cls.site_url) else False
 
     def signin(self, site_info: CommentedMap) -> Tuple[bool, str]:
         site = site_info.get("name")

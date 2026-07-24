@@ -9,7 +9,6 @@ from app.log import logger
 from app.plugins.autoptcheckin.helper.ocr_helper import recognize_captcha
 from app.plugins.autoptcheckin.sites import _ISiteSigninHandler
 from app.utils.http import RequestUtils
-from app.utils.string import StringUtils
 
 
 class Opencd(_ISiteSigninHandler):
@@ -19,9 +18,6 @@ class Opencd(_ISiteSigninHandler):
     site_url = "open.cd"
     _repeat_text = "/plugin_sign-in.php?cmd=show-log"
 
-    @classmethod
-    def match(cls, url: str) -> bool:
-        return True if StringUtils.url_equal(url, cls.site_url) else False
 
     def signin(self, site_info: CommentedMap) -> Tuple[bool, str]:
         site = site_info.get("name")

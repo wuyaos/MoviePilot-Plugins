@@ -11,7 +11,6 @@ from app.core.config import settings
 from app.log import logger
 from app.plugins.autoptcheckin.helper.ocr_helper import recognize_captcha
 from app.plugins.autoptcheckin.sites import _ISiteSigninHandler
-from app.utils.string import StringUtils
 
 
 class LaJiDui(_ISiteSigninHandler):
@@ -23,9 +22,6 @@ class LaJiDui(_ISiteSigninHandler):
     _success_texts = ["签到成功", "签到已得", "获得", "连续签到"]
     _repeat_texts = ["今天已经签到过", "请勿重复刷新", "已经签到"]
 
-    @classmethod
-    def match(cls, url: str) -> bool:
-        return True if StringUtils.url_equal(url, cls.site_url) else False
 
     def signin(self, site_info: CommentedMap) -> Tuple[bool, str]:
         site = site_info.get("name")

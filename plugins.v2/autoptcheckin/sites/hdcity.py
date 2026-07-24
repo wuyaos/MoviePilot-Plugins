@@ -4,7 +4,6 @@ from ruamel.yaml import CommentedMap
 
 from app.log import logger
 from app.plugins.autoptcheckin.sites import _ISiteSigninHandler
-from app.utils.string import StringUtils
 
 
 class HDCity(_ISiteSigninHandler):
@@ -19,14 +18,6 @@ class HDCity(_ISiteSigninHandler):
     # 重复签到（中文 / 英文）
     _repeat_texts = ['已签到', 'Already checked in today']
 
-    @classmethod
-    def match(cls, url: str) -> bool:
-        """
-        根据站点Url判断是否匹配当前站点签到类，大部分情况使用默认实现即可
-        :param url: 站点Url
-        :return: 是否匹配，如匹配则会调用该类的signin方法
-        """
-        return True if StringUtils.url_equal(url, cls.site_url) else False
 
     def signin(self, site_info: CommentedMap) -> Tuple[bool, str]:
         """

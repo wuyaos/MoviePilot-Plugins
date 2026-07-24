@@ -6,7 +6,6 @@ from ruamel.yaml import CommentedMap
 
 from app.log import logger
 from app.plugins.autoptcheckin.sites import _ISiteSigninHandler
-from app.utils.string import StringUtils
 
 
 class SiQi(_ISiteSigninHandler):
@@ -21,9 +20,6 @@ class SiQi(_ISiteSigninHandler):
         r'attend-success-effect',
     ]
 
-    @classmethod
-    def match(cls, url: str) -> bool:
-        return True if StringUtils.url_equal(url, cls.site_url) else False
 
     def signin(self, site_info: CommentedMap) -> Tuple[bool, str]:
         site = site_info.get("name")
