@@ -47,6 +47,8 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
         "验证码已过期", "驗證碼已過期", "验证码失效", "驗證碼失效",
         "验证码校验失败", "驗證碼校驗失敗", "验证失败", "驗證失敗",
     ]
+    # 每次重试都会刷新签到页，使用新的 imagehash 与验证码图片，不能复用旧验证码。
+    _captcha_attempts = 3
 
     @classmethod
     def match(cls, url: str) -> bool:
@@ -91,81 +93,80 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
             logger.info(f"{site} 今日已签到（页面已显示签到结果）")
             return True, "今日已签到"
 
-        # 2. 解析验证码 imagehash / image.php 图片地址
-        html = etree.HTML(html_text)
-        image_hash = ""
-        image_src = ""
-        if html is not None:
-            hash_values = html.xpath('//input[@name="imagehash"]/@value')
-            image_values = html.xpath('//form//img[contains(@src, "image.php")]/@src')
+        # 2. 验证码失败时必须刷新签到页后重试。验证码通常与 imagehash 绑定，
+        # 不能对同一张图片或旧 imagehash 反复提交。
+        resp_text = ""
+        for attempt in range(1, self._captcha_attempts + 1):
+            if attempt > 1:
+                status, html_text = client.get(self._signin_url)
+                if status != 200 or not html_text:
+                    logger.error(f"{site} 第 {attempt} 次获取验证码页失败，状态码：{status}")
+                    return False, f"签到失败，状态码：{status}"
+                if "login.php" in html_text:
+                    logger.error(f"{site} 签到失败，Cookie已失效")
+                    return False, "签到失败，Cookie已失效"
+
+            html = etree.HTML(html_text)
+            hash_values = html.xpath('//input[@name="imagehash"]/@value') if html is not None else []
+            image_values = html.xpath('//form//img[contains(@src, "image.php")]/@src') if html is not None else []
             image_hash = hash_values[0] if hash_values else ""
             image_src = image_values[0] if image_values else ""
-        if not image_hash or not image_src:
-            logger.error(f"{site} 签到失败，获取验证码参数失败")
-            return False, "签到失败，获取验证码参数失败"
+            if not image_hash or not image_src:
+                logger.error(f"{site} 签到失败，获取验证码参数失败")
+                return False, "签到失败，获取验证码参数失败"
 
-        base = self._signin_url.rsplit("/", 1)[0] + "/"
-        image_url = urljoin(base, image_src.replace("&amp;", "&"))
-        image_bytes = client.get_bytes(image_url)
-        if not image_bytes:
-            logger.error(f"{site} 签到失败，获取验证码图片失败")
-            return False, "签到失败，获取验证码图片失败"
+            base = self._signin_url.rsplit("/", 1)[0] + "/"
+            image_url = urljoin(base, image_src.replace("&amp;", "&"))
+            image_bytes = client.get_bytes(image_url)
+            if not image_bytes:
+                logger.error(f"{site} 签到失败，获取验证码图片失败")
+                return False, "签到失败，获取验证码图片失败"
 
-        # 3. ddddocr 优先，OcrHelper 回退
-        code = recognize_captcha(
-            image_bytes=image_bytes,
-            image_url=image_url,
-            cookie=site_cookie,
-            ua=ua,
-            referer=self._signin_url,
-            min_len=4,
-            max_len=6,
-            retry_times=1,
-            engine="ddddocr",
-            charset="alnum",
-            proxy=proxy,
-        )
-        if not code:
-            logger.info(f"{site} ddddocr 识别失败，切换 OcrHelper")
+            # ddddocr 无可用结果时才回退 OcrHelper；验证码被站点拒绝时刷新图片后重试。
             code = recognize_captcha(
-                image_url=image_url,
-                cookie=site_cookie,
-                ua=ua,
-                referer=self._signin_url,
-                min_len=4,
-                max_len=6,
-                engine="ocrhelper",
-                charset="alnum",
-                proxy=proxy,
+                image_bytes=image_bytes, image_url=image_url, cookie=site_cookie, ua=ua,
+                referer=self._signin_url, min_len=4, max_len=6, retry_times=1,
+                engine="ddddocr", charset="alnum", proxy=proxy,
             )
-        if not code:
-            logger.error(f"{site} 签到失败，验证码识别失败")
+            if not code:
+                logger.info(f"{site} 第 {attempt} 次 ddddocr 识别失败，切换 OcrHelper")
+                code = recognize_captcha(
+                    image_url=image_url, cookie=site_cookie, ua=ua, referer=self._signin_url,
+                    min_len=4, max_len=6, engine="ocrhelper", charset="alnum", proxy=proxy,
+                )
+            if not code:
+                logger.warning(f"{site} 第 {attempt} 次验证码识别失败")
+                continue
+
+            logger.info(f"{site} 第 {attempt}/{self._captcha_attempts} 次验证码识别: {code}")
+            status, resp_text = client.post(
+                self._signin_url,
+                data={"imagehash": image_hash, "imagestring": code},
+            )
+            if status != 200:
+                logger.error(f"{site} 签到失败，状态码：{status}")
+                return False, f"签到失败，状态码：{status}"
+            if not resp_text:
+                logger.error(f"{site} 签到失败，提交签到请求失败")
+                return False, "签到失败，提交签到请求失败"
+            if "login.php" in resp_text:
+                logger.error(f"{site} 签到失败，Cookie已失效")
+                return False, "签到失败，Cookie已失效"
+            resp_html = etree.HTML(resp_text)
+            captcha_remains = resp_html is not None and resp_html.xpath(
+                '//form[contains(@action,"attendance")]//input[@name="imagehash"]')
+            rejected = captcha_remains or any(text in resp_text for text in self._failure_texts)
+            if rejected:
+                if attempt < self._captcha_attempts:
+                    logger.warning(f"{site} 第 {attempt} 次验证码无效，刷新验证码后重试")
+                    continue
+                logger.error(f"{site} 签到失败，验证码连续 {self._captcha_attempts} 次无效")
+                return False, f"签到失败：验证码连续 {self._captcha_attempts} 次无效"
+            break
+        else:
             return False, "签到失败：验证码识别失败"
 
-        logger.info(f"{site} 验证码识别: {code}")
-
-        # 4. 提交签到
-        status, resp_text = client.post(
-            self._signin_url,
-            data={"imagehash": image_hash, "imagestring": code},
-        )
-        if status != 200:
-            logger.error(f"{site} 签到失败，状态码：{status}")
-            return False, f"签到失败，状态码：{status}"
-        if not resp_text:
-            logger.error(f"{site} 签到失败，提交签到请求失败")
-            return False, "签到失败，提交签到请求失败"
-        if "login.php" in resp_text:
-            logger.error(f"{site} 签到失败，Cookie已失效")
-            return False, "签到失败，Cookie已失效"
-        resp_html = etree.HTML(resp_text)
-        if resp_html is not None and resp_html.xpath('//form[contains(@action,"attendance")]//input[@name="imagehash"]'):
-            logger.error(f"{site} 签到失败，验证码错误或被拒")
-            return False, "签到失败：验证码错误或被拒"
-        if any(text in resp_text for text in self._failure_texts):
-            logger.error(f"{site} 签到失败，验证码无效")
-            return False, "签到失败：验证码无效"
-        # POST 响应可能混入导航栏、奖励说明等文本，不能只靠响应全文判定
+        # 3. POST 响应可能混入导航栏、奖励说明等文本，不能只靠响应全文判定
         # 成功。重新读取签到页，确认验证码表单已消失且存在精确成功状态。
         verify_status, verify_html = client.get(self._signin_url)
         if verify_status != 200 or not verify_html:
