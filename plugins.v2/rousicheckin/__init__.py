@@ -49,8 +49,7 @@ class RousiCheckin(_PluginBase):
     _onlyonce = False
 
     def init_plugin(self, config: dict = None):
-        # 停止现有任务，避免重载时定时任务残留/丢失（参考 moviepilotupdatenotify）
-        self.stop_service()
+        # 生命周期由框架管理：重载时框架会先调 stop_service 再调 init_plugin，无需手动停止
         if not hasattr(self, '_lock'):
             self._lock = threading.Lock()
         config = config or {}
