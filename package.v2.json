@@ -154,11 +154,12 @@
     "name": "PT站点自动签到",
     "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
     "labels": "签到,PT",
-    "version": "1.4.4",
+    "version": "1.4.5",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.4.5": "按实际执行站点 ID 记录重试结果，修复自定义站点命中重试关键词时无法重试及同名站点串 ID；保留普通站点专属的 SiteRefresh 边界。",
       "v1.4.4": "复用站点签到与登录的 CookieCloud 补取、失效重试和统计外壳，保持两类任务原有消息与处理差异。",
       "v1.4.3": "复用详情页签到与登录历史面板构建逻辑，并避免页面临时字段修改原始历史记录；保持汇总状态覆盖详细文案的现有展示规则。",
       "v1.4.2": "精简站点适配器重复的标准 match()：基类统一按 site_url 精确匹配，保留 M-Team、YemaPT 等特殊匹配规则；不改变任何签到请求或结果判断。",

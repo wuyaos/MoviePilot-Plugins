@@ -40,7 +40,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.4.4"
+    plugin_version = "1.4.5"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1612,22 +1612,21 @@ class AutoPtCheckin(_PluginBase):
             # 失败｜错误
             failed_msg = []
 
-            sites = task_context["site_id_by_name"]
-            custom_site_names = task_context["custom_site_names"]
-            for s in status:
+            ordinary_site_ids = task_context["ordinary_site_ids"]
+            # ThreadPool.map 保持输入顺序，结果与实际执行的站点记录一一对应。
+            for site_info, s in zip(do_sites, status):
+                site_id = site_info.get("id")
                 site_name = s[0]
-                site_id = None
-                if site_name:
-                    site_id = sites.get(site_name)
 
                 if 'Cookie已失效' in str(s):
-                    if site_id and site_id not in refresh_triggered_site_ids:
-                        refresh_triggered_site_ids.add(site_id)
-                        failed_sites.append({"site_id": site_id, "site_name": site_name})
-                        logger.info(f"站点 {site_name} Cookie 失效，待汇总触发 site_refresh")
-                    elif site_id:
-                        logger.info(f"站点 {site_name} 本轮已加入 site_refresh 汇总，跳过重复加入")
-                    elif site_name in custom_site_names:
+                    if site_id in ordinary_site_ids:
+                        if site_id not in refresh_triggered_site_ids:
+                            refresh_triggered_site_ids.add(site_id)
+                            failed_sites.append({"site_id": site_id, "site_name": site_name})
+                            logger.info(f"站点 {site_name} Cookie 失效，待汇总触发 site_refresh")
+                        else:
+                            logger.info(f"站点 {site_name} 本轮已加入 site_refresh 汇总，跳过重复加入")
+                    else:
                         logger.info(f"自定义站点 {site_name} Cookie已失效，但不在 MoviePilot 站点表，SiteRefresh 无法回写 Cookie/UA")
                 status_text = str(s)
                 is_success = any(keyword in status_text for keyword in ("登录成功", "仿真签到成功", "签到成功", "已签到"))
@@ -1748,8 +1747,7 @@ class AutoPtCheckin(_PluginBase):
         return {
             "all_sites": ordinary_sites + custom_sites,
             # 保持原有语义：仅 MoviePilot 内置站点可触发 SiteRefresh 写回。
-            "site_id_by_name": {site.get("name"): site.get("id") for site in ordinary_sites if site.get("name")},
-            "custom_site_names": {site.get("name") for site in custom_sites if site.get("name")},
+            "ordinary_site_ids": {site.get("id") for site in ordinary_sites if site.get("id") is not None},
             "cookie_cache": self.__new_cookie_cache(),
         }
 
