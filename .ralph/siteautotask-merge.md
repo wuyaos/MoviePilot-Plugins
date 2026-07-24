@@ -102,4 +102,13 @@ I. 最终验证：所有 Python 文件 ast.parse；pytest；插件加载/表单/
 - 本地 MoviePilot 强制重载成功，日志加载 17 个明确站点（藏宝阁 3 / CARPT 2 / 13City 5 / 蟹黄堡 3 / 财神 2 / 大青虫 2 / 自由农场 2 / 垃圾堆 2 / 柠檬 2 / LongPT 4 / NovaHD 2 / PTLGS 2 / Ptskit 3 / 青蛙 3 / 躺平 2 / 象站 3 / 织梦 2）；配置页和数据页接口均返回 200。
 - 未执行真实签到或任务申领；全部请求测试使用 mock。vclib 因含任务状态检查+魔力兑换复杂逻辑，延后单独迁移。
 
+## 迭代 8 进度（阶段 E 第四批，vclib + groupchatzone 独有第一批）
+- 已新增 Vc-Lib 适配器（3 任务）：签到、每周上传任务（领取+状态检查+未完成则魔力兑换）、每周魔力值任务申领；迁移改进：上游 stateless requests + verify=False 改为统一 session，移除不安全的 verify=False。
+- 已新增天枢(Dubhe) 适配器（2 任务）：签到、喊话（参考 groupchatzone：shoutbox 反馈解析+请求类型验证）。
+- 已新增好学(Hxpt) 适配器（2 任务）：签到、喊话（参考 groupchatzone：ajax_chat 轮询+上一行系统提示+火花奖励解析）。
+- 已新增 12 个 mock 测试覆盖 vclib/Dubhe/Hxpt 的匹配、任务状态完成/未完成、魔力兑换已兑换、反馈解析、任务元数据。
+- 验证：72/72 mock 测试通过；全部 Python AST 解析通过；`git diff --check` 通过。
+- 本地 MoviePilot 强制重载成功，日志加载 20 个明确站点（藏宝阁 3 / CARPT 2 / 13City 5 / 蟹黄堡 3 / 财神 2 / 大青虫 2 / 天枢 2 / 自由农场 2 / 好学 2 / 垃圾堆 2 / 柠檬 2 / LongPT 4 / NovaHD 2 / PTLGS 2 / Ptskit 3 / 青蛙 3 / 躺平 2 / Vc-Lib 3 / 象站 3 / 织梦 2）；配置页和数据页接口均返回 200。
+- 未执行真实签到、任务申领、魔力兑换或喊话；全部请求测试使用 mock。
+
 当前已存在半成品，必须先审计再改，不要假设已有代码正确。所有对用户的进展使用简体中文。
