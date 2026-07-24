@@ -358,6 +358,21 @@ class SunnyPTSignin(_PluginBase):
                 ],
             }
         else:
+            rows = []
+            for r in self.__table_items(records):
+                meta = self.__status_meta(r.get("status"))
+                rows.append({"component": "tr", "content": [
+                    {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": r.get("date") or "-"},
+                    {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": r.get("time") or "-"},
+                    {"component": "td", "content": [{"component": "VChip", "props": {"color": meta["color"], "size": "small", "variant": "tonal"}, "content": [
+                        {"component": "VIcon", "props": {"start": True, "size": "small"}, "text": meta["icon"]},
+                        {"component": "span", "text": r.get("status_text") or "-"}
+                    ]}]},
+                    {"component": "td", "props": {"class": "text-caption"}, "text": r.get("days")},
+                    {"component": "td", "props": {"class": "text-caption"}, "text": r.get("total_days")},
+                    {"component": "td", "props": {"class": "text-caption"}, "text": r.get("points")},
+                    {"component": "td", "props": {"class": "text-caption", "style": "white-space: normal; min-width: 180px;"}, "text": r.get("message") or "-"}
+                ]})
             table = {
                 "component": "VCard",
                 "props": {"variant": "outlined"},
@@ -367,30 +382,28 @@ class SunnyPTSignin(_PluginBase):
                         "props": {"class": "text-subtitle-1 d-flex align-center"},
                         "content": [
                             {"component": "VIcon", "props": {"icon": "mdi-history", "class": "mr-2", "color": "primary"}},
-                            {"component": "span", "text": "签到历史"},
-                        ],
+                            {"component": "span", "text": "签到历史"}
+                        ]
                     },
                     {"component": "VDivider"},
-                    {
-                        "component": "VDataTable",
-                        "props": {
-                            "headers": [
-                                {"title": "日期", "key": "date", "align": "start"},
-                                {"title": "时间", "key": "time"},
-                                {"title": "状态", "key": "status_text"},
-                                {"title": "连续", "key": "days"},
-                                {"title": "累计", "key": "total_days"},
-                                {"title": "魔力值", "key": "points"},
-                                {"title": "消息", "key": "message"},
-                            ],
-                            "items": self.__table_items(records),
-                            "items-per-page": 10,
-                            "density": "comfortable",
-                            "hover": True,
-                            "class": "elevation-0",
-                        },
-                    },
-                ],
+                    {"component": "VCardText", "props": {"class": "pa-0 pa-md-2"}, "content": [{
+                        "component": "VResponsive", "content": [{
+                            "component": "VTable", "props": {"hover": True, "density": "comfortable"}, "content": [
+                                {"component": "thead", "content": [{"component": "tr", "content": [
+                                    {"component": "th", "text": "日期"},
+                                    {"component": "th", "text": "时间"},
+                                    {"component": "th", "text": "状态"},
+                                    {"component": "th", "text": "连续"},
+                                    {"component": "th", "text": "累计"},
+                                    {"component": "th", "text": "魔力值"},
+                                    {"component": "th", "text": "消息"}
+                                ]}]},
+                                {"component": "tbody", "content": rows}
+                            ]
+                        }]
+                    }]
+                    }
+                ]
             }
 
         return [
@@ -407,6 +420,14 @@ class SunnyPTSignin(_PluginBase):
             item["points"] = r.get("points") if r.get("points") is not None else "-"
             items.append(item)
         return items
+
+    @staticmethod
+    def __status_meta(status: Any) -> Dict[str, str]:
+        metas = {
+            "success": {"color": "success", "icon": "mdi-check-circle"},
+            "fail": {"color": "error", "icon": "mdi-close-circle"},
+        }
+        return metas.get(status, {"color": "grey", "icon": "mdi-help-circle"})
 
     @staticmethod
     def __stat_card(label: str, value: str, icon: str, color: str) -> dict:
