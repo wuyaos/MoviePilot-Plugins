@@ -39,7 +39,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.3.7"
+    plugin_version = "1.3.8"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1739,26 +1739,37 @@ class AutoPtCheckin(_PluginBase):
         return None
 
     def signin_by_domain(self, url: str, apikey: str) -> schemas.Response:
+        """签到指定站点的调试 API，支持普通站点和本插件自定义站点。
+
+        ``url`` 可传完整站点 URL 或域名。该入口仅执行匹配到的一站，
+        不修改插件配置、定时任务或当日批量签到历史。
         """
-        签到一个站点，可由API调用
-        """
-        # 校验
         if apikey != settings.API_TOKEN:
             return schemas.Response(success=False, message="API密钥错误")
-        domain = StringUtils.get_url_domain(url)
-        site_info = self.sites.get_indexer(domain)
+        if not url or not str(url).strip():
+            return schemas.Response(success=False, message="缺少站点URL或域名")
+
+        target = str(url).strip()
+        if "://" not in target:
+            target = f"https://{target}"
+        target_domain = StringUtils.get_url_domain(target)
+        all_sites = [site for site in self.sites.get_indexers() if not site.get("public")]
+        all_sites.extend(self.__custom_sites())
+        site_info = next((site for site in all_sites
+                          if StringUtils.url_equal(site.get("url", ""), target)
+                          or StringUtils.get_url_domain(site.get("url", "")) == target_domain), None)
         if not site_info:
             return schemas.Response(
-                success=True,
-                message=f"站点【{url}】不存在"
+                success=False,
+                message=f"站点【{target_domain or url}】不存在或未配置"
             )
-        else:
-            site_name, message = self.signin_site(site_info)
-            success = "失败" not in str(message) and "错误" not in str(message)
-            return schemas.Response(
-                success=success,
-                message=f"站点【{site_name}】{message}"
-            )
+
+        site_name, message = self.signin_site(site_info)
+        success = "失败" not in str(message) and "错误" not in str(message) and "未确认" not in str(message)
+        return schemas.Response(
+            success=success,
+            message=f"站点【{site_name}】{message}"
+        )
 
     @staticmethod
     def _fetch_cookie_cloud(site_url: str) -> str:

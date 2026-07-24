@@ -28,12 +28,11 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
     site_url = ""
     _signin_url = ""
 
-    # 简繁兼容：覆盖 NexusPHP attendance.php 的成功/重复签到文案
+    # 仅保留可唯一确认签到完成的文案；“获得”“连续签到”等会出现在
+    # 奖励说明、导航栏等未签到页面中，不能作为成功依据。
     _success_texts = [
         "签到成功", "簽到成功",
         "签到已得", "簽到已得",
-        "获得", "獲得",
-        "连续签到", "連續簽到",
     ]
     _repeat_texts = [
         "今天已经签到过", "今天已經簽到過",
@@ -44,6 +43,9 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
     ]
     _failure_texts = [
         "图片代码无效", "圖片代碼無效", "图片验证码无效", "圖片驗證碼無效",
+        "验证码错误", "驗證碼錯誤", "验证码不正确", "驗證碼不正確",
+        "验证码已过期", "驗證碼已過期", "验证码失效", "驗證碼失效",
+        "验证码校验失败", "驗證碼校驗失敗", "验证失败", "驗證失敗",
     ]
 
     @classmethod
@@ -163,12 +165,29 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
         if any(text in resp_text for text in self._failure_texts):
             logger.error(f"{site} 签到失败，验证码无效")
             return False, "签到失败：验证码无效"
-        if any(text in resp_text for text in self._repeat_texts):
+        # POST 响应可能混入导航栏、奖励说明等文本，不能只靠响应全文判定
+        # 成功。重新读取签到页，确认验证码表单已消失且存在精确成功状态。
+        verify_status, verify_html = client.get(self._signin_url)
+        if verify_status != 200 or not verify_html:
+            logger.error(f"{site} 签到结果未确认，复查状态码：{verify_status}")
+            return False, f"签到结果未确认，复查状态码：{verify_status}"
+        if "login.php" in verify_html:
+            logger.error(f"{site} 签到结果未确认，Cookie已失效")
+            return False, "签到失败，Cookie已失效"
+        verify_dom = etree.HTML(verify_html)
+        if verify_dom is not None and verify_dom.xpath(
+                '//form[contains(@action,"attendance")]//input[@name="imagehash"]'):
+            logger.error(f"{site} 签到失败，复查后验证码表单仍存在")
+            return False, "签到失败：验证码错误或签到结果未生效"
+        if any(text in verify_html for text in self._failure_texts):
+            logger.error(f"{site} 签到失败，复查页面显示验证码无效")
+            return False, "签到失败：验证码无效"
+        if any(text in verify_html for text in self._repeat_texts):
             logger.info(f"{site} 今日已签到")
             return True, "今日已签到"
-        if any(text in resp_text for text in self._success_texts):
-            logger.info(f"{site} 签到成功")
+        if any(text in verify_html for text in self._success_texts):
+            logger.info(f"{site} 签到成功（已复查确认）")
             return True, "签到成功"
 
-        logger.error(f"{site} 签到失败，签到接口返回 {resp_text[:200]}")
-        return False, "签到失败"
+        logger.error(f"{site} 签到结果未确认，POST 返回 {resp_text[:200]}")
+        return False, "签到结果未确认"
