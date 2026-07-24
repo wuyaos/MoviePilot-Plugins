@@ -22,7 +22,7 @@ class SunnyPTSignin(_PluginBase):
     plugin_name = "SunnyPT 自动签到"
     plugin_desc = "通过用户名密码登录 SunnyPT 获取 token 自动签到，无需 Cookie。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.0.0"
+    plugin_version = "1.1.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "sunnyptsignin_"
@@ -43,6 +43,7 @@ class SunnyPTSignin(_PluginBase):
     _password = ""
     _cron = "10 9 * * *"
     _notify = True
+    _notify_type = "Plugin"
     _run_once = False
     _lock = threading.Lock()
 
@@ -53,6 +54,7 @@ class SunnyPTSignin(_PluginBase):
         self._password = config.get("password") or ""
         self._cron = self.__normalize_cron(config.get("cron"))
         self._notify = bool(config.get("notify", True))
+        self._notify_type = config.get("notify_type") or "Plugin"
         self._run_once = bool(config.get("run_once", False))
 
         if self._run_once and self._enabled and self._username and self._password:
@@ -124,89 +126,168 @@ class SunnyPTSignin(_PluginBase):
         ]
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        notify_type_items = [
+            {"title": member.value, "value": member.name} for member in NotificationType
+        ]
         return [
             {
                 "component": "VForm",
                 "content": [
+                    # ── 基础开关 ──────────────────────────────
                     {
-                        "component": "VRow",
+                        "component": "VCard",
+                        "props": {"variant": "outlined", "class": "mb-4"},
                         "content": [
                             {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "component": "VCardTitle",
+                                "props": {"class": "text-subtitle-1 d-flex align-center"},
                                 "content": [
-                                    {"component": "VSwitch", "props": {"model": "enabled", "label": "启用插件"}}
+                                    {"component": "VIcon", "props": {"icon": "mdi-cog-outline", "class": "mr-2", "color": "primary"}},
+                                    {"component": "span", "text": "基础设置"},
                                 ],
                             },
+                            {"component": "VDivider"},
                             {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
-                                "content": [
-                                    {"component": "VSwitch", "props": {"model": "notify", "label": "发送通知"}}
-                                ],
-                            },
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "component": "VCardText",
                                 "content": [
                                     {
-                                        "component": "VSwitch",
-                                        "props": {
-                                            "model": "run_once",
-                                            "label": "立即运行一次",
-                                            "hint": "保存配置后执行，并自动关闭",
-                                        },
-                                    }
+                                        "component": "VRow",
+                                        "content": [
+                                            {
+                                                "component": "VCol",
+                                                "props": {"cols": 12, "md": 4},
+                                                "content": [
+                                                    {"component": "VSwitch", "props": {"model": "enabled", "label": "启用插件", "color": "primary", "inset": True}}
+                                                ],
+                                            },
+                                            {
+                                                "component": "VCol",
+                                                "props": {"cols": 12, "md": 4},
+                                                "content": [
+                                                    {"component": "VSwitch", "props": {"model": "notify", "label": "发送通知", "color": "info", "inset": True}}
+                                                ],
+                                            },
+                                            {
+                                                "component": "VCol",
+                                                "props": {"cols": 12, "md": 4},
+                                                "content": [
+                                                    {
+                                                        "component": "VSwitch",
+                                                        "props": {
+                                                            "model": "run_once",
+                                                            "label": "立即运行一次",
+                                                            "color": "success",
+                                                            "inset": True,
+                                                            "hint": "保存配置后执行，并自动关闭",
+                                                            "persistent-hint": True,
+                                                        },
+                                                    }
+                                                ],
+                                            },
+                                        ],
+                                    },
                                 ],
                             },
                         ],
                     },
+                    # ── 账号与调度 ──────────────────────────────
                     {
-                        "component": "VRow",
+                        "component": "VCard",
+                        "props": {"variant": "outlined", "class": "mb-4"},
                         "content": [
                             {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "component": "VCardTitle",
+                                "props": {"class": "text-subtitle-1 d-flex align-center"},
                                 "content": [
-                                    {
-                                        "component": "VTextField",
-                                        "props": {
-                                            "model": "username",
-                                            "label": "用户名",
-                                            "placeholder": "SunnyPT 用户名",
-                                        },
-                                    }
+                                    {"component": "VIcon", "props": {"icon": "mdi-account-key-outline", "class": "mr-2", "color": "primary"}},
+                                    {"component": "span", "text": "账号与调度"},
                                 ],
                             },
+                            {"component": "VDivider"},
                             {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "component": "VCardText",
                                 "content": [
                                     {
-                                        "component": "VTextField",
-                                        "props": {
-                                            "model": "password",
-                                            "label": "密码",
-                                            "type": "password",
-                                            "placeholder": "SunnyPT 密码",
-                                            "autocomplete": "new-password",
-                                        },
-                                    }
-                                ],
-                            },
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
-                                "content": [
+                                        "component": "VRow",
+                                        "content": [
+                                            {
+                                                "component": "VCol",
+                                                "props": {"cols": 12, "md": 6},
+                                                "content": [
+                                                    {
+                                                        "component": "VTextField",
+                                                        "props": {
+                                                            "model": "username",
+                                                            "label": "用户名",
+                                                            "placeholder": "SunnyPT 用户名",
+                                                            "variant": "outlined",
+                                                            "prepend-inner-icon": "mdi-account",
+                                                            "clearable": True,
+                                                        },
+                                                    }
+                                                ],
+                                            },
+                                            {
+                                                "component": "VCol",
+                                                "props": {"cols": 12, "md": 6},
+                                                "content": [
+                                                    {
+                                                        "component": "VTextField",
+                                                        "props": {
+                                                            "model": "password",
+                                                            "label": "密码",
+                                                            "type": "password",
+                                                            "placeholder": "SunnyPT 密码",
+                                                            "variant": "outlined",
+                                                            "prepend-inner-icon": "mdi-lock",
+                                                            "autocomplete": "new-password",
+                                                        },
+                                                    }
+                                                ],
+                                            },
+                                        ],
+                                    },
                                     {
-                                        "component": "VCronField",
-                                        "props": {
-                                            "model": "cron",
-                                            "label": "执行周期",
-                                            "placeholder": "10 9 * * *",
-                                            "hint": "5位 Cron 表达式，例如 10 9 * * *",
-                                        },
-                                    }
+                                        "component": "VRow",
+                                        "content": [
+                                            {
+                                                "component": "VCol",
+                                                "props": {"cols": 12, "md": 6},
+                                                "content": [
+                                                    {
+                                                        "component": "VCronField",
+                                                        "props": {
+                                                            "model": "cron",
+                                                            "label": "执行周期",
+                                                            "placeholder": "10 9 * * *",
+                                                            "variant": "outlined",
+                                                            "prepend-inner-icon": "mdi-clock-outline",
+                                                            "hint": "5 位 Cron 表达式，例如 10 9 * * *",
+                                                            "persistent-hint": True,
+                                                        },
+                                                    }
+                                                ],
+                                            },
+                                            {
+                                                "component": "VCol",
+                                                "props": {"cols": 12, "md": 6},
+                                                "content": [
+                                                    {
+                                                        "component": "VSelect",
+                                                        "props": {
+                                                            "model": "notify_type",
+                                                            "label": "通知渠道",
+                                                            "items": notify_type_items,
+                                                            "variant": "outlined",
+                                                            "prepend-inner-icon": "mdi-bell-outline",
+                                                            "hint": "选择通知消息发送的渠道类型",
+                                                            "persistent-hint": True,
+                                                        },
+                                                    }
+                                                ],
+                                            },
+                                        ],
+                                    },
                                 ],
                             },
                         ],
@@ -216,6 +297,8 @@ class SunnyPTSignin(_PluginBase):
                         "props": {
                             "type": "info",
                             "variant": "tonal",
+                            "density": "comfortable",
+                            "icon": "mdi-information-outline",
                             "text": "SunnyPT 使用用户名密码登录获取 token 签到，token 缓存复用（24h 内无需重复登录）。与 autoptcheckin 的 cookie 鉴权体系独立。",
                         },
                     },
@@ -227,6 +310,7 @@ class SunnyPTSignin(_PluginBase):
             "password": self._password,
             "cron": self._cron,
             "notify": self._notify,
+            "notify_type": self._notify_type,
             "run_once": False,
         }
 
@@ -235,62 +319,121 @@ class SunnyPTSignin(_PluginBase):
         today = datetime.now().strftime("%Y-%m-%d")
         today_records = [r for r in records if r.get("date") == today]
         today_success = any(r.get("status") == "success" for r in today_records)
-        today_status = "今日已签到" if today_success else ("今日签到失败" if today_records else "今日未签到")
-        return [
-            {
+        if today_success:
+            today_status, today_color, today_icon = "今日已签到", "success", "mdi-check-circle"
+        elif today_records:
+            today_status, today_color, today_icon = "今日签到失败", "error", "mdi-close-circle"
+        else:
+            today_status, today_color, today_icon = "今日未签到", "grey", "mdi-clock-outline"
+
+        # 从最新一条成功记录取统计数据
+        latest = next((r for r in records if r.get("status") == "success"), records[0] if records else {})
+        days = latest.get("days")
+        total_days = latest.get("total_days")
+        points = latest.get("points")
+
+        stat_cards = {
+            "component": "VRow",
+            "content": [
+                self.__stat_card("今日状态", today_status, today_icon, today_color),
+                self.__stat_card("连续签到", f"{days} 天" if days is not None else "-", "mdi-fire", "deep-orange"),
+                self.__stat_card("累计签到", f"{total_days} 天" if total_days is not None else "-", "mdi-calendar-check", "blue"),
+                self.__stat_card("魔力值", str(points) if points is not None else "-", "mdi-diamond-stone", "purple"),
+            ],
+        }
+
+        if not records:
+            table = {
                 "component": "VCard",
-                "props": {"variant": "tonal", "class": "mb-4"},
+                "props": {"variant": "outlined"},
                 "content": [
-                    {"component": "VCardTitle", "text": "SunnyPT 签到状态"},
                     {
                         "component": "VCardText",
+                        "props": {"class": "text-center text-medium-emphasis py-8"},
                         "content": [
-                            {
-                                "component": "VRow",
-                                "content": [
-                                    self.__info_col("今日状态", today_status),
-                                    self.__info_col("历史记录", str(len(records))),
-                                    self.__info_col("执行周期", self._cron or "未配置"),
-                                ],
-                            }
+                            {"component": "VIcon", "props": {"icon": "mdi-history", "size": "48", "class": "mb-2"}},
+                            {"component": "div", "text": "暂无签到记录"},
+                        ],
+                    }
+                ],
+            }
+        else:
+            table = {
+                "component": "VCard",
+                "props": {"variant": "outlined"},
+                "content": [
+                    {
+                        "component": "VCardTitle",
+                        "props": {"class": "text-subtitle-1 d-flex align-center"},
+                        "content": [
+                            {"component": "VIcon", "props": {"icon": "mdi-history", "class": "mr-2", "color": "primary"}},
+                            {"component": "span", "text": "签到历史"},
                         ],
                     },
+                    {"component": "VDivider"},
+                    {
+                        "component": "VDataTable",
+                        "props": {
+                            "headers": [
+                                {"title": "日期", "key": "date", "align": "start"},
+                                {"title": "时间", "key": "time"},
+                                {"title": "状态", "key": "status_text"},
+                                {"title": "连续", "key": "days"},
+                                {"title": "累计", "key": "total_days"},
+                                {"title": "魔力值", "key": "points"},
+                                {"title": "消息", "key": "message"},
+                            ],
+                            "items": self.__table_items(records),
+                            "items-per-page": 10,
+                            "density": "comfortable",
+                            "hover": True,
+                            "class": "elevation-0",
+                        },
+                    },
                 ],
-            },
-            {
-                "component": "VDataTable",
-                "props": {
-                    "headers": [
-                        {"title": "日期", "key": "date"},
-                        {"title": "时间", "key": "time"},
-                        {"title": "状态", "key": "status_text"},
-                        {"title": "连续签到", "key": "days"},
-                        {"title": "累计签到", "key": "total_days"},
-                        {"title": "魔力值", "key": "points"},
-                        {"title": "消息", "key": "message"},
-                    ],
-                    "items": records,
-                    "items-per-page": 10,
-                },
-            },
+            }
+
+        return [
+            {"component": "div", "content": [stat_cards, {"component": "div", "props": {"class": "mt-4"}, "content": [table]}]}
         ]
 
     @staticmethod
-    def __info_col(label: str, value: Any) -> dict:
+    def __table_items(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        items = []
+        for r in records:
+            item = dict(r)
+            item["days"] = r.get("days") if r.get("days") is not None else "-"
+            item["total_days"] = r.get("total_days") if r.get("total_days") is not None else "-"
+            item["points"] = r.get("points") if r.get("points") is not None else "-"
+            items.append(item)
+        return items
+
+    @staticmethod
+    def __stat_card(label: str, value: str, icon: str, color: str) -> dict:
         return {
             "component": "VCol",
-            "props": {"cols": 12, "md": 4},
+            "props": {"cols": 6, "md": 3},
             "content": [
                 {
-                    "component": "div",
-                    "props": {"class": "text-caption text-medium-emphasis"},
-                    "text": label,
-                },
-                {
-                    "component": "div",
-                    "props": {"class": "text-h6"},
-                    "text": str(value) if value is not None else "-",
-                },
+                    "component": "VCard",
+                    "props": {"variant": "tonal", "color": color},
+                    "content": [
+                        {
+                            "component": "VCardText",
+                            "props": {"class": "d-flex align-center"},
+                            "content": [
+                                {"component": "VIcon", "props": {"icon": icon, "size": "36", "class": "mr-3"}},
+                                {
+                                    "component": "div",
+                                    "content": [
+                                        {"component": "div", "props": {"class": "text-caption"}, "text": label},
+                                        {"component": "div", "props": {"class": "text-h6 font-weight-bold"}, "text": value},
+                                    ],
+                                },
+                            ],
+                        }
+                    ],
+                }
             ],
         }
 
@@ -326,7 +469,7 @@ class SunnyPTSignin(_PluginBase):
                 title = "SunnyPT 签到成功" if ok else "SunnyPT 签到失败"
                 self.__notify(title, msg)
             except Exception as e:
-                logger.error(f"SunnyPT 签任务异常：{e}", exc_info=True)
+                logger.error(f"SunnyPT 签到任务异常：{e}", exc_info=True)
                 self.__save_record("fail", f"任务异常：{e}")
                 self.__notify("SunnyPT 签到失败", f"任务异常：{e}")
 
@@ -495,7 +638,11 @@ class SunnyPTSignin(_PluginBase):
     def __notify(self, title: str, text: str):
         if not self._notify:
             return
-        self.post_message(mtype=NotificationType.Plugin, title=title, text=text)
+        try:
+            mtype = NotificationType[self._notify_type]
+        except KeyError:
+            mtype = NotificationType.Plugin
+        self.post_message(mtype=mtype, title=title, text=text)
 
     # ===================== 工具方法 =====================
 
@@ -507,6 +654,7 @@ class SunnyPTSignin(_PluginBase):
                 "password": self._password,
                 "cron": self._cron,
                 "notify": self._notify,
+                "notify_type": self._notify_type,
                 "run_once": self._run_once,
             }
         )

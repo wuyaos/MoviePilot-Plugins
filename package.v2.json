@@ -314,12 +314,13 @@
     "name": "SunnyPT自动签到",
     "description": "通过用户名密码登录 SunnyPT 获取 token 自动签到，token 缓存复用，无需 Cookie",
     "labels": "sunnypt,签到,自动登录",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
     "author": "wuyaos",
     "level": 1,
     "history": {
-      "v1.0.0": "初始版本:用户名密码 POST /login 获取 token;POST /api/v1/attendance/check-in 签到;token 缓存复用(解码 JWT exp,提前1h刷新);token 失效(code=400000)自动重新登录重试一次;已签到 code=400001;GET /api/v1/attendance/status 丰富历史记录(连续/累计天数/魔力值);独立于 autoptcheckin 的 cookie 体系"
+      "v1.0.0": "初始版本:用户名密码 POST /login 获取 token;POST /api/v1/attendance/check-in 签到;token 缓存复用(解码 JWT exp,提前1h刷新);token 失效(code=400000)自动重新登录重试一次;已签到 code=400001;GET /api/v1/attendance/status 丰富历史记录(连续/累计天数/魔力值);独立于 autoptcheckin 的 cookie 体系",
+      "v1.1.0": "新增通知渠道选择;美化配置页(分组卡片+图标)和数据页(统计卡片+签到历史);补充 get_api 抽象方法;目录名改为小写修复安装404"
     }
   }
 }
