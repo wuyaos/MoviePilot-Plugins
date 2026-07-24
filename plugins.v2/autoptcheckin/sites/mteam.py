@@ -1,5 +1,4 @@
 from typing import Tuple
-from urllib.parse import urljoin
 
 from ruamel.yaml import CommentedMap
 

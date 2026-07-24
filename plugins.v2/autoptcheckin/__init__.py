@@ -2,9 +2,10 @@
 # output: AutoPtCheckin 插件入口、调度注册与站点自动签到执行逻辑
 # pos: MoviePilot V2 PT 站点自动签到的入口与编排层
 import re
-import traceback
 from datetime import datetime, timedelta
+from functools import partial
 from multiprocessing.dummy import Pool as ThreadPool
+from threading import Lock
 from typing import Any, List, Dict, Tuple, Optional
 from urllib.parse import urljoin
 
@@ -39,7 +40,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.3.9"
+    plugin_version = "1.4.0"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1520,14 +1521,17 @@ class AutoPtCheckin(_PluginBase):
         _force = self._clean
         refresh_triggered_site_ids = set()
         failed_sites = []
+        task_context = self.__build_task_context()
         if self._sign_sites:
             self._clean = _force
             self.__do(today=today, type_str="签到", do_sites=self._sign_sites, event=event,
-                      refresh_triggered_site_ids=refresh_triggered_site_ids, failed_sites=failed_sites)
+                      refresh_triggered_site_ids=refresh_triggered_site_ids, failed_sites=failed_sites,
+                      task_context=task_context)
         if self._login_sites:
             self._clean = _force
             self.__do(today=today, type_str="登录", do_sites=self._login_sites, event=event,
-                      refresh_triggered_site_ids=refresh_triggered_site_ids, failed_sites=failed_sites)
+                      refresh_triggered_site_ids=refresh_triggered_site_ids, failed_sites=failed_sites,
+                      task_context=task_context)
         if failed_sites:
             refreshed_site_ids = set()
             for site in failed_sites:
@@ -1543,7 +1547,7 @@ class AutoPtCheckin(_PluginBase):
                 logger.info(f"共 {len(refreshed_site_ids)} 个站点 Cookie 失效，批量触发 site_refresh: {refreshed_site_ids}")
 
     def __do(self, today: datetime, type_str: str, do_sites: list, event: Event = None,
-             refresh_triggered_site_ids: set = None, failed_sites: list = None):
+             refresh_triggered_site_ids: set = None, failed_sites: list = None, task_context: dict = None):
         """
         签到逻辑
         """
@@ -1561,8 +1565,9 @@ class AutoPtCheckin(_PluginBase):
         today_str = today.strftime('%Y-%m-%d')
         today_history = self.get_data(key=type_str + "-" + today_str)
 
-        # 查询所有站点
-        all_sites = [site for site in self.sites.get_indexers() if not site.get("public")] + self.__custom_sites()
+        # sign_in() 的签到/登录共用同一站点快照；单站 API 则按本次调用创建快照。
+        task_context = task_context or self.__build_task_context()
+        all_sites = task_context["all_sites"]
         # 过滤掉没有选中的站点
         if do_sites:
             do_sites = [site for site in all_sites if site.get("id") in do_sites]
@@ -1600,11 +1605,11 @@ class AutoPtCheckin(_PluginBase):
         # 执行签到
         logger.info(f"开始执行{type_str}任务 ...")
         if type_str == "签到":
-            with ThreadPool(min(len(do_sites), int(self._queue_cnt))) as p:
-                status = p.map(self.signin_site, do_sites)
+            action = partial(self.signin_site, cookie_cache=task_context["cookie_cache"])
         else:
-            with ThreadPool(min(len(do_sites), int(self._queue_cnt))) as p:
-                status = p.map(self.login_site, do_sites)
+            action = partial(self.login_site, cookie_cache=task_context["cookie_cache"])
+        with ThreadPool(min(len(do_sites), int(self._queue_cnt))) as p:
+            status = p.map(action, do_sites)
 
         if status:
             logger.info(f"站点{type_str}任务完成！")
@@ -1642,8 +1647,8 @@ class AutoPtCheckin(_PluginBase):
             # 失败｜错误
             failed_msg = []
 
-            sites = {site.get('name'): site.get("id") for site in self.sites.get_indexers() if not site.get("public")}
-            custom_site_names = {site.get("name") for site in self.__custom_sites() if site.get("name")}
+            sites = task_context["site_id_by_name"]
+            custom_site_names = task_context["custom_site_names"]
             for s in status:
                 site_name = s[0]
                 site_id = None
@@ -1764,20 +1769,43 @@ class AutoPtCheckin(_PluginBase):
                 message=f"站点【{target_domain or url}】不存在或未配置"
             )
 
-        site_name, message = self.signin_site(site_info)
+        site_name, message = self.signin_site(site_info, cookie_cache=self.__new_cookie_cache())
         success = "失败" not in str(message) and "错误" not in str(message) and "未确认" not in str(message)
         return schemas.Response(
             success=success,
             message=f"站点【{site_name}】{message}"
         )
 
+    def __build_task_context(self) -> dict:
+        """创建一次批量任务共享的站点快照和 CookieCloud 缓存。"""
+        ordinary_sites = [site for site in self.sites.get_indexers() if not site.get("public")]
+        custom_sites = self.__custom_sites()
+        return {
+            "all_sites": ordinary_sites + custom_sites,
+            # 保持原有语义：仅 MoviePilot 内置站点可触发 SiteRefresh 写回。
+            "site_id_by_name": {site.get("name"): site.get("id") for site in ordinary_sites if site.get("name")},
+            "custom_site_names": {site.get("name") for site in custom_sites if site.get("name")},
+            "cookie_cache": self.__new_cookie_cache(),
+        }
+
     @staticmethod
-    def _fetch_cookie_cloud(site_url: str) -> str:
-        """Cookie 为空时从 CookieCloud 按域名补取"""
+    def __new_cookie_cache() -> dict:
+        """CookieCloud 下载结果仅在单次任务内复用，避免跨任务使用旧 Cookie。"""
+        return {"loaded": False, "cookies": {}, "lock": Lock()}
+
+    @staticmethod
+    def _fetch_cookie_cloud(site_url: str, cookie_cache: dict = None) -> str:
+        """Cookie 为空时从 CookieCloud 按域名补取，支持单次任务缓存。"""
         try:
             from urllib.parse import urlparse
             from app.helper.cookiecloud import CookieCloudHelper
-            cookies, _ = CookieCloudHelper().download()
+            cookie_cache = cookie_cache or AutoPtCheckin.__new_cookie_cache()
+            with cookie_cache["lock"]:
+                if not cookie_cache["loaded"]:
+                    cookies, _ = CookieCloudHelper().download()
+                    cookie_cache["cookies"] = cookies or {}
+                    cookie_cache["loaded"] = True
+            cookies = cookie_cache["cookies"]
             if not cookies:
                 logger.info(f"CookieCloud 未配置或无数据，跳过补取（{site_url}）")
                 return ""
@@ -1790,12 +1818,12 @@ class AutoPtCheckin(_PluginBase):
             logger.info(f"CookieCloud 补取失败（可能未配置）：{e}")
         return ""
 
-    def signin_site(self, site_info: CommentedMap) -> Tuple[str, str]:
+    def signin_site(self, site_info: CommentedMap, cookie_cache: dict = None) -> Tuple[str, str]:
         """
         签到一个站点
         """
         if not site_info.get("cookie"):
-            cookie = self._fetch_cookie_cloud(site_info.get("url", ""))
+            cookie = self._fetch_cookie_cloud(site_info.get("url", ""), cookie_cache=cookie_cache)
             if cookie:
                 logger.info(f"{site_info.get('name')} Cookie 为空，已从 CookieCloud 补取")
                 site_info["cookie"] = cookie
@@ -1807,7 +1835,7 @@ class AutoPtCheckin(_PluginBase):
                 try:
                     return site_module().signin(site_info)
                 except Exception as e:
-                    traceback.print_exc()
+                    logger.exception(f"{site_info.get('name')} 签到处理器异常：{e}")
                     return False, f"签到失败：{str(e)}"
             return self.__signin_base(site_info)
 
@@ -1815,7 +1843,7 @@ class AutoPtCheckin(_PluginBase):
         message = message or ("签到成功" if state else "签到失败")
         if "Cookie已失效" in str(message):
             old_cookie = site_info.get("cookie") or ""
-            cookie = self._fetch_cookie_cloud(site_info.get("url", ""))
+            cookie = self._fetch_cookie_cloud(site_info.get("url", ""), cookie_cache=cookie_cache)
             if cookie and cookie != old_cookie:
                 logger.info(f"{site_info.get('name')} Cookie已失效，已从 CookieCloud 补取并重试签到")
                 site_info["cookie"] = cookie
@@ -1850,7 +1878,7 @@ class AutoPtCheckin(_PluginBase):
         proxies = settings.PROXY if site_info.get("proxy") else None
         proxy_server = settings.PROXY_SERVER if site_info.get("proxy") else None
         if not site_url or not site_cookie:
-            logger.warn(f"未配置 {site} 的站点地址或Cookie，无法签到")
+            logger.warning(f"未配置 {site} 的站点地址或Cookie，无法签到")
             return False, "签到失败，未配置站点地址或Cookie"
         # 模拟登录
         try:
@@ -1899,28 +1927,27 @@ class AutoPtCheckin(_PluginBase):
                             msg = "Cookie已失效"
                         else:
                             msg = f"状态码：{res.status_code}"
-                        logger.warn(f"{site} 签到失败，{msg}")
+                        logger.warning(f"{site} 签到失败，{msg}")
                         return False, f"签到失败，{msg}！"
                     else:
                         logger.info(f"{site} 签到成功")
                         return True, f"签到成功"
                 elif res is not None:
-                    logger.warn(f"{site} 签到失败，状态码：{res.status_code}")
+                    logger.warning(f"{site} 签到失败，状态码：{res.status_code}")
                     return False, f"签到失败，状态码：{res.status_code}！"
                 else:
-                    logger.warn(f"{site} 签到失败，无法打开网站")
+                    logger.warning(f"{site} 签到失败，无法打开网站")
                     return False, f"签到失败，无法打开网站！"
         except Exception as e:
-            logger.warn("%s 签到失败：%s" % (site, str(e)))
-            traceback.print_exc()
+            logger.exception("%s 签到失败：%s" % (site, str(e)))
             return False, f"签到失败：{str(e)}！"
 
-    def login_site(self, site_info: CommentedMap) -> Tuple[str, str]:
+    def login_site(self, site_info: CommentedMap, cookie_cache: dict = None) -> Tuple[str, str]:
         """
         模拟登录一个站点
         """
         if not site_info.get("cookie"):
-            cookie = self._fetch_cookie_cloud(site_info.get("url", ""))
+            cookie = self._fetch_cookie_cloud(site_info.get("url", ""), cookie_cache=cookie_cache)
             if cookie:
                 logger.info(f"{site_info.get('name')} Cookie 为空，已从 CookieCloud 补取")
                 site_info["cookie"] = cookie
@@ -1932,14 +1959,14 @@ class AutoPtCheckin(_PluginBase):
                 try:
                     return site_module().login(site_info)
                 except Exception as e:
-                    traceback.print_exc()
+                    logger.exception(f"{site_info.get('name')} 模拟登录处理器异常：{e}")
                     return False, f"模拟登录失败：{str(e)}"
             return self.__login_base(site_info)
 
         state, message = do_login()
         if "Cookie已失效" in str(message):
             old_cookie = site_info.get("cookie") or ""
-            cookie = self._fetch_cookie_cloud(site_info.get("url", ""))
+            cookie = self._fetch_cookie_cloud(site_info.get("url", ""), cookie_cache=cookie_cache)
             if cookie and cookie != old_cookie:
                 logger.info(f"{site_info.get('name')} Cookie已失效，已从 CookieCloud 补取并重试登录")
                 site_info["cookie"] = cookie
@@ -1973,7 +2000,7 @@ class AutoPtCheckin(_PluginBase):
         proxies = settings.PROXY if site_info.get("proxy") else None
         proxy_server = settings.PROXY_SERVER if site_info.get("proxy") else None
         if not site_url or not site_cookie:
-            logger.warn(f"未配置 {site} 的站点地址或Cookie，无法登录")
+            logger.warning(f"未配置 {site} 的站点地址或Cookie，无法登录")
             return False, "模拟登录失败，未配置站点地址或Cookie"
         # 模拟登录
         try:
@@ -2003,10 +2030,10 @@ class AutoPtCheckin(_PluginBase):
                     if res and res.status_code == 200:
                         page_text = res.text
                     elif res is not None and res.status_code not in [200, 500, 403]:
-                        logger.warn(f"{site} 模拟登录失败，状态码：{res.status_code}")
+                        logger.warning(f"{site} 模拟登录失败，状态码：{res.status_code}")
                         return False, f"模拟登录失败，状态码：{res.status_code}！"
                 except Exception as req_err:
-                    logger.warn(f"{site} RequestUtils 请求失败，尝试 CffiClient 回退：{req_err}")
+                    logger.warning(f"{site} RequestUtils 请求失败，尝试 CffiClient 回退：{req_err}")
 
                 # CffiClient 回退（WAF / gzip 异常等场景）
                 if page_text is None:
@@ -2018,15 +2045,15 @@ class AutoPtCheckin(_PluginBase):
                             proxy=proxy_server,
                         ).get(site_url)
                         if status not in [200, 500, 403]:
-                            logger.warn(f"{site} 模拟登录失败，状态码：{status}")
+                            logger.warning(f"{site} 模拟登录失败，状态码：{status}")
                             return False, f"模拟登录失败，状态码：{status}！"
                     except Exception as cffi_err:
-                        logger.warn(f"{site} 模拟登录失败，无法打开网站：{cffi_err}")
+                        logger.warning(f"{site} 模拟登录失败，无法打开网站：{cffi_err}")
                         return False, f"模拟登录失败，无法打开网站！"
 
                 # 判断登录状态
                 if not page_text:
-                    logger.warn(f"{site} 模拟登录失败，无法打开网站")
+                    logger.warning(f"{site} 模拟登录失败，无法打开网站")
                     return False, f"模拟登录失败，无法打开网站！"
                 if not SiteUtils.is_logged_in(page_text):
                     if under_challenge(page_text):
@@ -2035,14 +2062,13 @@ class AutoPtCheckin(_PluginBase):
                         msg = "站点服务器异常，稍后重试"
                     else:
                         msg = "Cookie已失效"
-                    logger.warn(f"{site} 模拟登录失败，{msg}")
+                    logger.warning(f"{site} 模拟登录失败，{msg}")
                     return False, f"模拟登录失败，{msg}！"
                 else:
                     logger.info(f"{site} 模拟登录成功")
                     return True, f"模拟登录成功"
         except Exception as e:
-            logger.warn("%s 模拟登录失败：%s" % (site, str(e)))
-            traceback.print_exc()
+            logger.exception("%s 模拟登录失败：%s" % (site, str(e)))
             return False, f"模拟登录失败：{str(e)}！"
 
     def stop_service(self):

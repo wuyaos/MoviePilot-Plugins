@@ -1,5 +1,4 @@
 import json
-import time
 from typing import Tuple
 
 from lxml import etree

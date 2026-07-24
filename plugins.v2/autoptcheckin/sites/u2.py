@@ -1,6 +1,5 @@
 import datetime
 import random
-import re
 from typing import Tuple
 
 from lxml import etree

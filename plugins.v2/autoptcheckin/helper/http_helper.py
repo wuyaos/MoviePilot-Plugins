@@ -38,73 +38,46 @@ class CffiClient:
         msg = str(err).lower()
         return any(m in msg for m in CffiClient._SSL_ERROR_MARKERS)
 
-    def get(self, url: str, timeout: int = 60) -> tuple[int, str]:
-        """GET 请求，返回 (status_code, text)；SSL 证书错误时回退跳过校验"""
-        kwargs = {"timeout": timeout}
+    def _request(self, method: str, url: str, timeout: int = 60, **kwargs):
+        """执行请求；仅 SSL 证书异常时以 verify=False 重试一次。"""
+        kwargs["timeout"] = timeout
         if self._proxy:
             kwargs["proxies"] = self._proxies()
+        request = getattr(self._session, method)
         try:
-            resp = self._session.get(url, **kwargs)
-            return resp.status_code, resp.text
-        except Exception as e:
-            if self._is_ssl_error(e):
-                logger.warning(f"curl-cffi SSL 证书校验失败，回退跳过校验重试: {url} - {e}")
-                try:
-                    resp = self._session.get(url, verify=False, **kwargs)
-                    return resp.status_code, resp.text
-                except Exception as e2:
-                    logger.error(f"curl-cffi GET 回退失败: {url} - {e2}")
-                    return 0, ""
-            logger.error(f"curl-cffi GET 失败: {url} - {e}")
-            return 0, ""
+            return request(url, **kwargs)
+        except Exception as err:
+            if not self._is_ssl_error(err):
+                logger.error(f"curl-cffi {method.upper()} 失败: {url} - {err}")
+                return None
+            logger.warning(f"curl-cffi SSL 证书校验失败，回退跳过校验重试: {url} - {err}")
+            try:
+                return request(url, verify=False, **kwargs)
+            except Exception as retry_err:
+                logger.error(f"curl-cffi {method.upper()} 回退失败: {url} - {retry_err}")
+                return None
+
+    def get(self, url: str, timeout: int = 60) -> tuple[int, str]:
+        """GET 请求，返回 (status_code, text)。"""
+        resp = self._request("get", url, timeout)
+        return (resp.status_code, resp.text) if resp is not None else (0, "")
 
     def post(
         self, url: str, data: dict = None, multipart: dict = None, timeout: int = 60
     ) -> tuple[int, str]:
-        """POST 请求，支持 multipart dict → CurlMime；SSL 证书错误时回退跳过校验"""
-        kwargs = {"timeout": timeout}
-        if self._proxy:
-            kwargs["proxies"] = self._proxies()
+        """POST 请求，支持 multipart dict → CurlMime。"""
+        kwargs = {}
         if multipart:
-            mp = CurlMime()
-            for k, v in multipart.items():
-                mp.addpart(name=k, data=str(v))
-            kwargs["multipart"] = mp
+            mime = CurlMime()
+            for key, value in multipart.items():
+                mime.addpart(name=key, data=str(value))
+            kwargs["multipart"] = mime
         elif data:
             kwargs["data"] = data
-        try:
-            resp = self._session.post(url, **kwargs)
-            return resp.status_code, resp.text
-        except Exception as e:
-            if self._is_ssl_error(e):
-                logger.warning(f"curl-cffi SSL 证书校验失败，回退跳过校验重试: {url} - {e}")
-                try:
-                    resp = self._session.post(url, verify=False, **kwargs)
-                    return resp.status_code, resp.text
-                except Exception as e2:
-                    logger.error(f"curl-cffi POST 回退失败: {url} - {e2}")
-                    return 0, ""
-            logger.error(f"curl-cffi POST 失败: {url} - {e}")
-            return 0, ""
+        resp = self._request("post", url, timeout, **kwargs)
+        return (resp.status_code, resp.text) if resp is not None else (0, "")
 
     def get_bytes(self, url: str, timeout: int = 60) -> bytes | None:
-        """GET 返回二进制内容（验证码图片）；SSL 证书错误时回退跳过校验"""
-        kwargs = {"timeout": timeout}
-        if self._proxy:
-            kwargs["proxies"] = self._proxies()
-        try:
-            resp = self._session.get(url, **kwargs)
-            if resp.status_code == 200:
-                return resp.content
-        except Exception as e:
-            if self._is_ssl_error(e):
-                logger.warning(f"curl-cffi SSL 证书校验失败，回退跳过校验重试: {url} - {e}")
-                try:
-                    resp = self._session.get(url, verify=False, **kwargs)
-                    if resp.status_code == 200:
-                        return resp.content
-                except Exception as e2:
-                    logger.error(f"curl-cffi 下载回退失败: {url} - {e2}")
-                return None
-            logger.error(f"curl-cffi 下载失败: {url} - {e}")
-        return None
+        """GET 返回二进制内容，仅在 HTTP 200 时返回。"""
+        resp = self._request("get", url, timeout)
+        return resp.content if resp is not None and resp.status_code == 200 else None
