@@ -49,7 +49,7 @@ def load_site_classes() -> List[dict]:
             elif issubclass(obj, BaseTask) and obj is not BaseTask:
                 tasks_cls = obj
 
-        if not handler_cls:
+        if not handler_cls or not hasattr(handler_cls, "match") or inspect.isabstract(handler_cls):
             continue
 
         site_name = ""

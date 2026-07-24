@@ -4,6 +4,7 @@
 站点业务逻辑留在 sites/，UI 留在 ui/，调度留在 scheduler.py。
 """
 from datetime import datetime
+import threading
 import pytz
 from app.core.config import settings
 from app.log import logger
@@ -16,9 +17,19 @@ from ..sites import get_site_handler
 class TaskEngine:
     def __init__(self, plugin):
         self.plugin = plugin
-        self.history = HistoryStore(plugin)
+        self.history = plugin.history
+        self._lock = threading.Lock()
 
     def run(self):
+        if not self._lock.acquire(blocking=False):
+            logger.warning("已有站点任务正在执行，跳过本次调度")
+            return []
+        try:
+            return self._run_locked()
+        finally:
+            self._lock.release()
+
+    def _run_locked(self):
         cfg = self.plugin.config
         if not cfg.chat_sites:
             logger.info("未配置需要执行的站点")
@@ -37,6 +48,8 @@ class TaskEngine:
                 record = self._run_task(handler, task)
                 records.append(record)
         self.history.append(records, cfg.history_days)
+        from .notify import send_summary
+        send_summary(self.plugin, records)
         return records
 
     def _build_handler(self, site):

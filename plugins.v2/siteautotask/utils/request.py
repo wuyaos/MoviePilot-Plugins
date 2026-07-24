@@ -59,10 +59,15 @@ def build_session(cookie: str, ua: str, use_proxy: bool, referer: str = "") -> r
 
 
 def _resolve_proxies():
-    """解析系统代理。"""
+    """解析系统代理为 requests 需要的字典格式。"""
     try:
-        if getattr(settings, "PROXY", None):
-            return settings.PROXY
+        proxy = getattr(settings, "PROXY", None)
+        if not proxy:
+            return None
+        if isinstance(proxy, str):
+            return {"http": proxy, "https": proxy}
+        if isinstance(proxy, dict):
+            return proxy
     except Exception as e:
         logger.warning(f"解析代理配置失败: {e}")
     return None
