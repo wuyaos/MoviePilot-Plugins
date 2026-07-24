@@ -24,7 +24,7 @@ class GGPTMedalBuyer(_PluginBase):
     plugin_name = "GGPT勋章购买"
     plugin_desc = "自动续购 7 天有效的 GGPT 疯狂星期四勋章，避免到期后忘记手动购买。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "jiangbkvir,wuyaos"
     author_url = "https://github.com/jiangbkvir/MoviePilot-Plugins"
     plugin_config_prefix = "ggptmedalbuyer_"
@@ -38,8 +38,7 @@ class GGPTMedalBuyer(_PluginBase):
     DEFAULT_MEDAL_ID = "35"
     DEFAULT_MEDAL_NAME = "疯狂星期四"
     DEFAULT_VALID_DAYS = 7
-    DAILY_REFRESH_HOUR = 8
-    DAILY_REFRESH_MINUTE = 0
+    DEFAULT_CRON = "0 8 * * *"
     MAX_HISTORY = 30
     REQUEST_TIMEOUT = 30
 
@@ -48,6 +47,7 @@ class GGPTMedalBuyer(_PluginBase):
     _run_once = False
     _medal_id = DEFAULT_MEDAL_ID
     _offset_seconds = 0
+    _cron = DEFAULT_CRON
     _lock = threading.Lock()
     _timer_lock = threading.Lock()
     _purchase_timer: Optional[threading.Timer] = None
@@ -60,9 +60,10 @@ class GGPTMedalBuyer(_PluginBase):
         self._run_once = bool(config.get("run_once", False))
         self._medal_id = str(config.get("medal_id") or self.DEFAULT_MEDAL_ID).strip()
         self._offset_seconds = self.__safe_int(config.get("offset_seconds"), 0, min_value=0)
+        self._cron = self.__normalize_cron(config.get("cron"))
         logger.info(
             f"GGPT 勋章购买初始化完成：enabled={self._enabled}, medal_id={self._medal_id}, "
-            f"offset_seconds={self._offset_seconds}, notify={self._notify}"
+            f"offset_seconds={self._offset_seconds}, notify={self._notify}, cron={self._cron}"
         )
         if self._run_once:
             self._run_once = False
@@ -97,13 +98,27 @@ class GGPTMedalBuyer(_PluginBase):
     def get_service(self) -> List[Dict[str, Any]]:
         if not self._enabled:
             return []
+        if not self._cron:
+            logger.warning("GGPT 勋章购买定时服务未注册：Cron 为空")
+            return []
+        try:
+            trigger = CronTrigger.from_crontab(self._cron)
+        except Exception as err:
+            logger.warning(f"GGPT 勋章购买 Cron 配置无效：cron={repr(self._cron)}，error={err}")
+            return []
         return [
             {
                 "id": "GGPTMedalBuyerDailyRefresh",
-                "name": "GGPT勋章每日刷新预计购买时间",
-                "trigger": CronTrigger(hour=self.DAILY_REFRESH_HOUR, minute=self.DAILY_REFRESH_MINUTE),
+                "name": "GGPT勋章每日刷新",
+                "trigger": "cron",
                 "func": self.daily_refresh_task,
-                "kwargs": {}
+                "kwargs": {
+                    "minute": str(trigger.fields[6]),
+                    "hour": str(trigger.fields[5]),
+                    "day": str(trigger.fields[2]),
+                    "month": str(trigger.fields[1]),
+                    "day_of_week": str(trigger.fields[4]),
+                },
             }
         ]
 
@@ -123,7 +138,7 @@ class GGPTMedalBuyer(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
                                         "component": "VSwitch",
@@ -136,14 +151,29 @@ class GGPTMedalBuyer(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
                                         "component": "VSwitch",
                                         "props": {
                                             "model": "notify",
-                                            "label": "购买成功提醒",
-                                            "hint": "勾选后购买成功或失败都会发送通知"
+                                            "label": "购买提醒",
+                                            "hint": "购买成功或失败都会发送通知"
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 4},
+                                "content": [
+                                    {
+                                        "component": "VSwitch",
+                                        "props": {
+                                            "model": "run_once",
+                                            "label": "立即运行一次",
+                                            "color": "success",
+                                            "hint": "保存配置后执行，并自动关闭"
                                         }
                                     }
                                 ]
@@ -160,10 +190,11 @@ class GGPTMedalBuyer(_PluginBase):
                                     {
                                         "component": "VTextField",
                                         "props": {
-                                            "model": "medal_id",
-                                            "label": "勋章 ID",
-                                            "placeholder": self.DEFAULT_MEDAL_ID,
-                                            "hint": "疯狂星期四当前为 35"
+                                            "model": "offset_seconds",
+                                            "label": "偏移量（秒）",
+                                            "type": "number",
+                                            "min": 0,
+                                            "hint": "到期后延迟多少秒购买勋章"
                                         }
                                     }
                                 ]
@@ -173,13 +204,15 @@ class GGPTMedalBuyer(_PluginBase):
                                 "props": {"cols": 12, "md": 6},
                                 "content": [
                                     {
-                                        "component": "VTextField",
+                                        "component": "VCronField",
                                         "props": {
-                                            "model": "offset_seconds",
-                                            "label": "偏移量（秒）",
-                                            "type": "number",
-                                            "min": 0,
-                                            "hint": "到期后延迟多少秒购买勋章"
+                                            "model": "cron",
+                                            "label": "执行周期",
+                                            "placeholder": self.DEFAULT_CRON,
+                                            "variant": "outlined",
+                                            "prepend-inner-icon": "mdi-clock-outline",
+                                            "hint": "5 位 Cron 表达式，例如 0 8 * * *",
+                                            "persistent-hint": True
                                         }
                                     }
                                 ]
@@ -211,10 +244,7 @@ class GGPTMedalBuyer(_PluginBase):
                 "props": {"class": "text-h6 mt-4 mb-3"},
                 "text": "购买记录"
             },
-            {
-                "component": "VRow",
-                "content": self.__record_cards(record_rows)
-            }
+            self.__record_table(record_rows)
         ]
 
     def __form_data(self) -> Dict[str, Any]:
@@ -225,8 +255,9 @@ class GGPTMedalBuyer(_PluginBase):
         return {
             "enabled": self._enabled,
             "notify": self._notify,
-            "medal_id": self._medal_id,
+            "run_once": self._run_once,
             "offset_seconds": self._offset_seconds,
+            "cron": self._cron,
             "next_purchase_at": next_purchase_at,
             "site_status": site_status
         }
@@ -325,118 +356,82 @@ class GGPTMedalBuyer(_PluginBase):
             }
         ]
 
-    def __record_cards(self, rows: List[Dict[str, Any]]) -> List[dict]:
+    def __record_table(self, rows: List[Dict[str, Any]]) -> dict:
         if not rows:
-            return [
-                {
-                    "component": "VCol",
-                    "props": {"cols": 12},
-                    "content": [
-                        {
-                            "component": "VCard",
-                            "props": {"variant": "tonal"},
-                            "content": [
-                                {
-                                    "component": "VCardText",
-                                    "props": {"class": "text-medium-emphasis"},
-                                    "text": "暂无购买记录"
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ]
-
-        cards = []
+            return {
+                "component": "VCard",
+                "props": {"variant": "outlined"},
+                "content": [
+                    {
+                        "component": "VCardText",
+                        "props": {"class": "text-center text-medium-emphasis py-8"},
+                        "content": [
+                            {"component": "VIcon", "props": {"icon": "mdi-history", "size": "48", "class": "mb-2"}},
+                            {"component": "div", "text": "暂无购买记录"},
+                        ],
+                    }
+                ],
+            }
+        table_rows = []
         for item in rows:
-            medal_name = item.get("medal_name") or self.DEFAULT_MEDAL_NAME
-            status_text = item.get("status_text") or "-"
-            status_color = item.get("status_color") or "default"
-            date_text = item.get("date") or "-"
-            date_part, time_part = self.__split_record_datetime(date_text)
-            message = item.get("message") or "-"
-            cards.append(
+            date_part, time_part = self.__split_record_datetime(item.get("date"))
+            status = item.get("status_text") or "-"
+            meta = self.__status_meta(item.get("status_color"))
+            table_rows.append({
+                "component": "tr",
+                "content": [
+                    {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": date_part},
+                    {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": time_part},
+                    {"component": "td", "content": [{"component": "VChip", "props": {"color": meta["color"], "size": "small", "variant": "tonal"}, "content": [
+                        {"component": "VIcon", "props": {"start": True, "size": "small"}, "text": meta["icon"]},
+                        {"component": "span", "text": status}
+                    ]}]},
+                    {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": item.get("medal_name") or self.DEFAULT_MEDAL_NAME},
+                    {"component": "td", "props": {"class": "text-caption text-no-wrap"}, "text": item.get("site_name") or self.SITE_NAME},
+                    {"component": "td", "props": {"class": "text-caption", "style": "white-space: normal; min-width: 180px;"}, "text": item.get("message") or "-"},
+                ],
+            })
+        return {
+            "component": "VCard",
+            "props": {"variant": "outlined"},
+            "content": [
                 {
-                    "component": "VCol",
-                    "props": {
-                        "cols": "auto",
-                        "style": "flex: 0 0 16.6667%; max-width: 16.6667%; min-width: 160px;"
-                    },
+                    "component": "VCardTitle",
+                    "props": {"class": "text-subtitle-1 d-flex align-center"},
                     "content": [
-                        {
-                            "component": "VCard",
-                            "props": {"variant": "tonal", "class": "h-100 d-flex flex-column"},
-                            "content": [
-                                {
-                                    "component": "VCardText",
-                                    "props": {"class": "pb-2"},
-                                    "content": [
-                                        {
-                                            "component": "div",
-                                            "props": {"class": "d-flex align-center justify-space-between mb-3"},
-                                            "content": [
-                                                {
-                                                    "component": "div",
-                                                    "props": {"class": "text-subtitle-2 font-weight-bold text-truncate"},
-                                                    "text": medal_name
-                                                },
-                                                {
-                                                    "component": "VChip",
-                                                    "props": {
-                                                        "size": "x-small",
-                                                        "color": status_color,
-                                                        "variant": "tonal"
-                                                    },
-                                                    "text": status_text
-                                                }
-                                            ]
-                                        },
-                                        {
-                                            "component": "div",
-                                            "props": {"class": "text-caption text-medium-emphasis mb-1"},
-                                            "text": "时间"
-                                        },
-                                        {
-                                            "component": "div",
-                                            "props": {
-                                                "class": "text-body-2 font-weight-medium",
-                                                "style": "white-space: nowrap;"
-                                            },
-                                            "text": date_part
-                                        },
-                                        {
-                                            "component": "div",
-                                            "props": {
-                                                "class": "text-body-2 font-weight-medium mb-2",
-                                                "style": "white-space: nowrap;"
-                                            },
-                                            "text": time_part
-                                        },
-                                        {
-                                            "component": "VDivider",
-                                            "props": {"class": "my-2"}
-                                        },
-                                        {
-                                            "component": "div",
-                                            "props": {"class": "text-caption text-medium-emphasis mb-1"},
-                                            "text": "说明"
-                                        },
-                                        {
-                                            "component": "div",
-                                            "props": {
-                                                "class": "text-body-2 text-medium-emphasis",
-                                                "style": "line-height: 1.45;"
-                                            },
-                                            "text": message
-                                        }
-                                    ]
-                                }
-                            ]
-                        }
+                        {"component": "VIcon", "props": {"icon": "mdi-history", "class": "mr-2", "color": "primary"}},
+                        {"component": "span", "text": "购买历史"}
                     ]
-                }
-            )
-        return cards
+                },
+                {"component": "VDivider"},
+                {"component": "VCardText", "props": {"class": "pa-0 pa-md-2"}, "content": [{
+                    "component": "VResponsive", "content": [{
+                        "component": "VTable", "props": {"hover": True, "density": "comfortable"}, "content": [
+                            {"component": "thead", "content": [{"component": "tr", "content": [
+                                {"component": "th", "text": "日期"},
+                                {"component": "th", "text": "时间"},
+                                {"component": "th", "text": "状态"},
+                                {"component": "th", "text": "勋章"},
+                                {"component": "th", "text": "站点"},
+                                {"component": "th", "text": "说明"}
+                            ]}]},
+                            {"component": "tbody", "content": table_rows}
+                        ]
+                    }]
+                }]}
+            ]
+        }
+
+    @staticmethod
+    def __status_meta(color: str) -> Dict[str, str]:
+        metas = {
+            "success": {"color": "success", "icon": "mdi-check-circle"},
+            "error": {"color": "error", "icon": "mdi-close-circle"},
+            "warning": {"color": "warning", "icon": "mdi-alert-circle"},
+            "info": {"color": "info", "icon": "mdi-clock-outline"},
+            "default": {"color": "grey", "icon": "mdi-help-circle"},
+        }
+        return metas.get(color or "", {"color": color or "grey", "icon": "mdi-help-circle"})
 
     def __record_rows(self, state: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         rows = []
@@ -992,13 +987,16 @@ class GGPTMedalBuyer(_PluginBase):
         return self.__next_daily_refresh_time().strftime("%Y-%m-%d %H:%M:%S")
 
     def __next_daily_refresh_time(self) -> datetime:
+        """从配置的 Cron 计算下次每日刷新时间；Cron 无效时回退到明天 08:00。"""
         now = datetime.now()
-        next_at = now.replace(
-            hour=self.DAILY_REFRESH_HOUR,
-            minute=self.DAILY_REFRESH_MINUTE,
-            second=0,
-            microsecond=0
-        )
+        try:
+            trigger = CronTrigger.from_crontab(self._cron)
+            next_at = trigger.get_next_fire_time(None, now)
+            if next_at:
+                return next_at
+        except Exception as err:
+            logger.warning(f"GGPT 勋章购买计算下次刷新时间失败：cron={repr(self._cron)}，error={err}")
+        next_at = now.replace(hour=8, minute=0, second=0, microsecond=0)
         if next_at <= now:
             next_at += timedelta(days=1)
         return next_at
@@ -1107,9 +1105,20 @@ class GGPTMedalBuyer(_PluginBase):
             "enabled": self._enabled,
             "notify": self._notify,
             "run_once": run_once,
-            "medal_id": self._medal_id,
-            "offset_seconds": self._offset_seconds
+            "offset_seconds": self._offset_seconds,
+            "cron": self._cron
         }
+
+    @staticmethod
+    def __normalize_cron(cron: str) -> str:
+        cron = (cron or "").strip()
+        if not cron:
+            return "0 8 * * *"
+        parts = cron.split()
+        if len(parts) == 5:
+            return cron
+        logger.warning(f"GGPT 勋章购买 Cron 非标准 5 位，使用默认：{cron}")
+        return "0 8 * * *"
 
     @staticmethod
     def __html_to_text(content: str) -> str:

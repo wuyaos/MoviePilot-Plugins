@@ -327,13 +327,14 @@
     "name": "GGPT勋章购买",
     "description": "自动续购 GGPT 疯狂星期四勋章，按真实到期时间触发购买，避免到期后忘记手动购买",
     "labels": "ggpt,勋章,自动化",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png",
     "author": "jiangbkvir,wuyaos",
     "level": 1,
     "history": {
       "v1.0.0": "初始版本:自动购买 GGPT 疯狂星期四勋章(ID=35,7天有效);从 MP 站点表读 GGPT 站点 Cookie;POST /ajax.php action=buyMedal 购买;每日 08:00 检查勋章页面;已购买时读个人中心过期时间;到期前定时续购;购买记录和通知提醒",
-      "v1.0.1": "修复到期时间解析错误导致「该买没买」:勋章页 __medal_html_context 改用 data-id 锚定的购买按钮定位单行 <tr>(避免正则贪婪跨行匹配整表);__parse_owned_expire_time 只在单行内取日期(修复 find(35) 误命中「分享率 3.935」里的 35);个人中心 __parse_userdetails_expire_time 改用 title=勋章名 img 锚定取其后最近的过期时间(替换 min(future_times) 碰运气);logger.warn 全部改为 logger.warning"
+      "v1.0.1": "修复到期时间解析错误导致「该买没买」:勋章页 __medal_html_context 改用 data-id 锚定的购买按钮定位单行 <tr>(避免正则贪婪跨行匹配整表);__parse_owned_expire_time 只在单行内取日期(修复 find(35) 误命中「分享率 3.935」里的 35);个人中心 __parse_userdetails_expire_time 改用 title=勋章名 img 锚定取其后最近的过期时间(替换 min(future_times) 碰运气);logger.warn 全部改为 logger.warning",
+      "v1.0.2": "配置页新增立即运行开关和执行周期(Cron)配置(默认每天 08:00);购买记录改为 VTable 列表(日期/时间/状态/勋章/站点/说明);移除勋章 ID 配置项(固定为疯狂星期四)"
     }
   }
 }
