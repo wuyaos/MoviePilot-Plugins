@@ -29,4 +29,12 @@ G. 集成：主入口委托、服务/调度、通知、历史、重试、配置�
 H. 多 subagent code review：至少并行审查架构/安全与请求、MoviePilot V2 契约/UI、站点迁移/测试覆盖；主代理修复发现的问题。
 I. 最终验证：所有 Python 文件 ast.parse；pytest；插件加载/表单/数据页/服务接口；本地 MP 调试；更新 package.v2.json、插件 AGENTS.md、版本历史；检查 git diff 与残余风险。
 
+## 迭代 2 进度
+- 已新增 LongPT 明确站点适配器及 4 个任务：签到、月度任务领取、喊话反馈、每日抽奖；全部请求测试使用 mock，未执行真实副作用。
+- 已新增藏宝阁适配器（此前 checkpoint 已提交），当前加载 3 个任务。
+- 已按需求移除 NexusPHP 通用站点暴露：加载器跳过 `sites/nexusphp.py`，配置页不再给未迁移站点回退通用任务；NexusPHP 仅保留能力组合代码。
+- 验证：19/19 mock 测试通过；全部 Python AST 解析通过；`git diff --check` 通过。
+- 本地 MoviePilot 强制重载成功，日志仅加载藏宝阁、LongPT、青蛙、织梦四个明确站点；配置页和数据页接口均返回 200。
+- 当前 checkpoint 待提交；下一步迁移 13City/Ptskit 等明确站点，并先补对应 mock 测试。
+
 当前已存在半成品，必须先审计再改，不要假设已有代码正确。所有对用户的进展使用简体中文。

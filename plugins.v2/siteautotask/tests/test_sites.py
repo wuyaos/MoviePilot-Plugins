@@ -20,10 +20,16 @@ class SiteModuleTests(unittest.TestCase):
             text = (ROOT / "sites" / name).read_text(encoding="utf-8")
             self.assertIn("TaskType.", text)
 
-    def test_fallback_module_is_separate(self):
-        text = (ROOT / "sites/nexusphp.py").read_text(encoding="utf-8")
-        self.assertIn("class NexusPHPHandler", text)
-        self.assertIn("class Tasks", text)
+    def test_nexusphp_is_capability_only(self):
+        loader = (ROOT / "sites/__init__.py").read_text(encoding="utf-8")
+        plugin = (ROOT / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn('if module_info.name == "nexusphp":', loader)
+        self.assertIn("NexusPHP 仅作为能力组合，不提供通用任务", plugin)
+
+    def test_nexusphp_handler_is_not_registered_as_site(self):
+        text = (ROOT / "sites/__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("通用 NexusPHP 必须最后加载", text)
+        self.assertIn("continue", text[text.index('if module_info.name == "nexusphp":'):])
 
 
 if __name__ == "__main__":

@@ -115,10 +115,7 @@ class SiteAutoTask(_PluginBase):
             entry = next((item for item in self._site_classes
                           if item.get("domain") == domain or
                           item.get("site_name") == site.get("name")), None)
-            if not entry:
-                # 未有专用适配的站点使用通用 NexusPHP 任务。
-                entry = next((item for item in self._site_classes
-                              if item.get("handler_cls", object).__name__ == "NexusPHPHandler"), None)
+            # 未有专用适配的站点不展示任务；NexusPHP 仅作为能力组合，不提供通用任务。
             if not entry:
                 continue
             tasks = [{k: v for k, v in task.items() if k != "func"}

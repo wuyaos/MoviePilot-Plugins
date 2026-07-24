@@ -30,9 +30,11 @@ def load_site_classes() -> List[dict]:
     pkg_prefix = __package__ or "sites"
 
     module_infos = list(pkgutil.iter_modules([str(sites_path)]))
-    # 通用 NexusPHP 必须最后加载，避免抢先匹配所有站点。
-    module_infos.sort(key=lambda item: (item.name == "nexusphp", item.name))
-    for module_info in module_infos:
+    # NexusPHP 只提供能力基类，不作为可配置/可执行的通用站点。
+    # 所有任务必须归属于明确的站点适配器，避免误把未知站点当作可执行目标。
+    for module_info in sorted(module_infos, key=lambda item: item.name):
+        if module_info.name == "nexusphp":
+            continue
         module_name = f"{pkg_prefix}.{module_info.name}"
         try:
             module = importlib.import_module(module_name)
