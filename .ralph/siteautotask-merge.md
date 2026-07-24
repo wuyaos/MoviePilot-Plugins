@@ -111,4 +111,19 @@ I. 最终验证：所有 Python 文件 ast.parse；pytest；插件加载/表单/
 - 本地 MoviePilot 强制重载成功，日志加载 20 个明确站点（藏宝阁 3 / CARPT 2 / 13City 5 / 蟹黄堡 3 / 财神 2 / 大青虫 2 / 天枢 2 / 自由农场 2 / 好学 2 / 垃圾堆 2 / 柠檬 2 / LongPT 4 / NovaHD 2 / PTLGS 2 / Ptskit 3 / 青蛙 3 / 躺平 2 / Vc-Lib 3 / 象站 3 / 织梦 2）；配置页和数据页接口均返回 200。
 - 未执行真实签到、任务申领、魔力兑换或喊话；全部请求测试使用 mock。
 
+## 迭代 9 反思
+- 已完成：阶段 A-E 主体完成，已迁移 20 个明确站点（8 重叠 + 12 独有），72/72 测试通过；本地 MP 加载 20 站点正常。
+- 进展良好：每批适配器+mock+MP 加载验证节奏稳定；未执行真实副作用。
+- 当前风险：retry_notify 无效、feedback_timeout 未接入、重试状态仅存内存仍未处理；缺图标资源（package 引用 icons/ptautotask.png 但文件不存在）；剩余 groupchatzone 独有站点 Moment/Luckpt 未迁移。
+- 调整：本轮完成最后两个独有站点 Moment/Luckpt，随后进入阶段 H code review 修复审查遗留问题，再进入阶段 I 最终验证。
+- 下一优先级：迁移 Moment、Luckpt；补 mock 测试；MP 加载验证。
+
+## 迭代 9 进度（阶段 E 第五批，阶段 E 全部完成）
+- 已新增 Moment 适配器（2 任务）：签到、喊话（参考 groupchatzone：解析「【{username}的女友】」格式反馈）。
+- 已新增 LuckPT 适配器（2 任务）：签到、喊话（参考 groupchatzone：非标准 DIV+Flex 布局，优先许愿池 wish-bubble-system 反馈，其次 chat-message-container 聊天区）。
+- 已新增 7 个 mock 测试覆盖 Moment/Luckpt 的匹配（含“幸运”别名）、许愿池反馈、聊天区回退、任务元数据。
+- 验证：80/80 mock 测试通过；全部 Python AST 解析通过；`git diff --check` 通过。
+- 本地 MoviePilot 强制重载成功，日志加载 22 个明确站点（藏宝阁 3 / CARPT 2 / 13City 5 / 蟹黄堡 3 / 财神 2 / 大青虫 2 / 天枢 2 / 自由农场 2 / 好学 2 / 垃圾堆 2 / 柠檬 2 / LongPT 4 / LuckPT 2 / Moment 2 / NovaHD 2 / PTLGS 2 / Ptskit 3 / 青蛙 3 / 躺平 2 / Vc-Lib 3 / 象站 3 / 织梦 2）；配置页和数据页接口均返回 200。
+- 阶段 E（独有站点迁移）全部完成；下一步进入阶段 H code review 修复审查遗留问题（retry_notify 无效、feedback_timeout 未接入、重试状态仅存内存、缺图标资源），再进入阶段 I 最终验证。
+
 当前已存在半成品，必须先审计再改，不要假设已有代码正确。所有对用户的进展使用简体中文。
