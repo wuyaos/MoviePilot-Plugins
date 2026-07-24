@@ -107,14 +107,21 @@ class QingwaHandler(CapabilityHandler):
         try:
             response = self.session.get(self.getitems_api, timeout=15)
             result = parse_json_response(response, "获取商品列表失败")
-            items = result if isinstance(result, list) else []
+            if isinstance(result, list):
+                items = result
+            elif isinstance(result, dict):
+                items = result.get("data") or result.get("items") or []
+            else:
+                items = []
             for item in items:
                 name = item.get("name", "")
                 b_type = item.get("b_type", "")
                 a_type = item.get("a_type", "")
                 # 每日福利：1 蝌蚪换 1000 蝌蚪
                 if "每日福利" in name and a_type == "bonus" and b_type == "bonus":
-                    return str(item.get("id"))
+                    item_id = item.get("id")
+                    if item_id is not None:
+                        return str(item_id)
             # 回退：硬编码 28
             logger.warning("动态匹配每日福利商品失败，回退 id=28")
             return "28"

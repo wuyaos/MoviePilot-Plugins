@@ -102,7 +102,7 @@ def parse_json_response(response, fallback_msg: str = "响应解析失败") -> d
         return {"success": False, "msg": f"响应解析失败: {text[:100]}"}
 
 
-def _get_browser_page_source(handler, url: str) -> Optional[str]:
+def _get_browser_page_source(handler, url: str, params: dict = None) -> Optional[str]:
     """通过 PlaywrightHelper 获取页面源码（render 站点）。"""
     proxies = None
     if handler.use_proxy:
@@ -118,6 +118,9 @@ def _get_browser_page_source(handler, url: str) -> Optional[str]:
             logger.warning(f"解析代理配置失败: {e}")
 
     try:
+        if params:
+            from requests import Request
+            url = Request("GET", url, params=params).prepare().url
         return PlaywrightHelper().get_page_source(
             url=url, cookies=handler.site_cookie, ua=handler.ua, proxies=proxies
         )
@@ -176,7 +179,7 @@ def send_get(handler, url: str, params: dict = None, rt_method: callable = None)
     """
     try:
         if handler.render:
-            html_text = _get_browser_page_source(handler, url)
+            html_text = _get_browser_page_source(handler, url, params=params)
             if html_text:
                 response = handler.MockResponse(html_text)
                 return rt_method(response) if rt_method else response

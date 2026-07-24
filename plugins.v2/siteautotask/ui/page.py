@@ -1,5 +1,8 @@
 """运行数据页：任务状态与反馈奖励一体展示。"""
-from ..utils.feedback import NotificationIcons
+try:
+    from ..utils.feedback import NotificationIcons
+except ImportError:  # 便于脱离 MoviePilot 包环境做单元测试
+    from siteautotask_feedback import NotificationIcons
 
 
 def _text(value):

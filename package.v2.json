@@ -349,5 +349,17 @@
       "v1.0.1": "修复到期时间解析错误导致「该买没买」:勋章页 __medal_html_context 改用 data-id 锚定的购买按钮定位单行 <tr>(避免正则贪婪跨行匹配整表);__parse_owned_expire_time 只在单行内取日期(修复 find(35) 误命中「分享率 3.935」里的 35);个人中心 __parse_userdetails_expire_time 改用 title=勋章名 img 锚定取其后最近的过期时间(替换 min(future_times) 碰运气);logger.warn 全部改为 logger.warning",
       "v1.0.2": "配置页新增立即运行开关和执行周期(Cron)配置(默认每天 08:00);购买记录改为 VTable 列表(日期/时间/状态/勋章/站点/说明);移除勋章 ID 配置项(固定为疯狂星期四)"
     }
+  },
+  "SiteAutoTask": {
+    "name": "站点自动任务",
+    "description": "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。",
+    "labels": "PT,签到,喊话,自动任务",
+    "version": "1.0.0",
+    "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/ptautotask.png",
+    "author": "wuyaos",
+    "level": 2,
+    "history": {
+      "v1.0.0": "初始模块化合并版本：统一任务结果、站点能力与运行数据页；首批接入青蛙站点。"
+    }
   }
 }
