@@ -1,0 +1,154 @@
+import importlib.util
+import sys
+import types
+import unittest
+from pathlib import Path
+from unittest.mock import Mock
+
+ROOT = Path(__file__).parents[1]
+for name in ("siteautotask", "siteautotask.sites", "siteautotask.base", "siteautotask.utils"):
+    module = types.ModuleType(name)
+    module.__path__ = [str(ROOT / name.split(".")[-1])] if name != "siteautotask" else [str(ROOT)]
+    sys.modules.setdefault(name, module)
+
+
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+app = types.ModuleType("app")
+core = types.ModuleType("app.core")
+config = types.ModuleType("app.core.config")
+config.settings = types.SimpleNamespace(PROXY=None, TZ="UTC")
+log = types.ModuleType("app.log")
+log.logger = types.SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None)
+helper = types.ModuleType("app.helper")
+helper_browser = types.ModuleType("app.helper.browser")
+helper_browser.PlaywrightHelper = Mock()
+for name, module in (("app", app), ("app.core", core), ("app.core.config", config), ("app.log", log),
+                     ("app.helper", helper), ("app.helper.browser", helper_browser)):
+    sys.modules[name] = module
+
+load("siteautotask.base.result", ROOT / "base/result.py")
+load("siteautotask.base.decorator", ROOT / "base/decorator.py")
+load("siteautotask.utils.request", ROOT / "utils/request.py")
+handler_base = types.ModuleType("siteautotask.base.site_handler")
+handler_base.ISiteHandler = object
+sys.modules["siteautotask.base.site_handler"] = handler_base
+cap = types.ModuleType("siteautotask.sites.capabilities")
+
+
+class CapabilityHandler:
+    def __init__(self, info):
+        self.site_info = info
+        self.site_url = info.get("url", "").strip().rstrip("/")
+        self.site_name = info.get("name", "").strip()
+        self.domain = info.get("domain", "")
+        self.session = info.get("session", Mock())
+        self._last_message_result = None
+
+    def _send_get_request(self, url, params=None, rt_method=None):
+        resp = self.session.get(url, params=params)
+        return rt_method(resp) if rt_method else resp
+
+    def _send_post_request(self, url, data=None, rt_method=None):
+        resp = self.session.post(url, data=data)
+        return rt_method(resp) if rt_method else resp
+
+    def attendance(self):
+        return "签到成功"
+
+
+cap.CapabilityHandler = CapabilityHandler
+sys.modules["siteautotask.sites.capabilities"] = cap
+freefarm = load("siteautotask.sites.freefarm", ROOT / "sites/freefarm.py")
+lajidui = load("siteautotask.sites.lajidui", ROOT / "sites/lajidui.py")
+novahd = load("siteautotask.sites.novahd", ROOT / "sites/novahd.py")
+
+
+class Response:
+    def __init__(self, payload=None, text=None, status=200):
+        self._payload = payload
+        self.text = text if text is not None else (__import__("json").dumps(payload, ensure_ascii=False) if payload else "")
+        self.status_code = status
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise Exception(f"HTTP {self.status_code}")
+
+    def json(self):
+        if self._payload is not None:
+            return self._payload
+        return __import__("json").loads(self.text)
+
+
+def make_info(**kw):
+    info = {"session": Mock(), "url": "", "name": "", "domain": ""}
+    info.update(kw)
+    return info
+
+
+class FreeFarmTests(unittest.TestCase):
+    def test_match_by_domain(self):
+        self.assertTrue(freefarm.FreeFarmHandler(make_info(domain="0ff.cc")).match())
+        self.assertTrue(freefarm.FreeFarmHandler(make_info(name="自由农场")).match())
+        self.assertFalse(freefarm.FreeFarmHandler(make_info(domain="other.com")).match())
+
+    def test_claim_task_success(self):
+        info = make_info(domain="0ff.cc", url="https://pt.0ff.cc")
+        info["session"].post.return_value = Response(payload={"msg": "领取成功"})
+        self.assertEqual(freefarm.FreeFarmHandler(info).claim_task("12"), "领取成功")
+
+    def test_task_metadata(self):
+        h = freefarm.FreeFarmHandler(make_info(domain="0ff.cc"))
+        tasks = freefarm.Tasks()
+        tasks.client = h
+        meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
+        self.assertEqual(meta["weekly_claim_task"], "claim")
+        self.assertEqual(meta["daily_checkin"], "checkin")
+
+
+class LajiduiTests(unittest.TestCase):
+    def test_match_by_domain(self):
+        self.assertTrue(lajidui.LajiduiHandler(make_info(domain="lajidui.top")).match())
+        self.assertFalse(lajidui.LajiduiHandler(make_info(domain="other.com")).match())
+
+    def test_claim_task_failure(self):
+        info = make_info(domain="lajidui.top", url="https://pt.lajidui.top")
+        info["session"].post.return_value = Response(payload={"msg": "今日已领取"})
+        self.assertEqual(lajidui.LajiduiHandler(info).claim_task("1"), "今日已领取")
+
+    def test_task_metadata(self):
+        h = lajidui.LajiduiHandler(make_info(domain="lajidui.top"))
+        tasks = lajidui.Tasks()
+        tasks.client = h
+        meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
+        self.assertEqual(meta["monthly_claim_task"], "claim")
+
+
+class NovaHDTests(unittest.TestCase):
+    def test_match_by_domain(self):
+        self.assertTrue(novahd.NovaHDHandler(make_info(domain="novahd.top")).match())
+        self.assertTrue(novahd.NovaHDHandler(make_info(name="NovaHD")).match())
+        self.assertFalse(novahd.NovaHDHandler(make_info(domain="other.com")).match())
+
+    def test_claim_task_success(self):
+        info = make_info(domain="novahd.top", url="https://pt.novahd.top")
+        info["session"].post.return_value = Response(payload={"msg": "领取成功"})
+        self.assertEqual(novahd.NovaHDHandler(info).claim_task("3"), "领取成功")
+
+    def test_task_metadata(self):
+        h = novahd.NovaHDHandler(make_info(domain="novahd.top"))
+        tasks = novahd.Tasks()
+        tasks.client = h
+        meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
+        self.assertEqual(meta["daily_claim_task"], "claim")
+        self.assertEqual(meta["daily_checkin"], "checkin")
+
+
+if __name__ == "__main__":
+    unittest.main()
