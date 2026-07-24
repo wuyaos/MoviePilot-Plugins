@@ -31,6 +31,9 @@ from app.utils.site import SiteUtils
 from app.utils.string import StringUtils
 from app.utils.timer import TimerUtils
 
+from .ui_helper import build_history_panels
+from .form_builder import build_form
+
 
 class AutoPtCheckin(_PluginBase):
     # 插件名称
@@ -40,7 +43,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.4.5"
+    plugin_version = "1.4.8"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -339,324 +342,7 @@ class AutoPtCheckin(_PluginBase):
             logger.warning(f"获取站点列表失败: {e}")
             site_options = [{"title": site.get("name"), "value": site.get("id")}
                             for site in customSites]
-        return [
-            {
-                'component': 'VForm',
-                'content': [
-                    # ── 开关行 ──────────────────────────────────────────
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [{'component': 'VSwitch', 'props': {'model': 'enabled', 'label': '启用插件'}}]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [{'component': 'VSwitch', 'props': {'model': 'notify', 'label': '发送通知'}}]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [{'component': 'VSwitch', 'props': {'model': 'onlyonce', 'label': '立即运行一次'}}]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [{'component': 'VSwitch', 'props': {'model': 'clean', 'label': '清理本日缓存'}}]
-                            },
-                        ]
-                    },
-                    # ── 调度 & 参数行 ────────────────────────────────────
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VSelect',
-                                        'props': {
-                                            'model': 'cron_mode',
-                                            'label': '调度模式',
-                                            'items': [
-                                                {'title': 'Cron表达式', 'value': 'cron'},
-                                                {'title': '间隔随机', 'value': 'interval'},
-                                            ]
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VCronField',
-                                        'props': {
-                                            'model': 'cron',
-                                            'label': 'Cron表达式',
-                                            'placeholder': '0 9 * * *'
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 2},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {'model': 'interval_hours', 'label': '间隔(小时)', 'placeholder': '2'}
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 2},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {'model': 'begin_hour', 'label': '开始时', 'placeholder': '9'}
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 2},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {'model': 'end_hour', 'label': '结束时', 'placeholder': '23'}
-                                    }
-                                ]
-                            },
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'retry_keyword',
-                                            'label': '重试关键词',
-                                            'placeholder': '支持正则表达式，命中才重签'
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'auto_cf',
-                                            'label': '自动优选',
-                                            'placeholder': '命中重试关键词次数（0-关闭）'
-                                        }
-                                    }
-                                ]
-                            },
-                        ]
-                    },
-                    # ── 站点选择 ─────────────────────────────────────────
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'content': [
-                                    {
-                                        'component': 'VSelect',
-                                        'props': {
-                                            'chips': True,
-                                            'multiple': True,
-                                            'model': 'sign_sites',
-                                            'label': '签到站点',
-                                            'items': site_options
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'content': [
-                                    {
-                                        'component': 'VSelect',
-                                        'props': {
-                                            'chips': True,
-                                            'multiple': True,
-                                            'model': 'login_sites',
-                                            'label': '登录站点',
-                                            'items': site_options
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    # ── 分割线 ───────────────────────────────────────────
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {'component': 'VCol', 'props': {'cols': 12}, 'content': [{'component': 'VDivider'}]}
-                        ]
-                    },
-                    # ── 自定义站点 ───────────────────────────────────────
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '自定义站点：每行一个，格式：站点名称|站点地址|是否仿真(Y/N)。'
-                                                    'Cookie 通过 CookieCloud 自动同步。'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    {
-                                        'component': 'VTextarea',
-                                        'props': {
-                                            'model': 'custom_site_urls',
-                                            'label': '自定义站点列表',
-                                            'rows': 5,
-                                            'placeholder': '每行一个站点，格式：\n'
-                                                           '站点名称|站点地址|是否仿真(Y/N)\n'
-                                                           '例如：思齐|https://si-qi.xyz/|N'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    # ── 说明 & 警告 ──────────────────────────────────────
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '调度模式说明：'
-                                                    '1、Cron表达式：填写 5 位 cron（如 0 9 * * *），精确控制执行时间；'
-                                                    '2、间隔随机：在开始时~结束时范围内，按间隔小时数随机生成多个执行点；'
-                                                    '3、两种模式都不配置时默认 9-23 点随机执行 2 次。'
-                                                    '每天首次全量执行，后续仅重试命中关键词的站点。'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '重试关键词：支持正则，命中签到结果才纳入下次重试。'
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '自动优选：命中重试关键词次数超过阈值时触发 Cloudflare IP 优选（需配置优选插件与自定义 Hosts 插件）。'
-                                        }
-                                    }
-                                ]
-                            },
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'warning',
-                                            'variant': 'tonal',
-                                            'text': '注意：部分站点（如馒头）不将程序签到/登录计为用户活跃，'
-                                                    '提示成功仍存在掉号风险，请结合站点公告自行判断。'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                ]
-            }
-        ], {
-            "enabled": False,
-            "notify": True,
-            "cron": "",
-            "cron_mode": "interval",
-            "interval_hours": 2,
-            "begin_hour": 9,
-            "end_hour": 23,
-            "auto_cf": 0,
-            "onlyonce": False,
-            "clean": False,
-            "queue_cnt": 5,
-            "sign_sites": [],
-            "login_sites": [],
-            "retry_keyword": "错误|失败",
-            "custom_site_urls": "",
-            "custom_sites_data": []
-        }
+        return build_form(site_options)
 
     def __custom_sites(self) -> List[Any]:
         """返回内置自定义站点列表（不再依赖外部 CustomSites 插件）"""
@@ -884,8 +570,8 @@ class AutoPtCheckin(_PluginBase):
 
         # 签到和登录均按原始追加顺序去重；同站点同日的汇总状态在后追加，
         # 因而继续覆盖详细执行文案。
-        signin_site_data, signin_panels = self._build_history_panels(all_data["signin"])
-        login_site_data, login_panels = self._build_history_panels(all_data["login"])
+        signin_site_data, signin_panels = build_history_panels(all_data["signin"])
+        login_site_data, login_panels = build_history_panels(all_data["login"])
 
         # 添加样式
         return [
@@ -1249,35 +935,6 @@ class AutoPtCheckin(_PluginBase):
                 ]
             }
         ]
-
-    def _build_history_panels(self, records: List[dict]) -> Tuple[Dict[str, List[dict]], List[dict]]:
-        """按原始追加顺序去重历史记录，分组排序后生成站点折叠面板。"""
-        site_day_records = {}
-        for record in records:
-            site_name = record.get("site", "未知站点")
-            date_str = record.get("date", "")
-            # 不能在去重前排序：后追加的汇总状态必须覆盖详细执行文案。
-            site_day_records[f"{site_name}_{date_str}"] = record
-
-        site_data = {}
-        for record in site_day_records.values():
-            site_name = record.get("site", "未知站点")
-            site_data.setdefault(site_name, []).append(record)
-
-        panels = []
-        for site_name, site_records in site_data.items():
-            try:
-                site_records.sort(key=lambda item: item.get("day_obj", datetime.now().date()), reverse=True)
-            except Exception as e:
-                logger.debug(f"{site_name} 历史记录排序失败: {e}")
-
-            latest_status = site_records[0].get("status", "未知状态")
-            status_color, status_icon = self._resolve_status_style(latest_status)
-            panels.append(self._create_expansion_panel(
-                site_name, site_records, status_color, status_icon, latest_status))
-
-        return site_data, panels
-
     @staticmethod
     def _add_site_info(sites_info: dict, site_id: Any, site_name: Any) -> None:
         """记录站点ID到名称的映射，兼容历史记录中ID类型不一致的情况。"""
@@ -1304,158 +961,6 @@ class AutoPtCheckin(_PluginBase):
         site_id_str = str(site_id)
         return sites_info.get(site_id_str) or sites_info.get(site_id)
 
-    @staticmethod
-    def _resolve_status_style(status: str) -> Tuple[str, str]:
-        """根据状态文本返回 (颜色, 图标)"""
-        if "失败" in status or "错误" in status:
-            return "deep-orange-lighten-3", "mdi-emoticon-sad-outline"
-        if "Cookie已失效" in status:
-            return "pink-lighten-3", "mdi-cookie-off"
-        if "重试" in status:
-            return "amber-lighten-3", "mdi-emoticon-confused-outline"
-        if "已签到" in status:
-            return "light-blue-lighten-3", "mdi-emoticon-cool-outline"
-        if "成功" in status:
-            return "teal-lighten-3", "mdi-emoticon-happy-outline"
-        return "teal-lighten-3", "mdi-emoticon-happy-outline"
-
-    def _create_expansion_panel(self, site_name, records, status_color, status_icon, latest_status):
-        """创建站点折叠面板"""
-        # 生成站点图标（使用站点名的首字母）
-        site_initial = site_name[0].upper() if site_name else "?"
-
-        # 生成记录列表
-        records_list = []
-        for record in records:
-            date_str = record.get("date", "")
-            status_text = record.get("status", "未知状态")
-
-            # 确定状态颜色和图标
-            record_color = "success"
-            record_icon = "mdi-check-circle"
-
-            if "失败" in status_text or "错误" in status_text:
-                record_color = "error"
-                record_icon = "mdi-alert-circle"
-            elif "Cookie已失效" in status_text:
-                record_color = "error"
-                record_icon = "mdi-cookie-off"
-            elif "重试" in status_text:
-                record_color = "warning"
-                record_icon = "mdi-refresh"
-            elif "已签到" in status_text:
-                record_color = "info"
-                record_icon = "mdi-check"
-            elif "登录成功" in status_text:
-                record_color = "success"
-                record_icon = "mdi-login-variant"
-
-            # 创建记录项
-            records_list.append({
-                'component': 'VListItem',
-                'props': {
-                    'class': 'site-item px-2 py-1'
-                },
-                'content': [
-                    {
-                        'component': 'div',
-                        'props': {
-                            'class': 'd-flex align-center w-100'
-                        },
-                        'content': [
-                            {
-                                'component': 'VChip',
-                                'props': {
-                                    'color': 'grey-lighten-3',
-                                    'size': 'x-small',
-                                    'class': 'date-chip mr-2',
-                                    'variant': 'flat',
-                                    'prepend-icon': 'mdi-flower-tulip'
-                                },
-                                'text': date_str
-                            },
-                            {
-                                'component': 'VSpacer'
-                            },
-                            {
-                                'component': 'VChip',
-                                'props': {
-                                    'color': record_color,
-                                    'size': 'x-small',
-                                    'class': 'ml-2 status-chip',
-                                    'variant': 'flat',
-                                    'prepend-icon': record_icon
-                                },
-                                'text': status_text
-                            }
-                        ]
-                    }
-                ]
-            })
-
-        # 创建折叠面板
-        return {
-            'component': 'VExpansionPanel',
-            'content': [
-                {
-                    'component': 'VExpansionPanelTitle',
-                    'content': [{
-                        'component': 'div',
-                        'props': {
-                            'class': 'd-flex align-center'
-                        },
-                        'content': [
-                            {
-                                'component': 'div',
-                                'props': {
-                                    'class': 'site-icon'
-                                },
-                                'text': site_initial
-                            },
-                            {
-                                'component': 'span',
-                                'props': {
-                                    'class': 'font-weight-medium'
-                                },
-                                'text': site_name
-                            },
-                            {
-                                'component': 'VSpacer'
-                            },
-                            {
-                                'component': 'VIcon',
-                                'props': {
-                                    'color': status_color,
-                                    'class': 'mr-2',
-                                    'size': 'small'
-                                },
-                                'text': status_icon
-                            },
-                            {
-                                'component': 'span',
-                                'props': {
-                                    'class': f'text-{status_color} text-caption'
-                                },
-                                'text': latest_status
-                            }
-                        ]
-                    }]
-                },
-                {
-                    'component': 'VExpansionPanelText',
-                    'content': [
-                        {
-                            'component': 'VList',
-                            'props': {
-                                'lines': 'one',
-                                'density': 'compact'
-                            },
-                            'content': records_list
-                        }
-                    ]
-                }
-            ]
-        }
 
     @eventmanager.register(EventType.PluginAction)
     def sign_in(self, event: Event = None):
@@ -1520,13 +1025,15 @@ class AutoPtCheckin(_PluginBase):
             refresh_triggered_site_ids = set()
         if failed_sites is None:
             failed_sites = []
-        last_day = today - timedelta(days=4)
-        last_day_str = last_day.strftime('%Y-%m-%d')
-        # 删除昨天历史
-        self.del_data(key=type_str + "-" + last_day_str)
-        self.del_data(key=f"{last_day.month}月{last_day.day}日")
+        expired_day = today - timedelta(days=14)
+        expired_day_str = expired_day.strftime('%Y-%m-%d')
+        # 删除详情页 14 天展示窗口之外的同日历史。
+        # 正常每日执行时，每天恰好清理一个过期日期，无需枚举全部 PluginData。
+        self.del_data(key=type_str + "-" + expired_day_str)
+        self.del_data(key=f"{expired_day.month}月{expired_day.day}日")
 
         # 查看今天有没有签到|登录历史
+
         today_str = today.strftime('%Y-%m-%d')
         today_history = self.get_data(key=type_str + "-" + today_str)
 
@@ -2088,64 +1595,3 @@ class AutoPtCheckin(_PluginBase):
                 self._enabled = False
 
         return do_sites
-
-
-def record_to_row(record):
-    """辅助函数：将记录转换为表格行"""
-    status = record.get("status", "")
-
-    # 确定状态图标和颜色
-    icon = "mdi-check-circle"
-    color = "success"
-
-    if "失败" in status or "错误" in status:
-        icon = "mdi-alert-circle"
-        color = "error"
-    elif "Cookie已失效" in status:
-        icon = "mdi-cookie-off"
-        color = "error"
-    elif "已签到" in status:
-        icon = "mdi-check"
-        color = "grey"
-    elif "成功" in status:
-        icon = "mdi-check-circle"
-        color = "success"
-
-    return {
-        'component': 'tr',
-        'props': {
-            'class': 'text-sm'
-        },
-        'content': [
-            {
-                'component': 'td',
-                'props': {
-                    'class': 'text-start'
-                },
-                'text': record.get("date", "")
-            },
-            {
-                'component': 'td',
-                'props': {
-                    'class': 'text-start'
-                },
-                'text': status
-            },
-            {
-                'component': 'td',
-                'props': {
-                    'class': 'text-center'
-                },
-                'content': [
-                    {
-                        'component': 'VIcon',
-                        'props': {
-                            'color': color,
-                            'size': 'small'
-                        },
-                        'text': icon
-                    }
-                ]
-            }
-        ]
-    }
