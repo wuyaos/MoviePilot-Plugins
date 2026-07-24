@@ -116,7 +116,8 @@ class TaskEngine:
             self.plugin.retry_records = []
             return []
         records = self.run(retry_only=True)
-        if all(record.get("success") for record in records):
+        # 锁冲突时 run 返回空列表，此时不能清空重试状态（all([]) 为真会误判）
+        if records and all(record.get("success") for record in records):
             self.plugin.retry_records = []
         return records
 
