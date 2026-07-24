@@ -65,6 +65,9 @@ class SunnyPTSignin(_PluginBase):
     def get_state(self) -> bool:
         return self._enabled
 
+    def get_api(self) -> List[Dict[str, Any]]:
+        return []
+
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
         return [
