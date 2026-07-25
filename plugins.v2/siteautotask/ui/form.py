@@ -22,7 +22,7 @@ def _subcard(title, rows):
         "component": "VCard",
         "props": {"variant": "flat", "class": "mb-3", "border": True},
         "content": [
-            {"component": "VCardTitle", "props": {"class": "text-subtitle-2 font-weight-bold text-primary pa-2"}, "text": title},
+            {"component": "VCardTitle", "props": {"class": "text-subtitle-1 font-weight-bold text-primary pa-2"}, "text": title},
             {"component": "VCardText", "props": {"class": "px-3 pb-2 pt-0"}, "content": rows},
         ],
     }
@@ -75,19 +75,19 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
 
     # 喊话子卡片
     chat_card = _subcard("喊话", [
-        {"component": "VRow", "props": {"class": "mb-2"}, "content": [_switch("get_feedback", "获取喊话反馈", md=12)]},
         {"component": "VRow", "content": [
-            _text("feedback_timeout", "反馈等待秒数", md=6, type="number"),
-            _text("interval_cnt", "消息间隔秒数", md=6, type="number"),
+            _switch("get_feedback", "获取喊话反馈", md=4),
+            _text("feedback_timeout", "反馈等待秒数", md=4, type="number"),
+            _text("interval_cnt", "消息间隔秒数", md=4, type="number"),
         ]},
     ])
 
     # 重试子卡片
     retry_card = _subcard("重试", [
-        {"component": "VRow", "props": {"class": "mb-2"}, "content": [_switch("retry_notify", "重试结果通知", md=12)]},
         {"component": "VRow", "content": [
-            _text("retry_count", "重试次数", md=6, type="number"),
-            _text("retry_interval", "重试间隔(分钟)", md=6, type="number"),
+            _switch("retry_notify", "重试结果通知", md=4),
+            _text("retry_count", "重试次数", md=4, type="number"),
+            _text("retry_interval", "重试间隔(分钟)", md=4, type="number"),
         ]},
     ])
 
