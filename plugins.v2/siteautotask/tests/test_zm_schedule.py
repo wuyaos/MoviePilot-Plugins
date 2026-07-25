@@ -169,6 +169,51 @@ class ZmNextTimeTests(unittest.TestCase):
         self.assertIsNotNone(nxt)
 
 
+class SchedulerEntryTests(unittest.TestCase):
+    def setUp(self):
+        SCHEDULER.CronTrigger = types.SimpleNamespace(
+            from_crontab=lambda expression: ("cron", expression)
+        )
+
+    def _plugin(self, medal_cron=""):
+        config = types.SimpleNamespace(
+            enabled=True, cron="4 0 * * *", retry_count=0, retry_interval=10,
+            medal_cron=medal_cron, zm_mail_time="",
+        )
+        return types.SimpleNamespace(
+            config=config,
+            run_scheduled=Mock(), run_retry=Mock(), run_medal=Mock(), run_zm=Mock(),
+            selected_sites=Mock(return_value=[]),
+        )
+
+    def test_main_cron_binds_run_scheduled(self):
+        plugin = self._plugin()
+        scheduler = SCHEDULER.TaskScheduler(plugin)
+        services = scheduler.services()
+        main = next(service for service in services if service["id"] == "siteautotask")
+        self.assertIs(main["func"], plugin.run_scheduled)
+
+    def test_medal_cron_adds_independent_service(self):
+        plugin = self._plugin("0 8 * * *")
+        scheduler = SCHEDULER.TaskScheduler(plugin)
+        services = scheduler.services()
+        self.assertEqual(
+            {service["id"] for service in services},
+            {"siteautotask", "siteautotask_medal"},
+        )
+        medal = next(service for service in services if service["id"] == "siteautotask_medal")
+        self.assertIs(medal["func"], plugin.run_medal)
+
+    def test_scheduler_start_does_not_execute_tasks(self):
+        plugin = self._plugin()
+        scheduler = SCHEDULER.TaskScheduler(plugin)
+        scheduler.start()
+        plugin.run_scheduled.assert_not_called()
+        plugin.run_retry.assert_not_called()
+        plugin.run_medal.assert_not_called()
+        plugin.run_zm.assert_not_called()
+
+
 class ZmMailTimeParseTests(unittest.TestCase):
     """ZmHandler.get_latest_message_time 邮件时间解析。"""
 
@@ -309,6 +354,111 @@ class MedalDispatchTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         engine._run_task.assert_called_once()
         self.assertEqual(engine._run_task.call_args.kwargs["claim_task_id"], ["8"])
+
+class ConfiguredTaskCollectionTests(unittest.TestCase):
+    def _engine(self, selected_values=None, switches=None):
+        selected_values = selected_values or {}
+        switches = switches or {}
+        ordinary = {"id": "normal", "name": "normal", "task_type": ENGINE.TaskType.CHECKIN}
+        claim = {
+            "id": "claim", "name": "claim", "task_type": ENGINE.TaskType.CLAIM,
+            "claim_options": [{"id": "6", "label": "月度任务"}],
+        }
+        medal = {"id": "medal", "name": "medal", "task_type": ENGINE.TaskType.MEDAL}
+        mypt_medal = {
+            "id": "mypt_medal", "name": "mypt_medal", "task_type": ENGINE.TaskType.MEDAL,
+            "claim_options": [{"id": "8", "label": "VIP"}],
+        }
+        normal_handler = types.SimpleNamespace(site_name="普通站", domain="normal.test")
+        zm_handler = types.SimpleNamespace(
+            site_name="织梦", domain="zmpt.cc", get_latest_message_time=Mock()
+        )
+        sites = [{"id": 1}, {"id": 2}]
+        handlers = {1: normal_handler, 2: zm_handler}
+        tasks = {
+            id(normal_handler): [ordinary, claim, medal, mypt_medal],
+            id(zm_handler): [ordinary],
+        }
+        plugin = types.SimpleNamespace(
+            config=types.SimpleNamespace(chat_sites=[1, 2]),
+            selected_sites=lambda: sites,
+            tasks_for=lambda handler: tasks[id(handler)],
+            task_enabled=lambda key: switches.get(key, False),
+            claim_task_id=lambda key: selected_values.get(key, ""),
+            history=Mock(),
+        )
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = plugin
+        engine.history = plugin.history
+        engine._build_handler = lambda site: handlers[site["id"]]
+        return engine
+
+    def test_ordinary_collects_switch_and_selected_dropdown_only(self):
+        engine = self._engine(
+            selected_values={"claim_1_claim": "6"},
+            switches={"1_normal": True, "1_medal": True},
+        )
+        tasks = list(engine._collect_configured_tasks("ordinary"))
+        self.assertEqual([task[2]["id"] for task in tasks], ["normal", "claim"])
+        self.assertEqual(tasks[1][3], "6")
+
+    def test_empty_dropdown_is_not_collected(self):
+        engine = self._engine(switches={"1_normal": True})
+        tasks = list(engine._collect_configured_tasks("ordinary"))
+        self.assertEqual([task[2]["id"] for task in tasks], ["normal"])
+
+    def test_medal_collects_fixed_switch_and_mypt_selection(self):
+        engine = self._engine(
+            selected_values={"claim_1_mypt_medal": ["8"]},
+            switches={"1_medal": True},
+        )
+        tasks = list(engine._collect_configured_tasks("medal"))
+        self.assertEqual([task[2]["id"] for task in tasks], ["medal", "mypt_medal"])
+        self.assertEqual(tasks[1][3], ["8"])
+
+    def test_zm_is_excluded_from_ordinary_and_collected_independently(self):
+        engine = self._engine(switches={"1_normal": True, "2_normal": True})
+        ordinary = list(engine._collect_configured_tasks("ordinary"))
+        zm = list(engine._collect_configured_tasks("zm"))
+        self.assertEqual([item[1].site_name for item in ordinary], ["普通站"])
+        self.assertEqual([item[1].site_name for item in zm], ["织梦"])
+
+
+class ManualSupplementTests(unittest.TestCase):
+    def test_manual_skips_success_and_runs_failed_or_unseen(self):
+        config = types.SimpleNamespace(
+            chat_sites=[1], history_days=30, get_feedback=False, retry_count=0
+        )
+        handler = types.SimpleNamespace(site_name="测试站", domain="example.com")
+        tasks = [
+            ({"id": "success", "config_key": "1_success", "label": "已成功"}, None),
+            ({"id": "failed", "config_key": "1_failed", "label": "曾失败"}, None),
+            ({"id": "unseen", "config_key": "1_unseen", "label": "未运行"}, None),
+        ]
+        history = Mock()
+        history.successful_task_ids_today.return_value = {"success"}
+        plugin = types.SimpleNamespace(config=config, history=history, retry_records=[])
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = plugin
+        engine.history = history
+        engine._collect_configured_tasks = Mock(return_value=[
+            ({"id": 1}, handler, task, claim_id) for task, claim_id in tasks
+        ])
+        engine._run_task = Mock(side_effect=lambda _handler, task, **_kwargs: {
+            "task_id": task["id"], "success": True,
+        })
+        engine._schedule_failed = Mock()
+
+        notify_module = types.ModuleType("siteautotask.core.notify")
+        notify_module.send_summary = Mock()
+        sys.modules["siteautotask.core.notify"] = notify_module
+
+        records = engine._run_locked(manual_only=True)
+
+        self.assertEqual([record["task_id"] for record in records], ["failed", "unseen"])
+        self.assertEqual(engine._run_task.call_count, 2)
+        history.append.assert_called_once()
+
 
 class ClaimSelectionTests(unittest.TestCase):
     def test_selected_claim_enables_task_without_switch(self):

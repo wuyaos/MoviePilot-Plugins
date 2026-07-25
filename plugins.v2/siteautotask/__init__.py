@@ -252,7 +252,7 @@ class SiteAutoTask(_PluginBase):
         if not self.engine:
             return {"success": False, "message": "插件未初始化"}
         if not site_id and not task_name:
-            threading.Thread(target=self.run_once, daemon=True).start()
+            threading.Thread(target=self.run_scheduled, daemon=True).start()
             return {"success": True, "message": "已后台启动全量任务，结果写入历史记录"}
         logger.info(f"调试执行请求：site_id={site_id!r}，task_name={task_name!r}")
         records = self.run_debug(site_filter=site_id or None, task_filter=task_name or None)
@@ -276,7 +276,7 @@ class SiteAutoTask(_PluginBase):
                 title="【站点自动任务】", text="插件未启用，无法执行任务。",
             )
             return
-        threading.Thread(target=self.run_once, daemon=True).start()
+        threading.Thread(target=self.run_scheduled, daemon=True).start()
         self.post_message(
             channel=channel, userid=userid, mtype=self.notification_type,
             title="【站点自动任务】", text="已后台启动任务执行，完成后按配置发送通知。",

@@ -49,7 +49,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
         site_url = (site.get("url") or "").strip()
         task_cols = []
         for task in sorted(tasks, key=_task_sort_key):
-            if task.get("task_type") in ("claim", "medal") and task.get("claim_options"):
+            if task.get("claim_options"):
                 # CLAIM 任务单选下拉；MEDAL 任务按 claim_multiple 决定是否多选
                 is_multiple = bool(task.get("claim_multiple"))
                 select_props = {
@@ -158,7 +158,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
     model = plugin.config.to_dict()
     for site in sites:
         for task in site.get("tasks") or []:
-            if task.get("task_type") in ("claim", "medal") and task.get("claim_options"):
+            if task.get("claim_options"):
                 model.setdefault(claim_task_key(site, task), [] if task.get("claim_multiple") else "")
             else:
                 model.setdefault(site_task_key(site, task), False)

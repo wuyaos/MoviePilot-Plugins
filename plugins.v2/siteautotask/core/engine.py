@@ -23,7 +23,7 @@ class TaskEngine:
         self._lock = threading.Lock()
 
     def run_scheduled(self):
-        """主 cron 入口：执行普通任务，并独立触发一次勋章检查。"""
+        """定时完整运行：执行普通任务，并独立触发一次勋章检查。"""
         records = self.run()
         self.run_medal()
         return records
@@ -47,43 +47,21 @@ class TaskEngine:
             return []
         records = []
         skipped_successful = 0
-        for site in self.plugin.selected_sites():
-            handler = self._build_handler(site)
-            if not handler:
+        for site, handler, task, claim_id in self._collect_configured_tasks("ordinary"):
+            task_key = task["config_key"]
+            if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
                 continue
-            tasks = self.plugin.tasks_for(handler)
-            for task in tasks:
-                # MEDAL 任务由独立勋章调度执行，主 cron 跳过
-                if task.get("task_type") == TaskType.MEDAL:
-                    continue
-                # 织梦喊话由独立 24h 调度执行，主 cron 跳过
-                if task.get("task_type") == TaskType.CHAT and hasattr(handler, "get_latest_message_time"):
-                    continue
-                task = dict(task)
-                task_key = site_task_key(site, task)
-                task["config_key"] = task_key
-                if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
-                    continue
 
-                # 配置页含选项的任务使用下拉框，选择值即启用状态和任务参数；
-                # 其余任务使用普通开关。
-                claim_id = None
-                if task.get("claim_options"):
-                    task["claim_key"] = claim_task_key(site, task)
-                    claim_id = self.plugin.claim_task_id(task["claim_key"])
-                elif not self.plugin.task_enabled(task_key):
-                    continue
-
-                # 手动“立即运行”只补跑当天失败或尚未执行的任务。
-                if manual_only and task.get("id") in successful_today:
-                    skipped_successful += 1
-                    logger.info(
-                        f"手动补跑：跳过今天已成功任务："
-                        f"{handler.site_name}/{task.get('label') or task.get('id')}"
-                    )
-                    continue
-                record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
-                records.append(record)
+            # 手动“立即运行”只补跑当天失败或尚未执行的任务。
+            if manual_only and task.get("id") in successful_today:
+                skipped_successful += 1
+                logger.info(
+                    f"手动补跑：跳过今天已成功任务："
+                    f"{handler.site_name}/{task.get('label') or task.get('id')}"
+                )
+                continue
+            record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
+            records.append(record)
         if records:
             self.history.append(records, cfg.history_days)
             self._schedule_failed(records)
@@ -106,6 +84,46 @@ class TaskEngine:
         except Exception as e:
             logger.error(f"构造站点处理器失败：{site.get('name')}，错误：{e}")
             return None
+
+    def _configure_task(self, site, task):
+        """按配置页控件解析任务：下拉非空即启用，其余由开关控制。"""
+        task = dict(task)
+        task_key = site_task_key(site, task)
+        task["config_key"] = task_key
+        if not task.get("claim_options"):
+            return task, None, self.plugin.task_enabled(task_key)
+
+        task["claim_key"] = claim_task_key(site, task)
+        claim_id = self.plugin.claim_task_id(task["claim_key"])
+        return task, claim_id, bool(claim_id)
+
+    def _collect_configured_tasks(self, scope, site_handlers=None):
+        """按当前配置收集指定执行组的任务。
+
+        ordinary：非织梦站点的非勋章任务；medal：所有勋章任务；
+        zm：织梦站点的非勋章任务。空下拉或关闭的开关不会进入清单。
+        """
+        if site_handlers is None:
+            site_handlers = (
+                (site, self._build_handler(site))
+                for site in self.plugin.selected_sites()
+            )
+        for site, handler in site_handlers:
+            if not handler:
+                continue
+            is_zm = hasattr(handler, "get_latest_message_time")
+            if scope == "ordinary" and is_zm:
+                continue
+            if scope == "zm" and not is_zm:
+                continue
+
+            for raw_task in self.plugin.tasks_for(handler):
+                is_medal = raw_task.get("task_type") == TaskType.MEDAL
+                if (scope == "medal") != is_medal:
+                    continue
+                task, claim_id, enabled = self._configure_task(site, raw_task)
+                if enabled:
+                    yield site, handler, task, claim_id
 
     def _run_task(self, handler, task, claim_task_id=None, skip_if_no_claim=False):
         """执行单个任务。
@@ -260,28 +278,9 @@ class TaskEngine:
             logger.info("未配置需要执行的站点")
             return []
         records = []
-        for site in self.plugin.selected_sites():
-            handler = self._build_handler(site)
-            if not handler:
-                continue
-            tasks = self.plugin.tasks_for(handler)
-            for task in tasks:
-                if task.get("task_type") != TaskType.MEDAL:
-                    continue
-                task = dict(task)
-                task_key = site_task_key(site, task)
-                task["config_key"] = task_key
-                # 有下拉选项的 MEDAL 由选择值决定是否启用；固定勋章使用普通任务开关。
-                claim_id = None
-                if task.get("claim_options"):
-                    task["claim_key"] = claim_task_key(site, task)
-                    claim_id = self.plugin.claim_task_id(task["claim_key"])
-                    if not claim_id:
-                        continue
-                elif not self.plugin.task_enabled(task_key):
-                    continue
-                record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=False)
-                records.append(record)
+        for _, handler, task, claim_id in self._collect_configured_tasks("medal"):
+            record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=False)
+            records.append(record)
         self.history.append(records, cfg.history_days)
         from .notify import send_summary
         send_summary(self.plugin, records, is_retry=False)
@@ -292,8 +291,8 @@ class TaskEngine:
     def run_zm(self):
         """织梦 24h 电力冷却调度执行。
 
-        由 scheduler 的 siteautotask_zm date trigger 触发，或 onlyonce 立即触发。
-        检查冷却 → 执行喊话 → 读邮件时间 → 更新状态 → 重新注册下次 date trigger。
+        仅由 scheduler 的 siteautotask_zm date trigger 触发。
+        检查冷却 → 执行已启用的织梦任务 → 读邮件时间 → 更新状态 → 重新注册下次 date trigger。
         """
         if not self._lock.acquire(blocking=False):
             logger.warning("已有站点任务正在执行，跳过本次织梦喊话")
@@ -332,16 +331,15 @@ class TaskEngine:
             return []
 
         records = []
-        tasks = self.plugin.tasks_for(zm_handler)
-        for task in tasks:
-            if task.get("task_type") != TaskType.CHAT:
-                continue
-            task_key = site_task_key(zm_site, task)
-            if not self.plugin.task_enabled(task_key):
-                continue
-            task = dict(task)
-            task["config_key"] = task_key
-            record = self._run_task(zm_handler, task, skip_if_no_claim=False)
+        for _, handler, task, claim_id in self._collect_configured_tasks(
+            "zm", [(zm_site, zm_handler)]
+        ):
+            record = self._run_task(
+                handler,
+                task,
+                claim_task_id=claim_id,
+                skip_if_no_claim=True,
+            )
             records.append(record)
 
         # 更新执行时间

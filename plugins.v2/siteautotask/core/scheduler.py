@@ -30,12 +30,8 @@ class TaskScheduler:
             return
         self.scheduler = BackgroundScheduler(timezone=settings.TZ)
         # 仅处理动态 Zm/勋章调度；人为“立即运行一次”由入口线程执行。
+        # stop() 已清空旧实例的等待任务，普通重载不会恢复或执行它们。
         self.scheduler.start()
-        # 普通重载不承接待执行任务；旧的持久化状态仅在内存中清除，
-        # 避免为清理状态再次保存配置并触发重载。
-        if cfg.medal_pending_time:
-            cfg.medal_pending_time = ""
-            logger.info("插件重载：已取消等待中的勋章续购任务")
 
     @staticmethod
     def _after(seconds):
