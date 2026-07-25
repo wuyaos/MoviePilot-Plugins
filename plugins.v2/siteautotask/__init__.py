@@ -27,7 +27,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.11"
+    plugin_version = "1.0.12"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -176,13 +176,9 @@ class SiteAutoTask(_PluginBase):
         }
 
     def selected_sites(self):
-        """按配置 ID 返回已选站点；内置 Vc-Lib 在运行时从 CookieCloud 补取 Cookie。"""
+        """按配置 ID 返回已选站点，不在站点筛选阶段触发 CookieCloud 请求。"""
         selected = {str(value) for value in self.config.chat_sites}
-        sites = [site for site in self.all_sites() if str(site.get("id")) in selected]
-        for site in sites:
-            if site.get("cookiecloud") and not site.get("cookie"):
-                site["cookie"] = self._fetch_cookiecloud_cookie(site["url"])
-        return sites
+        return [site for site in self.all_sites() if str(site.get("id")) in selected]
 
     @staticmethod
     def _fetch_cookiecloud_cookie(site_url: str) -> str:

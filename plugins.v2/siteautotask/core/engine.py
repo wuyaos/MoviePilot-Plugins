@@ -21,6 +21,7 @@ class TaskEngine:
         self.plugin = plugin
         self.history = plugin.history
         self._lock = threading.Lock()
+        self._cookiecloud_cache = {}
 
     def run_scheduled(self):
         """主 cron：执行除织梦喊话外的全部任务，跳过今天已成功任务。"""
@@ -85,8 +86,13 @@ class TaskEngine:
     def _build_handler(self, site):
         info = dict(site)
         if info.get("cookiecloud") and not info.get("cookie"):
-            logger.warning(f"{info.get('name')} - CookieCloud 未匹配到 Cookie，跳过站点")
-            return None
+            domain = info.get("domain") or info.get("url", "")
+            if domain not in self._cookiecloud_cache:
+                self._cookiecloud_cache[domain] = self.plugin._fetch_cookiecloud_cookie(info.get("url", ""))
+            info["cookie"] = self._cookiecloud_cache[domain]
+            if not info["cookie"]:
+                logger.warning(f"{info.get('name')} - CookieCloud 未匹配到 Cookie，跳过站点")
+                return None
         info["use_proxy"] = self.plugin.config.use_proxy
         info["feedback_timeout"] = self.plugin.config.feedback_timeout
         info["interval_cnt"] = self.plugin.config.interval_cnt
