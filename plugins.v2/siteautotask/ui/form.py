@@ -6,35 +6,43 @@ except ImportError:  # 便于脱离 MoviePilot 包环境做单元测试
     from siteautotask_task_keys import site_task_key
 
 
+def _switch(model, label, md=3, **props):
+    return {"component": "VCol", "props": {"cols": 12, "md": md},
+            "content": [{"component": "VSwitch", "props": {"model": model, "label": label, "hide-details": "auto", "density": "comfortable", **props}}]}
+
+
+def _text(model, label, md=3, **props):
+    return {"component": "VCol", "props": {"cols": 12, "md": md},
+            "content": [{"component": "VTextField", "props": {"model": model, "label": label, "hide-details": "auto", "density": "comfortable", **props}}]}
+
+
+def _subcard(title, rows):
+    """全局设置内的嵌套小卡片。"""
+    return {
+        "component": "VCard",
+        "props": {"variant": "flat", "class": "mb-3", "border": True},
+        "content": [
+            {"component": "VCardTitle", "props": {"class": "text-subtitle-2 font-weight-bold py-1 px-3"}, "text": title},
+            {"component": "VCardText", "props": {"class": "px-3 pb-2"}, "content": rows},
+        ],
+    }
+
+
 def build_form(plugin) -> Tuple[List[dict], Dict]:
     sites = plugin.support_site_options()
-    selected = set(plugin.config.chat_sites)
 
     site_cards = []
     for site in sites:
-        if site.get("id") not in selected:
+        if site.get("id") not in set(plugin.config.chat_sites):
             continue
         tasks = site.get("tasks") or []
         site_name = site.get("name", "未知站点")
-
-        # 任务开关：每行 3 个
-        task_cols = []
-        for task in tasks:
-            task_cols.append({
-                "component": "VCol",
-                "props": {"cols": 12, "md": 4},
-                "content": [{
-                    "component": "VSwitch",
-                    "props": {
-                        "model": site_task_key(site, task),
-                        "label": task.get("label", task["id"]),
-                        "hint": task.get("hint", ""),
-                        "density": "compact",
-                        "hide-details": "auto",
-                    },
-                }],
-            })
-
+        task_cols = [{
+            "component": "VCol", "props": {"cols": 12, "md": 4},
+            "content": [{"component": "VSwitch", "props": {
+                "model": site_task_key(site, task), "label": task.get("label", task["id"]),
+                "hint": task.get("hint", ""), "density": "compact", "hide-details": "auto"}}],
+        } for task in tasks]
         site_cards.append({
             "component": "VCard",
             "props": {"variant": "outlined", "class": "mb-3"},
@@ -48,29 +56,40 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             ],
         })
 
-    # 全局开关：一行四个
-    switches = [
-        ("enabled", "启用插件"),
-        ("notify", "开启通知"),
-        ("retry_notify", "重试结果通知"),
-        ("get_feedback", "获取喊话反馈"),
-        ("use_proxy", "使用系统代理"),
-        ("onlyonce", "立即运行一次"),
-    ]
-    switch_cols = [{
-        "component": "VCol",
-        "props": {"cols": 12, "md": 3},
-        "content": [{"component": "VSwitch", "props": {"model": m, "label": l, "hide-details": "auto", "density": "comfortable"}}],
-    } for m, l in switches]
+    # 基础子卡片
+    base_card = _subcard("基础", [
+        {"component": "VRow", "props": {"class": "mb-1"}, "content": [
+            _switch("enabled", "启用插件"), _switch("onlyonce", "立即运行一次"),
+            _switch("notify", "开启通知"), _switch("use_proxy", "使用系统代理"),
+        ]},
+        {"component": "VRow", "props": {"class": "mb-1"}, "content": [
+            _text("cron", "定时规则", md=6, hint="例如：30 9,21 * * *"),
+            _text("history_days", "历史保留天数", md=6, type="number"),
+        ]},
+        {"component": "VRow", "content": [
+            {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VSelect", "props": {
+                "model": "chat_sites", "label": "启用站点", "multiple": True, "chips": True,
+                "items": sites, "itemTitle": "name", "itemValue": "id", "hide-details": "auto"}}]},
+        ]},
+    ])
 
-    # 文本类配置：增加间距，去掉 compact
-    text_cols = [
-        {"component": "VCol", "props": {"cols": 12, "md": 3}, "content": [{"component": "VTextField", "props": {"model": "cron", "label": "定时规则", "hint": "例如：30 9,21 * * *", "hide-details": "auto"}}]},
-        {"component": "VCol", "props": {"cols": 12, "md": 2}, "content": [{"component": "VTextField", "props": {"model": "history_days", "label": "历史保留天数", "type": "number", "hide-details": "auto"}}]},
-        {"component": "VCol", "props": {"cols": 12, "md": 2}, "content": [{"component": "VTextField", "props": {"model": "feedback_timeout", "label": "反馈等待秒数", "type": "number", "hide-details": "auto"}}]},
-        {"component": "VCol", "props": {"cols": 12, "md": 2}, "content": [{"component": "VTextField", "props": {"model": "retry_count", "label": "重试次数", "type": "number", "hide-details": "auto"}}]},
-        {"component": "VCol", "props": {"cols": 12, "md": 3}, "content": [{"component": "VTextField", "props": {"model": "retry_interval", "label": "重试间隔(分钟)", "type": "number", "hide-details": "auto"}}]},
-    ]
+    # 喊话子卡片
+    chat_card = _subcard("喊话", [
+        {"component": "VRow", "props": {"class": "mb-1"}, "content": [_switch("get_feedback", "获取喊话反馈", md=12)]},
+        {"component": "VRow", "content": [
+            _text("feedback_timeout", "反馈等待秒数", md=6, type="number"),
+            _text("interval_cnt", "消息间隔秒数", md=6, type="number"),
+        ]},
+    ])
+
+    # 重试子卡片
+    retry_card = _subcard("重试", [
+        {"component": "VRow", "content": [
+            _text("retry_count", "重试次数", md=4, type="number"),
+            _text("retry_interval", "重试间隔(分钟)", md=4, type="number"),
+            _switch("retry_notify", "重试结果通知", md=4),
+        ]},
+    ])
 
     site_section_content = site_cards if site_cards else [{"component": "div", "props": {"class": "text-medium-emphasis pa-3"}, "text": "请先在「启用站点」选择站点"}]
 
@@ -82,13 +101,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             "content": [
                 {"component": "VCardTitle", "props": {"class": "text-subtitle-1 py-2"}, "text": "全局设置"},
                 {"component": "VDivider"},
-                {"component": "VCardText", "content": [
-                    {"component": "VRow", "props": {"class": "mb-2"}, "content": switch_cols},
-                    {"component": "VRow", "props": {"class": "mb-2"}, "content": text_cols},
-                    {"component": "VRow", "content": [
-                        {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VSelect", "props": {"model": "chat_sites", "label": "启用站点", "multiple": True, "chips": True, "items": sites, "itemTitle": "name", "itemValue": "id", "hide-details": "auto"}}]},
-                    ]},
-                ]},
+                {"component": "VCardText", "props": {"class": "pt-3"}, "content": [base_card, chat_card, retry_card]},
             ],
         }, {
             "component": "VCard",
