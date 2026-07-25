@@ -26,7 +26,6 @@ class CangbaoHandler(CapabilityHandler):
             {"id": "2", "label": "宝阁学徒"},
         ]
 
-    MESSAGE_INTERVAL = 60  # 藏宝阁多消息间隔秒数
     @staticmethod
     def get_site_name():
         return "藏宝阁"
@@ -38,24 +37,23 @@ class CangbaoHandler(CapabilityHandler):
     def match(self) -> bool:
         return "藏宝阁" in self.site_name or self.domain == "cangbao.ge"
 
-    def send_messagebox(self, message=None, callback=None):
-        """发送后轮询系统反馈；不阻塞过长，失败时仍保留发送结果。"""
-        callback = callback or (lambda response: " ".join(etree.HTML(response.text).xpath("//tr[1]/td//text()")))
-        result = super().send_messagebox(message, callback)
-        if not result[0]:
-            return result
+    def collect_message_feedback(self, message):
+        """在消息发送后单独等待并保存该消息的系统反馈。"""
         username = self.get_username()
         if not username:
-            return result
+            return None
         self.wait_feedback()
         feedback = self._poll_feedback(username, message)
-        if feedback:
-            self._last_message_result = feedback
-            return True, feedback
-        return result
+        if not feedback:
+            return None
+        self._last_message_result = feedback
+        message_feedbacks = getattr(self, "_message_feedbacks", [])
+        message_feedbacks.append({"message": message, "text": feedback})
+        self._message_feedbacks = message_feedbacks
+        return feedback
 
     def _poll_feedback(self, username, message=None):
-        keyword = "上传量" if message and "上传" in message else None
+        keyword = "上传量" if message and "上传" in message else "魔力" if message and "魔力" in message else None
         response = self._send_get_request(self.site_url + "/shoutbox.php")
         if not response:
             return None
@@ -72,13 +70,22 @@ class CangbaoHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message=None):
-        if not self._last_message_result:
+        message_feedbacks = getattr(self, "_message_feedbacks", [])
+        if not message_feedbacks and self._last_message_result:
+            message_feedbacks = [{"message": message, "text": self._last_message_result}]
+        if not message_feedbacks:
             return None
-        text = str(self._last_message_result)
-        kind = "上传量" if "上传" in text else "魔力值" if "魔力" in text else "raw_feedback"
-        return {"site": self.site_name, "message": message, "rewards": [{
-            "type": kind, "description": text, "amount": "", "unit": "", "is_negative": False,
-        }]}
+        rewards = []
+        for item in message_feedbacks:
+            text = str(item["text"])
+            kind = "上传量" if "上传" in text else "魔力值" if "魔力" in text else "raw_feedback"
+            sent_message = item.get("message")
+            description = f"“{sent_message}”：{text}" if sent_message else text
+            rewards.append({
+                "type": kind, "description": description,
+                "amount": "", "unit": "", "is_negative": False,
+            })
+        return {"site": self.site_name, "message": message, "rewards": rewards}
 
 
 class Tasks(BaseTask):
@@ -101,5 +108,6 @@ class Tasks(BaseTask):
             if i > 0:
                 time.sleep(self.client.message_interval)
             ok, msg_text = self.client.send_messagebox(msg)
-            results.append(msg_text)
+            feedback = self.client.collect_message_feedback(msg) if ok else None
+            results.append(feedback or msg_text)
         return TaskResult.ok("\n".join(results))

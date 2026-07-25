@@ -26,7 +26,6 @@ class LongPTHandler(CapabilityHandler):
             {"id": "2", "label": "保种-困难"},
         ]
 
-    MESSAGE_INTERVAL = 60  # LongPT多消息间隔秒数
     api_base = "https://longpt.org/pt-api/v1"
 
     @staticmethod

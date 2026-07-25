@@ -21,7 +21,6 @@ from ..base.result import TaskResult
 
 
 class PtlgsHandler(CapabilityHandler):
-    MESSAGE_INTERVAL = 60  # PTLGS多消息间隔秒数
     def __init__(self, site_info: dict):
         super().__init__(site_info)
         self.shoutbox_url = self.site_url + "/shoutbox.php"

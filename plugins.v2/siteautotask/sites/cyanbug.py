@@ -48,7 +48,7 @@ class Tasks(BaseTask):
         results = []
         for i, msg in enumerate(messages):
             if i > 0:
-                time.sleep(self.client.interval_cnt)
+                time.sleep(getattr(self.client, "message_interval", self.client.interval_cnt))
             ok, text = self.client.send_messagebox(msg)
             results.append(text if ok else f"失败: {text}")
         return TaskResult.ok("\n".join(results))

@@ -13,7 +13,7 @@ class PluginConfig:
     use_proxy: bool = False
     get_feedback: bool = True
     feedback_timeout: int = 5
-    interval_cnt: int = 5
+    interval_cnt: int = 30
     retry_count: int = 3
     retry_interval: int = 10
     retry_notify: bool = False
@@ -33,7 +33,7 @@ class PluginConfig:
                 values[name] = raw[name]
         values["history_days"] = int(values.get("history_days", 30))
         values["feedback_timeout"] = int(values.get("feedback_timeout", 5))
-        values["interval_cnt"] = int(values.get("interval_cnt", 5))
+        values["interval_cnt"] = int(values.get("interval_cnt", 30))
         values["retry_count"] = int(values.get("retry_count", 3))
         values["retry_interval"] = int(values.get("retry_interval", 10))
         values["chat_sites"] = list(values.get("chat_sites") or [])

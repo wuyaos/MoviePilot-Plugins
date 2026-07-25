@@ -1,9 +1,10 @@
 """通知渲染与发送。"""
 from ..utils.feedback import NotificationIcons
-from ..utils.display import display_task
+from ..utils.display import display_record_lines, format_record_line
 
 
 def render_records(records):
+    """按站点两级分组；多消息喊话拆成独立任务行。"""
     grouped = {}
     order = []
     for record in records:
@@ -12,22 +13,15 @@ def render_records(records):
             grouped[site] = []
             order.append(site)
         icon = "✅" if record.get("success") else "❌"
-        task_name = display_task(
-            site,
-            record.get("task_label") or record.get("task_id"),
-            record.get("task_type"),
-        )
-        line = f"{icon} {task_name}：{record.get('status', '')}"
-        feedback = record.get("feedback") or {}
-        rewards = feedback.get("rewards") or record.get("rewards") or []
-        for reward in rewards:
-            line += f"\n  {NotificationIcons.get(reward.get('type', ''))} {reward.get('description', '')}"
-        grouped[site].append(line)
+        for item in display_record_lines(record):
+            grouped[site].append(
+                f"   {icon} {format_record_line(item, NotificationIcons)}"
+            )
     parts = []
     for site in order:
-        parts.extend([f"🔔 {site}", *grouped[site], "────────────────────"])
-    if parts and parts[-1].startswith("─"):
-        parts.pop()
+        if parts:
+            parts.append("")
+        parts.extend([f"🌐 {site}", *grouped[site]])
     return "\n".join(parts)
 
 

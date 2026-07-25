@@ -1,12 +1,24 @@
 """运行数据页：按运行批次折叠、站点分组、任务状态+反馈奖励一体。"""
 try:
     from ..utils.feedback import NotificationIcons
-    from ..utils.display import display_task
+    from ..utils.display import display_record_lines, format_record_line
 except ImportError:  # 便于脱离 MoviePilot 包环境做单元测试
     from siteautotask_feedback import NotificationIcons
 
-    def display_task(site_name, task_label, task_type):
-        return str(task_label or "")
+    def display_record_lines(record):
+        return [{
+            "task": str(record.get("task_label") or record.get("task_id") or ""),
+            "status": str(record.get("status") or ""),
+            "rewards": (record.get("feedback") or {}).get("rewards") or record.get("rewards") or [],
+        }]
+
+    def format_record_line(item, icon_lookup):
+        rewards = "；".join(
+            f"{icon_lookup.get(reward.get('type', ''))} {reward.get('description', '')}".strip()
+            for reward in item.get("rewards") or []
+            if reward.get("description")
+        )
+        return f"{item['task']} -> {rewards or item['status'] or '无反馈'}"
 
 
 def _text(value):
@@ -111,28 +123,19 @@ def build_page(plugin):
                     ],
                 }, {"component": "VDivider", "props": {"class": "mb-1"}}],
             }
-            # 任务行：紧凑列表
+            # 任务行：多消息喊话拆分为独立行，状态与反馈统一用 -> 连接。
             for r in recs:
                 icon = "✅" if r.get("success") else "❌"
-                task_name = display_task(
-                    site,
-                    r.get("task_label") or r.get("task_id"),
-                    r.get("task_type"),
-                )
-                status = _text(r.get("status"))
-                rewards = (r.get("feedback") or {}).get("rewards") or r.get("rewards") or []
-                reward_str = _reward_line(rewards)
-                task_row = {
-                    "component": "div",
-                    "props": {"class": "d-flex align-start py-1"},
-                    "content": [
-                        {"component": "span", "props": {"class": "me-2"}, "text": icon},
-                        {"component": "div", "props": {"class": "flex-grow-1"}, "content": [
-                            {"component": "div", "props": {"class": "text-body-2"}, "text": f"{task_name}：{status}"},
-                        ] + ([{"component": "div", "props": {"class": "text-caption text-medium-emphasis mt-1"}, "text": reward_str}] if reward_str else [])},
-                    ],
-                }
-                site_block["content"].append(task_row)
+                for item in display_record_lines(r):
+                    task_row = {
+                        "component": "div",
+                        "props": {"class": "d-flex align-start py-1 ms-2"},
+                        "content": [
+                            {"component": "span", "props": {"class": "me-2"}, "text": icon},
+                            {"component": "div", "props": {"class": "text-body-2 flex-grow-1"}, "text": format_record_line(item, NotificationIcons)},
+                        ],
+                    }
+                    site_block["content"].append(task_row)
             site_blocks.append(site_block)
 
         panels.append({

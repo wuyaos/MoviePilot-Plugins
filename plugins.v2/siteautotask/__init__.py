@@ -26,7 +26,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.7"
+    plugin_version = "1.0.8"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -191,7 +191,17 @@ class SiteAutoTask(_PluginBase):
             return []
         tasks = entry["tasks_cls"](cookie=None)
         tasks.client = handler
-        return tasks.get_registered_tasks()
+        runtime_tasks = tasks.get_registered_tasks()
+        metadata_by_name = {
+            item.get("name"): item
+            for item in entry.get("tasks_meta", [])
+        }
+        for task in runtime_tasks:
+            metadata = metadata_by_name.get(task.get("name"), {})
+            if metadata.get("claim_options"):
+                task["claim_options"] = metadata["claim_options"]
+                task["claim_multiple"] = bool(metadata.get("claim_multiple", False))
+        return runtime_tasks
 
     def support_site_options(self):
         """返回配置页站点选项，id 必须使用 MP 站点真实 id。"""

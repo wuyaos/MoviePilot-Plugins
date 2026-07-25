@@ -12,7 +12,8 @@ from ..base.result import TaskResult
 from ..base.decorator import TaskType
 from .task_keys import site_task_key, claim_task_key
 from ..sites import get_site_handler
-from ..utils.display import display_task
+from ..utils.display import display_record_lines, display_task
+from ..utils.feedback import NotificationIcons, detect_reward_type
 
 
 class TaskEngine:
@@ -133,11 +134,37 @@ class TaskEngine:
         original_send = getattr(handler, "send_messagebox", None)
         if task.get("task_type") == TaskType.CHAT and callable(original_send):
             def tracked_send(message=None, *args, **kwargs):
+                message = str(message or "")
+                message_name = f"[喊话] “{message}”"
                 if message:
-                    sent_messages.append(str(message))
-                return original_send(message, *args, **kwargs)
+                    sent_messages.append(message)
+                    logger.info(f"{handler.site_name} - {message_name} -> 开始发送")
+                outcome = original_send(message, *args, **kwargs)
+                if message:
+                    success = bool(outcome and outcome[0]) if isinstance(outcome, tuple) else bool(outcome)
+                    detail = str(outcome[1] or "") if isinstance(outcome, tuple) and len(outcome) > 1 else ""
+                    phase = "发送成功" if success else "发送失败"
+                    if detail in {"发送成功", "消息发送成功", ""}:
+                        detail = ""
+                    logger.info(f"{handler.site_name} - {message_name} -> {phase}{f' -> {detail}' if detail else ''}")
+                return outcome
             handler.send_messagebox = tracked_send
-        logger.info(f"{handler.site_name} - {task_name} - 开始执行")
+            original_collect = getattr(handler, "collect_message_feedback", None)
+            if callable(original_collect):
+                def tracked_collect(message, *args, **kwargs):
+                    feedback = original_collect(message, *args, **kwargs)
+                    message_name = f"[喊话] “{message}”"
+                    if feedback:
+                        icon = NotificationIcons.get(detect_reward_type(str(feedback)))
+                        logger.info(f"{handler.site_name} - {message_name} -> {icon} {feedback}")
+                    else:
+                        logger.info(f"{handler.site_name} - {message_name} -> 无反馈")
+                    return feedback
+                handler.collect_message_feedback = tracked_collect
+        else:
+            original_collect = None
+        if task.get("task_type") != TaskType.CHAT:
+            logger.info(f"{handler.site_name} - {task_name} - 开始执行")
         try:
             needs_claim_id = task.get("task_type") == TaskType.CLAIM or task.get("claim_options")
             if needs_claim_id:
@@ -164,20 +191,23 @@ class TaskEngine:
                 "task_type": task.get("task_type", TaskType.GENERIC),
                 "success": result.success, "status": status,
             }
+            if sent_messages:
+                record["messages"] = sent_messages
             if feedback:
                 record["feedback"] = feedback
             if result.rewards:
                 record["rewards"] = result.rewards
-            outcome = "成功" if result.success else "失败"
-            logger.info(f"{handler.site_name} - {task_name} - 执行{outcome} - {status}")
-            if feedback:
-                rewards = feedback.get("rewards") or []
-                descriptions = [str(item.get("description")) for item in rewards if item.get("description")]
-                if descriptions:
-                    logger.info(
-                        f"{handler.site_name} - {task_name} - 反馈结果 - "
-                        f"{'；'.join(descriptions)}"
-                    )
+            if task.get("task_type") == TaskType.CHAT and not callable(original_collect):
+                for line in display_record_lines(record):
+                    reward_text = "；".join(
+                        f"{NotificationIcons.get(item.get('type', ''))} {item.get('description', '')}".strip()
+                        for item in line["rewards"]
+                        if item.get("description")
+                    ) or "无反馈"
+                    logger.info(f"{handler.site_name} - {line['task']} -> {reward_text}")
+            else:
+                outcome = "成功" if result.success else "失败"
+                logger.info(f"{handler.site_name} - {task_name} - 执行{outcome} -> {status}")
             return record
         except Exception as e:
             logger.error(f"{handler.site_name} - {task_name} - 执行失败 - {e}", exc_info=True)
@@ -190,6 +220,8 @@ class TaskEngine:
         finally:
             if task.get("task_type") == TaskType.CHAT and callable(original_send):
                 handler.send_messagebox = original_send
+            if task.get("task_type") == TaskType.CHAT and callable(original_collect):
+                handler.collect_message_feedback = original_collect
 
     def _schedule_failed(self, records, is_retry=False):
         """记录仍失败的任务；新失败批次从 0 次开始，实际重试后次数加一。"""

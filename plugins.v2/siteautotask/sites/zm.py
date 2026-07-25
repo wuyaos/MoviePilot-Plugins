@@ -10,7 +10,6 @@ from ..base.decorator import task_info, TaskType
 
 
 class ZmHandler(CapabilityHandler):
-    MESSAGE_INTERVAL = 60  # 织梦多消息间隔秒数（不暴露到配置页）
     @staticmethod
     def get_site_name():
         return "织梦"
