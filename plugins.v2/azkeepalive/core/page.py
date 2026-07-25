@@ -60,12 +60,13 @@ def _build_status_row(state: dict[str, Any], keepalive_days: int) -> dict:
     """保活状态 3 列等高 tonal 卡片（访问/下载分别显示规则和插件间隔）"""
     now = dt.datetime.now(dt.timezone.utc)
     last_status = state.get("last_status", "未运行")
-    color_map = {"visit_success": "primary", "download_success": "success",
-                 "skipped": "info",
-                 "no_candidate": "warning", "failed": "error"}
-    status_text = {"visit_success": "访问成功", "download_success": "下载成功",
-                   "skipped": "跳过",
-                   "no_candidate": "无候选", "failed": "失败"}.get(last_status, last_status)
+    color_map = {"visit_success": "primary", "visit_unverified": "warning",
+                 "download_success": "success", "skipped": "info",
+                 "no_candidate": "warning", "scan_failed": "error", "failed": "error"}
+    status_text = {"visit_success": "访问成功", "visit_unverified": "登录态未确认",
+                   "download_success": "下载成功", "skipped": "跳过",
+                   "no_candidate": "无候选", "scan_failed": "抓取失败",
+                   "failed": "失败"}.get(last_status, last_status)
     last_visit_at = state.get("last_visit_at", "")
     visit_days_left, visit_text = _remain_days(last_visit_at, 60, now)
     _, visit_interval_text = _remain_days(last_visit_at, keepalive_days, now)
@@ -277,20 +278,22 @@ def _build_history_table(state: dict[str, Any]) -> dict:
 
 def _history_row(ev: dict[str, Any]) -> dict:
     status = ev.get("status", "")
-    color_map = {"visit_success": "primary", "download_success": "success",
-                 "skipped": "info",
-                 "no_candidate": "warning", "failed": "error"}
+    color_map = {"visit_success": "primary", "visit_unverified": "warning",
+                 "download_success": "success", "skipped": "info",
+                 "no_candidate": "warning", "scan_failed": "error", "failed": "error"}
     _detail_map = {
         "visit_success": "访问保活成功",
+        "visit_unverified": "页面可访问但未确认登录态，访问时间未更新",
         "download_success": "下载种子保活成功",
         "skipped": "访问和下载均未到插件保活间隔",
-        "no_candidate": "未找到可下载的新种子",
+        "no_candidate": "未找到符合筛选条件的新种子",
+        "scan_failed": "种子页抓取或解析失败",
     }
     parts = []
     if status in _detail_map:
         parts.append(_detail_map[status])
     if ev.get("reason") and status not in (
-        "visit_success", "download_success", "skipped", "no_candidate",
+        "visit_success", "download_success", "skipped",
     ):
         parts.append(ev["reason"])
     detail = " | ".join(parts) if parts else ""

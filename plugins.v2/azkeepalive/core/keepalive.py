@@ -42,41 +42,40 @@ def run_keepalive(
             state, "last_download_at", keepalive_days, now, action="下载", force=force,
         )
     logger.info(f"AZ保活: 间隔判断 skip_check={skip_interval_check} force={force} visit_due={visit_due} download_due={download_due} last_visit={state.get('last_visit_at')} last_download={state.get('last_download_at')}")
+
+    # H&R 到期检查必须独立于访问/下载保活间隔；定时触发即使跳过保活，也要及时摘除标签。
+    if downloader_instance:
+        done = dl_check_hnr(downloader_instance, category, auto_delete=auto_delete)
+        if done:
+            logger.info(f"AZ保活: H&R完成 {len(done)} 个: {', '.join(done[:3])}")
+
     if not visit_due and not download_due:
         reason = "访问和下载均未到插件保活间隔"
         _append(state, "skipped", now, reason=reason, checked=False)
         return "skipped", _skip_msg(state, keepalive_days, now, reason), state
 
+    visit_status = "failed"
     visit_message = ""
     if not cookie:
         logger.warning("AZ保活: CookieCloud 未获取到 Cookie，用户信息无法抓取")
         visit_message = "CookieCloud 未获取到 AnimeZ Cookie，无法执行访问保活"
     else:
         vr = visit_site(site_url, cookie=cookie, timeout=timeout, proxies=proxies)
-        found = False
         if vr.get("ok"):
             for k in ("upload", "download", "ratio", "buffer", "seeds",
                       "leeches", "bonus", "hnr", "reseed", "name"):
                 if k in vr:
                     state[f"user_{k}"] = vr[k]
-                    found = True
-            if found:
-                _append(state, "visit_success", now, reason="访问保活成功")
-                visit_message = "访问保活成功"
-            else:
-                # P0 fix: HTTP 200 = 登录态有效，即使用户信息解析失败也推进 last_visit_at
-                _append(state, "visit_ok", now, reason="访问成功但未解析到用户信息")
-                visit_message = "访问成功但未解析到用户信息"
-                logger.warning(f"AZ保活: {visit_message}")
+            visit_status = "visit_success"
+            visit_message = "访问保活成功"
+            _append(state, visit_status, now, reason=visit_message)
+        elif vr.get("unverified"):
+            visit_status = "visit_unverified"
+            visit_message = str(vr.get("error") or "访问成功但无法确认登录态")
+            _append(state, visit_status, now, reason=visit_message)
         else:
-            visit_message = "访问 AnimeZ 失败，未更新访问保活时间"
+            visit_message = str(vr.get("error") or "访问 AnimeZ 失败，未更新访问保活时间")
             logger.warning(f"AZ保活: {visit_message}")
-
-    # H&R 检查：满足做种时限则移除标签，可选删除
-    if downloader_instance:
-        done = dl_check_hnr(downloader_instance, category, auto_delete=auto_delete)
-        if done:
-            logger.info(f"AZ保活: H&R完成 {len(done)} 个: {', '.join(done[:3])}")
 
     if not downloader_instance:
         msg = "下载器未配置或不可用，无法执行下载保活"
@@ -89,26 +88,31 @@ def run_keepalive(
         return "failed", msg, state
 
     if not download_due and not force:
-        # 访问保活已完成，但下载未到间隔，不执行下载
-        if visit_message:
-            _append(state, "visit_only", now, reason="访问保活完成，下载未到间隔")
-            return "visit_success", visit_message, state
+        # 下载未到间隔时，仅返回本轮真实的访问结果，不重复写入历史。
+        return visit_status, visit_message, state
 
     try:
         submit_tags = f"{tags},H&R" if tags else "H&R"
         strategies = _build_strategies(max_size_gb, require_free)
         for label, free, size in strategies:
-            r = _scan_pages(site_url, cookie, timeout, proxies, free, size,
-                            min_seeders, downloader_instance, category, submit_tags,
-                            state, now)
-            if r:
-                return r[0], r[1], state
-            logger.info(f"AZ保活: 策略[{label}]无新种子，尝试下一策略")
+            scan_status, scan_value = _scan_pages(
+                site_url, cookie, timeout, proxies, free, size,
+                min_seeders, downloader_instance, category, submit_tags, state, now,
+            )
+            if scan_status == "success":
+                result_status, result_message = scan_value
+                return result_status, result_message, state
+            if scan_status == "failed":
+                reason = str(scan_value or "种子页抓取失败")
+                _append(state, "scan_failed", now, reason=reason)
+                return "scan_failed", reason, state
+            logger.info(f"AZ保活: 策略[{label}]未找到符合条件的新种子")
 
-        _append(state, "no_candidate", now, reason="所有策略均未找到可下载种子")
+        reason = "未找到符合当前 Free、体积和做种数条件的新种子"
+        _append(state, "no_candidate", now, reason=reason)
         return "no_candidate", ("⚠️ 未找到新种子\n━━━━━━━━━━━━━\n"
-                                 "所有策略已扫描，候选种子均已存在于下载器\n"
-                                 "建议: 删除部分旧种子或调整筛选条件"), state
+                                 f"{reason}\n"
+                                 "建议: 检查筛选条件或下载器中的已有任务"), state
     except Exception as e:
         logger.error(f"AZ保活失败: {e}")
         _append(state, "failed", now, reason=str(e))
@@ -120,23 +124,30 @@ def _scan_pages(
     freeleech: bool, max_size_gb: float, min_seeders: int,
     dl_inst: Any, category: str, tags: str,
     state: dict[str, Any], now: dt.datetime,
-) -> tuple[str, str] | None:
-    """逐页扫描，找到第一个可下载种子立即提交"""
+) -> tuple[str, Any]:
+    """逐页扫描；明确区分成功、无候选和页面抓取失败。"""
     for page in range(1, 11):
-        items = fetch_torrents(site_url, cookie=cookie, timeout=timeout,
-                               proxies=proxies, freeleech=freeleech, page=page)
-        if not items:
+        page_result = fetch_torrents(
+            site_url, cookie=cookie, timeout=timeout,
+            proxies=proxies, freeleech=freeleech, page=page,
+        )
+        if not page_result.ok:
+            return "failed", page_result.error
+        if not page_result.items:
             break
-        eligible = filter_eligible(items, min_seeders, max_size_gb, freeleech)
-        logger.info(f"AZ保活: p{page} 解析={len(items)} 候选={len(eligible)}")
+        eligible = filter_eligible(
+            page_result.items, min_seeders, max_size_gb, freeleech,
+        )
+        logger.info(
+            f"AZ保活: p{page} 解析={len(page_result.items)} 候选={len(eligible)}"
+        )
 
-        # 逐个检查候选，找到即提交
         for item in eligible:
             result = _try_one(item, cookie, timeout, proxies, dl_inst,
                               category, tags, state, now)
             if result:
-                return result
-    return None
+                return "success", result
+    return "no_candidate", None
 
 
 def _try_one(
@@ -195,15 +206,8 @@ def _try_one(
 def _build_strategies(max_size_gb: float, require_free: bool) -> list[tuple[str, bool, float]]:
     """构建扫描策略标签，避免关闭 Free 限制时日志仍显示 Free。"""
     if require_free:
-        return [
-            (f"Free<={max_size_gb}GB", True, max_size_gb),
-            ("Free不限体积", True, 999999),
-            (f"全部<={max_size_gb}GB", False, max_size_gb),
-        ]
-    return [
-        (f"全部<={max_size_gb}GB", False, max_size_gb),
-        ("全部不限体积", False, 999999),
-    ]
+        return [(f"Free<={max_size_gb}GB", True, max_size_gb)]
+    return [(f"全部<={max_size_gb}GB", False, max_size_gb)]
 
 
 def _looks_like_torrent(body: bytes, content_type: str) -> bool:
@@ -242,7 +246,7 @@ def _append(
     history.append(ev)
     del history[:-MAX_HISTORY]
     state["last_status"] = status
-    if status in ("visit_success", "visit_ok"):
+    if status == "visit_success":
         state["last_visit_at"] = _ts(now)
     if status == "download_success":
         state["last_download_at"] = _ts(now)

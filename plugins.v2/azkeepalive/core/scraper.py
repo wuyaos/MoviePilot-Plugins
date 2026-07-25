@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urljoin
 
 from app.log import logger
 
@@ -15,11 +17,19 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 BASE_HEADERS = {"User-Agent": USER_AGENT}
 
 
+@dataclass(frozen=True)
+class TorrentPageResult:
+    """种子列表页抓取结果，区分请求/解析失败与页面确实为空。"""
+    ok: bool
+    items: list[FeedItem]
+    error: str = ""
+
+
 def fetch_torrents(
     site_url: str, cookie: str = "", timeout: int = 30,
     proxies: dict | None = None, freeleech: bool = True, page: int = 1,
-) -> list[FeedItem]:
-    """从种子列表页解析种子信息（支持分页）"""
+) -> TorrentPageResult:
+    """从种子列表页解析种子信息（支持分页）。"""
     from app.utils.http import RequestUtils
     base = f"{site_url.rstrip('/')}/torrents?q=&adult=&anime_id=&uploader="
     if freeleech:
@@ -33,12 +43,24 @@ def fetch_torrents(
     ).get_res(url=url)
     if not res or res.status_code != 200:
         code = res.status_code if res else "无响应"
-        logger.warning(f"AZ保活: 种子页请求失败: [{code}] {url}")
-        return []
+        error = f"种子页请求失败: [{code}] {url}"
+        logger.warning(f"AZ保活: {error}")
+        return TorrentPageResult(ok=False, items=[], error=error)
     res.encoding = res.encoding or "utf-8"
+    if _is_login_page(res.text):
+        error = "种子页返回登录页面，Cookie 可能已失效"
+        logger.warning(f"AZ保活: {error}")
+        return TorrentPageResult(ok=False, items=[], error=error)
     items = _parse_torrent_rows(res.text, site_url)
+    if not items and _looks_like_torrent_listing(res.text):
+        logger.debug(f"第{page}页无种子")
+        return TorrentPageResult(ok=True, items=[])
+    if not items:
+        error = f"第{page}页未识别到种子列表，页面结构可能已变化"
+        logger.warning(f"AZ保活: {error}")
+        return TorrentPageResult(ok=False, items=[], error=error)
     logger.debug(f"第{page}页解析: {len(items)} 条种子")
-    return items
+    return TorrentPageResult(ok=True, items=items)
 
 
 def _parse_torrent_rows(html: str, site_url: str) -> list[FeedItem]:
@@ -69,7 +91,8 @@ def _parse_torrent_rows(html: str, site_url: str) -> list[FeedItem]:
 
         size_bytes = parse_size_bytes(size_text)
         seeders = int(seeders_text) if seeders_text.isdigit() else None
-        dl_url = f"{href}/download" if href else ""
+        detail_url = urljoin(f"{site_url.rstrip('/')}/", href)
+        dl_url = f"{detail_url.rstrip('/')}/download" if detail_url else ""
         is_free = 'Free Download' in block or 'freeleech' in block.lower()
 
         items.append(FeedItem(
@@ -86,7 +109,8 @@ def filter_eligible(
     require_free: bool = True,
 ) -> list[FeedItem]:
     """筛选并排序候选种子（体积小优先）"""
-    max_bytes = int(max_size_gb * 1024**3)
+    # AnimeZ 列表按十进制 GB/MB 展示，和 parse_size_bytes 的 GB=10^9 保持一致。
+    max_bytes = int(max_size_gb * 1_000_000_000)
     eligible = [
         it for it in items
         if it.seeders is not None and it.seeders >= min_seeders
@@ -120,6 +144,24 @@ def get_site_cookie(site_url: str) -> str:
     return ""
 
 
+def _is_login_page(html: str) -> bool:
+    """识别明确的登录页，避免 HTTP 200 被误当作有效登录态。"""
+    text = html.lower()
+    has_password_field = any(marker in text for marker in (
+        'name="password"', "name='password'", 'type="password"', "type='password'",
+    ))
+    has_login_form = any(marker in text for marker in (
+        'action="/login', "action='/login", "sign in to your account",
+    ))
+    return has_password_field or has_login_form
+
+
+def _looks_like_torrent_listing(html: str) -> bool:
+    """判断响应是否仍是合法种子列表页面，包括空列表。"""
+    text = html.lower()
+    return "/torrents" in text and ("torrent-link" in text or "<table" in text)
+
+
 def visit_site(
     site_url: str, cookie: str = "", timeout: int = 30, proxies: dict | None = None
 ) -> dict[str, Any]:
@@ -136,15 +178,20 @@ def visit_site(
         if not res or res.status_code != 200:
             logger.warning(f"站点访问异常: [{res.status_code if res else '无响应'}]")
             return result
-        result["ok"] = True
+        if _is_login_page(res.text):
+            result["error"] = "站点返回登录页面，Cookie 可能已失效"
+            logger.warning(f"AZ保活: {result['error']}")
+            return result
         logger.info(f"AZ站点访问成功: {site_url} (HTML {len(res.text)} bytes)")
-        # 始终尝试解析（cookie 已由调用方传递，无需再次判断）
         stats = _parse_user_stats(res.text)
         if stats:
+            result["ok"] = True
             result.update(stats)
         else:
             has_bar = "ratio-bar" in res.text
             has_login = "Sign in" in res.text or "LOGIN" in res.text[:3000].upper()
+            result["unverified"] = True
+            result["error"] = "访问成功但无法确认登录态，未更新访问保活时间"
             logger.warning(f"用户信息解析为空 ratio-bar={has_bar} login页={has_login} "
                            f"cookie长度={len(cookie)}")
     except Exception as e:

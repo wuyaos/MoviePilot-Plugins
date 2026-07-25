@@ -2,6 +2,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta
 import threading
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -22,7 +23,7 @@ class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
     plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
-    plugin_version = "2.5.9"
+    plugin_version = "2.6.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "azkeepalive_"
@@ -48,9 +49,11 @@ class AzKeepAlive(_PluginBase):
     _random_cron = ""
     _scheduler: Optional[BackgroundScheduler] = None
     _run_lock = threading.Lock()
+    _initialized_at = 0.0
 
     def init_plugin(self, config: dict = None):
         self.stop_service()
+        self._initialized_at = time.monotonic()
         self._ensure_plugin_log_file()
         config = config or {}
         self._enabled = bool(config.get("enabled"))
@@ -77,14 +80,22 @@ class AzKeepAlive(_PluginBase):
             self._random_cron = f"{m} {h} * * *"
             self._save_config()
         if self._onlyonce:
-            # onlyonce 只立即运行一次，遵守间隔（force=False），不强制下载
-            self._scheduler = BackgroundScheduler(timezone=app_settings.TZ)
-            self._scheduler.add_job(lambda: self._run_task(force=False), "date",
-                                    run_date=datetime.now(tz=pytz.timezone(app_settings.TZ)) + timedelta(seconds=10),
-                                    name="AnimeZ保活-立即执行")
-            self._scheduler.start()
+            # 强制模式必须与“立即运行一次”同时提交；先消费并持久化开关，避免 reload 重复执行。
+            run_force = self._force_keepalive
             self._onlyonce = False
-            self._force_keepalive = False  # 同时清掉 force_keepalive 残留
+            self._force_keepalive = False
+            self._save_config()
+            self._scheduler = BackgroundScheduler(timezone=app_settings.TZ)
+            self._scheduler.add_job(
+                lambda: self._run_task(force=run_force), "date",
+                run_date=datetime.now(tz=pytz.timezone(app_settings.TZ)) + timedelta(seconds=10),
+                name="AnimeZ保活-强制执行" if run_force else "AnimeZ保活-立即执行",
+            )
+            self._scheduler.start()
+        elif self._force_keepalive:
+            # 单独残留的强制开关不执行，防止插件更新或 reload 意外触发下载。
+            logger.warning("AnimeZ保活: 强制保活需同时开启“立即运行一次”，本次未执行")
+            self._force_keepalive = False
             self._save_config()
 
     def get_state(self) -> bool:
@@ -135,10 +146,9 @@ class AzKeepAlive(_PluginBase):
         cookie = get_site_cookie(self._site_url)
         status, message = "failed", "保活未执行"
         for attempt in range(1, 4):
-            state = self.get_data("state") or {}
-            if not state:
-                logger.info("AnimeZ保活: state 未就绪（可能 reload 中），跳过本次执行")
-                return
+            stored_state = self.get_data("state")
+            state = stored_state if isinstance(stored_state, dict) else {}
+            state.setdefault("history", [])
             status, message, state = run_keepalive(
                 site_url=self._site_url, downloader_instance=dl_instance,
                 category=self._qb_category, tags=self._qb_tags,
@@ -151,8 +161,8 @@ class AzKeepAlive(_PluginBase):
             )
             self.save_data("state", state)
             logger.info(f"AnimeZ保活: [{status}] {message}")
-            # no_candidate 表示无可用种子，重试无意义；skipped/download_success 同样直接退出
-            if status in ("download_success", "skipped", "no_candidate"):
+            # 成功、跳过和确定无候选时无需重试。
+            if status in ("download_success", "visit_success", "visit_unverified", "skipped", "no_candidate"):
                 break
             if attempt < 3:
                 logger.warning(f"AnimeZ保活: 第 {attempt} 次未成功，准备重试")
@@ -164,10 +174,9 @@ class AzKeepAlive(_PluginBase):
         self._run_task(force=True)
 
     def _safe_run_task(self):
-        """cron 触发时先检查 state 就绪"""
-        state = self.get_data("state") or {}
-        if not state:
-            logger.info("AnimeZ保活: state 未就绪，跳过本次 cron 触发")
+        """避免插件刚 reload、持久化数据尚未恢复时被 cron 碰巧触发。"""
+        if time.monotonic() - self._initialized_at < 15:
+            logger.info("AnimeZ保活: 插件刚完成初始化，跳过本次 cron 触发")
             return
         self._run_task(force=False)
 
@@ -231,7 +240,7 @@ class AzKeepAlive(_PluginBase):
                 v_col(3, v_switch("enabled", "启用插件")),
                 v_col(3, v_switch("notify", "发送通知")),
                 v_col(3, v_switch("onlyonce", "立即运行一次")),
-                v_col(3, v_switch("force_keepalive", "强制保活")),
+                v_col(3, v_switch("force_keepalive", "立即运行时强制")),
             ]),
             # ── 站点与下载器 ───────────────────────
             _sec("🌐 站点与下载器"),
