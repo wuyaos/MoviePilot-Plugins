@@ -11,7 +11,7 @@ from app.log import logger
 from ..base.result import TaskResult
 from ..base.decorator import TaskType
 from .history import HistoryStore
-from .task_keys import site_task_key
+from .task_keys import site_task_key, claim_task_key
 from ..sites import get_site_handler
 
 
@@ -50,7 +50,12 @@ class TaskEngine:
                     continue
                 task = dict(task)
                 task["config_key"] = task_key
-                record = self._run_task(handler, task)
+                # CLAIM 任务：读取用户选择的 task_id，空则跳过
+                claim_id = None
+                if task.get("task_type") == TaskType.CLAIM:
+                    task["claim_key"] = claim_task_key(site, task)
+                    claim_id = self.plugin.claim_task_id(task["claim_key"])
+                record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
                 records.append(record)
         self.history.append(records, cfg.history_days)
         self._schedule_failed(records)
@@ -69,10 +74,29 @@ class TaskEngine:
             logger.error(f"构造站点处理器失败：{site.get('name')}，错误：{e}")
             return None
 
-    def _run_task(self, handler, task):
+    def _run_task(self, handler, task, claim_task_id=None, skip_if_no_claim=False):
+        """执行单个任务。
+
+        :param claim_task_id: CLAIM 任务传入的 task_id；None 表示 debug 模式（用 func 默认值）
+        :param skip_if_no_claim: 正式模式下为 True，CLAIM 任务未配置 task_id 时跳过
+        """
         now = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S")
         try:
-            raw = task["func"]()
+            # CLAIM 任务：正式模式下未配置 task_id 则跳过
+            if task.get("task_type") == TaskType.CLAIM:
+                if skip_if_no_claim and not claim_task_id:
+                    return {
+                        "date": now, "site": handler.site_name, "domain": handler.domain,
+                        "task_id": task.get("id"), "task_label": task.get("label"),
+                        "task_type": TaskType.CLAIM,
+                        "success": True, "status": "未配置，跳过申领",
+                    }
+                if claim_task_id is not None:
+                    raw = task["func"](claim_task_id)
+                else:
+                    raw = task["func"]()
+            else:
+                raw = task["func"]()
             result = self.normalize_result(raw)
             feedback = None
             if task.get("task_type") == TaskType.CHAT and self.plugin.config.get_feedback:
@@ -145,7 +169,12 @@ class TaskEngine:
             for task in tasks:
                 task = dict(task)
                 task["config_key"] = site_task_key(site, task)
-                record = self._run_task(handler, task)
+                # CLAIM 任务：读配置，空则跳过（与正式运行一致）
+                claim_id = None
+                if task.get("task_type") == TaskType.CLAIM:
+                    task["claim_key"] = claim_task_key(site, task)
+                    claim_id = self.plugin.claim_task_id(task["claim_key"]) or None
+                record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
                 records.append(record)
         self.history.append(records, cfg.history_days)
         return records

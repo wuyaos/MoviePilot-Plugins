@@ -102,8 +102,8 @@ class Tasks(BaseTask):
         return self.client.attendance()
 
     @task_info("{client_name}魔力值任务2", "领取Ptskit魔力值任务2", TaskType.CLAIM)
-    def daily_claim_task(self):
-        return self.client.claim_task("12")
+    def daily_claim_task(self, task_id=None):
+        return self.client.claim_task(task_id or "12")
 
     @task_info("{client_name}喊话", "执行Ptskit喊话并解析魔力值反馈", TaskType.CHAT)
     def daily_shotbox(self):

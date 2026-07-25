@@ -17,6 +17,7 @@ from app.log import logger
 
 from ..base.site_handler import ISiteHandler
 from ..base.base_task import BaseTask
+from ..base.decorator import TaskType
 
 
 def load_site_classes() -> List[dict]:
@@ -93,6 +94,17 @@ def load_site_classes() -> List[dict]:
                     tasks_meta = tasks_inst.get_registered_tasks()
             except Exception as e:
                 logger.error(f"解析站点 {site_name} 任务失败：{e}")
+
+        # 为 CLAIM 任务附加可选 task 列表（静态从 Handler 类获取）
+        claim_options = []
+        if hasattr(handler_cls, "get_claim_options"):
+            try:
+                claim_options = handler_cls.get_claim_options()
+            except Exception as e:
+                logger.error(f"获取站点 {site_name} claim 选项失败：{e}")
+        for task in tasks_meta:
+            if task.get("task_type") == "claim":
+                task["claim_options"] = claim_options
 
         sites_info.append({
             "handler_cls": handler_cls,

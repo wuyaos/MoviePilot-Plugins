@@ -81,8 +81,8 @@ class Tasks(BaseTask):
         super().__init__(None)
 
     @task_info("{client_name}月度保种领取", "领取 LongPT 月度保种任务", TaskType.CLAIM)
-    def monthly_claim_task(self):
-        return self.client.claim_task("2")
+    def monthly_claim_task(self, task_id=None):
+        return self.client.claim_task(task_id or "2")
 
     @task_info("{client_name}签到", "执行 LongPT 签到", TaskType.CHECKIN)
     def daily_checkin(self):

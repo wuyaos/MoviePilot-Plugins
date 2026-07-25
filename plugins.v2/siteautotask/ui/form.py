@@ -1,9 +1,9 @@
 """按站点分组、每任务独立开关的配置页。"""
 from typing import Dict, List, Tuple
 try:
-    from ..core.task_keys import site_task_key
+    from ..core.task_keys import site_task_key, claim_task_key
 except ImportError:  # 便于脱离 MoviePilot 包环境做单元测试
-    from siteautotask_task_keys import site_task_key
+    from siteautotask_task_keys import site_task_key, claim_task_key
 
 
 def _switch(model, label, md=3, **props):
@@ -37,12 +37,26 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             continue
         tasks = site.get("tasks") or []
         site_name = site.get("name", "未知站点")
-        task_cols = [{
-            "component": "VCol", "props": {"cols": 12, "md": 4},
-            "content": [{"component": "VSwitch", "props": {
-                "model": site_task_key(site, task), "label": task.get("label", task["id"]),
-                "hint": task.get("hint", ""), "density": "compact", "hide-details": "auto"}}],
-        } for task in tasks]
+        task_cols = []
+        for task in tasks:
+            if task.get("task_type") == "claim":
+                # CLAIM 任务渲染下拉选择，默认空=不申领
+                task_cols.append({
+                    "component": "VCol", "props": {"cols": 12, "md": 4},
+                    "content": [{"component": "VSelect", "props": {
+                        "model": claim_task_key(site, task), "label": task.get("label", task["id"]),
+                        "hint": task.get("hint", ""), "density": "compact", "hide-details": "auto",
+                        "items": task.get("claim_options", []), "itemTitle": "label", "itemValue": "id",
+                        "clearable": True, "placeholder": "不申领",
+                    }}],
+                })
+            else:
+                task_cols.append({
+                    "component": "VCol", "props": {"cols": 12, "md": 4},
+                    "content": [{"component": "VSwitch", "props": {
+                        "model": site_task_key(site, task), "label": task.get("label", task["id"]),
+                        "hint": task.get("hint", ""), "density": "compact", "hide-details": "auto"}}],
+                })
         site_cards.append({
             "component": "VCard",
             "props": {"variant": "outlined", "class": "mb-3"},
@@ -113,9 +127,12 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             ],
         }],
     }]
-    # 预置所有可配置任务开关的默认值，确保前端表单 model 完整
+    # 预置所有可配置任务的默认值，确保前端表单 model 完整
     model = plugin.config.to_dict()
     for site in sites:
         for task in site.get("tasks") or []:
-            model.setdefault(site_task_key(site, task), False)
+            if task.get("task_type") == "claim":
+                model.setdefault(claim_task_key(site, task), "")
+            else:
+                model.setdefault(site_task_key(site, task), False)
     return form, model

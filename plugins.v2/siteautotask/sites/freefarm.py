@@ -40,5 +40,5 @@ class Tasks(BaseTask):
         return self.client.attendance()
 
     @task_info("{client_name}每周任务领取", "领取自由农场每周做种任务", TaskType.CLAIM)
-    def weekly_claim_task(self):
-        return self.client.claim_task("12")
+    def weekly_claim_task(self, task_id=None):
+        return self.client.claim_task(task_id or "12")

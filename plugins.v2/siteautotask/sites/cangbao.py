@@ -69,8 +69,8 @@ class Tasks(BaseTask):
         super().__init__(None)
 
     @task_info("{client_name}任务领取", "领取藏宝阁做种传奇任务", TaskType.CLAIM)
-    def daily_claim_task(self):
-        return self.client.claim_task("12")
+    def daily_claim_task(self, task_id=None):
+        return self.client.claim_task(task_id or "12")
 
     @task_info("{client_name}签到", "执行藏宝阁签到", TaskType.CHECKIN)
     def daily_checkin(self):

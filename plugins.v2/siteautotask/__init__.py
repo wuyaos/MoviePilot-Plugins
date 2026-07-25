@@ -74,6 +74,10 @@ class SiteAutoTask(_PluginBase):
         """读取任务开关（扁平顶层配置 key）。"""
         return bool(self._raw_config.get(task_key, False))
 
+    def claim_task_id(self, key: str) -> str:
+        """读取 CLAIM 任务配置的 task_id，空字符串表示未选择（跳过申领）。"""
+        return str(self._raw_config.get(key, "") or "")
+
     def get_state(self) -> bool:
         return self.config.enabled
 

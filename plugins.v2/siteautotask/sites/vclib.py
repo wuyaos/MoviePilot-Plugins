@@ -157,5 +157,5 @@ class Tasks(BaseTask):
         return TaskResult.ok("\n".join(results))
 
     @task_info("每周魔力值任务", "领取Vc-Lib每周魔力值任务", TaskType.CLAIM)
-    def weekly_bonus_claim(self):
-        return self.client.claim_task("3")
+    def weekly_bonus_claim(self, task_id=None):
+        return self.client.claim_task(task_id or "3")

@@ -252,6 +252,14 @@ class City13Handler(CapabilityHandler):
             f"//div[contains(@class, 'medal-card')]"
             f"[.//div[contains(@class, 'medal-name') and normalize-space(text())='{self.BLESSING_MEDAL_NAME}']]")
 
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "2", "label": "每日做种"},
+            {"id": "6", "label": "每月做种"},
+        ]
+
 
 class Tasks(BaseTask):
     def __init__(self, cookie=None):
@@ -261,13 +269,9 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @task_info("{client_name}每日做种任务", "领取13City每日做种任务", TaskType.CLAIM)
-    def daily_claim_task(self):
-        return self.client.claim_task("2")
-
-    @task_info("{client_name}每月做种任务", "领取13City每月做种任务", TaskType.CLAIM)
-    def monthly_claim_task(self):
-        return self.client.claim_task("6")
+    @task_info("{client_name}任务申领", "申领13City做种任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
 
     @task_info("{client_name}喊话", "执行13City喊话并解析啤酒瓶反馈", TaskType.CHAT)
     def daily_shotbox(self):

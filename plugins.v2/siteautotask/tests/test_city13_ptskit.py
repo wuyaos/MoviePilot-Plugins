@@ -144,6 +144,22 @@ class City13Tests(unittest.TestCase):
         meta = {item["name"]: item["task_type"] for item in tasks.get_registered_tasks()}
         self.assertEqual(meta["buy_blessing"], "medal")
         self.assertEqual(meta["daily_shotbox"], "chat")
+        self.assertEqual(meta["claim"], "claim")
+        # 合并后不再有 daily_claim_task / monthly_claim_task
+        self.assertNotIn("daily_claim_task", meta)
+        self.assertNotIn("monthly_claim_task", meta)
+
+    def test_claim_options(self):
+        opts = city13.City13Handler.get_claim_options()
+        ids = [o["id"] for o in opts]
+        self.assertIn("2", ids)
+        self.assertIn("6", ids)
+        # claim 调用时传入 task_id
+        handler, _ = self.handler({})
+        tasks = city13.Tasks()
+        tasks.client = handler
+        tasks.client.claim_task = lambda tid: f"申领{tid}"
+        self.assertIn("申领6", tasks.claim("6"))
 
 
 PTSKIT_REWARD = """

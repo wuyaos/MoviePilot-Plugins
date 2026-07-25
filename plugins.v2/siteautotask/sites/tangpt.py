@@ -41,5 +41,7 @@ class Tasks(BaseTask):
         return self.client.attendance()
 
     @task_info("{client_name}任务领取", "领取躺平BUG/VIP任务", TaskType.CLAIM)
-    def daily_claim_task(self):
+    def daily_claim_task(self, task_id=None):
+        if task_id:
+            return self.client.claim_task(task_id)
         return "\n".join([self.client.claim_task(tid) for tid in ("3", "4")])
