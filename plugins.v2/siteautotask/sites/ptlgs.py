@@ -21,6 +21,7 @@ from ..base.result import TaskResult
 
 
 class PtlgsHandler(CapabilityHandler):
+    MESSAGE_INTERVAL = 60  # PTLGS多消息间隔秒数
     def __init__(self, site_info: dict):
         super().__init__(site_info)
         self.shoutbox_url = self.site_url + "/shoutbox.php"
@@ -132,8 +133,11 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行PTLGS喊话并解析黑丝娘反馈", TaskType.CHAT)
     def daily_shotbox(self):
+        messages = ["黑丝娘，求工分", "黑丝娘，求上传"]
         results = []
-        for msg in ("黑丝娘 求上传", "黑丝娘 求工分"):
+        for i, msg in enumerate(messages):
+            if i > 0:
+                time.sleep(self.client.message_interval)
             ok, text = self.client.send_messagebox(msg)
             results.append(text)
         return TaskResult.ok("\n".join(results))

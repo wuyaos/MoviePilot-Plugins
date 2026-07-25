@@ -12,6 +12,7 @@ from ..base.decorator import task_info, TaskType
 
 
 class ZmHandler(CapabilityHandler):
+    MESSAGE_INTERVAL = 60  # 织梦多消息间隔秒数（不暴露到配置页）
     @staticmethod
     def get_site_name():
         return "织梦"
@@ -58,11 +59,11 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行织梦喊话并等待奖励反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        messages = ["皮总，求电力", "皮总，求上传"]
+        messages = ["皮总，求上传", "皮总，求电力"]
         results = []
         for i, msg in enumerate(messages):
             if i > 0:
-                time.sleep(self.client.interval_cnt)
+                time.sleep(self.client.message_interval)
             ok, info = self.client.send_messagebox(msg)
             results.append(info)
         return "\n".join(results)

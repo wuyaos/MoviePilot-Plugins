@@ -4,6 +4,7 @@
 真实抽奖/喊话由任务开关控制，本模块测试只使用 mock。
 """
 import re
+import time
 from ..base.base_task import BaseTask
 from ..base.decorator import task_info, TaskType
 from ..base.result import TaskResult
@@ -12,6 +13,7 @@ from ..utils.request import parse_json_response
 
 
 class LongPTHandler(CapabilityHandler):
+    MESSAGE_INTERVAL = 60  # LongPT多消息间隔秒数
     api_base = "https://longpt.org/pt-api/v1"
 
     @staticmethod
@@ -88,8 +90,14 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行 LongPT 喊话并获取反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        ok, message = self.client.send_messagebox("求上传")
-        return TaskResult.ok(message) if ok else TaskResult.fail(message)
+        messages = ["龙宝，求上传", "龙宝，求魔力"]
+        results = []
+        for i, msg in enumerate(messages):
+            if i > 0:
+                time.sleep(self.client.message_interval)
+            ok, text = self.client.send_messagebox(msg)
+            results.append(text)
+        return TaskResult.ok("\n".join(results))
 
     @task_info("{client_name}每日抽奖", "参加 LongPT 每日抽奖", TaskType.LOTTERY)
     def daily_lottery(self):

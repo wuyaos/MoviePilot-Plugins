@@ -33,20 +33,12 @@ for name, module in (("app", app), ("app.core", core), ("app.core.config", confi
                      ("app.helper", helper), ("app.helper.browser", helper_browser)):
     sys.modules[name] = module
 
-load("siteautotask.base.result", ROOT / "base/result.py")
-load("siteautotask.base.decorator", ROOT / "base/decorator.py")
-load("siteautotask.utils.request", ROOT / "utils/request.py")
-load("siteautotask.utils.content_filter", ROOT / "utils/content_filter.py")
-handler_base = types.ModuleType("siteautotask.base.site_handler")
-handler_base.ISiteHandler = object
-sys.modules["siteautotask.base.site_handler"] = handler_base
-cap = types.ModuleType("siteautotask.sites.capabilities")
-
 
 class CapabilityHandler:
     def __init__(self, info):
         self.site_info = info
-        self.interval_cnt = int(info.get('interval_cnt', 2))
+        self.interval_cnt = int(info.get('interval_cnt', 5))
+        self.message_interval = getattr(type(self), "MESSAGE_INTERVAL", None) or self.interval_cnt
         self.feedback_timeout = int(info.get('feedback_timeout', 5))
         def _no_wait(): pass
         self.wait_feedback = _no_wait
@@ -56,7 +48,6 @@ class CapabilityHandler:
         self.session = info.get("session", Mock())
         self._last_message_result = None
         self._blessing_status = {}
-        self.feedback_timeout = int(info.get("feedback_timeout", 5))
 
     def _send_get_request(self, url, params=None, rt_method=None):
         resp = self.session.get(url, params=params)
@@ -72,24 +63,18 @@ class CapabilityHandler:
     def attendance(self):
         return "签到成功"
 
-    def get_message_list(self):
-        return self.site_info.get("message_list", [])
-
-    def set_message_read(self, message_id):
-        return None
-
     def send_messagebox(self, message=None, callback=None):
-        # 模拟 groupchatzone 父类发送：走 GET，返回 (True, 解析文本)
         resp = self.session.get(self.site_url + "/shoutbox.php", params={"shbox_text": message})
         text = callback(resp) if callback else resp.text
         self._last_message_result = text
         return True, text
 
 
+cap = load("siteautotask.sites.capabilities", ROOT / "sites/capabilities.py")
 cap.CapabilityHandler = CapabilityHandler
 sys.modules["siteautotask.sites.capabilities"] = cap
+
 ptlgs = load("siteautotask.sites.ptlgs", ROOT / "sites/ptlgs.py")
-vicomo = load("siteautotask.sites.vicomo", ROOT / "sites/vicomo.py")
 
 
 class Response:
@@ -149,44 +134,6 @@ class PtlgsTests(unittest.TestCase):
         tasks = ptlgs.Tasks()
         tasks.client = handler
         meta = {item["name"]: item["task_type"] for item in tasks.get_registered_tasks()}
-        self.assertEqual(meta["daily_shotbox"], "chat")
-
-
-VICOMO_MESSAGES = [
-    {"id": "1", "topic": "第一条"},
-    {"id": "2", "topic": "系统：感谢 @wuyaos 的求象草，获得象草+10"},
-]
-
-
-class VicomoTests(unittest.TestCase):
-    def handler(self, info):
-        session = Mock()
-        session.get.return_value = Response(info.get("html", "<html></html>"))
-        session.post.return_value = Response(info.get("boss_html", "<html></html>"))
-        info = dict(info)
-        info["session"] = session
-        info.setdefault("url", "https://ptvicomo.net")
-        info.setdefault("name", "象站")
-        info.setdefault("domain", "ptvicomo.net")
-        info.setdefault("username", "wuyaos")
-        info.setdefault("message_list", VICOMO_MESSAGES)
-        return vicomo.VicomoHandler(info), session
-
-    def test_match_and_message_feedback(self):
-        handler, _ = self.handler({})
-        self.assertTrue(handler.match())
-        ok, msg = handler.send_messagebox("小象求象草")
-        self.assertTrue(ok)
-        self.assertIn("象草", msg)
-        feedback = handler.get_feedback("小象求象草")
-        self.assertEqual(feedback["rewards"][0]["type"], "象草")
-
-    def test_task_metadata(self):
-        handler, _ = self.handler({})
-        tasks = vicomo.Tasks()
-        tasks.client = handler
-        meta = {item["name"]: item["task_type"] for item in tasks.get_registered_tasks()}
-        self.assertIn("daily_vs_boss", meta)
         self.assertEqual(meta["daily_shotbox"], "chat")
 
 

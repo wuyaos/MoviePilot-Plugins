@@ -4,6 +4,7 @@ groupchatzone 独有站点，喊话反馈解析型。
 - 发送后从 shoutbox 解析，匹配「【{username}的女友】」格式反馈
 """
 from typing import Optional, Tuple
+import time
 from lxml import etree
 from app.log import logger
 
@@ -14,6 +15,7 @@ from ..base.result import TaskResult
 
 
 class MomentHandler(CapabilityHandler):
+    MESSAGE_INTERVAL = 120  # Moment多消息间隔秒数
     def __init__(self, site_info: dict):
         super().__init__(site_info)
         self.shoutbox_url = self.site_url + "/shoutbox.php"
@@ -83,5 +85,11 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行Moment喊话并解析女友反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        ok, msg = self.client.send_messagebox("求上传")
-        return TaskResult.ok(msg) if ok else TaskResult.fail(msg)
+        messages = ["茄子", "保一条"]
+        results = []
+        for i, msg in enumerate(messages):
+            if i > 0:
+                time.sleep(self.client.message_interval)
+            ok, msg_text = self.client.send_messagebox(msg)
+            results.append(msg_text)
+        return TaskResult.ok("\n".join(results))

@@ -16,6 +16,7 @@ from ..base.result import TaskResult
 
 
 class DubheHandler(CapabilityHandler):
+    MESSAGE_INTERVAL = 60  # 天枢多消息间隔秒数
     def __init__(self, site_info: dict):
         super().__init__(site_info)
         self.shoutbox_url = self.site_url + "/shoutbox.php"
@@ -96,10 +97,11 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行天枢喊话并解析反馈", TaskType.CHAT)
     def daily_shotbox(self):
+        messages = ["天枢娘，求魔力", "天枢娘，求上传"]
         results = []
-        for i, msg in enumerate(("求上传", "求魔力")):
+        for i, msg in enumerate(messages):
             if i > 0:
-                time.sleep(self.client.interval_cnt)
+                time.sleep(self.client.message_interval)
             ok, text = self.client.send_messagebox(msg)
             results.append(text)
         return TaskResult.ok("\n".join(results))

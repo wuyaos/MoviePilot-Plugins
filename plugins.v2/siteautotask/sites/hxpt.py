@@ -98,5 +98,5 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行好学喊话并解析火花反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        ok, msg = self.client.send_messagebox("求火花")
+        ok, msg = self.client.send_messagebox("好好学习天天向上")
         return TaskResult.ok(msg) if ok else TaskResult.fail(msg)

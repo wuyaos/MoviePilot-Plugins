@@ -1,5 +1,6 @@
 """藏宝阁站点适配。"""
 import re
+import time
 from lxml import etree
 from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask
@@ -8,6 +9,7 @@ from ..base.result import TaskResult
 
 
 class CangbaoHandler(CapabilityHandler):
+    MESSAGE_INTERVAL = 60  # 藏宝阁多消息间隔秒数
     @staticmethod
     def get_site_name():
         return "藏宝阁"
@@ -76,5 +78,11 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行藏宝阁喊话并获取反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        ok, msg = self.client.send_messagebox("求上传")
-        return TaskResult.ok(msg) if ok else TaskResult.fail(msg)
+        messages = ["阁主，求上传", "阁主，求魔力"]
+        results = []
+        for i, msg in enumerate(messages):
+            if i > 0:
+                time.sleep(self.client.message_interval)
+            ok, msg_text = self.client.send_messagebox(msg)
+            results.append(msg_text)
+        return TaskResult.ok("\n".join(results))

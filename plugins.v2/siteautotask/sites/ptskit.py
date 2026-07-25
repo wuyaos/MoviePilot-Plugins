@@ -107,5 +107,5 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行Ptskit喊话并解析魔力值反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        ok, msg = self.client.send_messagebox("求魔力值")
+        ok, msg = self.client.send_messagebox("「短剧第一站」")
         return TaskResult.ok(msg) if ok else TaskResult.fail(msg)

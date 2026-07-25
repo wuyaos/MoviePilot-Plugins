@@ -18,6 +18,7 @@ from app.utils.string import StringUtils
 from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask
 from ..base.decorator import task_info, TaskType
+from ..base.result import TaskResult
 from ..utils.request import parse_json_response
 
 
@@ -148,14 +149,8 @@ class Tasks(BaseTask):
 
     @task_info(label="{client_name}喊话", hint="执行青蛙站点的喊话任务", task_type=TaskType.CHAT)
     def daily_shotbox(self):
-        messages = ["蛙总，求上传", "蛙总，求下载"]
-        results = []
-        for i, msg in enumerate(messages):
-            if i > 0:
-                time.sleep(self.client.interval_cnt)
-            ok, info = self.client.send_messagebox(msg)
-            results.append(info)
-        return "\n".join(results)
+        ok, msg = self.client.send_messagebox("蛙总求上传")
+        return TaskResult.ok(msg) if ok else TaskResult.fail(msg)
 
     @task_info(label="{client_name}签到", hint="执行青蛙站点签到", task_type=TaskType.CHECKIN)
     def daily_checkin(self):

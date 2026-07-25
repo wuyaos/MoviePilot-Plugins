@@ -138,10 +138,12 @@ class CsptTests(unittest.TestCase):
 
 
 class CyanbugTests(unittest.TestCase):
-    def test_match_by_domain_only(self):
-        # 名称同为"大青虫"但 domain 不同，必须不误匹配 13city
+    def test_match_by_name_or_domain(self):
+        # Cyanbug 名为“大青虫”，domain 或 name 命中即可匹配
+        self.assertTrue(cyanbug.CyanbugHandler(make_info(name="大青虫", domain="cyanbug.net")).match())
         self.assertTrue(cyanbug.CyanbugHandler(make_info(domain="cyanbug.net")).match())
-        self.assertFalse(cyanbug.CyanbugHandler(make_info(name="大青虫", domain="13city.org")).match())
+        # domain 为 13city 且 name 不含“大青虫”时不匹配
+        self.assertFalse(cyanbug.CyanbugHandler(make_info(name="13City", domain="13city.org")).match())
 
     def test_shotbox_sends_multiple(self):
         h = cyanbug.CyanbugHandler(make_info(domain="cyanbug.net"))

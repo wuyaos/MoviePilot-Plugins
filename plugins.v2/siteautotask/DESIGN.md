@@ -37,7 +37,7 @@ plugins.v2/siteautotask/
 │   ├── city13.py            # 13City
 │   ├── ptskit.py            # Ptskit
 │   ├── ptlgs.py             # PTLGS
-│   ├── vicomo.py            # Vicomo
+│   ├── vicomo.py            # （已移除：象站关站）
 │   ├── nexusphp.py          # 通用 NexusPHP 兜底 Handler
 │   ├── ...                  # 其余站点（car/crabpt/cspt/cyanbug/freefarm/lajidui/lemonhd/lgs/novahd/vclib/tangpt 等）
 │   ├── hxpt.py              # 好学（groupchatzone 独有）
@@ -268,7 +268,7 @@ VCard「最近运行」
 |---|---|---|---|
 | 青蛙 | groupchatzone（带 buy_daily_bonus） | ptautotask（daily_exchange） | buy_daily_bonus 改用动态 getItems |
 | 织梦 | groupchatzone（邮件时间+反馈） | ptautotask（medal_bonus） | 保留独立调度 |
-| 藏宝阁/LongPT/13City/Ptskit/Ptlgs/Vicomo | groupchatzone 的反馈 + ptautotask 的任务 | 合并 |
+| 藏宝阁/LongPT/13City/Ptskit/Ptlgs | groupchatzone 的反馈 + ptautotask 的任务 | 合并 |
 
 ### 7.2 ptautotask 独有站点迁移（按新契约重写）
 蟹黄堡/柠檬/自由农场/垃圾堆/躺平/财神/Car/Crabpt/Cspt/Cyanbug/Lgs/NovaHD/Vclib/Tangpt/City13

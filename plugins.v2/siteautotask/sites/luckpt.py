@@ -101,5 +101,5 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行LuckPT喊话并解析许愿池反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        ok, msg = self.client.send_messagebox("求幸运")
+        ok, msg = self.client.send_messagebox("幸运池祈福")
         return TaskResult.ok(msg) if ok else TaskResult.fail(msg)

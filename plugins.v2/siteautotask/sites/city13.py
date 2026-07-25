@@ -45,7 +45,7 @@ class City13Handler(CapabilityHandler):
         return "13city.org"
 
     def match(self) -> bool:
-        return "13city" in self.site_name.lower() or "大青虫" in self.site_name or "13city.org" in self.domain
+        return "13city" in self.site_name.lower() or "13city.org" in self.domain
 
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:
         if not message:
@@ -271,7 +271,7 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行13City喊话并解析啤酒瓶反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        ok, msg = self.client.send_messagebox("求啤酒瓶")
+        ok, msg = self.client.send_messagebox("掌管啤酒瓶的神请赐予我啤酒瓶")
         return TaskResult.ok(msg) if ok else TaskResult.fail(msg)
 
     @task_info("诸神赐福勋章", "自动购买13City诸神赐福勋章", TaskType.MEDAL)

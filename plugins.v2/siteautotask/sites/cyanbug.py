@@ -1,4 +1,4 @@
-"""大青虫/象站(Cyanbug)站点适配。
+"""大青虫(Cyanbug)站点适配。
 
 ptautotask 独有站点，标准 NexusPHP。
 注意：上游 site_name 为 "大青虫"，但 13City 也叫大青虫；
@@ -23,8 +23,7 @@ class CyanbugHandler(CapabilityHandler):
         return "cyanbug.net"
 
     def match(self) -> bool:
-        # 仅按 domain 匹配，避免与 13City（也叫大青虫）冲突
-        return "cyanbug" in self.domain
+        return "大青虫" in self.site_name or "cyanbug" in self.domain
 
     def get_feedback(self, message=None):
         if not self._last_message_result:

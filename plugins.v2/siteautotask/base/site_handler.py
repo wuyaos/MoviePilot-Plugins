@@ -25,6 +25,8 @@ class ISiteHandler(metaclass=ABCMeta):
         self.domain = site_info.get("domain") or StringUtils.get_url_domain(self.site_url)
         self.feedback_timeout = int(site_info.get("feedback_timeout", 5))
         self.interval_cnt = int(site_info.get("interval_cnt", 5))
+        # 站点特例：MESSAGE_INTERVAL 类属性可覆盖全局间隔（不暴露到配置页）
+        self.message_interval = getattr(type(self), "MESSAGE_INTERVAL", None) or self.interval_cnt
         self.session = build_session(self.site_cookie, self.ua, self.use_proxy, referer=self.site_url)
         self._last_message_result = None
 
