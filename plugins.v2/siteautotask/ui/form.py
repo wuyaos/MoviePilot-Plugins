@@ -37,9 +37,9 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
 
         site_cards.append({
             "component": "VCard",
-            "props": {"variant": "outlined", "class": "mb-3", "color": "primary"},
+            "props": {"variant": "outlined", "class": "mb-3"},
             "content": [
-                {"component": "VCardTitle", "props": {"class": "text-subtitle-1 py-2", "color": "primary"}, "text": site_name},
+                {"component": "VCardTitle", "props": {"class": "text-subtitle-1 font-weight-bold text-primary py-2"}, "text": site_name},
                 {"component": "VDivider"},
                 {"component": "VCardText", "content": [{
                     "component": "VRow",
@@ -48,7 +48,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             ],
         })
 
-    # 全局开关：全部放一起
+    # 全局开关：一行四个
     switches = [
         ("enabled", "启用插件"),
         ("notify", "开启通知"),
@@ -59,17 +59,17 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
     ]
     switch_cols = [{
         "component": "VCol",
-        "props": {"cols": 12, "md": 2},
-        "content": [{"component": "VSwitch", "props": {"model": m, "label": l, "density": "compact", "hide-details": "auto"}}],
+        "props": {"cols": 12, "md": 3},
+        "content": [{"component": "VSwitch", "props": {"model": m, "label": l, "hide-details": "auto", "density": "comfortable"}}],
     } for m, l in switches]
 
-    # 文本类配置
+    # 文本类配置：增加间距，去掉 compact
     text_cols = [
-        {"component": "VCol", "props": {"cols": 12, "md": 3}, "content": [{"component": "VTextField", "props": {"model": "cron", "label": "定时规则", "hint": "例如：30 9,21 * * *", "density": "compact", "hide-details": "auto"}}]},
-        {"component": "VCol", "props": {"cols": 12, "md": 2}, "content": [{"component": "VTextField", "props": {"model": "history_days", "label": "历史保留天数", "type": "number", "density": "compact", "hide-details": "auto"}}]},
-        {"component": "VCol", "props": {"cols": 12, "md": 2}, "content": [{"component": "VTextField", "props": {"model": "feedback_timeout", "label": "反馈等待秒数", "type": "number", "density": "compact", "hide-details": "auto"}}]},
-        {"component": "VCol", "props": {"cols": 12, "md": 2}, "content": [{"component": "VTextField", "props": {"model": "retry_count", "label": "重试次数", "type": "number", "density": "compact", "hide-details": "auto"}}]},
-        {"component": "VCol", "props": {"cols": 12, "md": 3}, "content": [{"component": "VTextField", "props": {"model": "retry_interval", "label": "重试间隔(分钟)", "type": "number", "density": "compact", "hide-details": "auto"}}]},
+        {"component": "VCol", "props": {"cols": 12, "md": 3}, "content": [{"component": "VTextField", "props": {"model": "cron", "label": "定时规则", "hint": "例如：30 9,21 * * *", "hide-details": "auto"}}]},
+        {"component": "VCol", "props": {"cols": 12, "md": 2}, "content": [{"component": "VTextField", "props": {"model": "history_days", "label": "历史保留天数", "type": "number", "hide-details": "auto"}}]},
+        {"component": "VCol", "props": {"cols": 12, "md": 2}, "content": [{"component": "VTextField", "props": {"model": "feedback_timeout", "label": "反馈等待秒数", "type": "number", "hide-details": "auto"}}]},
+        {"component": "VCol", "props": {"cols": 12, "md": 2}, "content": [{"component": "VTextField", "props": {"model": "retry_count", "label": "重试次数", "type": "number", "hide-details": "auto"}}]},
+        {"component": "VCol", "props": {"cols": 12, "md": 3}, "content": [{"component": "VTextField", "props": {"model": "retry_interval", "label": "重试间隔(分钟)", "type": "number", "hide-details": "auto"}}]},
     ]
 
     site_section_content = site_cards if site_cards else [{"component": "div", "props": {"class": "text-medium-emphasis pa-3"}, "text": "请先在「启用站点」选择站点"}]
@@ -83,10 +83,10 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
                 {"component": "VCardTitle", "props": {"class": "text-subtitle-1 py-2"}, "text": "全局设置"},
                 {"component": "VDivider"},
                 {"component": "VCardText", "content": [
-                    {"component": "VRow", "content": switch_cols},
-                    {"component": "VRow", "content": text_cols},
+                    {"component": "VRow", "props": {"class": "mb-2"}, "content": switch_cols},
+                    {"component": "VRow", "props": {"class": "mb-2"}, "content": text_cols},
                     {"component": "VRow", "content": [
-                        {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VSelect", "props": {"model": "chat_sites", "label": "启用站点", "multiple": True, "chips": True, "items": sites, "itemTitle": "name", "itemValue": "id", "density": "compact", "hide-details": "auto"}}]},
+                        {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VSelect", "props": {"model": "chat_sites", "label": "启用站点", "multiple": True, "chips": True, "items": sites, "itemTitle": "name", "itemValue": "id", "hide-details": "auto"}}]},
                     ]},
                 ]},
             ],
