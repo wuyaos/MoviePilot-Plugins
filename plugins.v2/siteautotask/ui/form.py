@@ -73,7 +73,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
                 {"component": "VCardTitle", "props": {"class": "text-subtitle-1 font-weight-bold text-primary pa-2"}, "text": site_name},
                 {"component": "VDivider"},
                 {"component": "VCardText", "content": [{
-                    "component": "VRow",
+                    "component": "VRow", "props": {"class": "mb-2"},
                     "content": task_cols or [{"component": "div", "props": {"class": "text-medium-emphasis pa-2"}, "text": "暂无任务"}],
                 }]},
             ],
