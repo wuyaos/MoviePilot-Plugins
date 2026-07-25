@@ -160,7 +160,12 @@ class SiteAutoTask(_PluginBase):
         return result
 
     def tasks_for(self, handler):
-        entry = next((x for x in self._site_classes if x.get("handler_cls") is type(handler)), None)
+        # 注意：MoviePilot 可能从不同路径（源目录/备份目录）加载插件模块，
+        # 导致 type(handler) 与 _site_classes 里的 handler_cls 是不同模块实例，
+        # 不能用 `is` 身份比较，改用类名比较。
+        handler_name = type(handler).__name__
+        entry = next((x for x in self._site_classes
+                      if x.get("handler_cls") and x["handler_cls"].__name__ == handler_name), None)
         if not entry or not entry.get("tasks_cls"):
             return []
         tasks = entry["tasks_cls"](cookie=None)

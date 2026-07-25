@@ -35,7 +35,6 @@
 | 站点 | 文件 | 任务 |
 |---|---|---|
 | 蟹黄堡 | crabpt.py | 签到/保种魔王/力争全勤 |
-| 柠檬 | lemonhd.py | 签到/每日神游 |
 | 躺平 | tangpt.py | 签到/BUG·VIP任务 |
 | 财神(CARPT) | car.py | 签到/天天快乐 |
 | 财神(Cspt) | cspt.py | 签到/西财神 |

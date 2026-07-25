@@ -39,7 +39,7 @@ plugins.v2/siteautotask/
 │   ├── ptlgs.py             # PTLGS
 │   ├── vicomo.py            # （已移除：象站关站）
 │   ├── nexusphp.py          # 通用 NexusPHP 兜底 Handler
-│   ├── ...                  # 其余站点（car/crabpt/cspt/cyanbug/freefarm/lajidui/lemonhd/lgs/novahd/vclib/tangpt 等）
+│   ├── ...                  # 其余站点（car/crabpt/cspt/cyanbug/freefarm/lajidui/lgs/novahd/vclib/tangpt 等）
 │   ├── hxpt.py              # 好学（groupchatzone 独有）
 │   ├── dubhe.py             # 天枢（groupchatzone 独有）
 │   ├── moment.py            # Moment
@@ -272,7 +272,7 @@ VCard「最近运行」
 | 藏宝阁/LongPT/13City/Ptskit/Ptlgs | groupchatzone 的反馈 + ptautotask 的任务 | 合并 |
 
 ### 7.2 ptautotask 独有站点迁移（按新契约重写）
-蟹黄堡/柠檬/自由农场/垃圾堆/躺平/财神/Car/Crabpt/Cspt/Cyanbug/Lgs/NovaHD/Vclib/Tangpt/City13
+蟹黄堡/自由农场/垃圾堆/躺平/财神/Car/Crabpt/Cspt/Cyanbug/Lgs/NovaHD/Vclib/Tangpt/City13
 
 ### 7.3 groupchatzone 独有站点迁移
 天枢/好学/Moment/LuckPT/Dubhe/大青虫（含 get_user_privileges）

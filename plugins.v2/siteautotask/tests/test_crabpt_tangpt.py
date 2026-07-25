@@ -67,7 +67,6 @@ class CapabilityHandler:
 cap.CapabilityHandler = CapabilityHandler
 sys.modules["siteautotask.sites.capabilities"] = cap
 crabpt = load("siteautotask.sites.crabpt", ROOT / "sites/crabpt.py")
-lemonhd = load("siteautotask.sites.lemonhd", ROOT / "sites/lemonhd.py")
 tangpt = load("siteautotask.sites.tangpt", ROOT / "sites/tangpt.py")
 
 
@@ -117,35 +116,6 @@ class CrabptTests(unittest.TestCase):
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
         self.assertEqual(meta["claim"], "claim")
         self.assertEqual(meta["claim"], "claim")
-        self.assertEqual(meta["daily_checkin"], "checkin")
-
-
-class LemonHDTests(unittest.TestCase):
-    def test_match(self):
-        h = lemonhd.LemonHDHandler(make_info(name="柠檬", domain="lemonhd.club"))
-        self.assertTrue(h.match())
-
-    def test_lottery_success(self):
-        info = make_info(name="柠檬", domain="lemonhd.club", url="https://lemonhd.club")
-        info["session"].post.return_value = Response(text="<html><table><tr><td>恭喜获得 100魔力</td></tr></table></html>")
-        h = lemonhd.LemonHDHandler(info)
-        ok, msg = h.daily_lottery()
-        self.assertTrue(ok)
-        self.assertIn("魔力", msg)
-
-    def test_lottery_empty_response(self):
-        info = make_info(name="柠檬", domain="lemonhd.club", url="https://lemonhd.club")
-        info["session"].post.return_value = Response(text="<html></html>")
-        h = lemonhd.LemonHDHandler(info)
-        ok, msg = h.daily_lottery()
-        self.assertTrue(ok)
-
-    def test_task_metadata(self):
-        h = lemonhd.LemonHDHandler(make_info(name="柠檬", domain="lemonhd.club"))
-        tasks = lemonhd.Tasks()
-        tasks.client = h
-        meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
-        self.assertEqual(meta["daily_lottery"], "lottery")
         self.assertEqual(meta["daily_checkin"], "checkin")
 
 
