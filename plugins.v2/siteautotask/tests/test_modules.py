@@ -63,6 +63,19 @@ class ModuleTests(unittest.TestCase):
         self.assertIn("task_1_chat", text)
         self.assertNotIn("task_switches.", text)
         self.assertIn("测试站", text)
+        self.assertIn("VExpansionPanel", text)
+        self.assertIn("retry_count", text)
+        self.assertIn("retry_notify", text)
+
+    def test_page_has_overview_and_history(self):
+        page = PAGE.build_page(FakePlugin())
+        text = repr(page)
+        self.assertIn("运行统计概览", text)
+        self.assertIn("VExpansionPanel", text)
+        self.assertIn("执行历史记录", text)
+        self.assertIn("共 1 次运行", text)
+        self.assertIn("⬆️ 10G", text)
+        self.assertIn("✅", text)
 
     def test_page_contains_feedback_reward(self):
         page = PAGE.build_page(FakePlugin())
