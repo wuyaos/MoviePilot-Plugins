@@ -92,8 +92,13 @@ class QingwaHandler(CapabilityHandler):
             if result.get("success"):
                 logger.info(f"青蛙：每日福利购买成功：{result.get('msg', '')}")
                 return True, result.get("msg", "购买成功")
-            logger.warning(f"青蛙：每日福利购买失败：{result.get('msg', '')}")
-            return False, result.get("msg", "购买失败")
+            msg = result.get("msg", "购买失败")
+            # 幂等成功：今日已购买（超过限购数量）
+            if any(kw in msg for kw in ("超过限购", "已购买", "已兑换")):
+                logger.info(f"青蛙：每日福利今日已购买：{msg}")
+                return True, f"今日已购买：{msg}"
+            logger.warning(f"青蛙：每日福利购买失败：{msg}")
+            return False, msg
         except Exception as e:
             logger.error(f"青蛙：每日福利购买异常：{e}")
             return False, f"购买异常: {e}"
