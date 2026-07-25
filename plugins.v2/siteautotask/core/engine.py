@@ -164,6 +164,14 @@ class TaskEngine:
 
     @staticmethod
     def normalize_result(raw):
+        # TaskResult（鸭子类型：MoviePilot 跨路径加载时 isinstance 可能失败）
+        if hasattr(raw, "success") and hasattr(raw, "message") and not isinstance(raw, (tuple, dict)):
+            return TaskResult(
+                bool(raw.success),
+                str(raw.message) if raw.message is not None else "",
+                getattr(raw, "feedback", None),
+                getattr(raw, "rewards", None) or [],
+            )
         if isinstance(raw, TaskResult):
             return raw
         if isinstance(raw, tuple) and len(raw) >= 2:
