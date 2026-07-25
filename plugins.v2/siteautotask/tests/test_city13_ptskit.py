@@ -45,6 +45,10 @@ cap = types.ModuleType("siteautotask.sites.capabilities")
 class CapabilityHandler:
     def __init__(self, info):
         self.site_info = info
+        self.interval_cnt = int(info.get('interval_cnt', 2))
+        self.feedback_timeout = int(info.get('feedback_timeout', 5))
+        def _no_wait(): pass
+        self.wait_feedback = _no_wait
         self.site_url = info.get("url", "").strip().rstrip("/")
         self.site_name = info.get("name", "").strip()
         self.domain = info.get("domain", "")

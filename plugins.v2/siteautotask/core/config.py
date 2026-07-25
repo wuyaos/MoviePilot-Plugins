@@ -13,6 +13,7 @@ class PluginConfig:
     use_proxy: bool = False
     get_feedback: bool = True
     feedback_timeout: int = 5
+    interval_cnt: int = 2
     retry_count: int = 2
     retry_interval: int = 10
     retry_notify: bool = False
@@ -27,6 +28,7 @@ class PluginConfig:
                 values[name] = raw[name]
         values["history_days"] = int(values.get("history_days", 30))
         values["feedback_timeout"] = int(values.get("feedback_timeout", 5))
+        values["interval_cnt"] = int(values.get("interval_cnt", 2))
         values["retry_count"] = int(values.get("retry_count", 2))
         values["retry_interval"] = int(values.get("retry_interval", 10))
         values["chat_sites"] = list(values.get("chat_sites") or [])
@@ -37,7 +39,7 @@ class PluginConfig:
             "enabled": self.enabled, "cron": self.cron, "onlyonce": self.onlyonce,
             "notify": self.notify, "history_days": self.history_days,
             "use_proxy": self.use_proxy, "get_feedback": self.get_feedback,
-            "feedback_timeout": self.feedback_timeout, "retry_count": self.retry_count,
-            "retry_interval": self.retry_interval, "retry_notify": self.retry_notify,
-            "chat_sites": self.chat_sites,
+            "feedback_timeout": self.feedback_timeout, "interval_cnt": self.interval_cnt,
+            "retry_count": self.retry_count, "retry_interval": self.retry_interval,
+            "retry_notify": self.retry_notify, "chat_sites": self.chat_sites,
         }

@@ -73,7 +73,8 @@ class City13Handler(CapabilityHandler):
                 logger.warning(f"13City：喊话请求已返回，但群聊区未发现用户消息：{username} {message}")
                 return False, "13City群聊区未显示发送的喊话消息"
 
-            # 5. 解析反馈（掌管啤酒瓶的神对 @username 的回复）
+            # 5. 等待系统反馈生成后解析（掌管啤酒瓶的神对 @username 的回复）
+            self.wait_feedback()
             feedback = self._poll_feedback(username)
             result = (True, feedback) if feedback else (True, "消息已发送")
             self._last_message_result = result[1] if result[0] else None

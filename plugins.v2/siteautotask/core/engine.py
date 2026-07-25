@@ -62,6 +62,7 @@ class TaskEngine:
         info = dict(site)
         info["use_proxy"] = self.plugin.config.use_proxy
         info["feedback_timeout"] = self.plugin.config.feedback_timeout
+        info["interval_cnt"] = self.plugin.config.interval_cnt
         try:
             return get_site_handler(info, self.plugin.handler_classes)
         except Exception as e:

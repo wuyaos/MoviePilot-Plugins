@@ -45,6 +45,7 @@ class VicomoHandler(CapabilityHandler):
             ok, _ = super().send_messagebox(message, lambda response: "")
             if not ok:
                 return False, "发送消息失败"
+            self.wait_feedback()
             message_list = self.client_message_list()
             if not message_list:
                 return False, "获取消息列表失败"

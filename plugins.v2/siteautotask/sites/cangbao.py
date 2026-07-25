@@ -28,6 +28,7 @@ class CangbaoHandler(CapabilityHandler):
         username = self.get_username()
         if not username:
             return result
+        self.wait_feedback()
         feedback = self._poll_feedback(username, message)
         if feedback:
             self._last_message_result = feedback

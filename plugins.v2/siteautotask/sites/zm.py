@@ -3,6 +3,7 @@
 织梦的奖励反馈依赖邮件/群聊区，单独模块化，避免污染通用 NexusPHP 执行流程。
 """
 import re
+import time
 from datetime import datetime
 from lxml import etree
 from .capabilities import CapabilityHandler
@@ -57,6 +58,11 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行织梦喊话并等待奖励反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        ok1, msg1 = self.client.send_messagebox("皮总，求电力")
-        ok2, msg2 = self.client.send_messagebox("皮总，求上传")
-        return "\n".join([msg1, msg2])
+        messages = ["皮总，求电力", "皮总，求上传"]
+        results = []
+        for i, msg in enumerate(messages):
+            if i > 0:
+                time.sleep(self.client.interval_cnt)
+            ok, info = self.client.send_messagebox(msg)
+            results.append(info)
+        return "\n".join(results)

@@ -5,6 +5,7 @@ groupchatzone 独有站点，喊话反馈解析型。
 - 验证回复与请求类型匹配（求魔力→魔力值，求上传→上传量）
 """
 from typing import Dict, Optional, Tuple
+import time
 from lxml import etree
 from app.log import logger
 
@@ -36,6 +37,7 @@ class DubheHandler(CapabilityHandler):
         try:
             ok, text = super().send_messagebox(message, callback)
             if ok:
+                self.wait_feedback()
                 self._poll_feedback(message)
             return ok, text
         except Exception as e:
@@ -95,7 +97,9 @@ class Tasks(BaseTask):
     @task_info("{client_name}喊话", "执行天枢喊话并解析反馈", TaskType.CHAT)
     def daily_shotbox(self):
         results = []
-        for msg in ("求上传", "求魔力"):
+        for i, msg in enumerate(("求上传", "求魔力")):
+            if i > 0:
+                time.sleep(self.client.interval_cnt)
             ok, text = self.client.send_messagebox(msg)
             results.append(text)
         return TaskResult.ok("\n".join(results))

@@ -39,6 +39,7 @@ class MomentHandler(CapabilityHandler):
             username = self.get_username()
             if not username:
                 return True, text
+            self.wait_feedback()
             feedback = self._poll_feedback(username)
             if feedback:
                 self._last_message_result = feedback

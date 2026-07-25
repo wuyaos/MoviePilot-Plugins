@@ -60,8 +60,8 @@ class PtlgsHandler(CapabilityHandler):
     def _poll_feedback(self, username: str, message: str = None) -> Optional[str]:
         """参考 groupchatzone：最多轮询 5 次，间隔受 feedback_timeout 影响。"""
         reward_keyword = self._get_reward_keyword(message)
-        # feedback_timeout 控制总等待预算，分配到 5 次尝试
-        interval = max(1, min(self.feedback_timeout, 10)) / 5 * 3
+        # feedback_timeout 控制总等待预算，平均分配到 5 次轮询
+        interval = max(1, self.feedback_timeout) / 5
         for attempt in range(5):
             if attempt > 0:
                 time.sleep(interval)

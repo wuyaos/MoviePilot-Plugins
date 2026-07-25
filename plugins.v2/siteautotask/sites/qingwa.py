@@ -8,6 +8,7 @@ groupchatzone 的 QingwaHandler（含 get_feedback + buy_daily_bonus）。
 """
 from typing import Dict, Optional, Tuple
 from urllib.parse import urljoin
+import time
 
 from lxml import etree
 
@@ -149,7 +150,9 @@ class Tasks(BaseTask):
     def daily_shotbox(self):
         messages = ["蛙总，求上传", "蛙总，求下载"]
         results = []
-        for msg in messages:
+        for i, msg in enumerate(messages):
+            if i > 0:
+                time.sleep(self.client.interval_cnt)
             ok, info = self.client.send_messagebox(msg)
             results.append(info)
         return "\n".join(results)

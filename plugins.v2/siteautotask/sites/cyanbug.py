@@ -5,6 +5,8 @@ ptautotask 独有站点，标准 NexusPHP。
 通过 domain (cyanbug.net vs 13city.org) 区分，避免 match 冲突。
 任务：签到、喊话（青虫娘，无特殊反馈解析，走通用 NexusPHP 喊话）。
 """
+import time
+
 from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask
 from ..base.decorator import task_info, TaskType
@@ -43,8 +45,11 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行大青虫喊话（青虫娘）", TaskType.CHAT)
     def daily_shotbox(self):
+        messages = ("青虫娘，求上传", "青虫娘，求魔力", "青虫娘，求下载")
         results = []
-        for msg in ("青虫娘，求上传", "青虫娘，求魔力", "青虫娘，求下载"):
+        for i, msg in enumerate(messages):
+            if i > 0:
+                time.sleep(self.client.interval_cnt)
             ok, text = self.client.send_messagebox(msg)
             results.append(text if ok else f"失败: {text}")
         return TaskResult.ok("\n".join(results))
