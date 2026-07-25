@@ -22,8 +22,8 @@ def _subcard(title, rows):
         "component": "VCard",
         "props": {"variant": "flat", "class": "mb-3", "border": True},
         "content": [
-            {"component": "VCardTitle", "props": {"class": "text-subtitle-2 font-weight-bold py-1 px-3"}, "text": title},
-            {"component": "VCardText", "props": {"class": "px-3 pb-2"}, "content": rows},
+            {"component": "VCardTitle", "props": {"class": "text-subtitle-1 font-weight-bold text-white bg-primary py-1 px-3"}, "text": title},
+            {"component": "VCardText", "props": {"class": "px-3 pb-2 pt-3"}, "content": rows},
         ],
     }
 
@@ -58,11 +58,11 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
 
     # 基础子卡片
     base_card = _subcard("基础", [
-        {"component": "VRow", "props": {"class": "mb-1"}, "content": [
-            _switch("enabled", "启用插件"), _switch("onlyonce", "立即运行一次"),
-            _switch("notify", "开启通知"), _switch("use_proxy", "使用系统代理"),
+        {"component": "VRow", "props": {"class": "mb-2"}, "content": [
+            _switch("enabled", "启用插件", md=3), _switch("onlyonce", "立即运行一次", md=3),
+            _switch("notify", "开启通知", md=3), _switch("use_proxy", "使用系统代理", md=3),
         ]},
-        {"component": "VRow", "props": {"class": "mb-1"}, "content": [
+        {"component": "VRow", "props": {"class": "mb-2"}, "content": [
             _text("cron", "定时规则", md=6, hint="例如：30 9,21 * * *"),
             _text("history_days", "历史保留天数", md=6, type="number"),
         ]},
@@ -75,7 +75,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
 
     # 喊话子卡片
     chat_card = _subcard("喊话", [
-        {"component": "VRow", "props": {"class": "mb-1"}, "content": [_switch("get_feedback", "获取喊话反馈", md=12)]},
+        {"component": "VRow", "props": {"class": "mb-2"}, "content": [_switch("get_feedback", "获取喊话反馈", md=12)]},
         {"component": "VRow", "content": [
             _text("feedback_timeout", "反馈等待秒数", md=6, type="number"),
             _text("interval_cnt", "消息间隔秒数", md=6, type="number"),
@@ -84,10 +84,10 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
 
     # 重试子卡片
     retry_card = _subcard("重试", [
+        {"component": "VRow", "props": {"class": "mb-2"}, "content": [_switch("retry_notify", "重试结果通知", md=12)]},
         {"component": "VRow", "content": [
-            _text("retry_count", "重试次数", md=4, type="number"),
-            _text("retry_interval", "重试间隔(分钟)", md=4, type="number"),
-            _switch("retry_notify", "重试结果通知", md=4),
+            _text("retry_count", "重试次数", md=6, type="number"),
+            _text("retry_interval", "重试间隔(分钟)", md=6, type="number"),
         ]},
     ])
 
