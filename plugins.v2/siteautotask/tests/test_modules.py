@@ -63,9 +63,10 @@ class ModuleTests(unittest.TestCase):
         self.assertIn("task_1_chat", text)
         self.assertNotIn("task_switches.", text)
         self.assertIn("测试站", text)
-        self.assertIn("VExpansionPanel", text)
+        self.assertNotIn("VExpansionPanel", text)
         self.assertIn("retry_count", text)
         self.assertIn("retry_notify", text)
+        self.assertIn("chat_sites", text)
 
     def test_page_has_overview_and_history(self):
         page = PAGE.build_page(FakePlugin())
