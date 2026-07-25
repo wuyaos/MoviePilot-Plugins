@@ -31,12 +31,11 @@ class TaskScheduler:
         self.scheduler = BackgroundScheduler(timezone=settings.TZ)
         # 仅处理动态 Zm/勋章调度；人为“立即运行一次”由入口线程执行。
         self.scheduler.start()
-        # 恢复被重载中断的勋章延迟续购
-        if cfg.enabled and self.plugin.engine:
-            try:
-                self.plugin.engine.resume_pending_medal()
-            except Exception as e:
-                logger.error(f"恢复勋章延迟任务失败：{e}")
+        # 普通重载不承接待执行任务；旧的持久化状态仅在内存中清除，
+        # 避免为清理状态再次保存配置并触发重载。
+        if cfg.medal_pending_time:
+            cfg.medal_pending_time = ""
+            logger.info("插件重载：已取消等待中的勋章续购任务")
 
     @staticmethod
     def _after(seconds):
@@ -50,7 +49,7 @@ class TaskScheduler:
             "id": "siteautotask",
             "name": "站点自动任务",
             "trigger": CronTrigger.from_crontab(str(cfg.cron)),
-            "func": self.plugin.run_once,
+            "func": self.plugin.run_scheduled,
             "kwargs": {},
         })
         if cfg.enabled and cfg.retry_count > 0:
@@ -100,18 +99,18 @@ class TaskScheduler:
         return False
 
     def _compute_zm_next_time(self, cfg):
-        """计算织梦下次执行时间：mail_time + 24h，过期则 now+3s。"""
+        """计算织梦下次执行时间；重载时不补执行过期任务。"""
         tz = pytz.timezone(settings.TZ)
         now = datetime.now(tz=tz)
-        if cfg.zm_mail_time:
-            try:
-                mail_time = datetime.strptime(cfg.zm_mail_time, "%Y-%m-%d %H:%M:%S")
-                if mail_time.tzinfo is None:
-                    mail_time = tz.localize(mail_time)
-                next_time = mail_time + timedelta(hours=24)
-                if next_time <= now:
-                    return now + timedelta(seconds=3)
-                return next_time
-            except Exception as e:
-                logger.error(f"解析织梦邮件时间失败：{e}")
-        return now + timedelta(seconds=3)
+        fallback_time = now + timedelta(hours=24)
+        if not cfg.zm_mail_time:
+            return fallback_time
+        try:
+            mail_time = datetime.strptime(cfg.zm_mail_time, "%Y-%m-%d %H:%M:%S")
+            if mail_time.tzinfo is None:
+                mail_time = tz.localize(mail_time)
+            next_time = mail_time + timedelta(hours=24)
+            return next_time if next_time > now else fallback_time
+        except Exception as e:
+            logger.error(f"解析织梦邮件时间失败：{e}")
+            return fallback_time

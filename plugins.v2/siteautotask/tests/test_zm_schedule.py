@@ -127,7 +127,7 @@ class ZmNextTimeTests(unittest.TestCase):
         plugin.selected_sites.return_value = []
         return SCHEDULER.TaskScheduler(plugin)
 
-    def test_no_mail_time_returns_now_plus_3s(self):
+    def test_no_mail_time_returns_now_plus_24h(self):
         s = self._scheduler()
         cfg = self._cfg("")
         from datetime import datetime
@@ -135,8 +135,7 @@ class ZmNextTimeTests(unittest.TestCase):
         now = datetime.now(tz=pytz.timezone("UTC"))
         nxt = s._compute_zm_next_time(cfg)
         delta = (nxt - now).total_seconds()
-        self.assertGreaterEqual(delta, 2)
-        self.assertLessEqual(delta, 5)
+        self.assertAlmostEqual(delta, 24 * 3600, delta=5)
 
     def test_mail_time_plus_24h(self):
         s = self._scheduler()
@@ -151,18 +150,17 @@ class ZmNextTimeTests(unittest.TestCase):
         # 允许几秒误差
         self.assertAlmostEqual((nxt - expected).total_seconds(), 0, delta=5)
 
-    def test_expired_mail_time_returns_now_plus_3s(self):
+    def test_expired_mail_time_returns_now_plus_24h(self):
         s = self._scheduler()
         import pytz
         tz = pytz.timezone("UTC")
         now = datetime.now(tz=tz)
-        # 邮件时间是 25 小时前 → 已过期 → now+3s
+        # 重载时不补执行已过期任务，顺延到 24 小时后。
         mail_time = (now - timedelta(hours=25)).strftime("%Y-%m-%d %H:%M:%S")
         cfg = self._cfg(mail_time)
         nxt = s._compute_zm_next_time(cfg)
         delta = (nxt - now).total_seconds()
-        self.assertGreaterEqual(delta, 2)
-        self.assertLessEqual(delta, 5)
+        self.assertAlmostEqual(delta, 24 * 3600, delta=5)
 
     def test_malformed_mail_time_falls_back(self):
         s = self._scheduler()
@@ -254,49 +252,101 @@ class FakePlugin:
         self.save_count += 1
 
 
-class MedalResumeTests(unittest.TestCase):
-    def _engine(self, pending_time=""):
-        cfg = CONFIG.PluginConfig.from_dict({"medal_pending_time": pending_time})
-        plugin = FakePlugin(cfg)
+class MedalDispatchTests(unittest.TestCase):
+    def test_main_cron_always_triggers_medal(self):
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = types.SimpleNamespace(config=types.SimpleNamespace(medal_cron=""))
+        engine._lock = ENGINE.threading.Lock()
+        engine._run_locked = Mock(return_value=[{"task_id": "regular"}])
+        engine.run_medal = Mock()
+
+        records = engine.run_scheduled()
+
+        self.assertEqual(records, [{"task_id": "regular"}])
+        engine.run_medal.assert_called_once_with()
+
+    def test_main_cron_still_triggers_medal_with_dedicated_cron(self):
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = types.SimpleNamespace(config=types.SimpleNamespace(medal_cron="0 8 * * *"))
+        engine._lock = ENGINE.threading.Lock()
+        engine._run_locked = Mock(return_value=[])
+        engine.run_medal = Mock()
+
+        engine.run_scheduled()
+
+        engine.run_medal.assert_called_once_with()
+
+    def test_selected_medals_enable_task_without_switch(self):
+        config = types.SimpleNamespace(chat_sites=[137], history_days=30)
+        handler = types.SimpleNamespace(site_name="myPT", domain="mypt.cc")
+        medal_task = {
+            "id": "mypt_buy_medal",
+            "name": "buy_medal",
+            "label": "myPT勋章续购",
+            "task_type": ENGINE.TaskType.MEDAL,
+            "claim_options": [{"id": "8", "label": "VIP"}],
+        }
+        plugin = types.SimpleNamespace(
+            config=config,
+            selected_sites=lambda: [{"id": 137}],
+            tasks_for=lambda _handler: [medal_task],
+            task_enabled=lambda _key: False,
+            claim_task_id=lambda _key: ["8"],
+            history=Mock(),
+        )
         engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
         engine.plugin = plugin
         engine.history = plugin.history
-        return engine, plugin
+        engine._build_handler = Mock(return_value=handler)
+        engine._run_task = Mock(return_value={"task_id": "mypt_buy_medal", "success": True})
 
-    def test_no_pending_does_nothing(self):
-        engine, plugin = self._engine("")
-        engine.resume_pending_medal()
-        self.assertEqual(plugin.scheduler.added, [])
-        self.assertEqual(plugin.save_count, 0)
+        notify_module = types.ModuleType("siteautotask.core.notify")
+        notify_module.send_summary = Mock()
+        sys.modules["siteautotask.core.notify"] = notify_module
 
-    def test_pending_within_window_registers_remaining(self):
-        import pytz
-        tz = pytz.timezone("UTC")
-        pending = (datetime.now(tz=tz) - timedelta(seconds=60)).isoformat()
-        engine, plugin = self._engine(pending)
-        engine.resume_pending_medal()
-        self.assertEqual(len(plugin.scheduler.added), 1)
-        self.assertEqual(plugin.scheduler.added[0]["name"], "siteautotask_medal_delayed")
-        # 剩余约 60s
-        run_date = plugin.scheduler.added[0]["run_date"]
-        remaining = (run_date - datetime.now(tz=tz)).total_seconds()
-        self.assertGreater(remaining, 55)
-        self.assertLess(remaining, 70)
+        records = engine._run_medal_locked()
 
-    def test_pending_expired_immediate_execute(self):
-        import pytz
-        tz = pytz.timezone("UTC")
-        pending = (datetime.now(tz=tz) - timedelta(seconds=200)).isoformat()
-        engine, plugin = self._engine(pending)
-        engine.resume_pending_medal()
-        self.assertEqual(len(plugin.scheduler.added), 1)
-        run_date = plugin.scheduler.added[0]["run_date"]
-        delay = (run_date - datetime.now(tz=tz)).total_seconds()
-        self.assertLess(delay, 5)
+        self.assertEqual(len(records), 1)
+        engine._run_task.assert_called_once()
+        self.assertEqual(engine._run_task.call_args.kwargs["claim_task_id"], ["8"])
 
-    def test_malformed_pending_cleared(self):
-        engine, plugin = self._engine("not-a-date")
-        engine.resume_pending_medal()
-        self.assertEqual(plugin.config.medal_pending_time, "")
-        self.assertEqual(plugin.save_count, 1)
-        self.assertEqual(plugin.scheduler.added, [])
+class ClaimSelectionTests(unittest.TestCase):
+    def test_selected_claim_enables_task_without_switch(self):
+        config = types.SimpleNamespace(
+            chat_sites=[13], history_days=30, get_feedback=False, medal_cron="configured"
+        )
+        handler = types.SimpleNamespace(site_name="测试站", domain="example.com")
+        claim_task = {
+            "id": "example_claim",
+            "name": "claim",
+            "label": "测试任务申领",
+            "task_type": ENGINE.TaskType.CLAIM,
+            "claim_options": [{"id": "6", "label": "月度任务"}],
+        }
+        history = Mock()
+        history.successful_task_ids_today.return_value = set()
+        plugin = types.SimpleNamespace(
+            config=config,
+            selected_sites=lambda: [{"id": 13}],
+            tasks_for=lambda _handler: [claim_task],
+            task_enabled=lambda _key: False,
+            claim_task_id=lambda _key: "6",
+            retry_records=[],
+            history=history,
+        )
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = plugin
+        engine.history = history
+        engine._build_handler = Mock(return_value=handler)
+        engine._run_task = Mock(return_value={"task_id": "example_claim", "success": True})
+        engine._schedule_failed = Mock()
+
+        notify_module = types.ModuleType("siteautotask.core.notify")
+        notify_module.send_summary = Mock()
+        sys.modules["siteautotask.core.notify"] = notify_module
+
+        records = engine._run_locked()
+
+        self.assertEqual(len(records), 1)
+        engine._run_task.assert_called_once()
+        self.assertEqual(engine._run_task.call_args.kwargs["claim_task_id"], "6")

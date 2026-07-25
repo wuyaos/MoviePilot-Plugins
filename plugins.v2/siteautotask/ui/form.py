@@ -101,7 +101,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
         ]},
         {"component": "VRow", "props": {"class": "mb-2"}, "content": [
             _text("cron", "定时规则", md=4, hint="例如：30 9,21 * * *"),
-            _text("medal_cron", "勋章续购定时", md=4, hint="留空=跟随主定时；例如：0 8 * * *"),
+            _text("medal_cron", "勋章续购定时", md=4, hint="可选；填写后在主定时之外额外检查，例如：0 8 * * *"),
             _text("history_days", "历史保留天数", md=4, type="number"),
         ]},
         {"component": "VRow", "content": [

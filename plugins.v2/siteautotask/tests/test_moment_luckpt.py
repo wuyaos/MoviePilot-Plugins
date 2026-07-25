@@ -173,12 +173,12 @@ class LuckptTests(unittest.TestCase):
         self.assertIn("@wuyaos", msg)
 
     def test_task_uses_real_wish_phrase(self):
-        h, _ = self.handler({})
+        handler, _ = self.handler({})
         tasks = luckpt.Tasks()
-        tasks.client = h
+        tasks.client = handler
         result = tasks.daily_shotbox()
         self.assertTrue(result.success)
-        self.assertEqual(h._last_message_result, "@wuyaos 幸运池听到了你的愿望，增加了100幸运星")
+        self.assertEqual(handler._last_message_result, "@wuyaos 幸运池听到了你的愿望，增加了100幸运星")
 
     def test_task_metadata(self):
         h, _ = self.handler({})

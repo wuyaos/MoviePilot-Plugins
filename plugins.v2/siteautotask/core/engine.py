@@ -22,7 +22,14 @@ class TaskEngine:
         self.history = plugin.history
         self._lock = threading.Lock()
 
+    def run_scheduled(self):
+        """主 cron 入口：执行普通任务，并独立触发一次勋章检查。"""
+        records = self.run()
+        self.run_medal()
+        return records
+
     def run(self, retry_only=False, manual_only=False):
+        """执行普通站点任务，不隐式触发勋章或织梦调度。"""
         if not self._lock.acquire(blocking=False):
             logger.warning("已有站点任务正在执行，跳过本次调度")
             return []
@@ -39,6 +46,7 @@ class TaskEngine:
             logger.info("未配置需要执行的站点")
             return []
         records = []
+        skipped_successful = 0
         for site in self.plugin.selected_sites():
             handler = self._build_handler(site)
             if not handler:
@@ -51,21 +59,29 @@ class TaskEngine:
                 # 织梦喊话由独立 24h 调度执行，主 cron 跳过
                 if task.get("task_type") == TaskType.CHAT and hasattr(handler, "get_latest_message_time"):
                     continue
+                task = dict(task)
                 task_key = site_task_key(site, task)
+                task["config_key"] = task_key
                 if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
                     continue
-                if not self.plugin.task_enabled(task_key):
-                    continue
-                # 手动“立即运行”只补跑当天失败或尚未执行的任务。
-                if manual_only and task.get("id") in successful_today:
-                    continue
-                task = dict(task)
-                task["config_key"] = task_key
-                # CLAIM 任务：读取用户选择的 task_id，空则跳过
+
+                # 配置页含选项的任务使用下拉框，选择值即启用状态和任务参数；
+                # 其余任务使用普通开关。
                 claim_id = None
-                if task.get("task_type") == TaskType.CLAIM:
+                if task.get("claim_options"):
                     task["claim_key"] = claim_task_key(site, task)
                     claim_id = self.plugin.claim_task_id(task["claim_key"])
+                elif not self.plugin.task_enabled(task_key):
+                    continue
+
+                # 手动“立即运行”只补跑当天失败或尚未执行的任务。
+                if manual_only and task.get("id") in successful_today:
+                    skipped_successful += 1
+                    logger.info(
+                        f"手动补跑：跳过今天已成功任务："
+                        f"{handler.site_name}/{task.get('label') or task.get('id')}"
+                    )
+                    continue
                 record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
                 records.append(record)
         if records:
@@ -73,8 +89,11 @@ class TaskEngine:
             self._schedule_failed(records)
             from .notify import send_summary
             send_summary(self.plugin, records, is_retry=retry_only)
-        elif manual_only:
-            logger.info("手动补跑：今天已成功的任务全部跳过，无需执行")
+        if manual_only:
+            logger.info(
+                f"手动补跑完成：执行 {len(records)} 个任务，"
+                f"跳过 {skipped_successful} 个今天已成功任务"
+            )
         return records
 
     def _build_handler(self, site):
@@ -202,7 +221,7 @@ class TaskEngine:
         """勋章续购专用执行：通过插件调度器延迟执行，避免 cron 触发时勋章尚未过期。
 
         由 scheduler 注册一次性 date 任务，不占用主锁，不与其他任务冲突。
-        若已有延迟任务在等待则跳过重复触发。触发时刻持久化到 config，重载后可恢复。
+        若已有延迟任务在等待则跳过重复触发；插件重载会取消等待任务。
         """
         if delay_seconds is None:
             delay_seconds = self.MEDAL_DELAY_SECONDS
@@ -218,9 +237,6 @@ class TaskEngine:
         tz = pytz.timezone(settings.TZ)
         now = datetime.now(tz=tz)
         run_at = now + timedelta(seconds=delay_seconds)
-        # 持久化触发时刻，重载后可恢复
-        self.plugin.config.medal_pending_time = now.isoformat()
-        self.plugin.save_config()
         scheduler.scheduler.add_job(
             self._execute_medal, "date", run_date=run_at,
             name="siteautotask_medal_delayed")
@@ -230,10 +246,6 @@ class TaskEngine:
     def _execute_medal(self):
         """延迟后实际执行的勋章续购逻辑。"""
         logger.info("勋章续购延迟到期，开始执行")
-        # 清除待执行状态
-        if self.plugin.config.medal_pending_time:
-            self.plugin.config.medal_pending_time = ""
-            self.plugin.save_config()
         if not self._lock.acquire(blocking=False):
             logger.warning("已有站点任务正在执行，跳过本次勋章续购")
             return []
@@ -241,47 +253,6 @@ class TaskEngine:
             return self._run_medal_locked()
         finally:
             self._lock.release()
-
-    def resume_pending_medal(self):
-        """重载后恢复被中断的勋章延迟续购。
-
-        读 config.medal_pending_time：
-        - 距触发 < 延迟窗口：注册剩余时间的延迟 job
-        - 距触发 >= 延迟窗口：立即补执行
-        - 无记录：跳过
-        """
-        pending = self.plugin.config.medal_pending_time
-        if not pending:
-            return
-        tz = pytz.timezone(settings.TZ)
-        try:
-            trigger_time = datetime.fromisoformat(pending)
-            if trigger_time.tzinfo is None:
-                trigger_time = tz.localize(trigger_time)
-        except Exception as e:
-            logger.error(f"解析勋章待执行时间失败：{e}，清除状态")
-            self.plugin.config.medal_pending_time = ""
-            self.plugin.save_config()
-            return
-        now = datetime.now(tz=tz)
-        elapsed = (now - trigger_time).total_seconds()
-        scheduler = getattr(self.plugin, "scheduler", None)
-        if not scheduler or not scheduler.scheduler:
-            return
-        if elapsed >= self.MEDAL_DELAY_SECONDS:
-            # 已过延迟窗口，立即补执行
-            logger.info(f"勋章续购延迟已被中断 {elapsed:.0f} 秒，立即补执行")
-            scheduler.scheduler.add_job(self._execute_medal, "date",
-                                         run_date=now + timedelta(seconds=1),
-                                         name="siteautotask_medal_delayed")
-        else:
-            # 仍在窗口内，注册剩余时间
-            remaining = self.MEDAL_DELAY_SECONDS - elapsed
-            run_at = now + timedelta(seconds=remaining)
-            logger.info(f"恢复勋章延迟任务，剩余 {remaining:.0f} 秒后执行（预计 {run_at.strftime('%H:%M:%S')}）")
-            scheduler.scheduler.add_job(self._execute_medal, "date",
-                                         run_date=run_at,
-                                         name="siteautotask_medal_delayed")
 
     def _run_medal_locked(self):
         cfg = self.plugin.config
@@ -297,25 +268,18 @@ class TaskEngine:
             for task in tasks:
                 if task.get("task_type") != TaskType.MEDAL:
                     continue
-                task_key = site_task_key(site, task)
-                if not self.plugin.task_enabled(task_key):
-                    continue
                 task = dict(task)
+                task_key = site_task_key(site, task)
                 task["config_key"] = task_key
-                # MEDAL 任务复用 CLAIM 下拉机制读 medal_id，空则跳过
+                # 有下拉选项的 MEDAL 由选择值决定是否启用；固定勋章使用普通任务开关。
                 claim_id = None
                 if task.get("claim_options"):
                     task["claim_key"] = claim_task_key(site, task)
                     claim_id = self.plugin.claim_task_id(task["claim_key"])
                     if not claim_id:
-                        now = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S")
-                        records.append({
-                            "date": now, "site": handler.site_name, "domain": handler.domain,
-                            "task_id": task.get("id"), "task_label": task.get("label"),
-                            "task_type": TaskType.MEDAL,
-                            "success": True, "status": "未选择勋章，跳过",
-                        })
                         continue
+                elif not self.plugin.task_enabled(task_key):
+                    continue
                 record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=False)
                 records.append(record)
         self.history.append(records, cfg.history_days)

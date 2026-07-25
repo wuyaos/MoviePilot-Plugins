@@ -51,8 +51,8 @@ class NexusPHPTaskClaimMixin:
     """NexusPHP 任务申领能力。"""
     def claim_task(self, task_id: str, callback=None):
         def parse_claim(response):
-            result = parse_json_response(response, "申领失败")
-            return result.get("msg") or result.get("message") or "申领失败"
+            response_data = parse_json_response(response, "申领失败")
+            return response_data.get("msg") or response_data.get("message") or "申领失败"
 
         result = self._send_post_request(
             self.site_url + "/ajax.php",
@@ -61,8 +61,8 @@ class NexusPHPTaskClaimMixin:
         )
         if result:
             return result
-        error = getattr(self, "_last_request_error", "")
-        return f"申领失败：{error}" if error else "申领失败"
+        error_message = getattr(self, "_last_request_error", "")
+        return f"申领失败：{error_message}" if error_message else "申领失败"
 
 
 class FeedbackMixin:

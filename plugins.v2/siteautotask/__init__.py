@@ -25,7 +25,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.5"
+    plugin_version = "1.0.6"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -63,19 +63,22 @@ class SiteAutoTask(_PluginBase):
         self.engine = TaskEngine(self)
         if config is not None:
             self.update_config(self._raw_config)
-        # “立即运行一次”只是人为触发标志，不属于调度任务。
-        # 清除并持久化标志后，由独立线程执行一次正常全量任务；
-        # 单个任务失败由 TaskEngine 记录，不影响后续任务继续执行。
-        run_once = bool(self.config.onlyonce)
-        if run_once:
+        # “立即运行一次”是人为触发的当天补跑，不属于调度任务。
+        # 先持久化清除触发标志，避免插件重载后重复执行。
+        manual_run_requested = bool(self.config.onlyonce)
+        if manual_run_requested:
             self.config.onlyonce = False
             self._raw_config["onlyonce"] = False
             self.update_config(self._raw_config)
         if self.config.enabled:
             self.scheduler.start()
-        if run_once:
-            threading.Thread(target=self.run_manual, daemon=True,
-                             name="siteautotask_manual_run").start()
+        if manual_run_requested:
+            logger.info("检测到“立即运行一次”请求，开始当天补跑")
+            threading.Thread(
+                target=self.run_manual,
+                daemon=True,
+                name="siteautotask_manual_run",
+            ).start()
 
     def task_enabled(self, task_key: str) -> bool:
         """读取任务开关（扁平顶层配置 key）。"""
@@ -94,9 +97,9 @@ class SiteAutoTask(_PluginBase):
     def get_state(self) -> bool:
         return self.config.enabled
 
-    def run_once(self):
-        """cron 正常全量运行。"""
-        return self.engine.run() if self.engine else []
+    def run_scheduled(self):
+        """主 cron 入口：执行普通任务，并额外触发勋章检查。"""
+        return self.engine.run_scheduled() if self.engine else []
 
     def run_manual(self):
         """人为“立即运行”：仅补跑当天失败或尚未执行的任务。"""
