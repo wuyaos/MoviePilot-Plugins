@@ -22,9 +22,12 @@ from ..utils.request import parse_json_response
 class VclibHandler(CapabilityHandler):
     @staticmethod
     def get_claim_options():
-        """可申领任务选项，id 为站点 exam_id。Vc-Lib 未在 MP 配置，沿用上游已知 task_id。"""
+        """可申领任务选项，id 为站点 exam_id。Vc-Lib 未在 MP 配置，沿用上游已知 task_id。
+
+        注意：id=2「每周上传任务」是带兑换逻辑的复合任务（weekly_upload_claim_and_exchange），
+        不放入此下拉；此处仅保留纯申领任务。
+        """
         return [
-            {"id": "2", "label": "每周上传任务"},
             {"id": "3", "label": "每周魔力值任务"},
         ]
 
