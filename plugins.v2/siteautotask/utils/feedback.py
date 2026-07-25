@@ -17,6 +17,7 @@ class NotificationIcons:
     RAINBOW = "🌈"
     SPARK = "🔥"
     BEER = "🍺"
+    LUCKY = "⭐"
     FEEDBACK = "📝"
     DEFAULT = "📌"
 
@@ -32,6 +33,7 @@ class NotificationIcons:
         "彩虹ID": RAINBOW,
         "火花": SPARK,
         "啤酒瓶": BEER,
+        "幸运星": LUCKY,
         "raw_feedback": FEEDBACK,
     }
 

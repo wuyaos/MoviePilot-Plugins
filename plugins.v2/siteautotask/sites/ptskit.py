@@ -51,8 +51,14 @@ class PtskitHandler(CapabilityHandler):
                 params={"shbox_text": message, "shout": "我喊", "sent": "yes", "type": "shoutbox"})
             if not response:
                 return False, "请求失败"
-            content = response.text
             username = self.get_username()
+            if not username:
+                return True, "消息已发送，未获取到用户名"
+            # PTS 的 magic-reward-top 反馈可能在发送响应之后异步出现，
+            # 等待配置的反馈时间，再重新读取 iframe 对应 shoutbox 页面。
+            self.wait_feedback()
+            feedback_response = self._send_get_request(self.shoutbox_url)
+            content = feedback_response.text if feedback_response else response.text
             try:
                 html = etree.HTML(content)
                 if html is None:
@@ -74,11 +80,11 @@ class PtskitHandler(CapabilityHandler):
                     if username and username in "".join(row.xpath(".//text()")) and message in "".join(row.xpath(".//text()")):
                         return True, "消息已发送"
                 if 'name="shbox_text"' in content or 'id="shbox_text"' in content:
-                    return True, "消息已发送 (未检测到特定反馈)"
+                    return True, "消息已发送，未解析到反馈"
             except Exception as e:
                 logger.error(f"Ptskit：解析HTML失败：{e}")
-                return True, "消息已发送 (解析反馈失败)"
-            return True, "消息已发送 (未获得反馈)"
+                return True, "消息已发送，反馈解析失败"
+            return True, "消息已发送，未解析到反馈"
         except Exception as e:
             logger.error(f"Ptskit：发送消息失败：{e}")
             return False, str(e)

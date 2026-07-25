@@ -80,7 +80,7 @@ class LuckptHandler(CapabilityHandler):
         text = str(self._last_message_result)
         reward_type = "raw_feedback"
         if "幸运星" in text:
-            reward_type = "raw_feedback"
+            reward_type = "幸运星"
         for kw, kind in (("上传", "上传量"), ("下载", "下载量"), ("魔力", "魔力值")):
             if kw in text:
                 reward_type = kind
@@ -101,5 +101,7 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}喊话", "执行LuckPT喊话并解析许愿池反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        ok, msg = self.client.send_messagebox("幸运池祈福")
-        return TaskResult.ok(msg) if ok else TaskResult.fail(msg)
+        ok, msg = self.client.send_messagebox("幸运池祈愿")
+        if not ok:
+            return TaskResult.fail(msg)
+        return TaskResult.ok(msg or "消息已发送，未解析到反馈")

@@ -4,6 +4,7 @@
 """
 from lxml import etree
 from ..base.site_handler import ISiteHandler
+from ..utils.request import parse_json_response
 
 
 class NexusPHPChatMixin:
@@ -49,10 +50,19 @@ class NexusPHPAccountMixin:
 class NexusPHPTaskClaimMixin:
     """NexusPHP 任务申领能力。"""
     def claim_task(self, task_id: str, callback=None):
-        callback = callback or (lambda response: " ".join(etree.HTML(response.text).xpath("//text()")))
-        return self._send_post_request(self.site_url + "/ajax.php",
-                                       data={"action": "claimTask", "params[exam_id]": task_id},
-                                       rt_method=callback) or "申领失败"
+        def parse_claim(response):
+            result = parse_json_response(response, "申领失败")
+            return result.get("msg") or result.get("message") or "申领失败"
+
+        result = self._send_post_request(
+            self.site_url + "/ajax.php",
+            data={"action": "claimTask", "params[exam_id]": task_id},
+            rt_method=callback or parse_claim,
+        )
+        if result:
+            return result
+        error = getattr(self, "_last_request_error", "")
+        return f"申领失败：{error}" if error else "申领失败"
 
 
 class FeedbackMixin:

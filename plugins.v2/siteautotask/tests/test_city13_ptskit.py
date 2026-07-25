@@ -215,6 +215,14 @@ class PtskitTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("已领取过", msg)
 
+    def test_other_users_reward_is_not_feedback(self):
+        html = '<div class="magic-reward-top system-msg">用户「other」获得302点魔力值</div>'
+        handler, _ = self.handler({"html": html})
+        ok, msg = handler.send_messagebox("「短剧第一站」")
+        self.assertTrue(ok)
+        self.assertIn("未解析到反馈", msg)
+        self.assertIsNone(handler.get_feedback())
+
     def test_task_metadata(self):
         handler, _ = self.handler({})
         tasks = ptskit.Tasks()

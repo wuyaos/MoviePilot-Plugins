@@ -26,12 +26,10 @@ class TaskScheduler:
     def start(self):
         self.stop()
         cfg = self.plugin.config
-        if not (cfg.enabled or cfg.onlyonce):
+        if not cfg.enabled:
             return
         self.scheduler = BackgroundScheduler(timezone=settings.TZ)
-        if cfg.onlyonce:
-            self.scheduler.add_job(self.plugin.run_once, "date", run_date=self._after(3), name="siteautotask_once")
-        # enabled 时即启动，供 run_zm/run_medal 动态 add_job 使用
+        # 仅处理动态 Zm/勋章调度；人为“立即运行一次”由入口线程执行。
         self.scheduler.start()
         # 恢复被重载中断的勋章延迟续购
         if cfg.enabled and self.plugin.engine:

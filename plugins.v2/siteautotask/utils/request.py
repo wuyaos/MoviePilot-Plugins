@@ -209,5 +209,6 @@ def send_post(handler, url: str, data: dict = None, rt_method: callable = None):
         response.raise_for_status()
         return rt_method(response) if rt_method else response
     except Exception as e:
+        handler._last_request_error = str(e)
         logger.error(f"POST 请求失败：{handler.site_name} {url}，错误：{e}")
         return None

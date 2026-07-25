@@ -28,3 +28,15 @@ class HistoryStore:
     def latest(self, limit=10):
         history = self.plugin.get_data(self.key) or []
         return list(reversed(history[-limit:]))
+
+    def successful_task_ids_today(self):
+        """返回今天已成功的 task_id，供手动补跑跳过已完成任务。"""
+        history = self.plugin.get_data(self.key) or []
+        today = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d")
+        return {
+            record.get("task_id")
+            for run in history
+            if str(run.get("date", "")).startswith(today)
+            for record in (run.get("records") or [])
+            if record.get("success") and record.get("task_id")
+        }

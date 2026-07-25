@@ -25,7 +25,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.4"
+    plugin_version = "1.0.5"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -63,12 +63,19 @@ class SiteAutoTask(_PluginBase):
         self.engine = TaskEngine(self)
         if config is not None:
             self.update_config(self._raw_config)
-        if self.config.enabled or self.config.onlyonce:
+        # “立即运行一次”只是人为触发标志，不属于调度任务。
+        # 清除并持久化标志后，由独立线程执行一次正常全量任务；
+        # 单个任务失败由 TaskEngine 记录，不影响后续任务继续执行。
+        run_once = bool(self.config.onlyonce)
+        if run_once:
+            self.config.onlyonce = False
+            self._raw_config["onlyonce"] = False
+            self.update_config(self._raw_config)
+        if self.config.enabled:
             self.scheduler.start()
-            if self.config.onlyonce:
-                self.config.onlyonce = False
-                self._raw_config["onlyonce"] = False
-                self.update_config(self._raw_config)
+        if run_once:
+            threading.Thread(target=self.run_manual, daemon=True,
+                             name="siteautotask_manual_run").start()
 
     def task_enabled(self, task_key: str) -> bool:
         """读取任务开关（扁平顶层配置 key）。"""
@@ -88,7 +95,12 @@ class SiteAutoTask(_PluginBase):
         return self.config.enabled
 
     def run_once(self):
+        """cron 正常全量运行。"""
         return self.engine.run() if self.engine else []
+
+    def run_manual(self):
+        """人为“立即运行”：仅补跑当天失败或尚未执行的任务。"""
+        return self.engine.run(manual_only=True) if self.engine else []
 
     def run_retry(self):
         return self.engine.retry_failed() if self.engine else []

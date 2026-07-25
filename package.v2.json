@@ -355,7 +355,7 @@
     "name": "站点自动任务",
     "description": "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。",
     "labels": "PT,签到,喊话,自动任务",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png",
     "author": "wuyaos",
     "level": 2,
@@ -364,7 +364,8 @@
       "v1.0.1": "完成 22 个站点适配（8 重叠 + 10 ptautotask 独有 + 4 groupchatzone 独有）；修复重试锁冲突、retry_notify 控制、feedback_timeout 接入、图标资源缺失。",
       "v1.0.2": "新增调试 API：POST /api/v1/plugin/SiteAutoTask/run，支持 site_id 和 task_name 参数指定站点和任务，绕过配置开关直接执行，方便本地真实调试；新增 /siteautotask_run 命令全量执行。",
       "v1.0.3": "新增 GGPT/myPT 勋章续购（简化迁移，过期检测后才买）；新增独立勋章定时（medal_cron，留空=不启用）；CLAIM 与 MEDAL 任务复用下拉选择机制。",
-      "v1.0.4": "修复 tasks_for 类身份比较问题：MP 从不同路径加载模块导致任务发现返回空（debug API 返回0任务，正式运行只执行首个站点后中断，history不写入）；移除柠檬(LemonHD)适配器（/lottery.php 已404）。"
+      "v1.0.4": "修复 tasks_for 类身份比较问题：MP 从不同路径加载模块导致任务发现返回空（debug API 返回0任务，正式运行只执行首个站点后中断，history不写入）；移除柠檬(LemonHD)适配器（/lottery.php 已404）。",
+      "v1.0.5": "修复“立即运行一次”：改为当天补跑，仅执行失败或未执行任务，跳过当天已成功任务；修复 LuckPT 祈愿口令与幸运星反馈；PTS 仅解析当前用户名的魔力反馈；CLAIM JSON 统一显示 msg；喊话状态与奖励去重；HTTP 500 显示具体错误。"
     }
   }
 }

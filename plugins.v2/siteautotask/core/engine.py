@@ -22,18 +22,19 @@ class TaskEngine:
         self.history = plugin.history
         self._lock = threading.Lock()
 
-    def run(self, retry_only=False):
+    def run(self, retry_only=False, manual_only=False):
         if not self._lock.acquire(blocking=False):
             logger.warning("已有站点任务正在执行，跳过本次调度")
             return []
         try:
-            return self._run_locked(retry_only=retry_only)
+            return self._run_locked(retry_only=retry_only, manual_only=manual_only)
         finally:
             self._lock.release()
 
-    def _run_locked(self, retry_only=False):
+    def _run_locked(self, retry_only=False, manual_only=False):
         cfg = self.plugin.config
         retry_keys = {item.get("task_id") for item in getattr(self.plugin, "retry_records", [])} if retry_only else None
+        successful_today = self.history.successful_task_ids_today() if manual_only else set()
         if not cfg.chat_sites:
             logger.info("未配置需要执行的站点")
             return []
@@ -55,6 +56,9 @@ class TaskEngine:
                     continue
                 if not self.plugin.task_enabled(task_key):
                     continue
+                # 手动“立即运行”只补跑当天失败或尚未执行的任务。
+                if manual_only and task.get("id") in successful_today:
+                    continue
                 task = dict(task)
                 task["config_key"] = task_key
                 # CLAIM 任务：读取用户选择的 task_id，空则跳过
@@ -64,10 +68,13 @@ class TaskEngine:
                     claim_id = self.plugin.claim_task_id(task["claim_key"])
                 record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
                 records.append(record)
-        self.history.append(records, cfg.history_days)
-        self._schedule_failed(records)
-        from .notify import send_summary
-        send_summary(self.plugin, records, is_retry=retry_only)
+        if records:
+            self.history.append(records, cfg.history_days)
+            self._schedule_failed(records)
+            from .notify import send_summary
+            send_summary(self.plugin, records, is_retry=retry_only)
+        elif manual_only:
+            logger.info("手动补跑：今天已成功的任务全部跳过，无需执行")
         return records
 
     def _build_handler(self, site):
@@ -109,11 +116,15 @@ class TaskEngine:
             feedback = None
             if task.get("task_type") == TaskType.CHAT and self.plugin.config.get_feedback:
                 feedback = handler.get_feedback()
+            status = result.message
+            # CHAT 成功反馈由 rewards 区域展示；状态行只保留发送结果，避免重复。
+            if task.get("task_type") == TaskType.CHAT and result.success and feedback:
+                status = "消息已发送"
             record = {
                 "date": now, "site": handler.site_name, "domain": handler.domain,
                 "task_id": task["id"], "task_label": task.get("label"),
                 "task_type": task.get("task_type", TaskType.GENERIC),
-                "success": result.success, "status": result.message,
+                "success": result.success, "status": status,
             }
             if feedback:
                 record["feedback"] = feedback
