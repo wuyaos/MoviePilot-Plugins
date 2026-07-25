@@ -24,7 +24,7 @@ class ISiteHandler(metaclass=ABCMeta):
         self.use_proxy = site_info.get("use_proxy", True)
         self.domain = site_info.get("domain") or StringUtils.get_url_domain(self.site_url)
         self.feedback_timeout = int(site_info.get("feedback_timeout", 5))
-        self.interval_cnt = int(site_info.get("interval_cnt", 2))
+        self.interval_cnt = int(site_info.get("interval_cnt", 5))
         self.session = build_session(self.site_cookie, self.ua, self.use_proxy, referer=self.site_url)
         self._last_message_result = None
 
