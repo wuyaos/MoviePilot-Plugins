@@ -37,13 +37,12 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
 
         site_cards.append({
             "component": "VCard",
-            "props": {"variant": "outlined", "class": "mb-3"},
+            "props": {"variant": "outlined", "class": "mb-3", "color": "primary"},
             "content": [
-                {"component": "VCardTitle", "props": {"class": "text-subtitle-1 py-2"}, "text": site_name},
+                {"component": "VCardTitle", "props": {"class": "text-subtitle-1 py-2", "color": "primary"}, "text": site_name},
                 {"component": "VDivider"},
                 {"component": "VCardText", "content": [{
                     "component": "VRow",
-                    "props": {"dense": True},
                     "content": task_cols or [{"component": "div", "props": {"class": "text-medium-emphasis pa-2"}, "text": "暂无任务"}],
                 }]},
             ],
@@ -84,9 +83,9 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
                 {"component": "VCardTitle", "props": {"class": "text-subtitle-1 py-2"}, "text": "全局设置"},
                 {"component": "VDivider"},
                 {"component": "VCardText", "content": [
-                    {"component": "VRow", "props": {"dense": True}, "content": switch_cols},
-                    {"component": "VRow", "props": {"dense": True}, "content": text_cols},
-                    {"component": "VRow", "props": {"dense": True}, "content": [
+                    {"component": "VRow", "content": switch_cols},
+                    {"component": "VRow", "content": text_cols},
+                    {"component": "VRow", "content": [
                         {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VSelect", "props": {"model": "chat_sites", "label": "启用站点", "multiple": True, "chips": True, "items": sites, "itemTitle": "name", "itemValue": "id", "density": "compact", "hide-details": "auto"}}]},
                     ]},
                 ]},
