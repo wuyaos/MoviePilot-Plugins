@@ -96,8 +96,8 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
     # 基础子卡片
     base_card = _subcard("基础", [
         {"component": "VRow", "props": {"class": "mb-2"}, "content": [
-            _switch("enabled", "启用插件", md=4),
-            _switch("notify", "开启通知", md=4), _switch("use_proxy", "使用系统代理", md=4),
+            _switch("enabled", "启用插件", md=3), _switch("onlyonce", "立即运行一次", md=3),
+            _switch("notify", "开启通知", md=3), _switch("use_proxy", "使用系统代理", md=3),
         ]},
         {"component": "VRow", "props": {"class": "mb-2"}, "content": [
             _text("cron", "定时规则", md=4, hint="默认每天 04:00，例如：0 4 * * *"),
@@ -156,6 +156,8 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
     }]
     # 预置所有可配置任务的默认值，确保前端表单 model 完整
     model = plugin.config.to_dict()
+    # 一次性开关仅供当前保存请求使用，绝不从持久化配置回显为 true。
+    model["onlyonce"] = False
     for site in sites:
         for task in site.get("tasks") or []:
             if task.get("claim_options"):

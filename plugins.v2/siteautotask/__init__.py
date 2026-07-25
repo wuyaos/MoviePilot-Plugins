@@ -27,7 +27,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.10"
+    plugin_version = "1.0.11"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -51,8 +51,11 @@ class SiteAutoTask(_PluginBase):
     def init_plugin(self, config: Optional[dict] = None):
         self.stop_service()
         self.siteoper = SiteOper()
+        # onlyonce 仅用于本次保存触发，消费后从持久化配置移除。
+        manual_run_requested = bool((config or {}).get("onlyonce", False))
         self.config = PluginConfig.from_dict(config)
         self._raw_config = dict(config or {})
+        self._raw_config.pop("onlyonce", None)
         if not self._site_classes:
             self._site_classes = load_site_classes()
             self.handler_classes = [x["handler_cls"] for x in self._site_classes if x.get("handler_cls")]
@@ -63,6 +66,9 @@ class SiteAutoTask(_PluginBase):
             self.update_config(self._raw_config)
         if self.config.enabled:
             self.scheduler.start()
+        if manual_run_requested and self.config.enabled:
+            logger.info("检测到配置页立即运行请求，开始当天补跑")
+            threading.Thread(target=self.run_manual, daemon=True, name="siteautotask_manual_run").start()
 
     def _clean_config(self, raw_config: dict) -> dict:
         """仅保留当前基础字段和当前站点适配器实际存在的任务配置。"""
