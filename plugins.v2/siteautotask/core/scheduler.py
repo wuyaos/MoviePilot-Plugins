@@ -79,7 +79,6 @@ class TaskScheduler:
                 "func": self.plugin.run_zm,
                 "kwargs": {"run_date": next_time},
             })
-            logger.info(f"已注册织梦定时任务（date）：将在 {next_time.strftime('%Y-%m-%d %H:%M:%S')} 运行")
         return services
 
     def _has_zm_site(self):
