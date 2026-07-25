@@ -58,12 +58,15 @@ class TaskEngine:
 
             if should_skip_successful and task.get("id") in successful_today:
                 skipped_successful += 1
+                task_type = task.get("task_type")
+                label = task.get("selected_option_label") or task.get("label") or task.get("id")
                 task_name = display_task(
                     handler.site_name,
-                    task.get("label") or task.get("id"),
-                    task.get("task_type"),
+                    label,
+                    task_type,
+                    type_only=task_type == TaskType.CHAT,
                 )
-                logger.info(f"{run_label} - {handler.site_name} - {task_name} - 今天已经成功，跳过")
+                logger.info(f"{run_label} - {handler.site_name} - {task_name} -> 今天已经成功，跳过")
                 continue
             record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
             records.append(record)
@@ -81,6 +84,9 @@ class TaskEngine:
 
     def _build_handler(self, site):
         info = dict(site)
+        if info.get("cookiecloud") and not info.get("cookie"):
+            logger.warning(f"{info.get('name')} - CookieCloud 未匹配到 Cookie，跳过站点")
+            return None
         info["use_proxy"] = self.plugin.config.use_proxy
         info["feedback_timeout"] = self.plugin.config.feedback_timeout
         info["interval_cnt"] = self.plugin.config.interval_cnt
@@ -179,7 +185,7 @@ class TaskEngine:
                 if skip_if_no_claim and not claim_task_id:
                     return {
                         "date": now, "site": handler.site_name, "domain": handler.domain,
-                        "task_id": task.get("id"), "task_label": task.get("label"),
+                        "task_id": task.get("id"), "task_label": task_label,
                         "task_type": task.get("task_type", TaskType.GENERIC),
                         "success": True, "status": "未配置，跳过",
                     }

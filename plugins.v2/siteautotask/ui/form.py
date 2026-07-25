@@ -96,8 +96,8 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
     # 基础子卡片
     base_card = _subcard("基础", [
         {"component": "VRow", "props": {"class": "mb-2"}, "content": [
-            _switch("enabled", "启用插件", md=3), _switch("onlyonce", "立即运行一次", md=3),
-            _switch("notify", "开启通知", md=3), _switch("use_proxy", "使用系统代理", md=3),
+            _switch("enabled", "启用插件", md=4),
+            _switch("notify", "开启通知", md=4), _switch("use_proxy", "使用系统代理", md=4),
         ]},
         {"component": "VRow", "props": {"class": "mb-2"}, "content": [
             _text("cron", "定时规则", md=4, hint="默认每天 04:00，例如：0 4 * * *"),

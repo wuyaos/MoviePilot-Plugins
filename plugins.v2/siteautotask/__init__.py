@@ -4,6 +4,7 @@
 """
 import threading
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from app.plugins import _PluginBase
 from app.db.site_oper import SiteOper
@@ -26,7 +27,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.9"
+    plugin_version = "1.0.10"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -60,22 +61,8 @@ class SiteAutoTask(_PluginBase):
         self.engine = TaskEngine(self)
         if config is not None and self._raw_config != config:
             self.update_config(self._raw_config)
-        # “立即运行一次”是人为触发的当天补跑，不属于调度任务。
-        # 先持久化清除触发标志，避免插件重载后重复执行。
-        manual_run_requested = bool(self.config.onlyonce)
-        if manual_run_requested:
-            self.config.onlyonce = False
-            self._raw_config["onlyonce"] = False
-            self.update_config(self._raw_config)
         if self.config.enabled:
             self.scheduler.start()
-        if manual_run_requested:
-            logger.info("检测到“立即运行一次”请求，开始当天补跑")
-            threading.Thread(
-                target=self.run_manual,
-                daemon=True,
-                name="siteautotask_manual_run",
-            ).start()
 
     def _clean_config(self, raw_config: dict) -> dict:
         """仅保留当前基础字段和当前站点适配器实际存在的任务配置。"""
@@ -162,7 +149,14 @@ class SiteAutoTask(_PluginBase):
         custom = self.get_config("CustomSites") or {}
         if custom.get("enabled"):
             sites.extend(custom.get("sites") or [])
-        return [self._site_to_dict(s) for s in sites]
+        normalized = [self._site_to_dict(site) for site in sites]
+        if not any((site.get("domain") or "").lower() == "vclib.online" for site in normalized):
+            normalized.append({
+                "id": "builtin_vclib", "name": "Vc-Lib", "domain": "vclib.online",
+                "url": "https://vclib.online", "cookie": "", "ua": "", "render": False,
+                "cookiecloud": True,
+            })
+        return normalized
 
     @staticmethod
     def _site_to_dict(site):
@@ -176,9 +170,30 @@ class SiteAutoTask(_PluginBase):
         }
 
     def selected_sites(self):
-        """按 MoviePilot 站点真实 ID 返回已选站点。"""
+        """按配置 ID 返回已选站点；内置 Vc-Lib 在运行时从 CookieCloud 补取 Cookie。"""
         selected = {str(value) for value in self.config.chat_sites}
-        return [site for site in self.all_sites() if str(site.get("id")) in selected]
+        sites = [site for site in self.all_sites() if str(site.get("id")) in selected]
+        for site in sites:
+            if site.get("cookiecloud") and not site.get("cookie"):
+                site["cookie"] = self._fetch_cookiecloud_cookie(site["url"])
+        return sites
+
+    @staticmethod
+    def _fetch_cookiecloud_cookie(site_url: str) -> str:
+        """按域名从 MoviePilot CookieCloud 补取内置站点 Cookie。"""
+        try:
+            from app.helper.cookiecloud import CookieCloudHelper
+            cookies, _ = CookieCloudHelper().download()
+            hostname = urlparse(site_url).hostname or ""
+            for domain, cookie in (cookies or {}).items():
+                normalized_domain = str(domain).lstrip(".").lower()
+                if cookie and (hostname == normalized_domain or hostname.endswith(f".{normalized_domain}")):
+                    logger.info(f"CookieCloud 匹配到 {hostname} 的 Cookie")
+                    return str(cookie)
+            logger.warning(f"CookieCloud 未匹配到 {hostname} 的 Cookie")
+        except Exception as e:
+            logger.warning(f"CookieCloud 获取 {site_url} Cookie 失败：{e}")
+        return ""
 
     def tasks_for(self, handler):
         # 注意：MoviePilot 可能从不同路径（源目录/备份目录）加载插件模块，
@@ -237,9 +252,16 @@ class SiteAutoTask(_PluginBase):
             {
                 "cmd": "/siteautotask_run",
                 "event": EventType.PluginAction,
-                "desc": "立即执行站点自动任务",
+                "desc": "按当前配置执行站点自动任务",
                 "category": "站点",
                 "data": {"action": "siteautotask_run"},
+            },
+            {
+                "cmd": "/siteautotask_manual_run",
+                "event": EventType.PluginAction,
+                "desc": "当天补跑未成功的站点任务",
+                "category": "站点",
+                "data": {"action": "siteautotask_manual_run"},
             }
         ]
 
@@ -255,8 +277,25 @@ class SiteAutoTask(_PluginBase):
                     "site_id 指定站点(id 或域名)，task_name 指定任务名(模糊匹配)；"
                     "都不传则按配置全量后台执行。调试指定站点/任务时同步返回执行记录。"
                 ),
+            },
+            {
+                "path": "/manual-run",
+                "endpoint": self.api_manual_run,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "当天补跑未成功的已配置任务",
             }
         ]
+
+    def api_manual_run(self) -> Dict[str, Any]:
+        """独立手动补跑入口，不读取或写入持久化配置。"""
+        if not self.engine:
+            return {"success": False, "message": "插件未初始化"}
+        if not self.config.enabled:
+            return {"success": False, "message": "插件未启用"}
+        logger.info("收到独立手动补跑请求，开始当天补跑")
+        threading.Thread(target=self.run_manual, daemon=True, name="siteautotask_manual_run").start()
+        return {"success": True, "message": "已后台启动当天补跑，结果写入历史记录"}
 
     def api_run(self, site_id: str = "", task_name: str = "") -> Dict[str, Any]:
         """立即执行任务。
@@ -281,7 +320,8 @@ class SiteAutoTask(_PluginBase):
     @eventmanager.register(EventType.PluginAction)
     def run_command(self, event: Event = None):
         event_data = event.event_data if event else {}
-        if not event_data or event_data.get("action") != "siteautotask_run":
+        action = event_data.get("action") if event_data else None
+        if action not in {"siteautotask_run", "siteautotask_manual_run"}:
             return
         channel = event_data.get("channel")
         userid = event_data.get("user")
@@ -292,10 +332,12 @@ class SiteAutoTask(_PluginBase):
                 title="【站点自动任务】", text="插件未启用，无法执行任务。",
             )
             return
-        threading.Thread(target=self.run_scheduled, daemon=True).start()
+        target = self.run_manual if action == "siteautotask_manual_run" else self.run_scheduled
+        text = "已后台启动当天补跑，完成后按配置发送通知。" if action == "siteautotask_manual_run" else "已后台启动任务执行，完成后按配置发送通知。"
+        threading.Thread(target=target, daemon=True).start()
         self.post_message(
             channel=channel, userid=userid, mtype=self.notification_type,
-            title="【站点自动任务】", text="已后台启动任务执行，完成后按配置发送通知。",
+            title="【站点自动任务】", text=text,
         )
 
     def get_service(self):

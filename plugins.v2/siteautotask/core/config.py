@@ -7,7 +7,6 @@ from typing import List, Optional
 class PluginConfig:
     enabled: bool = False
     cron: str = "0 4 * * *"
-    onlyonce: bool = False
     notify: bool = False
     history_days: int = 30
     use_proxy: bool = False
@@ -45,7 +44,7 @@ class PluginConfig:
 
     def to_dict(self):
         return {
-            "enabled": self.enabled, "cron": self.cron, "onlyonce": self.onlyonce,
+            "enabled": self.enabled, "cron": self.cron,
             "notify": self.notify, "history_days": self.history_days,
             "use_proxy": self.use_proxy, "get_feedback": self.get_feedback,
             "feedback_timeout": self.feedback_timeout, "interval_cnt": self.interval_cnt,

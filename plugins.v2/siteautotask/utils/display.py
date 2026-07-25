@@ -22,14 +22,17 @@ def display_task_name(site_name, task_label):
     return short_name or label
 
 
-def display_task(site_name, task_label, task_type):
+def display_task(site_name, task_label, task_type, type_only=False):
     """输出带方括号类型、且不重复站点名的任务名称。"""
-    name = display_task_name(site_name, task_label)
     if not task_type:
-        return name
-    type_label = TASK_TYPE_LABELS.get(str(task_type).lower(), "任务")
+        return display_task_name(site_name, task_label)
+    type_label = TASK_TYPE_LABELS.get(str(task_type).lower(), "其他")
+    if type_only:
+        return f"[{type_label}]"
+    name = display_task_name(site_name, task_label)
+    if str(task_type).lower() == "medal" and name.startswith("购买") and name.endswith("勋章"):
+        name = name[len("购买"):-len("勋章")]
     return f"[{type_label}] {name}"
-
 
 def display_reward_text(rewards, icon_lookup):
     """保留原始反馈文本，并在前方加奖励类型图标。"""
