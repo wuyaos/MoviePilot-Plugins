@@ -54,7 +54,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
                     "component": "VCol", "props": {"cols": 12, "md": 4},
                     "content": [{"component": "VSelect", "props": {
                         "model": claim_task_key(site, task), "label": task.get("label", task["id"]),
-                        "hint": task.get("hint", ""), "density": "compact", "hide-details": "auto",
+                        "hide-details": "auto",
                         "items": task.get("claim_options", []), "itemTitle": "label", "itemValue": "id",
                         "clearable": True, "placeholder": "不申领",
                     }}],
