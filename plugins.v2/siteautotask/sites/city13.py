@@ -9,7 +9,6 @@
 """
 import json
 from typing import Optional, Tuple
-from urllib.parse import urljoin
 from lxml import etree
 
 from app.log import logger

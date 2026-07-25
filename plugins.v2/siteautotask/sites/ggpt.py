@@ -50,7 +50,7 @@ class GgptHandler(CapabilityHandler):
         """购买勋章，返回 (success, message)。"""
         medal_id = medal_id or self.MEDAL_ID
         if not self._is_medal_expired():
-            return True, f"勋章未过期，跳过续购"
+            return True, "勋章未过期，跳过续购"
         response = self._send_post_request(
             self.site_url + "/ajax.php",
             data={"action": "buyMedal", "params[medal_id]": medal_id})

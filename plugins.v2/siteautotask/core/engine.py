@@ -10,7 +10,6 @@ from app.core.config import settings
 from app.log import logger
 from ..base.result import TaskResult
 from ..base.decorator import TaskType
-from .history import HistoryStore
 from .task_keys import site_task_key, claim_task_key
 from ..sites import get_site_handler
 

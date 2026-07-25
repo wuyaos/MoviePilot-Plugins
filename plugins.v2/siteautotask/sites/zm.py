@@ -2,9 +2,7 @@
 
 织梦的奖励反馈依赖邮件/群聊区，单独模块化，避免污染通用 NexusPHP 执行流程。
 """
-import re
 import time
-from datetime import datetime
 from lxml import etree
 from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask

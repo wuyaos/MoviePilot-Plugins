@@ -2,7 +2,6 @@
 
 作为最后一个 Handler 兜底，具体站点模块应放在它之前并实现更精确的 match。
 """
-from lxml import etree
 from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask
 from ..base.decorator import task_info, TaskType

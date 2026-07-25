@@ -7,13 +7,10 @@ groupchatzone 的 QingwaHandler（含 get_feedback + buy_daily_bonus）。
 不再硬编码 id=28（当前仍为 28，但防未来变化）。
 """
 from typing import Dict, Optional, Tuple
-from urllib.parse import urljoin
-import time
 
 from lxml import etree
 
 from app.log import logger
-from app.utils.string import StringUtils
 
 from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask

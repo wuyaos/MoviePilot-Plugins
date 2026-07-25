@@ -17,7 +17,6 @@ from app.log import logger
 
 from ..base.site_handler import ISiteHandler
 from ..base.base_task import BaseTask
-from ..base.decorator import TaskType
 
 
 def load_site_classes() -> List[dict]:

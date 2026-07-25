@@ -36,7 +36,6 @@ for name, module in (("app", app), ("app.core", core), ("app.core.config", confi
 load("siteautotask.base.result", ROOT / "base/result.py")
 load("siteautotask.base.decorator", ROOT / "base/decorator.py")
 load("siteautotask.utils.request", ROOT / "utils/request.py")
-load("siteautotask.utils.content_filter", ROOT / "utils/content_filter.py")
 handler_base = types.ModuleType("siteautotask.base.site_handler")
 handler_base.ISiteHandler = object
 sys.modules["siteautotask.base.site_handler"] = handler_base
