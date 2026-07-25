@@ -17,6 +17,7 @@ class PluginConfig:
     retry_count: int = 3
     retry_interval: int = 10
     retry_notify: bool = False
+    medal_cron: str = ""
     chat_sites: List[str] = field(default_factory=list)
 
     @classmethod
@@ -32,6 +33,7 @@ class PluginConfig:
         values["retry_count"] = int(values.get("retry_count", 3))
         values["retry_interval"] = int(values.get("retry_interval", 10))
         values["chat_sites"] = list(values.get("chat_sites") or [])
+        values["medal_cron"] = str(values.get("medal_cron") or "").strip()
         return cls(**values)
 
     def to_dict(self):
@@ -41,5 +43,6 @@ class PluginConfig:
             "use_proxy": self.use_proxy, "get_feedback": self.get_feedback,
             "feedback_timeout": self.feedback_timeout, "interval_cnt": self.interval_cnt,
             "retry_count": self.retry_count, "retry_interval": self.retry_interval,
-            "retry_notify": self.retry_notify, "chat_sites": self.chat_sites,
+            "retry_notify": self.retry_notify, "medal_cron": self.medal_cron,
+            "chat_sites": self.chat_sites,
         }

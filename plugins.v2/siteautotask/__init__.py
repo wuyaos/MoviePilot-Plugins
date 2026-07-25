@@ -25,7 +25,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -74,9 +74,15 @@ class SiteAutoTask(_PluginBase):
         """读取任务开关（扁平顶层配置 key）。"""
         return bool(self._raw_config.get(task_key, False))
 
-    def claim_task_id(self, key: str) -> str:
-        """读取 CLAIM 任务配置的 task_id，空字符串表示未选择（跳过申领）。"""
-        return str(self._raw_config.get(key, "") or "")
+    def claim_task_id(self, key: str):
+        """读取 CLAIM/MEDAL 任务配置的 task_id，空表示未选择（跳过）。
+
+        多选时返回 list，单选时返回 str；空 list/空字符串均视为未配置。
+        """
+        value = self._raw_config.get(key, "")
+        if isinstance(value, list):
+            return value
+        return str(value or "")
 
     def get_state(self) -> bool:
         return self.config.enabled
@@ -86,6 +92,10 @@ class SiteAutoTask(_PluginBase):
 
     def run_retry(self):
         return self.engine.retry_failed() if self.engine else []
+
+    def run_medal(self):
+        """勋章续购专用调度入口。"""
+        return self.engine.run_medal() if self.engine else []
 
     def run_debug(self, site_filter=None, task_filter=None):
         """调试执行：绕过配置开关，按站点/任务过滤器直接执行。"""
@@ -149,6 +159,7 @@ class SiteAutoTask(_PluginBase):
                 "id": site.get("id"),
                 "name": site.get("name") or entry.get("site_name") or domain,
                 "domain": domain,
+                "url": (site.get("url") or "").strip(),
                 "tasks": tasks,
             })
         return options

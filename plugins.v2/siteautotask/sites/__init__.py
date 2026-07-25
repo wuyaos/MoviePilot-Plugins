@@ -103,8 +103,11 @@ def load_site_classes() -> List[dict]:
             except Exception as e:
                 logger.error(f"获取站点 {site_name} claim 选项失败：{e}")
         for task in tasks_meta:
-            if task.get("task_type") == "claim":
+            if task.get("task_type") in ("claim", "medal") and claim_options:
                 task["claim_options"] = claim_options
+                # MEDAL 任务可多选（get_claim_options 默认单选，CLAIM_MULTIPLE=True 时多选）
+                if task.get("task_type") == "medal":
+                    task["claim_multiple"] = bool(getattr(handler_cls, "CLAIM_MULTIPLE", False))
 
         sites_info.append({
             "handler_cls": handler_cls,

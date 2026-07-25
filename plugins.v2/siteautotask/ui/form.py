@@ -46,18 +46,24 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             continue
         tasks = site.get("tasks") or []
         site_name = site.get("name", "未知站点")
+        site_url = (site.get("url") or "").strip()
         task_cols = []
         for task in sorted(tasks, key=_task_sort_key):
-            if task.get("task_type") == "claim":
-                # CLAIM 任务渲染下拉选择，默认空=不申领
+            if task.get("task_type") in ("claim", "medal") and task.get("claim_options"):
+                # CLAIM 任务单选下拉；MEDAL 任务按 claim_multiple 决定是否多选
+                is_multiple = bool(task.get("claim_multiple"))
+                select_props = {
+                    "model": claim_task_key(site, task), "label": task.get("label", task["id"]),
+                    "hide-details": "auto",
+                    "items": task.get("claim_options", []), "itemTitle": "label", "itemValue": "id",
+                    "clearable": True, "placeholder": "不购买" if is_multiple else "不申领",
+                }
+                if is_multiple:
+                    select_props["multiple"] = True
+                    select_props["chips"] = True
                 task_cols.append({
                     "component": "VCol", "props": {"cols": 12, "md": 4},
-                    "content": [{"component": "VSelect", "props": {
-                        "model": claim_task_key(site, task), "label": task.get("label", task["id"]),
-                        "hide-details": "auto",
-                        "items": task.get("claim_options", []), "itemTitle": "label", "itemValue": "id",
-                        "clearable": True, "placeholder": "不申领",
-                    }}],
+                    "content": [{"component": "VSelect", "props": select_props}],
                 })
             else:
                 task_cols.append({
@@ -70,7 +76,15 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             "component": "VCard",
             "props": {"variant": "outlined", "class": "mb-3"},
             "content": [
-                {"component": "VCardTitle", "props": {"class": "text-subtitle-1 font-weight-bold text-primary pa-2"}, "text": site_name},
+                {"component": "VCardTitle", "props": {"class": "text-subtitle-1 font-weight-bold text-primary pa-2 d-flex align-center"},
+                 "content": [
+                     {"component": "VBtn", "props": {
+                         "href": site_url, "target": "_blank", "variant": "text",
+                         "color": "primary", "class": "text-subtitle-1 font-weight-bold pa-0 ma-0",
+                         "prepend-icon": "mdi-open-in-new",
+                     }, "text": site_name} if site_url else
+                     {"component": "span", "text": site_name},
+                 ]},
                 {"component": "VDivider"},
                 {"component": "VCardText", "content": [{
                     "component": "VRow", "props": {"class": "mb-2"},
@@ -86,8 +100,9 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             _switch("notify", "开启通知", md=3), _switch("use_proxy", "使用系统代理", md=3),
         ]},
         {"component": "VRow", "props": {"class": "mb-2"}, "content": [
-            _text("cron", "定时规则", md=6, hint="例如：30 9,21 * * *"),
-            _text("history_days", "历史保留天数", md=6, type="number"),
+            _text("cron", "定时规则", md=4, hint="例如：30 9,21 * * *"),
+            _text("medal_cron", "勋章续购定时", md=4, hint="留空=跟随主定时；例如：0 8 * * *"),
+            _text("history_days", "历史保留天数", md=4, type="number"),
         ]},
         {"component": "VRow", "content": [
             {"component": "VCol", "props": {"cols": 12}, "content": [{"component": "VSelect", "props": {
@@ -140,8 +155,8 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
     model = plugin.config.to_dict()
     for site in sites:
         for task in site.get("tasks") or []:
-            if task.get("task_type") == "claim":
-                model.setdefault(claim_task_key(site, task), "")
+            if task.get("task_type") in ("claim", "medal") and task.get("claim_options"):
+                model.setdefault(claim_task_key(site, task), [] if task.get("claim_multiple") else "")
             else:
                 model.setdefault(site_task_key(site, task), False)
     return form, model

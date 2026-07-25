@@ -3,7 +3,7 @@
 只负责编排：站点发现、任务开关、结果收集、反馈关联与通知数据。
 站点业务逻辑留在 sites/，UI 留在 ui/，调度留在 scheduler.py。
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
 import pytz
 from app.core.config import settings
@@ -43,6 +43,9 @@ class TaskEngine:
                 continue
             tasks = self.plugin.tasks_for(handler)
             for task in tasks:
+                # MEDAL 任务由独立勋章调度执行，主 cron 跳过
+                if task.get("task_type") == TaskType.MEDAL:
+                    continue
                 task_key = site_task_key(site, task)
                 if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
                     continue
@@ -82,14 +85,15 @@ class TaskEngine:
         """
         now = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S")
         try:
-            # CLAIM 任务：正式模式下未配置 task_id 则跳过
-            if task.get("task_type") == TaskType.CLAIM:
+            # CLAIM 任务或带下拉的 MEDAL 任务：正式模式下未配置 task_id 则跳过
+            needs_claim_id = task.get("task_type") == TaskType.CLAIM or task.get("claim_options")
+            if needs_claim_id:
                 if skip_if_no_claim and not claim_task_id:
                     return {
                         "date": now, "site": handler.site_name, "domain": handler.domain,
                         "task_id": task.get("id"), "task_label": task.get("label"),
-                        "task_type": TaskType.CLAIM,
-                        "success": True, "status": "未配置，跳过申领",
+                        "task_type": task.get("task_type", TaskType.GENERIC),
+                        "success": True, "status": "未配置，跳过",
                     }
                 if claim_task_id is not None:
                     raw = task["func"](claim_task_id)
@@ -177,6 +181,79 @@ class TaskEngine:
                 record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
                 records.append(record)
         self.history.append(records, cfg.history_days)
+        return records
+
+    def run_medal(self, delay_seconds: int = 120):
+        """勋章续购专用执行：通过插件调度器延迟执行，避免 cron 触发时勋章尚未过期。
+
+        由 scheduler 注册一次性 date 任务，不占用主锁，不与其他任务冲突。
+        若已有延迟任务在等待则跳过重复触发。
+        """
+        scheduler = getattr(self.plugin, "scheduler", None)
+        if not scheduler or not scheduler.scheduler:
+            logger.warning("调度器未就绪，勋章续购立即执行")
+            return self._execute_medal()
+        # 检查是否已有等待中的勋章延迟任务
+        existing = [j for j in scheduler.scheduler.get_jobs() if j.name == "siteautotask_medal_delayed"]
+        if existing:
+            logger.info("勋章续购延迟任务已在等待，跳过本次触发")
+            return []
+        run_at = datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=delay_seconds)
+        scheduler.scheduler.add_job(
+            self._execute_medal, "date", run_date=run_at,
+            name="siteautotask_medal_delayed")
+        logger.info(f"勋章续购已触发，延迟 {delay_seconds} 秒后执行（预计 {run_at.strftime('%H:%M:%S')}）")
+        return []
+
+    def _execute_medal(self):
+        """延迟后实际执行的勋章续购逻辑。"""
+        logger.info("勋章续购延迟到期，开始执行")
+        if not self._lock.acquire(blocking=False):
+            logger.warning("已有站点任务正在执行，跳过本次勋章续购")
+            return []
+        try:
+            return self._run_medal_locked()
+        finally:
+            self._lock.release()
+
+    def _run_medal_locked(self):
+        cfg = self.plugin.config
+        if not cfg.chat_sites:
+            logger.info("未配置需要执行的站点")
+            return []
+        records = []
+        for site in self.plugin.selected_sites():
+            handler = self._build_handler(site)
+            if not handler:
+                continue
+            tasks = self.plugin.tasks_for(handler)
+            for task in tasks:
+                if task.get("task_type") != TaskType.MEDAL:
+                    continue
+                task_key = site_task_key(site, task)
+                if not self.plugin.task_enabled(task_key):
+                    continue
+                task = dict(task)
+                task["config_key"] = task_key
+                # MEDAL 任务复用 CLAIM 下拉机制读 medal_id，空则跳过
+                claim_id = None
+                if task.get("claim_options"):
+                    task["claim_key"] = claim_task_key(site, task)
+                    claim_id = self.plugin.claim_task_id(task["claim_key"])
+                    if not claim_id:
+                        now = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S")
+                        records.append({
+                            "date": now, "site": handler.site_name, "domain": handler.domain,
+                            "task_id": task.get("id"), "task_label": task.get("label"),
+                            "task_type": TaskType.MEDAL,
+                            "success": True, "status": "未选择勋章，跳过",
+                        })
+                        continue
+                record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=False)
+                records.append(record)
+        self.history.append(records, cfg.history_days)
+        from .notify import send_summary
+        send_summary(self.plugin, records, is_retry=False)
         return records
 
     def retry_failed(self):
