@@ -393,6 +393,7 @@ class ConfiguredTaskCollectionTests(unittest.TestCase):
         tasks = list(engine._collect_configured_tasks("main"))
         self.assertEqual([task[2]["id"] for task in tasks], ["normal", "claim", "medal", "normal"])
         self.assertEqual(tasks[1][3], "6")
+        self.assertEqual(tasks[1][2]["selected_option_label"], "月度任务")
         self.assertEqual([task[1].site_name for task in tasks], ["普通站", "普通站", "普通站", "织梦"])
 
     def test_empty_dropdown_is_not_collected(self):

@@ -87,7 +87,7 @@ class ModuleTests(unittest.TestCase):
 
     def test_display_task_removes_repeated_site_and_type(self):
         self.assertEqual(DISPLAY.display_task("青蛙", "青蛙喊话", "chat"), "[喊话] 喊话")
-        self.assertEqual(DISPLAY.display_task("LongPT", "LongPT任务申领", "claim"), "[申领] 任务申领")
+        self.assertEqual(DISPLAY.display_task("LongPT", "LongPT任务申领", "claim"), "[任务] 任务申领")
         self.assertEqual(DISPLAY.display_task("青蛙", "每日1k蝌蚪", "exchange"), "[兑换] 每日1k蝌蚪")
 
 

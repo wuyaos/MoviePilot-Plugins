@@ -4,11 +4,11 @@ import re
 TASK_TYPE_LABELS = {
     "checkin": "签到",
     "chat": "喊话",
-    "claim": "申领",
+    "claim": "任务",
     "exchange": "兑换",
     "medal": "勋章",
     "lottery": "抽奖",
-    "generic": "任务",
+    "generic": "其他",
 }
 
 

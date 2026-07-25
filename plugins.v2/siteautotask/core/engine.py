@@ -100,6 +100,14 @@ class TaskEngine:
 
         task["claim_key"] = claim_task_key(site, task)
         claim_id = self.plugin.claim_task_id(task["claim_key"])
+        if task.get("task_type") == TaskType.CLAIM and claim_id:
+            selected_id = str(claim_id)
+            selected_option = next(
+                (option for option in task["claim_options"] if str(option.get("id")) == selected_id),
+                None,
+            )
+            if selected_option:
+                task["selected_option_label"] = selected_option.get("label") or task.get("label")
         return task, claim_id, bool(claim_id)
 
     def _collect_configured_tasks(self, scope, site_handlers=None):
@@ -128,7 +136,7 @@ class TaskEngine:
     def _run_task(self, handler, task, claim_task_id=None, skip_if_no_claim=False):
         """执行单个任务，并统一记录任务进度、喊话内容与反馈。"""
         now = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S")
-        task_label = task.get("label") or task.get("id")
+        task_label = task.get("selected_option_label") or task.get("label") or task.get("id")
         task_name = display_task(handler.site_name, task_label, task.get("task_type"))
         sent_messages = []
         original_send = getattr(handler, "send_messagebox", None)
@@ -187,7 +195,7 @@ class TaskEngine:
                 status = f"已发送“{'；'.join(sent_messages)}”"
             record = {
                 "date": now, "site": handler.site_name, "domain": handler.domain,
-                "task_id": task["id"], "task_label": task.get("label"),
+                "task_id": task["id"], "task_label": task_label,
                 "task_type": task.get("task_type", TaskType.GENERIC),
                 "success": result.success, "status": status,
             }

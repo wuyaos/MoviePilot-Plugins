@@ -151,6 +151,7 @@ class MyptTests(unittest.TestCase):
         opts = mypt.MyptHandler.get_claim_options()
         self.assertEqual(len(opts), 6)
         self.assertIn("VIP", opts[0]["label"])
+        self.assertIn("4", [option["id"] for option in opts])
 
     def test_medal_expired_buys(self):
         medal_page = '<input type="button" class="claim" data-id="8" value="领取">'
@@ -159,7 +160,8 @@ class MyptTests(unittest.TestCase):
                               "url": "https://mypt.cc", "session": session})
         ok, msg = h.buy_medal("8")
         self.assertTrue(ok)
-        self.assertEqual(session.last_post_data["id"], "8")
+        self.assertIn("VIP勋章", msg)
+        self.assertEqual(session.last_post_data["params[medal_id]"], "8")
 
     def test_medal_active_skips(self):
         medal_page = '<input type="button" data-id="8" value="已经购买" disabled>'
@@ -169,6 +171,15 @@ class MyptTests(unittest.TestCase):
         ok, msg = h.buy_medal("8")
         self.assertTrue(ok)
         self.assertIn("未过期", msg)
+
+    def test_insufficient_magic_is_successful_skip(self):
+        session = FakeSession(get_text='<input type="button" data-id="3" value="需要更多魔力值" disabled>')
+        h = mypt.MyptHandler({"name": "myPT", "domain": "mypt.cc",
+                              "url": "https://mypt.cc", "session": session})
+        ok, msg = h.buy_medal("3")
+        self.assertTrue(ok)
+        self.assertIn("至尊勋章魔力不足", msg)
+        self.assertIsNone(session.last_post_data)
 
     def test_no_medal_id(self):
         h = mypt.MyptHandler({"name": "myPT", "domain": "mypt.cc", "url": "https://mypt.cc"})
