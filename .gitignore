@@ -173,5 +173,6 @@ cython_debug/
 .DS_Store
 plugins.v2/.DS_Store
 
-# pi-subagents local execution artifacts
+# Local agent execution artifacts
 .pi-subagents/
+.ralph/
