@@ -97,6 +97,31 @@ class SiteAutoTask(_PluginBase):
         """勋章续购专用调度入口。"""
         return self.engine.run_medal() if self.engine else []
 
+    def run_zm(self):
+        """织梦 24h 电力冷却调度入口。"""
+        return self.engine.run_zm() if self.engine else []
+
+    def reschedule_zm(self, run_at):
+        """重新注册织梦 date trigger 任务（自包含，不依赖 MP reload）。"""
+        scheduler = getattr(self, "scheduler", None)
+        if not scheduler or not scheduler.scheduler:
+            logger.warning("调度器未就绪，织梦重新调度跳过")
+            return
+        for job in scheduler.scheduler.get_jobs():
+            if job.name == "siteautotask_zm":
+                job.remove()
+        scheduler.scheduler.add_job(
+            self.engine.run_zm, "date", run_date=run_at,
+            name="siteautotask_zm")
+        logger.info(f"织梦下次执行已注册：{run_at.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    def save_config(self):
+        """持久化当前配置（含 zm 调度状态）。"""
+        try:
+            self.update_config(self.config.to_dict())
+        except Exception as e:
+            logger.error(f"保存配置失败：{e}")
+
     def run_debug(self, site_filter=None, task_filter=None):
         """调试执行：绕过配置开关，按站点/任务过滤器直接执行。"""
         return self.engine.run_debug(site_filter, task_filter) if self.engine else []

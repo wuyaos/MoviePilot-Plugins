@@ -118,6 +118,9 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             _text("feedback_timeout", "反馈等待秒数", md=4, type="number"),
             _text("interval_cnt", "消息间隔秒数", md=4, type="number"),
         ]},
+        {"component": "VRow", "props": {"class": "mb-2"}, "content": [
+            _text("zm_cooldown", "织梦冷却(秒)", md=4, type="number", hint="织梦喊话24h调度的短时冷却，防止重复触发，默认3600"),
+        ]},
     ])
 
     # 重试子卡片

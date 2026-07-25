@@ -29,11 +29,16 @@ class TaskScheduler:
         if not (cfg.enabled or cfg.onlyonce):
             return
         self.scheduler = BackgroundScheduler(timezone=settings.TZ)
-        # cron 由 MoviePilot get_service() 统一管理；插件自建调度器只承载一次性任务。
         if cfg.onlyonce:
             self.scheduler.add_job(self.plugin.run_once, "date", run_date=self._after(3), name="siteautotask_once")
-        if self.scheduler.get_jobs():
-            self.scheduler.start()
+        # enabled 时即启动，供 run_zm/run_medal 动态 add_job 使用
+        self.scheduler.start()
+        # 恢复被重载中断的勋章延迟续购
+        if cfg.enabled and self.plugin.engine:
+            try:
+                self.plugin.engine.resume_pending_medal()
+            except Exception as e:
+                logger.error(f"恢复勋章延迟任务失败：{e}")
 
     @staticmethod
     def _after(seconds):
@@ -71,4 +76,44 @@ class TaskScheduler:
                     "func": self.plugin.run_medal,
                     "kwargs": {},
                 })
+        # 织梦 24h 电力冷却调度（date trigger）
+        if cfg.enabled and self._has_zm_site():
+            next_time = self._compute_zm_next_time(cfg)
+            services.append({
+                "id": "siteautotask_zm",
+                "name": "织梦24h电力调度",
+                "trigger": "date",
+                "func": self.plugin.run_zm,
+                "kwargs": {"run_date": next_time},
+            })
+            logger.info(f"已注册织梦定时任务（date）：将在 {next_time.strftime('%Y-%m-%d %H:%M:%S')} 运行")
         return services
+
+    def _has_zm_site(self):
+        """检查已选站点中是否有织梦。"""
+        try:
+            for site in self.plugin.selected_sites():
+                name = (site.get("name") or "")
+                domain = (site.get("domain") or "")
+                if "织梦" in name or "zmpt.cc" in domain:
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _compute_zm_next_time(self, cfg):
+        """计算织梦下次执行时间：mail_time + 24h，过期则 now+3s。"""
+        tz = pytz.timezone(settings.TZ)
+        now = datetime.now(tz=tz)
+        if cfg.zm_mail_time:
+            try:
+                mail_time = datetime.strptime(cfg.zm_mail_time, "%Y-%m-%d %H:%M:%S")
+                if mail_time.tzinfo is None:
+                    mail_time = tz.localize(mail_time)
+                next_time = mail_time + timedelta(hours=24)
+                if next_time <= now:
+                    return now + timedelta(seconds=3)
+                return next_time
+            except Exception as e:
+                logger.error(f"解析织梦邮件时间失败：{e}")
+        return now + timedelta(seconds=3)

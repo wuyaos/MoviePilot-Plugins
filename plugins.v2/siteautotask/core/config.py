@@ -18,6 +18,12 @@ class PluginConfig:
     retry_interval: int = 10
     retry_notify: bool = False
     medal_cron: str = ""
+    # 勋章延迟续购状态持久化（重载恢复用）
+    medal_pending_time: str = ""  # run_medal 触发时刻（ISO 格式），空=无待执行
+    # 织梦 24h 电力冷却调度
+    zm_cooldown: int = 3600  # 执行冷却秒数，防止短时重复触发
+    zm_mail_time: str = ""  # 最新电力邮件时间 "YYYY-MM-DD HH:MM:SS"
+    last_zm_execution_time: str = ""  # 上次织梦喊话执行时间（ISO 格式）
     chat_sites: List[str] = field(default_factory=list)
 
     @classmethod
@@ -34,6 +40,10 @@ class PluginConfig:
         values["retry_interval"] = int(values.get("retry_interval", 10))
         values["chat_sites"] = list(values.get("chat_sites") or [])
         values["medal_cron"] = str(values.get("medal_cron") or "").strip()
+        values["medal_pending_time"] = str(values.get("medal_pending_time") or "")
+        values["zm_cooldown"] = int(values.get("zm_cooldown", 3600))
+        values["zm_mail_time"] = str(values.get("zm_mail_time") or "")
+        values["last_zm_execution_time"] = str(values.get("last_zm_execution_time") or "")
         return cls(**values)
 
     def to_dict(self):
@@ -44,5 +54,8 @@ class PluginConfig:
             "feedback_timeout": self.feedback_timeout, "interval_cnt": self.interval_cnt,
             "retry_count": self.retry_count, "retry_interval": self.retry_interval,
             "retry_notify": self.retry_notify, "medal_cron": self.medal_cron,
+            "medal_pending_time": self.medal_pending_time,
+            "zm_cooldown": self.zm_cooldown, "zm_mail_time": self.zm_mail_time,
+            "last_zm_execution_time": self.last_zm_execution_time,
             "chat_sites": self.chat_sites,
         }
