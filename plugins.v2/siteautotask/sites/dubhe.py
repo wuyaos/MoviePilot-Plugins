@@ -39,7 +39,7 @@ class DubheHandler(CapabilityHandler):
                 self._poll_feedback(message)
             return ok, text
         except Exception as e:
-            logger.error(f"天枢发送消息失败: {e}")
+            logger.error(f"天枢：发送消息失败：{e}")
             return False, str(e)
 
     def _poll_feedback(self, message: str = None):

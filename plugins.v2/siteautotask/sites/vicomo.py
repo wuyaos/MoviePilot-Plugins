@@ -54,7 +54,7 @@ class VicomoHandler(CapabilityHandler):
             self._last_message_result = feedback
             return True, feedback
         except Exception as e:
-            logger.error(f"Vicomo 发送消息失败: {e}")
+            logger.error(f"象站：发送消息失败：{e}")
             return False, str(e)
 
     def client_message_list(self):
@@ -97,25 +97,25 @@ class VicomoHandler(CapabilityHandler):
             response = self.session.post(self.vs_boss_url, data=vs_data, timeout=(3.05, 15))
             response.raise_for_status()
         except Exception as e:
-            logger.error(f"Vicomo 打Boss请求失败: {e}")
+            logger.error(f"象站：打Boss请求失败：{e}")
             return None
 
         # 提取签到信息
         match = ContentFilter.re_get_match(response, r"\[签到已得(\d+), 补签卡: (\d+)\]")
         if match:
-            logger.info(f"Vicomo 签到已得: {match.group(1)}, 补签卡: {match.group(2)}")
+            logger.info(f"象站：签到已得：{match.group(1)}，补签卡：{match.group(2)}")
 
         # 提取战斗结果重定向 URL
         match = ContentFilter.re_get_match(response, r"window\.location\.href\s*=\s*'([^']+战斗结果[^']+)'")
         if not match:
-            logger.info("Vicomo 未找到战斗结果重定向 URL")
+            logger.info("象站：未找到战斗结果重定向 URL")
             return None
         redirect_url = match.group(1)
         try:
             battle_response = self.session.get(redirect_url, timeout=(3.05, 15))
             battle_response.raise_for_status()
         except Exception as e:
-            logger.error(f"Vicomo 战斗结果页请求失败: {e}")
+            logger.error(f"象站：战斗结果页请求失败：{e}")
             return None
         html = ContentFilter.lxml_get_html(battle_response)
         if not html.xpath('//*[@id="battleMsgInput"]'):

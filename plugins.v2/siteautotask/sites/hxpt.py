@@ -48,7 +48,7 @@ class HxptHandler(CapabilityHandler):
                 return True, feedback
             return True, text
         except Exception as e:
-            logger.error(f"好学发送消息失败: {e}")
+            logger.error(f"好学：发送消息失败：{e}")
             return False, str(e)
 
     def _poll_feedback(self, username: str) -> Optional[str]:

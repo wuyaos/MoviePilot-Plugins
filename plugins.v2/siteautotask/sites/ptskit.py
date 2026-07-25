@@ -65,11 +65,11 @@ class PtskitHandler(CapabilityHandler):
                 if 'name="shbox_text"' in content or 'id="shbox_text"' in content:
                     return True, "消息已发送 (未检测到特定反馈)"
             except Exception as e:
-                logger.error(f"Ptskit 解析HTML失败: {e}")
+                logger.error(f"Ptskit：解析HTML失败：{e}")
                 return True, "消息已发送 (解析反馈失败)"
             return True, "消息已发送 (未获得反馈)"
         except Exception as e:
-            logger.error(f"Ptskit 发送消息失败: {e}")
+            logger.error(f"Ptskit：发送消息失败：{e}")
             return False, str(e)
 
     def _extract_feedback(self, node, username: str, message: str):

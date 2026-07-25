@@ -39,7 +39,7 @@ def load_site_classes() -> List[dict]:
         try:
             module = importlib.import_module(module_name)
         except Exception as e:
-            logger.error(f"加载站点模块 {module_name} 失败: {e}")
+            logger.error(f"加载站点模块 {module_name} 失败：{e}")
             continue
 
         handler_cls = None
@@ -92,7 +92,7 @@ def load_site_classes() -> List[dict]:
                     tasks_inst.client = handler_inst
                     tasks_meta = tasks_inst.get_registered_tasks()
             except Exception as e:
-                logger.error(f"反射站点 {site_name} 任务失败: {e}")
+                logger.error(f"解析站点 {site_name} 任务失败：{e}")
 
         sites_info.append({
             "handler_cls": handler_cls,
@@ -101,7 +101,7 @@ def load_site_classes() -> List[dict]:
             "domain": domain,
             "tasks_meta": tasks_meta,
         })
-        logger.info(f"成功加载站点 {site_name or module_info.name}，任务数：{len(tasks_meta)}")
+        logger.info(f"成功加载站点：{site_name or module_info.name}，任务数：{len(tasks_meta)}")
 
     return sites_info
 
@@ -120,5 +120,5 @@ def get_site_handler(site_info: dict, handler_classes: List[type]) -> ISiteHandl
             if handler.match():
                 return handler
         except Exception as e:
-            logger.error(f"实例化/匹配 Handler {handler_cls.__name__} 失败: {e}")
+            logger.error(f"实例化/匹配处理器 {handler_cls.__name__} 失败：{e}")
     return None

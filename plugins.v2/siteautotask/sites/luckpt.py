@@ -47,7 +47,7 @@ class LuckptHandler(CapabilityHandler):
                 return True, feedback
             return True, text
         except Exception as e:
-            logger.error(f"LuckPT发送消息失败: {e}")
+            logger.error(f"LuckPT：发送消息失败：{e}")
             return False, str(e)
 
     def _poll_feedback(self, username: str) -> Optional[str]:

@@ -70,7 +70,7 @@ class City13Handler(CapabilityHandler):
 
             # 4. 校验群聊区是否出现自己的消息
             if not self._message_exists_in_shoutbox(username, message):
-                logger.warning(f"13City喊话请求已返回，但群聊区未发现用户消息: {username} {message}")
+                logger.warning(f"13City：喊话请求已返回，但群聊区未发现用户消息：{username} {message}")
                 return False, "13City群聊区未显示发送的喊话消息"
 
             # 5. 解析反馈（掌管啤酒瓶的神对 @username 的回复）
@@ -79,7 +79,7 @@ class City13Handler(CapabilityHandler):
             self._last_message_result = result[1] if result[0] else None
             return result
         except Exception as e:
-            logger.error(f"13City发送消息失败: {e}")
+            logger.error(f"13City：发送消息失败：{e}")
             return False, str(e)
 
     def _send_shout_message(self, message: str) -> Tuple[bool, str]:
@@ -93,7 +93,7 @@ class City13Handler(CapabilityHandler):
             response.raise_for_status()
             return True, response.text
         except Exception as e:
-            logger.error(f"13City发送喊话失败: {e}")
+            logger.error(f"13City：发送喊话失败：{e}")
             return False, "发送13City喊话失败"
 
     def _message_exists_in_shoutbox(self, username: str, message: str) -> bool:

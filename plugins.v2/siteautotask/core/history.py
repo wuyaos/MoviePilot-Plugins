@@ -21,7 +21,7 @@ class HistoryStore:
                 history = [item for item in history
                            if datetime.strptime(item["date"], "%Y-%m-%d %H:%M:%S").timestamp() >= cutoff]
             except Exception as e:
-                logger.error(f"清理运行历史失败: {e}")
+                logger.error(f"清理运行历史失败：{e}")
         self.plugin.save_data(self.key, history)
         return history
 

@@ -19,7 +19,7 @@ class TaskScheduler:
                 if self.scheduler.running:
                     self.scheduler.shutdown(wait=False)
             except Exception as e:
-                logger.error(f"停止调度器失败: {e}")
+                logger.error(f"停止调度器失败：{e}")
             finally:
                 self.scheduler = None
 

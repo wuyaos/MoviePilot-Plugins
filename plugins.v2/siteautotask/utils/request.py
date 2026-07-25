@@ -69,7 +69,7 @@ def _resolve_proxies():
         if isinstance(proxy, dict):
             return proxy
     except Exception as e:
-        logger.warning(f"解析代理配置失败: {e}")
+        logger.warning(f"解析代理配置失败：{e}")
     return None
 
 
@@ -115,7 +115,7 @@ def _get_browser_page_source(handler, url: str, params: dict = None) -> Optional
             if proxy_url:
                 proxies = {"server": proxy_url}
         except Exception as e:
-            logger.warning(f"解析代理配置失败: {e}")
+            logger.warning(f"解析代理配置失败：{e}")
 
     try:
         if params:
@@ -125,7 +125,7 @@ def _get_browser_page_source(handler, url: str, params: dict = None) -> Optional
             url=url, cookies=handler.site_cookie, ua=handler.ua, proxies=proxies
         )
     except Exception as e:
-        logger.error(f"BrowserHelper 请求异常: {e}")
+        logger.error(f"浏览器渲染请求异常：{e}")
         return None
 
 
@@ -142,7 +142,7 @@ def _post_via_browser(handler, url: str, data: dict = None) -> Optional[str]:
             if proxy_url:
                 proxies = {"server": proxy_url}
         except Exception as e:
-            logger.warning(f"解析代理配置失败: {e}")
+            logger.warning(f"解析代理配置失败：{e}")
 
     def post_action(page):
         js_data = data or {}
@@ -167,7 +167,7 @@ def _post_via_browser(handler, url: str, data: dict = None) -> Optional[str]:
             ua=handler.ua, proxies=proxies,
         )
     except Exception as e:
-        logger.error(f"BrowserHelper POST请求异常: {e}")
+        logger.error(f"浏览器渲染 POST 请求异常：{e}")
         return None
 
 
@@ -188,7 +188,7 @@ def send_get(handler, url: str, params: dict = None, rt_method: callable = None)
         response.raise_for_status()
         return rt_method(response) if rt_method else response
     except Exception as e:
-        logger.error(f"GET请求失败 [{handler.site_name}] {url}: {e}")
+        logger.error(f"GET 请求失败：{handler.site_name} {url}，错误：{e}")
         return None
 
 
@@ -209,5 +209,5 @@ def send_post(handler, url: str, data: dict = None, rt_method: callable = None):
         response.raise_for_status()
         return rt_method(response) if rt_method else response
     except Exception as e:
-        logger.error(f"POST请求失败 [{handler.site_name}] {url}: {e}")
+        logger.error(f"POST 请求失败：{handler.site_name} {url}，错误：{e}")
         return None

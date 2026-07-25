@@ -52,5 +52,5 @@ class ISiteHandler(metaclass=ABCMeta):
                 if item.domain == self.domain:
                     return getattr(item, field, None)
         except Exception as e:
-            logger.error(f"获取站点 {self.site_name} 用户信息失败: {e}")
+            logger.error(f"获取站点 {self.site_name} 用户信息失败：{e}")
         return None

@@ -65,7 +65,7 @@ class TaskEngine:
         try:
             return get_site_handler(info, self.plugin.handler_classes)
         except Exception as e:
-            logger.error(f"构造站点处理器失败 [{site.get('name')}]: {e}")
+            logger.error(f"构造站点处理器失败：{site.get('name')}，错误：{e}")
             return None
 
     def _run_task(self, handler, task):
@@ -88,7 +88,7 @@ class TaskEngine:
                 record["rewards"] = result.rewards
             return record
         except Exception as e:
-            logger.error(f"执行任务失败 [{handler.site_name}/{task.get('id')}]: {e}", exc_info=True)
+            logger.error(f"执行任务失败：{handler.site_name}/{task.get('id')}，错误：{e}", exc_info=True)
             return {
                 "date": now, "site": handler.site_name, "domain": handler.domain,
                 "task_id": task.get("id"), "task_label": task.get("label"),

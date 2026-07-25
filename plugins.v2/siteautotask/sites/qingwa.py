@@ -49,12 +49,12 @@ class QingwaHandler(CapabilityHandler):
             result = super().send_messagebox(message, cb)
             if result[0]:
                 self._last_message_result = result[1]
-                logger.info(f"青蛙消息发送成功: {result[1]}")
+                logger.info(f"青蛙：消息发送成功：{result[1]}")
             else:
                 self._last_message_result = None
             return result
         except Exception as e:
-            logger.error(f"青蛙发送消息异常: {e}")
+            logger.error(f"青蛙：发送消息异常：{e}")
             self._last_message_result = None
             return False, str(e)
 
@@ -90,12 +90,12 @@ class QingwaHandler(CapabilityHandler):
             response = self.session.post(self.bonusshop_api, data=data, timeout=30)
             result = parse_json_response(response, "购买请求失败")
             if result.get("success"):
-                logger.info(f"青蛙每日福利购买成功: {result.get('msg', '')}")
+                logger.info(f"青蛙：每日福利购买成功：{result.get('msg', '')}")
                 return True, result.get("msg", "购买成功")
-            logger.warning(f"青蛙每日福利购买失败: {result.get('msg', '')}")
+            logger.warning(f"青蛙：每日福利购买失败：{result.get('msg', '')}")
             return False, result.get("msg", "购买失败")
         except Exception as e:
-            logger.error(f"青蛙每日福利购买异常: {e}")
+            logger.error(f"青蛙：每日福利购买异常：{e}")
             return False, f"购买异常: {e}"
 
     def _get_daily_bonus_id(self) -> Optional[str]:
@@ -123,10 +123,10 @@ class QingwaHandler(CapabilityHandler):
                     if item_id is not None:
                         return str(item_id)
             # 回退：硬编码 28
-            logger.warning("动态匹配每日福利商品失败，回退 id=28")
+            logger.warning("青蛙：动态匹配每日福利商品失败，回退 id=28")
             return "28"
         except Exception as e:
-            logger.error(f"获取每日福利商品 id 失败: {e}，回退 id=28")
+            logger.error(f"青蛙：获取每日福利商品 id 失败：{e}，回退 id=28")
             return "28"
 
     def medal_bonus(self) -> str:

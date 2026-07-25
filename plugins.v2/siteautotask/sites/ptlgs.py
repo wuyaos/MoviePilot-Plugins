@@ -54,7 +54,7 @@ class PtlgsHandler(CapabilityHandler):
             self._last_message_result = text
             return True, text
         except Exception as e:
-            logger.error(f"PTLGS 发送消息失败: {e}")
+            logger.error(f"PTLGS：发送消息失败：{e}")
             return False, str(e)
 
     def _poll_feedback(self, username: str, message: str = None) -> Optional[str]:

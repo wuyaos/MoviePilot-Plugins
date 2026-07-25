@@ -194,7 +194,7 @@ class SiteAutoTask(_PluginBase):
         if not site_id and not task_name:
             threading.Thread(target=self.run_once, daemon=True).start()
             return {"success": True, "message": "已后台启动全量任务，结果写入历史记录"}
-        logger.info(f"调试执行请求：site_id={site_id!r}, task_name={task_name!r}")
+        logger.info(f"调试执行请求：site_id={site_id!r}，task_name={task_name!r}")
         records = self.run_debug(site_filter=site_id or None, task_filter=task_name or None)
         return {
             "success": True,

@@ -80,7 +80,7 @@ class VclibHandler(CapabilityHandler):
                         "requirement": "10 GB", "current": "10.00 GB"}
             return {"status": "not_exist", "message": "未找到每周上传任务"}
         except Exception as e:
-            logger.error(f"Vc-Lib 获取任务状态异常: {e}")
+            logger.error(f"Vc-Lib：获取任务状态异常：{e}")
             return {"status": "error", "message": f"解析异常: {e}"}
 
     def _get_current_bonus(self) -> Optional[float]:
@@ -93,7 +93,7 @@ class VclibHandler(CapabilityHandler):
             if match:
                 return float(match.group(1).replace(',', '').strip())
         except Exception as e:
-            logger.error(f"Vc-Lib 获取魔力值异常: {e}")
+            logger.error(f"Vc-Lib：获取魔力值异常：{e}")
         return None
 
     def exchange_upload_bonus(self, option: int = 2) -> Tuple[bool, str]:
@@ -122,7 +122,7 @@ class VclibHandler(CapabilityHandler):
                 return True, "魔力值兑换上传量成功"
             return True, "兑换上传量请求已发送"
         except Exception as e:
-            logger.error(f"Vc-Lib 兑换上传量异常: {e}")
+            logger.error(f"Vc-Lib：兑换上传量异常：{e}")
             return False, f"兑换异常: {e}"
 
 
