@@ -1,5 +1,6 @@
 """通知渲染与发送。"""
 from ..utils.feedback import NotificationIcons
+from ..utils.display import display_task
 
 
 def render_records(records):
@@ -11,7 +12,12 @@ def render_records(records):
             grouped[site] = []
             order.append(site)
         icon = "✅" if record.get("success") else "❌"
-        line = f"{icon} {record.get('task_label') or record.get('task_id')}: {record.get('status', '')}"
+        task_name = display_task(
+            site,
+            record.get("task_label") or record.get("task_id"),
+            record.get("task_type"),
+        )
+        line = f"{icon} {task_name}：{record.get('status', '')}"
         feedback = record.get("feedback") or {}
         rewards = feedback.get("rewards") or record.get("rewards") or []
         for reward in rewards:

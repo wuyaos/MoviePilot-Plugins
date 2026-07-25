@@ -298,28 +298,18 @@ class FakePlugin:
 
 
 class MedalDispatchTests(unittest.TestCase):
-    def test_main_cron_always_triggers_medal(self):
+    def test_main_cron_runs_main_group_and_skips_today_success(self):
         engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
         engine.plugin = types.SimpleNamespace(config=types.SimpleNamespace(medal_cron=""))
         engine._lock = ENGINE.threading.Lock()
-        engine._run_locked = Mock(return_value=[{"task_id": "regular"}])
-        engine.run_medal = Mock()
+        engine._run_locked = Mock(return_value=[{"task_id": "regular"}, {"task_id": "medal"}])
 
         records = engine.run_scheduled()
 
-        self.assertEqual(records, [{"task_id": "regular"}])
-        engine.run_medal.assert_called_once_with()
-
-    def test_main_cron_still_triggers_medal_with_dedicated_cron(self):
-        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
-        engine.plugin = types.SimpleNamespace(config=types.SimpleNamespace(medal_cron="0 8 * * *"))
-        engine._lock = ENGINE.threading.Lock()
-        engine._run_locked = Mock(return_value=[])
-        engine.run_medal = Mock()
-
-        engine.run_scheduled()
-
-        engine.run_medal.assert_called_once_with()
+        self.assertEqual(records, [{"task_id": "regular"}, {"task_id": "medal"}])
+        engine._run_locked.assert_called_once_with(
+            retry_only=False, manual_only=False, skip_successful=True
+        )
 
     def test_selected_medals_enable_task_without_switch(self):
         config = types.SimpleNamespace(chat_sites=[137], history_days=30)
@@ -339,6 +329,7 @@ class MedalDispatchTests(unittest.TestCase):
             claim_task_id=lambda _key: ["8"],
             history=Mock(),
         )
+        plugin.history.successful_task_ids_today.return_value = set()
         engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
         engine.plugin = plugin
         engine.history = plugin.history
@@ -360,6 +351,7 @@ class ConfiguredTaskCollectionTests(unittest.TestCase):
         selected_values = selected_values or {}
         switches = switches or {}
         ordinary = {"id": "normal", "name": "normal", "task_type": ENGINE.TaskType.CHECKIN}
+        zm_chat = {"id": "zm_chat", "name": "zm_chat", "task_type": ENGINE.TaskType.CHAT}
         claim = {
             "id": "claim", "name": "claim", "task_type": ENGINE.TaskType.CLAIM,
             "claim_options": [{"id": "6", "label": "月度任务"}],
@@ -377,7 +369,7 @@ class ConfiguredTaskCollectionTests(unittest.TestCase):
         handlers = {1: normal_handler, 2: zm_handler}
         tasks = {
             id(normal_handler): [ordinary, claim, medal, mypt_medal],
-            id(zm_handler): [ordinary],
+            id(zm_handler): [ordinary, zm_chat],
         }
         plugin = types.SimpleNamespace(
             config=types.SimpleNamespace(chat_sites=[1, 2]),
@@ -393,18 +385,19 @@ class ConfiguredTaskCollectionTests(unittest.TestCase):
         engine._build_handler = lambda site: handlers[site["id"]]
         return engine
 
-    def test_ordinary_collects_switch_and_selected_dropdown_only(self):
+    def test_main_collects_all_enabled_except_zm_chat(self):
         engine = self._engine(
             selected_values={"claim_1_claim": "6"},
-            switches={"1_normal": True, "1_medal": True},
+            switches={"1_normal": True, "1_medal": True, "2_normal": True, "2_zm_chat": True},
         )
-        tasks = list(engine._collect_configured_tasks("ordinary"))
-        self.assertEqual([task[2]["id"] for task in tasks], ["normal", "claim"])
+        tasks = list(engine._collect_configured_tasks("main"))
+        self.assertEqual([task[2]["id"] for task in tasks], ["normal", "claim", "medal", "normal"])
         self.assertEqual(tasks[1][3], "6")
+        self.assertEqual([task[1].site_name for task in tasks], ["普通站", "普通站", "普通站", "织梦"])
 
     def test_empty_dropdown_is_not_collected(self):
         engine = self._engine(switches={"1_normal": True})
-        tasks = list(engine._collect_configured_tasks("ordinary"))
+        tasks = list(engine._collect_configured_tasks("main"))
         self.assertEqual([task[2]["id"] for task in tasks], ["normal"])
 
     def test_medal_collects_fixed_switch_and_mypt_selection(self):
@@ -416,12 +409,79 @@ class ConfiguredTaskCollectionTests(unittest.TestCase):
         self.assertEqual([task[2]["id"] for task in tasks], ["medal", "mypt_medal"])
         self.assertEqual(tasks[1][3], ["8"])
 
-    def test_zm_is_excluded_from_ordinary_and_collected_independently(self):
-        engine = self._engine(switches={"1_normal": True, "2_normal": True})
-        ordinary = list(engine._collect_configured_tasks("ordinary"))
+    def test_zm_scope_contains_only_zm_chat(self):
+        engine = self._engine(switches={"1_normal": True, "2_normal": True, "2_zm_chat": True})
+        main = list(engine._collect_configured_tasks("main"))
         zm = list(engine._collect_configured_tasks("zm"))
-        self.assertEqual([item[1].site_name for item in ordinary], ["普通站"])
-        self.assertEqual([item[1].site_name for item in zm], ["织梦"])
+        self.assertEqual([item[2]["id"] for item in main], ["normal", "normal"])
+        self.assertEqual([item[2]["id"] for item in zm], ["zm_chat"])
+        self.assertEqual(zm[0][1].site_name, "织梦")
+
+
+class RetryFailedTests(unittest.TestCase):
+    def test_retry_keeps_only_enabled_failed_not_successful_today(self):
+        history = Mock()
+        history.successful_task_ids_today.return_value = {"already_ok"}
+        plugin = types.SimpleNamespace(
+            config=types.SimpleNamespace(retry_count=3),
+            retry_records=[
+                {"task_id": "enabled_fail", "success": False},
+                {"task_id": "disabled_fail", "success": False},
+                {"task_id": "already_ok", "success": False},
+            ],
+            retry_attempt=1,
+        )
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = plugin
+        engine.history = history
+        engine._collect_configured_tasks = Mock(return_value=[
+            ({"id": 1}, Mock(), {"id": "enabled_fail"}, None),
+            ({"id": 1}, Mock(), {"id": "already_ok"}, None),
+        ])
+        engine.run = Mock(return_value=[{"task_id": "enabled_fail", "success": True}])
+
+        records = engine.retry_failed()
+
+        self.assertEqual(records, [{"task_id": "enabled_fail", "success": True}])
+        self.assertEqual(plugin.retry_records, [])
+        engine.run.assert_called_once_with(retry_only=True)
+
+
+class TaskOutputTests(unittest.TestCase):
+    def test_chat_record_uses_actual_sent_messages(self):
+        handler = types.SimpleNamespace(
+            site_name="织梦", domain="zmpt.cc", _last_message_result=None
+        )
+        sent = []
+
+        def send_messagebox(message):
+            sent.append(message)
+            return True, "发送成功"
+
+        handler.send_messagebox = send_messagebox
+        handler.get_feedback = lambda: {
+            "rewards": [{"type": "电力", "description": "获得电力50"}]
+        }
+        task = {
+            "id": "zm_daily_shotbox", "label": "织梦喊话",
+            "task_type": ENGINE.TaskType.CHAT,
+            "func": lambda: (
+                handler.send_messagebox("皮总，求上传"),
+                handler.send_messagebox("皮总，求电力"),
+                ENGINE.TaskResult.ok("完成"),
+            )[-1],
+        }
+        plugin = types.SimpleNamespace(
+            config=types.SimpleNamespace(get_feedback=True)
+        )
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = plugin
+
+        record = engine._run_task(handler, task)
+
+        self.assertEqual(sent, ["皮总，求上传", "皮总，求电力"])
+        self.assertEqual(record["status"], "已发送“皮总，求上传；皮总，求电力”")
+        self.assertIs(handler.send_messagebox, send_messagebox)
 
 
 class ManualSupplementTests(unittest.TestCase):

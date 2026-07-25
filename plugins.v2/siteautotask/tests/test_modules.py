@@ -20,6 +20,7 @@ sys.modules["siteautotask.core.task_keys"] = TASK_KEYS
 FORM = load("siteautotask_form", ROOT / "ui/form.py")
 FEEDBACK = load("siteautotask_feedback", ROOT / "utils/feedback.py")
 sys.modules["siteautotask_feedback"] = FEEDBACK
+DISPLAY = load("siteautotask_display", ROOT / "utils/display.py")
 PAGE = load("siteautotask_page", ROOT / "ui/page.py")
 
 
@@ -83,6 +84,11 @@ class ModuleTests(unittest.TestCase):
         text = repr(page)
         self.assertIn("10G", text)
         self.assertIn("⬆️", text)
+
+    def test_display_task_removes_repeated_site_and_type(self):
+        self.assertEqual(DISPLAY.display_task("青蛙", "青蛙喊话", "chat"), "喊话")
+        self.assertEqual(DISPLAY.display_task("LongPT", "LongPT任务申领", "claim"), "任务申领")
+        self.assertEqual(DISPLAY.display_task("青蛙", "每日1k蝌蚪", "exchange"), "[兑换] 每日1k蝌蚪")
 
 
 if __name__ == "__main__":

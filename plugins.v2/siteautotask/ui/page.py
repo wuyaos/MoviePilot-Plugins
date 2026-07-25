@@ -1,8 +1,12 @@
 """运行数据页：按运行批次折叠、站点分组、任务状态+反馈奖励一体。"""
 try:
     from ..utils.feedback import NotificationIcons
+    from ..utils.display import display_task
 except ImportError:  # 便于脱离 MoviePilot 包环境做单元测试
     from siteautotask_feedback import NotificationIcons
+
+    def display_task(site_name, task_label, task_type):
+        return str(task_label or "")
 
 
 def _text(value):
@@ -110,7 +114,11 @@ def build_page(plugin):
             # 任务行：紧凑列表
             for r in recs:
                 icon = "✅" if r.get("success") else "❌"
-                task_name = _text(r.get("task_label") or r.get("task_id"))
+                task_name = display_task(
+                    site,
+                    r.get("task_label") or r.get("task_id"),
+                    r.get("task_type"),
+                )
                 status = _text(r.get("status"))
                 rewards = (r.get("feedback") or {}).get("rewards") or r.get("rewards") or []
                 reward_str = _reward_line(rewards)

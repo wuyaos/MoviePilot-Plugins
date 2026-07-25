@@ -100,7 +100,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
             _switch("notify", "开启通知", md=3), _switch("use_proxy", "使用系统代理", md=3),
         ]},
         {"component": "VRow", "props": {"class": "mb-2"}, "content": [
-            _text("cron", "定时规则", md=4, hint="例如：30 9,21 * * *"),
+            _text("cron", "定时规则", md=4, hint="默认每天 04:00，例如：0 4 * * *"),
             _text("medal_cron", "勋章续购定时", md=4, hint="可选；填写后在主定时之外额外检查，例如：0 8 * * *"),
             _text("history_days", "历史保留天数", md=4, type="number"),
         ]},

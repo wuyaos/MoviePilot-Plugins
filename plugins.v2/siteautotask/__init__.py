@@ -16,6 +16,7 @@ from .core.config import PluginConfig
 from .core.engine import TaskEngine
 from .core.history import HistoryStore
 from .core.scheduler import TaskScheduler
+from .core.task_keys import claim_task_key, site_task_key
 from .sites import load_site_classes
 from .ui.form import build_form
 from .ui.page import build_page
@@ -25,7 +26,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.6"
+    plugin_version = "1.0.7"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -51,17 +52,13 @@ class SiteAutoTask(_PluginBase):
         self.siteoper = SiteOper()
         self.config = PluginConfig.from_dict(config)
         self._raw_config = dict(config or {})
-        # 兼容旧 task_switches 字典配置，迁移为扁平 key（补 task_ 前缀）
-        legacy = self._raw_config.pop("task_switches", None)
-        if isinstance(legacy, dict):
-            for key, value in legacy.items():
-                new_key = key if str(key).startswith("task_") else f"task_{key}"
-                self._raw_config.setdefault(new_key, value)
         if not self._site_classes:
             self._site_classes = load_site_classes()
             self.handler_classes = [x["handler_cls"] for x in self._site_classes if x.get("handler_cls")]
+        self._raw_config = self._clean_config(self._raw_config)
+        self.config = PluginConfig.from_dict(self._raw_config)
         self.engine = TaskEngine(self)
-        if config is not None:
+        if config is not None and self._raw_config != config:
             self.update_config(self._raw_config)
         # “立即运行一次”是人为触发的当天补跑，不属于调度任务。
         # 先持久化清除触发标志，避免插件重载后重复执行。
@@ -79,6 +76,18 @@ class SiteAutoTask(_PluginBase):
                 daemon=True,
                 name="siteautotask_manual_run",
             ).start()
+
+    def _clean_config(self, raw_config: dict) -> dict:
+        """仅保留当前基础字段和当前站点适配器实际存在的任务配置。"""
+        valid_keys = set(PluginConfig.__dataclass_fields__)
+        for site in self.support_site_options():
+            for task in site.get("tasks") or []:
+                key = claim_task_key(site, task) if task.get("claim_options") else site_task_key(site, task)
+                valid_keys.add(key)
+        removed = sorted(set(raw_config) - valid_keys)
+        if removed:
+            logger.info(f"清理旧配置：已移除 {len(removed)} 个失效配置项：{'、'.join(removed)}")
+        return {key: value for key, value in raw_config.items() if key in valid_keys}
 
     def task_enabled(self, task_key: str) -> bool:
         """读取任务开关（扁平顶层配置 key）。"""
@@ -98,7 +107,7 @@ class SiteAutoTask(_PluginBase):
         return self.config.enabled
 
     def run_scheduled(self):
-        """主 cron 入口：执行普通任务，并额外触发勋章检查。"""
+        """主 cron：执行全部已配置任务，排除由独立调度负责的织梦喊话。"""
         return self.engine.run_scheduled() if self.engine else []
 
     def run_manual(self):
@@ -109,7 +118,7 @@ class SiteAutoTask(_PluginBase):
         return self.engine.retry_failed() if self.engine else []
 
     def run_medal(self):
-        """勋章续购专用调度入口。"""
+        """独立 medal_cron 入口：只执行当天尚未成功的勋章任务。"""
         return self.engine.run_medal() if self.engine else []
 
     def run_zm(self):
@@ -131,9 +140,12 @@ class SiteAutoTask(_PluginBase):
         logger.info(f"织梦下次执行已注册：{run_at.strftime('%Y-%m-%d %H:%M:%S')}")
 
     def save_config(self):
-        """持久化当前配置（含 zm 调度状态）。"""
+        """持久化状态字段，同时保留当前有效任务开关与下拉选择。"""
         try:
-            self.update_config(self.config.to_dict())
+            merged = dict(self._raw_config)
+            merged.update(self.config.to_dict())
+            self._raw_config = self._clean_config(merged)
+            self.update_config(self._raw_config)
         except Exception as e:
             logger.error(f"保存配置失败：{e}")
 
@@ -164,15 +176,9 @@ class SiteAutoTask(_PluginBase):
         }
 
     def selected_sites(self):
-        """按 MP 站点真实 id 选择站点，并兼容旧配置中的域名值。"""
+        """按 MoviePilot 站点真实 ID 返回已选站点。"""
         selected = {str(value) for value in self.config.chat_sites}
-        result = []
-        for site in self.all_sites():
-            site_id = site.get("id")
-            domain = site.get("domain") or ""
-            if str(site_id) in selected or domain in selected:
-                result.append(site)
-        return result
+        return [site for site in self.all_sites() if str(site.get("id")) in selected]
 
     def tasks_for(self, handler):
         # 注意：MoviePilot 可能从不同路径（源目录/备份目录）加载插件模块，

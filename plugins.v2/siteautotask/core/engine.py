@@ -12,64 +12,68 @@ from ..base.result import TaskResult
 from ..base.decorator import TaskType
 from .task_keys import site_task_key, claim_task_key
 from ..sites import get_site_handler
+from ..utils.display import display_task
 
 
 class TaskEngine:
-    MEDAL_DELAY_SECONDS = 120  # 勋章续购延迟秒数（防 cron 触发时未过期）
-
     def __init__(self, plugin):
         self.plugin = plugin
         self.history = plugin.history
         self._lock = threading.Lock()
 
     def run_scheduled(self):
-        """定时完整运行：执行普通任务，并独立触发一次勋章检查。"""
-        records = self.run()
-        self.run_medal()
-        return records
+        """主 cron：执行除织梦喊话外的全部任务，跳过今天已成功任务。"""
+        return self.run(skip_successful=True)
 
-    def run(self, retry_only=False, manual_only=False):
-        """执行普通站点任务，不隐式触发勋章或织梦调度。"""
+    def run(self, retry_only=False, manual_only=False, skip_successful=False):
+        """执行主任务组；织梦喊话始终由独立调度处理。"""
         if not self._lock.acquire(blocking=False):
             logger.warning("已有站点任务正在执行，跳过本次调度")
             return []
         try:
-            return self._run_locked(retry_only=retry_only, manual_only=manual_only)
+            return self._run_locked(
+                retry_only=retry_only,
+                manual_only=manual_only,
+                skip_successful=skip_successful,
+            )
         finally:
             self._lock.release()
 
-    def _run_locked(self, retry_only=False, manual_only=False):
+    def _run_locked(self, retry_only=False, manual_only=False, skip_successful=False):
         cfg = self.plugin.config
         retry_keys = {item.get("task_id") for item in getattr(self.plugin, "retry_records", [])} if retry_only else None
-        successful_today = self.history.successful_task_ids_today() if manual_only else set()
+        should_skip_successful = manual_only or skip_successful or retry_only
+        successful_today = self.history.successful_task_ids_today() if should_skip_successful else set()
         if not cfg.chat_sites:
             logger.info("未配置需要执行的站点")
             return []
         records = []
         skipped_successful = 0
-        for site, handler, task, claim_id in self._collect_configured_tasks("ordinary"):
+        run_label = "失败重试" if retry_only else ("手动补跑" if manual_only else "主定时")
+        for site, handler, task, claim_id in self._collect_configured_tasks("main"):
             task_key = task["config_key"]
             if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
                 continue
 
-            # 手动“立即运行”只补跑当天失败或尚未执行的任务。
-            if manual_only and task.get("id") in successful_today:
+            if should_skip_successful and task.get("id") in successful_today:
                 skipped_successful += 1
-                logger.info(
-                    f"手动补跑：跳过今天已成功任务："
-                    f"{handler.site_name}/{task.get('label') or task.get('id')}"
+                task_name = display_task(
+                    handler.site_name,
+                    task.get("label") or task.get("id"),
+                    task.get("task_type"),
                 )
+                logger.info(f"{run_label} - {handler.site_name} - {task_name} - 今天已经成功，跳过")
                 continue
             record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
             records.append(record)
         if records:
             self.history.append(records, cfg.history_days)
-            self._schedule_failed(records)
+            self._schedule_failed(records, is_retry=retry_only)
             from .notify import send_summary
             send_summary(self.plugin, records, is_retry=retry_only)
-        if manual_only:
+        if should_skip_successful:
             logger.info(
-                f"手动补跑完成：执行 {len(records)} 个任务，"
+                f"{run_label}完成：执行 {len(records)} 个任务，"
                 f"跳过 {skipped_successful} 个今天已成功任务"
             )
         return records
@@ -98,11 +102,7 @@ class TaskEngine:
         return task, claim_id, bool(claim_id)
 
     def _collect_configured_tasks(self, scope, site_handlers=None):
-        """按当前配置收集指定执行组的任务。
-
-        ordinary：非织梦站点的非勋章任务；medal：所有勋章任务；
-        zm：织梦站点的非勋章任务。空下拉或关闭的开关不会进入清单。
-        """
+        """按配置收集任务组：main 排除织梦喊话，medal 仅勋章，zm 仅织梦喊话。"""
         if site_handlers is None:
             site_handlers = (
                 (site, self._build_handler(site))
@@ -112,28 +112,33 @@ class TaskEngine:
             if not handler:
                 continue
             is_zm = hasattr(handler, "get_latest_message_time")
-            if scope == "ordinary" and is_zm:
-                continue
-            if scope == "zm" and not is_zm:
-                continue
-
             for raw_task in self.plugin.tasks_for(handler):
-                is_medal = raw_task.get("task_type") == TaskType.MEDAL
-                if (scope == "medal") != is_medal:
+                task_type = raw_task.get("task_type")
+                if scope == "main" and is_zm and task_type == TaskType.CHAT:
+                    continue
+                if scope == "medal" and task_type != TaskType.MEDAL:
+                    continue
+                if scope == "zm" and (not is_zm or task_type != TaskType.CHAT):
                     continue
                 task, claim_id, enabled = self._configure_task(site, raw_task)
                 if enabled:
                     yield site, handler, task, claim_id
 
     def _run_task(self, handler, task, claim_task_id=None, skip_if_no_claim=False):
-        """执行单个任务。
-
-        :param claim_task_id: CLAIM 任务传入的 task_id；None 表示 debug 模式（用 func 默认值）
-        :param skip_if_no_claim: 正式模式下为 True，CLAIM 任务未配置 task_id 时跳过
-        """
+        """执行单个任务，并统一记录任务进度、喊话内容与反馈。"""
         now = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S")
+        task_label = task.get("label") or task.get("id")
+        task_name = display_task(handler.site_name, task_label, task.get("task_type"))
+        sent_messages = []
+        original_send = getattr(handler, "send_messagebox", None)
+        if task.get("task_type") == TaskType.CHAT and callable(original_send):
+            def tracked_send(message=None, *args, **kwargs):
+                if message:
+                    sent_messages.append(str(message))
+                return original_send(message, *args, **kwargs)
+            handler.send_messagebox = tracked_send
+        logger.info(f"{handler.site_name} - {task_name} - 开始执行")
         try:
-            # CLAIM 任务或带下拉的 MEDAL 任务：正式模式下未配置 task_id 则跳过
             needs_claim_id = task.get("task_type") == TaskType.CLAIM or task.get("claim_options")
             if needs_claim_id:
                 if skip_if_no_claim and not claim_task_id:
@@ -143,10 +148,7 @@ class TaskEngine:
                         "task_type": task.get("task_type", TaskType.GENERIC),
                         "success": True, "status": "未配置，跳过",
                     }
-                if claim_task_id is not None:
-                    raw = task["func"](claim_task_id)
-                else:
-                    raw = task["func"]()
+                raw = task["func"](claim_task_id) if claim_task_id is not None else task["func"]()
             else:
                 raw = task["func"]()
             result = self.normalize_result(raw)
@@ -154,9 +156,8 @@ class TaskEngine:
             if task.get("task_type") == TaskType.CHAT and self.plugin.config.get_feedback:
                 feedback = handler.get_feedback()
             status = result.message
-            # CHAT 成功反馈由 rewards 区域展示；状态行只保留发送结果，避免重复。
-            if task.get("task_type") == TaskType.CHAT and result.success and feedback:
-                status = "消息已发送"
+            if task.get("task_type") == TaskType.CHAT and result.success and sent_messages:
+                status = f"已发送“{'；'.join(sent_messages)}”"
             record = {
                 "date": now, "site": handler.site_name, "domain": handler.domain,
                 "task_id": task["id"], "task_label": task.get("label"),
@@ -167,23 +168,41 @@ class TaskEngine:
                 record["feedback"] = feedback
             if result.rewards:
                 record["rewards"] = result.rewards
+            outcome = "成功" if result.success else "失败"
+            logger.info(f"{handler.site_name} - {task_name} - 执行{outcome} - {status}")
+            if feedback:
+                rewards = feedback.get("rewards") or []
+                descriptions = [str(item.get("description")) for item in rewards if item.get("description")]
+                if descriptions:
+                    logger.info(
+                        f"{handler.site_name} - {task_name} - 反馈结果 - "
+                        f"{'；'.join(descriptions)}"
+                    )
             return record
         except Exception as e:
-            logger.error(f"执行任务失败：{handler.site_name}/{task.get('id')}，错误：{e}", exc_info=True)
+            logger.error(f"{handler.site_name} - {task_name} - 执行失败 - {e}", exc_info=True)
             return {
                 "date": now, "site": handler.site_name, "domain": handler.domain,
                 "task_id": task.get("id"), "task_label": task.get("label"),
                 "task_type": task.get("task_type", TaskType.GENERIC),
-                "success": False, "status": f"执行失败: {e}",
+                "success": False, "status": f"执行失败：{e}",
             }
+        finally:
+            if task.get("task_type") == TaskType.CHAT and callable(original_send):
+                handler.send_messagebox = original_send
 
-    def _schedule_failed(self, records):
-        """持久化失败任务，交由下一次 date 服务重试。"""
+    def _schedule_failed(self, records, is_retry=False):
+        """记录仍失败的任务；新失败批次从 0 次开始，实际重试后次数加一。"""
         failed = [record for record in records if not record.get("success")]
         if not failed or self.plugin.config.retry_count <= 0:
+            if is_retry:
+                self.plugin.retry_records = []
+                self.plugin.retry_attempt = 0
             return
         self.plugin.retry_records = failed
-        self.plugin.retry_attempt = getattr(self.plugin, "retry_attempt", 0) + 1
+        self.plugin.retry_attempt = (
+            getattr(self.plugin, "retry_attempt", 0) + 1 if is_retry else 0
+        )
 
     def run_debug(self, site_filter=None, task_filter=None):
         """调试执行：绕过配置开关与 chat_sites 限制，按过滤器直接执行指定任务。
@@ -235,37 +254,10 @@ class TaskEngine:
         self.history.append(records, cfg.history_days)
         return records
 
-    def run_medal(self, delay_seconds: int = None):
-        """勋章续购专用执行：通过插件调度器延迟执行，避免 cron 触发时勋章尚未过期。
-
-        由 scheduler 注册一次性 date 任务，不占用主锁，不与其他任务冲突。
-        若已有延迟任务在等待则跳过重复触发；插件重载会取消等待任务。
-        """
-        if delay_seconds is None:
-            delay_seconds = self.MEDAL_DELAY_SECONDS
-        scheduler = getattr(self.plugin, "scheduler", None)
-        if not scheduler or not scheduler.scheduler:
-            logger.warning("调度器未就绪，勋章续购立即执行")
-            return self._execute_medal()
-        # 检查是否已有等待中的勋章延迟任务
-        existing = [j for j in scheduler.scheduler.get_jobs() if j.name == "siteautotask_medal_delayed"]
-        if existing:
-            logger.info("勋章续购延迟任务已在等待，跳过本次触发")
-            return []
-        tz = pytz.timezone(settings.TZ)
-        now = datetime.now(tz=tz)
-        run_at = now + timedelta(seconds=delay_seconds)
-        scheduler.scheduler.add_job(
-            self._execute_medal, "date", run_date=run_at,
-            name="siteautotask_medal_delayed")
-        logger.info(f"勋章续购已触发，延迟 {delay_seconds} 秒后执行（预计 {run_at.strftime('%H:%M:%S')}）")
-        return []
-
-    def _execute_medal(self):
-        """延迟后实际执行的勋章续购逻辑。"""
-        logger.info("勋章续购延迟到期，开始执行")
+    def run_medal(self):
+        """独立勋章 cron：只执行今天尚未成功的已配置勋章任务。"""
         if not self._lock.acquire(blocking=False):
-            logger.warning("已有站点任务正在执行，跳过本次勋章续购")
+            logger.warning("已有站点任务正在执行，跳过本次勋章检查")
             return []
         try:
             return self._run_medal_locked()
@@ -277,13 +269,30 @@ class TaskEngine:
         if not cfg.chat_sites:
             logger.info("未配置需要执行的站点")
             return []
+        successful_today = self.history.successful_task_ids_today()
         records = []
+        skipped_successful = 0
         for _, handler, task, claim_id in self._collect_configured_tasks("medal"):
+            if task.get("id") in successful_today:
+                skipped_successful += 1
+                task_name = display_task(
+                    handler.site_name,
+                    task.get("label") or task.get("id"),
+                    task.get("task_type"),
+                )
+                logger.info(f"勋章定时 - {handler.site_name} - {task_name} - 今天已经成功，跳过")
+                continue
             record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=False)
             records.append(record)
-        self.history.append(records, cfg.history_days)
-        from .notify import send_summary
-        send_summary(self.plugin, records, is_retry=False)
+        if records:
+            self.history.append(records, cfg.history_days)
+            self._schedule_failed(records)
+            from .notify import send_summary
+            send_summary(self.plugin, records, is_retry=False)
+        logger.info(
+            f"勋章定时完成：执行 {len(records)} 个任务，"
+            f"跳过 {skipped_successful} 个今天已成功任务"
+        )
         return records
 
     # ===== 织梦 24h 电力冷却调度 =====
@@ -401,16 +410,38 @@ class TaskEngine:
         self.plugin.reschedule_zm(next_time)
 
     def retry_failed(self):
-        """只重试最近一次失败任务；站点任务方法会重新构造，避免复用失效 session。"""
-        if not getattr(self.plugin, "retry_records", None):
+        """重试仍启用且今天尚未成功的失败任务，织梦喊话不进入主任务组。"""
+        pending = list(getattr(self.plugin, "retry_records", None) or [])
+        if not pending:
             return []
-        if getattr(self.plugin, "retry_attempt", 0) > self.plugin.config.retry_count:
+
+        successful_today = self.history.successful_task_ids_today()
+        configured_ids = {
+            task.get("id")
+            for _, _, task, _ in self._collect_configured_tasks("main")
+        }
+        pending = [
+            record for record in pending
+            if record.get("task_id") in configured_ids
+            and record.get("task_id") not in successful_today
+        ]
+        self.plugin.retry_records = pending
+        if not pending:
+            self.plugin.retry_attempt = 0
+            logger.info("失败重试：待重试任务今天均已成功，无需执行")
+            return []
+        if getattr(self.plugin, "retry_attempt", 0) >= self.plugin.config.retry_count:
             self.plugin.retry_records = []
+            self.plugin.retry_attempt = 0
+            logger.info("失败重试：已达到最大重试次数，停止重试")
             return []
+
         records = self.run(retry_only=True)
-        # 锁冲突时 run 返回空列表，此时不能清空重试状态（all([]) 为真会误判）
-        if records and all(record.get("success") for record in records):
-            self.plugin.retry_records = []
+        # 锁冲突时 run 返回空列表，保留失败状态；正常执行后仅保留仍失败项。
+        if records:
+            self.plugin.retry_records = [record for record in records if not record.get("success")]
+            if not self.plugin.retry_records:
+                self.plugin.retry_attempt = 0
         return records
 
     @staticmethod
