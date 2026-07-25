@@ -176,3 +176,5 @@ plugins.v2/.DS_Store
 # Local agent execution artifacts
 .pi-subagents/
 .ralph/
+.pi-loop.json
+.pi-loop.json.lock
