@@ -22,8 +22,8 @@ def _subcard(title, rows):
         "component": "VCard",
         "props": {"variant": "flat", "class": "mb-3", "border": True},
         "content": [
-            {"component": "VCardTitle", "props": {"class": "text-subtitle-1 font-weight-bold text-white bg-primary py-1 px-3"}, "text": title},
-            {"component": "VCardText", "props": {"class": "px-3 pb-2 pt-3"}, "content": rows},
+            {"component": "VCardTitle", "props": {"class": "text-subtitle-2 font-weight-bold text-primary pa-2"}, "text": title},
+            {"component": "VCardText", "props": {"class": "px-3 pb-2 pt-0"}, "content": rows},
         ],
     }
 
