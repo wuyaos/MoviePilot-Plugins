@@ -150,12 +150,15 @@ class City13Handler(CapabilityHandler):
         }
 
     def buy_blessing_medal(self) -> Tuple[bool, str]:
-        """暴露为任务的诸神赐福勋章自动购买。"""
-        ok, msg = self._ensure_blessing_medal()
+        """暴露为任务的诸神赐福勋章自动购买（喊话前联动）。"""
+        ok, msg = self._ensure_blessing_medal(auto_buy=True)
         return ok, msg
 
-    def _ensure_blessing_medal(self) -> Tuple[bool, str]:
-        auto_buy = bool(self.site_info.get("thirteencity_auto_buy_blessing", False))
+    def _ensure_blessing_medal(self, auto_buy: bool = False) -> Tuple[bool, str]:
+        """检查/购买诸神赐福勋章。
+
+        :param auto_buy: True=未拥有时自动购买（buy_blessing 任务）；False=只检查不买（喊话前）
+        """
         self._blessing_status = {
             "auto_buy_enabled": auto_buy,
             "medal_status": "检查中", "purchase_status": "未触发",
@@ -278,7 +281,7 @@ class Tasks(BaseTask):
         ok, msg = self.client.send_messagebox("掌管啤酒瓶的神请赐予我啤酒瓶")
         return TaskResult.ok(msg) if ok else TaskResult.fail(msg)
 
-    @task_info("诸神赐福勋章", "自动购买13City诸神赐福勋章", TaskType.MEDAL)
+    @task_info("诸神赐福勋章", "喊话前自动购买13City诸神赐福勋章，关闭则只检查不买", TaskType.CHECKIN)
     def buy_blessing(self):
         ok, msg = self.client.buy_blessing_medal()
         return TaskResult.ok(msg) if ok else TaskResult.fail(msg)

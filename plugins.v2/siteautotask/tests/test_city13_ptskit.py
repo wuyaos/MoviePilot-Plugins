@@ -114,7 +114,7 @@ class City13Tests(unittest.TestCase):
         return city13.City13Handler(info), session
 
     def test_match_and_feedback_parse(self):
-        handler, _ = self.handler({"thirteencity_auto_buy_blessing": False})
+        handler, _ = self.handler({})
         self.assertTrue(handler.match())
         ok, msg = handler.send_messagebox("求啤酒瓶")
         self.assertTrue(ok)
@@ -131,18 +131,31 @@ class City13Tests(unittest.TestCase):
         self.assertIn("未显示", msg)
 
     def test_buy_blessing_already_owned(self):
-        handler, _ = self.handler({"thirteencity_auto_buy_blessing": True, "shoutbox_html": CITY13_MEDAL_OWNED})
+        handler, _ = self.handler({"shoutbox_html": CITY13_MEDAL_OWNED})
         # 勋章页返回已拥有 → 不触发购买
         ok, msg = handler.buy_blessing_medal()
         self.assertTrue(ok)
         self.assertIn("诸神赐福", msg)
+
+    def test_buy_blessing_triggers_purchase(self):
+        # 未拥有勋章 + auto_buy=True → 触发购买，复查返回已拥有
+        not_owned = ('<html><body><div class="medal-card">'
+                     '<div class="medal-name">诸神赐福</div>'
+                     '<div class="medal-action"><button class="buy" data-id="11">购买</button></div>'
+                     '</div></body></html>')
+        handler, session = self.handler({})
+        session.get.side_effect = [Response(not_owned), Response(CITY13_MEDAL_OWNED)]
+        ok, msg = handler.buy_blessing_medal()
+        self.assertTrue(ok)
+        # 应发起购买 POST
+        self.assertTrue(session.post.called)
 
     def test_task_metadata(self):
         handler, _ = self.handler({})
         tasks = city13.Tasks()
         tasks.client = handler
         meta = {item["name"]: item["task_type"] for item in tasks.get_registered_tasks()}
-        self.assertEqual(meta["buy_blessing"], "medal")
+        self.assertEqual(meta["buy_blessing"], "checkin")
         self.assertEqual(meta["daily_shotbox"], "chat")
         self.assertEqual(meta["claim"], "claim")
         # 合并后不再有 daily_claim_task / monthly_claim_task
