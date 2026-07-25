@@ -5,6 +5,15 @@ try:
 except ImportError:  # 便于脱离 MoviePilot 包环境做单元测试
     from siteautotask_task_keys import site_task_key, claim_task_key
 
+# 任务类型固定排序：开关类在前，CLAIM 下拉垫底
+_TASK_TYPE_ORDER = {
+    "checkin": 0, "chat": 1, "exchange": 2, "medal": 3, "lottery": 4, "generic": 5, "claim": 9,
+}
+
+
+def _task_sort_key(task):
+    return (_TASK_TYPE_ORDER.get(task.get("task_type", "generic"), 6), task.get("name", ""))
+
 
 def _switch(model, label, md=3, **props):
     return {"component": "VCol", "props": {"cols": 12, "md": md},
@@ -38,7 +47,7 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
         tasks = site.get("tasks") or []
         site_name = site.get("name", "未知站点")
         task_cols = []
-        for task in tasks:
+        for task in sorted(tasks, key=_task_sort_key):
             if task.get("task_type") == "claim":
                 # CLAIM 任务渲染下拉选择，默认空=不申领
                 task_cols.append({

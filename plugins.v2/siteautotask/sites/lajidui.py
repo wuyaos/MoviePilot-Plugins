@@ -10,6 +10,14 @@ from ..utils.request import parse_json_response
 
 
 class LajiduiHandler(CapabilityHandler):
+
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "1", "label": "保种计划"},
+        ]
+
     @staticmethod
     def get_site_name():
         return "垃圾堆"
@@ -39,6 +47,7 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @task_info("{client_name}每月任务领取", "领取垃圾堆每月保种计划任务", TaskType.CLAIM)
-    def monthly_claim_task(self, task_id=None):
-        return self.client.claim_task(task_id or "1")
+    @task_info("{client_name}任务申领", "申领Lajidui任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
+

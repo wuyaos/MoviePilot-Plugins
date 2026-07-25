@@ -10,6 +10,16 @@ from ..utils.request import parse_json_response
 
 
 class FreeFarmHandler(CapabilityHandler):
+
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "12", "label": "做种积分"},
+            {"id": "11", "label": "发种增量"},
+            {"id": "9", "label": "下载增量"},
+        ]
+
     @staticmethod
     def get_site_name():
         return "自由农场"
@@ -39,6 +49,7 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @task_info("{client_name}每周任务领取", "领取自由农场每周做种任务", TaskType.CLAIM)
-    def weekly_claim_task(self, task_id=None):
-        return self.client.claim_task(task_id or "12")
+    @task_info("{client_name}任务申领", "申领FreeFarm任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
+

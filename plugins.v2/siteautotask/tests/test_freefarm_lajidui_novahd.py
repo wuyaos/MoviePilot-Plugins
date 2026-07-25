@@ -112,7 +112,7 @@ class FreeFarmTests(unittest.TestCase):
         tasks = freefarm.Tasks()
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
-        self.assertEqual(meta["weekly_claim_task"], "claim")
+        self.assertEqual(meta["claim"], "claim")
         self.assertEqual(meta["daily_checkin"], "checkin")
 
 
@@ -131,7 +131,7 @@ class LajiduiTests(unittest.TestCase):
         tasks = lajidui.Tasks()
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
-        self.assertEqual(meta["monthly_claim_task"], "claim")
+        self.assertEqual(meta["claim"], "claim")
 
 
 class NovaHDTests(unittest.TestCase):
@@ -150,7 +150,7 @@ class NovaHDTests(unittest.TestCase):
         tasks = novahd.Tasks()
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
-        self.assertEqual(meta["daily_claim_task"], "claim")
+        self.assertEqual(meta["claim"], "claim")
         self.assertEqual(meta["daily_checkin"], "checkin")
 
 

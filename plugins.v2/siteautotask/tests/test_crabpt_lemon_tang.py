@@ -116,8 +116,8 @@ class CrabptTests(unittest.TestCase):
         tasks = crabpt.Tasks()
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
-        self.assertEqual(meta["daily_claim_task"], "claim")
-        self.assertEqual(meta["monthly_claim_task"], "claim")
+        self.assertEqual(meta["claim"], "claim")
+        self.assertEqual(meta["claim"], "claim")
         self.assertEqual(meta["daily_checkin"], "checkin")
 
 
@@ -167,7 +167,7 @@ class TangptTests(unittest.TestCase):
         tasks = tangpt.Tasks()
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
-        self.assertEqual(meta["daily_claim_task"], "claim")
+        self.assertEqual(meta["claim"], "claim")
         self.assertEqual(meta["daily_checkin"], "checkin")
 
 

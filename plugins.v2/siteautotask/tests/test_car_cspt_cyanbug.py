@@ -115,7 +115,7 @@ class CarTests(unittest.TestCase):
         tasks = car.Tasks()
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
-        self.assertEqual(meta["daily_claim_task"], "claim")
+        self.assertEqual(meta["claim"], "claim")
         self.assertEqual(meta["daily_checkin"], "checkin")
 
 
@@ -134,7 +134,7 @@ class CsptTests(unittest.TestCase):
         tasks = cspt.Tasks()
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
-        self.assertEqual(meta["daily_claim_task"], "claim")
+        self.assertEqual(meta["claim"], "claim")
 
 
 class CyanbugTests(unittest.TestCase):

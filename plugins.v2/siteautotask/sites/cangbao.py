@@ -9,6 +9,23 @@ from ..base.result import TaskResult
 
 
 class CangbaoHandler(CapabilityHandler):
+
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "12", "label": "做种传奇"},
+            {"id": "11", "label": "做种之光"},
+            {"id": "10", "label": "做种大师"},
+            {"id": "9", "label": "做种达人"},
+            {"id": "8", "label": "做种新秀"},
+            {"id": "6", "label": "开阁元老"},
+            {"id": "5", "label": "宗师巨匠"},
+            {"id": "4", "label": "护宝大师"},
+            {"id": "3", "label": "持证工匠"},
+            {"id": "2", "label": "宝阁学徒"},
+        ]
+
     MESSAGE_INTERVAL = 60  # 藏宝阁多消息间隔秒数
     @staticmethod
     def get_site_name():
@@ -68,13 +85,13 @@ class Tasks(BaseTask):
     def __init__(self, cookie=None):
         super().__init__(None)
 
-    @task_info("{client_name}任务领取", "领取藏宝阁做种传奇任务", TaskType.CLAIM)
-    def daily_claim_task(self, task_id=None):
-        return self.client.claim_task(task_id or "12")
-
     @task_info("{client_name}签到", "执行藏宝阁签到", TaskType.CHECKIN)
     def daily_checkin(self):
         return self.client.attendance()
+
+    @task_info("{client_name}任务申领", "申领Cangbao任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
 
     @task_info("{client_name}喊话", "执行藏宝阁喊话并获取反馈", TaskType.CHAT)
     def daily_shotbox(self):

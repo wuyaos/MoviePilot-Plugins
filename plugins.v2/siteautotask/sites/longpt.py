@@ -13,6 +13,19 @@ from ..utils.request import parse_json_response
 
 
 class LongPTHandler(CapabilityHandler):
+
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "8", "label": "发种-简单"},
+            {"id": "7", "label": "发种-正常"},
+            {"id": "6", "label": "发种-困难"},
+            {"id": "5", "label": "保种-简单"},
+            {"id": "4", "label": "保种-正常"},
+            {"id": "2", "label": "保种-困难"},
+        ]
+
     MESSAGE_INTERVAL = 60  # LongPT多消息间隔秒数
     api_base = "https://longpt.org/pt-api/v1"
 
@@ -80,13 +93,13 @@ class Tasks(BaseTask):
     def __init__(self, cookie=None):
         super().__init__(None)
 
-    @task_info("{client_name}月度保种领取", "领取 LongPT 月度保种任务", TaskType.CLAIM)
-    def monthly_claim_task(self, task_id=None):
-        return self.client.claim_task(task_id or "2")
-
     @task_info("{client_name}签到", "执行 LongPT 签到", TaskType.CHECKIN)
     def daily_checkin(self):
         return self.client.attendance()
+
+    @task_info("{client_name}任务申领", "申领LongPT任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
 
     @task_info("{client_name}喊话", "执行 LongPT 喊话并获取反馈", TaskType.CHAT)
     def daily_shotbox(self):

@@ -207,7 +207,7 @@ class PtskitTests(unittest.TestCase):
         tasks = ptskit.Tasks()
         tasks.client = handler
         meta = {item["name"]: item["task_type"] for item in tasks.get_registered_tasks()}
-        self.assertEqual(meta["daily_claim_task"], "claim")
+        self.assertEqual(meta["claim"], "claim")
         self.assertEqual(meta["daily_shotbox"], "chat")
 
 

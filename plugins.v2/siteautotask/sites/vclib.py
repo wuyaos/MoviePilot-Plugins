@@ -20,6 +20,14 @@ from ..utils.request import parse_json_response
 
 
 class VclibHandler(CapabilityHandler):
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。Vc-Lib 未在 MP 配置，沿用上游已知 task_id。"""
+        return [
+            {"id": "2", "label": "每周上传任务"},
+            {"id": "3", "label": "每周魔力值任务"},
+        ]
+
     def __init__(self, site_info: dict):
         super().__init__(site_info)
         self.bonus_url = self.site_url + "/mybonus.php?action=exchange"
@@ -156,6 +164,6 @@ class Tasks(BaseTask):
         results.append(f"✅ 任务已完成（{status.get('message')}），跳过兑换")
         return TaskResult.ok("\n".join(results))
 
-    @task_info("每周魔力值任务", "领取Vc-Lib每周魔力值任务", TaskType.CLAIM)
-    def weekly_bonus_claim(self, task_id=None):
-        return self.client.claim_task(task_id or "3")
+    @task_info("{client_name}任务申领", "申领Vc-Lib任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)

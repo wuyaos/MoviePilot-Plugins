@@ -146,7 +146,7 @@ class VclibTests(unittest.TestCase):
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
         self.assertIn("weekly_upload_claim_and_exchange", meta)
-        self.assertEqual(meta["weekly_bonus_claim"], "claim")
+        self.assertEqual(meta["claim"], "claim")
 
 
 DUBHE_SHOUTBOX = """

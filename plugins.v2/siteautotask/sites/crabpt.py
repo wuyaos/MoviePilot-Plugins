@@ -10,6 +10,21 @@ from ..utils.request import parse_json_response
 
 
 class CrabptHandler(CapabilityHandler):
+
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "16", "label": "转种员专属任务"},
+            {"id": "15", "label": "保种员专属2"},
+            {"id": "14", "label": "保种员专属1"},
+            {"id": "12", "label": "保种魔王"},
+            {"id": "11", "label": "力争全勤奖"},
+            {"id": "10", "label": "每月任务2"},
+            {"id": "9", "label": "每月任务1"},
+            {"id": "2", "label": "test转种项目"},
+        ]
+
     @staticmethod
     def get_site_name():
         return "蟹黄堡"
@@ -40,10 +55,7 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @task_info("{client_name}保种魔王", "领取蟹黄堡保种魔王任务", TaskType.CLAIM)
-    def daily_claim_task(self, task_id=None):
-        return self.client.claim_task(task_id or "12")
+    @task_info("{client_name}任务申领", "申领Crabpt任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
 
-    @task_info("{client_name}力争全勤", "领取蟹黄堡力争全勤任务", TaskType.CLAIM)
-    def monthly_claim_task(self, task_id=None):
-        return self.client.claim_task(task_id or "11")

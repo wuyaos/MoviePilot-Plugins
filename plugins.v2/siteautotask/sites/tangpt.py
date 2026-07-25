@@ -10,6 +10,19 @@ from ..utils.request import parse_json_response
 
 
 class TangptHandler(CapabilityHandler):
+
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "7", "label": "我想试试"},
+            {"id": "6", "label": "YES"},
+            {"id": "5", "label": "苍蝇腿"},
+            {"id": "4", "label": "VIP"},
+            {"id": "3", "label": "BUG"},
+            {"id": "2", "label": "TEST"},
+        ]
+
     @staticmethod
     def get_site_name():
         return "躺平"
@@ -40,8 +53,7 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @task_info("{client_name}任务领取", "领取躺平BUG/VIP任务", TaskType.CLAIM)
-    def daily_claim_task(self, task_id=None):
-        if task_id:
-            return self.client.claim_task(task_id)
-        return "\n".join([self.client.claim_task(tid) for tid in ("3", "4")])
+    @task_info("{client_name}任务申领", "申领Tangpt任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
+

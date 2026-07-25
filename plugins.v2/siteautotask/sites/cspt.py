@@ -10,6 +10,16 @@ from ..utils.request import parse_json_response
 
 
 class CsptHandler(CapabilityHandler):
+
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "6", "label": "南财神"},
+            {"id": "5", "label": "西财神"},
+            {"id": "3", "label": "东财神"},
+        ]
+
     @staticmethod
     def get_site_name():
         return "财神"
@@ -39,6 +49,7 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @task_info("{client_name}任务领取", "领取财神西财神任务", TaskType.CLAIM)
-    def daily_claim_task(self, task_id=None):
-        return self.client.claim_task(task_id or "5")
+    @task_info("{client_name}任务申领", "申领Cspt任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
+

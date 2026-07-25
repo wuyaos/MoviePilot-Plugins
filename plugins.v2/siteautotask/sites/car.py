@@ -11,6 +11,17 @@ from ..utils.request import parse_json_response
 
 
 class CarHandler(CapabilityHandler):
+
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "5", "label": "天天快乐任务"},
+            {"id": "4", "label": "15天任务(VIP)"},
+            {"id": "3", "label": "30天任务"},
+            {"id": "2", "label": "7天任务"},
+        ]
+
     @staticmethod
     def get_site_name():
         return "CARPT"
@@ -40,6 +51,7 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @task_info("{client_name}任务领取", "领取CARPT天天快乐任务", TaskType.CLAIM)
-    def daily_claim_task(self, task_id=None):
-        return self.client.claim_task(task_id or "5")
+    @task_info("{client_name}任务申领", "申领Car任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
+

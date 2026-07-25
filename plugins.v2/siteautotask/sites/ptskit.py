@@ -16,6 +16,17 @@ from ..base.result import TaskResult
 
 
 class PtskitHandler(CapabilityHandler):
+
+    @staticmethod
+    def get_claim_options():
+        """可申领任务选项，id 为站点 exam_id。"""
+        return [
+            {"id": "15", "label": "永久邀请奖励"},
+            {"id": "14", "label": "魔力值奖励3"},
+            {"id": "13", "label": "魔力值奖励1"},
+            {"id": "12", "label": "魔力值任务2"},
+        ]
+
     def __init__(self, site_info: dict):
         super().__init__(site_info)
         self.shoutbox_url = self.site_url + "/shoutbox.php?type=shoutbox"
@@ -101,9 +112,9 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @task_info("{client_name}魔力值任务2", "领取Ptskit魔力值任务2", TaskType.CLAIM)
-    def daily_claim_task(self, task_id=None):
-        return self.client.claim_task(task_id or "12")
+    @task_info("{client_name}任务申领", "申领Ptskit任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)
 
     @task_info("{client_name}喊话", "执行Ptskit喊话并解析魔力值反馈", TaskType.CHAT)
     def daily_shotbox(self):
