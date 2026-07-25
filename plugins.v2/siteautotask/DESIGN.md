@@ -44,6 +44,7 @@ plugins.v2/siteautotask/
 │   ├── dubhe.py             # 天枢（groupchatzone 独有）
 │   ├── moment.py            # Moment
 │   ├── luckpt.py            # LuckPT
+│   ├── railgunpt.py         # RailgunPT
 │   └── dqc.py               # 大青虫（含 get_user_privileges）
 ├── utils/
 │   ├── __init__.py

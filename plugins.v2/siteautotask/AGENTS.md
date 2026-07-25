@@ -18,7 +18,7 @@
 - `utils/`：统一请求（session+重试+代理+JSON容错+browser兜底）、反馈奖励解析、HTML 工具
 - `tests/`：无真实网络副作用的 mock 测试
 
-## 站点清单（21 个）
+## 站点清单（22 个）
 
 ### 重叠站点（7，合并双方）
 | 站点 | 文件 | 特性 |
@@ -45,13 +45,14 @@
 | NovaHD | novahd.py | 签到/保种 |
 | Vc-Lib | vclib.py | 签到/每周上传任务（状态检查+魔力兑换）/每周魔力值任务 |
 
-### groupchatzone 独有站点（4）
+### groupchatzone 独有站点（5）
 | 站点 | 文件 | 特性 |
 |---|---|---|
 | 天枢 | dubhe.py | 签到/喊话（请求类型验证反馈） |
 | 好学 | hxpt.py | 签到/喊话（火花反馈） |
 | Moment | moment.py | 签到/喊话（女友反馈） |
 | LuckPT | luckpt.py | 签到/喊话（许愿池反馈） |
+| RailgunPT | railgunpt.py | 签到/喊话（通用 NexusPHP，无特殊反馈） |
 
 ## 契约约束
 
