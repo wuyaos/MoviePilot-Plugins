@@ -23,7 +23,7 @@ MoviePilot官方插件市场：https://github.com/jxxghp/MoviePilot-Plugins
 | clouddrive2disk | [CloudDrive2 存储](#clouddrive2disk) | 1.0.3 | CloudDrive2 gRPC 直连接入，注册为 MoviePilot 存储 |
 | myptmedalbuyer | [myPT勋章续购](#myptmedalbuyer) | 1.0.0 | 自动续购 myPT 勋章，避免到期忘记购买 |
 | tanglottery | [不可躺自动抽奖助手](#tanglottery) | 3.0.2 | 按每日目标次数自动拆解并执行不可躺抽奖 |
-| tangredpacket | [不可躺自动领红包](#tangredpacket) | 1.0.9 | 自动发现并串行领取不可躺红包 |
+| tangredpacketclaim | [不可躺自动领红包](#tangredpacketclaim) | 1.0.11 | 自动发现并串行领取不可躺红包 |
 
 ---
 
@@ -163,8 +163,8 @@ yzyy 论坛每日签到，自动获取签到码完成签到。
 
 按每日目标次数自动拆解并执行不可躺抽奖。
 
-<a id="tangredpacket"></a>
-### [不可躺自动领红包](https://github.com/wuyaos/MoviePilot-Plugins/tree/main/plugins.v2/tangredpacket)
-> 版本 1.0.9 · 作者 wuyaos
+<a id="tangredpacketclaim"></a>
+### [不可躺自动领红包](https://github.com/wuyaos/MoviePilot-Plugins/tree/main/plugins.v2/tangredpacketclaim)
+> 版本 1.0.11 · 作者 wuyaos
 
 自动发现并串行领取不可躺红包，支持限流感知和历史统计。
