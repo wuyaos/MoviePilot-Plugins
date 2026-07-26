@@ -122,22 +122,34 @@ class SiqiConfig(FarmSiteConfig):
         data = self._json_dict(html)
         statuses: Dict[str, Dict] = {}
         for plot in data.get("user_lands") or []:
-            if not isinstance(plot, dict) or not plot.get("seed_id"):
+            if not isinstance(plot, dict):
                 continue
             seed_id = self._number(plot.get("seed_id"))
-            if seed_id is None:
-                continue
-            ready = str(plot.get("is_ready", "0")) == "1"
-            harvest_time = self._number(plot.get("harvest_time"))
-            # harvest_time 已过期也算可收获(站点 is_ready 可能未及时更新)
-            if not ready and harvest_time and harvest_time <= time.time():
-                ready = True
-            statuses[f"crop_{seed_id}"] = {
-                "can_harvest": ready,
-                "land_id": plot.get("land_id"),
-                "plot_index": plot.get("plot_index"),
-                "harvest_time": plot.get("harvest_time"),
-            }
+            land_id = plot.get("land_id")
+            plot_index = plot.get("plot_index")
+            if seed_id is not None and seed_id != 0:
+                # 已种植的 plot
+                ready = str(plot.get("is_ready", "0")) == "1"
+                harvest_time = self._number(plot.get("harvest_time"))
+                if not ready and harvest_time and harvest_time <= time.time():
+                    ready = True
+                key = f"crop_{seed_id}"
+                if key not in statuses or (ready and not statuses[key].get("can_harvest")):
+                    statuses[key] = {
+                        "can_harvest": ready,
+                        "land_id": land_id,
+                        "plot_index": plot_index,
+                        "harvest_time": plot.get("harvest_time"),
+                    }
+            else:
+                # 空地也记录(供 plant 使用)
+                statuses[f"empty_{land_id}_{plot_index}"] = {
+                    "can_harvest": False,
+                    "land_id": land_id,
+                    "plot_index": plot_index,
+                    "harvest_time": None,
+                    "is_empty": True,
+                }
         if statuses:
             return statuses
 

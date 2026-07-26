@@ -591,8 +591,13 @@ class FarmExecutor:
                 crop_action = crop.get("action", "plant")
                 if site_config.site_id == "siqi":
                     # 思齐用 POST plant_game.php + action=plant
-                    # 从 crop_status 获取 land_id/plot_index
-                    cs = (crop_status or {}).get(crop_key, {})
+                    # 从 crop_status 找空地(is_empty=True)获取 land_id/plot_index
+                    empty_plot = None
+                    for v in (crop_status or {}).values():
+                        if isinstance(v, dict) and v.get("is_empty"):
+                            empty_plot = v
+                            break
+                    cs = empty_plot or {}
                     response = self.http_client.post(
                         site_config.get_farm_url(),
                         cookies,
