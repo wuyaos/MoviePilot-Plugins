@@ -93,5 +93,6 @@ def test_min_profit_rate_override_is_used_by_smart_plan():
     )
 
     assert policy["min_profit_rate"] == 0.2
-    assert report.actions == []
+    # min_profit_rate 不满足时跳过出售,但收获免费仍执行
+    assert all(a.action != "sell" for a in report.actions)
     assert report.status == "skipped"
