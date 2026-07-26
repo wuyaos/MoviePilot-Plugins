@@ -615,18 +615,7 @@ class FarmAuto(_PluginBase):
 
     def _api_status(self) -> Dict[str, Any]:
         trends = self._trend_store.to_dict()
-        last_result = self._stats.get("last_result") or {}
-        reports = last_result.get("site_reports") or [] if isinstance(last_result, dict) else []
-        site_ids = list(dict.fromkeys(
-            self._site_ids
-            + list((self._market_prices or {}).keys())
-            + list(trends.keys())
-            + [
-                str(report.get("site_id"))
-                for report in reports
-                if isinstance(report, dict) and report.get("site_id")
-            ]
-        ))
+        site_ids = list(dict.fromkeys(list(SITE_CONFIGS.keys())))
         sites = []
         for site_id in site_ids:
             site_config = get_site_config(site_id)

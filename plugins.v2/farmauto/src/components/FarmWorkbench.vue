@@ -37,15 +37,20 @@ const balance = computed(() => selectedSite.value.bonus ?? '—')
 const currency = computed(() => selectedSite.value.currency || '')
 const nextRun = computed(() => status.value.next_run || '未安排')
 const dryRun = computed(() => Boolean(status.value.dry_run))
-const apiBase = computed(() => `/api/v1/plugin/${props.pluginId}`)
+// 宿主 api 会自动拼接 /api/v1/ 前缀并附带 bearer 认证。
+const apiBase = computed(() => `plugin/${props.pluginId || 'FarmAuto'}`)
 const cropStatus = computed(() => siteDetail.value.crop_status || {})
 const crops = computed(() => siteDetail.value.crops || {})
 const trends = computed(() => siteDetail.value.trends || {})
 const warehouse = computed(() => Array.isArray(siteDetail.value.warehouse) ? siteDetail.value.warehouse : [])
 const marketPrices = computed(() => siteDetail.value.market_prices || {})
 const siqiExtra = computed(() => siteDetail.value.siqi_extra || null)
-const cropKeys = ['crop_1', 'crop_2', 'crop_3', 'crop_4']
-const animalKeys = ['animal_1', 'animal_2', 'animal_3', 'animal_4']
+const cropKeys = computed(() => Object.entries(crops.value)
+  .filter(([, definition]) => definition?.type === 'crop')
+  .map(([cropKey]) => cropKey))
+const animalKeys = computed(() => Object.entries(crops.value)
+  .filter(([, definition]) => definition?.type === 'animal')
+  .map(([cropKey]) => cropKey))
 
 function windowToken() {
   if (typeof window === 'undefined') return ''
@@ -56,7 +61,7 @@ function windowToken() {
 }
 
 async function fetchRequest(path, options = {}) {
-  const token = props.api?.token || windowToken()
+  const token = windowToken()
   const headers = { ...(options.headers || {}) }
   if (token) headers.Authorization = `Bearer ${token}`
   if (options.body) headers['Content-Type'] = 'application/json'
@@ -64,30 +69,47 @@ async function fetchRequest(path, options = {}) {
   const response = await fetch(path, { ...options, headers })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(payload?.message || `请求失败（${response.status}）`)
+    throw new Error(payload?.message || payload?.detail || `请求失败（${response.status}）`)
   }
   return payload
 }
 
 async function request(method, path, body) {
-  const apiMethod = props.api?.[method.toLowerCase()]
-  if (typeof apiMethod === 'function') {
-    return method === 'GET'
-      ? apiMethod.call(props.api, path)
-      : apiMethod.call(props.api, path, body || {})
+  const hasHostApi = typeof props.api?.get === 'function' || typeof props.api?.post === 'function'
+  if (hasHostApi) {
+    if (method === 'GET' && typeof props.api.get === 'function') {
+      return props.api.get(path)
+    }
+    if (method === 'POST' && typeof props.api.post === 'function') {
+      return props.api.post(path, body || {})
+    }
+    throw new Error(`宿主 API 不支持 ${method} 请求`)
   }
-  return fetchRequest(path, {
+
+  // 仅在宿主未注入 api 时兜底；相对插件路径需补全为后端绝对路径。
+  const url = path.startsWith('http') || path.startsWith('/api')
+    ? path
+    : `/api/v1/${path}`
+  return fetchRequest(url, {
     method,
     body: method === 'GET' ? undefined : JSON.stringify(body || {}),
   })
 }
 
 function unwrapResponse(response) {
-  const payload = response?.data ?? response
+  const payload = response
+    && Object.prototype.hasOwnProperty.call(response, 'success')
+    ? response
+    : response?.data ?? response
   if (payload?.success === false) {
     throw new Error(payload.message || '请求未成功')
   }
-  return payload?.data ?? payload ?? {}
+  if (payload && Object.prototype.hasOwnProperty.call(payload, 'success')) {
+    return Object.prototype.hasOwnProperty.call(payload, 'data')
+      ? payload.data ?? {}
+      : payload
+  }
+  return payload ?? {}
 }
 
 async function loadStatus() {
@@ -106,9 +128,7 @@ async function loadStatus() {
 
 async function loadHistory() {
   try {
-    const response = await request('GET', `${apiBase.value}/stats`)
-    const payload = response?.data ?? response ?? {}
-    if (payload?.success === false) throw new Error(payload.message || '请求未成功')
+    const payload = unwrapResponse(await request('GET', `${apiBase.value}/stats`))
     history.value = Array.isArray(payload?.stats?.history) ? payload.stats.history : []
   } catch (requestError) {
     history.value = []
@@ -141,10 +161,7 @@ async function runNow() {
   error.value = ''
   successMessage.value = ''
   try {
-    const response = await request('POST', `${apiBase.value}/run`, {})
-    const payload = response?.data ?? response ?? {}
-    if (payload?.success === false) throw new Error(payload.message || '提交立即运行失败')
-    const result = payload?.data ?? payload
+    const result = unwrapResponse(await request('POST', `${apiBase.value}/run`, {}))
     emit('action', result)
     await loadStatus()
     await Promise.all([loadSiteDetail(), loadHistory()])
@@ -157,14 +174,11 @@ async function runNow() {
 
 async function postSiteAction(action, cropKey) {
   const body = cropKey ? { action, crop_key: cropKey } : { action }
-  const response = await request(
+  return unwrapResponse(await request(
     'POST',
     `${apiBase.value}/site/${encodeURIComponent(selectedSiteId.value)}/action`,
     body,
-  )
-  const payload = response?.data ?? response ?? {}
-  if (payload?.success === false) throw new Error(payload.message || '操作失败')
-  return payload?.data ?? payload
+  ))
 }
 
 async function handleManualAction({ action, cropKey }) {
@@ -223,9 +237,9 @@ async function handleSiqiAction({ action }) {
   await handleManualAction({ action })
 }
 
-watch(selectedSite, site => {
+watch(selectedSiteId, siteId => {
   successMessage.value = ''
-  loadSiteDetail(site?.site_id || '')
+  loadSiteDetail(siteId)
 })
 
 onMounted(() => Promise.all([loadStatus(), loadHistory()]))

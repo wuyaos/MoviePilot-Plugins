@@ -165,7 +165,11 @@ def test_api_status_returns_global_and_site_summary():
     assert data["total_profit"] == 123
     assert data["total_trades"] == 4
     assert data["last_run"] is not None
-    assert data["sites"] == [{
+    # 全部已注册站点都会出现在列表中
+    sites = data["sites"]
+    playlet_site = next((s for s in sites if s["site_id"] == "playlet"), None)
+    assert playlet_site is not None
+    assert playlet_site == {
         "site_id": "playlet",
         "site_name": "PlayLet",
         "currency": "魔力",
@@ -175,7 +179,8 @@ def test_api_status_returns_global_and_site_summary():
         "warehouse_count": 2,
         "trend_points": 2,
         "recent_action": "harvest",
-    }]
+    }
+    assert len(sites) >= 1
 
 
 def test_api_site_action_dry_run_does_not_build_client_or_request():
