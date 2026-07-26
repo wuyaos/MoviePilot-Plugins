@@ -182,7 +182,7 @@ def build_page(plugin):
             "props": {"cols": 12, "md": 6},
             "content": [{
                 "component": "VCard",
-                "props": {"variant": "elevated", "elevation": "3", "border": True, "class": "h-100"},
+                "props": {"variant": "elevated", "elevation": "3", "border": "opacity-30", "class": "h-100"},
                 "content": [
                     {"component": "VCardText", "props": {"class": "pa-3"}, "content": [
                         title_row,
@@ -209,7 +209,7 @@ def build_page(plugin):
             {"component": "VDivider"},
             {"component": "VCardText", "content": [{
                 "component": "VRow",
-                "props": {"dense": True},
+                "props": {"dense": True, "align": "stretch"},
                 "content": site_cards or [{"component": "div", "props": {"class": "text-medium-emphasis pa-2"}, "text": "暂无运行记录，执行任务后此处显示站点卡片"}],
             }]},
         ],
