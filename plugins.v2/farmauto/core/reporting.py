@@ -33,7 +33,7 @@ _ACTION_CATEGORIES = (
 def _format_site_detail(site_report: SiteRunReport) -> str:
     lines = [
         f"【{site_report.site_name}】{_STATUS_EMOJIS.get(site_report.status, '⚠️')} "
-        f"{site_report.trades_count}笔 魔力{'+' if site_report.total_profit >= 0 else ''}{site_report.total_profit}"
+        f"{'+' if site_report.total_profit >= 0 else ''}{site_report.total_profit} 魔力"
     ]
     grouped_actions = [[] for _ in range(len(_ACTION_CATEGORIES) + 1)]
     for action in site_report.actions:
@@ -53,9 +53,12 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
             continue
         successful_actions = [action for action in actions if action.success]
         failed_actions = [action for action in actions if not action.success]
-        successful_targets = list(dict.fromkeys(
-            str(action.target) for action in successful_actions if action.target
-        ))[:5]
+        # 按目标名聚合计数
+        target_counts = {}
+        for action in successful_actions:
+            target = str(action.target) if action.target else "未知"
+            target_counts[target] = target_counts.get(target, 0) + 1
+        successful_targets = [f"{name}×{count}" for name, count in list(target_counts.items())[:5]]
         success_detail = (
             f"（{'、'.join(successful_targets)}）" if successful_targets else ""
         )
@@ -65,8 +68,8 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
         ]
         failure_detail = f"（{'、'.join(failed_details)}）" if failed_details else ""
         lines.append(
-            f"  {icon} {label}：✅{len(successful_actions)}{success_detail} "
-            f"❌{len(failed_actions)}{failure_detail}"
+            f"  {icon} {label}：✅{len(successful_actions)}{success_detail}"
+            + (f" ❌{len(failed_actions)}{failure_detail}" if failed_actions else "")
         )
     return "\n".join(lines)
 
