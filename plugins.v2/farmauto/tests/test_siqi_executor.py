@@ -30,11 +30,19 @@ class FakeHttpClient:
             raise AssertionError("发生了未预期的 HTTP 请求")
         return self.responses.pop(0)
 
-    def get(self, url, cookies):
+    def get(self, url, cookies, retryable=True):
         self.calls.append(("GET", url, None))
         return self._response()
 
-    def post(self, url, cookies, data=None, json=None, allow_redirects=True):
+    def post(
+        self,
+        url,
+        cookies,
+        data=None,
+        json=None,
+        allow_redirects=True,
+        retryable=False,
+    ):
         self.calls.append(("POST", url, data))
         return self._response()
 

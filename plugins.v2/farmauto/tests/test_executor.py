@@ -60,7 +60,7 @@ class FakeHttpClient:
         self.urls = []
         self.failed = False
 
-    def get(self, url, cookies):
+    def get(self, url, cookies, retryable=True):
         self.urls.append(url)
         if self.fail_token and self.fail_token in url and not self.failed:
             self.failed = True
@@ -123,7 +123,15 @@ class BatchSellHttpClient(FakeHttpClient):
         self.posts = []
         self.post_error = post_error
 
-    def post(self, url, cookies, data=None, json=None, allow_redirects=True):
+    def post(
+        self,
+        url,
+        cookies,
+        data=None,
+        json=None,
+        allow_redirects=True,
+        retryable=False,
+    ):
         self.posts.append({"url": url, "data": data})
         if self.post_error:
             raise self.post_error

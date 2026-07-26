@@ -325,6 +325,7 @@ class FarmExecutor:
                 harvested = self.http_client.get(
                     site_config.get_harvest_plot_url(plot["land_id"], plot["plot_index"]),
                     cookies,
+                    retryable=False,
                 )
                 harvested.raise_for_status()
                 if not site_config.parse_harvest_result(harvested.text).get("success"):
@@ -519,12 +520,12 @@ class FarmExecutor:
         try:
             if operation == "harvest_all":
                 action_url = site_config.get_harvest_all_url()
-                response = self.http_client.get(action_url, cookies)
+                response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)
             elif operation == "harvest":
                 action_url = site_config.get_harvest_url(crop["type"], crop["id"])
-                response = self.http_client.get(action_url, cookies)
+                response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)
             elif operation == "plant":
@@ -535,7 +536,7 @@ class FarmExecutor:
                     else site_config.get_plant_url(crop["type"], crop["id"])
                 )
                 action_url = url
-                response = self.http_client.get(action_url, cookies)
+                response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_plant_result(response.text, crop_action)
             elif operation == "sell":
@@ -550,7 +551,7 @@ class FarmExecutor:
                 if not sell_key:
                     return ActionResult("sell", target, False, message="未找到出售标识"), farm_html
                 action_url = site_config.get_sell_url(sell_key)
-                response = self.http_client.get(action_url, cookies)
+                response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_sell_result(response.text)
             else:

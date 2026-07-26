@@ -290,6 +290,45 @@ def test_api_site_action_dry_run_does_not_build_client_or_request():
     assert requested == []
 
 
+def test_api_site_action_rejects_request_while_task_is_running():
+    plugin = build_plugin()
+    requested = []
+    plugin._build_http_client = lambda policy: requested.append(policy)
+    assert type(plugin)._run_lock.acquire(blocking=False) is True
+
+    try:
+        response = plugin._api_site_action(
+            "playlet", {"action": "harvest", "crop_key": "crop_1"}
+        )
+    finally:
+        type(plugin)._run_lock.release()
+
+    assert response == {
+        "success": False,
+        "message": "农场任务正在运行，请稍后重试",
+        "action": "harvest",
+        "target": "小麦",
+        "dry_run": False,
+    }
+    assert requested == []
+
+
+def test_api_site_action_releases_lock_after_request_error():
+    plugin = build_plugin()
+    plugin._build_http_client = lambda _policy: (_ for _ in ()).throw(
+        RuntimeError("client failed")
+    )
+
+    response = plugin._api_site_action(
+        "playlet", {"action": "harvest", "crop_key": "crop_1"}
+    )
+
+    assert response["success"] is False
+    assert response["message"] == "client failed"
+    assert type(plugin)._run_lock.acquire(blocking=False) is True
+    type(plugin)._run_lock.release()
+
+
 def test_api_site_action_sell_fetches_farm_and_calls_sell_url():
     plugin = build_plugin()
     client = FakeHttpClient()

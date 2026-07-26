@@ -907,6 +907,18 @@ class FarmAuto(_PluginBase):
                 "dry_run": True,
             }
 
+        if not type(self)._run_lock.acquire(blocking=False):
+            logger.warning(
+                f"[FarmAuto] {site_config.site_name} 手动{action}请求被拒绝：任务正在运行"
+            )
+            return {
+                "success": False,
+                "message": "农场任务正在运行，请稍后重试",
+                "action": action,
+                "target": target,
+                "dry_run": False,
+            }
+
         try:
             http_client = self._build_http_client(policy)
             cookies = FarmExecutor._cookie_dict(self._get_site_cookie(site_config))
@@ -1054,6 +1066,8 @@ class FarmAuto(_PluginBase):
                 "target": target,
                 "dry_run": False,
             }
+        finally:
+            type(self)._run_lock.release()
 
     @eventmanager.register(EventType.PluginAction)
     def run_once_command(self, event: Event = None):

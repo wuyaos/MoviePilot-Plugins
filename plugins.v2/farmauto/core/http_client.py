@@ -50,8 +50,20 @@ class FarmHttpClient:
         except Exception:
             return None
 
-    def get(self, url: str, cookies: dict, allow_redirects: bool = True) -> requests.Response:
-        return self._request("GET", url, cookies=cookies, allow_redirects=allow_redirects)
+    def get(
+        self,
+        url: str,
+        cookies: dict,
+        allow_redirects: bool = True,
+        retryable: bool = True,
+    ) -> requests.Response:
+        return self._request(
+            "GET",
+            url,
+            cookies=cookies,
+            allow_redirects=allow_redirects,
+            retryable=retryable,
+        )
 
     def post(
         self,
@@ -60,6 +72,7 @@ class FarmHttpClient:
         data: Any = None,
         json: Any = None,
         allow_redirects: bool = True,
+        retryable: bool = False,
     ) -> requests.Response:
         return self._request(
             "POST",
@@ -68,6 +81,7 @@ class FarmHttpClient:
             data=data,
             json=json,
             allow_redirects=allow_redirects,
+            retryable=retryable,
         )
 
     def _rate_limit(self) -> None:
@@ -75,16 +89,24 @@ class FarmHttpClient:
         if wait > 0:
             time.sleep(wait)
 
-    def _request(self, method: str, url: str, cookies: Dict[str, str], **kwargs: Any) -> requests.Response:
+    def _request(
+        self,
+        method: str,
+        url: str,
+        cookies: Dict[str, str],
+        retryable: bool = True,
+        **kwargs: Any,
+    ) -> requests.Response:
         last_error: Optional[BaseException] = None
-        for attempt in range(self.retry_count + 1):
+        max_attempts = self.retry_count + 1 if retryable else 1
+        for attempt in range(max_attempts):
             self._rate_limit()
             proxies = {"http": self.proxy_url, "https": self.proxy_url} if self.proxy_url else None
             try:
                 response = self._send(method, url, cookies, proxies, **kwargs)
             except (requests.Timeout, requests.ConnectionError) as error:
                 last_error = error
-                if proxies:
+                if retryable and proxies:
                     logger.warning(f"[FarmAuto] HTTP {url} 代理失败回退直连")
                     try:
                         response = self._send(method, url, cookies, None, **kwargs)
@@ -97,7 +119,7 @@ class FarmHttpClient:
                         last_error = requests.HTTPError(
                             f"HTTP {response.status_code}", response=response
                         )
-                if attempt < self.retry_count:
+                if attempt + 1 < max_attempts:
                     self._log_retry(url, attempt + 1, last_error)
                     time.sleep(min(self.retry_interval * (2 ** attempt), 30.0))
                 continue
@@ -107,7 +129,7 @@ class FarmHttpClient:
             last_error = requests.HTTPError(
                 f"HTTP {response.status_code}", response=response
             )
-            if attempt < self.retry_count:
+            if attempt + 1 < max_attempts:
                 self._log_retry(url, attempt + 1, last_error)
                 time.sleep(min(self.retry_interval * (2 ** attempt), 30.0))
         if last_error:
