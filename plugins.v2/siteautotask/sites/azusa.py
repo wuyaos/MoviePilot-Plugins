@@ -33,6 +33,15 @@ class AzusaHandler(CapabilityHandler):
     def get_site_domain():
         return "azusa.wiki"
 
+    def __init__(self, site_info: dict):
+        super().__init__(site_info)
+        # task.php 的领取按钮由 jQuery 同源 AJAX 提交，站点要求该请求头。
+        headers = getattr(self.session, "headers", None)
+        if not isinstance(headers, dict):
+            headers = {}
+            self.session.headers = headers
+        headers["X-Requested-With"] = "XMLHttpRequest"
+
     def match(self) -> bool:
         return "azusa.wiki" in self.domain or "梓喵" in self.site_name
 
@@ -53,6 +62,9 @@ class AzusaHandler(CapabilityHandler):
             data={"action": "claimTask", "params[exam_id]": task_id},
         )
         if response is None:
+            error = getattr(self, "_last_request_error", "")
+            if "403" in error:
+                return "任务领取失败：403，请更新梓喵 Cookie（需包含 PHPSESSID）"
             return "任务领取失败"
         result = parse_json_response(response, "任务领取失败")
         return result.get("msg", "未知错误")

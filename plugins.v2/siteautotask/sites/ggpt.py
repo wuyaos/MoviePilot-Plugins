@@ -47,25 +47,25 @@ class GgptHandler(CapabilityHandler):
         return True  # 按钮可点击，已过期
 
     def buy_medal(self, medal_id: str = None) -> tuple:
-        """购买勋章，返回 (success, message)。"""
+        """购买勋章，返回 (检查成功, 消息, 实际购买成功的 ID)。"""
         medal_id = medal_id or self.MEDAL_ID
         if not self._is_medal_expired():
-            return True, "勋章未过期，跳过续购"
+            return True, "勋章未过期，跳过续购", []
         response = self._send_post_request(
             self.site_url + "/ajax.php",
             data={"action": "buyMedal", "params[medal_id]": medal_id})
         if not response:
-            return False, "购买请求失败：无响应"
+            return False, "购买请求失败：无响应", []
         try:
             payload = json.loads(response.text)
         except Exception:
-            return False, f"购买勋章响应解析失败：{response.text[:100]}"
+            return False, f"购买勋章响应解析失败：{response.text[:100]}", []
         msg = payload.get("message") or payload.get("msg") or payload.get("info") or "无返回信息"
         if payload.get("ret") in (0, "0"):
-            return True, f"购买成功：{msg}"
+            return True, f"购买成功：{msg}", [str(medal_id)]
         if any(kw in str(msg) for kw in ("已经购买", "已拥有", "已购买", "already")):
-            return True, f"已拥有：{msg}"
-        return False, str(msg)
+            return True, f"已拥有：{msg}", []
+        return False, str(msg), []
 
 
 class Tasks(BaseTask):
@@ -78,5 +78,5 @@ class Tasks(BaseTask):
 
     @task_info("购买疯狂星期四勋章", "过期时购买GGPT疯狂星期四勋章(7天有效)", TaskType.MEDAL)
     def buy_medal(self):
-        ok, msg = self.client.buy_medal()
-        return TaskResult.ok(msg) if ok else TaskResult.fail(msg)
+        ok, msg, purchased_ids = self.client.buy_medal()
+        return TaskResult.ok(msg, purchased_medal_ids=purchased_ids) if ok else TaskResult.fail(msg)

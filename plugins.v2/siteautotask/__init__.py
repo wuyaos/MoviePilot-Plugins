@@ -27,7 +27,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.15"
+    plugin_version = "1.0.16"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"
@@ -109,10 +109,6 @@ class SiteAutoTask(_PluginBase):
 
     def run_retry(self):
         return self.engine.retry_failed() if self.engine else []
-
-    def run_medal(self):
-        """独立 medal_cron 入口：只执行当天尚未成功的勋章任务。"""
-        return self.engine.run_medal() if self.engine else []
 
     def run_zm(self):
         """织梦 24h 电力冷却调度入口。"""

@@ -30,7 +30,7 @@ class HistoryStore:
         return list(reversed(history[-limit:]))
 
     def successful_task_ids_today(self):
-        """返回今天已成功的 task_id，供手动补跑跳过已完成任务。"""
+        """返回今天已成功的 task_id，供普通任务补跑跳过已完成项。"""
         history = self.plugin.get_data(self.key) or []
         today = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d")
         return {
@@ -39,4 +39,17 @@ class HistoryStore:
             if str(run.get("date", "")).startswith(today)
             for record in (run.get("records") or [])
             if record.get("success") and record.get("task_id")
+        }
+
+    def purchased_medal_keys_today(self):
+        """返回当天真实购买成功的 domain:medal_id；旧历史没有该字段时安全忽略。"""
+        history = self.plugin.get_data(self.key) or []
+        today = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d")
+        return {
+            f"{record.get('domain')}:{medal_id}"
+            for run in history
+            if str(run.get("date", "")).startswith(today)
+            for record in (run.get("records") or [])
+            for medal_id in (record.get("purchased_medal_ids") or [])
+            if record.get("domain")
         }

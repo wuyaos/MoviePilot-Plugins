@@ -175,14 +175,14 @@ class SchedulerEntryTests(unittest.TestCase):
             from_crontab=lambda expression: ("cron", expression)
         )
 
-    def _plugin(self, medal_cron=""):
+    def _plugin(self):
         config = types.SimpleNamespace(
             enabled=True, cron="4 0 * * *", retry_count=0, retry_interval=10,
-            medal_cron=medal_cron, zm_mail_time="",
+            zm_mail_time="",
         )
         return types.SimpleNamespace(
             config=config,
-            run_scheduled=Mock(), run_retry=Mock(), run_medal=Mock(), run_zm=Mock(),
+            run_scheduled=Mock(), run_retry=Mock(), run_zm=Mock(),
             selected_sites=Mock(return_value=[]),
         )
 
@@ -193,16 +193,14 @@ class SchedulerEntryTests(unittest.TestCase):
         main = next(service for service in services if service["id"] == "siteautotask")
         self.assertIs(main["func"], plugin.run_scheduled)
 
-    def test_medal_cron_adds_independent_service(self):
-        plugin = self._plugin("0 8 * * *")
+    def test_scheduler_only_has_main_cron_retry_and_zm(self):
+        plugin = self._plugin()
         scheduler = SCHEDULER.TaskScheduler(plugin)
         services = scheduler.services()
         self.assertEqual(
             {service["id"] for service in services},
-            {"siteautotask", "siteautotask_medal"},
+            {"siteautotask"},
         )
-        medal = next(service for service in services if service["id"] == "siteautotask_medal")
-        self.assertIs(medal["func"], plugin.run_medal)
 
     def test_scheduler_start_does_not_execute_tasks(self):
         plugin = self._plugin()
@@ -210,7 +208,6 @@ class SchedulerEntryTests(unittest.TestCase):
         scheduler.start()
         plugin.run_scheduled.assert_not_called()
         plugin.run_retry.assert_not_called()
-        plugin.run_medal.assert_not_called()
         plugin.run_zm.assert_not_called()
 
 
@@ -300,7 +297,7 @@ class FakePlugin:
 class MedalDispatchTests(unittest.TestCase):
     def test_main_cron_runs_main_group_and_skips_today_success(self):
         engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
-        engine.plugin = types.SimpleNamespace(config=types.SimpleNamespace(medal_cron=""))
+        engine.plugin = types.SimpleNamespace(config=types.SimpleNamespace())
         engine._lock = ENGINE.threading.Lock()
         engine._run_locked = Mock(return_value=[{"task_id": "regular"}, {"task_id": "medal"}])
 
@@ -330,9 +327,11 @@ class MedalDispatchTests(unittest.TestCase):
             history=Mock(),
         )
         plugin.history.successful_task_ids_today.return_value = set()
+        plugin.history.purchased_medal_keys_today.return_value = set()
         engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
         engine.plugin = plugin
         engine.history = plugin.history
+        engine._lock = ENGINE.threading.Lock()
         engine._build_handler = Mock(return_value=handler)
         engine._run_task = Mock(return_value={"task_id": "mypt_buy_medal", "success": True})
 
@@ -340,7 +339,7 @@ class MedalDispatchTests(unittest.TestCase):
         notify_module.send_summary = Mock()
         sys.modules["siteautotask.core.notify"] = notify_module
 
-        records = engine._run_medal_locked()
+        records = engine.run_scheduled()
 
         self.assertEqual(len(records), 1)
         engine._run_task.assert_called_once()
@@ -524,7 +523,7 @@ class ManualSupplementTests(unittest.TestCase):
 class ClaimSelectionTests(unittest.TestCase):
     def test_selected_claim_enables_task_without_switch(self):
         config = types.SimpleNamespace(
-            chat_sites=[13], history_days=30, get_feedback=False, medal_cron="configured"
+            chat_sites=[13], history_days=30, get_feedback=False
         )
         handler = types.SimpleNamespace(site_name="测试站", domain="example.com")
         claim_task = {

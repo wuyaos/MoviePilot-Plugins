@@ -146,6 +146,7 @@ class AzusaTests(unittest.TestCase):
         info["session"].post.return_value = Response(payload={"msg": "任务认领成功"})
         handler = azusa.AzusaHandler(info)
         self.assertTrue(handler.match())
+        self.assertEqual(handler.session.headers["X-Requested-With"], "XMLHttpRequest")
         self.assertEqual(handler.claim_task("11"), "任务认领成功")
         self.assertEqual(handler.session.post.call_args.args[0],
                          f"https://azusa.wiki/ajax.php?csrf_token={csrf_token}")
@@ -159,6 +160,15 @@ class AzusaTests(unittest.TestCase):
         handler = azusa.AzusaHandler(info)
         self.assertIn("CSRF Token", handler.claim_task("11"))
         info["session"].post.assert_not_called()
+
+    def test_claim_403_explains_missing_session_cookie(self):
+        info = make_info(name="梓喵", domain="azusa.wiki", url="https://azusa.wiki")
+        csrf_token = "b" * 40
+        info["session"].get.return_value = Response(text=f"csrf_token={csrf_token}")
+        handler = azusa.AzusaHandler(info)
+        handler._send_post_request = Mock(return_value=None)
+        handler._last_request_error = "403 Client Error"
+        self.assertIn("PHPSESSID", handler.claim_task("11"))
 
     def test_claim_options_match_task_page(self):
         options = azusa.AzusaHandler.get_claim_options()

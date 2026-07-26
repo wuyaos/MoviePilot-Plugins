@@ -52,12 +52,17 @@ class TaskEngine:
         records = []
         skipped_successful = 0
         run_label = "失败重试" if retry_only else ("手动补跑" if manual_only else "主定时")
+        purchased_medals = self.history.purchased_medal_keys_today()
         for site, handler, task, claim_id in self._collect_configured_tasks("main"):
             task_key = task["config_key"]
             if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
                 continue
 
-            if should_skip_successful and task.get("id") in successful_today:
+            if task.get("task_type") == TaskType.MEDAL:
+                claim_id = self._remaining_medal_ids(handler, task, claim_id, purchased_medals)
+                if claim_id is None:
+                    continue
+            elif should_skip_successful and task.get("id") in successful_today:
                 skipped_successful += 1
                 task_type = task.get("task_type")
                 label = task.get("selected_option_label") or task.get("label") or task.get("id")
@@ -145,6 +150,26 @@ class TaskEngine:
                 if enabled:
                     yield site, handler, task, claim_id
 
+    def _remaining_medal_ids(self, handler, task, claim_id, purchased_medals):
+        """剔除当天已经实际购买成功的单枚勋章，其他状态允许后续 cron 继续检查。"""
+        domain = handler.domain
+        if task.get("claim_options"):
+            selected_ids = list(claim_id or []) if isinstance(claim_id, (list, tuple)) else [claim_id]
+            remaining_ids = [
+                medal_id for medal_id in selected_ids
+                if medal_id and f"{domain}:{medal_id}" not in purchased_medals
+            ]
+            if remaining_ids:
+                return remaining_ids if isinstance(claim_id, (list, tuple)) else remaining_ids[0]
+            logger.info(f"{handler.site_name} - [勋章] -> 当天已购买成功，跳过")
+            return None
+
+        medal_id = str(getattr(handler, "MEDAL_ID", ""))
+        if medal_id and f"{domain}:{medal_id}" in purchased_medals:
+            logger.info(f"{handler.site_name} - [勋章] -> 当天已购买成功，跳过")
+            return None
+        return claim_id
+
     def _run_task(self, handler, task, claim_task_id=None, skip_if_no_claim=False):
         """执行单个任务，并统一记录任务进度、喊话内容与反馈。"""
         now = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S")
@@ -217,6 +242,8 @@ class TaskEngine:
                 record["feedback"] = feedback
             if result.rewards:
                 record["rewards"] = result.rewards
+            if result.purchased_medal_ids:
+                record["purchased_medal_ids"] = result.purchased_medal_ids
             if task.get("task_type") == TaskType.CHAT and not callable(original_collect):
                 for line in display_record_lines(record):
                     reward_text = "；".join(
@@ -304,47 +331,6 @@ class TaskEngine:
                 record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
                 records.append(record)
         self.history.append(records, cfg.history_days)
-        return records
-
-    def run_medal(self):
-        """独立勋章 cron：只执行今天尚未成功的已配置勋章任务。"""
-        if not self._lock.acquire(blocking=False):
-            logger.warning("已有站点任务正在执行，跳过本次勋章检查")
-            return []
-        try:
-            return self._run_medal_locked()
-        finally:
-            self._lock.release()
-
-    def _run_medal_locked(self):
-        cfg = self.plugin.config
-        if not cfg.chat_sites:
-            logger.info("未配置需要执行的站点")
-            return []
-        successful_today = self.history.successful_task_ids_today()
-        records = []
-        skipped_successful = 0
-        for _, handler, task, claim_id in self._collect_configured_tasks("medal"):
-            if task.get("id") in successful_today:
-                skipped_successful += 1
-                task_name = display_task(
-                    handler.site_name,
-                    task.get("label") or task.get("id"),
-                    task.get("task_type"),
-                )
-                logger.info(f"勋章定时 - {handler.site_name} - {task_name} - 今天已经成功，跳过")
-                continue
-            record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=False)
-            records.append(record)
-        if records:
-            self.history.append(records, cfg.history_days)
-            self._schedule_failed(records)
-            from .notify import send_summary
-            send_summary(self.plugin, records, is_retry=False)
-        logger.info(
-            f"勋章定时完成：执行 {len(records)} 个任务，"
-            f"跳过 {skipped_successful} 个今天已成功任务"
-        )
         return records
 
     # ===== 织梦 24h 电力冷却调度 =====
@@ -471,6 +457,7 @@ class TaskEngine:
         configured_ids = {
             task.get("id")
             for _, _, task, _ in self._collect_configured_tasks("main")
+            if task.get("task_type") != TaskType.MEDAL
         }
         pending = [
             record for record in pending
@@ -505,6 +492,7 @@ class TaskEngine:
                 str(raw.message) if raw.message is not None else "",
                 getattr(raw, "feedback", None),
                 getattr(raw, "rewards", None) or [],
+                getattr(raw, "purchased_medal_ids", None) or [],
             )
         if isinstance(raw, TaskResult):
             return raw
@@ -515,6 +503,7 @@ class TaskEngine:
                 bool(raw.get("success", True)),
                 str(raw.get("message") or raw.get("msg") or raw.get("status") or "执行完成"),
                 raw.get("feedback"), raw.get("rewards") or [],
+                raw.get("purchased_medal_ids") or [],
             )
         text = "执行完成" if raw is None else str(raw)
         failed = any(word in text.lower() for word in ("失败", "异常", "error"))

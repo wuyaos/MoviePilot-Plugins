@@ -17,10 +17,14 @@ class TaskResult:
     feedback: Optional[Dict] = None
     # 直接产出的奖励（非喊话类，如领勋章/抽奖的中奖信息）
     rewards: List[Dict] = field(default_factory=list)
+    # 本次真实购买成功的勋章 ID；未过期、余额不足等检查结果不写入。
+    purchased_medal_ids: List[str] = field(default_factory=list)
 
     @classmethod
-    def ok(cls, message: str = "执行成功", feedback: Dict = None, rewards: List[Dict] = None) -> "TaskResult":
-        return cls(success=True, message=message, feedback=feedback, rewards=rewards or [])
+    def ok(cls, message: str = "执行成功", feedback: Dict = None, rewards: List[Dict] = None,
+           purchased_medal_ids: List[str] = None) -> "TaskResult":
+        return cls(success=True, message=message, feedback=feedback, rewards=rewards or [],
+                   purchased_medal_ids=purchased_medal_ids or [])
 
     @classmethod
     def fail(cls, message: str = "执行失败") -> "TaskResult":

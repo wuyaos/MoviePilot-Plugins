@@ -60,46 +60,47 @@ class MyptHandler(CapabilityHandler):
         return "active" if disabled or "已经购买" in value or "已购买" in value else "expired"
 
     def buy_medal(self, medal_id=None) -> tuple:
-        """购买勋章，medal_id 可为 str 或 list（多选时为列表）。"""
+        """购买勋章，返回检查结果、消息和实际购买成功的 ID。"""
         if isinstance(medal_id, (list, tuple)):
             if not medal_id:
-                return False, "未选择勋章，跳过续购"
+                return False, "未选择勋章，跳过续购", []
             results = [self._buy_one(str(mid)) for mid in medal_id]
-            all_ok = all(r[0] for r in results)
-            msgs = "; ".join(r[1] for r in results)
-            return all_ok, msgs
+            all_ok = all(result[0] for result in results)
+            messages = "; ".join(result[1] for result in results)
+            purchased_ids = [purchased_id for _, _, ids in results for purchased_id in ids]
+            return all_ok, messages, purchased_ids
         return self._buy_one(medal_id)
 
     def _buy_one(self, medal_id: str) -> tuple:
-        """购买单个勋章，返回带站点勋章名称的结果。"""
+        """购买单个勋章，返回检查结果、名称化消息和实际购买成功 ID。"""
         if not medal_id:
-            return False, "未选择勋章，跳过续购"
+            return False, "未选择勋章，跳过续购", []
         medal_name = next(
             (medal["label"].split("（", 1)[0] for medal in self.MEDALS if medal["id"] == medal_id),
             f"勋章 {medal_id}",
         )
         state = self._medal_purchase_state(medal_id)
         if state == "active":
-            return True, f"{medal_name}勋章未过期，跳过续购"
+            return True, f"{medal_name}勋章未过期，跳过续购", []
         if state == "unavailable":
-            return True, f"{medal_name}勋章当前不可购买，跳过续购"
+            return True, f"{medal_name}勋章当前不可购买，跳过续购", []
         if state == "insufficient":
-            return True, f"{medal_name}勋章魔力不足，跳过续购"
+            return True, f"{medal_name}勋章魔力不足，跳过续购", []
         response = self._send_post_request(
             self.site_url + "/ajax.php",
             data={"action": "buyMedal", "params[medal_id]": medal_id})
         if not response:
-            return False, f"{medal_name}勋章购买请求失败：无响应"
+            return False, f"{medal_name}勋章购买请求失败：无响应", []
         try:
             payload = json.loads(response.text)
         except Exception:
-            return False, f"{medal_name}勋章购买响应解析失败：{response.text[:100]}"
+            return False, f"{medal_name}勋章购买响应解析失败：{response.text[:100]}", []
         msg = payload.get("message") or payload.get("msg") or payload.get("info") or "无返回信息"
         if payload.get("ret") in (0, "0") or payload.get("success") is True:
-            return True, f"{medal_name}勋章购买成功：{msg}"
+            return True, f"{medal_name}勋章购买成功：{msg}", [str(medal_id)]
         if any(kw in str(msg) for kw in ("已经购买", "已拥有", "已购买", "already", "未到期")):
-            return True, f"{medal_name}勋章已拥有：{msg}"
-        return False, f"{medal_name}勋章购买失败：{msg}"
+            return True, f"{medal_name}勋章已拥有：{msg}", []
+        return False, f"{medal_name}勋章购买失败：{msg}", []
 
 
 class Tasks(BaseTask):
@@ -112,5 +113,5 @@ class Tasks(BaseTask):
 
     @task_info("{client_name}勋章续购", "过期时续购myPT勋章", TaskType.MEDAL)
     def buy_medal(self, medal_id=None):
-        ok, msg = self.client.buy_medal(medal_id)
-        return TaskResult.ok(msg) if ok else TaskResult.fail(msg)
+        ok, msg, purchased_ids = self.client.buy_medal(medal_id)
+        return TaskResult.ok(msg, purchased_medal_ids=purchased_ids) if ok else TaskResult.fail(msg)

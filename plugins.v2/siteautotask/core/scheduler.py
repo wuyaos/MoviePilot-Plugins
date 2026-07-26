@@ -56,19 +56,6 @@ class TaskScheduler:
                 "func": self.plugin.run_retry,
                 "kwargs": {"minutes": cfg.retry_interval},
             })
-        if cfg.enabled and cfg.medal_cron:
-            try:
-                medal_trigger = CronTrigger.from_crontab(str(cfg.medal_cron))
-            except Exception as e:
-                logger.error(f"勋章 cron 解析失败：{cfg.medal_cron}，错误：{e}")
-            else:
-                services.append({
-                    "id": "siteautotask_medal",
-                    "name": "站点勋章续购",
-                    "trigger": medal_trigger,
-                    "func": self.plugin.run_medal,
-                    "kwargs": {},
-                })
         # 织梦 24h 电力冷却调度（date trigger）
         if cfg.enabled and self._has_zm_site():
             next_time = self._compute_zm_next_time(cfg)

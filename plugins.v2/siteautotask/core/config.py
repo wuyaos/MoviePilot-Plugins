@@ -16,7 +16,6 @@ class PluginConfig:
     retry_count: int = 3
     retry_interval: int = 10
     retry_notify: bool = False
-    medal_cron: str = ""
     # 织梦 24h 电力冷却调度
     zm_cooldown: int = 3600  # 执行冷却秒数，防止短时重复触发
     zm_mail_time: str = ""  # 最新电力邮件时间 "YYYY-MM-DD HH:MM:SS"
@@ -35,8 +34,10 @@ class PluginConfig:
         values["interval_cnt"] = int(values.get("interval_cnt", 30))
         values["retry_count"] = int(values.get("retry_count", 3))
         values["retry_interval"] = int(values.get("retry_interval", 10))
+        # 仅精确匹配旧默认值时迁移为每日两次，避免改动用户自定义 cron。
+        cron_value = str(values.get("cron") or "").strip()
+        values["cron"] = "4 0,12 * * *" if cron_value in ("4 0 * * *", "0 4 * * *") else (cron_value or "4 0,12 * * *")
         values["chat_sites"] = list(values.get("chat_sites") or [])
-        values["medal_cron"] = str(values.get("medal_cron") or "").strip()
         values["zm_cooldown"] = int(values.get("zm_cooldown", 3600))
         values["zm_mail_time"] = str(values.get("zm_mail_time") or "")
         values["last_zm_execution_time"] = str(values.get("last_zm_execution_time") or "")
@@ -49,7 +50,7 @@ class PluginConfig:
             "use_proxy": self.use_proxy, "get_feedback": self.get_feedback,
             "feedback_timeout": self.feedback_timeout, "interval_cnt": self.interval_cnt,
             "retry_count": self.retry_count, "retry_interval": self.retry_interval,
-            "retry_notify": self.retry_notify, "medal_cron": self.medal_cron,
+            "retry_notify": self.retry_notify,
             "zm_cooldown": self.zm_cooldown, "zm_mail_time": self.zm_mail_time,
             "last_zm_execution_time": self.last_zm_execution_time,
             "chat_sites": self.chat_sites,

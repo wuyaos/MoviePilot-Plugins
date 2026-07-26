@@ -102,10 +102,10 @@ class GgptTests(unittest.TestCase):
         session = FakeSession(get_text=medal_page, post_text='{"ret": 0, "msg": "购买成功"}')
         h = ggpt.GgptHandler({"name": "GGPT", "domain": "gamegamept.com",
                               "url": "https://gamegamept.com", "session": session})
-        ok, msg = h.buy_medal()
+        ok, msg, purchased = h.buy_medal()
         self.assertTrue(ok)
         self.assertIn("购买成功", msg)
-        self.assertEqual(session.last_post_data["params[medal_id]"], "35")
+        self.assertEqual(purchased, ["35"])
 
     def test_medal_active_skips(self):
         """按钮 disabled=仍有效，应跳过购买。"""
@@ -113,10 +113,10 @@ class GgptTests(unittest.TestCase):
         session = FakeSession(get_text=medal_page)
         h = ggpt.GgptHandler({"name": "GGPT", "domain": "gamegamept.com",
                               "url": "https://gamegamept.com", "session": session})
-        ok, msg = h.buy_medal()
+        ok, msg, purchased = h.buy_medal()
         self.assertTrue(ok)
         self.assertIn("未过期", msg)
-        self.assertIsNone(session.last_post_data)  # 未发起购买
+        self.assertEqual(purchased, [])
 
     def test_already_owned_idempotent(self):
         """购买返回已拥有，视为成功。"""
@@ -124,7 +124,7 @@ class GgptTests(unittest.TestCase):
         session = FakeSession(get_text=medal_page, post_text='{"ret": 1, "msg": "已经购买"}')
         h = ggpt.GgptHandler({"name": "GGPT", "domain": "gamegamept.com",
                               "url": "https://gamegamept.com", "session": session})
-        ok, msg = h.buy_medal()
+        ok, msg, purchased = h.buy_medal()
         self.assertTrue(ok)
 
     def test_task_metadata(self):
@@ -158,34 +158,36 @@ class MyptTests(unittest.TestCase):
         session = FakeSession(get_text=medal_page, post_text='{"ret": 0, "msg": "购买成功"}')
         h = mypt.MyptHandler({"name": "myPT", "domain": "mypt.cc",
                               "url": "https://mypt.cc", "session": session})
-        ok, msg = h.buy_medal("8")
+        ok, msg, purchased = h.buy_medal("8")
         self.assertTrue(ok)
         self.assertIn("VIP勋章", msg)
-        self.assertEqual(session.last_post_data["params[medal_id]"], "8")
+        self.assertEqual(purchased, ["8"])
 
     def test_medal_active_skips(self):
         medal_page = '<input type="button" data-id="8" value="已经购买" disabled>'
         session = FakeSession(get_text=medal_page)
         h = mypt.MyptHandler({"name": "myPT", "domain": "mypt.cc",
                               "url": "https://mypt.cc", "session": session})
-        ok, msg = h.buy_medal("8")
+        ok, msg, purchased = h.buy_medal("8")
         self.assertTrue(ok)
         self.assertIn("未过期", msg)
+        self.assertEqual(purchased, [])
 
     def test_insufficient_magic_is_successful_skip(self):
         session = FakeSession(get_text='<input type="button" data-id="3" value="需要更多魔力值" disabled>')
         h = mypt.MyptHandler({"name": "myPT", "domain": "mypt.cc",
                               "url": "https://mypt.cc", "session": session})
-        ok, msg = h.buy_medal("3")
+        ok, msg, purchased = h.buy_medal("3")
         self.assertTrue(ok)
         self.assertIn("至尊勋章魔力不足", msg)
-        self.assertIsNone(session.last_post_data)
+        self.assertEqual(purchased, [])
 
     def test_no_medal_id(self):
         h = mypt.MyptHandler({"name": "myPT", "domain": "mypt.cc", "url": "https://mypt.cc"})
-        ok, msg = h.buy_medal(None)
+        ok, msg, purchased = h.buy_medal(None)
         self.assertFalse(ok)
         self.assertIn("未选择", msg)
+        self.assertEqual(purchased, [])
 
     def test_task_metadata(self):
         from siteautotask.base.decorator import TaskType
