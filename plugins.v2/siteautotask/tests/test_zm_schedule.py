@@ -459,6 +459,7 @@ class TaskOutputTests(unittest.TestCase):
             return True, "发送成功"
 
         handler.send_messagebox = send_messagebox
+        handler.wait_feedback = lambda: None
         handler.get_feedback = lambda: {
             "rewards": [{"type": "电力", "description": "获得电力50"}]
         }

@@ -31,11 +31,9 @@ class ISiteHandler(metaclass=ABCMeta):
         self._last_message_result = None
 
     def wait_feedback(self):
-        """发送喊话后等待系统反馈生成，时长由 feedback_timeout 控制。"""
-        import time
-        seconds = max(0, int(self.feedback_timeout))
-        if seconds > 0:
-            time.sleep(seconds)
+        """需要延迟反馈的站点（如织梦电力奖励）重写此方法等待。
+        默认不等待，避免对无反馈的站点造成不必要的延迟。"""
+        return
 
     @abstractmethod
     def match(self) -> bool:

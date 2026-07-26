@@ -29,6 +29,11 @@ class ZmHandler(CapabilityHandler):
         # 织梦喊话发送后由 get_feedback 重新读喊话区解析系统反馈。
         return super().send_messagebox(message, callback or (lambda response: ""))
 
+    def wait_feedback(self):
+        # 织梦电力奖励通过站内信延迟发放，需等待系统反馈生成后再读喊话区。
+        import time
+        time.sleep(max(0, int(self.feedback_timeout)))
+
     def get_feedback(self, message=None):
         # 重新读取喊话区，查找系统 @ 用户名的反馈行（如“@用户：皮总没有理你，明天再来吧”）。
         response = self._send_get_request(self.site_url + "/shoutbox.php")

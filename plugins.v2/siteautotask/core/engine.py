@@ -272,6 +272,7 @@ class TaskEngine:
             result = self.normalize_result(raw)
             feedback = None
             if task.get("task_type") == TaskType.CHAT and self.plugin.config.get_feedback:
+                handler.wait_feedback()
                 feedback = handler.get_feedback()
             status = result.message
             if task.get("task_type") == TaskType.CHAT and result.success and sent_messages:
