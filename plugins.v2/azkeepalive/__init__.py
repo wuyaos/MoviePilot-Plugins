@@ -1,0 +1,328 @@
+# input: MoviePilot _PluginBase | output: AnimeZ 保活插件 | pos: 插件入口
+from __future__ import annotations
+from datetime import datetime, timedelta
+import threading
+import time
+from typing import Any, Dict, List, Optional, Tuple
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import pytz
+from app.core.config import settings as app_settings
+from app.core.event import eventmanager, Event
+from app.log import logger
+from app.plugins import _PluginBase
+from app.schemas import NotificationType
+from app.schemas.types import EventType
+
+from .core.form_utils import v_col, v_cron, v_row, v_select, v_switch, v_text
+from .core.page import build_page
+
+
+class AzKeepAlive(_PluginBase):
+    plugin_name = "AnimeZ保活"
+    plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
+    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
+    plugin_version = "2.6.0"
+    plugin_author = "wuyaos"
+    author_url = "https://github.com/wuyaos"
+    plugin_config_prefix = "azkeepalive_"
+    plugin_order = 30
+    auth_level = 2
+
+    _enabled = False
+    _notify = True
+    _cron = ""
+    _onlyonce = False
+    _force_keepalive = False
+    _site_url = "https://animez.to/"
+    _downloader = ""
+    _qb_category = "AnimeZ"
+    _qb_tags = "keepalive"
+    _keepalive_days = 30
+    _min_seeders = 5
+    _max_size_gb = 10.0
+    _require_free = True
+    _timeout = 30
+    _use_proxy = False
+    _auto_delete = False
+    _random_cron = ""
+    _scheduler: Optional[BackgroundScheduler] = None
+    _run_lock = threading.Lock()
+    _initialized_at = 0.0
+
+    def init_plugin(self, config: dict = None):
+        self.stop_service()
+        self._initialized_at = time.monotonic()
+        self._ensure_plugin_log_file()
+        config = config or {}
+        self._enabled = bool(config.get("enabled"))
+        self._notify = bool(config.get("notify", True))
+        self._cron = str(config.get("cron") or "").strip()
+        self._onlyonce = bool(config.get("onlyonce"))
+        self._force_keepalive = bool(config.get("force_keepalive"))
+        self._site_url = str(config.get("site_url") or "https://animez.to/").strip().rstrip("/")
+        self._downloader = str(config.get("downloader") or "")
+        self._qb_category = str(config.get("qb_category") or "AnimeZ")
+        self._qb_tags = str(config.get("qb_tags") or "keepalive")
+        self._keepalive_days = int(config.get("keepalive_days") or 30)
+        self._min_seeders = int(config.get("min_seeders") or 5)
+        self._max_size_gb = float(config.get("max_size_gb") or 10.0)
+        self._require_free = bool(config.get("require_free", True))
+        self._timeout = int(config.get("timeout") or 30)
+        self._use_proxy = bool(config.get("use_proxy"))
+        self._auto_delete = bool(config.get("auto_delete"))
+        self._random_cron = str(config.get("random_cron") or "").strip()
+        # 无用户 cron 时生成固定随机时间（仅首次），避免每次重载漂移
+        if not self._cron and not self._random_cron:
+            import random
+            h, m = random.randint(9, 22), random.randint(0, 59)
+            self._random_cron = f"{m} {h} * * *"
+            self._save_config()
+        if self._onlyonce:
+            # 强制模式必须与“立即运行一次”同时提交；先消费并持久化开关，避免 reload 重复执行。
+            run_force = self._force_keepalive
+            self._onlyonce = False
+            self._force_keepalive = False
+            self._save_config()
+            self._scheduler = BackgroundScheduler(timezone=app_settings.TZ)
+            self._scheduler.add_job(
+                lambda: self._run_task(force=run_force), "date",
+                run_date=datetime.now(tz=pytz.timezone(app_settings.TZ)) + timedelta(seconds=10),
+                name="AnimeZ保活-强制执行" if run_force else "AnimeZ保活-立即执行",
+            )
+            self._scheduler.start()
+        elif self._force_keepalive:
+            # 单独残留的强制开关不执行，防止插件更新或 reload 意外触发下载。
+            logger.warning("AnimeZ保活: 强制保活需同时开启“立即运行一次”，本次未执行")
+            self._force_keepalive = False
+            self._save_config()
+
+    def get_state(self) -> bool:
+        return self._enabled
+
+    def _ensure_plugin_log_file(self):
+        """确保插件日志文件存在，避免前端日志页 404"""
+        try:
+            from app.core.config import settings
+            path = settings.LOG_PATH / "plugins" / "azkeepalive.log"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch(exist_ok=True)
+        except Exception:
+            pass
+
+    def _save_config(self):
+        self.update_config({
+            "enabled": self._enabled, "notify": self._notify,
+            "cron": self._cron, "onlyonce": False, "force_keepalive": False,
+            "site_url": self._site_url, "downloader": self._downloader,
+            "qb_category": self._qb_category, "qb_tags": self._qb_tags,
+            "keepalive_days": self._keepalive_days, "min_seeders": self._min_seeders,
+            "max_size_gb": self._max_size_gb, "require_free": self._require_free,
+            "timeout": self._timeout, "use_proxy": self._use_proxy,
+            "auto_delete": self._auto_delete,
+            "random_cron": self._random_cron,
+        })
+
+    def _run_task(self, force: bool = False):
+        if not self._run_lock.acquire(blocking=False):
+            logger.warning("AnimeZ保活: 已有任务运行中，跳过本次触发")
+            return
+        try:
+            self._run_task_locked(force=force)
+        finally:
+            self._run_lock.release()
+
+    def _run_task_locked(self, force: bool = False):
+        from .core.keepalive import run_keepalive
+        from .core.downloader import get_downloader_instance
+        from .core.scraper import get_site_cookie
+        if not self._site_url:
+            logger.warning("AnimeZ保活: 缺少站点地址"); return
+        dl_instance = get_downloader_instance(self._downloader)
+        if not dl_instance:
+            logger.warning("AnimeZ保活: 下载器未配置或不可用，仅执行站点访问保活")
+        # Cookie 只获取一次，重试时复用
+        cookie = get_site_cookie(self._site_url)
+        status, message = "failed", "保活未执行"
+        for attempt in range(1, 4):
+            stored_state = self.get_data("state")
+            state = stored_state if isinstance(stored_state, dict) else {}
+            state.setdefault("history", [])
+            status, message, state = run_keepalive(
+                site_url=self._site_url, downloader_instance=dl_instance,
+                category=self._qb_category, tags=self._qb_tags,
+                keepalive_days=self._keepalive_days, min_seeders=self._min_seeders,
+                max_size_gb=self._max_size_gb, require_free=self._require_free,
+                timeout=self._timeout, use_proxy=self._use_proxy,
+                cookie=cookie, state=state, force=force,
+                auto_delete=self._auto_delete,
+                skip_interval_check=attempt > 1,
+            )
+            self.save_data("state", state)
+            logger.info(f"AnimeZ保活: [{status}] {message}")
+            # 成功、跳过和确定无候选时无需重试。
+            if status in ("download_success", "visit_success", "visit_unverified", "skipped", "no_candidate"):
+                break
+            if attempt < 3:
+                logger.warning(f"AnimeZ保活: 第 {attempt} 次未成功，准备重试")
+        if self._notify and status != "skipped":
+            self.post_message(title="【AnimeZ保活】",
+                              mtype=NotificationType.SiteMessage, text=message)
+
+    def _run_force_task(self):
+        self._run_task(force=True)
+
+    def _safe_run_task(self):
+        """避免插件刚 reload、持久化数据尚未恢复时被 cron 碰巧触发。"""
+        if time.monotonic() - self._initialized_at < 15:
+            logger.info("AnimeZ保活: 插件刚完成初始化，跳过本次 cron 触发")
+            return
+        self._run_task(force=False)
+
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        return [
+            {"cmd": "/az_run", "event": EventType.PluginAction,
+             "desc": "立即运行保活（遵守间隔）", "category": "保活",
+             "data": {"action": "az_run"}},
+            {"cmd": "/az_force", "event": EventType.PluginAction,
+             "desc": "强制保活（绕过间隔）", "category": "保活",
+             "data": {"action": "az_force"}},
+        ]
+
+    def get_api(self) -> List[Dict[str, Any]]:
+        return []
+
+    def get_service(self) -> List[Dict[str, Any]]:
+        if not self._enabled:
+            return []
+        services = []
+        if self._cron:
+            try:
+                if self._cron.count(" ") != 4:
+                    logger.error("AnimeZ保活 cron 错误: 需要 5 位 cron 表达式，跳过定时注册")
+                else:
+                    services.append({"id": "AzKeepAlive", "name": "AnimeZ保活定时任务",
+                                     "trigger": CronTrigger.from_crontab(self._cron),
+                                     "func": self._safe_run_task, "kwargs": {}})
+                    logger.info(f"AnimeZ保活已注册定时任务: {self._cron}")
+            except Exception as e:
+                logger.error(f"AnimeZ保活 cron 错误: {e}，跳过定时注册")
+        else:
+            # 使用 init_plugin 已持久化的随机时间，避免每次重载漂移
+            cron_str = self._random_cron
+            logger.info(f"AnimeZ保活随机触发时间：{cron_str}")
+            services.append({"id": "AzKeepAlive",
+                             "name": f"AnimeZ保活定时任务 {cron_str}",
+                             "trigger": CronTrigger.from_crontab(cron_str),
+                             "func": self._safe_run_task, "kwargs": {}})
+        return services
+
+    def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        try:
+            from app.helper.downloader import DownloaderHelper
+            services = DownloaderHelper().get_services() or {}
+            dl_options = [{"title": n, "value": n} for n in services.keys()]
+        except Exception as e:
+            logger.debug(f"获取下载器列表失败: {e}")
+            dl_options = []
+
+        def _sec(text: str) -> dict:
+            return {"component": "VRow", "content": [{"component": "VCol", "props": {"cols": 12},
+                "content": [{"component": "div", "props": {
+                    "class": "text-subtitle-2 font-weight-medium text-medium-emphasis pt-2 pb-1"
+                }, "text": text}]}]}
+
+        return [{"component": "VForm", "content": [
+            # ── 基本控制 ───────────────────────────
+            v_row([
+                v_col(3, v_switch("enabled", "启用插件")),
+                v_col(3, v_switch("notify", "发送通知")),
+                v_col(3, v_switch("onlyonce", "立即运行一次")),
+                v_col(3, v_switch("force_keepalive", "立即运行时强制")),
+            ]),
+            # ── 站点与下载器 ───────────────────────
+            _sec("🌐 站点与下载器"),
+            v_row([
+                v_col(5, v_text("site_url", "站点地址", "https://animez.to/")),
+                v_col(4, v_select("downloader", "下载器", dl_options)),
+                v_col(3, v_switch("use_proxy", "使用代理")),
+            ]),
+            v_row([
+                v_col(3, v_text("qb_category", "分类(qB)/标签(TR)", "AnimeZ")),
+                v_col(3, v_text("qb_tags", "额外标签(仅qB)", "keepalive")),
+                v_col(6, v_cron("cron", "执行周期", "留空=每天随机一次")),
+            ]),
+            # ── 筛选参数 ───────────────────────────
+            _sec("🔍 筛选参数"),
+            v_row([
+                v_col(3, v_text("keepalive_days", "插件保活间隔(天)")),
+                v_col(3, v_text("min_seeders", "最小做种数")),
+                v_col(3, v_text("max_size_gb", "最大体积(GB)")),
+                v_col(3, v_text("timeout", "超时(秒)")),
+            ]),
+            # ── H&R 控制 ──────────────────────────
+            _sec("⏱ H&R 控制"),
+            v_row([
+                v_col(3, v_switch("require_free", "仅Free种子")),
+                v_col(3, v_switch("auto_delete", "H&R达标后删除种子和数据")),
+                v_col(6, {"component": "VAlert", "props": {
+                    "type": "warning", "variant": "tonal", "density": "compact",
+                    "text": "开启后，满足做种时限的H&R种子将从下载器删除，同时删除文件",
+                }}),
+            ]),
+            # ── 说明 ──────────────────────────────
+            v_row([v_col(12, {"component": "VAlert", "props": {
+                "type": "info", "variant": "tonal",
+                "text": "AZ保活策略：① 每 60 天至少登录一次，否则账号删除；"
+                        "② 每 90 天至少下载 1 个种子，否则账号禁用。"
+                        "插件按保活间隔执行访问和下载，默认30天冗余保活；"
+                        "种子自动打 H&R 标签，到期后自动移除标签（可选删除任务和文件）。"
+            }})]),
+        ]}], {
+            "enabled": False, "notify": True, "cron": "", "onlyonce": False, "force_keepalive": False,
+            "site_url": "https://animez.to/",
+            "downloader": "", "qb_category": "AnimeZ", "qb_tags": "keepalive",
+            "require_free": True, "auto_delete": False,
+            "keepalive_days": 30, "min_seeders": 5,
+            "max_size_gb": 10.0, "timeout": 30, "use_proxy": False,
+        }
+
+    def get_page(self) -> List[dict]:
+        try:
+            state = self.get_data("state") or {}
+            dl_torrents = []
+            try:
+                from .core.downloader import get_downloader_instance, dl_list_category
+                inst = get_downloader_instance(self._downloader)
+                if inst:
+                    dl_torrents = dl_list_category(inst, self._qb_category)
+            except Exception as e:
+                logger.debug(f"查询下载器种子失败: {e}")
+            return build_page(state, self._keepalive_days, dl_torrents, dl_name=self._downloader)
+        except Exception as e:
+            logger.error(f"AnimeZ保活详情页失败: {e}")
+            return [{"component": "VAlert", "props": {
+                "type": "error", "variant": "tonal", "text": f"详情页加载失败: {e}"
+            }}]
+
+    @eventmanager.register(EventType.PluginAction)
+    def on_plugin_action(self, event: Event):
+        if not event or not event.event_data:
+            return
+        action = event.event_data.get("action")
+        if action == "az_run":
+            self._run_task()
+        elif action == "az_force":
+            self._run_force_task()
+
+    def stop_service(self):
+        try:
+            if self._scheduler:
+                self._scheduler.remove_all_jobs()
+                if self._scheduler.running:
+                    self._scheduler.shutdown()
+                self._scheduler = None
+        except Exception as e:
+            logger.error(f"AnimeZ保活停止失败: {e}")

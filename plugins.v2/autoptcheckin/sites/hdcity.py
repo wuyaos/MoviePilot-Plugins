@@ -1,0 +1,58 @@
+from typing import Tuple
+
+from ruamel.yaml import CommentedMap
+
+from app.log import logger
+from app.plugins.autoptcheckin.sites import _ISiteSigninHandler
+
+
+class HDCity(_ISiteSigninHandler):
+    """
+    城市签到
+    """
+    # 匹配的站点Url，每一个实现类都需要设置为自己的站点Url
+    site_url = "hdcity.city"
+
+    # 签到成功（中文 / 英文）
+    _success_texts = ['本次签到获得魅力', 'Got extra']
+    # 重复签到（中文 / 英文）
+    _repeat_texts = ['已签到', 'Already checked in today']
+
+
+    def signin(self, site_info: CommentedMap) -> Tuple[bool, str]:
+        """
+        执行签到操作
+        :param site_info: 站点信息，含有站点Url、站点Cookie、UA等信息
+        :return: 签到结果信息
+        """
+        site = site_info.get("name")
+        site_cookie = site_info.get("cookie")
+        ua = site_info.get("ua")
+        proxy = site_info.get("proxy")
+        render = site_info.get("render")
+
+        # 获取页面html
+        html_text = self.get_page_source(url='https://hdcity.city/sign',
+                                         cookie=site_cookie,
+                                         ua=ua,
+                                         proxy=proxy,
+                                         render=render)
+        if not html_text:
+            logger.error(f"{site} 签到失败，请检查站点连通性")
+            return False, '签到失败，请检查站点连通性'
+
+        # 优先判断签到结果，避免页面含 login 字样时误判 Cookie 失效
+        if any(t in html_text for t in self._success_texts):
+            logger.info(f"{site} 签到成功")
+            return True, '签到成功'
+        if any(t in html_text for t in self._repeat_texts):
+            logger.info(f"{site} 今日已签到")
+            return True, '今日已签到'
+
+        # 再判断是否未登录（跳转到登录页）
+        if "login.php" in html_text or "/login" in html_text:
+            logger.error(f"{site} 签到失败，Cookie已失效")
+            return False, '签到失败，Cookie已失效'
+
+        logger.error(f"{site} 签到失败，签到接口返回 {html_text[:200]}")
+        return False, '签到失败'

@@ -1,0 +1,18 @@
+####### 配置说明 #######
+# 站点独立配置。每个站点一个条目（以 - 开头）。
+# 所有条件为 OR 关系：满足任一即视为通过 H&R。
+# 未设置的字段自动继承全局配置。
+#
+# 支持的条件字段：
+#   site_name            - 站点名称（必填，需与 MP 中站点名一致）
+#   hr_duration          - 要求做种时间（小时）
+#   additional_seed_time - 附加做种时间（小时）
+#   hr_deadline_days     - 考核期（天），超期未满足则标记过期
+#   hr_ratio             - 分享率 >= 此值即通过
+#   hr_upload_multiplier - 上传量 >= 种子大小 * N 倍即通过
+#   hr_upload_gte_download - true 时上传量 >= 下载量即通过
+#   hr_active            - 全站 H&R，所有种子视为 H&R
+#   hr_size_tiers        - 按种子大小分级，每级独立设定 hr_duration 和 hr_deadline_days
+#     - max_size_gib     - 种子大小上限（GiB），0 表示无上限
+#       hr_duration      - 该分级的做种时间（小时）
+#       hr_deadline_days - 该分级的考核期（天）

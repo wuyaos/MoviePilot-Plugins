@@ -1,0 +1,356 @@
+"""站点自动任务插件入口。
+
+入口只负责 MoviePilot 生命周期与模块委托；执行、调度、历史、UI 分别位于 core/ 与 ui/。
+"""
+import threading
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
+
+from app.plugins import _PluginBase
+from app.db.site_oper import SiteOper
+from app.log import logger
+from app.schemas import NotificationType
+from app.core.event import Event, eventmanager
+from app.schemas.types import EventType
+
+from .core.config import PluginConfig
+from .core.engine import TaskEngine
+from .core.history import HistoryStore
+from .core.scheduler import TaskScheduler
+from .core.task_keys import claim_task_key, site_task_key
+from .sites import load_site_classes
+from .ui.form import build_form
+from .ui.page import build_page
+
+
+class SiteAutoTask(_PluginBase):
+    plugin_name = "站点自动任务"
+    plugin_desc = "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。"
+    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
+    plugin_version = "1.0.16"
+    plugin_author = "wuyaos"
+    author_url = "https://github.com/wuyaos"
+    plugin_config_prefix = "siteautotask_"
+    plugin_order = 24
+    auth_level = 2
+
+    def __init__(self):
+        super().__init__()
+        self.config = PluginConfig()
+        self.siteoper = None
+        self._site_classes = []
+        self.handler_classes = []
+        self.engine = None
+        self.history = HistoryStore(self)
+        self.scheduler = TaskScheduler(self)
+        self.notification_type = NotificationType.SiteMessage
+        self.retry_records = []
+        self.retry_attempt = 0
+        self._raw_config: dict = {}
+
+    def init_plugin(self, config: Optional[dict] = None):
+        self.stop_service()
+        self.siteoper = SiteOper()
+        # onlyonce 仅用于本次保存触发，消费后从持久化配置移除。
+        manual_run_requested = bool((config or {}).get("onlyonce", False))
+        self.config = PluginConfig.from_dict(config)
+        self._raw_config = dict(config or {})
+        self._raw_config.pop("onlyonce", None)
+        if not self._site_classes:
+            self._site_classes = load_site_classes()
+            self.handler_classes = [x["handler_cls"] for x in self._site_classes if x.get("handler_cls")]
+        self._raw_config = self._clean_config(self._raw_config)
+        self.config = PluginConfig.from_dict(self._raw_config)
+        self.engine = TaskEngine(self)
+        if config is not None and self._raw_config != config:
+            self.update_config(self._raw_config)
+        if self.config.enabled:
+            self.scheduler.start()
+        if manual_run_requested and self.config.enabled:
+            logger.info("检测到配置页立即运行请求，开始当天补跑")
+            threading.Thread(target=self.run_manual, daemon=True, name="siteautotask_manual_run").start()
+
+    def _clean_config(self, raw_config: dict) -> dict:
+        """仅保留当前基础字段和当前站点适配器实际存在的任务配置。"""
+        valid_keys = set(PluginConfig.__dataclass_fields__)
+        for site in self.support_site_options():
+            for task in site.get("tasks") or []:
+                key = claim_task_key(site, task) if task.get("claim_options") else site_task_key(site, task)
+                valid_keys.add(key)
+        removed = sorted(set(raw_config) - valid_keys)
+        if removed:
+            logger.info(f"清理旧配置：已移除 {len(removed)} 个失效配置项：{'、'.join(removed)}")
+        return {key: value for key, value in raw_config.items() if key in valid_keys}
+
+    def task_enabled(self, task_key: str) -> bool:
+        """读取任务开关（扁平顶层配置 key）。"""
+        return bool(self._raw_config.get(task_key, False))
+
+    def claim_task_id(self, key: str):
+        """读取 CLAIM/MEDAL 任务配置的 task_id，空表示未选择（跳过）。
+
+        多选时返回 list，单选时返回 str；空 list/空字符串均视为未配置。
+        """
+        value = self._raw_config.get(key, "")
+        if isinstance(value, list):
+            return value
+        return str(value or "")
+
+    def get_state(self) -> bool:
+        return self.config.enabled
+
+    def run_scheduled(self):
+        """主 cron：执行全部已配置任务，排除由独立调度负责的织梦喊话。"""
+        return self.engine.run_scheduled() if self.engine else []
+
+    def run_manual(self):
+        """人为“立即运行”：仅补跑当天失败或尚未执行的任务。"""
+        return self.engine.run(manual_only=True) if self.engine else []
+
+    def run_retry(self):
+        return self.engine.retry_failed() if self.engine else []
+
+    def run_zm(self):
+        """织梦 24h 电力冷却调度入口。"""
+        return self.engine.run_zm() if self.engine else []
+
+    def reschedule_zm(self, run_at):
+        """重新注册织梦 date trigger 任务（自包含，不依赖 MP reload）。"""
+        scheduler = getattr(self, "scheduler", None)
+        if not scheduler or not scheduler.scheduler:
+            logger.warning("调度器未就绪，织梦重新调度跳过")
+            return
+        for job in scheduler.scheduler.get_jobs():
+            if job.name == "siteautotask_zm":
+                job.remove()
+        scheduler.scheduler.add_job(
+            self.engine.run_zm, "date", run_date=run_at,
+            name="siteautotask_zm")
+        logger.info(f"织梦下次执行已注册：{run_at.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    def save_config(self):
+        """持久化状态字段，同时保留当前有效任务开关与下拉选择。"""
+        try:
+            merged = dict(self._raw_config)
+            merged.update(self.config.to_dict())
+            self._raw_config = self._clean_config(merged)
+            self.update_config(self._raw_config)
+        except Exception as e:
+            logger.error(f"保存配置失败：{e}")
+
+    def run_debug(self, site_filter=None, task_filter=None):
+        """调试执行：绕过配置开关，按站点/任务过滤器直接执行。"""
+        return self.engine.run_debug(site_filter, task_filter) if self.engine else []
+
+    def all_sites(self):
+        sites = []
+        try:
+            sites.extend(s for s in self.siteoper.list_order_by_pri() if not getattr(s, "public", False))
+        except Exception:
+            pass
+        custom = self.get_config("CustomSites") or {}
+        if custom.get("enabled"):
+            sites.extend(custom.get("sites") or [])
+        normalized = [self._site_to_dict(site) for site in sites]
+        if not any((site.get("domain") or "").lower() == "vclib.online" for site in normalized):
+            normalized.append({
+                "id": "builtin_vclib", "name": "Vc-Lib", "domain": "vclib.online",
+                "url": "https://vclib.online", "cookie": "", "ua": "", "render": False,
+                "cookiecloud": True,
+            })
+        return normalized
+
+    @staticmethod
+    def _site_to_dict(site):
+        if isinstance(site, dict):
+            return dict(site)
+        return {
+            "id": getattr(site, "id", None), "name": getattr(site, "name", ""),
+            "url": getattr(site, "url", ""), "cookie": getattr(site, "cookie", ""),
+            "ua": getattr(site, "ua", ""), "render": getattr(site, "render", False),
+            "domain": getattr(site, "domain", ""),
+        }
+
+    def selected_sites(self):
+        """按配置 ID 返回已选站点，不在站点筛选阶段触发 CookieCloud 请求。"""
+        selected = {str(value) for value in self.config.chat_sites}
+        return [site for site in self.all_sites() if str(site.get("id")) in selected]
+
+    @staticmethod
+    def _fetch_cookiecloud_cookie(site_url: str) -> str:
+        """按域名从 MoviePilot CookieCloud 补取内置站点 Cookie。"""
+        try:
+            from app.helper.cookiecloud import CookieCloudHelper
+            cookies, _ = CookieCloudHelper().download()
+            hostname = urlparse(site_url).hostname or ""
+            for domain, cookie in (cookies or {}).items():
+                normalized_domain = str(domain).lstrip(".").lower()
+                if cookie and (hostname == normalized_domain or hostname.endswith(f".{normalized_domain}")):
+                    logger.info(f"CookieCloud 匹配到 {hostname} 的 Cookie")
+                    return str(cookie)
+            logger.warning(f"CookieCloud 未匹配到 {hostname} 的 Cookie")
+        except Exception as e:
+            logger.warning(f"CookieCloud 获取 {site_url} Cookie 失败：{e}")
+        return ""
+
+    def tasks_for(self, handler):
+        # 注意：MoviePilot 可能从不同路径（源目录/备份目录）加载插件模块，
+        # 导致 type(handler) 与 _site_classes 里的 handler_cls 是不同模块实例，
+        # 不能用 `is` 身份比较，改用类名比较。
+        handler_name = type(handler).__name__
+        entry = next((x for x in self._site_classes
+                      if x.get("handler_cls") and x["handler_cls"].__name__ == handler_name), None)
+        if not entry or not entry.get("tasks_cls"):
+            return []
+        tasks = entry["tasks_cls"](cookie=None)
+        tasks.client = handler
+        runtime_tasks = tasks.get_registered_tasks()
+        metadata_by_name = {
+            item.get("name"): item
+            for item in entry.get("tasks_meta", [])
+        }
+        for task in runtime_tasks:
+            metadata = metadata_by_name.get(task.get("name"), {})
+            if metadata.get("claim_options"):
+                task["claim_options"] = metadata["claim_options"]
+                task["claim_multiple"] = bool(metadata.get("claim_multiple", False))
+        return runtime_tasks
+
+    def support_site_options(self):
+        """返回配置页站点选项，id 必须使用 MP 站点真实 id。"""
+        options = []
+        for site in self.all_sites():
+            domain = site.get("domain") or ""
+            entry = next((item for item in self._site_classes
+                          if item.get("domain") == domain or
+                          item.get("site_name") == site.get("name")), None)
+            # 未有专用适配的站点不展示任务；NexusPHP 仅作为能力组合，不提供通用任务。
+            if not entry:
+                continue
+            tasks = [{k: v for k, v in task.items() if k != "func"}
+                     for task in entry.get("tasks_meta", [])]
+            options.append({
+                "id": site.get("id"),
+                "name": site.get("name") or entry.get("site_name") or domain,
+                "domain": domain,
+                "url": (site.get("url") or "").strip(),
+                "tasks": tasks,
+            })
+        return options
+
+    def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        return build_form(self)
+
+    def get_page(self) -> List[dict]:
+        return build_page(self)
+
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        return [
+            {
+                "cmd": "/siteautotask_run",
+                "event": EventType.PluginAction,
+                "desc": "按当前配置执行站点自动任务",
+                "category": "站点",
+                "data": {"action": "siteautotask_run"},
+            },
+            {
+                "cmd": "/siteautotask_manual_run",
+                "event": EventType.PluginAction,
+                "desc": "当天补跑未成功的站点任务",
+                "category": "站点",
+                "data": {"action": "siteautotask_manual_run"},
+            }
+        ]
+
+    def get_api(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "path": "/run",
+                "endpoint": self.api_run,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "执行站点任务（可指定站点和任务用于调试）",
+                "description": (
+                    "site_id 指定站点(id 或域名)，task_name 指定任务名(模糊匹配)；"
+                    "scope=zm 触发织梦独立 24h 调度；"
+                    "都不传则按配置全量后台执行。调试指定站点/任务时同步返回执行记录。"
+                ),
+            },
+            {
+                "path": "/manual-run",
+                "endpoint": self.api_manual_run,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "当天补跑未成功的已配置任务",
+            }
+        ]
+
+    def api_manual_run(self) -> Dict[str, Any]:
+        """独立手动补跑入口，不读取或写入持久化配置。"""
+        if not self.engine:
+            return {"success": False, "message": "插件未初始化"}
+        if not self.config.enabled:
+            return {"success": False, "message": "插件未启用"}
+        logger.info("收到独立手动补跑请求，开始当天补跑")
+        threading.Thread(target=self.run_manual, daemon=True, name="siteautotask_manual_run").start()
+        return {"success": True, "message": "已后台启动当天补跑，结果写入历史记录"}
+
+    def api_run(self, site_id: str = "", task_name: str = "", scope: str = "") -> Dict[str, Any]:
+        """立即执行任务。
+
+        - site_id 和 task_name 都为空：按配置全量后台执行（避免 API 超时）。
+        - 指定 site_id：调试执行该站点全部任务，同步返回记录。
+        - 指定 site_id + task_name：调试执行该站点匹配任务，同步返回记录。
+        - scope=zm：触发织梦独立 24h 调度，读取站内信并刷新下次调度。
+        """
+        if not self.engine:
+            return {"success": False, "message": "插件未初始化"}
+        if scope == "zm":
+            logger.info("收到织梦独立调度触发请求")
+            records = self.run_zm()
+            return {
+                "success": True,
+                "message": f"织梦独立调度执行完成，共 {len(records)} 个任务",
+                "records": records,
+            }
+        if not site_id and not task_name:
+            threading.Thread(target=self.run_scheduled, daemon=True).start()
+            return {"success": True, "message": "已后台启动全量任务，结果写入历史记录"}
+        logger.info(f"调试执行请求：site_id={site_id!r}，task_name={task_name!r}")
+        records = self.run_debug(site_filter=site_id or None, task_filter=task_name or None)
+        return {
+            "success": True,
+            "message": f"执行完成，共 {len(records)} 个任务",
+            "records": records,
+        }
+
+    @eventmanager.register(EventType.PluginAction)
+    def run_command(self, event: Event = None):
+        event_data = event.event_data if event else {}
+        action = event_data.get("action") if event_data else None
+        if action not in {"siteautotask_run", "siteautotask_manual_run"}:
+            return
+        channel = event_data.get("channel")
+        userid = event_data.get("user")
+        if not self.config.enabled:
+            logger.warning("命令执行请求被忽略：插件未启用")
+            self.post_message(
+                channel=channel, userid=userid, mtype=self.notification_type,
+                title="【站点自动任务】", text="插件未启用，无法执行任务。",
+            )
+            return
+        target = self.run_manual if action == "siteautotask_manual_run" else self.run_scheduled
+        text = "已后台启动当天补跑，完成后按配置发送通知。" if action == "siteautotask_manual_run" else "已后台启动任务执行，完成后按配置发送通知。"
+        threading.Thread(target=target, daemon=True).start()
+        self.post_message(
+            channel=channel, userid=userid, mtype=self.notification_type,
+            title="【站点自动任务】", text=text,
+        )
+
+    def get_service(self):
+        return self.scheduler.services()
+
+    def stop_service(self):
+        if hasattr(self, "scheduler") and self.scheduler:
+            self.scheduler.stop()
