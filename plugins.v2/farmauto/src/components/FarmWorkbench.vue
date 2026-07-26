@@ -438,7 +438,8 @@ onBeforeUnmount(() => {
         class="mb-3"
       >
         <v-tab v-for="site in sites" :key="site.site_id" :value="site.site_id" :prepend-icon="site.site_id === 'siqi' ? 'mdi-snake' : 'mdi-web'">
-          {{ site.site_name || site.site_id }}{{ selectedSiteIds.includes(site.site_id) ? ' ✅' : ' ⚪' }}
+          {{ site.site_name || site.site_id }}
+          <span class="tab-status-dot" :class="selectedSiteIds.includes(site.site_id) ? 'on' : 'off'"></span>
         </v-tab>
       </v-tabs>
 
@@ -712,4 +713,15 @@ onBeforeUnmount(() => {
 }
 .stat-value small { font-size: 11px; opacity: 0.5; font-weight: 400; }
 .stat-value.refreshing { opacity: 0.3; }
+
+.tab-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.tab-status-dot.on { background: #4ade80; box-shadow: 0 0 4px rgba(74, 222, 128, 0.6); }
+.tab-status-dot.off { background: rgba(var(--v-theme-on-surface), 0.25); }
 </style>

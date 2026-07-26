@@ -82507,7 +82507,10 @@ return (_ctx, _cache) => {
                       "prepend-icon": site.site_id === 'siqi' ? 'mdi-snake' : 'mdi-web'
                     }, {
                       default: _withCtx(() => [
-                        _createTextVNode(_toDisplayString(site.site_name || site.site_id) + _toDisplayString(selectedSiteIds.value.includes(site.site_id) ? ' ✅' : ' ⚪'), 1)
+                        _createTextVNode(_toDisplayString(site.site_name || site.site_id) + " ", 1),
+                        _createElementVNode("span", {
+                          class: _normalizeClass(["tab-status-dot", selectedSiteIds.value.includes(site.site_id) ? 'on' : 'off'])
+                        }, null, 2)
                       ]),
                       _: 2
                     }, 1032, ["value", "prepend-icon"]))
@@ -82780,6 +82783,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-45dbdf51"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-706f5ec2"]]);
 
 export { FarmWorkbench as F };
