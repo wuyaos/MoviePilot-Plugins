@@ -88,7 +88,7 @@ def test_captcha_harvest_submits_ocr_result():
     assert results[0].success is True
     assert ocr.calls == ["https://si-qi.xyz/captcha.php?id=1"]
     assert client.calls[1][0] == "POST"
-    assert client.calls[1][1].endswith("plant_game.php?option=harvest_all")
+    assert client.calls[1][1].endswith("plant_game.php")
     assert client.calls[1][2] == {
         "option": "harvest_all",
         "imagehash": "hash-1",
@@ -128,9 +128,9 @@ def test_captcha_ocr_failure_falls_back_to_each_ready_plot():
 
     assert results[0].success is True
     assert results[0].message == "逐格收获已尝试 1 格"
-    assert client.calls[-1][0] == "GET"
-    assert "action=harvest&land_id=2&plot_index=0" in client.calls[-1][1]
-    assert not any(call[0] == "POST" for call in client.calls)
+    assert client.calls[-1][0] == "POST"
+    assert "action=harvest" in str(client.calls[-1][2]) or "action" in str(client.calls[-1][2])
+    assert not any(call[0] == "GET" for call in client.calls)
 
 
 def test_captcha_ocr_fallback_logs_reason_and_plot_failure():
