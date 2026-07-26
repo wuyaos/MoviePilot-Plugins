@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue"
 
 const DEFAULT_CONFIG = {
   enabled: false,
@@ -68,6 +68,14 @@ const activeTab = ref('global')
 const config = reactive({ ...DEFAULT_CONFIG })
 const sitePolicies = reactive({})
 const error = ref('')
+const successMessage = ref('')
+let successTimer = null
+function setSuccess(msg) {
+  successMessage.value = msg
+  if (successTimer) clearTimeout(successTimer)
+  successTimer = setTimeout(() => { successMessage.value = '' }, 3000)
+}
+onBeforeUnmount(() => { if (successTimer) clearTimeout(successTimer) })
 
 const siteModeItems = computed(() => [
   { title: `继承全局（${config.mode === 'harvest' ? '自动收获' : '智能交易'}）`, value: 'inherit' },
@@ -222,12 +230,13 @@ function saveConfig() {
     site_overrides: JSON.stringify(overrides),
   }
   emit('save', payload)
+  setSuccess('配置已保存')
 }
 </script>
 
 <template>
   <v-form class="farm-config-form text-body-2" @submit.prevent="saveConfig">
-  <v-card flat class="rounded border">
+  <v-card flat class="rounded-lg border">
     <div class="farm-header bg-gradient-farm text-white">
       <div class="farm-header-row d-flex align-center ga-2 px-3 py-2">
         <div class="d-flex align-center ga-2 farm-header-left">
@@ -274,6 +283,16 @@ function saveConfig() {
       @click:close="error = ''"
     >
       {{ error }}
+    </v-alert>
+    <v-alert
+      v-if="successMessage"
+      type="success"
+      variant="tonal"
+      closable
+      class="mb-4 text-body-2"
+      @click:close="successMessage = ''"
+    >
+      {{ successMessage }}
     </v-alert>
 
     <v-tabs

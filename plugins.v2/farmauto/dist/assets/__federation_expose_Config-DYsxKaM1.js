@@ -13,7 +13,7 @@ const _hoisted_6 = { class: "pa-4" };
 const _hoisted_7 = { class: "text-subtitle-1" };
 const _hoisted_8 = { class: "d-flex flex-wrap align-center ga-2 mt-2" };
 
-const {computed,reactive,ref,watch} = await importShared('vue');
+const {computed,onBeforeUnmount,reactive,ref,watch} = await importShared('vue');
 
 
 
@@ -90,6 +90,14 @@ const activeTab = ref('global');
 const config = reactive({ ...DEFAULT_CONFIG });
 const sitePolicies = reactive({});
 const error = ref('');
+const successMessage = ref('');
+let successTimer = null;
+function setSuccess(msg) {
+  successMessage.value = msg;
+  if (successTimer) clearTimeout(successTimer);
+  successTimer = setTimeout(() => { successMessage.value = ''; }, 3000);
+}
+onBeforeUnmount(() => { if (successTimer) clearTimeout(successTimer); });
 
 const siteModeItems = computed(() => [
   { title: `继承全局（${config.mode === 'harvest' ? '自动收获' : '智能交易'}）`, value: 'inherit' },
@@ -244,6 +252,7 @@ function saveConfig() {
     site_overrides: JSON.stringify(overrides),
   };
   emit('save', payload);
+  setSuccess('配置已保存');
 }
 
 return (_ctx, _cache) => {
@@ -274,7 +283,7 @@ return (_ctx, _cache) => {
     default: _withCtx(() => [
       _createVNode(_component_v_card, {
         flat: "",
-        class: "rounded border"
+        class: "rounded-lg border"
       }, {
         default: _withCtx(() => [
           _createElementVNode("div", _hoisted_1, [
@@ -285,7 +294,7 @@ return (_ctx, _cache) => {
                   color: "white",
                   size: "small"
                 }),
-                _cache[28] || (_cache[28] = _createElementVNode("span", { class: "text-subtitle-1 text-white font-weight-bold" }, "农场配置", -1))
+                _cache[29] || (_cache[29] = _createElementVNode("span", { class: "text-subtitle-1 text-white font-weight-bold" }, "农场配置", -1))
               ]),
               _createVNode(_component_v_spacer),
               _createElementVNode("div", _hoisted_4, [
@@ -332,9 +341,24 @@ return (_ctx, _cache) => {
                 _: 1
               }))
             : _createCommentVNode("", true),
+          (successMessage.value)
+            ? (_openBlock$1(), _createBlock$1(_component_v_alert, {
+                key: 1,
+                type: "success",
+                variant: "tonal",
+                closable: "",
+                class: "mb-4 text-body-2",
+                "onClick:close": _cache[3] || (_cache[3] = $event => (successMessage.value = ''))
+              }, {
+                default: _withCtx(() => [
+                  _createTextVNode(_toDisplayString(successMessage.value), 1)
+                ]),
+                _: 1
+              }))
+            : _createCommentVNode("", true),
           _createVNode(_component_v_tabs, {
             modelValue: activeTab.value,
-            "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((activeTab).value = $event)),
+            "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((activeTab).value = $event)),
             color: "primary",
             density: "default",
             "show-arrows": "",
@@ -345,7 +369,7 @@ return (_ctx, _cache) => {
                 value: "global",
                 "prepend-icon": "mdi-tune-variant"
               }, {
-                default: _withCtx(() => [...(_cache[29] || (_cache[29] = [
+                default: _withCtx(() => [...(_cache[30] || (_cache[30] = [
                   _createTextVNode("全局设置", -1)
                 ]))]),
                 _: 1
@@ -367,7 +391,7 @@ return (_ctx, _cache) => {
           }, 8, ["modelValue"]),
           _createVNode(_component_v_window, {
             modelValue: activeTab.value,
-            "onUpdate:modelValue": _cache[27] || (_cache[27] = $event => ((activeTab).value = $event))
+            "onUpdate:modelValue": _cache[28] || (_cache[28] = $event => ((activeTab).value = $event))
           }, {
             default: _withCtx(() => [
               _createVNode(_component_v_window_item, { value: "global" }, {
@@ -386,7 +410,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[30] || (_cache[30] = _createTextVNode(" 基础设置 ", -1))
+                            _cache[31] || (_cache[31] = _createTextVNode(" 基础设置 ", -1))
                           ]),
                           _: 1
                         }),
@@ -401,7 +425,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_switch, {
                                       modelValue: config.enabled,
-                                      "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((config.enabled) = $event)),
+                                      "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((config.enabled) = $event)),
                                       label: "启用插件",
                                       color: "primary",
                                       density: "compact",
@@ -417,7 +441,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_switch, {
                                       modelValue: config.notify,
-                                      "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((config.notify) = $event)),
+                                      "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((config.notify) = $event)),
                                       label: "发送通知",
                                       color: "primary",
                                       density: "compact",
@@ -433,7 +457,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_switch, {
                                       modelValue: config.run_once,
-                                      "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((config.run_once) = $event)),
+                                      "onUpdate:modelValue": _cache[7] || (_cache[7] = $event => ((config.run_once) = $event)),
                                       label: "立即运行一次",
                                       color: "primary",
                                       density: "compact",
@@ -449,7 +473,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_select, {
                                       modelValue: config.mode,
-                                      "onUpdate:modelValue": _cache[7] || (_cache[7] = $event => ((config.mode) = $event)),
+                                      "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((config.mode) = $event)),
                                       items: MODE_ITEMS,
                                       label: "运行模式",
                                       density: "compact",
@@ -467,7 +491,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_switch, {
                                       modelValue: config.use_proxy,
-                                      "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((config.use_proxy) = $event)),
+                                      "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((config.use_proxy) = $event)),
                                       label: "使用 MP 系统代理",
                                       color: "info",
                                       density: "compact",
@@ -483,7 +507,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_switch, {
                                       modelValue: config.dry_run,
-                                      "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((config.dry_run) = $event)),
+                                      "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((config.dry_run) = $event)),
                                       label: "仅模拟（不发送操作请求）",
                                       color: "warning",
                                       density: "compact",
@@ -514,7 +538,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[31] || (_cache[31] = _createTextVNode(" 自动化功能 ", -1))
+                            _cache[32] || (_cache[32] = _createTextVNode(" 自动化功能 ", -1))
                           ]),
                           _: 1
                         }),
@@ -529,7 +553,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_switch, {
                                       modelValue: config.auto_harvest,
-                                      "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((config.auto_harvest) = $event)),
+                                      "onUpdate:modelValue": _cache[11] || (_cache[11] = $event => ((config.auto_harvest) = $event)),
                                       label: "自动收获",
                                       hint: "成熟作物自动收获",
                                       "persistent-hint": "",
@@ -546,7 +570,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_switch, {
                                       modelValue: config.auto_plant,
-                                      "onUpdate:modelValue": _cache[11] || (_cache[11] = $event => ((config.auto_plant) = $event)),
+                                      "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((config.auto_plant) = $event)),
                                       label: "自动种植/养殖",
                                       hint: "空地自动补种",
                                       "persistent-hint": "",
@@ -563,7 +587,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_switch, {
                                       modelValue: config.auto_sell,
-                                      "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((config.auto_sell) = $event)),
+                                      "onUpdate:modelValue": _cache[13] || (_cache[13] = $event => ((config.auto_sell) = $event)),
                                       label: "自动出售",
                                       hint: "盈利区间内自动出售",
                                       "persistent-hint": "",
@@ -580,7 +604,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_switch, {
                                       modelValue: config.expiry_sale,
-                                      "onUpdate:modelValue": _cache[13] || (_cache[13] = $event => ((config.expiry_sale) = $event)),
+                                      "onUpdate:modelValue": _cache[14] || (_cache[14] = $event => ((config.expiry_sale) = $event)),
                                       label: "临期自动出售",
                                       hint: "剩余时间低于阈值强制出售",
                                       "persistent-hint": "",
@@ -597,7 +621,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_text_field, {
                                       modelValue: config.expire_threshold_minutes,
-                                      "onUpdate:modelValue": _cache[14] || (_cache[14] = $event => ((config.expire_threshold_minutes) = $event)),
+                                      "onUpdate:modelValue": _cache[15] || (_cache[15] = $event => ((config.expire_threshold_minutes) = $event)),
                                       modelModifiers: { number: true },
                                       label: "临期阈值（分钟）",
                                       type: "number",
@@ -632,7 +656,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[32] || (_cache[32] = _createTextVNode(" 调度与网络 ", -1))
+                            _cache[33] || (_cache[33] = _createTextVNode(" 调度与网络 ", -1))
                           ]),
                           _: 1
                         }),
@@ -648,7 +672,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_text_field, {
                                       modelValue: config.interval_minutes,
-                                      "onUpdate:modelValue": _cache[15] || (_cache[15] = $event => ((config.interval_minutes) = $event)),
+                                      "onUpdate:modelValue": _cache[16] || (_cache[16] = $event => ((config.interval_minutes) = $event)),
                                       modelModifiers: { number: true },
                                       label: "智能交易间隔（分钟）",
                                       type: "number",
@@ -667,7 +691,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_text_field, {
                                       modelValue: config.harvest_interval_minutes,
-                                      "onUpdate:modelValue": _cache[16] || (_cache[16] = $event => ((config.harvest_interval_minutes) = $event)),
+                                      "onUpdate:modelValue": _cache[17] || (_cache[17] = $event => ((config.harvest_interval_minutes) = $event)),
                                       modelModifiers: { number: true },
                                       label: "自动收获间隔（分钟）",
                                       type: "number",
@@ -686,7 +710,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_text_field, {
                                       modelValue: config.request_interval,
-                                      "onUpdate:modelValue": _cache[17] || (_cache[17] = $event => ((config.request_interval) = $event)),
+                                      "onUpdate:modelValue": _cache[18] || (_cache[18] = $event => ((config.request_interval) = $event)),
                                       modelModifiers: { number: true },
                                       label: "请求间隔（秒）",
                                       type: "number",
@@ -706,7 +730,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_text_field, {
                                       modelValue: config.retry_count,
-                                      "onUpdate:modelValue": _cache[18] || (_cache[18] = $event => ((config.retry_count) = $event)),
+                                      "onUpdate:modelValue": _cache[19] || (_cache[19] = $event => ((config.retry_count) = $event)),
                                       modelModifiers: { number: true },
                                       label: "重试次数",
                                       type: "number",
@@ -740,7 +764,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[33] || (_cache[33] = _createTextVNode(" 交易策略 ", -1))
+                            _cache[34] || (_cache[34] = _createTextVNode(" 交易策略 ", -1))
                           ]),
                           _: 1
                         }),
@@ -755,7 +779,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_text_field, {
                                       modelValue: config.min_profit_rate,
-                                      "onUpdate:modelValue": _cache[19] || (_cache[19] = $event => ((config.min_profit_rate) = $event)),
+                                      "onUpdate:modelValue": _cache[20] || (_cache[20] = $event => ((config.min_profit_rate) = $event)),
                                       modelModifiers: { number: true },
                                       label: "最低利润率",
                                       type: "number",
@@ -776,7 +800,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_text_field, {
                                       modelValue: config.max_profit_rate,
-                                      "onUpdate:modelValue": _cache[20] || (_cache[20] = $event => ((config.max_profit_rate) = $event)),
+                                      "onUpdate:modelValue": _cache[21] || (_cache[21] = $event => ((config.max_profit_rate) = $event)),
                                       modelModifiers: { number: true },
                                       label: "最高利润率",
                                       type: "number",
@@ -797,7 +821,7 @@ return (_ctx, _cache) => {
                                   default: _withCtx(() => [
                                     _createVNode(_component_v_text_field, {
                                       modelValue: config.max_sell_per_run,
-                                      "onUpdate:modelValue": _cache[21] || (_cache[21] = $event => ((config.max_sell_per_run) = $event)),
+                                      "onUpdate:modelValue": _cache[22] || (_cache[22] = $event => ((config.max_sell_per_run) = $event)),
                                       modelModifiers: { number: true },
                                       label: "单轮单站最大出售数",
                                       type: "number",
@@ -860,7 +884,7 @@ return (_ctx, _cache) => {
                                 variant: "tonal",
                                 class: "mb-4 pa-3 text-body-2"
                               }, {
-                                default: _withCtx(() => [...(_cache[34] || (_cache[34] = [
+                                default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
                                   _createTextVNode(" 未填写的覆盖项会自动继承全局设置；禁用站点只会将其从 site_ids 中移除。 ", -1)
                                 ]))]),
                                 _: 1
@@ -1091,7 +1115,7 @@ return (_ctx, _cache) => {
                                 _: 2
                               }, 1024),
                               _createElementVNode("div", _hoisted_8, [
-                                _cache[35] || (_cache[35] = _createElementVNode("span", { class: "text-body-2 text-medium-emphasis" }, "生效摘要", -1)),
+                                _cache[36] || (_cache[36] = _createElementVNode("span", { class: "text-body-2 text-medium-emphasis" }, "生效摘要", -1)),
                                 _createVNode(_component_v_chip_group, {
                                   column: "",
                                   class: "ga-2"
@@ -1212,7 +1236,7 @@ return (_ctx, _cache) => {
                                     size: "small",
                                     class: "mr-2"
                                   }),
-                                  _cache[36] || (_cache[36] = _createTextVNode(" 思齐专属功能 ", -1))
+                                  _cache[37] || (_cache[37] = _createTextVNode(" 思齐专属功能 ", -1))
                                 ]),
                                 _: 1
                               }),
@@ -1223,7 +1247,7 @@ return (_ctx, _cache) => {
                                     variant: "tonal",
                                     class: "mb-4 pa-3 text-body-2"
                                   }, {
-                                    default: _withCtx(() => [...(_cache[37] || (_cache[37] = [
+                                    default: _withCtx(() => [...(_cache[38] || (_cache[38] = [
                                       _createTextVNode(" 验证码收获、偷菜、点赞和扩地属于高风险行为；除 OCR 外默认关闭，开启即表示自行承担账号风控风险。 ", -1)
                                     ]))]),
                                     _: 1
@@ -1238,7 +1262,7 @@ return (_ctx, _cache) => {
                                         default: _withCtx(() => [
                                           _createVNode(_component_v_switch, {
                                             modelValue: config.siqi_auto_captcha_harvest,
-                                            "onUpdate:modelValue": _cache[22] || (_cache[22] = $event => ((config.siqi_auto_captcha_harvest) = $event)),
+                                            "onUpdate:modelValue": _cache[23] || (_cache[23] = $event => ((config.siqi_auto_captcha_harvest) = $event)),
                                             label: "验证码自动收获",
                                             color: "primary",
                                             density: "compact",
@@ -1255,7 +1279,7 @@ return (_ctx, _cache) => {
                                         default: _withCtx(() => [
                                           _createVNode(_component_v_switch, {
                                             modelValue: config.siqi_captcha_ocr,
-                                            "onUpdate:modelValue": _cache[23] || (_cache[23] = $event => ((config.siqi_captcha_ocr) = $event)),
+                                            "onUpdate:modelValue": _cache[24] || (_cache[24] = $event => ((config.siqi_captcha_ocr) = $event)),
                                             label: "OCR 优先识别",
                                             color: "primary",
                                             density: "compact",
@@ -1272,7 +1296,7 @@ return (_ctx, _cache) => {
                                         default: _withCtx(() => [
                                           _createVNode(_component_v_switch, {
                                             modelValue: config.siqi_auto_buy_slot,
-                                            "onUpdate:modelValue": _cache[24] || (_cache[24] = $event => ((config.siqi_auto_buy_slot) = $event)),
+                                            "onUpdate:modelValue": _cache[25] || (_cache[25] = $event => ((config.siqi_auto_buy_slot) = $event)),
                                             label: "自动扩地",
                                             color: "primary",
                                             density: "compact",
@@ -1289,7 +1313,7 @@ return (_ctx, _cache) => {
                                         default: _withCtx(() => [
                                           _createVNode(_component_v_switch, {
                                             modelValue: config.siqi_auto_steal,
-                                            "onUpdate:modelValue": _cache[25] || (_cache[25] = $event => ((config.siqi_auto_steal) = $event)),
+                                            "onUpdate:modelValue": _cache[26] || (_cache[26] = $event => ((config.siqi_auto_steal) = $event)),
                                             label: "每日偷菜",
                                             color: "primary",
                                             density: "compact",
@@ -1306,7 +1330,7 @@ return (_ctx, _cache) => {
                                         default: _withCtx(() => [
                                           _createVNode(_component_v_switch, {
                                             modelValue: config.siqi_auto_like,
-                                            "onUpdate:modelValue": _cache[26] || (_cache[26] = $event => ((config.siqi_auto_like) = $event)),
+                                            "onUpdate:modelValue": _cache[27] || (_cache[27] = $event => ((config.siqi_auto_like) = $event)),
                                             label: "每日点赞",
                                             color: "primary",
                                             density: "compact",
@@ -1343,7 +1367,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-95876688"]]);
+const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-20f41117"]]);
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 

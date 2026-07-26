@@ -1,21 +1,21 @@
 
-.farm-config-form[data-v-95876688] {
+.farm-config-form[data-v-20f41117] {
   min-inline-size: 0;
   padding: 0.5rem;
   max-width: 1100px;
   margin-inline: auto;
 }
-.config-section[data-v-95876688] {
+.config-section[data-v-20f41117] {
   overflow: hidden;
 }
-.config-tabs[data-v-95876688] {
+.config-tabs[data-v-20f41117] {
   border-block-end: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
-.config-section[data-v-95876688] {
+.config-section[data-v-20f41117] {
   background: rgba(var(--v-theme-surface), 0.96);
   box-shadow: 0 2px 10px rgba(28, 40, 52, 0.06);
 }
-.config-section-title[data-v-95876688] {
+.config-section-title[data-v-20f41117] {
   border-block-end: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 

@@ -82333,7 +82333,7 @@ return (_ctx, _cache) => {
 
   return (_openBlock(), _createBlock(_component_v_card, {
     flat: "",
-    class: "farm-workbench rounded border text-body-2"
+    class: "farm-workbench rounded-lg border text-body-2"
   }, {
     default: _withCtx(() => [
       _createElementVNode("div", _hoisted_1, [
@@ -82780,6 +82780,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-7d5d9c5e"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-f0cd93ca"]]);
 
 export { FarmWorkbench as F };

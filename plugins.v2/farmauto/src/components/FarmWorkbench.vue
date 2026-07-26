@@ -332,7 +332,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <v-card flat class="farm-workbench rounded border text-body-2">
+  <v-card flat class="farm-workbench rounded-lg border text-body-2">
     <div class="farm-header bg-gradient-farm text-white">
       <div class="farm-header-row d-flex align-center ga-2 px-3 py-2">
         <div class="d-flex align-center ga-2 farm-header-left">
