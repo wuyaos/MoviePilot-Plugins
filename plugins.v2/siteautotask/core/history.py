@@ -4,7 +4,7 @@ from datetime import datetime
 import pytz
 from app.core.config import settings
 from app.log import logger
-
+from .execution import is_retryable_failure, is_terminal_success, record_execution_key
 
 class HistoryStore:
     def __init__(self, plugin, key="history"):
@@ -39,6 +39,30 @@ class HistoryStore:
             if str(run.get("date", "")).startswith(today)
             for record in (run.get("records") or [])
             if record.get("success") and record.get("task_id")
+        }
+
+    def terminal_keys_today(self):
+        """返回当天终态成功的执行键集合，供主 cron/手动补跑跳过。"""
+        history = self.plugin.get_data(self.key) or []
+        today = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d")
+        return {
+            record_execution_key(record)
+            for run in history
+            if str(run.get("date", "")).startswith(today)
+            for record in (run.get("records") or [])
+            if is_terminal_success(record)
+        }
+
+    def failed_execution_keys_today(self):
+        """返回当天可重试的技术失败执行键集合。"""
+        history = self.plugin.get_data(self.key) or []
+        today = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d")
+        return {
+            record_execution_key(record)
+            for run in history
+            if str(run.get("date", "")).startswith(today)
+            for record in (run.get("records") or [])
+            if is_retryable_failure(record)
         }
 
     def purchased_medal_keys_today(self):

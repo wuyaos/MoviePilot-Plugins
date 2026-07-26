@@ -11,6 +11,7 @@ from app.log import logger
 from ..base.result import TaskResult
 from ..base.decorator import TaskType
 from .task_keys import site_task_key, claim_task_key
+from .execution import execution_key
 from ..sites import get_site_handler
 from ..utils.display import display_record_lines, display_task
 from ..utils.feedback import NotificationIcons, detect_reward_type
@@ -219,6 +220,9 @@ class TaskEngine:
                         "task_id": task.get("id"), "task_label": task_label,
                         "task_type": task.get("task_type", TaskType.GENERIC),
                         "success": True, "status": "未配置，跳过",
+                        "execution_key": execution_key(handler.domain, task.get("id")),
+                        "terminal_success": True,
+                        "retryable": False,
                     }
                 raw = task["func"](claim_task_id) if claim_task_id is not None else task["func"]()
             else:
@@ -235,6 +239,9 @@ class TaskEngine:
                 "task_id": task["id"], "task_label": task_label,
                 "task_type": task.get("task_type", TaskType.GENERIC),
                 "success": result.success, "status": status,
+                "execution_key": execution_key(handler.domain, task["id"]),
+                "terminal_success": result.success,
+                "retryable": not result.success,
             }
             if sent_messages:
                 record["messages"] = sent_messages
@@ -244,6 +251,8 @@ class TaskEngine:
                 record["rewards"] = result.rewards
             if result.purchased_medal_ids:
                 record["purchased_medal_ids"] = result.purchased_medal_ids
+                record["terminal_success"] = bool(result.purchased_medal_ids)
+                record["retryable"] = False
             if task.get("task_type") == TaskType.CHAT and not callable(original_collect):
                 for line in display_record_lines(record):
                     reward_text = "；".join(
@@ -263,6 +272,9 @@ class TaskEngine:
                 "task_id": task.get("id"), "task_label": task.get("label"),
                 "task_type": task.get("task_type", TaskType.GENERIC),
                 "success": False, "status": f"执行失败：{e}",
+                "execution_key": execution_key(handler.domain, task.get("id")),
+                "terminal_success": False,
+                "retryable": True,
             }
         finally:
             if task.get("task_type") == TaskType.CHAT and callable(original_send):
