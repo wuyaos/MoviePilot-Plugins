@@ -724,4 +724,8 @@ onBeforeUnmount(() => {
 }
 .tab-status-dot.on { background: #4ade80; box-shadow: 0 0 4px rgba(74, 222, 128, 0.6); }
 .tab-status-dot.off { background: rgba(var(--v-theme-on-surface), 0.25); }
+
+.v-card .v-table { width: 100%; }
+.v-card .v-table > .v-table__wrapper > table { width: 100%; }
+.v-card .v-table > .v-table__wrapper { overflow-x: auto; }
 </style>
