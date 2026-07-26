@@ -374,7 +374,7 @@ class FarmAuto(_PluginBase):
                     self._build_http_client(policy), logger, self._trend_store
                 )
                 cookie = self._get_site_cookie(site_config)
-                site_report = executor.run_site(cookie, site_config, mode, policy)
+                site_report = executor.run_site(cookie, site_config, mode, policy, self._siqi_options)
                 self._run_siqi_extras(executor, site_config, cookie, policy, site_report)
                 site_reports.append(site_report)
                 self._market_prices[site_id] = dict(site_report.market_prices)

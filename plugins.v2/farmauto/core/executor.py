@@ -70,7 +70,7 @@ class FarmExecutor:
                 cookies[key.strip()] = value.strip()
         return cookies
 
-    def run_site(self, cookie: str, site_config, mode: str, policy: dict) -> SiteRunReport:
+    def run_site(self, cookie: str, site_config, mode: str, policy: dict, siqi_options: dict = None) -> SiteRunReport:
         policy = {**DEFAULT_POLICY, **(policy or {})}
         report = SiteRunReport(site_config.site_id, site_config.site_name, mode)
         site_name = site_config.site_name
@@ -590,18 +590,13 @@ class FarmExecutor:
             elif operation == "plant":
                 crop_action = crop.get("action", "plant")
                 if site_config.site_id == "siqi":
-                    # 思齐用 POST plant_game.php + action=plant
-                    # 从 crop_status 找空地(is_empty=True)获取 land_id/plot_index
-                    empty_plot = None
-                    for v in (crop_status or {}).values():
-                        if isinstance(v, dict) and v.get("is_empty"):
-                            empty_plot = v
-                            break
-                    cs = empty_plot or {}
+                    # 思齐用 POST plant_game.php + action=plant_all_empty 批量种空地
+                    # seed_id 取思齐配置页的 default_seed_id(回退 crop.id)
+                    default_seed = (siqi_options or {}).get("default_seed_id") or crop.get("id", 1)
                     response = self.http_client.post(
                         site_config.get_farm_url(),
                         cookies,
-                        data={"action": "plant", "land_id": cs.get("land_id", ""), "plot_index": cs.get("plot_index", ""), "seed_id": crop.get("id", "")},
+                        data={"action": "plant_all_empty", "seed_id": default_seed},
                         retryable=False,
                     )
                 else:
