@@ -30,7 +30,7 @@ from .sites import SITE_CONFIGS, SITE_OPTIONS, get_site_config
 class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场自动化，支持智能交易与自动收获"
-    plugin_icon = "farm.png"
+    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
     plugin_version = "3.0.3"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
