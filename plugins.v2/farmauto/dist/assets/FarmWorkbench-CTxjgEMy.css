@@ -309,24 +309,24 @@
 
 /* 参观输入框紧凑样式（全局，穿透 scoped） */
 
-.farm-workbench[data-v-4d712a9d] {
+.farm-workbench[data-v-03a36938] {
   min-inline-size: 0;
   padding: 0.5rem;
 }
-.farm-header[data-v-4d712a9d] {
+.farm-header[data-v-03a36938] {
   border-radius: inherit;
 }
-.farm-header-row[data-v-4d712a9d] { position: relative;
+.farm-header-row[data-v-03a36938] { position: relative;
 }
-.farm-header-left[data-v-4d712a9d] { flex: 0 0 auto;
+.farm-header-left[data-v-03a36938] { flex: 0 0 auto;
 }
-.farm-header-center[data-v-4d712a9d] { flex: 1 1 auto;
+.farm-header-center[data-v-03a36938] { flex: 1 1 auto;
 }
-.farm-header-right[data-v-4d712a9d] { flex: 0 0 auto;
+.farm-header-right[data-v-03a36938] { flex: 0 0 auto;
 }
-.value-changed[data-v-4d712a9d] { animation: value-flash-4d712a9d 0.8s ease;
+.value-changed[data-v-03a36938] { animation: value-flash-03a36938 0.8s ease;
 }
-@keyframes value-flash-4d712a9d {
+@keyframes value-flash-03a36938 {
 0% { color: inherit;
 }
 30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4);
@@ -334,10 +334,10 @@
 100% { color: inherit; text-shadow: none;
 }
 }
-.magic-anim[data-v-4d712a9d] {
-  animation: magic-pulse-4d712a9d 2s infinite ease-in-out;
+.magic-anim[data-v-03a36938] {
+  animation: magic-pulse-03a36938 2s infinite ease-in-out;
 }
-@keyframes magic-pulse-4d712a9d {
+@keyframes magic-pulse-03a36938 {
 0%, 100% {
     transform: scale(1) rotate(0deg);
     filter: drop-shadow(0 0 2px rgba(156, 39, 176, 0.4));
@@ -360,10 +360,11 @@
 
 /* 顶栏渐变背景（主题色感知） */
 .bg-gradient-farm {
-  background: linear-gradient(135deg, rgba(var(--v-theme-success), 0.78), rgba(var(--v-theme-success), 0.62)) !important;
-  backdrop-filter: blur(12px) saturate(1.1);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
-  box-shadow: 0 2px 8px rgba(var(--v-theme-success), 0.2);
+  background: linear-gradient(135deg, rgba(var(--v-theme-success), 0.55), rgba(var(--v-theme-surface), 0.65)) !important;
+  backdrop-filter: blur(16px) saturate(0.9);
+  -webkit-backdrop-filter: blur(16px) saturate(0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 .farm-status-chip {
   background: rgba(255, 255, 255, 0.15) !important;

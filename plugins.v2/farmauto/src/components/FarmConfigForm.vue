@@ -229,19 +229,39 @@ function saveConfig() {
   <v-form class="farm-config-form text-body-2" @submit.prevent="saveConfig">
   <v-card flat class="rounded border">
     <div class="farm-header bg-gradient-farm text-white">
-      <div class="d-flex align-center ga-2 px-3 py-2">
-        <v-icon icon="mdi-sprout" color="white" size="small" />
-        <span class="text-subtitle-1 text-white font-weight-bold">农场配置</span>
+      <div class="farm-header-row d-flex align-center ga-2 px-3 py-2">
+        <div class="d-flex align-center ga-2 farm-header-left">
+          <v-icon icon="mdi-sprout" color="white" size="small" />
+          <span class="text-subtitle-1 text-white font-weight-bold">农场配置</span>
+        </div>
         <v-spacer />
-        <v-btn size="small" variant="outlined" color="white" border="white" prepend-icon="mdi-content-save" :loading="loading" @click="saveConfig">
-          保存配置
-        </v-btn>
-        <v-btn size="small" variant="outlined" color="white" border="white" prepend-icon="mdi-view-dashboard-outline" @click="emit('switch')">
-          切换详情
-        </v-btn>
-        <v-btn size="small" variant="outlined" color="white" border="white" prepend-icon="mdi-close" @click="emit('close')">
-          关闭
-        </v-btn>
+        <div class="d-flex flex-wrap align-center justify-end ga-3 farm-header-right">
+          <v-btn
+            icon="mdi-content-save"
+            size="default"
+            variant="outlined"
+            color="white"
+            border="white"
+            :loading="loading"
+            @click="saveConfig"
+          />
+          <v-btn
+            icon="mdi-view-dashboard-outline"
+            size="default"
+            variant="outlined"
+            color="white"
+            border="white"
+            @click="emit('switch')"
+          />
+          <v-btn
+            icon="mdi-close"
+            size="default"
+            variant="outlined"
+            color="white"
+            border="white"
+            @click="emit('close')"
+          />
+        </div>
       </div>
     </div>
 
