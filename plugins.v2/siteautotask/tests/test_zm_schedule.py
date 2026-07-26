@@ -421,7 +421,7 @@ class ConfiguredTaskCollectionTests(unittest.TestCase):
 class RetryFailedTests(unittest.TestCase):
     def test_retry_keeps_only_enabled_failed_not_successful_today(self):
         history = Mock()
-        history.successful_task_ids_today.return_value = {"already_ok"}
+        history.terminal_keys_today.return_value = {"example.com:already_ok"}
         plugin = types.SimpleNamespace(
             config=types.SimpleNamespace(retry_count=3),
             retry_records=[
@@ -496,7 +496,7 @@ class ManualSupplementTests(unittest.TestCase):
             ({"id": "unseen", "config_key": "1_unseen", "label": "未运行"}, None),
         ]
         history = Mock()
-        history.successful_task_ids_today.return_value = {"success"}
+        history.terminal_keys_today.return_value = {"example.com:success"}
         plugin = types.SimpleNamespace(config=config, history=history, retry_records=[])
         engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
         engine.plugin = plugin

@@ -11,7 +11,7 @@ from app.log import logger
 from ..base.result import TaskResult
 from ..base.decorator import TaskType
 from .task_keys import site_task_key, claim_task_key
-from .execution import execution_key
+from .execution import execution_key, is_retryable_failure, record_execution_key
 from ..sites import get_site_handler
 from ..utils.display import display_record_lines, display_task
 from ..utils.feedback import NotificationIcons, detect_reward_type
@@ -44,9 +44,8 @@ class TaskEngine:
 
     def _run_locked(self, retry_only=False, manual_only=False, skip_successful=False):
         cfg = self.plugin.config
-        retry_keys = {item.get("task_id") for item in getattr(self.plugin, "retry_records", [])} if retry_only else None
+        retry_keys = {record_execution_key(item) for item in getattr(self.plugin, "retry_records", [])} if retry_only else None
         should_skip_successful = manual_only or skip_successful or retry_only
-        successful_today = self.history.successful_task_ids_today() if should_skip_successful else set()
         if not cfg.chat_sites:
             logger.info("未配置需要执行的站点")
             return []
@@ -55,20 +54,21 @@ class TaskEngine:
         run_label = "失败重试" if retry_only else ("手动补跑" if manual_only else "主定时")
         terminal_keys = self.history.terminal_keys_today()
         for site, handler, task, claim_id in self._collect_configured_tasks("main"):
-            task_key = task["config_key"]
-            if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
+            ekey = execution_key(
+                handler.domain, task["id"],
+                str(claim_id) if claim_id else (task.get("unit_id") if task.get("task_type") == TaskType.CHAT else None)
+            )
+            if retry_keys is not None and ekey not in retry_keys:
                 continue
 
             if task.get("task_type") == TaskType.MEDAL:
-                # 展开后每枚勋章是独立执行单元，按 terminal_keys 跳过已购买成功的。
-                ekey = execution_key(handler.domain, task["id"], str(claim_id) if claim_id else None)
                 if ekey in terminal_keys:
                     skipped_successful += 1
                     medal_label = task.get("selected_option_label") or task.get("label") or task.get("id")
                     task_name = display_task(handler.site_name, medal_label, task.get("task_type"))
                     logger.info(f"{run_label} - {handler.site_name} - {task_name} -> 当天已购买成功，跳过")
                     continue
-            elif should_skip_successful and task.get("id") in successful_today:
+            elif should_skip_successful and ekey in terminal_keys:
                 skipped_successful += 1
                 task_type = task.get("task_type")
                 label = task.get("selected_option_label") or task.get("label") or task.get("id")
@@ -492,26 +492,22 @@ class TaskEngine:
         self.plugin.reschedule_zm(next_time)
 
     def retry_failed(self):
-        """重试仍启用且今天尚未成功的失败任务，织梦喊话不进入主任务组。"""
+        """重试仍启用且当天未终态成功的技术失败执行单元。"""
         pending = list(getattr(self.plugin, "retry_records", None) or [])
         if not pending:
             return []
 
-        successful_today = self.history.successful_task_ids_today()
-        configured_ids = {
-            task.get("id")
-            for _, _, task, _ in self._collect_configured_tasks("main")
-            if task.get("task_type") != TaskType.MEDAL
-        }
+        terminal_keys = self.history.terminal_keys_today()
+        # 仅保留当天仍可重试的执行单元（技术失败、未终态成功）。
         pending = [
             record for record in pending
-            if record.get("task_id") in configured_ids
-            and record.get("task_id") not in successful_today
+            if is_retryable_failure(record)
+            and record_execution_key(record) not in terminal_keys
         ]
         self.plugin.retry_records = pending
         if not pending:
             self.plugin.retry_attempt = 0
-            logger.info("失败重试：待重试任务今天均已成功，无需执行")
+            logger.info("失败重试：待重试执行单元均已终态成功或不可重试，无需执行")
             return []
         if getattr(self.plugin, "retry_attempt", 0) >= self.plugin.config.retry_count:
             self.plugin.retry_records = []
@@ -520,9 +516,10 @@ class TaskEngine:
             return []
 
         records = self.run(retry_only=True)
-        # 锁冲突时 run 返回空列表，保留失败状态；正常执行后仅保留仍失败项。
         if records:
-            self.plugin.retry_records = [record for record in records if not record.get("success")]
+            self.plugin.retry_records = [
+                record for record in records if is_retryable_failure(record)
+            ]
             if not self.plugin.retry_records:
                 self.plugin.retry_attempt = 0
         return records
