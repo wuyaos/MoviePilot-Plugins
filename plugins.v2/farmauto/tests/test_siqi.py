@@ -71,18 +71,16 @@ def test_siqi_metadata_and_urls():
     assert config.crops["crop_1"]["action"] == "plant"
 
     assert _query(config.get_harvest_captcha_url()) == {"action": ["get_harvest_all_captcha"]}
-    assert _query(config.get_harvest_all_submit_url()) == {
-        "option": ["harvest_all"],
-    }
+    assert config.get_harvest_all_submit_url() == "https://si-qi.xyz/plant_game.php"
     assert _query(config.get_harvest_plot_url(2, 0)) == {
         "action": ["harvest"], "land_id": ["2"], "plot_index": ["0"],
     }
     assert config.get_captcha_image_url("hash-123").endswith("captcha.php?imagehash=hash-123")
     assert _query(config.get_steal_target_url()) == {"action": ["get_victim_farm"]}
-    assert _query(config.get_steal_plot_url()) == {"option": ["steal"]}
+    assert config.get_steal_plot_url() == "https://si-qi.xyz/plant_game.php"
     assert _query(config.get_like_target_url()) == {"action": ["random_like_targets"]}
-    assert _query(config.get_like_submit_url()) == {"option": ["like"]}
-    assert _query(config.get_buy_plot_slot_url()) == {"option": ["buy_plot_slot"]}
+    assert config.get_like_submit_url() == "https://si-qi.xyz/plant_game.php"
+    assert config.get_buy_plot_slot_url() == "https://si-qi.xyz/plant_game.php"
 
 
 def test_siqi_farm_and_warehouse_parsers():
