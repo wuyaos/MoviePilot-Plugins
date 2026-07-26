@@ -70,6 +70,14 @@ class MomentHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message: str = None):
+        # 单条展开时重新查询，避免返回上一条消息的反馈。
+        if message:
+            username = self.get_username()
+            if username:
+                self.wait_feedback()
+                fb = self._poll_feedback(username)
+                if fb:
+                    self._last_message_result = fb
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)

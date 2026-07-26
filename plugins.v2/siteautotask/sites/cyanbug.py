@@ -7,6 +7,8 @@ ptautotask 独有站点，标准 NexusPHP。
 """
 import time
 
+from lxml import etree
+
 from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask
 from ..base.decorator import task_info, TaskType
@@ -30,12 +32,36 @@ class CyanbugHandler(CapabilityHandler):
         return "大青虫" in self.site_name or "cyanbug" in self.domain
 
     def get_feedback(self, message=None):
+        # 单条展开时按消息重新查询反馈，避免被后续消息覆盖。
+        if message:
+            self._last_message_result = self._poll_shoutbox_feedback(message)
         if not self._last_message_result:
             return None
         return {"site": self.site_name, "message": message, "rewards": [{
             "type": "raw_feedback", "description": self._last_message_result,
             "amount": "", "unit": "", "is_negative": False,
         }]}
+
+    def _poll_shoutbox_feedback(self, message):
+        """按喊话内容从 shoutbox 查找系统反馈。"""
+        username = self.get_username()
+        if not username:
+            return None
+        keyword = "上传量" if "上传" in message else "魔力值" if "魔力" in message else None
+        response = self._send_get_request(self.site_url + "/shoutbox.php")
+        if not response:
+            return None
+        html = etree.HTML(response.text or "")
+        for row in html.xpath("//tr[td][position() <= 15]"):
+            text = "".join(t.strip() for t in row.xpath(".//td//text()"))
+            if "@" not in text or username not in text:
+                continue
+            if "青虫娘" not in text:
+                continue
+            if keyword and keyword not in text:
+                continue
+            return text
+        return None
 
 
 class Tasks(BaseTask):

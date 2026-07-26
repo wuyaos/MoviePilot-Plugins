@@ -77,6 +77,9 @@ class CangbaoHandler(CapabilityHandler):
         message_feedbacks = getattr(self, "_message_feedbacks", [])
         if not message_feedbacks and self._last_message_result:
             message_feedbacks = [{"message": message, "text": self._last_message_result}]
+        # 单条展开时仅返回当前消息的反馈。
+        if message:
+            message_feedbacks = [f for f in message_feedbacks if f.get("message") == message]
         if not message_feedbacks:
             return None
         rewards = []

@@ -75,6 +75,9 @@ class DubheHandler(CapabilityHandler):
                 return
 
     def get_feedback(self, message: str = None) -> Optional[Dict]:
+        # 单条展开时按消息重新查询反馈，避免被后续消息覆盖。
+        if not self._last_message_result or message:
+            self._poll_feedback(message)
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)
