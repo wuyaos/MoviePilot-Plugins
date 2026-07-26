@@ -713,7 +713,55 @@ class FarmAuto(_PluginBase):
             } if isinstance(site_trends, dict) else {},
             "recent_actions": history[-10:],
         }
+        detail_message = ""
         if site_id != "siqi":
+            try:
+                policy = self.get_effective_policy(site_id)
+                http_client = self._build_http_client(policy)
+                cookies = FarmExecutor._cookie_dict(self._get_site_cookie(site_config))
+                if not cookies:
+                    raise ValueError("未提供有效 Cookie")
+
+                farm_url = site_config.get_farm_url()
+                logger.info(f"[FarmAuto] {site_config.site_name} detail 拉取农场页")
+                farm_response = http_client.get(farm_url, cookies)
+                farm_response.raise_for_status()
+                farm_html = farm_response.text
+                if not site_config.check_auth(farm_html):
+                    raise ValueError("Cookie 已失效")
+
+                market_prices = site_config.parse_market_prices(farm_html)
+                crop_status = site_config.parse_crop_status(farm_html)
+                warehouse, _ = site_config.parse_warehouse_page(farm_html)
+                warehouse_url = site_config.get_warehouse_url()
+                if not warehouse and warehouse_url != farm_url:
+                    warehouse_response = http_client.get(warehouse_url, cookies)
+                    warehouse_response.raise_for_status()
+                    warehouse_html = warehouse_response.text
+                    if not site_config.check_auth(warehouse_html):
+                        raise ValueError("Cookie 已失效")
+                    warehouse, _ = site_config.parse_warehouse_page(warehouse_html)
+
+                data["market_prices"] = market_prices
+                data["crop_status"] = self._normalize_crop_status(crop_status)
+                data["warehouse"] = self._normalize_warehouse(warehouse)
+                self._market_prices[site_id] = market_prices
+                self._trend_store.record(site_id, market_prices)
+                site_trends = self._trend_store.to_dict().get(site_id, {})
+                data["trends"] = {
+                    crop_key: samples[-20:]
+                    for crop_key, samples in site_trends.items()
+                    if isinstance(samples, list)
+                } if isinstance(site_trends, dict) else {}
+                logger.info(
+                    f"[FarmAuto] {site_config.site_name} 解析到 "
+                    f"{len(market_prices)} 价格 {len(crop_status)} 状态 "
+                    f"{len(warehouse)} 仓库"
+                )
+            except Exception as error:
+                detail_message = f"{site_config.site_name} detail 拉取失败：{error}"
+                logger.warning(f"[FarmAuto] {detail_message}")
+
             market_prices = data["market_prices"] if isinstance(data["market_prices"], dict) else {}
             for crop_key, status in data["crop_status"].items():
                 if "state" not in status:
@@ -768,7 +816,10 @@ class FarmAuto(_PluginBase):
                 "like_done_today": is_today and bool(daily.get("like")),
                 "buy_slot_available": siqi_farm.get("plot_slot", {}).get("available", False),
             }
-        return {"success": True, "data": data}
+        response = {"success": True, "data": data}
+        if detail_message:
+            response["message"] = detail_message
+        return response
 
     def _api_site_action(self, site_id: str, payload: dict) -> Dict[str, Any]:
         action = str((payload or {}).get("action") or "")
