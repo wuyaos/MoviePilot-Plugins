@@ -1,2 +1,0 @@
-curl-cffi>=0.7.0
-ddddocr>=1.4.11
