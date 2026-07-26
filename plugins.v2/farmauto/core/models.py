@@ -52,6 +52,12 @@ class ActionResult:
     double: bool = False
     profit: int = 0
     message: str = ""
+    crop_name: str = ""
+    crop_icon: str = ""
+    land_name: str = ""
+    plot_index: Optional[int] = None
+    quantity: int = 0
+    value_unit: str = ""
 
 
 @dataclass

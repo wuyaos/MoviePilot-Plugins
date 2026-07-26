@@ -743,6 +743,12 @@ class FarmAuto(_PluginBase):
                 "message": str(raw_action.get("message") or ""),
                 "time": raw_action.get("time") or raw_action.get("ts") or report_time,
                 "site": raw_action.get("site") or site_config.site_name,
+                "crop_name": str(raw_action.get("crop_name") or ""),
+                "crop_icon": str(raw_action.get("crop_icon") or ""),
+                "land_name": str(raw_action.get("land_name") or ""),
+                "plot_index": raw_action.get("plot_index"),
+                "quantity": self._to_int(raw_action.get("quantity"), 0),
+                "value_unit": str(raw_action.get("value_unit") or ""),
             })
         site_trends = self._trend_store.to_dict().get(site_id, {})
         data = {

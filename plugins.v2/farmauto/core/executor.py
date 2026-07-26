@@ -654,6 +654,14 @@ class FarmExecutor:
                 if cost > 0:
                     profit = -cost
                     message = f"{message} 成本{cost}".strip()
+            # 填充 KoWming logMeta 所需字段(所有站点统一)
+            crop_name = str(crop.get("name") or target or "")
+            crop_icon = ""
+            try:
+                crop_icon = site_config.crop_image(crop_name) if hasattr(site_config, "crop_image") else ""
+            except Exception:
+                crop_icon = ""
+            value_unit = "魔力值" if operation in ("sell", "plant", "breed") else ("收获值" if operation == "harvest" else "")
             result = ActionResult(
                 operation,
                 target,
@@ -661,6 +669,10 @@ class FarmExecutor:
                 double=bool(parsed.get("double", False)),
                 profit=profit,
                 message=message,
+                crop_name=crop_name,
+                crop_icon=crop_icon,
+                quantity=quantity if operation == "sell" else int(action.get("quantity", 1)),
+                value_unit=value_unit,
             )
             return result, farm_html
         except AuthError as error:

@@ -6,47 +6,61 @@ const props = defineProps({
   currency: { type: String, default: '' },
 })
 
-const actionMeta = {
-  harvest: { icon: '🌾', text: '收获' },
-  plant: { icon: '🌱', text: '种植' },
-  sell: { icon: '💰', text: '出售' },
-  harvest_all: { icon: '🧺', text: '一键收获' },
-  steal: { icon: '🥷', text: '偷菜' },
-  like: { icon: '👍', text: '点赞' },
-  buy_slot: { icon: '🏗', text: '扩地' },
+// KoWming logMeta 对齐: action -> [中文, class]
+const actionMap = {
+  harvest: ['收获', 'harvest'],
+  harvest_all: ['一键收获', 'harvest'],
+  plant: ['种植', 'plant'],
+  breed: ['养殖', 'plant'],
+  sell: ['售出', 'sell'],
+  steal: ['偷菜', 'steal'],
+  like: ['点赞', 'like'],
+  buy_slot: ['购买坑位', 'plant'],
+  buy_decor: ['购买装饰', 'plant'],
+  visit: ['参观', 'like'],
+}
+
+function logMeta(item) {
+  const action = String(item?.action || '').trim()
+  const mapped = actionMap[action] || [action || '未知', '']
+  const parts = []
+  // 种子图标
+  if (item?.crop_icon) parts.push({ icon: item.crop_icon, name: item.crop_name })
+  else if (item?.crop_name) parts.push({ name: item.crop_name })
+  // 地块信息
+  const hasPlotIndex = item?.plot_index !== undefined && item?.plot_index !== null && !Number.isNaN(Number(item.plot_index))
+  if (item?.land_name) parts.push(`(${item.land_name}${hasPlotIndex ? `-${Number(item.plot_index) + 1}号地` : ''})`)
+  // 数量
+  if (item?.quantity && Number(item.quantity) > 0) parts.push(`数量：${Number(item.quantity)}`)
+  // 失败消息
+  if (item?.success === false && item?.message) parts.push(item.message)
+
+  const unit = item?.value_unit || (action === 'harvest' ? '收获值' : '魔力值')
+  const value = Number(item?.profit || 0)
+  return {
+    actionText: mapped[0],
+    actionClass: mapped[1] ? `history-action--${mapped[1]}` : '',
+    detailText: parts.map(p => typeof p === 'string' ? p : (p.name || '')).filter(Boolean).join(' '),
+    hasIcon: !!parts.find(p => typeof p === 'object' && p.icon),
+    iconSrc: (parts.find(p => typeof p === 'object' && p.icon) || {}).icon,
+    valueText: value !== 0 ? `${value > 0 ? '+' : ''}${value} ${unit}` : '',
+    valueClass: value > 0 ? 'history-value--plus' : (value < 0 ? 'history-value--minus' : ''),
+  }
 }
 
 const rows = computed(() => (Array.isArray(props.history) ? props.history : []).slice(-20).reverse())
-
-function getActionMeta(action) {
-  return actionMeta[action] || { icon: '📋', text: action || '操作' }
-}
 
 function formatTime(value) {
   if (value == null || value === '') return '—'
   if (typeof value === 'string' && /^\d{1,2}:\d{2}(?::\d{2})?$/.test(value)) {
     return value.slice(0, 5)
   }
-
   const numericValue = Number(value)
   const date = Number.isFinite(numericValue)
     ? new Date(numericValue < 1e12 ? numericValue * 1000 : numericValue)
     : new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-}
-
-function profitValue(profit) {
-  const value = Number(profit)
-  return Number.isFinite(value) ? value : 0
-}
-
-function formatProfit(profit) {
-  const value = profitValue(profit)
-  if (!value) return ''
-  const sign = value > 0 ? '+' : ''
-  const unit = props.currency || '魔力'
-  return `${unit} ${sign}${value}`
 }
 </script>
 
@@ -73,16 +87,22 @@ function formatProfit(profit) {
         >
           <td class="text-no-wrap">{{ formatTime(item.time) }}</td>
           <td>
-            <span class="mr-1" aria-hidden="true">{{ getActionMeta(item.action).icon }}</span>
-            <span>{{ getActionMeta(item.action).text }}</span>
-            <span v-if="item.target"> {{ item.target }}</span>
-            <span v-if="item.success === false && item.message" class="failure-message"> — {{ item.message }}</span>
+            <span class="history-action" :class="logMeta(item).actionClass">{{ logMeta(item).actionText }}</span>
+            <span class="history-detail">
+              <v-img
+                v-if="logMeta(item).hasIcon"
+                :src="logMeta(item).iconSrc"
+                width="20"
+                height="20"
+                contain
+                class="d-inline-block mr-1"
+                style="vertical-align: middle"
+              />
+              {{ logMeta(item).detailText }}
+            </span>
           </td>
-          <td
-            class="text-end text-no-wrap profit"
-            :class="profitValue(item.profit) > 0 ? 'text-success' : 'text-error'"
-          >
-            {{ formatProfit(item.profit) }}
+          <td class="text-end text-no-wrap profit" :class="logMeta(item).valueClass">
+            {{ logMeta(item).valueText }}
           </td>
         </tr>
       </tbody>
@@ -97,7 +117,21 @@ function formatProfit(profit) {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)) !important;
 }
 
-.failure-message {
-  font-size: 0.75rem;
+.history-action {
+  font-weight: 700;
+  margin-right: 6px;
 }
+.history-action--plant { color: rgb(var(--v-theme-success)); }
+.history-action--harvest { color: rgb(var(--v-theme-warning)); }
+.history-action--sell { color: rgb(var(--v-theme-info)); }
+.history-action--steal { color: rgb(var(--v-theme-error)); }
+.history-action--like { color: rgb(var(--v-theme-secondary)); }
+
+.history-detail {
+  font-size: 0.8rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+
+.history-value--plus { color: rgb(var(--v-theme-success)); }
+.history-value--minus { color: rgb(var(--v-theme-error)); }
 </style>
