@@ -593,6 +593,17 @@ class FarmAuto(_PluginBase):
     def _next_run_text(self) -> Optional[str]:
         if not self._enabled or not self._site_ids:
             return None
+        if self._cron_mode == "cron" and self._cron:
+            try:
+                from apscheduler.triggers.cron import CronTrigger
+                from datetime import datetime as _dt
+                trigger = CronTrigger.from_crontab(self._cron.strip())
+                next_fire = trigger.get_next_fire_time(None, _dt.now())
+                if next_fire:
+                    return next_fire.strftime("%m-%d %H:%M")
+            except Exception:
+                return None
+            return None
         interval = (
             self._harvest_interval_minutes
             if self._mode == "harvest"
