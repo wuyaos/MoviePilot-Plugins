@@ -81932,7 +81932,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-a4125b82"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-c41f3999"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 
@@ -83020,6 +83020,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-65278c57"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b13a3562"]]);
 
 export { FarmWorkbench as F };

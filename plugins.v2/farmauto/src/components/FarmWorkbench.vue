@@ -632,7 +632,7 @@ onMounted(() => loadStatus())
 .stat-card.refreshing { animation: stat-pulse 0.6s ease; }
 @keyframes stat-pulse { 0% { background: rgba(var(--v-theme-on-surface), 0.03); } 50% { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); } 100% { background: rgba(var(--v-theme-on-surface), 0.03); } }
 .stat-icon { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: 0 0 38px; }
-.stat-icon.orange { background: rgba(245,158,11,0.14); color: rgb(var(--v-theme-orange)); }
+.stat-icon.orange { background: rgba(245,158,11,0.14); color: rgb(var(--v-theme-warning)); }
 .stat-icon.green { background: rgba(34,197,94,0.14); color: rgb(var(--v-theme-success)); }
 .stat-icon.amber { background: rgba(217,119,6,0.14); color: rgb(var(--v-theme-warning)); }
 .stat-content { min-width: 0; flex: 1; }

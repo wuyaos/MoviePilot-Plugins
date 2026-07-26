@@ -726,7 +726,7 @@ function handlePlotClick(plot) {
   justify-content: center;
   flex: 0 0 38px;
 }
-.stat-icon.orange { background: rgba(245,158,11,0.14); color: rgb(var(--v-theme-orange)); }
+.stat-icon.orange { background: rgba(245,158,11,0.14); color: rgb(var(--v-theme-warning)); }
 .stat-icon.green { background: rgba(34,197,94,0.14); color: rgb(var(--v-theme-success)); }
 .stat-icon.red { background: rgba(239,68,68,0.14); color: rgb(var(--v-theme-error)); }
 .stat-icon.blue { background: rgba(59,130,246,0.14); color: rgb(var(--v-theme-info)); }
@@ -799,7 +799,7 @@ function handlePlotClick(plot) {
 .neu-action-content { position: relative; z-index: 1; flex: 1; min-width: 0; }
 .neu-action-label { font-size: 12px; font-weight: 800; color: rgba(var(--v-theme-on-surface), 0.84); margin-bottom: 2px; line-height: 1.15; }
 .neu-action-desc { color: rgba(var(--v-theme-on-surface), 0.52); font-size: 11px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.farm-action-btn { flex: 0 0 auto; }
+.farm-action-btn { flex: 0 0 auto; min-width: 84px; }
 /* 参观项：grid 布局含输入框+按钮 */
 .neu-action-card--visit {
   display: flex;
@@ -818,22 +818,7 @@ function handlePlotClick(plot) {
   justify-content: flex-end;
 }
 .visit-username-input { flex: 1 1 auto; min-width: 0; }
-.visit-username-input :deep(.v-field) {
-  background: rgba(var(--v-theme-on-surface), 0.05) !important;
-  border-radius: 8px !important;
-  min-height: 32px !important;
-}
-.visit-username-input :deep(.v-field__outline__start),
-.visit-username-input :deep(.v-field__outline__end) {
-  border-color: rgba(var(--v-theme-on-surface), 0.2) !important;
-}
-.visit-username-input :deep(.v-field__input) {
-  font-size: 12px !important;
-  min-height: 32px !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-}
-.visit-btn { width: 76px !important; min-width: 76px !important; flex: 0 0 76px; }
+.visit-btn { min-width: 84px !important; flex: 0 0 84px; }
 
 .plot {
   min-height: 78px;
@@ -935,4 +920,25 @@ function handlePlotClick(plot) {
 /* 区块标题背景统一为主题色，深浅色自适应 */
 .section-title-bg { background-color: rgba(var(--v-theme-on-surface), 0.06) !important; }
 
+</style>
+
+<style>
+/* 参观输入框紧凑样式（全局，穿透 scoped） */
+.visit-username-input .v-field {
+  background: rgba(var(--v-theme-on-surface), 0.05) !important;
+  border-radius: 8px !important;
+  min-height: 30px !important;
+  height: 30px !important;
+}
+.visit-username-input .v-field__outline__start,
+.visit-username-input .v-field__outline__end {
+  border-color: rgba(var(--v-theme-on-surface), 0.2) !important;
+}
+.visit-username-input .v-field__input {
+  font-size: 12px !important;
+  min-height: 30px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  height: 30px !important;
+}
 </style>
