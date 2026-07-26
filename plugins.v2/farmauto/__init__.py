@@ -687,6 +687,13 @@ class FarmAuto(_PluginBase):
                 or report.get("market_prices")
                 or {},
                 "crop_status": self._normalize_crop_status(report.get("crop_status")),
+                "crops": {
+                    crop_key: {
+                        field: crop.get(field)
+                        for field in ("name", "cost", "type", "id", "action")
+                    }
+                    for crop_key, crop in site_config.crops.items()
+                },
                 "warehouse": self._normalize_warehouse(report.get("warehouse")),
                 "trends": {
                     crop_key: samples[-20:]
