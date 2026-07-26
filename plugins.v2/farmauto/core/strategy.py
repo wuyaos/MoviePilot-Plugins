@@ -44,8 +44,11 @@ def should_sell(crop: dict, market_price: int, policy: dict) -> bool:
     profit = market_price - cost
     if market_price <= cost:
         return False
-    if min_profit_rate > 0 and profit < cost * min_profit_rate:
+    if min_profit_rate > 0 and cost > 0 and profit < cost * min_profit_rate:
         return False
+    # cost=0 时跳过 max_profit_rate 限制(纯利润作物)
+    if cost == 0:
+        return True
     return max_profit_rate <= 0 or profit <= cost * max_profit_rate
 
 

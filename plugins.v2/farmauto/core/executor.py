@@ -649,8 +649,8 @@ class FarmExecutor:
                 price = int(market_prices.get(crop_key, 0))
                 cost = int(crop.get("cost", 0))
                 quantity = max(1, int(action.get("quantity", 1)))
-                if price > 0 and cost > 0:
-                    profit = price - cost
+                if price > 0:
+                    profit = (price - cost) * quantity
                 message = f"{message} 价格{price}×{quantity}".strip()
             elif success and operation == "plant":
                 cost = int(crop.get("cost", 0))
