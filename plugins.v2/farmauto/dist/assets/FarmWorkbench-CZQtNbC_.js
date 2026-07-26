@@ -263,7 +263,7 @@ return (_ctx, _cache) => {
                     : (item.state === 'ripe')
                       ? (_openBlock$6(), _createBlock$5(_component_v_btn, {
                           key: 1,
-                          color: "orange",
+                          color: "warning",
                           size: "small",
                           variant: "flat",
                           "prepend-icon": "mdi-basket",
@@ -290,7 +290,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-aac0646d"]]);
+const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-b7609b4a"]]);
 
 const {resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,createTextVNode:_createTextVNode$4,withCtx:_withCtx$4,createElementVNode:_createElementVNode$5,renderList:_renderList$4,Fragment:_Fragment$4,openBlock:_openBlock$5,createElementBlock:_createElementBlock$5,toDisplayString:_toDisplayString$4,createCommentVNode:_createCommentVNode$5,normalizeClass:_normalizeClass$4,createBlock:_createBlock$4} = await importShared('vue');
 
@@ -442,7 +442,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-a585fe0b"]]);
+const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-46b29935"]]);
 
 const {resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,createElementVNode:_createElementVNode$4,openBlock:_openBlock$4,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$4,withCtx:_withCtx$3,renderList:_renderList$3,Fragment:_Fragment$3,createElementBlock:_createElementBlock$4,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$3,createTextVNode:_createTextVNode$3} = await importShared('vue');
 
@@ -589,7 +589,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const MarketTable = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-d5cbf6e6"]]);
 
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -81480,7 +81479,7 @@ return (_ctx, _cache) => {
                         ? (_openBlock$2(), _createBlock$2(_component_v_progress_linear, {
                             key: 0,
                             indeterminate: "",
-                            color: "red",
+                            color: "error",
                             class: "mb-3"
                           }))
                         : _createCommentVNode$2("", true),
@@ -81504,7 +81503,7 @@ return (_ctx, _cache) => {
                                       (_openBlock$2(true), _createElementBlock$2(_Fragment$2, null, _renderList$2(stealPlots(target), (plot) => {
                                         return (_openBlock$2(), _createBlock$2(_component_v_btn, {
                                           key: `${plot.land_id}-${plot.plot_index}`,
-                                          color: "red",
+                                          color: "error",
                                           variant: "flat",
                                           "prepend-icon": "mdi-incognito",
                                           disabled: actionLoading.value,
@@ -81675,7 +81674,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-4a61d491"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-20fbf36b"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 
@@ -81789,7 +81788,7 @@ return (_ctx, _cache) => {
             : _createCommentVNode$1("", true),
           _createVNode$1(_component_v_spacer),
           _createVNode$1(_component_v_btn, {
-            color: "orange",
+            color: "warning",
             size: "small",
             variant: "flat",
             "prepend-icon": "mdi-cash",
@@ -81852,7 +81851,7 @@ return (_ctx, _cache) => {
                     _createElementVNode$1("td", _hoisted_5$1, _toDisplayString$1(formatPrice(itemTotal(item))), 1),
                     _createElementVNode$1("td", _hoisted_6$1, [
                       _createVNode$1(_component_v_btn, {
-                        color: "orange",
+                        color: "warning",
                         size: "x-small",
                         variant: "flat",
                         "prepend-icon": "mdi-cash",
@@ -81920,7 +81919,7 @@ return (_ctx, _cache) => {
                     _: 1
                   }, 8, ["disabled"]),
                   _createVNode$1(_component_v_btn, {
-                    color: "orange",
+                    color: "warning",
                     variant: "flat",
                     "prepend-icon": "mdi-check",
                     loading: __props.loading,
@@ -81948,7 +81947,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const WarehouseTable = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-2180daef"]]);
 
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,toDisplayString:_toDisplayString,openBlock:_openBlock,createElementBlock:_createElementBlock,createCommentVNode:_createCommentVNode,createTextVNode:_createTextVNode,withCtx:_withCtx,createBlock:_createBlock,renderList:_renderList,Fragment:_Fragment,normalizeClass:_normalizeClass} = await importShared('vue');
 
@@ -82679,7 +82677,7 @@ return (_ctx, _cache) => {
                       md: "6"
                     }, {
                       default: _withCtx(() => [
-                        _createVNode(MarketTable, {
+                        _createVNode(_sfc_main$4, {
                           market_prices: marketPrices.value,
                           crops: crops.value,
                           trends: trends.value,
@@ -82741,7 +82739,7 @@ return (_ctx, _cache) => {
                       md: "6"
                     }, {
                       default: _withCtx(() => [
-                        _createVNode(WarehouseTable, {
+                        _createVNode(_sfc_main$1, {
                           warehouse: warehouse.value,
                           crops: crops.value,
                           currency: currency.value,
@@ -82778,6 +82776,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-9369e42b"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-f5af6597"]]);
 
 export { FarmWorkbench as F };

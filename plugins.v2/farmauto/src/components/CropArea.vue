@@ -193,7 +193,7 @@ function emitCropAction(action, item) {
             </v-btn>
             <v-btn
               v-else-if="item.state === 'ripe'"
-              color="orange"
+              color="warning"
               size="small"
               variant="flat"
               prepend-icon="mdi-basket"
@@ -210,15 +210,6 @@ function emitCropAction(action, item) {
 </template>
 
 <style scoped>
-.section-title-bg {
-  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
-}
-
-.text-subtitle-2 {
-  font-size: 0.9rem !important;
-  font-weight: 500 !important;
-}
-
 /* CropArea 卡片样式（对齐思齐 seed-card 风格） */
 .crop-grid {
   display: grid;

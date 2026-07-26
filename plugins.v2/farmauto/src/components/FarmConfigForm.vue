@@ -649,7 +649,4 @@ function saveConfig() {
   font-size: 1rem;
 }
 
-.section-title-bg {
-  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
-}
 </style>

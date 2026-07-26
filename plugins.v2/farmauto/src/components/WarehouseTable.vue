@@ -67,7 +67,7 @@ function confirmSellAll() {
       <span v-if="currency" class="text-caption text-medium-emphasis ml-2">{{ currency }}</span>
       <v-spacer />
       <v-btn
-        color="orange"
+        color="warning"
         size="small"
         variant="flat"
         prepend-icon="mdi-cash"
@@ -104,7 +104,7 @@ function confirmSellAll() {
           <td class="text-center font-weight-medium">{{ formatPrice(itemTotal(item)) }}</td>
           <td class="text-center">
             <v-btn
-              color="orange"
+              color="warning"
               size="x-small"
               variant="flat"
               prepend-icon="mdi-cash"
@@ -129,7 +129,7 @@ function confirmSellAll() {
         <v-card-actions>
           <v-spacer />
           <v-btn color="grey" variant="text" prepend-icon="mdi-close" :disabled="loading" @click="sellAllDialog = false">取消</v-btn>
-          <v-btn color="orange" variant="flat" prepend-icon="mdi-check" :loading="loading" :disabled="loading || !items.length" @click="confirmSellAll">
+          <v-btn color="warning" variant="flat" prepend-icon="mdi-check" :loading="loading" :disabled="loading || !items.length" @click="confirmSellAll">
             确认
           </v-btn>
         </v-card-actions>
@@ -139,8 +139,4 @@ function confirmSellAll() {
 </template>
 
 <style scoped>
-.section-title-bg {
-  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
-}
-
 </style>

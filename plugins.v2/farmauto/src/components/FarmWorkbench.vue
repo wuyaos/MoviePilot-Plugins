@@ -589,26 +589,9 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 8px rgba(67, 160, 71, 0.3);
 }
 
-.section-title-bg {
-  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
-}
-
 .text-subtitle-1 {
   font-size: 1.1rem !important;
   font-weight: 500 !important;
-}
-
-.text-subtitle-2 {
-  font-size: 0.9rem !important;
-  font-weight: 500 !important;
-}
-
-.text-caption {
-  font-size: 0.75rem !important;
-}
-
-.text-body-2 {
-  font-size: 0.875rem !important;
 }
 
 .farm-header {
@@ -628,18 +611,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.stat-card { display: flex; align-items: center; gap: 12px; border-radius: 14px; padding: 12px 14px; border: 0.5px solid rgba(var(--v-theme-on-surface), 0.08); background: rgba(var(--v-theme-on-surface), 0.03); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 12px rgba(var(--v-theme-on-surface), 0.08); transition: all 0.3s ease; }
-.stat-card.refreshing { animation: stat-pulse 0.6s ease; }
-@keyframes stat-pulse { 0% { background: rgba(var(--v-theme-on-surface), 0.03); } 50% { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); } 100% { background: rgba(var(--v-theme-on-surface), 0.03); } }
-.stat-icon { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: 0 0 38px; }
-.stat-icon.orange { background: rgba(245,158,11,0.14); color: rgb(var(--v-theme-warning)); }
-.stat-icon.green { background: rgba(34,197,94,0.14); color: rgb(var(--v-theme-success)); }
-.stat-icon.amber { background: rgba(217,119,6,0.14); color: rgb(var(--v-theme-warning)); }
-.stat-content { min-width: 0; flex: 1; }
-.stat-title { font-size: 11px; color: rgba(var(--v-theme-on-surface),0.55); font-weight: 600; }
-.stat-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
-.stat-value small { font-size: 11px; opacity: 0.5; font-weight: 400; }
-.stat-value.refreshing { opacity: 0.3; }
 .value-changed { animation: value-flash 0.8s ease; }
 @keyframes value-flash { 0% { color: inherit; } 30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4); } 100% { color: inherit; text-shadow: none; } }
 

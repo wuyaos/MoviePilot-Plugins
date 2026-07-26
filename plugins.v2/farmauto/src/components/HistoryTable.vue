@@ -92,10 +92,6 @@ function formatProfit(profit) {
 </template>
 
 <style scoped>
-.section-title-bg {
-  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
-}
-
 .failed-row td,
 .failed-row .profit {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)) !important;

@@ -657,7 +657,7 @@ onBeforeUnmount(() => {
         <v-card>
           <v-card-title class="d-flex align-center">偷菜目标<v-spacer /><v-btn color="grey" prepend-icon="mdi-close" variant="text" @click="stealDialog = false" /></v-card-title>
           <v-card-text>
-            <v-progress-linear v-if="actionLoading" indeterminate color="red" class="mb-3" />
+            <v-progress-linear v-if="actionLoading" indeterminate color="error" class="mb-3" />
             <v-card v-for="target in stealTargets" :key="target.target_id ?? target.victim_id" variant="outlined" class="mb-3">
               <v-card-title class="text-subtitle-2">{{ target.name || target.victim_name || `农场 ${target.target_id ?? target.victim_id}` }}</v-card-title>
               <v-card-text>
@@ -665,7 +665,7 @@ onBeforeUnmount(() => {
                   <v-btn
                     v-for="plot in stealPlots(target)"
                     :key="`${plot.land_id}-${plot.plot_index}`"
-                    color="red"
+                    color="error"
                     variant="flat"
                     prepend-icon="mdi-incognito"
                     :disabled="actionLoading"
@@ -715,41 +715,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .h-100 { height: 100%; }
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-radius: 14px;
-  padding: 12px 14px;
-  border: 0.5px solid rgba(var(--v-theme-on-surface), 0.08);
-  background: rgba(var(--v-theme-on-surface), 0.03);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 12px rgba(var(--v-theme-on-surface), 0.08);
-  transition: all 0.3s ease;
-}
-.stat-card.refreshing { animation: stat-pulse 0.6s ease; }
-@keyframes stat-pulse {
-  0% { background: rgba(var(--v-theme-on-surface), 0.03); }
-  50% { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); }
-  100% { background: rgba(var(--v-theme-on-surface), 0.03); }
-}
-.stat-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 38px;
-}
-.stat-icon.orange { background: rgba(245,158,11,0.14); color: rgb(var(--v-theme-warning)); }
-.stat-icon.green { background: rgba(34,197,94,0.14); color: rgb(var(--v-theme-success)); }
-.stat-icon.red { background: rgba(239,68,68,0.14); color: rgb(var(--v-theme-error)); }
-.stat-icon.blue { background: rgba(59,130,246,0.14); color: rgb(var(--v-theme-info)); }
-.stat-content { min-width: 0; flex: 1; }
-.stat-title { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); font-weight: 600; }
-.stat-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
-.stat-value.refreshing { opacity: 0.3; }
 
 /* 种子商店卡片（与 CropArea crop-card 同款布局） */
 .crop-grid {
@@ -925,9 +890,6 @@ onBeforeUnmount(() => {
     opacity: .45;
   }
 }
-/* 区块标题背景统一为主题色，深浅色自适应 */
-.section-title-bg { background-color: rgba(var(--v-theme-on-surface), 0.06) !important; }
-
 </style>
 
 <style>
