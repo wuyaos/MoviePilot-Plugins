@@ -181,10 +181,18 @@ class FarmAuto(_PluginBase):
         if not type(self)._run_lock.acquire(blocking=False):
             logger.warning(f"[FarmAuto] 任务正在运行，忽略{source}请求")
             return False
+        def _safe_run():
+            try:
+                self.run_farm_task(lock_acquired=True)
+            except Exception as err:
+                logger.error(f"[FarmAuto] 后台任务异常：{err}")
+                try:
+                    type(self)._run_lock.release()
+                except (RuntimeError, AssertionError):
+                    pass
         try:
             threading.Thread(
-                target=self.run_farm_task,
-                kwargs={"lock_acquired": True},
+                target=_safe_run,
                 daemon=True,
                 name="farmauto_run",
             ).start()
