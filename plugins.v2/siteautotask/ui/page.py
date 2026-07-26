@@ -1,9 +1,19 @@
 """运行数据页：按站点卡片展示，每站独立显示任务执行情况和趋势。"""
 try:
     from ..utils.feedback import NotificationIcons
-    from ..utils.display import display_record_lines, format_record_line
+    from ..utils.display import display_record_lines, format_record_line, display_task
+    from ..core.task_keys import claim_task_key, site_task_key
 except ImportError:  # 便于脱离 MoviePilot 包环境做单元测试
     from siteautotask_feedback import NotificationIcons
+
+    def display_task(_site, label, _task_type, **_kwargs):
+        return str(label)
+
+    def site_task_key(site, task):
+        return f"task_{site.get('id')}_{task.get('name') or task.get('id', '').split('_')[-1]}"
+
+    def claim_task_key(site, task):
+        return f"claim_{site.get('id')}_{task.get('name') or task.get('id', '').split('_')[-1]}"
 
     def display_record_lines(record):
         return [{
@@ -60,13 +70,16 @@ def build_page(plugin):
     def stat_cell(label, value, color="text-primary"):
         return {
             "component": "VCol",
-            "props": {"cols": 6, "md": 3},
+            "props": {"cols": 6, "md": 3, "class": "d-flex"},
             "content": [{
                 "component": "div",
-                "props": {"class": "d-flex flex-column align-center py-1"},
+                "props": {
+                    "class": "d-flex flex-column align-center justify-center pa-2 flex-grow-1",
+                    "style": "background-color: rgba(var(--v-theme-surface), 0.75);border: 1px solid rgba(var(--v-theme-on-surface), 0.12);border-radius: 8px;box-sizing: border-box;",
+                },
                 "content": [
                     {"component": "div", "props": {"class": f"text-h6 {color}"}, "text": str(value)},
-                    {"component": "div", "props": {"class": "text-caption text-medium-emphasis"}, "text": label},
+                    {"component": "div", "props": {"class": "text-caption text-medium-emphasis text-center"}, "text": label},
                 ],
             }],
         }
@@ -90,55 +103,110 @@ def build_page(plugin):
         ],
     }
 
-    # 按站点聚合：以已启用任务为基础，填充最近执行结果，不被后续运行覆盖。
-    site_data = {}  # site -> {tasks: {execution_key: record}, runs: [(date, success, total)]}
+    # 以当前“启用站点 + 启用任务”作为卡片基准；历史仅补充每个单元的最近状态和趋势。
+    selected_ids = {str(site_id) for site_id in (getattr(cfg, "chat_sites", None) or [])}
+    site_data = {}
     site_order = []
-    # 从配置获取已启用站点和任务作为基础
-    enabled_sites = {}
-    try:
-        for opt in plugin.support_site_options():
-            site_name = opt.get("name") or opt.get("domain") or "未知站点"
-            enabled_sites[site_name] = opt
-    except Exception:
-        pass
-    # 初始化每站的任务骨架
-    for site_name, opt in enabled_sites.items():
-        site_data[site_name] = {"tasks": {}, "runs": []}
+    for option in plugin.support_site_options():
+        if str(option.get("id")) not in selected_ids:
+            continue
+        enabled_tasks = []
+        for task in option.get("tasks") or []:
+            key = claim_task_key(option, task) if task.get("claim_options") else site_task_key(option, task)
+            value = plugin.claim_task_id(key) if task.get("claim_options") else plugin.task_enabled(key)
+            if value:
+                enabled_tasks.append(task)
+        if not enabled_tasks:
+            continue
+        site_name = option.get("name") or option.get("domain") or "未知站点"
+        site_data[site_name] = {
+            "domain": option.get("domain") or "",
+            "url": (option.get("url") or "").strip(),
+            "tasks": {},
+        }
+        for task in enabled_tasks:
+            task_id = task.get("id") or ""
+            base_key = f"{option.get('domain') or ''}:{task_id}"
+            site_data[site_name]["tasks"][base_key] = {
+                "record": {
+                    "site": site_name,
+                    "domain": option.get("domain") or "",
+                    "task_id": task_id,
+                    "task_label": task.get("label") or task_id,
+                    "task_type": task.get("task_type"),
+                    "status": "尚未执行",
+                    "placeholder": True,
+                },
+                "runs": [],
+            }
         site_order.append(site_name)
-    # 从历史填充执行结果
+
+    # history.latest() 已按时间倒序返回，因此首次命中的记录就是该执行单元最近状态。
     for run in history:
         run_date = run.get("date", "")
-        run_records = run.get("records", []) or []
-        run_by_site = {}
-        for r in run_records:
-            site = r.get("site") or r.get("domain") or "未知站点"
-            if site not in site_data:
-                site_data[site] = {"tasks": {}, "runs": []}
-                site_order.append(site)
-            run_by_site.setdefault(site, []).append(r)
-        for site, recs in run_by_site.items():
-            s = sum(1 for r in recs if r.get("success"))
-            site_data[site]["runs"].append((run_date, s, len(recs)))
-        # 更新每个任务执行单元的最近记录（保留已有，不覆盖为空）
-        for site, recs in run_by_site.items():
-            for r in recs:
-                ekey = r.get("execution_key") or f"{r.get('domain','')}:{r.get('task_id','')}"
-                # 只在任务尚未有记录或本次运行更晚时更新
-                site_data[site]["tasks"][ekey] = r
+        for record in run.get("records", []) or []:
+            site_name = record.get("site") or record.get("domain") or "未知站点"
+            data = site_data.get(site_name)
+            if not data:
+                continue  # 已禁用站点或任务不在卡片中展示历史残留
+            domain = record.get("domain") or data["domain"]
+            task_id = record.get("task_id") or ""
+            base_key = f"{domain}:{task_id}"
+            parent = data["tasks"].get(base_key)
+            if not parent and not task_id:
+                # 兼容旧历史：旧记录可能只有 task_label，没有 task_id。
+                parent = next(
+                    (entry for entry in data["tasks"].values()
+                     if entry["record"].get("task_label") == record.get("task_label")),
+                    None,
+                )
+                if parent:
+                    base_key = next(key for key, entry in data["tasks"].items() if entry is parent)
+            if not parent:
+                continue  # 已禁用任务不展示历史残留
+            unit_key = record.get("execution_key") or base_key
+            entry = data["tasks"].setdefault(unit_key, {"record": None, "runs": []})
+            if entry["record"] is None or entry["record"].get("placeholder"):
+                entry["record"] = record
+            entry["runs"].append((run_date, bool(record.get("success"))))
+            # 有拆分单元的任务不再显示父任务的“尚未执行”占位行。
+            if unit_key != base_key and parent["record"].get("placeholder"):
+                data["tasks"].pop(base_key, None)
+
+    def _task_trend(runs):
+        states = ["✅" if success else "❌" for _date, success in runs[:3]]
+        return " ".join(states)
+
+    # 与论坛签到数据页统一：主题变量保障深浅色可读，外层卡片才有边框。
+    site_card_style = (
+        "background-color: rgba(var(--v-theme-surface), 0.75);"
+        "backdrop-filter: blur(5px);-webkit-backdrop-filter: blur(5px);"
+        "border: 1px solid rgba(var(--v-theme-on-surface), 0.12);"
+        "border-radius: 8px;box-sizing: border-box;"
+    )
 
     def _site_card(site, data):
-        records = list(data["tasks"].values())
-        runs = list(reversed(data["runs"]))[:3]  # 最近3次，最新在前
+        entries = list(data["tasks"].values())
+        records = [entry["record"] for entry in entries if entry.get("record")]
         site_success = sum(1 for r in records if r.get("success"))
         site_total = len(records)
         all_ok = site_success == site_total and site_total > 0
 
-        # 标题行
+        site_title = {
+            "component": "VBtn",
+            "props": {
+                "href": data["url"], "target": "_blank", "variant": "text", "color": "primary",
+                "class": "text-subtitle-1 font-weight-medium pa-0 me-2", "append-icon": "mdi-open-in-new",
+            },
+            "text": f"🌐 {site}",
+        } if data["url"] else {
+            "component": "span", "props": {"class": "text-subtitle-1 font-weight-medium me-2"}, "text": f"🌐 {site}",
+        }
         title_row = {
             "component": "div",
             "props": {"class": "d-flex align-center pb-2"},
             "content": [
-                {"component": "span", "props": {"class": "text-subtitle-1 font-weight-medium me-2"}, "text": f"🌐 {site}"},
+                site_title,
                 {"component": "VSpacer"},
                 {"component": "VChip", "props": {
                     "size": "small", "variant": "tonal",
@@ -147,49 +215,44 @@ def build_page(plugin):
             ],
         }
 
-        # 任务行
         task_rows = []
-        for r in records:
-            icon = "✅" if r.get("success") else "❌"
-            for item in display_record_lines(r):
-                line_text = format_record_line(item, NotificationIcons)
-                task_rows.append({
-                    "component": "div",
-                    "props": {"class": "d-flex align-start py-1"},
-                    "content": [
-                        {"component": "span", "props": {"class": "me-2 text-body-2"}, "text": icon},
-                        {"component": "div", "props": {"class": "text-body-2 flex-grow-1"}, "text": line_text},
-                    ],
-                })
-
-        # 趋势行：单行文字
-        trend_parts = []
-        for run_date, s, t in runs:
-            ok = s == t and t > 0
-            trend_parts.append("✅" if ok else "❌")
-        trend_text = " ".join(trend_parts) if trend_parts else "—"
-        trend_row = {
-            "component": "div",
-            "props": {"class": "d-flex align-center pt-2 mt-1"},
-            "content": [
-                {"component": "span", "props": {"class": "text-caption text-medium-emphasis me-2"}, "text": f"最近{len(runs)}次"},
-                {"component": "span", "props": {"class": "text-body-2"}, "text": trend_text},
-            ],
-        } if trend_parts else {"component": "div", "props": {"class": "pt-2"}, "text": ""}
+        for entry in entries:
+            record = entry["record"]
+            if record.get("placeholder"):
+                icon = "⏳"
+                line_text = display_task(site, record.get("task_label"), record.get("task_type")) + " -> 尚未执行"
+            else:
+                icon = "✅" if record.get("success") else "❌"
+                rendered = display_record_lines(record)
+                line_text = "；".join(format_record_line(item, NotificationIcons) for item in rendered)
+            trend = _task_trend(entry.get("runs") or [])
+            task_rows.append({
+                "component": "div",
+                "props": {"class": "d-flex align-start py-1"},
+                "content": [
+                    {"component": "span", "props": {"class": "me-2 text-body-2"}, "text": icon},
+                    {"component": "div", "props": {"class": "text-body-2 flex-grow-1"}, "content": [
+                        {"component": "div", "text": line_text},
+                        {"component": "div", "props": {"class": "text-caption text-medium-emphasis"}, "text": f"最近{min(len(entry.get('runs') or []), 3)}次：{trend}"} if trend else None,
+                    ]},
+                ],
+            })
+            task_rows[-1]["content"][1]["content"] = [part for part in task_rows[-1]["content"][1]["content"] if part]
 
         return {
             "component": "VCol",
-            "props": {"cols": 12, "md": 6},
+            "props": {"cols": 12, "md": 6, "class": "d-flex"},
             "content": [{
                 "component": "VCard",
-                "props": {"variant": "elevated", "elevation": "3", "border": "currentColor opacity-30", "class": "h-100"},
+                "props": {
+                    "variant": "outlined", "class": "h-100 w-100 pa-0",
+                    "style": site_card_style,
+                },
                 "content": [
                     {"component": "VCardText", "props": {"class": "pa-3"}, "content": [
                         title_row,
                         {"component": "VDivider", "props": {"class": "mb-2"}},
-                        *(task_rows or [{"component": "div", "props": {"class": "text-medium-emphasis py-2"}, "text": "暂无记录"}]),
-                        {"component": "VDivider", "props": {"class": "mt-2"}},
-                        trend_row,
+                        *(task_rows or [{"component": "div", "props": {"class": "text-medium-emphasis py-2"}, "text": "暂无启用任务"}]),
                     ]},
                 ],
             }],
