@@ -593,29 +593,21 @@ class FarmAuto(_PluginBase):
     def _next_run_text(self) -> Optional[str]:
         if not self._enabled or not self._site_ids:
             return None
-        if self._cron_mode == "cron" and self._cron:
-            try:
-                from apscheduler.triggers.cron import CronTrigger
-                from datetime import datetime as _dt
-                trigger = CronTrigger.from_crontab(self._cron.strip())
-                next_fire = trigger.get_next_fire_time(None, _dt.now())
-                if next_fire:
-                    return next_fire.strftime("%m-%d %H:%M")
-            except Exception:
-                return None
-            return None
-        interval = (
-            self._harvest_interval_minutes
-            if self._mode == "harvest"
-            else self._interval_minutes
-        )
-        last_run = self._stats.get("last_run")
-        if last_run in (None, ""):
-            return None
         try:
-            return datetime.fromtimestamp(float(last_run) + interval * 60).strftime("%m-%d %H:%M")
-        except (TypeError, ValueError, OSError):
-            return None
+            from app.scheduler import Scheduler
+            scheduler = Scheduler()
+            for task in scheduler.list() or []:
+                if getattr(task, "provider", "") == self.plugin_name or getattr(task, "id", "") == "FarmAuto":
+                    next_run = getattr(task, "next_run", None)
+                    if next_run:
+                        return str(next_run)
+                    status = getattr(task, "status", "")
+                    if status == "正在运行":
+                        return "正在运行中"
+                    return f"按配置执行: {self._cron}"
+        except Exception:
+            pass
+        return f"按配置执行: {self._cron}" if self._cron_mode == "cron" else None
 
     def _last_site_report(self, site_id: str) -> Dict[str, Any]:
         last_result = self._stats.get("last_result") or {}
