@@ -6,7 +6,7 @@ from typing import List, Optional
 @dataclass
 class PluginConfig:
     enabled: bool = False
-    cron: str = "0 4 * * *"
+    cron: str = "4 0,12 * * *"
     notify: bool = False
     history_days: int = 30
     use_proxy: bool = False
