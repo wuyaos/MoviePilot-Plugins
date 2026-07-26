@@ -21,6 +21,8 @@ const emit = defineEmits(['action', 'switch', 'close'])
 
 const loading = ref(false)
 const detailLoading = ref(false)
+const refreshing = ref(false)
+const balanceChanged = ref(false)
 const running = ref(false)
 const actionLoading = ref(false)
 const error = ref('')
@@ -54,6 +56,8 @@ const siqiFarm = computed(() => siteDetail.value.siqi_farm || {})
 const siteActions = computed(() => (
   Array.isArray(siteDetail.value.recent_actions) ? siteDetail.value.recent_actions : []
 ))
+const harvestCount = computed(() => siteActions.value
+  .filter(action => action.action === 'harvest' || action.action === 'harvest_all').length)
 const cropKeys = computed(() => Object.entries(crops.value)
   .filter(([, definition]) => definition?.type === 'crop')
   .map(([cropKey]) => cropKey))
@@ -156,7 +160,9 @@ async function loadSiteDetail(siteId = selectedSiteId.value) {
 }
 
 async function refreshData() {
+  const previousBalance = balance.value
   loading.value = true
+  refreshing.value = true
   error.value = ''
   successMessage.value = ''
   try {
@@ -164,11 +170,16 @@ async function refreshData() {
     if (error.value) throw new Error(error.value)
     await loadSiteDetail()
     if (error.value) throw new Error(error.value)
+    if (balance.value !== previousBalance) {
+      balanceChanged.value = true
+      setTimeout(() => { balanceChanged.value = false }, 800)
+    }
     successMessage.value = '数据已刷新'
   } catch (requestError) {
     error.value = `刷新数据失败：${requestError?.message || '未知错误'}`
   } finally {
     loading.value = false
+    refreshing.value = false
   }
 }
 
@@ -427,86 +438,123 @@ onMounted(() => loadStatus())
       />
 
       <template v-else>
-      <v-row dense>
-        <v-col cols="12" md="6">
-          <v-card flat class="rounded border">
-            <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5">
-              <v-icon icon="mdi-chart-line" color="blue" size="small" class="mr-2" />
-              菜市场价格波动
-              <v-spacer />
-              <v-chip color="blue-grey-lighten-4" size="small" variant="flat" class="magic-anim">
-                <v-icon icon="mdi-auto-fix" color="purple" size="small" class="mr-1" />
-                <span class="font-weight-bold">{{ balance }} {{ currency }}</span>
-              </v-chip>
-            </v-card-title>
-            <v-card-text class="pa-3">
-              <PriceTrendChart :trends="trends" :crops="crops" />
-            </v-card-text>
-          </v-card>
-        </v-col>
+        <v-row dense class="mb-3">
+          <v-col cols="12" md="4">
+            <div class="stat-card" :class="{ refreshing }">
+              <div class="stat-icon orange"><v-icon icon="mdi-auto-fix" /></div>
+              <div class="stat-content">
+                <div class="stat-title">魔力值</div>
+                <div
+                  class="stat-value"
+                  :class="{ refreshing, 'value-changed': balanceChanged }"
+                >
+                  {{ balance }} <small v-if="currency">{{ currency }}</small>
+                </div>
+              </div>
+            </div>
+          </v-col>
+          <v-col cols="12" md="4">
+            <div class="stat-card" :class="{ refreshing }">
+              <div class="stat-icon green"><v-icon icon="mdi-sprout" /></div>
+              <div class="stat-content">
+                <div class="stat-title">收获</div>
+                <div class="stat-value" :class="{ refreshing }">
+                  {{ harvestCount }} <small>次</small>
+                </div>
+              </div>
+            </div>
+          </v-col>
+          <v-col cols="12" md="4">
+            <div class="stat-card" :class="{ refreshing }">
+              <div class="stat-icon amber"><v-icon icon="mdi-sync" /></div>
+              <div class="stat-content">
+                <div class="stat-title">操作数</div>
+                <div class="stat-value" :class="{ refreshing }">
+                  {{ siteActions.length }} <small>次</small>
+                </div>
+              </div>
+            </div>
+          </v-col>
+        </v-row>
 
-        <v-col cols="12" md="6" class="d-flex flex-column ga-3">
-          <CropArea
-            title="农作物种植区"
-            :items="cropKeys"
-            :crop-status="cropStatus"
-            :crops="crops"
-            :loading="actionLoading"
-            @action="handleManualAction"
-            @harvest-all="harvestAllCurrent"
-          />
-          <CropArea
-            title="动物养殖区"
-            :items="animalKeys"
-            :crop-status="cropStatus"
-            :crops="crops"
-            :loading="actionLoading"
-            animal
-            @action="handleManualAction"
-            @harvest-all="harvestAllCurrent"
-          />
-        </v-col>
-      </v-row>
+        <v-row dense class="mb-3">
+          <v-col cols="12" md="6">
+            <v-card flat class="rounded border">
+              <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5">
+                <v-icon icon="mdi-chart-line" color="blue" size="small" class="mr-2" />
+                菜市场价格波动
+                <v-spacer />
+                <v-chip color="blue-grey-lighten-4" size="small" variant="flat" class="magic-anim">
+                  <v-icon icon="mdi-auto-fix" color="purple" size="small" class="mr-1" />
+                  <span class="font-weight-bold">{{ balance }} {{ currency }}</span>
+                </v-chip>
+              </v-card-title>
+              <v-card-text class="pa-3">
+                <PriceTrendChart :trends="trends" :crops="crops" />
+              </v-card-text>
+            </v-card>
+          </v-col>
+          <v-col cols="12" md="6">
+            <MarketTable
+              :market_prices="marketPrices"
+              :crops="crops"
+              :trends="trends"
+              :loading="detailLoading"
+            />
+          </v-col>
+        </v-row>
 
-      <v-row v-if="siqiExtra" dense class="mt-1">
-        <v-col cols="12">
-          <SiqiPanel
-            :siqi_extra="siqiExtra"
-            :loading="actionLoading"
-            @action="handleSiqiAction"
-          />
-        </v-col>
-      </v-row>
+        <v-row dense class="mb-3">
+          <v-col cols="12" md="6">
+            <CropArea
+              title="农作物种植区"
+              :items="cropKeys"
+              :crop-status="cropStatus"
+              :crops="crops"
+              :loading="actionLoading"
+              @action="handleManualAction"
+              @harvest-all="harvestAllCurrent"
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <CropArea
+              title="动物养殖区"
+              :items="animalKeys"
+              :crop-status="cropStatus"
+              :crops="crops"
+              :loading="actionLoading"
+              animal
+              @action="handleManualAction"
+              @harvest-all="harvestAllCurrent"
+            />
+          </v-col>
+        </v-row>
 
-      <v-row dense class="mt-1">
-        <v-col cols="12">
-          <WarehouseTable
-            :warehouse="warehouse"
-            :crops="crops"
-            :currency="currency"
-            :loading="actionLoading || detailLoading"
-            @sell="sellWarehouseItem"
-            @sell-all="sellAllWarehouseItems"
-          />
-        </v-col>
-      </v-row>
+        <v-row v-if="siqiExtra" dense class="mb-3">
+          <v-col cols="12">
+            <SiqiPanel
+              :siqi_extra="siqiExtra"
+              :loading="actionLoading"
+              @action="handleSiqiAction"
+            />
+          </v-col>
+        </v-row>
 
-      <v-row dense class="mt-1">
-        <v-col cols="12">
-          <MarketTable
-            :market_prices="marketPrices"
-            :crops="crops"
-            :trends="trends"
-            :loading="detailLoading"
-          />
-        </v-col>
-      </v-row>
-
-      <v-row dense class="mt-1">
-        <v-col cols="12">
-          <HistoryTable :history="siteActions" :currency="currency" />
-        </v-col>
-      </v-row>
+        <v-row dense>
+          <v-col cols="12" md="6">
+            <WarehouseTable
+              :warehouse="warehouse"
+              :crops="crops"
+              :currency="currency"
+              :loading="actionLoading || detailLoading"
+              @sell="sellWarehouseItem"
+              @sell-all="sellAllWarehouseItems"
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <HistoryTable :history="siteActions" :currency="currency" />
+          </v-col>
+        </v-row>
       </template>
     </v-card-text>
   </v-card>
@@ -578,6 +626,23 @@ onMounted(() => loadStatus())
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
+.stat-card { display: flex; align-items: center; gap: 12px; border-radius: 14px; padding: 12px 14px; border: 0.5px solid rgba(var(--v-theme-on-surface), 0.08); background: rgba(var(--v-theme-on-surface), 0.03); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 12px rgba(var(--v-theme-on-surface), 0.08); transition: all 0.3s ease; }
+.stat-card.refreshing { animation: stat-pulse 0.6s ease; }
+@keyframes stat-pulse { 0% { background: rgba(var(--v-theme-on-surface), 0.03); } 50% { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); } 100% { background: rgba(var(--v-theme-on-surface), 0.03); } }
+.stat-icon { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: 0 0 38px; }
+.stat-icon.orange { background: rgba(245,158,11,0.12); color: #f59e0b; }
+.stat-icon.green { background: rgba(34,197,94,0.12); color: #22c55e; }
+.stat-icon.amber { background: rgba(217,119,6,0.12); color: #d97706; }
+.stat-content { min-width: 0; flex: 1; }
+.stat-title { font-size: 11px; color: rgba(var(--v-theme-on-surface),0.55); font-weight: 600; }
+.stat-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.stat-value small { font-size: 11px; opacity: 0.5; font-weight: 400; }
+.stat-value.refreshing { opacity: 0.3; }
+.value-changed { animation: value-flash 0.8s ease; }
+@keyframes value-flash { 0% { color: inherit; } 30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4); } 100% { color: inherit; text-shadow: none; } }
+.slide-fade-enter-active, .slide-fade-leave-active { transition: all 0.3s ease; }
+.slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-20px); opacity: 0; }
 
 .magic-anim {
   animation: magic-pulse 2s infinite ease-in-out;

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import HistoryTable from './HistoryTable.vue'
 
 const props = defineProps({
@@ -16,6 +16,7 @@ const props = defineProps({
 const emit = defineEmits(['action', 'switch', 'close', 'refresh'])
 
 const actionLoading = ref(false)
+const refreshing = ref(props.loading)
 const error = ref('')
 const success = ref('')
 const selectedSeedId = ref('')
@@ -27,6 +28,10 @@ const stealTargets = ref([])
 const likeUsernames = ref('')
 const visitUsername = ref('')
 const visitResult = ref(null)
+
+watch(() => props.loading, (loading) => {
+  refreshing.value = loading
+})
 
 const f = computed(() => props.farm || {})
 const bonus = computed(() => f.value.user_bonus ?? '—')
@@ -347,32 +352,40 @@ function handlePlotClick(plot) {
       <!-- 统计卡 -->
       <v-row dense class="mb-3">
         <v-col cols="6" md="3">
-          <v-card flat variant="tonal" color="orange" class="pa-3 text-center">
-            <v-icon icon="mdi-auto-fix" color="orange" class="mb-1" />
-            <div class="text-caption">魔力值</div>
-            <div class="text-h6 font-weight-bold">{{ bonus }}</div>
-          </v-card>
+          <div class="stat-card" :class="{ refreshing }">
+            <div class="stat-icon orange"><v-icon icon="mdi-auto-fix" /></div>
+            <div class="stat-content">
+              <div class="stat-title">魔力值</div>
+              <div class="stat-value" :class="{ refreshing }">{{ bonus }}</div>
+            </div>
+          </div>
         </v-col>
         <v-col cols="6" md="3">
-          <v-card flat variant="tonal" color="green" class="pa-3 text-center">
-            <v-icon icon="mdi-sprout" color="green" class="mb-1" />
-            <div class="text-caption">总种植收获</div>
-            <div class="text-h6 font-weight-bold">{{ totalHarvest }}</div>
-          </v-card>
+          <div class="stat-card" :class="{ refreshing }">
+            <div class="stat-icon green"><v-icon icon="mdi-sprout" /></div>
+            <div class="stat-content">
+              <div class="stat-title">收获</div>
+              <div class="stat-value" :class="{ refreshing }">{{ totalHarvest }}</div>
+            </div>
+          </div>
         </v-col>
         <v-col cols="6" md="3">
-          <v-card flat variant="tonal" color="red" class="pa-3 text-center">
-            <v-icon icon="mdi-incognito" color="red" class="mb-1" />
-            <div class="text-caption">总偷菜收获</div>
-            <div class="text-h6 font-weight-bold">{{ totalSteal }}</div>
-          </v-card>
+          <div class="stat-card" :class="{ refreshing }">
+            <div class="stat-icon red"><v-icon icon="mdi-incognito" /></div>
+            <div class="stat-content">
+              <div class="stat-title">总偷菜收获</div>
+              <div class="stat-value" :class="{ refreshing }">{{ totalSteal }}</div>
+            </div>
+          </div>
         </v-col>
         <v-col cols="6" md="3">
-          <v-card flat variant="tonal" color="blue" class="pa-3 text-center">
-            <v-icon icon="mdi-thumb-up" color="blue" class="mb-1" />
-            <div class="text-caption">农场被点赞</div>
-            <div class="text-h6 font-weight-bold">{{ farmLike }}</div>
-          </v-card>
+          <div class="stat-card" :class="{ refreshing }">
+            <div class="stat-icon blue"><v-icon icon="mdi-thumb-up" /></div>
+            <div class="stat-content">
+              <div class="stat-title">农场被点赞</div>
+              <div class="stat-value" :class="{ refreshing }">{{ farmLike }}</div>
+            </div>
+          </div>
         </v-col>
       </v-row>
 
@@ -522,37 +535,41 @@ function handlePlotClick(plot) {
         </v-card-text>
       </v-card>
 
-      <!-- 背包 -->
-      <v-card flat class="rounded border mb-3">
-        <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-amber-lighten-5">
-          <v-icon icon="mdi-bag-personal" color="amber" size="small" class="mr-2" />收获背包
-          <v-spacer />
-          <v-btn color="orange" size="small" variant="flat" prepend-icon="mdi-cash" :disabled="!inventory.length" @click="sellAllDialog = true">一键出售</v-btn>
-        </v-card-title>
-        <v-card-text class="pa-3">
-          <v-table v-if="inventory.length" density="compact">
-            <thead>
-              <tr><th>物品</th><th>数量</th><th>单价</th><th>总价</th><th></th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in inventory" :key="item.seed_id">
-                <td><span class="mr-1" aria-hidden="true">{{ seedEmoji(item.name || seedNameById(item.seed_id)) }}</span>{{ item.name || `作物 ${item.seed_id}` }}</td>
-                <td>{{ item.quantity }}</td>
-                <td>{{ item.unit_reward }}</td>
-                <td>{{ (Number(item.quantity || 0) * Number(item.unit_reward || 0)) }}</td>
-                <td><v-btn size="x-small" color="orange" variant="flat" prepend-icon="mdi-cash" @click="sell(item)">出售</v-btn></td>
-              </tr>
-            </tbody>
-          </v-table>
-          <div v-else class="text-center text-grey pa-4">
-            <v-icon icon="mdi-bag-personal-outline" size="40" class="mb-2 opacity-50" />
-            <div>背包空空如也</div>
-          </div>
-        </v-card-text>
-      </v-card>
-
-      <!-- 执行记录 -->
-      <HistoryTable :history="history" :currency="currency" />
+      <!-- 背包 + 执行记录 -->
+      <v-row dense>
+        <v-col cols="12" md="6">
+          <v-card flat class="rounded border">
+            <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-amber-lighten-5">
+              <v-icon icon="mdi-bag-personal" color="amber" size="small" class="mr-2" />收获背包
+              <v-spacer />
+              <v-btn color="orange" size="small" variant="flat" prepend-icon="mdi-cash" :disabled="!inventory.length" @click="sellAllDialog = true">一键出售</v-btn>
+            </v-card-title>
+            <v-card-text class="pa-3">
+              <v-table v-if="inventory.length" density="compact">
+                <thead>
+                  <tr><th>物品</th><th>数量</th><th>单价</th><th>总价</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in inventory" :key="item.seed_id">
+                    <td><span class="mr-1" aria-hidden="true">{{ seedEmoji(item.name || seedNameById(item.seed_id)) }}</span>{{ item.name || `作物 ${item.seed_id}` }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>{{ item.unit_reward }}</td>
+                    <td>{{ (Number(item.quantity || 0) * Number(item.unit_reward || 0)) }}</td>
+                    <td><v-btn size="x-small" color="orange" variant="flat" prepend-icon="mdi-cash" @click="sell(item)">出售</v-btn></td>
+                  </tr>
+                </tbody>
+              </v-table>
+              <div v-else class="text-center text-grey pa-4">
+                <v-icon icon="mdi-bag-personal-outline" size="40" class="mb-2 opacity-50" />
+                <div>背包空空如也</div>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" md="6">
+          <HistoryTable :history="history" :currency="currency" />
+        </v-col>
+      </v-row>
 
       <v-dialog v-model="stealDialog" max-width="720">
         <v-card>
@@ -638,6 +655,49 @@ function handlePlotClick(plot) {
 <style scoped>
 .cursor-pointer { cursor: pointer; }
 .h-100 { height: 100%; }
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 0.5px solid rgba(var(--v-theme-on-surface), 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 12px rgba(var(--v-theme-on-surface), 0.08);
+  transition: all 0.3s ease;
+}
+.stat-card.refreshing { animation: stat-pulse 0.6s ease; }
+@keyframes stat-pulse {
+  0% { background: rgba(var(--v-theme-on-surface), 0.03); }
+  50% { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); }
+  100% { background: rgba(var(--v-theme-on-surface), 0.03); }
+}
+.stat-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+}
+.stat-icon.orange { background: rgba(245,158,11,0.12); color: #f59e0b; }
+.stat-icon.green { background: rgba(34,197,94,0.12); color: #22c55e; }
+.stat-icon.red { background: rgba(239,68,68,0.12); color: #ef4444; }
+.stat-icon.blue { background: rgba(59,130,246,0.12); color: #3b82f6; }
+.stat-content { min-width: 0; flex: 1; }
+.stat-title { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); font-weight: 600; }
+.stat-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.stat-value.refreshing { opacity: 0.3; }
+.value-changed { animation: value-flash 0.8s ease; }
+@keyframes value-flash {
+  0% { color: inherit; }
+  30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4); }
+  100% { color: inherit; text-shadow: none; }
+}
+.slide-fade-enter-active, .slide-fade-leave-active { transition: all 0.3s ease; }
+.slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-20px); opacity: 0; }
 
 .plot {
   min-height: 78px;
