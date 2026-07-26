@@ -291,15 +291,22 @@ function saveConfig() {
                   <v-col cols="12" sm="4">
                     <v-switch v-model="config.run_once" label="立即运行一次" color="primary" density="compact" hide-details />
                   </v-col>
-                  <v-col cols="12" md="4">
+                  <v-col cols="12" sm="4">
                     <v-select
                       v-model="config.mode"
                       :items="MODE_ITEMS"
                       label="运行模式"
                       density="compact"
                       variant="outlined"
-                      hide-details
+                      hint="smart=全自动交易，harvest=只收获+补种+临期出售，可再用下方开关微调"
+                      persistent-hint
                     />
+                  </v-col>
+                  <v-col cols="12" sm="4">
+                    <v-switch v-model="config.use_proxy" label="使用 MP 系统代理" color="info" density="compact" hide-details />
+                  </v-col>
+                  <v-col cols="12" sm="4">
+                    <v-switch v-model="config.dry_run" label="仅模拟（不发送操作请求）" color="warning" density="compact" hide-details />
                   </v-col>
                 </v-row>
               </v-card-text>
@@ -307,63 +314,68 @@ function saveConfig() {
 
             <v-card flat class="config-section rounded border mb-4">
               <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-green-lighten-5">
-                <v-icon icon="mdi-chart-timeline-variant" color="green" size="small" class="mr-2" />
-                调度与策略
+                <v-icon icon="mdi-robot-outline" color="green" size="small" class="mr-2" />
+                自动化功能
               </v-card-title>
               <v-card-text class="pa-4">
                 <v-row>
-                  <v-col cols="12" md="4">
+                  <v-col cols="12" sm="4">
+                    <v-switch v-model="config.auto_harvest" label="自动收获" hint="成熟作物自动收获" persistent-hint color="primary" density="compact" />
+                  </v-col>
+                  <v-col cols="12" sm="4">
+                    <v-switch v-model="config.auto_plant" label="自动种植/养殖" hint="空地自动补种" persistent-hint color="primary" density="compact" />
+                  </v-col>
+                  <v-col cols="12" sm="4">
+                    <v-switch v-model="config.auto_sell" label="自动出售" hint="盈利区间内自动出售" persistent-hint color="primary" density="compact" />
+                  </v-col>
+                  <v-col cols="12" sm="4">
+                    <v-switch v-model="config.expiry_sale" label="临期自动出售" hint="剩余时间低于阈值强制出售" persistent-hint color="primary" density="compact" />
+                  </v-col>
+                  <v-col cols="12" sm="4">
+                    <v-text-field v-model.number="config.expire_threshold_minutes" label="临期阈值（分钟）" type="number" min="10" density="compact" variant="outlined" hint="剩余时间低于此值强制出售（分钟）" persistent-hint />
+                  </v-col>
+                </v-row>
+              </v-card-text>
+            </v-card>
+
+            <v-card flat class="config-section rounded border mb-4">
+              <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-purple-lighten-5">
+                <v-icon icon="mdi-timer-sand" color="purple" size="small" class="mr-2" />
+                调度与网络
+              </v-card-title>
+              <v-card-text class="pa-4">
+                <v-row>
+                  <v-col cols="12" sm="6" md="3">
                     <v-text-field v-model.number="config.interval_minutes" label="智能交易间隔（分钟）" type="number" min="1" density="compact" variant="outlined" />
                   </v-col>
-                  <v-col cols="12" md="4">
+                  <v-col cols="12" sm="6" md="3">
                     <v-text-field v-model.number="config.harvest_interval_minutes" label="自动收获间隔（分钟）" type="number" min="5" density="compact" variant="outlined" />
-                  </v-col>
-                  <v-col cols="12" md="4">
-                    <v-text-field v-model.number="config.expire_threshold_minutes" label="临期阈值（分钟）" type="number" min="10" density="compact" variant="outlined" />
-                  </v-col>
-                  <v-col cols="12" sm="6" md="3">
-                    <v-text-field v-model.number="config.min_profit_rate" label="最低利润率" type="number" min="0" step="0.01" density="compact" variant="outlined" hint="0.1 表示 10%" persistent-hint />
-                  </v-col>
-                  <v-col cols="12" sm="6" md="3">
-                    <v-text-field v-model.number="config.max_profit_rate" label="最高利润率" type="number" min="0" step="0.01" density="compact" variant="outlined" hint="0 表示无上限" persistent-hint />
-                  </v-col>
-                  <v-col cols="12" sm="6" md="3">
-                    <v-text-field v-model.number="config.max_sell_per_run" label="单轮单站最大出售数" type="number" min="1" density="compact" variant="outlined" />
                   </v-col>
                   <v-col cols="12" sm="6" md="3">
                     <v-text-field v-model.number="config.request_interval" label="请求间隔（秒）" type="number" min="0" step="0.1" density="compact" variant="outlined" />
                   </v-col>
-                  <v-col cols="12" md="4">
+                  <v-col cols="12" sm="6" md="3">
                     <v-text-field v-model.number="config.retry_count" label="重试次数" type="number" min="0" density="compact" variant="outlined" hide-details />
-                  </v-col>
-                  <v-col cols="12" sm="6" md="4">
-                    <v-switch v-model="config.use_proxy" label="使用 MP 系统代理" color="info" density="compact" hide-details />
-                  </v-col>
-                  <v-col cols="12" sm="6" md="4">
-                    <v-switch v-model="config.dry_run" label="仅模拟（不发送操作请求）" color="warning" density="compact" hide-details />
                   </v-col>
                 </v-row>
               </v-card-text>
             </v-card>
 
             <v-card flat class="config-section rounded border">
-              <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-blue-lighten-5">
-                <v-icon icon="mdi-robot-outline" color="primary" size="small" class="mr-2" />
-                自动化功能
+              <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-amber-lighten-5">
+                <v-icon icon="mdi-chart-line" color="amber-darken-3" size="small" class="mr-2" />
+                交易策略
               </v-card-title>
               <v-card-text class="pa-4">
                 <v-row>
-                  <v-col cols="12" md="6">
-                    <v-switch v-model="config.auto_harvest" label="自动收获" hint="成熟作物自动收获" persistent-hint color="primary" density="compact" />
+                  <v-col cols="12" sm="4">
+                    <v-text-field v-model.number="config.min_profit_rate" label="最低利润率" type="number" min="0" step="0.01" density="compact" variant="outlined" hint="0.1 表示 10%" persistent-hint />
                   </v-col>
-                  <v-col cols="12" md="6">
-                    <v-switch v-model="config.auto_plant" label="自动种植/养殖" hint="空地自动补种" persistent-hint color="primary" density="compact" />
+                  <v-col cols="12" sm="4">
+                    <v-text-field v-model.number="config.max_profit_rate" label="最高利润率" type="number" min="0" step="0.01" density="compact" variant="outlined" hint="0 表示无上限" persistent-hint />
                   </v-col>
-                  <v-col cols="12" md="6">
-                    <v-switch v-model="config.auto_sell" label="自动出售" hint="盈利区间内自动出售" persistent-hint color="primary" density="compact" />
-                  </v-col>
-                  <v-col cols="12" md="6">
-                    <v-switch v-model="config.expiry_sale" label="临期自动出售" hint="剩余时间低于阈值强制出售" persistent-hint color="primary" density="compact" />
+                  <v-col cols="12" sm="4">
+                    <v-text-field v-model.number="config.max_sell_per_run" label="单轮单站最大出售数" type="number" min="1" density="compact" variant="outlined" />
                   </v-col>
                 </v-row>
               </v-card-text>
@@ -559,10 +571,10 @@ function saveConfig() {
                 </v-alert>
                 <v-row>
                   <v-col cols="12" sm="6" md="4">
-                    <v-switch v-model="config.siqi_auto_captcha_harvest" label="验证码收获" color="primary" density="compact" hide-details />
+                    <v-switch v-model="config.siqi_auto_captcha_harvest" label="验证码自动收获" color="primary" density="compact" hide-details />
                   </v-col>
                   <v-col cols="12" sm="6" md="4">
-                    <v-switch v-model="config.siqi_captcha_ocr" label="OCR 优先" color="primary" density="compact" hide-details />
+                    <v-switch v-model="config.siqi_captcha_ocr" label="OCR 优先识别" color="primary" density="compact" hide-details />
                   </v-col>
                   <v-col cols="12" sm="6" md="4">
                     <v-switch v-model="config.siqi_auto_buy_slot" label="自动扩地" color="primary" density="compact" hide-details />
@@ -625,11 +637,13 @@ function saveConfig() {
 
 .bg-blue-lighten-5 { background-color: rgba(33, 150, 243, 0.1) !important; }
 .bg-green-lighten-5 { background-color: rgba(76, 175, 80, 0.1) !important; }
+.bg-purple-lighten-5 { background-color: rgba(156, 39, 176, 0.1) !important; }
 .bg-amber-lighten-5 { background-color: rgba(255, 193, 7, 0.12) !important; }
 
 @media (prefers-color-scheme: dark) {
   .bg-blue-lighten-5 { background-color: rgba(33, 150, 243, 0.2) !important; }
   .bg-green-lighten-5 { background-color: rgba(76, 175, 80, 0.2) !important; }
+  .bg-purple-lighten-5 { background-color: rgba(156, 39, 176, 0.2) !important; }
   .bg-amber-lighten-5 { background-color: rgba(255, 193, 7, 0.2) !important; }
 }
 </style>
