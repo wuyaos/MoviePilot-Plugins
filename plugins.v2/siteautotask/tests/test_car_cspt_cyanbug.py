@@ -70,6 +70,10 @@ class CapabilityHandler:
         self._last_message_result = message
         return True, message
 
+    @staticmethod
+    def shotbox_messages():
+        return ["青虫娘，求上传", "青虫娘，求魔力"]
+
 
 cap.CapabilityHandler = CapabilityHandler
 sys.modules["siteautotask.sites.capabilities"] = cap

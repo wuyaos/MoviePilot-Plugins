@@ -83,9 +83,13 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
+    @staticmethod
+    def shotbox_messages():
+        return ["茄子", "保一条"]
+
     @task_info("{client_name}喊话", "执行Moment喊话并解析女友反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        messages = ["茄子", "保一条"]
+        messages = self.client.shotbox_messages()
         results = []
         for i, msg in enumerate(messages):
             if i > 0:

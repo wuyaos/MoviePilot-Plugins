@@ -100,9 +100,13 @@ class Tasks(BaseTask):
     def claim(self, task_id=None):
         return self.client.claim_task(task_id)
 
+    @staticmethod
+    def shotbox_messages():
+        return ["阁主，求上传", "阁主，求魔力"]
+
     @task_info("{client_name}喊话", "执行藏宝阁喊话并获取反馈", TaskType.CHAT)
     def daily_shotbox(self):
-        messages = ["阁主，求上传", "阁主，求魔力"]
+        messages = self.client.shotbox_messages()
         results = []
         for i, msg in enumerate(messages):
             if i > 0:

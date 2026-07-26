@@ -177,8 +177,20 @@ class TaskEngine:
                 if task_type == TaskType.MEDAL and isinstance(claim_id, (list, tuple)):
                     for unit_task, unit_claim_id in self._expand_medal_units(site, handler, task, claim_id):
                         yield site, handler, unit_task, unit_claim_id
+                elif task_type == TaskType.CHAT and hasattr(handler, "shotbox_messages"):
+                    for unit_task, unit_claim_id in self._expand_chat_units(handler, task):
+                        yield site, handler, unit_task, unit_claim_id
                 else:
                     yield site, handler, task, claim_id
+
+    def _expand_chat_units(self, handler, task):
+        """将多条喊话展开为单条执行单元，每条消息独立 execution_key。"""
+        messages = handler.shotbox_messages()
+        for message in messages:
+            unit_task = dict(task)
+            unit_task["unit_id"] = message
+            unit_task["selected_option_label"] = f"“{message}”"
+            yield unit_task, None
 
     def _run_task(self, handler, task, claim_task_id=None, skip_if_no_claim=False):
         """执行单个任务，并统一记录任务进度、喊话内容与反馈。"""
@@ -186,7 +198,9 @@ class TaskEngine:
         task_label = task.get("selected_option_label") or task.get("label") or task.get("id")
         task_name = display_task(handler.site_name, task_label, task.get("task_type"))
         # CLAIM 执行键带上 exam_id，使不同任务申领独立跳过/重试。
-        unit_id = str(claim_task_id) if (task.get("task_type") == TaskType.CLAIM or task.get("claim_options")) and claim_task_id else None
+        # 单条喊话展开后 unit_id 是消息内容。
+        chat_unit_message = task.get("unit_id") if task.get("task_type") == TaskType.CHAT else None
+        unit_id = str(claim_task_id) if (task.get("task_type") == TaskType.CLAIM or task.get("claim_options")) and claim_task_id else chat_unit_message
         sent_messages = []
         original_send = getattr(handler, "send_messagebox", None)
         if task.get("task_type") == TaskType.CHAT and callable(original_send):
@@ -224,7 +238,14 @@ class TaskEngine:
             logger.info(f"{handler.site_name} - {task_name} - 开始执行")
         try:
             needs_claim_id = task.get("task_type") == TaskType.CLAIM or task.get("claim_options")
-            if needs_claim_id:
+            if chat_unit_message is not None:
+                # 展开后的单条喊话执行单元：直接发送该消息并获取反馈。
+                sent_messages.append(chat_unit_message)
+                ok, text = handler.send_messagebox(chat_unit_message)
+                if callable(original_collect) and ok:
+                    handler.collect_message_feedback(chat_unit_message)
+                raw = TaskResult.ok(text if ok else "发送失败") if ok else TaskResult.fail(str(text))
+            elif needs_claim_id:
                 if skip_if_no_claim and not claim_task_id:
                     return {
                         "date": now, "site": handler.site_name, "domain": handler.domain,
