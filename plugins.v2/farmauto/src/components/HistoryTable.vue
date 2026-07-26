@@ -44,7 +44,9 @@ function profitValue(profit) {
 function formatProfit(profit) {
   const value = profitValue(profit)
   if (!value) return ''
-  return `${value > 0 ? '+' : ''}${value}${props.currency ? ` ${props.currency}` : ''}`
+  const sign = value > 0 ? '+' : ''
+  const unit = props.currency || '魔力'
+  return `${unit} ${sign}${value}`
 }
 </script>
 

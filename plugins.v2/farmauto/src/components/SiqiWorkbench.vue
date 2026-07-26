@@ -35,6 +35,7 @@ watch(() => props.loading, (loading) => {
 
 const f = computed(() => props.farm || {})
 const bonus = computed(() => f.value.user_bonus ?? '—')
+const userBonus = computed(() => Number(f.value.user_bonus) || 0)
 const totalHarvest = computed(() => f.value.user_stats?.total_harvest ?? '—')
 const totalSteal = computed(() => f.value.user_steal_gain ?? f.value.user_stats?.total_steal_gain ?? '—')
 const farmLike = computed(() => f.value.user_farm_like_total ?? f.value.farm_like_total ?? '—')
@@ -51,6 +52,7 @@ const landsGrouped = computed(() => {
         name: plot.name,
         effective_plot_count: plot.effective_plot_count,
         plot_count: plot.plot_count,
+        unlock_harvest: plot.unlock_harvest,
       })
       continue
     }
@@ -60,6 +62,10 @@ const landsGrouped = computed(() => {
       Number(plot.effective_plot_count || 0),
     )
     current.plot_count = Math.max(Number(current.plot_count || 0), Number(plot.plot_count || 0))
+    current.unlock_harvest = Math.max(
+      Number(current.unlock_harvest || 0),
+      Number(plot.unlock_harvest || 0),
+    )
   }
   return [...grouped.values()]
 })
@@ -132,6 +138,10 @@ async function doAction(action, params = {}) {
   return null
 }
 
+function isSeedLocked(seed) {
+  const unlockHarvest = Number(seed.unlock_harvest || 0)
+  return unlockHarvest > 0 && unlockHarvest > (Number(totalHarvest.value) || 0)
+}
 function selectSeed(seed) { selectedSeedId.value = seed.seed_id ?? seed.id }
 function plantFill() {
   if (!selectedSeedId.value) { error.value = '请先选择种子'; return }
@@ -233,10 +243,13 @@ function plotsForLand(land) {
   const configuredMax = Number(plotSlot.value.max_per_land || 0)
   const max = configuredMax > 0 ? configuredMax : effective
   const nextSlotCost = valueForLand(plotSlot.value.next_slot_cost_by_land, land.land_id)
+  const landLocked = Number(land.unlock_harvest || 0) > (Number(totalHarvest.value) || 0)
   const plots = []
 
   for (let plotIndex = 0; plotIndex < max; plotIndex += 1) {
-    if (plotIndex < effective) {
+    if (landLocked) {
+      plots.push({ land_id: land.land_id, plot_index: plotIndex, state: 'locked' })
+    } else if (plotIndex < effective) {
       const source = lands.value.find(plot => (
         String(plot.land_id) === String(land.land_id)
         && Number(plot.plot_index) === plotIndex
@@ -246,8 +259,12 @@ function plotsForLand(land) {
       const seed = hasSeed
         ? (plot.seed || seeds.value.find(item => String(item.seed_id ?? item.id) === String(plot.seed_id)))
         : null
-      plots.push({ ...plot, seed, state: hasSeed ? 'planted' : 'empty' })
-    } else if (nextSlotCost != null) {
+      plots.push({
+        ...plot,
+        seed,
+        state: plot.state === 'locked' ? 'locked' : (hasSeed ? 'planted' : 'empty'),
+      })
+    } else if (plotIndex === effective && nextSlotCost != null) {
       plots.push({
         land_id: land.land_id,
         plot_index: plotIndex,
@@ -259,6 +276,10 @@ function plotsForLand(land) {
     }
   }
   return plots
+}
+
+function isPlotAffordable(plot) {
+  return Number(plot.cost) <= userBonus.value
 }
 
 function isPlotReady(plot) {
@@ -329,6 +350,10 @@ function stealPlots(target) {
 }
 
 function handlePlotClick(plot) {
+  if (plot.state === 'buyable' && !isPlotAffordable(plot)) {
+    error.value = '魔力不足，无法购买'
+    return
+  }
   if (plot.state === 'buyable') buyPlotSlot(plot.land_id)
   else if (plot.state === 'empty') plant(plot)
   else if (plot.state === 'planted' && isPlotReady(plot)) harvestPlot(plot)
@@ -401,15 +426,21 @@ function handlePlotClick(plot) {
             <v-card-text class="pa-3">
               <v-row dense>
                 <v-col v-for="seed in seeds" :key="seed.seed_id ?? seed.id" cols="6" sm="4">
-                  <v-card flat variant="outlined" :class="{ 'border-success': selectedSeedId === (seed.seed_id ?? seed.id) }" class="pa-2 cursor-pointer" @click="selectSeed(seed)">
-                    <div class="d-flex align-center ga-2">
-                      <span class="text-h5" aria-hidden="true">{{ seedEmoji(seed.name) }}</span>
-                      <div class="flex-grow-1">
-                        <div class="text-body-2 font-weight-bold">{{ seed.name }}</div>
-                        <div class="text-caption text-grey">{{ seed.cost }} → {{ seed.base_reward }}</div>
-                      </div>
+                  <div
+                    class="seed-card"
+                    :class="{
+                      locked: isSeedLocked(seed),
+                      selected: selectedSeedId === (seed.seed_id ?? seed.id),
+                    }"
+                    @click="!isSeedLocked(seed) && selectSeed(seed)"
+                  >
+                    <div class="seed-icon">{{ seedEmoji(seed.name) }}</div>
+                    <div>
+                      <div class="seed-name">{{ seed.name }}</div>
+                      <div class="seed-meta">成本 {{ seed.cost }} → 收益 {{ seed.base_reward }} · 成长 {{ seed.grow_time }}</div>
+                      <div v-if="isSeedLocked(seed)" class="seed-meta">🔒 解锁需总收获 {{ seed.unlock_harvest }}</div>
                     </div>
-                  </v-card>
+                  </div>
                 </v-col>
               </v-row>
               <div v-if="!seeds.length" class="text-center text-grey pa-4">暂无种子数据</div>
@@ -423,48 +454,52 @@ function handlePlotClick(plot) {
               <span class="text-caption text-grey ml-2">偷菜、点赞与参观</span>
             </v-card-title>
             <v-card-text class="pa-3">
-              <v-row dense>
-                <v-col cols="12">
-                  <div class="d-flex align-center ga-2 pa-2 rounded border">
-                    <v-icon icon="mdi-incognito" color="red" />
-                    <div class="flex-grow-1">
-                      <div class="text-body-2 font-weight-bold">偷菜</div>
-                      <div class="text-caption text-grey">每日一次，自动寻找可偷作物</div>
-                    </div>
-                    <v-btn color="red" size="small" variant="elevated" prepend-icon="mdi-incognito" :disabled="!canSteal" @click="openStealDialog">{{ canSteal ? '去偷菜' : '今日已偷' }}</v-btn>
+              <div class="farm-action-list">
+                <div class="neu-action-card neu-action-card--steal">
+                  <div class="neu-action-icon">🥷</div>
+                  <div class="neu-action-content">
+                    <div class="neu-action-label">偷菜</div>
+                    <div class="neu-action-desc">每日一次，自动寻找可偷作物</div>
                   </div>
-                </v-col>
-                <v-col cols="12">
-                  <div class="d-flex align-center ga-2 pa-2 rounded border">
-                    <v-icon icon="mdi-thumb-up" color="pink" />
-                    <div class="flex-grow-1">
-                      <div class="text-body-2 font-weight-bold">点赞</div>
-                      <div class="text-caption text-grey">剩余 {{ likeRemaining }}/{{ likeMax }}</div>
+                  <v-btn :color="canSteal ? 'red' : 'grey'" size="small" variant="flat" :disabled="!canSteal" @click="openStealDialog" class="farm-action-btn">
+                    {{ canSteal ? '去偷菜' : '今日已偷' }}
+                  </v-btn>
+                </div>
+                <div class="neu-action-card neu-action-card--like">
+                  <div class="neu-action-icon">👍</div>
+                  <div class="neu-action-content">
+                    <div class="neu-action-label">一键点赞</div>
+                    <div class="neu-action-desc">
+                      <template v-if="likeMax <= 0">可批量点赞</template>
+                      <template v-else>剩余 {{ likeRemaining }}/{{ likeMax }}</template>
                     </div>
-                    <v-btn color="pink" size="small" variant="elevated" prepend-icon="mdi-thumb-up" :disabled="likeRemaining <= 0" @click="openLikeDialog">去点赞</v-btn>
                   </div>
-                </v-col>
-                <v-col cols="12">
-                  <div class="d-flex align-center ga-2 pa-2 rounded border">
-                    <v-icon icon="mdi-account-search" color="blue" />
-                    <div class="flex-grow-1">
-                      <div class="text-body-2 font-weight-bold">参观农场</div>
-                      <div class="text-caption text-grey">按用户名访问好友农场</div>
-                    </div>
-                    <v-btn color="blue" size="small" variant="elevated" prepend-icon="mdi-map-marker" @click="visitDialog = true">去参观</v-btn>
+                  <v-btn color="pink" size="small" variant="flat" :disabled="likeRemaining <= 0" @click="openLikeDialog" class="farm-action-btn">
+                    去点赞
+                  </v-btn>
+                </div>
+                <div class="neu-action-card neu-action-card--visit">
+                  <div class="neu-action-icon">🚜</div>
+                  <div class="neu-action-content">
+                    <div class="neu-action-label">参观农场</div>
+                    <div class="neu-action-desc">输入用户名或访问好友农场</div>
                   </div>
-                </v-col>
-                <v-col cols="12">
-                  <div class="d-flex align-center ga-2 pa-2 rounded border">
-                    <v-icon icon="mdi-map-marker" color="deep-purple" />
-                    <div class="flex-grow-1">
-                      <div class="text-body-2 font-weight-bold">扩地</div>
-                      <div class="text-caption text-grey">{{ buySlotAvailable ? '可购买坑位' : '暂无可购买坑位' }}</div>
-                    </div>
-                    <v-btn color="deep-purple" size="small" variant="elevated" prepend-icon="mdi-home-plus" :disabled="!buySlotAvailable" @click="buySlot">扩地</v-btn>
+                  <div class="visit-action-row">
+                    <v-text-field v-model="visitUsername" density="compact" hide-details placeholder="用户名" variant="outlined" class="visit-username-input" @keyup.enter="visit" />
+                    <v-btn color="purple" size="small" variant="flat" :disabled="!visitUsername.trim()" @click="visit" class="visit-btn">访问</v-btn>
                   </div>
-                </v-col>
-              </v-row>
+                </div>
+                <div class="neu-action-card neu-action-card--slot">
+                  <div class="neu-action-icon">🏗</div>
+                  <div class="neu-action-content">
+                    <div class="neu-action-label">扩地</div>
+                    <div class="neu-action-desc">{{ buySlotAvailable ? '可购买下一个坑位' : '暂无可购买坑位' }}</div>
+                  </div>
+                  <v-btn color="deep-purple" size="small" variant="flat" :disabled="!buySlotAvailable" @click="buySlot" class="farm-action-btn">
+                    扩地
+                  </v-btn>
+                </div>
+              </div>
             </v-card-text>
           </v-card>
         </v-col>
@@ -487,6 +522,10 @@ function handlePlotClick(plot) {
             <div class="land-title">
               {{ land.name || `地块 ${land.land_id}` }}
               <span class="land-plot-count">（坑位：{{ landPlotCountLabel(land) }}）</span>
+              <span
+                v-if="plotsForLand(land).every(plot => plot.state === 'locked')"
+                class="unlock-hint"
+              >🔒 解锁需总收获 {{ land.unlock_harvest }}</span>
             </div>
             <div
               v-if="plotsForLand(land).every(plot => plot.state === 'locked')"
@@ -502,6 +541,7 @@ function handlePlotClick(plot) {
                   ready: isPlotReady(plot),
                   locked: plot.state === 'locked',
                   buyable: plot.state === 'buyable',
+                  'plot--insufficient': plot.state === 'buyable' && !isPlotAffordable(plot),
                 }"
                 @click="handlePlotClick(plot)"
               >
@@ -509,7 +549,10 @@ function handlePlotClick(plot) {
                   🔒<br><small>未解锁</small>
                 </template>
                 <template v-else-if="plot.state === 'buyable'">
-                  ➕<br><small>购买 {{ plot.cost }}</small>
+                  <div>
+                    ➕<br><small>购买 {{ plot.cost }}</small><br>
+                    <small v-if="!isPlotAffordable(plot)" class="text-red">魔力不足</small>
+                  </div>
                 </template>
                 <template v-else-if="plot.seed">
                   <img
@@ -699,6 +742,60 @@ function handlePlotClick(plot) {
 .slide-fade-enter-active, .slide-fade-leave-active { transition: all 0.3s ease; }
 .slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-20px); opacity: 0; }
 
+.seed-card {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.seed-card:hover { border-color: rgba(34,197,94,0.4); }
+.seed-card.locked { opacity: 0.5; cursor: not-allowed; }
+.seed-card.selected { border-color: #43a047; background: rgba(76,175,80,0.18); }
+.seed-icon { font-size: 20px; flex: 0 0 28px; text-align: center; }
+.seed-name { font-weight: 700; font-size: 12px; }
+.seed-meta { font-size: 10px; color: rgba(var(--v-theme-on-surface),0.4); }
+
+/* 农场互动 neu-action-card（KoWming 风格） */
+.farm-action-list { display: flex; flex-direction: column; gap: 8px; }
+.neu-action-card {
+  position: relative; display: flex; flex-direction: row; align-items: center;
+  gap: 7px; min-height: 46px; overflow: hidden;
+  background: rgba(var(--v-theme-surface), 0.88);
+  border: 1px solid rgba(76, 175, 80, 0.16);
+  border-radius: 11px; padding: 10px 12px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.neu-action-card:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(15, 23, 42, 0.07); }
+.neu-action-card:active { transform: translateY(0) scale(0.98); }
+.neu-action-icon {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  flex: 0 0 28px; border-radius: 9px;
+  background: rgba(76, 175, 80, 0.09); font-size: 19px;
+}
+.neu-action-content { position: relative; z-index: 1; flex: 1; min-width: 0; }
+.neu-action-label { font-size: 12px; font-weight: 800; color: rgba(var(--v-theme-on-surface), 0.84); margin-bottom: 2px; line-height: 1.15; }
+.neu-action-desc { color: rgba(var(--v-theme-on-surface), 0.52); font-size: 11px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.farm-action-btn { flex: 0 0 auto; }
+/* 参观项：grid 布局含输入框+按钮 */
+.neu-action-card--visit {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  row-gap: 10px;
+  align-items: center;
+}
+.neu-action-card--visit .neu-action-icon { grid-column: 1; grid-row: 1; }
+.neu-action-card--visit .neu-action-content { grid-column: 2; grid-row: 1; }
+.visit-action-row {
+  grid-column: 1 / -1; display: flex; align-items: center;
+  gap: 6px; min-width: 0;
+}
+.visit-username-input { flex: 1 1 auto; min-width: 0; }
+.visit-btn { width: 76px !important; min-width: 76px !important; flex: 0 0 76px; }
+
 .plot {
   min-height: 78px;
   padding: 6px;
@@ -709,6 +806,11 @@ function handlePlotClick(plot) {
   font: inherit;
   line-height: 1.1;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
   cursor: pointer;
   appearance: none;
   transition: transform .18s ease, box-shadow .18s ease;
@@ -736,6 +838,7 @@ function handlePlotClick(plot) {
   border-color: rgba(33, 150, 243, .34);
   color: #42a5f5;
 }
+.plot--insufficient { filter: grayscale(1); opacity: 0.5; cursor: not-allowed; }
 .plot-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
@@ -750,6 +853,8 @@ function handlePlotClick(plot) {
   border: 1px solid rgba(var(--v-theme-surface), .07);
 }
 .land-section:last-child { margin-bottom: 0; }
+.land-section--locked { opacity: 0.5; background: rgba(var(--v-theme-on-surface),0.02); }
+.land-section--locked .land-title { color: rgba(var(--v-theme-on-surface),0.4); }
 .land-title {
   margin-bottom: 10px;
   font-size: 13px;
@@ -761,6 +866,7 @@ function handlePlotClick(plot) {
   font-weight: 700;
   opacity: .6;
 }
+.unlock-hint { margin-left: 8px; font-size: 11px; }
 .land-locked-mobile-hint { display: none; }
 .land-section .plot small { line-height: 1.1; }
 .plot-emoji {

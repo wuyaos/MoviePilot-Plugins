@@ -7,6 +7,13 @@ const props = defineProps({
   crops: { type: Object, default: () => ({}) },
 })
 
+const CHART_COLORS = [
+  '#F44336', '#E91E63', '#9C27B0', '#673AB7', '#3F51B5',
+  '#2196F3', '#03A9F4', '#00BCD4', '#009688', '#4CAF50',
+  '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800',
+  '#FF5722', '#795548', '#9E9E9E', '#607D8B',
+]
+
 const chartElement = ref(null)
 let chart
 let resizeObserver
@@ -41,33 +48,90 @@ function renderChart() {
   )))]
   const series = trendEntries.value.map(([cropKey, samples]) => {
     const pricesByTime = new Map(samples.map(sample => [sampleTime(sample?.[0]), sample?.[1]]))
+    const idx = trendEntries.value.findIndex(([k]) => k === cropKey)
     return {
       name: props.crops?.[cropKey]?.name || cropKey,
       type: 'line',
       smooth: true,
-      showSymbol: false,
+      symbol: 'circle',
+      symbolSize: 6,
+      showSymbol: true,
       connectNulls: true,
       data: labels.map(label => pricesByTime.get(label) ?? null),
+      lineStyle: { width: 3 },
+      itemStyle: { color: CHART_COLORS[idx % CHART_COLORS.length] },
     }
   })
 
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    || window.matchMedia('(prefers-color-scheme: dark)').matches
+  const labelColor = isDark ? '#ccc' : '#333'
+  const axisLineColor = isDark ? '#555' : '#e0e0e0'
+  const axisLabelColor = isDark ? '#aaa' : '#999'
+  const splitColor = isDark ? '#444' : '#eee'
+
   chart.setOption({
     animationDuration: 300,
-    color: ['#4caf50', '#ff9800', '#2196f3', '#9c27b0', '#795548', '#009688', '#f44336', '#607d8b'],
-    tooltip: { trigger: 'axis' },
-    legend: { type: 'scroll', bottom: 0 },
-    grid: { left: 48, right: 20, top: 24, bottom: 54 },
+    color: CHART_COLORS,
+    tooltip: {
+      trigger: 'axis',
+      appendToBody: true,
+      padding: 10,
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderColor: '#ccc',
+      textStyle: { color: '#333' },
+      extraCssText: 'box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); border-radius: 4px;',
+      formatter: (params) => {
+        if (!params || !params.length) return ''
+        let res = `<div style="font-weight:600;margin-bottom:6px">${params[0].name}</div>`
+        params.forEach(param => {
+          const val = param.value
+          if (val == null) return
+          const cropName = param.seriesName
+          const color = param.color
+          const cropEntry = Object.entries(props.crops || {}).find(([, c]) => (c?.name) === cropName)
+          const cost = cropEntry ? Number(cropEntry[1]?.cost) : 0
+          let fluctuationStr = ''
+          if (cost > 0) {
+            const pct = ((val - cost) / cost) * 100
+            const sign = pct > 0 ? '+' : ''
+            const colorClass = pct > 0 ? '#F44336' : (pct < 0 ? '#4CAF50' : '#999')
+            fluctuationStr = ` <span style="color:${colorClass}; font-size:0.9em;">(${sign}${pct.toFixed(2)}%)</span>`
+          }
+          res += `<div style="display:flex; align-items:center; justify-content:space-between; margin:2px 0;">
+            <div><span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:${color};"></span><span>${cropName}</span></div>
+            <span style="margin-left:10px; font-weight:bold;">${val}${fluctuationStr}</span>
+          </div>`
+        })
+        return res
+      },
+    },
+    grid: { left: '3%', right: '4%', bottom: '10%', top: '10%', containLabel: true },
+    legend: {
+      data: series.map(s => s.name),
+      type: 'scroll',
+      bottom: 0,
+      icon: 'roundRect',
+      itemWidth: 10,
+      itemHeight: 10,
+      textStyle: { fontSize: 11, color: labelColor },
+    },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: labels,
-      axisLabel: { hideOverlap: true },
+      axisLine: { lineStyle: { color: axisLineColor } },
+      axisLabel: { color: axisLabelColor, fontSize: 10, hideOverlap: true },
     },
     yAxis: {
       type: 'value',
       name: '价格',
       scale: true,
-      splitLine: { lineStyle: { type: 'dashed' } },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { type: 'dashed', color: splitColor } },
+      axisLabel: { color: axisLabelColor, fontSize: 10 },
+      nameTextStyle: { color: axisLabelColor },
     },
     series,
   }, true)

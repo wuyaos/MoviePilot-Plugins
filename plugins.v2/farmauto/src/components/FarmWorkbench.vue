@@ -38,8 +38,8 @@ const selectedSiteIds = computed(() => (
 const selectedSite = computed(() => (
   sites.value.find(site => site.site_id === selectedSiteId.value) || sites.value[0] || {}
 ))
-const balance = computed(() => selectedSite.value.bonus ?? '—')
-const currency = computed(() => selectedSite.value.currency || '')
+const balance = computed(() => siteDetail.value.bonus ?? selectedSite.value.bonus ?? '—')
+const currency = computed(() => siteDetail.value.currency || selectedSite.value.currency || '')
 const enabled = computed(() => Boolean(status.value.enabled))
 const useProxy = computed(() => Boolean(status.value.use_proxy))
 const nextRun = computed(() => status.value.next_run || '未安排')
@@ -305,6 +305,7 @@ async function handleSiqiAction({ action, result }) {
 
 watch(selectedSiteId, siteId => {
   successMessage.value = ''
+  siteDetail.value = {}
   loadSiteDetail(siteId)
 })
 

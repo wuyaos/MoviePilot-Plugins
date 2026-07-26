@@ -137,80 +137,74 @@ function emitCropAction(action, item) {
       </v-tooltip>
     </v-card-title>
 
-    <v-card-text class="px-3 py-2">
-      <v-row dense>
-        <v-col v-for="item in areaItems" :key="item.cropKey" cols="12" sm="6">
-          <v-card
-            variant="outlined"
-            :color="stateColor(item.state)"
-            class="horizontal-card crop-area__item"
-          >
-            <div class="d-flex">
-              <div class="crop-area__media flex-shrink-0 pa-2">
-                <v-img
-                  v-if="hasUsableImage(item)"
-                  :src="item.image"
-                  width="40"
-                  height="40"
-                  contain
-                  class="mx-auto"
-                  @error="markImageError(item)"
-                />
-                <v-icon
-                  v-else
-                  :icon="cropIcon(item.cropKey, item.name)"
-                  :color="animal ? 'brown' : 'green'"
-                  size="40"
-                  class="d-block mx-auto"
-                />
-                <div v-if="item.growTime" class="crop-area__time text-center text-caption text-grey mt-1">
-                  成长时间: {{ item.growTime }}
-                </div>
-                <div v-if="item.state === 'growing' && item.remainingMinutes !== null && item.remainingMinutes !== undefined" class="crop-area__time text-center text-caption text-grey">
-                  剩余 {{ formatRemainingMinutes(item.remainingMinutes) }}
-                </div>
-              </div>
-
-              <div class="crop-area__details flex-grow-1 pa-2">
-                <div class="d-flex align-center ga-2 mb-1">
-                  <div class="text-body-2 font-weight-bold text-truncate" :title="item.name">
-                    {{ item.name }}
-                  </div>
-                  <v-chip size="x-small" :color="stateColor(item.state)">
-                    {{ stateText(item.state) }}
-                  </v-chip>
-                  <v-spacer />
-                  <v-btn
-                    v-if="item.state === 'empty'"
-                    color="success"
-                    size="x-small"
-                    variant="flat"
-                    prepend-icon="mdi-seed"
-                    :disabled="loading"
-                    @click="emitCropAction('plant', item)"
-                  >
-                    种植
-                  </v-btn>
-                  <v-btn
-                    v-else-if="item.state === 'ripe'"
-                    color="orange"
-                    size="x-small"
-                    variant="flat"
-                    prepend-icon="mdi-basket"
-                    :disabled="loading"
-                    @click="emitCropAction('harvest', item)"
-                  >
-                    收获
-                  </v-btn>
-                </div>
-                <div class="text-caption text-grey-darken-1">
-                  价格: {{ displayValue(item.price) }}（成本 {{ displayValue(item.cost) }}）
-                </div>
-              </div>
+    <v-card-text class="pa-3">
+      <div class="crop-grid">
+        <div
+          v-for="item in areaItems"
+          :key="item.cropKey"
+          class="crop-card"
+          :class="[`state-${item.state}`, { animal }]"
+        >
+          <div class="crop-icon">
+            <v-img
+              v-if="hasUsableImage(item)"
+              :src="item.image"
+              width="40"
+              height="40"
+              contain
+              @error="markImageError(item)"
+            />
+            <v-icon
+              v-else
+              :icon="cropIcon(item.cropKey, item.name)"
+              :color="animal ? 'brown' : 'green'"
+              size="36"
+            />
+          </div>
+          <div class="crop-info">
+            <div class="crop-name" :title="item.name">{{ item.name }}</div>
+            <div class="crop-meta">
+              价格 {{ displayValue(item.price) }} · 成本 {{ displayValue(item.cost) }}
+              <span v-if="item.growTime"> · 成长 {{ item.growTime }}</span>
             </div>
-          </v-card>
-        </v-col>
-      </v-row>
+            <div class="crop-status">
+              <v-chip size="x-small" :color="stateColor(item.state)" variant="flat">
+                {{ stateText(item.state) }}
+              </v-chip>
+              <span
+                v-if="item.state === 'growing' && item.remainingMinutes !== null && item.remainingMinutes !== undefined"
+                class="crop-remain"
+              >
+                剩余 {{ formatRemainingMinutes(item.remainingMinutes) }}
+              </span>
+            </div>
+          </div>
+          <div class="crop-action">
+            <v-btn
+              v-if="item.state === 'empty'"
+              color="success"
+              size="small"
+              variant="flat"
+              prepend-icon="mdi-seed"
+              :disabled="loading"
+              @click="emitCropAction('plant', item)"
+            >
+              种植
+            </v-btn>
+            <v-btn
+              v-else-if="item.state === 'ripe'"
+              color="orange"
+              size="small"
+              variant="flat"
+              prepend-icon="mdi-basket"
+              :disabled="loading"
+              @click="emitCropAction('harvest', item)"
+            >
+              收获
+            </v-btn>
+          </div>
+        </div>
+      </div>
     </v-card-text>
   </v-card>
 </template>
@@ -255,6 +249,81 @@ function emitCropAction(action, item) {
   min-inline-size: 0;
 }
 
+/* CropArea 卡片样式（对齐思齐 seed-card 风格） */
+.crop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+.crop-card {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: rgba(var(--v-theme-surface), 0.5);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.crop-card:hover {
+  border-color: rgba(76, 175, 80, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+.crop-card.animal:hover {
+  border-color: rgba(180, 83, 9, 0.4);
+}
+.crop-card.state-ripe {
+  border-color: rgba(255, 152, 0, 0.35);
+  background: rgba(255, 152, 0, 0.05);
+}
+.crop-card.state-growing {
+  border-color: rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.04);
+}
+.crop-icon {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+.crop-info {
+  flex: 1;
+  min-width: 0;
+}
+.crop-name {
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crop-meta {
+  font-size: 10px;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crop-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.crop-remain {
+  font-size: 10px;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+.crop-action {
+  flex: 0 0 auto;
+}
 @media (prefers-color-scheme: dark) {
   .bg-green-lighten-5 {
     background-color: rgba(76, 175, 80, 0.2) !important;
