@@ -47,7 +47,7 @@ function formatRate(rate) {
 
 <template>
   <v-card flat class="rounded border">
-    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5">
+    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg">
       <v-icon icon="mdi-cash" color="blue" size="small" class="mr-2" />
       <span>菜市场</span>
       <v-spacer />
@@ -89,8 +89,8 @@ function formatRate(rate) {
 </template>
 
 <style scoped>
-.bg-blue-lighten-5 {
-  background-color: rgba(33, 150, 243, 0.1) !important;
+.section-title-bg {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 
 .text-subtitle-2 {
@@ -99,8 +99,8 @@ function formatRate(rate) {
 }
 
 @media (prefers-color-scheme: dark) {
-  .bg-blue-lighten-5 {
-    background-color: rgba(33, 150, 243, 0.2) !important;
+  .section-title-bg {
+    background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
   }
 }
 </style>

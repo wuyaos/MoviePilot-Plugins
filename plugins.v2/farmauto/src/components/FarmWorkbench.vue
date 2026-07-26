@@ -632,9 +632,9 @@ onMounted(() => loadStatus())
 .stat-card.refreshing { animation: stat-pulse 0.6s ease; }
 @keyframes stat-pulse { 0% { background: rgba(var(--v-theme-on-surface), 0.03); } 50% { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); } 100% { background: rgba(var(--v-theme-on-surface), 0.03); } }
 .stat-icon { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: 0 0 38px; }
-.stat-icon.orange { background: rgba(245,158,11,0.12); color: #f59e0b; }
-.stat-icon.green { background: rgba(34,197,94,0.12); color: #22c55e; }
-.stat-icon.amber { background: rgba(217,119,6,0.12); color: #d97706; }
+.stat-icon.orange { background: rgba(245,158,11,0.14); color: rgb(var(--v-theme-orange)); }
+.stat-icon.green { background: rgba(34,197,94,0.14); color: rgb(var(--v-theme-success)); }
+.stat-icon.amber { background: rgba(217,119,6,0.14); color: rgb(var(--v-theme-warning)); }
 .stat-content { min-width: 0; flex: 1; }
 .stat-title { font-size: 11px; color: rgba(var(--v-theme-on-surface),0.55); font-weight: 600; }
 .stat-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }

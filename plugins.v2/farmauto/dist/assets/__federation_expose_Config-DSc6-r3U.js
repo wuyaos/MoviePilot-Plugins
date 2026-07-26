@@ -383,7 +383,7 @@ return (_ctx, _cache) => {
                       class: "config-section rounded border mb-4"
                     }, {
                       default: _withCtx(() => [
-                        _createVNode(_component_v_card_title, { class: "config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-blue-lighten-5" }, {
+                        _createVNode(_component_v_card_title, { class: "config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3" }, {
                           default: _withCtx(() => [
                             _createVNode(_component_v_icon, {
                               icon: "mdi-cog-outline",
@@ -511,7 +511,7 @@ return (_ctx, _cache) => {
                       class: "config-section rounded border mb-4"
                     }, {
                       default: _withCtx(() => [
-                        _createVNode(_component_v_card_title, { class: "config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-green-lighten-5" }, {
+                        _createVNode(_component_v_card_title, { class: "config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3" }, {
                           default: _withCtx(() => [
                             _createVNode(_component_v_icon, {
                               icon: "mdi-robot-outline",
@@ -629,7 +629,7 @@ return (_ctx, _cache) => {
                       class: "config-section rounded border mb-4"
                     }, {
                       default: _withCtx(() => [
-                        _createVNode(_component_v_card_title, { class: "config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-purple-lighten-5" }, {
+                        _createVNode(_component_v_card_title, { class: "config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3" }, {
                           default: _withCtx(() => [
                             _createVNode(_component_v_icon, {
                               icon: "mdi-timer-sand",
@@ -737,7 +737,7 @@ return (_ctx, _cache) => {
                       class: "config-section rounded border"
                     }, {
                       default: _withCtx(() => [
-                        _createVNode(_component_v_card_title, { class: "config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-amber-lighten-5" }, {
+                        _createVNode(_component_v_card_title, { class: "config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3" }, {
                           default: _withCtx(() => [
                             _createVNode(_component_v_icon, {
                               icon: "mdi-chart-line",
@@ -838,7 +838,7 @@ return (_ctx, _cache) => {
                         class: "config-section rounded border mb-4"
                       }, {
                         default: _withCtx(() => [
-                          _createVNode(_component_v_card_title, { class: "config-section-title d-flex flex-wrap align-center ga-2 px-4 py-3 bg-green-lighten-5" }, {
+                          _createVNode(_component_v_card_title, { class: "config-section-title section-title-bg d-flex flex-wrap align-center ga-2 px-4 py-3" }, {
                             default: _withCtx(() => [
                               _createVNode(_component_v_icon, {
                                 icon: "mdi-web",
@@ -1209,7 +1209,7 @@ return (_ctx, _cache) => {
                             class: "config-section rounded border"
                           }, {
                             default: _withCtx(() => [
-                              _createVNode(_component_v_card_title, { class: "config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-amber-lighten-5" }, {
+                              _createVNode(_component_v_card_title, { class: "config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3" }, {
                                 default: _withCtx(() => [
                                   _createVNode(_component_v_icon, {
                                     icon: "mdi-shield-alert-outline",
@@ -1348,7 +1348,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-25b9724f"]]);
+const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-c6da6072"]]);
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 

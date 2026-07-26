@@ -52,7 +52,7 @@ function formatProfit(profit) {
 
 <template>
   <v-card flat class="rounded border h-100">
-    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-grey-lighten-5">
+    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg">
       <v-icon icon="mdi-history" color="grey" size="small" class="mr-2" />
       执行记录
     </v-card-title>
@@ -62,7 +62,7 @@ function formatProfit(profit) {
         <tr>
           <th>时间</th>
           <th>操作</th>
-          <th class="text-end">利润</th>
+          <th class="text-end">费用</th>
         </tr>
       </thead>
       <tbody>
@@ -92,8 +92,8 @@ function formatProfit(profit) {
 </template>
 
 <style scoped>
-.bg-grey-lighten-5 {
-  background-color: rgba(158, 158, 158, 0.1) !important;
+.section-title-bg {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 
 .text-subtitle-2 {
@@ -111,8 +111,8 @@ function formatProfit(profit) {
 }
 
 @media (prefers-color-scheme: dark) {
-  .bg-grey-lighten-5 {
-    background-color: rgba(158, 158, 158, 0.16) !important;
+  .section-title-bg {
+    background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
   }
 }
 </style>

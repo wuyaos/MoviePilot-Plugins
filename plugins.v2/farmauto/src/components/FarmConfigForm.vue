@@ -276,7 +276,7 @@ function saveConfig() {
         <v-window-item value="global">
           <div class="pa-4">
             <v-card flat class="config-section rounded border mb-4">
-              <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-blue-lighten-5">
+              <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
                 <v-icon icon="mdi-cog-outline" color="purple" size="small" class="mr-2" />
                 基础设置
               </v-card-title>
@@ -313,7 +313,7 @@ function saveConfig() {
             </v-card>
 
             <v-card flat class="config-section rounded border mb-4">
-              <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-green-lighten-5">
+              <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
                 <v-icon icon="mdi-robot-outline" color="green" size="small" class="mr-2" />
                 自动化功能
               </v-card-title>
@@ -339,7 +339,7 @@ function saveConfig() {
             </v-card>
 
             <v-card flat class="config-section rounded border mb-4">
-              <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-purple-lighten-5">
+              <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
                 <v-icon icon="mdi-timer-sand" color="purple" size="small" class="mr-2" />
                 调度与网络
               </v-card-title>
@@ -362,7 +362,7 @@ function saveConfig() {
             </v-card>
 
             <v-card flat class="config-section rounded border">
-              <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-amber-lighten-5">
+              <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
                 <v-icon icon="mdi-chart-line" color="amber-darken-3" size="small" class="mr-2" />
                 交易策略
               </v-card-title>
@@ -390,7 +390,7 @@ function saveConfig() {
         >
           <div class="pa-4">
             <v-card flat class="config-section rounded border mb-4">
-              <v-card-title class="config-section-title d-flex flex-wrap align-center ga-2 px-4 py-3 bg-green-lighten-5">
+              <v-card-title class="config-section-title section-title-bg d-flex flex-wrap align-center ga-2 px-4 py-3">
                 <v-icon icon="mdi-web" color="green" size="small" />
                 <span class="text-subtitle-1">{{ site.title }} 策略</span>
                 <v-spacer />
@@ -561,7 +561,7 @@ function saveConfig() {
             </v-card>
 
             <v-card v-if="site.value === 'siqi'" flat class="config-section rounded border">
-              <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-amber-lighten-5">
+              <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
                 <v-icon icon="mdi-shield-alert-outline" color="amber-darken-3" size="small" class="mr-2" />
                 思齐专属功能
               </v-card-title>
@@ -635,15 +635,7 @@ function saveConfig() {
   font-size: 1rem;
 }
 
-.bg-blue-lighten-5 { background-color: rgba(33, 150, 243, 0.1) !important; }
-.bg-green-lighten-5 { background-color: rgba(76, 175, 80, 0.1) !important; }
-.bg-purple-lighten-5 { background-color: rgba(156, 39, 176, 0.1) !important; }
-.bg-amber-lighten-5 { background-color: rgba(255, 193, 7, 0.12) !important; }
-
-@media (prefers-color-scheme: dark) {
-  .bg-blue-lighten-5 { background-color: rgba(33, 150, 243, 0.2) !important; }
-  .bg-green-lighten-5 { background-color: rgba(76, 175, 80, 0.2) !important; }
-  .bg-purple-lighten-5 { background-color: rgba(156, 39, 176, 0.2) !important; }
-  .bg-amber-lighten-5 { background-color: rgba(255, 193, 7, 0.2) !important; }
+.section-title-bg {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 </style>

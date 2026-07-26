@@ -116,7 +116,7 @@ function emitCropAction(action, item) {
 
 <template>
   <v-card flat class="rounded border">
-    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2" :class="animal ? 'bg-brown-lighten-5' : 'bg-green-lighten-5'">
+    <v-card-title class="section-title-bg text-subtitle-2 d-flex align-center px-3 py-2">
       <v-icon :icon="animal ? 'mdi-cow' : 'mdi-seed'" :color="animal ? 'brown' : 'green'" size="small" class="mr-2" />
       {{ title }}
       <v-spacer />
@@ -210,12 +210,8 @@ function emitCropAction(action, item) {
 </template>
 
 <style scoped>
-.bg-green-lighten-5 {
-  background-color: rgba(76, 175, 80, 0.1) !important;
-}
-
-.bg-brown-lighten-5 {
-  background-color: rgba(121, 85, 72, 0.1) !important;
+.section-title-bg {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 
 .text-subtitle-2 {
@@ -323,14 +319,5 @@ function emitCropAction(action, item) {
 }
 .crop-action {
   flex: 0 0 auto;
-}
-@media (prefers-color-scheme: dark) {
-  .bg-green-lighten-5 {
-    background-color: rgba(76, 175, 80, 0.2) !important;
-  }
-
-  .bg-brown-lighten-5 {
-    background-color: rgba(121, 85, 72, 0.2) !important;
-  }
 }
 </style>

@@ -77,9 +77,9 @@ function renderChart() {
       trigger: 'axis',
       appendToBody: true,
       padding: 10,
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      borderColor: '#ccc',
-      textStyle: { color: '#333' },
+      backgroundColor: isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.9)',
+      borderColor: isDark ? '#555' : '#ccc',
+      textStyle: { color: isDark ? '#eee' : '#333' },
       extraCssText: 'box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); border-radius: 4px;',
       formatter: (params) => {
         if (!params || !params.length) return ''

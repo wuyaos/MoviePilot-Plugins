@@ -1,7 +1,7 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
 import { _ as _export_sfc } from './_plugin-vue_export-helper-pcqpp-6-.js';
 
-const {resolveComponent:_resolveComponent$7,createVNode:_createVNode$7,toDisplayString:_toDisplayString$6,createTextVNode:_createTextVNode$6,mergeProps:_mergeProps,withCtx:_withCtx$6,openBlock:_openBlock$7,createBlock:_createBlock$6,createCommentVNode:_createCommentVNode$7,normalizeClass:_normalizeClass$5,renderList:_renderList$5,Fragment:_Fragment$5,createElementBlock:_createElementBlock$6,createElementVNode:_createElementVNode$6} = await importShared('vue');
+const {resolveComponent:_resolveComponent$7,createVNode:_createVNode$7,toDisplayString:_toDisplayString$6,createTextVNode:_createTextVNode$6,mergeProps:_mergeProps,withCtx:_withCtx$6,openBlock:_openBlock$7,createBlock:_createBlock$6,createCommentVNode:_createCommentVNode$7,renderList:_renderList$5,Fragment:_Fragment$5,createElementBlock:_createElementBlock$6,createElementVNode:_createElementVNode$6,normalizeClass:_normalizeClass$5} = await importShared('vue');
 
 
 const _hoisted_1$6 = { class: "crop-grid" };
@@ -155,9 +155,7 @@ return (_ctx, _cache) => {
     class: "rounded border"
   }, {
     default: _withCtx$6(() => [
-      _createVNode$7(_component_v_card_title, {
-        class: _normalizeClass$5(["text-subtitle-2 d-flex align-center px-3 py-2", __props.animal ? 'bg-brown-lighten-5' : 'bg-green-lighten-5'])
-      }, {
+      _createVNode$7(_component_v_card_title, { class: "section-title-bg text-subtitle-2 d-flex align-center px-3 py-2" }, {
         default: _withCtx$6(() => [
           _createVNode$7(_component_v_icon, {
             icon: __props.animal ? 'mdi-cow' : 'mdi-seed',
@@ -193,7 +191,7 @@ return (_ctx, _cache) => {
             : _createCommentVNode$7("", true)
         ]),
         _: 1
-      }, 8, ["class"]),
+      }),
       _createVNode$7(_component_v_card_text, { class: "pa-3" }, {
         default: _withCtx$6(() => [
           _createElementVNode$6("div", _hoisted_1$6, [
@@ -292,7 +290,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$7, [['__scopeId',"data-v-bd3d1666"]]);
+const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$7, [['__scopeId',"data-v-5d70dd9b"]]);
 
 const {resolveComponent:_resolveComponent$6,createVNode:_createVNode$6,createTextVNode:_createTextVNode$5,withCtx:_withCtx$5,createElementVNode:_createElementVNode$5,renderList:_renderList$4,Fragment:_Fragment$4,openBlock:_openBlock$6,createElementBlock:_createElementBlock$5,toDisplayString:_toDisplayString$5,createCommentVNode:_createCommentVNode$6,normalizeClass:_normalizeClass$4,createBlock:_createBlock$5} = await importShared('vue');
 
@@ -377,7 +375,7 @@ return (_ctx, _cache) => {
     class: "rounded border h-100"
   }, {
     default: _withCtx$5(() => [
-      _createVNode$6(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 bg-grey-lighten-5" }, {
+      _createVNode$6(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg" }, {
         default: _withCtx$5(() => [
           _createVNode$6(_component_v_icon, {
             icon: "mdi-history",
@@ -399,7 +397,7 @@ return (_ctx, _cache) => {
                 _createElementVNode$5("tr", null, [
                   _createElementVNode$5("th", null, "时间"),
                   _createElementVNode$5("th", null, "操作"),
-                  _createElementVNode$5("th", { class: "text-end" }, "利润")
+                  _createElementVNode$5("th", { class: "text-end" }, "费用")
                 ])
               ], -1)),
               _createElementVNode$5("tbody", null, [
@@ -444,7 +442,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-c8bf685b"]]);
+const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-d1fa36f6"]]);
 
 const {resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,createElementVNode:_createElementVNode$4,openBlock:_openBlock$5,createBlock:_createBlock$4,createCommentVNode:_createCommentVNode$5,withCtx:_withCtx$4,renderList:_renderList$3,Fragment:_Fragment$3,createElementBlock:_createElementBlock$4,toDisplayString:_toDisplayString$4,normalizeClass:_normalizeClass$3,createTextVNode:_createTextVNode$4} = await importShared('vue');
 
@@ -518,7 +516,7 @@ return (_ctx, _cache) => {
     class: "rounded border"
   }, {
     default: _withCtx$4(() => [
-      _createVNode$5(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5" }, {
+      _createVNode$5(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg" }, {
         default: _withCtx$4(() => [
           _createVNode$5(_component_v_icon, {
             icon: "mdi-cash",
@@ -591,7 +589,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const MarketTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-62e2ba88"]]);
+const MarketTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-4829b48d"]]);
 
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -80230,9 +80228,9 @@ function renderChart() {
       trigger: 'axis',
       appendToBody: true,
       padding: 10,
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      borderColor: '#ccc',
-      textStyle: { color: '#333' },
+      backgroundColor: isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.9)',
+      borderColor: isDark ? '#555' : '#ccc',
+      textStyle: { color: isDark ? '#eee' : '#333' },
       extraCssText: 'box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); border-radius: 4px;',
       formatter: (params) => {
         if (!params || !params.length) return ''
@@ -80337,7 +80335,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const PriceTrendChart = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-6dc0e664"]]);
+const PriceTrendChart = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-cf0ce03a"]]);
 
 const {resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createTextVNode:_createTextVNode$3,withCtx:_withCtx$3,toDisplayString:_toDisplayString$3,openBlock:_openBlock$3,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$3} = await importShared('vue');
 
@@ -80549,80 +80547,87 @@ const _hoisted_5$2 = { class: "stat-icon red" };
 const _hoisted_6$2 = { class: "stat-content" };
 const _hoisted_7$2 = { class: "stat-icon blue" };
 const _hoisted_8$1 = { class: "stat-content" };
-const _hoisted_9$1 = ["onClick"];
-const _hoisted_10$1 = { class: "seed-icon" };
-const _hoisted_11 = { class: "seed-name" };
-const _hoisted_12 = { class: "seed-meta" };
-const _hoisted_13 = {
+const _hoisted_9$1 = { class: "crop-grid" };
+const _hoisted_10$1 = ["onClick"];
+const _hoisted_11 = { class: "crop-icon" };
+const _hoisted_12 = { class: "crop-info" };
+const _hoisted_13 = ["title"];
+const _hoisted_14 = { class: "crop-meta" };
+const _hoisted_15 = {
   key: 0,
-  class: "seed-meta"
+  class: "crop-meta locked-meta"
 };
-const _hoisted_14 = {
+const _hoisted_16 = {
+  key: 1,
+  class: "crop-meta"
+};
+const _hoisted_17 = { class: "crop-action" };
+const _hoisted_18 = {
   key: 0,
   class: "text-center text-grey pa-4"
 };
-const _hoisted_15 = { class: "farm-action-list" };
-const _hoisted_16 = { class: "neu-action-card neu-action-card--steal" };
-const _hoisted_17 = { class: "neu-action-card neu-action-card--like" };
-const _hoisted_18 = { class: "neu-action-content" };
-const _hoisted_19 = { class: "neu-action-desc" };
-const _hoisted_20 = { class: "neu-action-card neu-action-card--visit" };
-const _hoisted_21 = { class: "visit-action-row" };
-const _hoisted_22 = { class: "neu-action-card neu-action-card--slot" };
-const _hoisted_23 = { class: "neu-action-content" };
-const _hoisted_24 = { class: "neu-action-desc" };
-const _hoisted_25 = { class: "land-title" };
-const _hoisted_26 = { class: "land-plot-count" };
-const _hoisted_27 = {
+const _hoisted_19 = { class: "farm-action-list" };
+const _hoisted_20 = { class: "neu-action-card neu-action-card--steal" };
+const _hoisted_21 = { class: "neu-action-card neu-action-card--like" };
+const _hoisted_22 = { class: "neu-action-content" };
+const _hoisted_23 = { class: "neu-action-desc" };
+const _hoisted_24 = { class: "neu-action-card neu-action-card--visit" };
+const _hoisted_25 = { class: "visit-action-row" };
+const _hoisted_26 = { class: "neu-action-card neu-action-card--slot" };
+const _hoisted_27 = { class: "neu-action-content" };
+const _hoisted_28 = { class: "neu-action-desc" };
+const _hoisted_29 = { class: "land-title" };
+const _hoisted_30 = { class: "land-plot-count" };
+const _hoisted_31 = {
   key: 0,
   class: "unlock-hint"
 };
-const _hoisted_28 = {
+const _hoisted_32 = {
   key: 0,
   class: "land-locked-mobile-hint"
 };
-const _hoisted_29 = { class: "plot-grid" };
-const _hoisted_30 = ["onClick"];
-const _hoisted_31 = { key: 1 };
-const _hoisted_32 = {
+const _hoisted_33 = { class: "plot-grid" };
+const _hoisted_34 = ["onClick"];
+const _hoisted_35 = { key: 1 };
+const _hoisted_36 = {
   key: 0,
   class: "text-red"
 };
-const _hoisted_33 = ["src", "alt", "onError"];
-const _hoisted_34 = {
+const _hoisted_37 = ["src", "alt", "onError"];
+const _hoisted_38 = {
   key: 1,
   class: "plot-emoji",
   "aria-hidden": "true"
 };
-const _hoisted_35 = { class: "font-weight-bold" };
-const _hoisted_36 = {
+const _hoisted_39 = { class: "font-weight-bold" };
+const _hoisted_40 = {
   key: 0,
   class: "text-center text-grey pa-4"
 };
-const _hoisted_37 = {
+const _hoisted_41 = {
   class: "mr-1",
   "aria-hidden": "true"
 };
-const _hoisted_38 = {
+const _hoisted_42 = {
   key: 1,
   class: "text-center text-grey pa-4"
 };
-const _hoisted_39 = {
+const _hoisted_43 = {
   key: 0,
   class: "d-flex flex-wrap ga-2"
 };
-const _hoisted_40 = {
+const _hoisted_44 = {
   key: 1,
   class: "text-grey"
 };
-const _hoisted_41 = {
+const _hoisted_45 = {
   key: 1,
   class: "text-center text-grey pa-4"
 };
-const _hoisted_42 = { class: "text-caption text-grey mb-2" };
-const _hoisted_43 = { class: "d-flex ga-2 align-start" };
-const _hoisted_44 = { key: 0 };
-const _hoisted_45 = { key: 1 };
+const _hoisted_46 = { class: "text-caption text-grey mb-2" };
+const _hoisted_47 = { class: "d-flex ga-2 align-start" };
+const _hoisted_48 = { key: 0 };
+const _hoisted_49 = { key: 1 };
 
 const {computed: computed$2,ref: ref$2,watch: watch$1} = await importShared('vue');
 
@@ -81170,7 +81175,7 @@ return (_ctx, _cache) => {
                     class: "rounded border h-100"
                   }, {
                     default: _withCtx$2(() => [
-                      _createVNode$2(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 bg-green-lighten-5" }, {
+                      _createVNode$2(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg" }, {
                         default: _withCtx$2(() => [
                           _createVNode$2(_component_v_icon, {
                             icon: "mdi-seed",
@@ -81198,40 +81203,38 @@ return (_ctx, _cache) => {
                       }),
                       _createVNode$2(_component_v_card_text, { class: "pa-3" }, {
                         default: _withCtx$2(() => [
-                          _createVNode$2(_component_v_row, { dense: "" }, {
-                            default: _withCtx$2(() => [
-                              (_openBlock$2(true), _createElementBlock$2(_Fragment$2, null, _renderList$2(seeds.value, (seed) => {
-                                return (_openBlock$2(), _createBlock$2(_component_v_col, {
-                                  key: seed.seed_id ?? seed.id,
-                                  cols: "6",
-                                  sm: "4"
-                                }, {
-                                  default: _withCtx$2(() => [
-                                    _createElementVNode$2("div", {
-                                      class: _normalizeClass$2(["seed-card", {
-                      locked: isSeedLocked(seed),
-                      selected: selectedSeedId.value === (seed.seed_id ?? seed.id),
-                    }]),
-                                      onClick: $event => (!isSeedLocked(seed) && selectSeed(seed))
-                                    }, [
-                                      _createElementVNode$2("div", _hoisted_10$1, _toDisplayString$2(seedEmoji(seed.name)), 1),
-                                      _createElementVNode$2("div", null, [
-                                        _createElementVNode$2("div", _hoisted_11, _toDisplayString$2(seed.name), 1),
-                                        _createElementVNode$2("div", _hoisted_12, "成本 " + _toDisplayString$2(seed.cost) + " → 收益 " + _toDisplayString$2(seed.base_reward) + " · 成长 " + _toDisplayString$2(seed.grow_time), 1),
-                                        (isSeedLocked(seed))
-                                          ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_13, "🔒 解锁需总收获 " + _toDisplayString$2(seed.unlock_harvest), 1))
-                                          : _createCommentVNode$2("", true)
-                                      ])
-                                    ], 10, _hoisted_9$1)
-                                  ]),
-                                  _: 2
-                                }, 1024))
-                              }), 128))
-                            ]),
-                            _: 1
-                          }),
+                          _createElementVNode$2("div", _hoisted_9$1, [
+                            (_openBlock$2(true), _createElementBlock$2(_Fragment$2, null, _renderList$2(seeds.value, (seed) => {
+                              return (_openBlock$2(), _createElementBlock$2("div", {
+                                key: seed.seed_id ?? seed.id,
+                                class: _normalizeClass$2(["crop-card", { locked: isSeedLocked(seed), selected: selectedSeedId.value === (seed.seed_id ?? seed.id) }]),
+                                onClick: $event => (!isSeedLocked(seed) && selectSeed(seed))
+                              }, [
+                                _createElementVNode$2("div", _hoisted_11, _toDisplayString$2(seedEmoji(seed.name)), 1),
+                                _createElementVNode$2("div", _hoisted_12, [
+                                  _createElementVNode$2("div", {
+                                    class: "crop-name",
+                                    title: seed.name
+                                  }, _toDisplayString$2(seed.name), 9, _hoisted_13),
+                                  _createElementVNode$2("div", _hoisted_14, "成本 " + _toDisplayString$2(seed.cost) + " → 收益 " + _toDisplayString$2(seed.base_reward) + " · 成长 " + _toDisplayString$2(seed.grow_time), 1),
+                                  (isSeedLocked(seed))
+                                    ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_15, "🔒 解锁需总收获 " + _toDisplayString$2(seed.unlock_harvest), 1))
+                                    : (_openBlock$2(), _createElementBlock$2("div", _hoisted_16, "可购买种植"))
+                                ]),
+                                _createElementVNode$2("div", _hoisted_17, [
+                                  (selectedSeedId.value === (seed.seed_id ?? seed.id))
+                                    ? (_openBlock$2(), _createBlock$2(_component_v_icon, {
+                                        key: 0,
+                                        icon: "mdi-check-circle",
+                                        color: "success"
+                                      }))
+                                    : _createCommentVNode$2("", true)
+                                ])
+                              ], 10, _hoisted_10$1))
+                            }), 128))
+                          ]),
                           (!seeds.value.length)
-                            ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_14, "暂无种子数据"))
+                            ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_18, "暂无种子数据"))
                             : _createCommentVNode$2("", true)
                         ]),
                         _: 1
@@ -81252,7 +81255,7 @@ return (_ctx, _cache) => {
                     class: "rounded border h-100"
                   }, {
                     default: _withCtx$2(() => [
-                      _createVNode$2(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 bg-purple-lighten-5" }, {
+                      _createVNode$2(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg" }, {
                         default: _withCtx$2(() => [
                           _createVNode$2(_component_v_icon, {
                             icon: "mdi-home-group",
@@ -81267,15 +81270,15 @@ return (_ctx, _cache) => {
                       }),
                       _createVNode$2(_component_v_card_text, { class: "pa-3" }, {
                         default: _withCtx$2(() => [
-                          _createElementVNode$2("div", _hoisted_15, [
-                            _createElementVNode$2("div", _hoisted_16, [
+                          _createElementVNode$2("div", _hoisted_19, [
+                            _createElementVNode$2("div", _hoisted_20, [
                               _cache[24] || (_cache[24] = _createElementVNode$2("div", { class: "neu-action-icon" }, "🥷", -1)),
                               _cache[25] || (_cache[25] = _createElementVNode$2("div", { class: "neu-action-content" }, [
                                 _createElementVNode$2("div", { class: "neu-action-label" }, "偷菜"),
                                 _createElementVNode$2("div", { class: "neu-action-desc" }, "每日一次，自动寻找可偷作物")
                               ], -1)),
                               _createVNode$2(_component_v_btn, {
-                                color: canSteal.value ? 'red' : 'grey',
+                                color: canSteal.value ? 'error' : 'grey',
                                 size: "small",
                                 variant: "flat",
                                 disabled: !canSteal.value,
@@ -81288,11 +81291,11 @@ return (_ctx, _cache) => {
                                 _: 1
                               }, 8, ["color", "disabled"])
                             ]),
-                            _createElementVNode$2("div", _hoisted_17, [
+                            _createElementVNode$2("div", _hoisted_21, [
                               _cache[28] || (_cache[28] = _createElementVNode$2("div", { class: "neu-action-icon" }, "👍", -1)),
-                              _createElementVNode$2("div", _hoisted_18, [
+                              _createElementVNode$2("div", _hoisted_22, [
                                 _cache[26] || (_cache[26] = _createElementVNode$2("div", { class: "neu-action-label" }, "一键点赞", -1)),
-                                _createElementVNode$2("div", _hoisted_19, [
+                                _createElementVNode$2("div", _hoisted_23, [
                                   (likeMax.value <= 0)
                                     ? (_openBlock$2(), _createElementBlock$2(_Fragment$2, { key: 0 }, [
                                         _createTextVNode$2("可批量点赞")
@@ -81303,7 +81306,7 @@ return (_ctx, _cache) => {
                                 ])
                               ]),
                               _createVNode$2(_component_v_btn, {
-                                color: "pink",
+                                color: "warning",
                                 size: "small",
                                 variant: "flat",
                                 disabled: likeRemaining.value <= 0,
@@ -81316,13 +81319,13 @@ return (_ctx, _cache) => {
                                 _: 1
                               }, 8, ["disabled"])
                             ]),
-                            _createElementVNode$2("div", _hoisted_20, [
+                            _createElementVNode$2("div", _hoisted_24, [
                               _cache[30] || (_cache[30] = _createElementVNode$2("div", { class: "neu-action-icon" }, "🚜", -1)),
                               _cache[31] || (_cache[31] = _createElementVNode$2("div", { class: "neu-action-content" }, [
                                 _createElementVNode$2("div", { class: "neu-action-label" }, "参观农场"),
                                 _createElementVNode$2("div", { class: "neu-action-desc" }, "输入用户名或访问好友农场")
                               ], -1)),
-                              _createElementVNode$2("div", _hoisted_21, [
+                              _createElementVNode$2("div", _hoisted_25, [
                                 _createVNode$2(_component_v_text_field, {
                                   modelValue: visitUsername.value,
                                   "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((visitUsername).value = $event)),
@@ -81334,7 +81337,7 @@ return (_ctx, _cache) => {
                                   onKeyup: _withKeys(visit, ["enter"])
                                 }, null, 8, ["modelValue"]),
                                 _createVNode$2(_component_v_btn, {
-                                  color: "purple",
+                                  color: "info",
                                   size: "small",
                                   variant: "flat",
                                   disabled: !visitUsername.value.trim(),
@@ -81348,14 +81351,14 @@ return (_ctx, _cache) => {
                                 }, 8, ["disabled"])
                               ])
                             ]),
-                            _createElementVNode$2("div", _hoisted_22, [
+                            _createElementVNode$2("div", _hoisted_26, [
                               _cache[34] || (_cache[34] = _createElementVNode$2("div", { class: "neu-action-icon" }, "🏗", -1)),
-                              _createElementVNode$2("div", _hoisted_23, [
+                              _createElementVNode$2("div", _hoisted_27, [
                                 _cache[32] || (_cache[32] = _createElementVNode$2("div", { class: "neu-action-label" }, "扩地", -1)),
-                                _createElementVNode$2("div", _hoisted_24, _toDisplayString$2(buySlotAvailable.value ? '可购买下一个坑位' : '暂无可购买坑位'), 1)
+                                _createElementVNode$2("div", _hoisted_28, _toDisplayString$2(buySlotAvailable.value ? '可购买下一个坑位' : '暂无可购买坑位'), 1)
                               ]),
                               _createVNode$2(_component_v_btn, {
-                                color: "deep-purple",
+                                color: "primary",
                                 size: "small",
                                 variant: "flat",
                                 disabled: !buySlotAvailable.value,
@@ -81386,7 +81389,7 @@ return (_ctx, _cache) => {
             class: "rounded border mb-3"
           }, {
             default: _withCtx$2(() => [
-              _createVNode$2(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5" }, {
+              _createVNode$2(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg" }, {
                 default: _withCtx$2(() => [
                   _createVNode$2(_component_v_icon, {
                     icon: "mdi-farm",
@@ -81418,17 +81421,17 @@ return (_ctx, _cache) => {
                       key: land.land_id,
                       class: _normalizeClass$2(["land-section", { 'land-section--locked': plotsForLand(land).every(plot => plot.state === 'locked') }])
                     }, [
-                      _createElementVNode$2("div", _hoisted_25, [
+                      _createElementVNode$2("div", _hoisted_29, [
                         _createTextVNode$2(_toDisplayString$2(land.name || `地块 ${land.land_id}`) + " ", 1),
-                        _createElementVNode$2("span", _hoisted_26, "（坑位：" + _toDisplayString$2(landPlotCountLabel(land)) + "）", 1),
+                        _createElementVNode$2("span", _hoisted_30, "（坑位：" + _toDisplayString$2(landPlotCountLabel(land)) + "）", 1),
                         (plotsForLand(land).every(plot => plot.state === 'locked'))
-                          ? (_openBlock$2(), _createElementBlock$2("span", _hoisted_27, "🔒 解锁需总收获 " + _toDisplayString$2(land.unlock_harvest), 1))
+                          ? (_openBlock$2(), _createElementBlock$2("span", _hoisted_31, "🔒 解锁需总收获 " + _toDisplayString$2(land.unlock_harvest), 1))
                           : _createCommentVNode$2("", true)
                       ]),
                       (plotsForLand(land).every(plot => plot.state === 'locked'))
-                        ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_28, "未解锁，移动端已折叠显示"))
+                        ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_32, "未解锁，移动端已折叠显示"))
                         : _createCommentVNode$2("", true),
-                      _createElementVNode$2("div", _hoisted_29, [
+                      _createElementVNode$2("div", _hoisted_33, [
                         (_openBlock$2(true), _createElementBlock$2(_Fragment$2, null, _renderList$2(plotsForLand(land), (plot) => {
                           return (_openBlock$2(), _createElementBlock$2("button", {
                             class: _normalizeClass$2(["plot", {
@@ -81449,13 +81452,13 @@ return (_ctx, _cache) => {
                                   _cache[39] || (_cache[39] = _createElementVNode$2("small", null, "未解锁", -1))
                                 ], 64))
                               : (plot.state === 'buyable')
-                                ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_31, [
+                                ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_35, [
                                     _cache[40] || (_cache[40] = _createTextVNode$2(" ➕", -1)),
                                     _cache[41] || (_cache[41] = _createElementVNode$2("br", null, null, -1)),
                                     _createElementVNode$2("small", null, "购买 " + _toDisplayString$2(plot.cost), 1),
                                     _cache[42] || (_cache[42] = _createElementVNode$2("br", null, null, -1)),
                                     (!isPlotAffordable(plot))
-                                      ? (_openBlock$2(), _createElementBlock$2("small", _hoisted_32, "魔力不足"))
+                                      ? (_openBlock$2(), _createElementBlock$2("small", _hoisted_36, "魔力不足"))
                                       : _createCommentVNode$2("", true)
                                   ]))
                                 : (plot.seed)
@@ -81467,10 +81470,10 @@ return (_ctx, _cache) => {
                                             alt: plot.seed.name,
                                             class: "stage-img",
                                             onError: $event => (markStageIconFailed(plot))
-                                          }, null, 40, _hoisted_33))
-                                        : (_openBlock$2(), _createElementBlock$2("span", _hoisted_34, _toDisplayString$2(plot.seed.icon || seedEmoji(plot.seed.name)), 1)),
+                                          }, null, 40, _hoisted_37))
+                                        : (_openBlock$2(), _createElementBlock$2("span", _hoisted_38, _toDisplayString$2(plot.seed.icon || seedEmoji(plot.seed.name)), 1)),
                                       _cache[43] || (_cache[43] = _createElementVNode$2("br", null, null, -1)),
-                                      _createElementVNode$2("small", _hoisted_35, _toDisplayString$2(plot.seed.name), 1),
+                                      _createElementVNode$2("small", _hoisted_39, _toDisplayString$2(plot.seed.name), 1),
                                       _cache[44] || (_cache[44] = _createElementVNode$2("br", null, null, -1)),
                                       _createElementVNode$2("small", {
                                         class: _normalizeClass$2(isPlotReady(plot) ? 'text-orange' : 'text-grey')
@@ -81481,13 +81484,13 @@ return (_ctx, _cache) => {
                                       _cache[46] || (_cache[46] = _createElementVNode$2("br", null, null, -1)),
                                       _cache[47] || (_cache[47] = _createElementVNode$2("small", null, "点击种植", -1))
                                     ], 64))
-                          ], 10, _hoisted_30))
+                          ], 10, _hoisted_34))
                         }), 128))
                       ])
                     ], 2))
                   }), 128)),
                   (!landsGrouped.value.length)
-                    ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_36, "暂无菜地数据"))
+                    ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_40, "暂无菜地数据"))
                     : _createCommentVNode$2("", true)
                 ]),
                 _: 1
@@ -81507,7 +81510,7 @@ return (_ctx, _cache) => {
                     class: "rounded border"
                   }, {
                     default: _withCtx$2(() => [
-                      _createVNode$2(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 bg-amber-lighten-5" }, {
+                      _createVNode$2(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg" }, {
                         default: _withCtx$2(() => [
                           _createVNode$2(_component_v_icon, {
                             icon: "mdi-bag-personal",
@@ -81518,7 +81521,7 @@ return (_ctx, _cache) => {
                           _cache[49] || (_cache[49] = _createTextVNode$2("收获背包 ", -1)),
                           _createVNode$2(_component_v_spacer),
                           _createVNode$2(_component_v_btn, {
-                            color: "orange",
+                            color: "warning",
                             size: "small",
                             variant: "flat",
                             "prepend-icon": "mdi-cash",
@@ -81556,7 +81559,7 @@ return (_ctx, _cache) => {
                                         key: item.seed_id
                                       }, [
                                         _createElementVNode$2("td", null, [
-                                          _createElementVNode$2("span", _hoisted_37, _toDisplayString$2(seedEmoji(item.name || seedNameById(item.seed_id))), 1),
+                                          _createElementVNode$2("span", _hoisted_41, _toDisplayString$2(seedEmoji(item.name || seedNameById(item.seed_id))), 1),
                                           _createTextVNode$2(_toDisplayString$2(item.name || `作物 ${item.seed_id}`), 1)
                                         ]),
                                         _createElementVNode$2("td", null, _toDisplayString$2(item.quantity), 1),
@@ -81565,7 +81568,7 @@ return (_ctx, _cache) => {
                                         _createElementVNode$2("td", null, [
                                           _createVNode$2(_component_v_btn, {
                                             size: "x-small",
-                                            color: "orange",
+                                            color: "warning",
                                             variant: "flat",
                                             "prepend-icon": "mdi-cash",
                                             onClick: $event => (sell(item))
@@ -81582,7 +81585,7 @@ return (_ctx, _cache) => {
                                 ]),
                                 _: 1
                               }))
-                            : (_openBlock$2(), _createElementBlock$2("div", _hoisted_38, [
+                            : (_openBlock$2(), _createElementBlock$2("div", _hoisted_42, [
                                 _createVNode$2(_component_v_icon, {
                                   icon: "mdi-bag-personal-outline",
                                   size: "40",
@@ -81661,7 +81664,7 @@ return (_ctx, _cache) => {
                             _createVNode$2(_component_v_card_text, null, {
                               default: _withCtx$2(() => [
                                 (stealPlots(target).length)
-                                  ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_39, [
+                                  ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_43, [
                                       (_openBlock$2(true), _createElementBlock$2(_Fragment$2, null, _renderList$2(stealPlots(target), (plot) => {
                                         return (_openBlock$2(), _createBlock$2(_component_v_btn, {
                                           key: `${plot.land_id}-${plot.plot_index}`,
@@ -81678,7 +81681,7 @@ return (_ctx, _cache) => {
                                         }, 1032, ["disabled", "onClick"]))
                                       }), 128))
                                     ]))
-                                  : (_openBlock$2(), _createElementBlock$2("div", _hoisted_40, "暂无成熟作物"))
+                                  : (_openBlock$2(), _createElementBlock$2("div", _hoisted_44, "暂无成熟作物"))
                               ]),
                               _: 2
                             }, 1024)
@@ -81687,7 +81690,7 @@ return (_ctx, _cache) => {
                         }, 1024))
                       }), 128)),
                       (!actionLoading.value && !stealTargets.value.length)
-                        ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_41, "暂无可偷菜目标"))
+                        ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_45, "暂无可偷菜目标"))
                         : _createCommentVNode$2("", true)
                     ]),
                     _: 1
@@ -81714,7 +81717,7 @@ return (_ctx, _cache) => {
                   }),
                   _createVNode$2(_component_v_card_text, null, {
                     default: _withCtx$2(() => [
-                      _createElementVNode$2("div", _hoisted_42, "剩余 " + _toDisplayString$2(likeRemaining.value) + "/" + _toDisplayString$2(likeMax.value), 1),
+                      _createElementVNode$2("div", _hoisted_46, "剩余 " + _toDisplayString$2(likeRemaining.value) + "/" + _toDisplayString$2(likeMax.value), 1),
                       _createVNode$2(_component_v_textarea, {
                         modelValue: likeUsernames.value,
                         "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((likeUsernames).value = $event)),
@@ -81751,7 +81754,7 @@ return (_ctx, _cache) => {
                         _: 1
                       }),
                       _createVNode$2(_component_v_btn, {
-                        color: "pink",
+                        color: "warning",
                         variant: "flat",
                         "prepend-icon": "mdi-check",
                         loading: actionLoading.value,
@@ -81787,7 +81790,7 @@ return (_ctx, _cache) => {
                   }),
                   _createVNode$2(_component_v_card_text, null, {
                     default: _withCtx$2(() => [
-                      _createElementVNode$2("div", _hoisted_43, [
+                      _createElementVNode$2("div", _hoisted_47, [
                         _createVNode$2(_component_v_text_field, {
                           modelValue: visitUsername.value,
                           "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((visitUsername).value = $event)),
@@ -81826,10 +81829,10 @@ return (_ctx, _cache) => {
                                 default: _withCtx$2(() => [
                                   _createElementVNode$2("div", null, _toDisplayString$2(visitResult.value.message || visitResult.value.msg || '访问成功'), 1),
                                   (visitResult.value.user_bonus != null)
-                                    ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_44, "魔力值：" + _toDisplayString$2(visitResult.value.user_bonus), 1))
+                                    ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_48, "魔力值：" + _toDisplayString$2(visitResult.value.user_bonus), 1))
                                     : _createCommentVNode$2("", true),
                                   (Array.isArray(visitResult.value.user_lands))
-                                    ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_45, "菜地坑位：" + _toDisplayString$2(visitResult.value.user_lands.length), 1))
+                                    ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_49, "菜地坑位：" + _toDisplayString$2(visitResult.value.user_lands.length), 1))
                                     : _createCommentVNode$2("", true)
                                 ]),
                                 _: 1
@@ -81899,7 +81902,7 @@ return (_ctx, _cache) => {
                         _: 1
                       }),
                       _createVNode$2(_component_v_btn, {
-                        color: "orange",
+                        color: "warning",
                         variant: "flat",
                         "prepend-icon": "mdi-check",
                         loading: actionLoading.value,
@@ -81929,7 +81932,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-11f6ddb4"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-a4125b82"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 
@@ -82029,7 +82032,7 @@ return (_ctx, _cache) => {
     class: "rounded border"
   }, {
     default: _withCtx$1(() => [
-      _createVNode$1(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 bg-amber-lighten-5" }, {
+      _createVNode$1(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg" }, {
         default: _withCtx$1(() => [
           _createVNode$1(_component_v_icon, {
             icon: "mdi-package-variant",
@@ -82202,7 +82205,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const WarehouseTable = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-4a4bf1a3"]]);
+const WarehouseTable = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-7ed61f91"]]);
 
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,openBlock:_openBlock,createBlock:_createBlock,createCommentVNode:_createCommentVNode,renderList:_renderList,Fragment:_Fragment,createElementBlock:_createElementBlock,normalizeClass:_normalizeClass} = await importShared('vue');
 
@@ -83017,6 +83020,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-51a062bb"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-65278c57"]]);
 
 export { FarmWorkbench as F };

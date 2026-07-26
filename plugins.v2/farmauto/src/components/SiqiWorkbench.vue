@@ -418,38 +418,39 @@ function handlePlotClick(plot) {
       <v-row dense class="mb-3">
         <v-col cols="12" md="6">
           <v-card flat class="rounded border h-100">
-            <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-green-lighten-5">
+            <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg">
               <v-icon icon="mdi-seed" color="green" size="small" class="mr-2" />种子商店
               <v-spacer />
               <v-btn color="success" size="small" variant="flat" prepend-icon="mdi-seed" :disabled="!selectedSeedId" @click="plantFill">一键种植</v-btn>
             </v-card-title>
             <v-card-text class="pa-3">
-              <v-row dense>
-                <v-col v-for="seed in seeds" :key="seed.seed_id ?? seed.id" cols="6" sm="4">
-                  <div
-                    class="seed-card"
-                    :class="{
-                      locked: isSeedLocked(seed),
-                      selected: selectedSeedId === (seed.seed_id ?? seed.id),
-                    }"
-                    @click="!isSeedLocked(seed) && selectSeed(seed)"
-                  >
-                    <div class="seed-icon">{{ seedEmoji(seed.name) }}</div>
-                    <div>
-                      <div class="seed-name">{{ seed.name }}</div>
-                      <div class="seed-meta">成本 {{ seed.cost }} → 收益 {{ seed.base_reward }} · 成长 {{ seed.grow_time }}</div>
-                      <div v-if="isSeedLocked(seed)" class="seed-meta">🔒 解锁需总收获 {{ seed.unlock_harvest }}</div>
-                    </div>
+              <div class="crop-grid">
+                <div
+                  v-for="seed in seeds"
+                  :key="seed.seed_id ?? seed.id"
+                  class="crop-card"
+                  :class="{ locked: isSeedLocked(seed), selected: selectedSeedId === (seed.seed_id ?? seed.id) }"
+                  @click="!isSeedLocked(seed) && selectSeed(seed)"
+                >
+                  <div class="crop-icon">{{ seedEmoji(seed.name) }}</div>
+                  <div class="crop-info">
+                    <div class="crop-name" :title="seed.name">{{ seed.name }}</div>
+                    <div class="crop-meta">成本 {{ seed.cost }} → 收益 {{ seed.base_reward }} · 成长 {{ seed.grow_time }}</div>
+                    <div v-if="isSeedLocked(seed)" class="crop-meta locked-meta">🔒 解锁需总收获 {{ seed.unlock_harvest }}</div>
+                    <div v-else class="crop-meta">可购买种植</div>
                   </div>
-                </v-col>
-              </v-row>
+                  <div class="crop-action">
+                    <v-icon v-if="selectedSeedId === (seed.seed_id ?? seed.id)" icon="mdi-check-circle" color="success" />
+                  </div>
+                </div>
+              </div>
               <div v-if="!seeds.length" class="text-center text-grey pa-4">暂无种子数据</div>
             </v-card-text>
           </v-card>
         </v-col>
         <v-col cols="12" md="6">
           <v-card flat class="rounded border h-100">
-            <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-purple-lighten-5">
+            <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg">
               <v-icon icon="mdi-home-group" color="deep-purple" size="small" class="mr-2" />农场互动
               <span class="text-caption text-grey ml-2">偷菜、点赞与参观</span>
             </v-card-title>
@@ -461,7 +462,7 @@ function handlePlotClick(plot) {
                     <div class="neu-action-label">偷菜</div>
                     <div class="neu-action-desc">每日一次，自动寻找可偷作物</div>
                   </div>
-                  <v-btn :color="canSteal ? 'red' : 'grey'" size="small" variant="flat" :disabled="!canSteal" @click="openStealDialog" class="farm-action-btn">
+                  <v-btn :color="canSteal ? 'error' : 'grey'" size="small" variant="flat" :disabled="!canSteal" @click="openStealDialog" class="farm-action-btn">
                     {{ canSteal ? '去偷菜' : '今日已偷' }}
                   </v-btn>
                 </div>
@@ -474,7 +475,7 @@ function handlePlotClick(plot) {
                       <template v-else>剩余 {{ likeRemaining }}/{{ likeMax }}</template>
                     </div>
                   </div>
-                  <v-btn color="pink" size="small" variant="flat" :disabled="likeRemaining <= 0" @click="openLikeDialog" class="farm-action-btn">
+                  <v-btn color="warning" size="small" variant="flat" :disabled="likeRemaining <= 0" @click="openLikeDialog" class="farm-action-btn">
                     去点赞
                   </v-btn>
                 </div>
@@ -486,7 +487,7 @@ function handlePlotClick(plot) {
                   </div>
                   <div class="visit-action-row">
                     <v-text-field v-model="visitUsername" density="compact" hide-details placeholder="用户名" variant="outlined" class="visit-username-input" @keyup.enter="visit" />
-                    <v-btn color="purple" size="small" variant="flat" :disabled="!visitUsername.trim()" @click="visit" class="visit-btn">访问</v-btn>
+                    <v-btn color="info" size="small" variant="flat" :disabled="!visitUsername.trim()" @click="visit" class="visit-btn">访问</v-btn>
                   </div>
                 </div>
                 <div class="neu-action-card neu-action-card--slot">
@@ -495,7 +496,7 @@ function handlePlotClick(plot) {
                     <div class="neu-action-label">扩地</div>
                     <div class="neu-action-desc">{{ buySlotAvailable ? '可购买下一个坑位' : '暂无可购买坑位' }}</div>
                   </div>
-                  <v-btn color="deep-purple" size="small" variant="flat" :disabled="!buySlotAvailable" @click="buySlot" class="farm-action-btn">
+                  <v-btn color="primary" size="small" variant="flat" :disabled="!buySlotAvailable" @click="buySlot" class="farm-action-btn">
                     扩地
                   </v-btn>
                 </div>
@@ -507,7 +508,7 @@ function handlePlotClick(plot) {
 
       <!-- 菜地 -->
       <v-card flat class="rounded border mb-3">
-        <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5">
+        <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg">
           <v-icon icon="mdi-farm" color="blue" size="small" class="mr-2" />菜地
           <v-spacer />
           <v-btn color="success" size="small" variant="flat" prepend-icon="mdi-basket" @click="harvestAll">一键收获</v-btn>
@@ -546,11 +547,11 @@ function handlePlotClick(plot) {
                 @click="handlePlotClick(plot)"
               >
                 <template v-if="plot.state === 'locked'">
-                  🔒<br><small>未解锁</small>
+                  🔒<br/><small>未解锁</small>
                 </template>
                 <template v-else-if="plot.state === 'buyable'">
                   <div>
-                    ➕<br><small>购买 {{ plot.cost }}</small><br>
+                    ➕<br/><small>购买 {{ plot.cost }}</small><br/>
                     <small v-if="!isPlotAffordable(plot)" class="text-red">魔力不足</small>
                   </div>
                 </template>
@@ -561,15 +562,15 @@ function handlePlotClick(plot) {
                     :alt="plot.seed.name"
                     class="stage-img"
                     @error="markStageIconFailed(plot)"
-                  >
+                  />
                   <span v-else class="plot-emoji" aria-hidden="true">{{ plot.seed.icon || seedEmoji(plot.seed.name) }}</span>
-                  <br><small class="font-weight-bold">{{ plot.seed.name }}</small><br>
+                  <br/><small class="font-weight-bold">{{ plot.seed.name }}</small><br/>
                   <small :class="isPlotReady(plot) ? 'text-orange' : 'text-grey'">
                     {{ isPlotReady(plot) ? '可收获' : `成长中 ${formatRemain(plot)}` }}
                   </small>
                 </template>
                 <template v-else>
-                  空地<br><small>点击种植</small>
+                  空地<br/><small>点击种植</small>
                 </template>
               </button>
             </div>
@@ -582,10 +583,10 @@ function handlePlotClick(plot) {
       <v-row dense>
         <v-col cols="12" md="6">
           <v-card flat class="rounded border">
-            <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-amber-lighten-5">
+            <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg">
               <v-icon icon="mdi-bag-personal" color="amber" size="small" class="mr-2" />收获背包
               <v-spacer />
-              <v-btn color="orange" size="small" variant="flat" prepend-icon="mdi-cash" :disabled="!inventory.length" @click="sellAllDialog = true">一键出售</v-btn>
+              <v-btn color="warning" size="small" variant="flat" prepend-icon="mdi-cash" :disabled="!inventory.length" @click="sellAllDialog = true">一键出售</v-btn>
             </v-card-title>
             <v-card-text class="pa-3">
               <v-table v-if="inventory.length" density="compact">
@@ -598,7 +599,7 @@ function handlePlotClick(plot) {
                     <td>{{ item.quantity }}</td>
                     <td>{{ item.unit_reward }}</td>
                     <td>{{ (Number(item.quantity || 0) * Number(item.unit_reward || 0)) }}</td>
-                    <td><v-btn size="x-small" color="orange" variant="flat" prepend-icon="mdi-cash" @click="sell(item)">出售</v-btn></td>
+                    <td><v-btn size="x-small" color="warning" variant="flat" prepend-icon="mdi-cash" @click="sell(item)">出售</v-btn></td>
                   </tr>
                 </tbody>
               </v-table>
@@ -654,7 +655,7 @@ function handlePlotClick(plot) {
             <v-btn variant="tonal" prepend-icon="mdi-shuffle" :loading="actionLoading" @click="loadLikeTargets">随机填充</v-btn>
             <v-spacer />
             <v-btn color="grey" variant="text" prepend-icon="mdi-close" @click="likeDialog = false">取消</v-btn>
-            <v-btn color="pink" variant="flat" prepend-icon="mdi-check" :loading="actionLoading" @click="like">一键点赞</v-btn>
+            <v-btn color="warning" variant="flat" prepend-icon="mdi-check" :loading="actionLoading" @click="like">一键点赞</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -687,7 +688,7 @@ function handlePlotClick(plot) {
           <v-card-actions>
             <v-spacer />
             <v-btn color="grey" variant="text" prepend-icon="mdi-close" @click="sellAllDialog = false">取消</v-btn>
-            <v-btn color="orange" variant="flat" prepend-icon="mdi-check" :loading="actionLoading" @click="sellAll">确认出售</v-btn>
+            <v-btn color="warning" variant="flat" prepend-icon="mdi-check" :loading="actionLoading" @click="sellAll">确认出售</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -725,10 +726,10 @@ function handlePlotClick(plot) {
   justify-content: center;
   flex: 0 0 38px;
 }
-.stat-icon.orange { background: rgba(245,158,11,0.12); color: #f59e0b; }
-.stat-icon.green { background: rgba(34,197,94,0.12); color: #22c55e; }
-.stat-icon.red { background: rgba(239,68,68,0.12); color: #ef4444; }
-.stat-icon.blue { background: rgba(59,130,246,0.12); color: #3b82f6; }
+.stat-icon.orange { background: rgba(245,158,11,0.14); color: rgb(var(--v-theme-orange)); }
+.stat-icon.green { background: rgba(34,197,94,0.14); color: rgb(var(--v-theme-success)); }
+.stat-icon.red { background: rgba(239,68,68,0.14); color: rgb(var(--v-theme-error)); }
+.stat-icon.blue { background: rgba(59,130,246,0.14); color: rgb(var(--v-theme-info)); }
 .stat-content { min-width: 0; flex: 1; }
 .stat-title { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); font-weight: 600; }
 .stat-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
@@ -742,22 +743,41 @@ function handlePlotClick(plot) {
 .slide-fade-enter-active, .slide-fade-leave-active { transition: all 0.3s ease; }
 .slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-20px); opacity: 0; }
 
-.seed-card {
+/* 种子商店卡片（与 CropArea crop-card 同款布局） */
+.crop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.crop-card {
   border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   border-radius: 8px;
-  padding: 8px;
+  padding: 10px 12px;
   display: flex;
-  gap: 7px;
+  gap: 10px;
   align-items: center;
+  background: rgba(var(--v-theme-surface), 0.5);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
   cursor: pointer;
-  transition: border-color 0.15s;
 }
-.seed-card:hover { border-color: rgba(34,197,94,0.4); }
-.seed-card.locked { opacity: 0.5; cursor: not-allowed; }
-.seed-card.selected { border-color: #43a047; background: rgba(76,175,80,0.18); }
-.seed-icon { font-size: 20px; flex: 0 0 28px; text-align: center; }
-.seed-name { font-weight: 700; font-size: 12px; }
-.seed-meta { font-size: 10px; color: rgba(var(--v-theme-on-surface),0.4); }
+.crop-card:hover {
+  border-color: rgba(34, 197, 94, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+.crop-card.locked { opacity: 0.5; cursor: not-allowed; }
+.crop-card.locked:hover { transform: none; box-shadow: none; }
+.crop-card.selected { border-color: rgb(var(--v-theme-success)); background: rgba(76, 175, 80, 0.18); }
+.crop-icon {
+  width: 48px; height: 48px; flex: 0 0 48px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; background: rgba(34, 197, 94, 0.09); font-size: 24px;
+}
+.crop-info { flex: 1; min-width: 0; }
+.crop-name { font-weight: 700; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crop-meta { font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.4); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crop-meta.locked-meta { color: rgb(var(--v-theme-error)); opacity: 0.7; }
+.crop-action { flex: 0 0 auto; }
 
 /* 农场互动 neu-action-card（KoWming 风格） */
 .farm-action-list { display: flex; flex-direction: column; gap: 8px; }
@@ -782,24 +802,43 @@ function handlePlotClick(plot) {
 .farm-action-btn { flex: 0 0 auto; }
 /* 参观项：grid 布局含输入框+按钮 */
 .neu-action-card--visit {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  row-gap: 10px;
+  display: flex;
+  flex-direction: row;
   align-items: center;
+  gap: 7px;
 }
-.neu-action-card--visit .neu-action-icon { grid-column: 1; grid-row: 1; }
-.neu-action-card--visit .neu-action-content { grid-column: 2; grid-row: 1; }
-.visit-action-row {
-  grid-column: 1 / -1; display: flex; align-items: center;
-  gap: 6px; min-width: 0;
+.neu-action-card--visit .neu-action-content { flex: 0 0 auto; }
+.neu-action-card--visit .visit-action-row {
+  grid-column: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: flex-end;
 }
 .visit-username-input { flex: 1 1 auto; min-width: 0; }
+.visit-username-input :deep(.v-field) {
+  background: rgba(var(--v-theme-on-surface), 0.05) !important;
+  border-radius: 8px !important;
+  min-height: 32px !important;
+}
+.visit-username-input :deep(.v-field__outline__start),
+.visit-username-input :deep(.v-field__outline__end) {
+  border-color: rgba(var(--v-theme-on-surface), 0.2) !important;
+}
+.visit-username-input :deep(.v-field__input) {
+  font-size: 12px !important;
+  min-height: 32px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
 .visit-btn { width: 76px !important; min-width: 76px !important; flex: 0 0 76px; }
 
 .plot {
   min-height: 78px;
   padding: 6px;
-  border: 1px solid rgba(166, 124, 82, .32);
+  border: 1.5px solid rgba(166, 124, 82, .32);
   border-radius: 12px;
   background: rgba(121, 85, 72, .12);
   color: inherit;
@@ -828,15 +867,15 @@ function handlePlotClick(plot) {
   border-color: rgba(255, 152, 0, .42);
 }
 .plot.locked {
-  background: rgba(var(--v-theme-surface), .045);
-  border-color: rgba(var(--v-theme-surface), .12);
-  color: rgba(var(--v-theme-surface), .45);
+  background: rgba(var(--v-theme-on-surface), .04);
+  border-color: rgba(var(--v-theme-on-surface), .2);
+  color: rgba(var(--v-theme-on-surface), .4);
   cursor: not-allowed;
 }
 .plot.buyable {
   background: rgba(33, 150, 243, .13);
   border-color: rgba(33, 150, 243, .34);
-  color: #42a5f5;
+  color: rgb(var(--v-theme-info));
 }
 .plot--insufficient { filter: grayscale(1); opacity: 0.5; cursor: not-allowed; }
 .plot-grid {
@@ -893,4 +932,7 @@ function handlePlotClick(plot) {
     opacity: .45;
   }
 }
+/* 区块标题背景统一为主题色，深浅色自适应 */
+.section-title-bg { background-color: rgba(var(--v-theme-on-surface), 0.06) !important; }
+
 </style>

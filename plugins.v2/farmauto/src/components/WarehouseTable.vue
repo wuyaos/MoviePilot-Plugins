@@ -61,7 +61,7 @@ function confirmSellAll() {
 
 <template>
   <v-card flat class="rounded border">
-    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-amber-lighten-5">
+    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg">
       <v-icon icon="mdi-package-variant" color="amber" size="small" class="mr-2" />
       <span>仓库</span>
       <span v-if="currency" class="text-caption text-medium-emphasis ml-2">{{ currency }}</span>
@@ -139,8 +139,8 @@ function confirmSellAll() {
 </template>
 
 <style scoped>
-.bg-amber-lighten-5 {
-  background-color: rgba(255, 193, 7, 0.1) !important;
+.section-title-bg {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 
 .text-subtitle-2 {
@@ -150,11 +150,5 @@ function confirmSellAll() {
 
 .text-caption {
   font-size: 0.75rem !important;
-}
-
-@media (prefers-color-scheme: dark) {
-  .bg-amber-lighten-5 {
-    background-color: rgba(255, 193, 7, 0.2) !important;
-  }
 }
 </style>
