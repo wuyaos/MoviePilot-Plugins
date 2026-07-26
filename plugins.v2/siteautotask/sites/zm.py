@@ -26,16 +26,27 @@ class ZmHandler(CapabilityHandler):
         return "织梦" in self.site_name or "zmpt.cc" in self.domain
 
     def send_messagebox(self, message=None, callback=None):
-        # 织梦需要等待站点处理喊话，不主动伪造成功反馈。
+        # 织梦喊话发送后由 get_feedback 重新读喊话区解析系统反馈。
         return super().send_messagebox(message, callback or (lambda response: ""))
 
     def get_feedback(self, message=None):
-        if not self._last_message_result:
+        # 重新读取喊话区，查找系统 @ 用户名的反馈行（如“@用户：皮总没有理你，明天再来吧”）。
+        response = self._send_get_request(self.site_url + "/shoutbox.php")
+        if not response:
             return None
-        return {"site": self.site_name, "message": message, "rewards": [{
-            "type": "电力", "description": self._last_message_result,
-            "amount": "", "unit": "", "is_negative": False,
-        }]}
+        html = etree.HTML(response.text or "")
+        for row in html.xpath("//tr[td]"):
+            line = "".join(t.strip() for t in row.xpath(".//td//text()"))
+            # 系统反馈含 @ 用户名；自己发的喊话不含 @。
+            if "@" not in line:
+                continue
+            if any(k in line for k in ("皮总", "明天再来", "电力", "魔力", "上传", "没有理")):
+                is_negative = "没有理" in line or "明天再来" in line
+                return {"site": self.site_name, "message": message, "rewards": [{
+                    "type": "电力", "description": line,
+                    "amount": "", "unit": "", "is_negative": is_negative,
+                }]}
+        return None
 
     def get_latest_message_time(self):
         def extract(response):
