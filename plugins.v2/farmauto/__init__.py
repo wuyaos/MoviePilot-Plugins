@@ -5,7 +5,6 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from app.core.event import Event, eventmanager
 from app.db.site_oper import SiteOper
@@ -478,6 +477,7 @@ class FarmAuto(_PluginBase):
             return []
         if self._cron_mode == "cron" and self._cron:
             try:
+                from apscheduler.triggers.cron import CronTrigger
                 cron_str = self._cron.strip()
                 if cron_str.count(" ") != 4:
                     logger.error("[FarmAuto] cron 格式错误，需 5 位 cron 表达式")
