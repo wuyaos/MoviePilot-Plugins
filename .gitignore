@@ -185,3 +185,39 @@ plugins.v2/.DS_Store
 .pytest_cache/
 .coverage
 htmlcov/
+
+# 运行时缓存/临时文件
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Node/构建运行时
+node_modules/
+.npm/
+.pnpm-store/
+
+# Python 运行时
+*.egg-info/
+.venv/
+venv/
+env/
+.tox/
+
+# 编辑器/IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# 子目录特定
+plugins.v2/**/node_modules/
+plugins.v2/**/.cache/
+plugins.v2/**/*.log
+
+# MP 同步产物
+config/
+.cache/
