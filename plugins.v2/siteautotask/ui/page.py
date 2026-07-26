@@ -90,9 +90,22 @@ def build_page(plugin):
         ],
     }
 
-    # 按站点聚合最近记录，每站保留最近3次运行和各任务的最新状态。
-    site_data = {}  # site -> {records: [...], runs: [(date, success_count, total)]}
+    # 按站点聚合：以已启用任务为基础，填充最近执行结果，不被后续运行覆盖。
+    site_data = {}  # site -> {tasks: {execution_key: record}, runs: [(date, success, total)]}
     site_order = []
+    # 从配置获取已启用站点和任务作为基础
+    enabled_sites = {}
+    try:
+        for opt in plugin.support_site_options():
+            site_name = opt.get("name") or opt.get("domain") or "未知站点"
+            enabled_sites[site_name] = opt
+    except Exception:
+        pass
+    # 初始化每站的任务骨架
+    for site_name, opt in enabled_sites.items():
+        site_data[site_name] = {"tasks": {}, "runs": []}
+        site_order.append(site_name)
+    # 从历史填充执行结果
     for run in history:
         run_date = run.get("date", "")
         run_records = run.get("records", []) or []
@@ -100,19 +113,21 @@ def build_page(plugin):
         for r in run_records:
             site = r.get("site") or r.get("domain") or "未知站点"
             if site not in site_data:
-                site_data[site] = {"latest_records": [], "runs": []}
+                site_data[site] = {"tasks": {}, "runs": []}
                 site_order.append(site)
             run_by_site.setdefault(site, []).append(r)
-        # 记录每站本轮运行趋势
         for site, recs in run_by_site.items():
             s = sum(1 for r in recs if r.get("success"))
             site_data[site]["runs"].append((run_date, s, len(recs)))
-        # 更新每站最新任务记录（只保留最近一次运行的任务）
+        # 更新每个任务执行单元的最近记录（保留已有，不覆盖为空）
         for site, recs in run_by_site.items():
-            site_data[site]["latest_records"] = recs
+            for r in recs:
+                ekey = r.get("execution_key") or f"{r.get('domain','')}:{r.get('task_id','')}"
+                # 只在任务尚未有记录或本次运行更晚时更新
+                site_data[site]["tasks"][ekey] = r
 
     def _site_card(site, data):
-        records = data["latest_records"]
+        records = list(data["tasks"].values())
         runs = list(reversed(data["runs"]))[:3]  # 最近3次，最新在前
         site_success = sum(1 for r in records if r.get("success"))
         site_total = len(records)
