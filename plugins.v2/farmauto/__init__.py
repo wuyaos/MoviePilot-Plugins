@@ -282,6 +282,8 @@ class FarmAuto(_PluginBase):
     def _run_siqi_extras(self, executor, site_config, cookie, policy, report) -> None:
         if site_config.site_id != "siqi" or policy.get("dry_run", False):
             return
+        original_status = report.status
+        original_message = report.message
         daily = self._siqi_daily_state()
         results = executor.run_siqi_extras(
             cookie,
@@ -293,13 +295,16 @@ class FarmAuto(_PluginBase):
             report.actions.append(result)
             if result.success:
                 report.trades_count += 1
-            if result.action in ("steal", "like"):
-                daily[result.action] = True
-                self.save_data("siqi_daily", daily)
-        if results:
+                if result.action in ("steal", "like"):
+                    daily[result.action] = True
+                    self.save_data("siqi_daily", daily)
+        if results and original_status not in ("failed", "partial"):
             failures = sum(not result.success for result in report.actions)
             report.status = "partial" if failures else "completed"
             report.message = f"完成 {report.trades_count} 个操作"
+        elif original_status in ("failed", "partial"):
+            report.status = original_status
+            report.message = original_message
 
     @staticmethod
     def _site_report_dict(report: SiteRunReport) -> Dict[str, Any]:

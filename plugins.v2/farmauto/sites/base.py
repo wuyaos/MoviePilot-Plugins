@@ -150,21 +150,43 @@ class FarmSiteConfig(ABC):
                 return key, crop
         return None
 
+    @staticmethod
+    def _action_result_text(html: str) -> str:
+        return " ".join(re.sub(r"<[^>]+>", " ", html or "").split())
+
+    @staticmethod
+    def _has_action_failure(text: str) -> bool:
+        return any(
+            token in text
+            for token in ("失败", "错误", "异常", "无法", "不能", "未成功", "操作失败")
+        )
+
     def parse_harvest_result(self, html: str) -> Dict[str, Any]:
-        double = self.has_double_harvest and any(token in html for token in ("双倍", "2倍", "双倍收获"))
-        if "已收获" in html or "已经收获" in html:
+        text = self._action_result_text(html)
+        if self._has_action_failure(text):
+            return {"success": False, "double": False, "message": "收获失败"}
+        double = self.has_double_harvest and any(
+            token in text for token in ("双倍", "2倍", "双倍收获")
+        )
+        if "已收获" in text or "已经收获" in text:
             return {"success": True, "double": False, "message": "已收获"}
-        if "成功" in html or "收获" in html:
+        if "成功" in text or "收获" in text:
             return {"success": True, "double": double, "message": "收获成功"}
         return {"success": False, "double": False, "message": "收获失败"}
 
     def parse_plant_result(self, html: str, action: str) -> Dict[str, Any]:
         action_name = "种植" if action == "plant" else "养殖"
-        success = "成功" in html or action_name in html or "完成" in html
+        text = self._action_result_text(html)
+        if self._has_action_failure(text):
+            return {"success": False, "message": f"{action_name}失败"}
+        success = "成功" in text or action_name in text or "完成" in text
         return {"success": success, "message": f"{action_name}{'成功' if success else '失败'}"}
 
     def parse_sell_result(self, html: str) -> Dict[str, Any]:
-        success = any(token in html for token in ("成功", "出售", "获得", "已出售", "已经出售"))
+        text = self._action_result_text(html)
+        if self._has_action_failure(text):
+            return {"success": False, "message": "出售失败"}
+        success = any(token in text for token in ("成功", "出售", "获得", "已出售", "已经出售"))
         return {"success": success, "message": "出售成功" if success else "出售失败"}
 
     def parse_batch_sell_result(self, html: str) -> Dict[str, Any]:

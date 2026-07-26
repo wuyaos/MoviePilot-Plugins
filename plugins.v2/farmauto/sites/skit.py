@@ -2,7 +2,7 @@ import html as html_lib
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from .base import CAPABILITY_BATCH_SELL, FarmSiteConfig, parse_expire_minutes
+from .base import CAPABILITY_BATCH_SELL, FarmSiteConfig
 
 
 class SkitConfig(FarmSiteConfig):
@@ -71,9 +71,6 @@ class SkitConfig(FarmSiteConfig):
                 if price is not None:
                     result[crop_key] = price
         return result
-
-    def parse_crop_status(self, html: str) -> Dict[str, Dict]:
-        return super().parse_crop_status(html)
 
     def parse_warehouse_items(self, html: str) -> List[Dict[str, Any]]:
         tables = re.findall(

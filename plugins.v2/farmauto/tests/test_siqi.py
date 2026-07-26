@@ -61,7 +61,7 @@ def test_siqi_metadata_and_urls():
     assert config.crops["crop_1"]["action"] == "plant"
 
     assert _query(config.get_harvest_captcha_url()) == {"action": ["get_harvest_all_captcha"]}
-    assert _query(config.get_harvest_all_submit_url("hash-123")) == {
+    assert _query(config.get_harvest_all_submit_url()) == {
         "option": ["harvest_all"],
     }
     assert _query(config.get_harvest_plot_url(2, 0)) == {

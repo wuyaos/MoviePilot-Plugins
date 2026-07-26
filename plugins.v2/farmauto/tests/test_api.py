@@ -90,6 +90,8 @@ def load_plugin_class():
 
 
 FarmAuto = load_plugin_class()
+ActionResult = sys.modules[f"{PACKAGE_NAME}.core.models"].ActionResult
+SiteRunReport = sys.modules[f"{PACKAGE_NAME}.core.models"].SiteRunReport
 
 
 class FakeResponse:
@@ -120,6 +122,51 @@ def build_plugin():
     plugin._stats = plugin._empty_stats()
     plugin._market_prices = {}
     return plugin
+
+
+def test_siqi_daily_flags_only_successful_actions():
+    plugin = build_plugin()
+    plugin._siqi_options = {"auto_steal": True, "auto_like": True}
+    saved = []
+    plugin.get_data = lambda _key: {"date": "2099-01-01", "steal": False, "like": False}
+    plugin.save_data = lambda key, value: saved.append((key, dict(value)))
+    plugin._siqi_daily_state = lambda: {"date": "2099-01-01", "steal": False, "like": False}
+    executor = types.SimpleNamespace(run_siqi_extras=lambda *_args, **_kwargs: [
+        ActionResult("steal", "目标A", False, message="偷菜失败"),
+        ActionResult("like", "目标B", True, message="点赞成功"),
+    ])
+    site = types.SimpleNamespace(site_id="siqi")
+    report = SiteRunReport("siqi", "思齐", "smart")
+
+    plugin._run_siqi_extras(executor, site, "cookie", {}, report)
+
+    assert saved == [("siqi_daily", {
+        "date": "2099-01-01", "steal": False, "like": True,
+    })]
+    assert report.status == "partial"
+    assert report.trades_count == 1
+
+
+def test_siqi_extras_preserve_existing_failed_report_status():
+    plugin = build_plugin()
+    plugin._siqi_options = {"auto_like": True}
+    plugin._siqi_daily_state = lambda: {
+        "date": "2099-01-01", "steal": False, "like": False,
+    }
+    plugin.save_data = lambda *_args: None
+    executor = types.SimpleNamespace(run_siqi_extras=lambda *_args, **_kwargs: [
+        ActionResult("like", "目标B", True, message="点赞成功"),
+    ])
+    site = types.SimpleNamespace(site_id="siqi")
+    report = SiteRunReport(
+        "siqi", "思齐", "smart", status="failed", message="认证失败",
+    )
+
+    plugin._run_siqi_extras(executor, site, "cookie", {}, report)
+
+    assert report.status == "failed"
+    assert report.message == "认证失败"
+    assert report.trades_count == 1
 
 
 def test_api_status_returns_global_and_site_summary():

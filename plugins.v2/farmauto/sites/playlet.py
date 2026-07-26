@@ -45,9 +45,6 @@ class PlayLetConfig(FarmSiteConfig):
                     result[key] = int(match.group(1))
         return result
 
-    def parse_crop_status(self, html: str) -> Dict[str, Dict]:
-        return super().parse_crop_status(html)
-
     def parse_warehouse_items(self, html: str) -> List[Dict[str, Any]]:
         items: List[Dict[str, Any]] = []
         warehouse_start = re.search(r"仓库", html or "")

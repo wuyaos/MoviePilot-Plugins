@@ -2,7 +2,7 @@ import html as html_lib
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from .base import FarmSiteConfig, parse_expire_minutes
+from .base import FarmSiteConfig
 
 
 class HaoxueConfig(FarmSiteConfig):
@@ -52,9 +52,6 @@ class HaoxueConfig(FarmSiteConfig):
                 if match and key not in result and 100 <= int(match.group(1)) <= 20000:
                     result[key] = int(match.group(1))
         return result
-
-    def parse_crop_status(self, html: str) -> Dict[str, Dict]:
-        return super().parse_crop_status(html)
 
     def parse_warehouse_items(self, html: str) -> List[Dict[str, Any]]:
         items: List[Dict[str, Any]] = []

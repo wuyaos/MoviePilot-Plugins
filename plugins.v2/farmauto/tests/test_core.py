@@ -10,6 +10,25 @@ from core.strategy import is_expiry, plan_harvest, plan_smart, should_sell
 from sites.playlet import PlayLetConfig
 
 
+def test_default_action_result_parsers_reject_failure_text():
+    config = PlayLetConfig()
+
+    assert not config.parse_harvest_result("收获失败：魔力不足")["success"]
+    assert not config.parse_plant_result("种植失败：魔力不足", "plant")["success"]
+    assert not config.parse_plant_result("养殖失败：魔力不足", "breed")["success"]
+    assert not config.parse_sell_result("出售失败：物品不存在")["success"]
+    assert not config.parse_batch_sell_result("批量出售失败")["success"]
+
+
+def test_default_action_result_parsers_keep_known_success_responses():
+    config = PlayLetConfig()
+
+    assert config.parse_harvest_result("收获成功")["success"]
+    assert config.parse_plant_result("种植成功", "plant")["success"]
+    assert config.parse_plant_result("养殖成功", "breed")["success"]
+    assert config.parse_sell_result("出售成功，获得 100 魔力")["success"]
+
+
 def test_expiry_and_profit_policy():
     assert parse_expire_minutes("1天2小时3分钟") == 1563
     assert parse_expire_minutes("已过期") == 0

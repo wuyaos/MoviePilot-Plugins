@@ -28,9 +28,6 @@ class BaoziConfig(FarmSiteConfig):
                 break
         return result
 
-    def parse_crop_status(self, html: str) -> Dict[str, Dict]:
-        return super().parse_crop_status(html)
-
     def parse_warehouse_items(self, html: str) -> List[Dict[str, Any]]:
         warehouse_start = html.find("<!-- 仓库 -->")
         if warehouse_start == -1:

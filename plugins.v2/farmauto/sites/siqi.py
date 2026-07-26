@@ -399,7 +399,7 @@ class SiqiConfig(FarmSiteConfig):
         token = html_lib.unescape(token_match.group(1)) if token_match else ""
         return {"token": token, "imagehash": token, "image_url": html_lib.unescape(image_match.group(1)) if image_match else ""}
 
-    def get_harvest_all_submit_url(self, token: str = "") -> str:
+    def get_harvest_all_submit_url(self) -> str:
         return f"{self.get_farm_url()}?{urlencode({'option': 'harvest_all'})}"
 
     def get_harvest_plot_url(self, land_id: Any, plot_index: Any) -> str:
@@ -461,7 +461,7 @@ class SiqiConfig(FarmSiteConfig):
                 targets.append({"target_id": target_id.group(1), "name": html_lib.unescape(name.group(1)) if name else ""})
         return targets
 
-    def get_steal_plot_url(self, target_id: Any = None, plot_id: Any = None) -> str:
+    def get_steal_plot_url(self) -> str:
         return f"{self.get_farm_url()}?{urlencode({'option': 'steal'})}"
 
     def get_like_target_url(self) -> str:
