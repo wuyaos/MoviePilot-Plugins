@@ -1,4 +1,4 @@
-"""运行数据页：按运行批次折叠、站点分组、任务状态+反馈奖励一体。"""
+"""运行数据页：按站点卡片展示，每站独立显示任务执行情况和趋势。"""
 try:
     from ..utils.feedback import NotificationIcons
     from ..utils.display import display_record_lines, format_record_line
@@ -35,7 +35,7 @@ def _reward_line(rewards):
 
 
 def build_page(plugin):
-    history = plugin.history.latest(20)
+    history = plugin.history.latest(30)
 
     # 累计统计
     total = success = 0
@@ -90,87 +90,121 @@ def build_page(plugin):
         ],
     }
 
-    panels = []
+    # 按站点聚合最近记录，每站保留最近3次运行和各任务的最新状态。
+    site_data = {}  # site -> {records: [...], runs: [(date, success_count, total)]}
+    site_order = []
     for run in history:
         run_date = run.get("date", "")
-        records = run.get("records", []) or []
-        run_success = sum(1 for r in records if r.get("success"))
-        run_fail = len(records) - run_success
-
-        # 按站点分组
-        sites_map = {}
-        site_order = []
-        for r in records:
+        run_records = run.get("records", []) or []
+        run_by_site = {}
+        for r in run_records:
             site = r.get("site") or r.get("domain") or "未知站点"
-            if site not in site_order:
+            if site not in site_data:
+                site_data[site] = {"latest_records": [], "runs": []}
                 site_order.append(site)
-            sites_map.setdefault(site, []).append(r)
+            run_by_site.setdefault(site, []).append(r)
+        # 记录每站本轮运行趋势
+        for site, recs in run_by_site.items():
+            s = sum(1 for r in recs if r.get("success"))
+            site_data[site]["runs"].append((run_date, s, len(recs)))
+        # 更新每站最新任务记录（只保留最近一次运行的任务）
+        for site, recs in run_by_site.items():
+            site_data[site]["latest_records"] = recs
 
-        site_blocks = []
-        for site in site_order:
-            recs = sites_map[site]
-            site_success = sum(1 for r in recs if r.get("success"))
-            site_block = {
-                "component": "div",
-                "props": {"class": "mb-2"},
-                "content": [{
+    def _site_card(site, data):
+        records = data["latest_records"]
+        runs = list(reversed(data["runs"]))[:3]  # 最近3次，最新在前
+        site_success = sum(1 for r in records if r.get("success"))
+        site_total = len(records)
+        all_ok = site_success == site_total and site_total > 0
+
+        # 标题行
+        title_row = {
+            "component": "div",
+            "props": {"class": "d-flex align-center pb-2"},
+            "content": [
+                {"component": "span", "props": {"class": "text-subtitle-1 font-weight-medium me-2"}, "text": f"🌐 {site}"},
+                {"component": "VSpacer"},
+                {"component": "VChip", "props": {
+                    "size": "small", "variant": "tonal",
+                    "color": "success" if all_ok else ("warning" if site_success > 0 else "error"),
+                }, "text": f"{site_success}/{site_total}"},
+            ],
+        }
+
+        # 任务行
+        task_rows = []
+        for r in records:
+            icon = "✅" if r.get("success") else "❌"
+            for item in display_record_lines(r):
+                line_text = format_record_line(item, NotificationIcons)
+                task_rows.append({
                     "component": "div",
-                    "props": {"class": "d-flex align-center text-subtitle-2 py-1"},
+                    "props": {"class": "d-flex align-start py-1"},
                     "content": [
-                        {"component": "span", "text": f"🔔 {site}"},
-                        {"component": "VSpacer"},
-                        {"component": "VChip", "props": {"size": "x-small", "variant": "tonal", "color": "success" if site_success == len(recs) else "warning"}, "text": f"{site_success}/{len(recs)}"},
+                        {"component": "span", "props": {"class": "me-2 text-body-2"}, "text": icon},
+                        {"component": "div", "props": {"class": "text-body-2 flex-grow-1"}, "text": line_text},
                     ],
-                }, {"component": "VDivider", "props": {"class": "mb-1"}}],
-            }
-            # 任务行：多消息喊话拆分为独立行，状态与反馈统一用 -> 连接。
-            for r in recs:
-                icon = "✅" if r.get("success") else "❌"
-                for item in display_record_lines(r):
-                    task_row = {
-                        "component": "div",
-                        "props": {"class": "d-flex align-start py-1 ms-2"},
-                        "content": [
-                            {"component": "span", "props": {"class": "me-2"}, "text": icon},
-                            {"component": "div", "props": {"class": "text-body-2 flex-grow-1"}, "text": format_record_line(item, NotificationIcons)},
-                        ],
-                    }
-                    site_block["content"].append(task_row)
-            site_blocks.append(site_block)
+                })
 
-        panels.append({
-            "component": "VExpansionPanel",
+        # 趋势行
+        trend_chips = []
+        for run_date, s, t in runs:
+            ok = s == t and t > 0
+            label = run_date[-8:] if len(run_date) >= 8 else run_date  # HH:MM:SS
+            trend_chips.append({
+                "component": "VChip",
+                "props": {
+                    "size": "x-small", "variant": "flat",
+                    "color": "success" if ok else "error",
+                    "class": "me-1",
+                },
+                "text": f"{'✅' if ok else '❌'} {label}",
+            })
+
+        trend_row = {
+            "component": "div",
+            "props": {"class": "d-flex align-center pt-2 mt-1"},
+            "content": [
+                {"component": "span", "props": {"class": "text-caption text-medium-emphasis me-2"}, "text": "趋势"},
+                *trend_chips,
+            ],
+        } if trend_chips else {"component": "div", "props": {"class": "pt-2"}, "text": ""}
+
+        return {
+            "component": "VCol",
+            "props": {"cols": 12, "md": 6},
             "content": [{
-                "component": "VExpansionPanelTitle",
-                "content": [{
-                    "component": "div",
-                    "props": {"class": "d-flex align-center w-100"},
-                    "content": [
-                        {"component": "span", "props": {"class": "font-weight-medium me-2"}, "text": run_date},
-                        {"component": "VChip", "props": {"size": "x-small", "variant": "tonal", "color": "success", "class": "me-1"}, "text": f"成功 {run_success}"},
-                        {"component": "VChip", "props": {"size": "x-small", "variant": "tonal", "color": "error", "class": "me-1"}, "text": f"失败 {run_fail}"} if run_fail else {"component": "span", "text": ""},
-                    ],
-                }],
-            }, {
-                "component": "VExpansionPanelText",
-                "content": site_blocks or [{"component": "div", "props": {"class": "text-medium-emphasis pa-2"}, "text": "无详细记录"}],
+                "component": "VCard",
+                "props": {"variant": "outlined", "class": "h-100"},
+                "content": [
+                    {"component": "VCardText", "props": {"class": "pa-3"}, "content": [
+                        title_row,
+                        {"component": "VDivider", "props": {"class": "mb-2"}},
+                        *(task_rows or [{"component": "div", "props": {"class": "text-medium-emphasis py-2"}, "text": "暂无记录"}]),
+                        {"component": "VDivider", "props": {"class": "mt-2"}},
+                        trend_row,
+                    ]},
+                ],
             }],
-        })
+        }
+
+    site_cards = [_site_card(site, site_data[site]) for site in site_order]
 
     history_card = {
         "component": "VCard",
         "props": {"variant": "outlined"},
         "content": [
             {"component": "VCardTitle", "props": {"class": "text-subtitle-1 py-2"}, "content": [
-                {"component": "span", "text": "执行历史记录"},
+                {"component": "span", "text": "站点任务执行情况"},
                 {"component": "VSpacer"},
-                {"component": "span", "props": {"class": "text-caption text-medium-emphasis"}, "text": f"共 {len(history)} 次运行"},
+                {"component": "span", "props": {"class": "text-caption text-medium-emphasis"}, "text": f"共 {len(site_order)} 个站点"},
             ]},
             {"component": "VDivider"},
             {"component": "VCardText", "content": [{
-                "component": "VExpansionPanels",
-                "props": {"variant": "accordion", "multiple": True},
-                "content": panels if panels else [{"component": "div", "props": {"class": "text-medium-emphasis pa-2"}, "text": "暂无运行记录，执行任务后此处显示历史"}],
+                "component": "VRow",
+                "props": {"dense": True},
+                "content": site_cards or [{"component": "div", "props": {"class": "text-medium-emphasis pa-2"}, "text": "暂无运行记录，执行任务后此处显示站点卡片"}],
             }]},
         ],
     }

@@ -5,6 +5,7 @@
 """
 from datetime import datetime, timedelta
 import threading
+import time
 import pytz
 from app.core.config import settings
 from app.log import logger
@@ -53,6 +54,7 @@ class TaskEngine:
         skipped_successful = 0
         run_label = "失败重试" if retry_only else ("手动补跑" if manual_only else "主定时")
         terminal_keys = self.history.terminal_keys_today()
+        last_domain_type = None
         for site, handler, task, claim_id in self._collect_configured_tasks("main"):
             ekey = execution_key(
                 handler.domain, task["id"],
@@ -80,6 +82,13 @@ class TaskEngine:
                 )
                 logger.info(f"{run_label} - {handler.site_name} - {task_name} -> 今天已经成功，跳过")
                 continue
+            # 同站点同类型连续执行单元之间插入间隔（仅在真实执行时）。
+            current_domain_type = (handler.domain, task.get("task_type"))
+            if last_domain_type == current_domain_type and current_domain_type[1] in (
+                TaskType.CHAT, TaskType.CLAIM, TaskType.MEDAL, TaskType.GENERIC,
+            ):
+                time.sleep(cfg.interval_cnt)
+            last_domain_type = current_domain_type
             record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
             records.append(record)
         if records:

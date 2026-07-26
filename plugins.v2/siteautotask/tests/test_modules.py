@@ -73,9 +73,7 @@ class ModuleTests(unittest.TestCase):
         page = PAGE.build_page(FakePlugin())
         text = repr(page)
         self.assertIn("运行统计概览", text)
-        self.assertIn("VExpansionPanel", text)
-        self.assertIn("执行历史记录", text)
-        self.assertIn("共 1 次运行", text)
+        self.assertIn("站点任务执行情况", text)
         self.assertIn("⬆️ 10G", text)
         self.assertIn("✅", text)
 
@@ -84,6 +82,12 @@ class ModuleTests(unittest.TestCase):
         text = repr(page)
         self.assertIn("10G", text)
         self.assertIn("⬆️", text)
+
+    def test_page_has_site_card(self):
+        page = PAGE.build_page(FakePlugin())
+        text = repr(page)
+        self.assertIn("🌐 测试站", text)
+        self.assertIn("1/1", text)
 
     def test_display_task_removes_repeated_site_and_type(self):
         self.assertEqual(DISPLAY.display_task("青蛙", "青蛙喊话", "chat"), "[喊话] 喊话")
