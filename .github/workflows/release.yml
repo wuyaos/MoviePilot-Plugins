@@ -1,0 +1,111 @@
+name: Release Plugins
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'package.v2.json'
+  workflow_dispatch:
+    inputs:
+      plugin_id:
+        description: '插件ID(留空则处理所有release:true的插件)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Read package.v2.json and create releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          python3 << 'PYEOF'
+          import json, os, subprocess, sys, zipfile, tempfile, shutil
+          from pathlib import Path
+
+          repo = os.environ.get("GITHUB_REPOSITORY", "")
+          plugin_filter = os.environ.get("INPUT_PLUGIN_ID", "").strip()
+
+          with open("package.v2.json", encoding="utf-8") as f:
+              data = json.load(f)
+
+          for pid, meta in data.items():
+              if not isinstance(meta, dict) or "version" not in meta:
+                  continue
+              if not meta.get("release"):
+                  continue
+              if plugin_filter and pid.lower() != plugin_filter.lower():
+                  continue
+
+              version = str(meta["version"])
+              tag = f"{pid}_v{version}"
+              asset_name = f"{pid.lower()}_v{version}.zip"
+              plugin_dir = Path(f"plugins.v2/{pid.lower()}")
+              if not plugin_dir.exists():
+                  # 兼容大小写
+                  for d in Path("plugins.v2").iterdir():
+                      if d.name.lower() == pid.lower():
+                          plugin_dir = d
+                          break
+              if not plugin_dir.exists():
+                  print(f"⚠️ {pid}: 插件目录不存在，跳过")
+                  continue
+
+              # 检查 tag 是否已存在
+              result = subprocess.run(
+                  ["gh", "release", "view", tag, "-R", repo],
+                  capture_output=True, text=True
+              )
+              if result.returncode == 0:
+                  print(f"⏭️ {pid} v{version}: tag已存在，跳过")
+                  continue
+
+              # 打包 zip（zip 根为插件文件，不含外层目录）
+              workdir = tempfile.mkdtemp()
+              asset_path = os.path.join(workdir, asset_name)
+              with zipfile.ZipFile(asset_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                  for root, dirs, files in os.walk(plugin_dir):
+                      # 跳过 __pycache__
+                      dirs[:] = [d for d in dirs if d != "__pycache__"]
+                      for fn in files:
+                          fp = Path(root) / fn
+                          arcname = fp.relative_to(plugin_dir)
+                          zf.write(fp, arcname)
+
+              # 创建 release 并上传资产
+              title = f"{pid} v{version}"
+              notes = meta.get("history", {})
+              latest_note = ""
+              if isinstance(notes, dict):
+                  latest_note = notes.get(f"v{version}", "")
+              body = latest_note if latest_note else f"{pid} v{version}"
+
+              subprocess.run(
+                  ["gh", "release", "create", tag,
+                   "-R", repo,
+                   "--title", title,
+                   "--notes", body,
+                   "--target", "main",
+                   asset_path],
+                  check=True
+              )
+
+              shutil.rmtree(workdir)
+              print(f"✅ {pid} v{version}: Release 已创建 tag={tag} asset={asset_name}")
+          PYEOF
+        env:
+          INPUT_PLUGIN_ID: ${{ github.event.inputs.plugin_id }}
