@@ -1,3 +1,3 @@
 {
-  "tests/test_policy.py::test_min_profit_rate_override_is_used_by_smart_plan": true
+  "tests/test_reporting.py::test_format_notification_groups_actions_and_failures": true
 }

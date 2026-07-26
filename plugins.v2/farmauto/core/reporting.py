@@ -33,7 +33,7 @@ _ACTION_CATEGORIES = (
 def _format_site_detail(site_report: SiteRunReport) -> str:
     lines = [
         f"【{site_report.site_name}】{_STATUS_EMOJIS.get(site_report.status, '⚠️')} "
-        f"{site_report.trades_count}笔 利润{site_report.total_profit}"
+        f"{site_report.trades_count}笔 魔力{'+' if site_report.total_profit >= 0 else ''}{site_report.total_profit}"
     ]
     grouped_actions = [[] for _ in range(len(_ACTION_CATEGORIES) + 1)]
     for action in site_report.actions:
@@ -89,7 +89,7 @@ def format_notification(report: RunReport) -> str:
         f"⏰ 时间：{finished_at}\n"
         f"📊 站点：{len(report.site_reports)}（✅成功 {completed} / "
         f"⚠️部分 {partial} / ❌失败 {failed}）\n"
-        f"💰 总利润：{report.total_profit}\n"
+        f"💰 魔力变化：{'+' if report.total_profit >= 0 else ''}{report.total_profit}\n"
         f"🔄 总操作：{report.total_trades} 次\n\n"
         f"{site_details}\n\n"
         f"状态：{report.status}{status_message}"
