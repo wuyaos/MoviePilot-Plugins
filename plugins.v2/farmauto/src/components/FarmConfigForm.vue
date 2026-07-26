@@ -650,7 +650,6 @@ function saveConfig() {
 .farm-config-form {
   min-inline-size: 0;
   padding: 0.5rem;
-  max-width: 1100px;
   margin-inline: auto;
 }
 
