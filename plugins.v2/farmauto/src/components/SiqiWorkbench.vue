@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import HistoryTable from './HistoryTable.vue'
 
 const props = defineProps({
@@ -19,6 +19,7 @@ const actionLoading = ref(false)
 const refreshing = ref(props.loading)
 const error = ref('')
 const success = ref('')
+let successTimer = null
 const selectedSeedId = ref('')
 const stealDialog = ref(false)
 const likeDialog = ref(false)
@@ -121,13 +122,24 @@ function unwrap(r) {
   return p ?? {}
 }
 
+function setSuccess(message = '') {
+  success.value = message
+  if (successTimer) clearTimeout(successTimer)
+  successTimer = message
+    ? setTimeout(() => {
+      success.value = ''
+      successTimer = null
+    }, 3000)
+    : null
+}
+
 async function doAction(action, params = {}) {
   actionLoading.value = true
   error.value = ''
-  success.value = ''
+  setSuccess('')
   try {
     const r = unwrap(await request('POST', `${apiBase()}/site/siqi/action`, { action, ...params }))
-    success.value = r.message || `${action} 操作成功`
+    setSuccess(r.message || `${action} 操作成功`)
     emit('action', { action, result: r })
     return r
   } catch (e) {
@@ -358,6 +370,10 @@ function handlePlotClick(plot) {
   else if (plot.state === 'empty') plant(plot)
   else if (plot.state === 'planted' && isPlotReady(plot)) harvestPlot(plot)
 }
+
+onBeforeUnmount(() => {
+  if (successTimer) clearTimeout(successTimer)
+})
 </script>
 
 <template>

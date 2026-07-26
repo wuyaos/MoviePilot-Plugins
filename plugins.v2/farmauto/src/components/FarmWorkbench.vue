@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CropArea from './CropArea.vue'
 import HistoryTable from './HistoryTable.vue'
 import MarketTable from './MarketTable.vue'
@@ -27,6 +27,7 @@ const running = ref(false)
 const actionLoading = ref(false)
 const error = ref('')
 const successMessage = ref('')
+let successTimer = null
 const status = ref({ sites: [], selected_site_ids: [] })
 const siteDetail = ref({})
 const selectedSiteId = ref('')
@@ -65,6 +66,17 @@ const cropKeys = computed(() => Object.entries(crops.value)
 const animalKeys = computed(() => Object.entries(crops.value)
   .filter(([, definition]) => definition?.type === 'animal')
   .map(([cropKey]) => cropKey))
+
+function setSuccess(message = '') {
+  successMessage.value = message
+  if (successTimer) clearTimeout(successTimer)
+  successTimer = message
+    ? setTimeout(() => {
+      successMessage.value = ''
+      successTimer = null
+    }, 3000)
+    : null
+}
 
 function windowToken() {
   if (typeof window === 'undefined') return ''
@@ -165,7 +177,7 @@ async function refreshData() {
   loading.value = true
   refreshing.value = true
   error.value = ''
-  successMessage.value = ''
+  setSuccess('')
   try {
     await loadStatus(false)
     if (error.value) throw new Error(error.value)
@@ -175,7 +187,7 @@ async function refreshData() {
       balanceChanged.value = true
       setTimeout(() => { balanceChanged.value = false }, 800)
     }
-    successMessage.value = '数据已刷新'
+    setSuccess('数据已刷新')
   } catch (requestError) {
     error.value = `刷新数据失败：${requestError?.message || '未知错误'}`
   } finally {
@@ -186,7 +198,7 @@ async function refreshData() {
 
 async function runNow() {
   error.value = ''
-  successMessage.value = ''
+  setSuccess('')
   if (!selectedSiteIds.value.length) {
     error.value = '请先在配置页选择至少一个站点'
     return
@@ -195,7 +207,7 @@ async function runNow() {
   running.value = true
   try {
     const result = unwrapResponse(await request('POST', `${apiBase.value}/run`, {}))
-    successMessage.value = result.message || '任务已在后台启动'
+    setSuccess(result.message || '任务已在后台启动')
     emit('action', result)
     await loadStatus()
     await loadSiteDetail()
@@ -223,10 +235,10 @@ async function harvestAllCurrent() {
 
   actionLoading.value = true
   error.value = ''
-  successMessage.value = ''
+  setSuccess('')
   try {
     const result = await postSiteAction('harvest_all')
-    successMessage.value = result.message || (dryRun.value ? 'dry-run：已生成一键收获计划' : '一键收获成功')
+    setSuccess(result.message || (dryRun.value ? 'dry-run：已生成一键收获计划' : '一键收获成功'))
     emit('action', result)
     await loadSiteDetail(selectedSiteId.value)
   } catch (requestError) {
@@ -240,10 +252,10 @@ async function handleManualAction({ action, cropKey }) {
   if (!selectedSiteId.value) return
   actionLoading.value = true
   error.value = ''
-  successMessage.value = ''
+  setSuccess('')
   try {
     const result = await postSiteAction(action, cropKey)
-    successMessage.value = result.message || `${result.target || crops.value[cropKey]?.name || cropKey || action}操作成功`
+    setSuccess(result.message || `${result.target || crops.value[cropKey]?.name || cropKey || action}操作成功`)
     emit('action', result)
     await loadSiteDetail(selectedSiteId.value)
   } catch (requestError) {
@@ -274,7 +286,7 @@ async function sellAllWarehouseItems() {
 
   actionLoading.value = true
   error.value = ''
-  successMessage.value = ''
+  setSuccess('')
   const failures = []
   let successCount = 0
   try {
@@ -288,7 +300,7 @@ async function sellAllWarehouseItems() {
       }
     }
     if (failures.length) error.value = failures.join('；')
-    if (successCount) successMessage.value = `已出售 ${successCount} 类仓库物品`
+    if (successCount) setSuccess(`已出售 ${successCount} 类仓库物品`)
     await loadSiteDetail(selectedSiteId.value)
   } finally {
     actionLoading.value = false
@@ -305,12 +317,15 @@ async function handleSiqiAction({ action, result }) {
 }
 
 watch(selectedSiteId, siteId => {
-  successMessage.value = ''
+  setSuccess('')
   siteDetail.value = {}
   loadSiteDetail(siteId)
 })
 
 onMounted(() => loadStatus())
+onBeforeUnmount(() => {
+  if (successTimer) clearTimeout(successTimer)
+})
 </script>
 
 <template>

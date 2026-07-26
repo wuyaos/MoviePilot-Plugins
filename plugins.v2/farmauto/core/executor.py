@@ -376,7 +376,13 @@ class FarmExecutor:
         response = self.http_client.post(site_config.get_steal_plot_url(), cookies, data=data)
         response.raise_for_status()
         parsed = site_config.parse_steal_result(response.text)
-        return ActionResult("steal", str(data["victim_id"]), bool(parsed.get("success")), message=parsed.get("message", ""))
+        message = f"{str(parsed.get('message') or '')} 目标{data['victim_id']}".strip()
+        return ActionResult(
+            "steal",
+            str(data["victim_id"]),
+            bool(parsed.get("success")),
+            message=message,
+        )
 
     def _do_siqi_like(self, cookies, site_config) -> ActionResult:
         target_response = self.http_client.post(
@@ -394,7 +400,10 @@ class FarmExecutor:
         )
         response.raise_for_status()
         parsed = site_config.parse_like_result(response.text)
-        return ActionResult("like", str(target_id), bool(parsed.get("success")), message=parsed.get("message", ""))
+        message = f"{str(parsed.get('message') or '')} 目标{target_id}".strip()
+        return ActionResult(
+            "like", str(target_id), bool(parsed.get("success")), message=message
+        )
 
     def _do_siqi_buy_slot(self, cookies, site_config) -> ActionResult:
         farm_response = self.http_client.get(site_config.get_warehouse_url(), cookies)
@@ -409,7 +418,10 @@ class FarmExecutor:
         )
         response.raise_for_status()
         parsed = site_config.parse_buy_slot_result(response.text)
-        return ActionResult("buy_slot", str(land_id), bool(parsed.get("success")), message=parsed.get("message", ""))
+        message = f"{str(parsed.get('message') or '')} 地块{land_id}".strip()
+        return ActionResult(
+            "buy_slot", str(land_id), bool(parsed.get("success")), message=message
+        )
 
     def _fetch_warehouse(self, cookies: Dict[str, str], site_config) -> List[Dict[str, Any]]:
         response = self.http_client.get(site_config.get_warehouse_url(), cookies)
@@ -546,22 +558,26 @@ class FarmExecutor:
 
             success = bool(parsed.get("success"))
             profit = 0
+            message = str(parsed.get("message") or "")
             if success and operation == "sell":
                 price = int(market_prices.get(crop_key, 0))
                 cost = int(crop.get("cost", 0))
+                quantity = max(1, int(action.get("quantity", 1)))
                 if price > 0 and cost > 0:
                     profit = price - cost
+                message = f"{message} 价格{price}×{quantity}".strip()
             elif success and operation == "plant":
                 cost = int(crop.get("cost", 0))
                 if cost > 0:
                     profit = -cost
+                    message = f"{message} 成本{cost}".strip()
             result = ActionResult(
                 operation,
                 target,
                 success,
                 double=bool(parsed.get("double", False)),
                 profit=profit,
-                message=parsed.get("message", ""),
+                message=message,
             )
             return result, farm_html
         except AuthError as error:

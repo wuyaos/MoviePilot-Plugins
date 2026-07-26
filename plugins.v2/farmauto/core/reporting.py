@@ -12,26 +12,78 @@ if TYPE_CHECKING:
         from sites.base import FarmSiteConfig
 
 
+_STATUS_EMOJIS = {
+    "completed": "✅",
+    "partial": "⚠️",
+    "failed": "❌",
+    "skipped": "⚠️",
+}
+
+_ACTION_CATEGORIES = (
+    ({"harvest", "harvest_all"}, "🌾", "收获"),
+    ({"plant"}, "🌱", "种植"),
+    ({"sell"}, "💰", "出售"),
+    ({"steal"}, "🥷", "偷菜"),
+    ({"like"}, "👍", "点赞"),
+    ({"buy_slot"}, "🏗", "扩地"),
+    ({"visit"}, "🚜", "参观"),
+)
+
+
+def _format_site_detail(site_report: SiteRunReport) -> str:
+    lines = [
+        f"【{site_report.site_name}】{_STATUS_EMOJIS.get(site_report.status, '⚠️')} "
+        f"{site_report.trades_count}笔 利润{site_report.total_profit}"
+    ]
+    grouped_actions = [[] for _ in range(len(_ACTION_CATEGORIES) + 1)]
+    for action in site_report.actions:
+        category_index = next(
+            (
+                index
+                for index, (action_names, _, _) in enumerate(_ACTION_CATEGORIES)
+                if action.action in action_names
+            ),
+            len(_ACTION_CATEGORIES),
+        )
+        grouped_actions[category_index].append(action)
+
+    categories = (*_ACTION_CATEGORIES, (set(), "📋", "其他"))
+    for (_, icon, label), actions in zip(categories, grouped_actions):
+        if not actions:
+            continue
+        successful_actions = [action for action in actions if action.success]
+        failed_actions = [action for action in actions if not action.success]
+        successful_targets = list(dict.fromkeys(
+            str(action.target) for action in successful_actions if action.target
+        ))[:5]
+        success_detail = (
+            f"（{'、'.join(successful_targets)}）" if successful_targets else ""
+        )
+        failed_details = [
+            f"{action.target or '未知目标'}：{action.message or '失败'}"
+            for action in failed_actions
+        ]
+        failure_detail = f"（{'、'.join(failed_details)}）" if failed_details else ""
+        lines.append(
+            f"  {icon} {label}：✅{len(successful_actions)}{success_detail} "
+            f"❌{len(failed_actions)}{failure_detail}"
+        )
+    return "\n".join(lines)
+
+
 def format_notification(report: RunReport) -> str:
     completed = sum(item.status == "completed" for item in report.site_reports)
     partial = sum(item.status == "partial" for item in report.site_reports)
     failed = sum(item.status == "failed" for item in report.site_reports)
-    status_emojis = {
-        "completed": "✅",
-        "partial": "⚠️",
-        "failed": "❌",
-        "skipped": "⚠️",
-    }
-    site_details = "\n".join(
-        f"{item.site_name}：{status_emojis.get(item.status, '⚠️')} "
-        f"{item.trades_count}笔 利润{item.total_profit}"
-        for item in report.site_reports
+    site_details = "\n\n".join(
+        _format_site_detail(item) for item in report.site_reports
     ) or "无站点执行结果"
     finished_at = datetime.fromtimestamp(report.finished_at).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
     status_message = f" {report.message}" if report.message else ""
     return (
+        "━━━━━━━━━━━━━━\n"
         "🌾 农场自动化 Pro 运行报告\n"
         "━━━━━━━━━━━━━━\n"
         f"⏰ 时间：{finished_at}\n"
@@ -39,7 +91,7 @@ def format_notification(report: RunReport) -> str:
         f"⚠️部分 {partial} / ❌失败 {failed}）\n"
         f"💰 总利润：{report.total_profit}\n"
         f"🔄 总操作：{report.total_trades} 次\n\n"
-        f"各站详情：\n{site_details}\n\n"
+        f"{site_details}\n\n"
         f"状态：{report.status}{status_message}"
     )
 

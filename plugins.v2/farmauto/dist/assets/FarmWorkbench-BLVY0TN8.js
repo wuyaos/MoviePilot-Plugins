@@ -80144,7 +80144,7 @@ const _hoisted_2$3 = {
   key: 0,
   class: "price-trend-chart__empty text-medium-emphasis"
 };
-const {computed: computed$3,nextTick,onBeforeUnmount,onMounted: onMounted$1,ref: ref$3,watch: watch$2} = await importShared('vue');
+const {computed: computed$3,nextTick,onBeforeUnmount: onBeforeUnmount$2,onMounted: onMounted$1,ref: ref$3,watch: watch$2} = await importShared('vue');
 
 
 
@@ -80303,7 +80303,7 @@ onMounted$1(async () => {
   }
 });
 
-onBeforeUnmount(() => {
+onBeforeUnmount$2(() => {
   resizeObserver?.disconnect();
   chart?.dispose();
   chart = undefined;
@@ -80629,7 +80629,7 @@ const _hoisted_47 = { class: "d-flex ga-2 align-start" };
 const _hoisted_48 = { key: 0 };
 const _hoisted_49 = { key: 1 };
 
-const {computed: computed$2,ref: ref$2,watch: watch$1} = await importShared('vue');
+const {computed: computed$2,onBeforeUnmount: onBeforeUnmount$1,ref: ref$2,watch: watch$1} = await importShared('vue');
 
 
 const _sfc_main$2 = {
@@ -80655,6 +80655,7 @@ const actionLoading = ref$2(false);
 const refreshing = ref$2(props.loading);
 const error = ref$2('');
 const success = ref$2('');
+let successTimer = null;
 const selectedSeedId = ref$2('');
 const stealDialog = ref$2(false);
 const likeDialog = ref$2(false);
@@ -80757,13 +80758,24 @@ function unwrap(r) {
   return p ?? {}
 }
 
+function setSuccess(message = '') {
+  success.value = message;
+  if (successTimer) clearTimeout(successTimer);
+  successTimer = message
+    ? setTimeout(() => {
+      success.value = '';
+      successTimer = null;
+    }, 3000)
+    : null;
+}
+
 async function doAction(action, params = {}) {
   actionLoading.value = true;
   error.value = '';
-  success.value = '';
+  setSuccess('');
   try {
     const r = unwrap(await request('POST', `${apiBase()}/site/siqi/action`, { action, ...params }));
-    success.value = r.message || `${action} 操作成功`;
+    setSuccess(r.message || `${action} 操作成功`);
     emit('action', { action, result: r });
     return r
   } catch (e) {
@@ -80993,6 +81005,10 @@ function handlePlotClick(plot) {
   else if (plot.state === 'empty') plant(plot);
   else if (plot.state === 'planted' && isPlotReady(plot)) harvestPlot(plot);
 }
+
+onBeforeUnmount$1(() => {
+  if (successTimer) clearTimeout(successTimer);
+});
 
 return (_ctx, _cache) => {
   const _component_v_icon = _resolveComponent$2("v-icon");
@@ -81932,7 +81948,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-c41f3999"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-4728a2e0"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 
@@ -82228,7 +82244,7 @@ const _hoisted_12 = { class: "stat-icon amber" };
 const _hoisted_13 = { class: "stat-content" };
 const _hoisted_14 = { class: "font-weight-bold" };
 
-const {computed,onMounted,ref,watch} = await importShared('vue');
+const {computed,onBeforeUnmount,onMounted,ref,watch} = await importShared('vue');
 
 
 const _sfc_main = {
@@ -82256,6 +82272,7 @@ const running = ref(false);
 const actionLoading = ref(false);
 const error = ref('');
 const successMessage = ref('');
+let successTimer = null;
 const status = ref({ sites: [], selected_site_ids: [] });
 const siteDetail = ref({});
 const selectedSiteId = ref('');
@@ -82294,6 +82311,17 @@ const cropKeys = computed(() => Object.entries(crops.value)
 const animalKeys = computed(() => Object.entries(crops.value)
   .filter(([, definition]) => definition?.type === 'animal')
   .map(([cropKey]) => cropKey));
+
+function setSuccess(message = '') {
+  successMessage.value = message;
+  if (successTimer) clearTimeout(successTimer);
+  successTimer = message
+    ? setTimeout(() => {
+      successMessage.value = '';
+      successTimer = null;
+    }, 3000)
+    : null;
+}
 
 function windowToken() {
   if (typeof window === 'undefined') return ''
@@ -82394,7 +82422,7 @@ async function refreshData() {
   loading.value = true;
   refreshing.value = true;
   error.value = '';
-  successMessage.value = '';
+  setSuccess('');
   try {
     await loadStatus(false);
     if (error.value) throw new Error(error.value)
@@ -82404,7 +82432,7 @@ async function refreshData() {
       balanceChanged.value = true;
       setTimeout(() => { balanceChanged.value = false; }, 800);
     }
-    successMessage.value = '数据已刷新';
+    setSuccess('数据已刷新');
   } catch (requestError) {
     error.value = `刷新数据失败：${requestError?.message || '未知错误'}`;
   } finally {
@@ -82415,7 +82443,7 @@ async function refreshData() {
 
 async function runNow() {
   error.value = '';
-  successMessage.value = '';
+  setSuccess('');
   if (!selectedSiteIds.value.length) {
     error.value = '请先在配置页选择至少一个站点';
     return
@@ -82424,7 +82452,7 @@ async function runNow() {
   running.value = true;
   try {
     const result = unwrapResponse(await request('POST', `${apiBase.value}/run`, {}));
-    successMessage.value = result.message || '任务已在后台启动';
+    setSuccess(result.message || '任务已在后台启动');
     emit('action', result);
     await loadStatus();
     await loadSiteDetail();
@@ -82452,10 +82480,10 @@ async function harvestAllCurrent() {
 
   actionLoading.value = true;
   error.value = '';
-  successMessage.value = '';
+  setSuccess('');
   try {
     const result = await postSiteAction('harvest_all');
-    successMessage.value = result.message || (dryRun.value ? 'dry-run：已生成一键收获计划' : '一键收获成功');
+    setSuccess(result.message || (dryRun.value ? 'dry-run：已生成一键收获计划' : '一键收获成功'));
     emit('action', result);
     await loadSiteDetail(selectedSiteId.value);
   } catch (requestError) {
@@ -82469,10 +82497,10 @@ async function handleManualAction({ action, cropKey }) {
   if (!selectedSiteId.value) return
   actionLoading.value = true;
   error.value = '';
-  successMessage.value = '';
+  setSuccess('');
   try {
     const result = await postSiteAction(action, cropKey);
-    successMessage.value = result.message || `${result.target || crops.value[cropKey]?.name || cropKey || action}操作成功`;
+    setSuccess(result.message || `${result.target || crops.value[cropKey]?.name || cropKey || action}操作成功`);
     emit('action', result);
     await loadSiteDetail(selectedSiteId.value);
   } catch (requestError) {
@@ -82503,7 +82531,7 @@ async function sellAllWarehouseItems() {
 
   actionLoading.value = true;
   error.value = '';
-  successMessage.value = '';
+  setSuccess('');
   const failures = [];
   let successCount = 0;
   try {
@@ -82517,7 +82545,7 @@ async function sellAllWarehouseItems() {
       }
     }
     if (failures.length) error.value = failures.join('；');
-    if (successCount) successMessage.value = `已出售 ${successCount} 类仓库物品`;
+    if (successCount) setSuccess(`已出售 ${successCount} 类仓库物品`);
     await loadSiteDetail(selectedSiteId.value);
   } finally {
     actionLoading.value = false;
@@ -82534,12 +82562,15 @@ async function handleSiqiAction({ action, result }) {
 }
 
 watch(selectedSiteId, siteId => {
-  successMessage.value = '';
+  setSuccess('');
   siteDetail.value = {};
   loadSiteDetail(siteId);
 });
 
 onMounted(() => loadStatus());
+onBeforeUnmount(() => {
+  if (successTimer) clearTimeout(successTimer);
+});
 
 return (_ctx, _cache) => {
   const _component_v_icon = _resolveComponent("v-icon");
@@ -83036,6 +83067,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b980118e"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-766bb920"]]);
 
 export { FarmWorkbench as F };
