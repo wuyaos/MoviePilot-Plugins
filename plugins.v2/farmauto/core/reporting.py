@@ -16,13 +16,31 @@ def format_notification(report: RunReport) -> str:
     completed = sum(item.status == "completed" for item in report.site_reports)
     partial = sum(item.status == "partial" for item in report.site_reports)
     failed = sum(item.status == "failed" for item in report.site_reports)
-    currency_hint = "各站点币种"
+    status_emojis = {
+        "completed": "✅",
+        "partial": "⚠️",
+        "failed": "❌",
+        "skipped": "⚠️",
+    }
+    site_details = "\n".join(
+        f"{item.site_name}：{status_emojis.get(item.status, '⚠️')} "
+        f"{item.trades_count}笔 利润{item.total_profit}"
+        for item in report.site_reports
+    ) or "无站点执行结果"
+    finished_at = datetime.fromtimestamp(report.finished_at).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+    status_message = f" {report.message}" if report.message else ""
     return (
-        "农场自动化 Pro 运行完成\n"
-        f"站点：{len(report.site_reports)}（成功 {completed} / 部分 {partial} / 失败 {failed}）\n"
-        f"总利润：{report.total_profit} {currency_hint}\n"
-        f"成功操作：{report.total_trades} 次\n"
-        f"状态：{report.status}{('；' + report.message) if report.message else ''}"
+        "🌾 农场自动化 Pro 运行报告\n"
+        "━━━━━━━━━━━━━━\n"
+        f"⏰ 时间：{finished_at}\n"
+        f"📊 站点：{len(report.site_reports)}（✅成功 {completed} / "
+        f"⚠️部分 {partial} / ❌失败 {failed}）\n"
+        f"💰 总利润：{report.total_profit}\n"
+        f"🔄 总操作：{report.total_trades} 次\n\n"
+        f"各站详情：\n{site_details}\n\n"
+        f"状态：{report.status}{status_message}"
     )
 
 

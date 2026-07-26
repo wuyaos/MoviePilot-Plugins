@@ -136,7 +136,7 @@ function refresh() { emit('refresh') }
             <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-green-lighten-5">
               <v-icon icon="mdi-seed" color="green" size="small" class="mr-2" />种子商店
               <v-spacer />
-              <v-btn color="green" size="small" variant="flat" :disabled="!selectedSeedId" @click="plantFill">一键种植</v-btn>
+              <v-btn color="success" size="small" variant="flat" :disabled="!selectedSeedId" @click="plantFill">一键种植</v-btn>
             </v-card-title>
             <v-card-text class="pa-3">
               <v-row dense>
@@ -166,7 +166,7 @@ function refresh() { emit('refresh') }
                       <div class="text-body-2 font-weight-bold">偷菜</div>
                       <div class="text-caption text-grey">每日一次，自动寻找可偷作物</div>
                     </div>
-                    <v-btn :color="canSteal ? 'red' : 'grey'" size="small" variant="flat" :disabled="!canSteal" @click="steal">{{ canSteal ? '去偷菜' : '今日已偷' }}</v-btn>
+                    <v-btn color="red" size="small" variant="flat" :disabled="!canSteal" @click="steal">{{ canSteal ? '去偷菜' : '今日已偷' }}</v-btn>
                   </div>
                 </v-col>
                 <v-col cols="12">
@@ -200,7 +200,7 @@ function refresh() { emit('refresh') }
         <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5">
           <v-icon icon="mdi-farm" color="blue" size="small" class="mr-2" />菜地
           <v-spacer />
-          <v-btn color="orange" size="small" variant="flat" prepend-icon="mdi-basket" @click="harvestAll">一键收获</v-btn>
+          <v-btn color="success" size="small" variant="flat" prepend-icon="mdi-basket" @click="harvestAll">一键收获</v-btn>
         </v-card-title>
         <v-card-text class="pa-3">
           <div v-for="land in lands" :key="land.land_id" class="mb-3">
@@ -215,7 +215,7 @@ function refresh() { emit('refresh') }
                   <div class="text-caption" :class="land.is_ready ? 'text-orange' : 'text-grey'">
                     {{ land.is_ready ? '可收获' : (land.harvest_time ? `剩余 ${land.harvest_time}` : '空地') }}
                   </div>
-                  <v-btn v-if="land.is_ready" size="x-small" color="orange" variant="flat" class="mt-1">收获</v-btn>
+                  <v-btn v-if="land.is_ready" size="small" color="success" variant="flat" class="mt-1">收获</v-btn>
                 </v-card>
               </v-col>
             </v-row>
@@ -242,7 +242,7 @@ function refresh() { emit('refresh') }
                 <td>{{ item.quantity }}</td>
                 <td>{{ item.unit_reward }}</td>
                 <td>{{ (Number(item.quantity || 0) * Number(item.unit_reward || 0)) }}</td>
-                <td><v-btn size="x-small" color="orange" variant="flat" @click="sell(item)">出售</v-btn></td>
+                <td><v-btn size="small" color="orange" variant="flat" @click="sell(item)">出售</v-btn></td>
               </tr>
             </tbody>
           </v-table>

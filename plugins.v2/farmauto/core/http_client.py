@@ -6,9 +6,12 @@ import requests
 import urllib3
 from urllib3.exceptions import InsecureRequestWarning
 
-urllib3.disable_warnings(InsecureRequestWarning)
+try:
+    from app.log import logger
+except ImportError:  # 允许核心模块在 MoviePilot 之外独立测试
+    logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
+urllib3.disable_warnings(InsecureRequestWarning)
 
 
 class AuthError(requests.HTTPError):
@@ -82,32 +85,39 @@ class FarmHttpClient:
             except (requests.Timeout, requests.ConnectionError) as error:
                 last_error = error
                 if proxies:
-                    logger.warning("农场请求代理连接失败，回退直连")
+                    logger.warning(f"[FarmAuto] HTTP {url} 代理失败回退直连")
                     try:
                         response = self._send(method, url, cookies, None, **kwargs)
                     except (requests.Timeout, requests.ConnectionError) as direct_error:
                         last_error = direct_error
                     else:
-                        self._check_auth(response)
+                        self._check_auth(response, url)
                         if response.status_code < 500:
                             return response
                         last_error = requests.HTTPError(
                             f"HTTP {response.status_code}", response=response
                         )
                 if attempt < self.retry_count:
+                    self._log_retry(url, attempt + 1, last_error)
                     time.sleep(min(self.retry_interval * (2 ** attempt), 30.0))
                 continue
-            self._check_auth(response)
+            self._check_auth(response, url)
             if response.status_code < 500:
                 return response
             last_error = requests.HTTPError(
                 f"HTTP {response.status_code}", response=response
             )
             if attempt < self.retry_count:
+                self._log_retry(url, attempt + 1, last_error)
                 time.sleep(min(self.retry_interval * (2 ** attempt), 30.0))
         if last_error:
             raise last_error
         raise requests.RequestException("农场请求失败")
+
+    def _log_retry(self, url: str, attempt: int, error: BaseException) -> None:
+        logger.warning(
+            f"[FarmAuto] HTTP {url} 重试 {attempt}/{self.retry_count}: {error}"
+        )
 
     def _send(
         self,
@@ -117,8 +127,10 @@ class FarmHttpClient:
         proxies: Optional[Dict[str, str]],
         **kwargs: Any,
     ) -> requests.Response:
+        started_at = time.monotonic()
+        logger.debug(f"[FarmAuto] HTTP {method} {url} ...")
         try:
-            return self.session.request(
+            response = self.session.request(
                 method,
                 url,
                 cookies=cookies,
@@ -127,11 +139,19 @@ class FarmHttpClient:
                 verify=False,
                 **kwargs,
             )
+            duration_ms = round((time.monotonic() - started_at) * 1000)
+            logger.debug(
+                f"[FarmAuto] HTTP {url} -> {response.status_code} ({duration_ms}ms)"
+            )
+            return response
         finally:
             self._last_request_at = time.monotonic()
 
     @staticmethod
-    def _check_auth(response: requests.Response) -> requests.Response:
+    def _check_auth(response: requests.Response, url: str) -> requests.Response:
         if response.status_code in (401, 403):
+            logger.error(
+                f"[FarmAuto] HTTP {url} 认证失败（{response.status_code}）"
+            )
             raise AuthError(f"HTTP {response.status_code}", response=response)
         return response

@@ -9,6 +9,17 @@ from .trend import PriceTrendStore
 
 
 class FarmExecutor:
+    ACTION_NAMES = {
+        "harvest_all": "一键收获",
+        "harvest": "收获",
+        "plant": "种植",
+        "sell": "出售",
+        "harvest_captcha": "验证码收获",
+        "steal": "偷菜",
+        "like": "点赞",
+        "buy_slot": "扩地",
+    }
+
     def __init__(
         self,
         http_client: FarmHttpClient,
@@ -20,6 +31,32 @@ class FarmExecutor:
         self.logger = logger
         self.trend_store = trend_store
         self.ocr_recognizer = ocr_recognizer or OcrRecognizer()
+
+    def _log(self, level: str, message: str) -> None:
+        try:
+            getattr(self.logger, level)(f"[FarmAuto] {message}")
+        except (AttributeError, TypeError):
+            pass
+
+    def _log_action(self, site_name: str, result: ActionResult) -> None:
+        action = self.ACTION_NAMES.get(result.action, result.action)
+        outcome = "成功" if result.success else "失败"
+        self._log(
+            "info",
+            f"{site_name} {action} {result.target} {outcome}: {result.message}",
+        )
+
+    @staticmethod
+    def _error_context(error: BaseException, url: str = "") -> str:
+        response = getattr(error, "response", None)
+        error_url = url or getattr(response, "url", "")
+        status = getattr(response, "status_code", None)
+        context = []
+        if error_url:
+            context.append(f"url={error_url}")
+        if status is not None:
+            context.append(f"status={status}")
+        return f"{error} ({', '.join(context)})" if context else str(error)
 
     @staticmethod
     def _cookie_dict(cookie: str) -> Dict[str, str]:
@@ -33,14 +70,21 @@ class FarmExecutor:
     def run_site(self, cookie: str, site_config, mode: str, policy: dict) -> SiteRunReport:
         policy = {**DEFAULT_POLICY, **(policy or {})}
         report = SiteRunReport(site_config.site_id, site_config.site_name, mode)
+        site_name = site_config.site_name
+        dry_run = bool(policy.get("dry_run", False))
+        self._log("info", f"{site_name} 开始执行（mode={mode}, dry_run={dry_run}）")
         cookies = self._cookie_dict(cookie)
         if not cookies:
             report.status = "failed"
             report.message = "未提供有效 Cookie"
+            self._log("error", f"{site_name} 认证 异常：{report.message}")
             return report
 
+        current_action = "拉取农场页"
+        current_url = site_config.get_farm_url()
         try:
-            farm_response = self.http_client.get(site_config.get_farm_url(), cookies)
+            self._log("debug", f"{site_name} 拉取农场页 {current_url}")
+            farm_response = self.http_client.get(current_url, cookies)
             farm_response.raise_for_status()
             farm_html = farm_response.text
             if not site_config.check_auth(farm_html):
@@ -54,9 +98,23 @@ class FarmExecutor:
                 "market_prices": report.market_prices,
                 "crop_status": report.crop_status,
             }
+            current_action = "拉取仓库"
+            current_url = site_config.get_warehouse_url()
             warehouse = self._fetch_warehouse(cookies, site_config)
             report.warehouse = warehouse
+            harvestable = sum(
+                bool(status.get("can_harvest"))
+                for status in report.crop_status.values()
+                if isinstance(status, dict)
+            )
+            self._log(
+                "info",
+                f"{site_name} 解析到 {len(report.market_prices)} 种价格、"
+                f"{harvestable} 可收获、{len(warehouse)} 仓库项",
+            )
 
+            current_action = "生成计划"
+            current_url = ""
             if mode == "smart":
                 plan = plan_smart(snapshot, warehouse, site_config, policy)
             elif mode == "harvest":
@@ -64,18 +122,27 @@ class FarmExecutor:
             else:
                 report.status = "skipped"
                 report.message = f"不支持的运行模式：{mode}"
+                self._log("error", f"{site_name} 生成计划 异常：{report.message}")
                 return report
 
+            self._log("debug", f"{site_name} 执行计划 {len(plan)} 步")
             if policy["dry_run"]:
                 for action in plan:
                     crop = site_config.crops.get(action["crop_key"], {})
                     target = crop.get("name", action["crop_key"])
                     for _ in range(int(action.get("quantity", 1))):
-                        report.actions.append(ActionResult(
+                        result = ActionResult(
                             action["op"], target, True, message="dry-run：仅记录计划"
-                        ))
+                        )
+                        report.actions.append(result)
+                        self._log_action(site_name, result)
                 report.status = "skipped"
                 report.message = f"dry-run：记录 {len(report.actions)} 个计划操作"
+                self._log(
+                    "info",
+                    f"{site_name} 完成：{report.trades_count} 笔交易，利润 "
+                    f"{report.total_profit} {site_config.currency}",
+                )
                 return report
 
             sold_count = 0
@@ -103,6 +170,7 @@ class FarmExecutor:
                     )
                     report.actions.extend(results)
                     for result in results:
+                        self._log_action(site_name, result)
                         if result.success:
                             report.trades_count += 1
                             report.total_profit += result.profit
@@ -127,6 +195,7 @@ class FarmExecutor:
                         report.market_prices,
                     )
                     report.actions.append(result)
+                    self._log_action(site_name, result)
                     if result.success:
                         report.trades_count += 1
                         report.total_profit += result.profit
@@ -144,16 +213,29 @@ class FarmExecutor:
                 if report.actions
                 else "无可执行操作"
             )
+            self._log(
+                "info",
+                f"{site_name} 完成：{report.trades_count} 笔交易，利润 "
+                f"{report.total_profit} {site_config.currency}",
+            )
         except AuthError as error:
             report.status = "failed"
             report.message = f"认证失败：{error}"
+            failed_action = getattr(error, "farm_action", current_action)
+            failed_url = getattr(error, "farm_url", current_url)
+            self._log(
+                "error",
+                f"{site_name} {failed_action} 异常："
+                f"{self._error_context(error, failed_url)}",
+            )
         except Exception as error:
             report.status = "failed"
             report.message = str(error)
-            try:
-                self.logger.error(f"{site_config.site_name} 农场任务失败：{error}")
-            except Exception:
-                pass
+            self._log(
+                "error",
+                f"{site_name} {current_action} 异常："
+                f"{self._error_context(error, current_url)}",
+            )
         return report
 
     def run_siqi_extras(
@@ -185,9 +267,18 @@ class FarmExecutor:
             if not options.get(option, False) or skip_daily.get(action, False):
                 continue
             try:
-                results.append(operation())
+                result = operation()
             except Exception as error:
-                results.append(ActionResult(action, site_config.site_name, False, message=str(error)))
+                self._log(
+                    "error",
+                    f"{site_config.site_name} {self.ACTION_NAMES.get(action, action)} "
+                    f"异常：{self._error_context(error)}",
+                )
+                result = ActionResult(
+                    action, site_config.site_name, False, message=str(error)
+                )
+            results.append(result)
+            self._log_action(site_config.site_name, result)
         return results
 
     def _do_siqi_captcha_harvest(self, cookies, site_config, use_ocr=True) -> ActionResult:
@@ -387,6 +478,11 @@ class FarmExecutor:
                 ))
             return results
         except Exception as error:
+            self._log(
+                "error",
+                f"{site_config.site_name} 出售 异常："
+                f"{self._error_context(error, site_config.get_batch_sell_url())}",
+            )
             return [
                 ActionResult(
                     "sell",
@@ -406,16 +502,17 @@ class FarmExecutor:
         crop = site_config.crops.get(crop_key, {})
         target = crop.get("name", crop_key)
         operation = action.get("op", "unknown")
+        action_url = ""
 
         try:
             if operation == "harvest_all":
-                response = self.http_client.get(site_config.get_harvest_all_url(), cookies)
+                action_url = site_config.get_harvest_all_url()
+                response = self.http_client.get(action_url, cookies)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)
             elif operation == "harvest":
-                response = self.http_client.get(
-                    site_config.get_harvest_url(crop["type"], crop["id"]), cookies
-                )
+                action_url = site_config.get_harvest_url(crop["type"], crop["id"])
+                response = self.http_client.get(action_url, cookies)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)
             elif operation == "plant":
@@ -425,20 +522,23 @@ class FarmExecutor:
                     if crop_action == "breed"
                     else site_config.get_plant_url(crop["type"], crop["id"])
                 )
-                response = self.http_client.get(url, cookies)
+                action_url = url
+                response = self.http_client.get(action_url, cookies)
                 response.raise_for_status()
                 parsed = site_config.parse_plant_result(response.text, crop_action)
             elif operation == "sell":
                 sell_key = action.get("sell_key")
                 if action.get("source") == "field":
-                    latest = self.http_client.get(site_config.get_farm_url(), cookies)
+                    action_url = site_config.get_farm_url()
+                    latest = self.http_client.get(action_url, cookies)
                     latest.raise_for_status()
                     farm_html = latest.text
                     sell_key = site_config.get_sell_key(farm_html, crop["type"], crop["id"])
                     sell_key = sell_key or f"{crop['type']}_{crop['id']}"
                 if not sell_key:
                     return ActionResult("sell", target, False, message="未找到出售标识"), farm_html
-                response = self.http_client.get(site_config.get_sell_url(sell_key), cookies)
+                action_url = site_config.get_sell_url(sell_key)
+                response = self.http_client.get(action_url, cookies)
                 response.raise_for_status()
                 parsed = site_config.parse_sell_result(response.text)
             else:
@@ -460,7 +560,14 @@ class FarmExecutor:
                 message=parsed.get("message", ""),
             )
             return result, farm_html
-        except AuthError:
+        except AuthError as error:
+            error.farm_action = self.ACTION_NAMES.get(operation, operation)
+            error.farm_url = action_url
             raise
         except Exception as error:
+            self._log(
+                "error",
+                f"{site_config.site_name} {self.ACTION_NAMES.get(operation, operation)} "
+                f"异常：{self._error_context(error, action_url)}",
+            )
             return ActionResult(operation, target, False, message=str(error)), farm_html

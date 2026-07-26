@@ -38,7 +38,7 @@ function expiryText(item) {
       <v-btn
         color="orange"
         size="small"
-        variant="elevated"
+        variant="flat"
         :loading="loading"
         :disabled="loading || !items.length"
         @click="emit('sell-all')"
@@ -68,9 +68,9 @@ function expiryText(item) {
           </td>
           <td class="text-center">
             <v-btn
-              color="error"
+              color="orange"
               size="small"
-              variant="text"
+              variant="flat"
               :loading="loading"
               :disabled="loading || !item.crop_key"
               @click="emit('sell', item.crop_key)"

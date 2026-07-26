@@ -146,7 +146,7 @@ class FarmAuto(_PluginBase):
                 if isinstance(override, dict)
             }
         except (TypeError, ValueError, json.JSONDecodeError) as error:
-            logger.warning(f"农场自动化单站策略覆盖解析失败，已忽略：{error}")
+            logger.warning(f"[FarmAuto] 单站策略覆盖解析失败，已忽略：{error}")
             self._site_overrides = {}
 
         stored_stats = config.get("stats", self.get_data("stats") or {})
@@ -162,7 +162,7 @@ class FarmAuto(_PluginBase):
             if self._site_ids:
                 self._start_background_task("配置页立即运行")
             else:
-                logger.warning("农场自动化未选择站点，忽略配置页立即运行请求")
+                logger.warning("[FarmAuto] 未选择站点，忽略配置页立即运行请求")
 
     def get_state(self) -> bool:
         return self._enabled
@@ -173,7 +173,7 @@ class FarmAuto(_PluginBase):
 
     def _start_background_task(self, source: str) -> bool:
         if not type(self)._run_lock.acquire(blocking=False):
-            logger.warning(f"农场自动化任务正在运行，忽略{source}请求")
+            logger.warning(f"[FarmAuto] 任务正在运行，忽略{source}请求")
             return False
         try:
             threading.Thread(
@@ -222,23 +222,23 @@ class FarmAuto(_PluginBase):
                 site = site_oper.get_by_domain(domain)
                 cookie = self._cookie_from_site(site)
                 if cookie:
-                    logger.info(f"{site_config.site_name} 已读取站点 Cookie")
+                    logger.info(f"[FarmAuto] {site_config.site_name} Cookie 已读取")
                     return cookie
             except Exception as error:
-                logger.debug(f"{site_config.site_name} 按域名读取 Cookie 失败：{error}")
+                logger.debug(f"[FarmAuto] {site_config.site_name} 按域名读取 Cookie 失败：{error}")
 
         try:
             sites = site_oper.list() or []
         except Exception as error:
-            logger.warning(f"{site_config.site_name} 读取站点列表失败：{error}")
+            logger.warning(f"[FarmAuto] {site_config.site_name} 读取站点列表失败：{error}")
             sites = []
         for site in sites:
             if any(self._site_matches_domain(site, candidate) for candidate in site_config.domains):
                 cookie = self._cookie_from_site(site)
                 if cookie:
-                    logger.info(f"{site_config.site_name} 已从站点列表读取 Cookie")
+                    logger.info(f"[FarmAuto] {site_config.site_name} Cookie 已读取")
                     return cookie
-        logger.warning(f"{site_config.site_name} 未找到可用 Cookie")
+        logger.warning(f"[FarmAuto] {site_config.site_name} 未找到 Cookie")
         return ""
 
     def get_effective_policy(self, site_id: str) -> dict:
@@ -320,9 +320,12 @@ class FarmAuto(_PluginBase):
 
     def run_farm_task(self, lock_acquired: bool = False) -> Optional[RunReport]:
         if not lock_acquired and not type(self)._run_lock.acquire(blocking=False):
-            logger.warning("农场自动化任务正在运行，跳过本次触发")
+            logger.warning("[FarmAuto] 任务正在运行，跳过本次触发")
             return None
         started_at = time.time()
+        logger.info(
+            f"[FarmAuto] 开始多站任务（{len(self._site_ids)} 站, mode={self._mode}）"
+        )
         try:
             per_site_clients = any(
                 isinstance(override, dict) and "use_proxy" in override
@@ -338,7 +341,9 @@ class FarmAuto(_PluginBase):
             site_reports: List[SiteRunReport] = []
             for site_id in self._site_ids:
                 if not self.is_site_enabled(site_id):
-                    logger.info(f"农场自动化站点 {site_id} 已被单站策略禁用，跳过")
+                    site_config = get_site_config(site_id)
+                    site_name = site_config.site_name if site_config else site_id
+                    logger.info(f"[FarmAuto] {site_name} 已被单站策略禁用，跳过")
                     continue
                 site_config = get_site_config(site_id)
                 if not site_config:
@@ -375,10 +380,13 @@ class FarmAuto(_PluginBase):
                 status=status,
                 message=message,
             )
+            logger.info(
+                f"[FarmAuto] 全部完成：总利润 {total_profit}, {total_trades} 笔"
+            )
             try:
                 self._record_report(report)
             except Exception as error:
-                logger.error(f"农场自动化统计持久化失败：{error}")
+                logger.error(f"[FarmAuto] 统计持久化失败：{error}")
             if self._notify:
                 try:
                     self.post_message(
@@ -387,10 +395,10 @@ class FarmAuto(_PluginBase):
                         text=format_notification(report),
                     )
                 except Exception as error:
-                    logger.error(f"农场自动化通知发送失败：{error}")
+                    logger.error(f"[FarmAuto] 通知发送失败：{error}")
             return report
         except Exception as error:
-            logger.error(f"农场自动化多站编排失败：{error}")
+            logger.error(f"[FarmAuto] 多站编排失败：{error}")
             report = RunReport(
                 started_at=started_at,
                 finished_at=time.time(),
@@ -400,7 +408,7 @@ class FarmAuto(_PluginBase):
             try:
                 self._record_report(report)
             except Exception as save_error:
-                logger.error(f"农场自动化失败统计持久化失败：{save_error}")
+                logger.error(f"[FarmAuto] 失败统计持久化失败：{save_error}")
             return report
         finally:
             type(self)._run_lock.release()
@@ -725,7 +733,7 @@ class FarmAuto(_PluginBase):
                     if market_prices:
                         data["market_prices"] = market_prices
             except Exception as error:
-                logger.warning(f"思齐农场详情刷新失败：{error}")
+                logger.warning(f"[FarmAuto] 思齐农场详情刷新失败：{error}")
             data["siqi_farm"] = siqi_farm
 
             daily = self.get_data("siqi_daily") or {}
@@ -988,7 +996,7 @@ class FarmAuto(_PluginBase):
                 },
             ]
         except Exception as error:
-            logger.error(f"农场自动化详情页加载失败：{error}")
+            logger.error(f"[FarmAuto] 详情页加载失败：{error}")
             return [{
                 "component": "VAlert",
                 "props": {"type": "error", "variant": "tonal", "text": f"详情页加载失败：{error}"},

@@ -88,9 +88,9 @@ function statusText(item) {
           <v-btn
             v-bind="tooltipProps"
             prepend-icon="mdi-basket"
-            :color="animal ? 'brown' : 'green'"
+            color="success"
             size="small"
-            variant="text"
+            variant="flat"
             :loading="loading"
             @click="emit('harvest-all')"
           >
@@ -138,7 +138,7 @@ function statusText(item) {
                   <v-spacer />
                   <v-btn
                     v-if="item.canHarvest"
-                    color="orange"
+                    color="success"
                     size="x-small"
                     variant="flat"
                     :disabled="loading"
@@ -148,7 +148,7 @@ function statusText(item) {
                   </v-btn>
                   <v-btn
                     v-else-if="!item.isGrowing"
-                    :color="animal ? 'brown' : 'green'"
+                    color="success"
                     size="x-small"
                     variant="flat"
                     :disabled="loading"
