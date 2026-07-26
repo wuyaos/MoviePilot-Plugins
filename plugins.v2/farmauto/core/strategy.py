@@ -81,9 +81,10 @@ def plan_smart(
         price = int(market_prices.get(crop_key, 0))
         # 收获不受 should_sell 限制（收获免费，即使亏损也该收获成熟作物）
         can_harvest = crop_status.get(crop_key, {}).get("can_harvest") and policy["auto_harvest"]
-        if not should_sell(crop, price, policy) and not can_harvest:
+        should_sell_flag = should_sell(crop, price, policy)
+        if not should_sell_flag and not can_harvest:
             continue
-        if policy["auto_sell"]:
+        if should_sell_flag and policy["auto_sell"]:
             for item in warehouse_items:
                 if remaining_sales <= 0 or item.crop_key != crop_key or not item.sell_key:
                     continue
@@ -98,7 +99,7 @@ def plan_smart(
             plan.append({"op": "harvest", "crop_key": crop_key, "source": "field", "quantity": 1})
             if policy["auto_plant"]:
                 plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
-            if policy["auto_sell"] and remaining_sales > 0:
+            if should_sell_flag and policy["auto_sell"] and remaining_sales > 0:
                 plan.append({"op": "sell", "crop_key": crop_key, "source": "field", "quantity": 1})
                 remaining_sales -= 1
     return plan
