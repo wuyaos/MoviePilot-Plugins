@@ -82,6 +82,12 @@ const inventoryTotalValue = computed(() => inventory.value.reduce(
   0,
 ))
 
+function seedMatureIcon(seed) {
+  const icons = seed?.stage_icons
+  if (icons && icons.mature) return icons.mature
+  return ''
+}
+
 function seedEmoji(name) {
   const emojiByName = {
     萝卜: '🥕',
@@ -99,7 +105,7 @@ function seedEmoji(name) {
     羊: '🐑',
   }
   return emojiByName[name] || '🌱'
-}
+}}
 
 function seedNameById(seedId) {
   return seeds.value.find(seed => String(seed.seed_id ?? seed.id) === String(seedId))?.name
@@ -473,7 +479,16 @@ onBeforeUnmount(() => {
                   :class="{ locked: isSeedLocked(seed), selected: selectedSeedId === (seed.seed_id ?? seed.id) }"
                   @click="!isSeedLocked(seed) && selectSeed(seed)"
                 >
-                  <div class="crop-icon">{{ seedEmoji(seed.name) }}</div>
+                  <div class="crop-icon">
+                    <v-img
+                      v-if="seedMatureIcon(seed)"
+                      :src="assetUrl(seedMatureIcon(seed))"
+                      width="40"
+                      height="40"
+                      contain
+                    />
+                    <span v-else>{{ seedEmoji(seed.name) }}</span>
+                  </div>
                   <div class="crop-info">
                     <div class="crop-name" :title="seed.name">{{ seed.name }}</div>
                     <div class="crop-meta">成本 {{ seed.cost }} → 收益 {{ seed.base_reward }} · 成长 {{ seed.grow_time }}</div>
