@@ -203,7 +203,8 @@ class TaskEngine:
         unit_id = str(claim_task_id) if (task.get("task_type") == TaskType.CLAIM or task.get("claim_options")) and claim_task_id else chat_unit_message
         sent_messages = []
         original_send = getattr(handler, "send_messagebox", None)
-        if task.get("task_type") == TaskType.CHAT and callable(original_send):
+        # 仅对未展开的多消息 CHAT 包装 tracked_send；单条展开单元直接调用 send_messagebox。
+        if task.get("task_type") == TaskType.CHAT and callable(original_send) and chat_unit_message is None:
             def tracked_send(message=None, *args, **kwargs):
                 message = str(message or "")
                 message_name = f"[喊话] “{message}”"
@@ -281,10 +282,6 @@ class TaskEngine:
                 record["feedback"] = feedback
             if result.rewards:
                 record["rewards"] = result.rewards
-            if result.purchased_medal_ids:
-                record["purchased_medal_ids"] = result.purchased_medal_ids
-                record["terminal_success"] = bool(result.purchased_medal_ids)
-                record["retryable"] = False
             if task.get("task_type") == TaskType.CHAT and not callable(original_collect):
                 for line in display_record_lines(record):
                     reward_text = "；".join(
@@ -316,7 +313,7 @@ class TaskEngine:
 
     def _schedule_failed(self, records, is_retry=False):
         """记录仍失败的任务；新失败批次从 0 次开始，实际重试后次数加一。"""
-        failed = [record for record in records if not record.get("success")]
+        failed = [record for record in records if is_retryable_failure(record)]
         if not failed or self.plugin.config.retry_count <= 0:
             if is_retry:
                 self.plugin.retry_records = []
