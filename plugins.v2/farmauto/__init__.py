@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from app.core.event import Event, eventmanager
 from app.db.site_oper import SiteOper
@@ -47,6 +48,8 @@ class FarmAuto(_PluginBase):
         self._raw_config: Dict[str, Any] = {}
         self._mode = "smart"
         self._site_ids: List[str] = []
+        self._cron_mode = "cron"
+        self._cron = "5 */4 * * *"
         self._interval_minutes = 61
         self._harvest_interval_minutes = 61
         self._expire_threshold_minutes = 120
@@ -112,6 +115,8 @@ class FarmAuto(_PluginBase):
         else:
             self._site_ids = []
         self._interval_minutes = self._to_int(config.get("interval_minutes"), 61, 1)
+        self._cron_mode = str(config.get("cron_mode") or "cron")
+        self._cron = str(config.get("cron") or "5 */4 * * *")
         self._harvest_interval_minutes = self._to_int(
             config.get("harvest_interval_minutes"), 61, 5
         )
@@ -471,6 +476,22 @@ class FarmAuto(_PluginBase):
     def get_service(self) -> List[Dict[str, Any]]:
         if not self._enabled or not self._site_ids:
             return []
+        if self._cron_mode == "cron" and self._cron:
+            try:
+                cron_str = self._cron.strip()
+                if cron_str.count(" ") != 4:
+                    logger.error("[FarmAuto] cron 格式错误，需 5 位 cron 表达式")
+                    return []
+                return [{
+                    "id": "FarmAuto",
+                    "name": "农场自动化定时任务",
+                    "trigger": CronTrigger.from_crontab(cron_str),
+                    "func": self.run_farm_task,
+                    "kwargs": {},
+                }]
+            except Exception as err:
+                logger.error(f"[FarmAuto] cron 定时任务配置错误：{err}")
+                return []
         interval = (
             self._harvest_interval_minutes
             if self._mode == "harvest"
@@ -1242,6 +1263,21 @@ class FarmAuto(_PluginBase):
                     }}),
                 ]},
                 {"component": "VRow", "content": [
+                    col(4, {"component": "VSelect", "props": {
+                        "model": "cron_mode", "label": "调度模式",
+                        "items": [
+                            {"title": "Cron 表达式", "value": "cron"},
+                            {"title": "固定间隔", "value": "interval"},
+                        ],
+                    }}),
+                    col(8, {"component": "VTextField", "props": {
+                        "model": "cron", "label": "Cron 表达式（5位）",
+                        "placeholder": "5 */4 * * *",
+                        "hint": "如 5 */4 * * *（每4小时第5分钟）",
+                        "persistent-hint": True,
+                    }}),
+                ]},
+                {"component": "VRow", "content": [
                     col(4, number("interval_minutes", "智能交易间隔（分钟）", 1)),
                     col(4, number("harvest_interval_minutes", "自动收获间隔（分钟）", 5)),
                     col(4, number("expire_threshold_minutes", "临期阈值（分钟）", 10)),
@@ -1292,6 +1328,8 @@ class FarmAuto(_PluginBase):
             "run_once": False,
             "mode": "smart",
             "site_ids": [],
+            "cron_mode": "cron",
+            "cron": "5 */4 * * *",
             "interval_minutes": 61,
             "harvest_interval_minutes": 61,
             "expire_threshold_minutes": 120,

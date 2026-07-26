@@ -7,6 +7,8 @@ const DEFAULT_CONFIG = {
   run_once: false,
   mode: 'smart',
   site_ids: [],
+  cron_mode: 'cron',
+  cron: '5 */4 * * *',
   interval_minutes: 61,
   harvest_interval_minutes: 61,
   expire_threshold_minutes: 120,
@@ -387,15 +389,21 @@ function saveConfig() {
               <v-card-text class="pa-4">
                 <v-row>
                   <v-col cols="12" sm="6" md="3">
+                    <v-select v-model="config.cron_mode" label="调度模式" :items="[{title:'Cron 表达式',value:'cron'},{title:'固定间隔',value:'interval'}]" density="compact" variant="outlined" />
+                  </v-col>
+                  <v-col v-if="config.cron_mode === 'cron'" cols="12" sm="6" md="9">
+                    <v-text-field v-model="config.cron" label="Cron 表达式（5位）" placeholder="5 */4 * * *" hint="如 5 */4 * * *（每4小时第5分钟）" persistent-hint density="compact" variant="outlined" />
+                  </v-col>
+                  <v-col v-if="config.cron_mode !== 'cron'" cols="12" sm="6" md="3">
                     <v-text-field v-model.number="config.interval_minutes" label="智能交易间隔（分钟）" type="number" min="1" density="compact" variant="outlined" />
                   </v-col>
-                  <v-col cols="12" sm="6" md="3">
+                  <v-col v-if="config.cron_mode !== 'cron'" cols="12" sm="6" md="3">
                     <v-text-field v-model.number="config.harvest_interval_minutes" label="自动收获间隔（分钟）" type="number" min="5" density="compact" variant="outlined" />
                   </v-col>
-                  <v-col cols="12" sm="6" md="3">
+                  <v-col v-if="config.cron_mode !== 'cron'" cols="12" sm="6" md="3">
                     <v-text-field v-model.number="config.request_interval" label="请求间隔（秒）" type="number" min="0" step="0.1" density="compact" variant="outlined" />
                   </v-col>
-                  <v-col cols="12" sm="6" md="3">
+                  <v-col v-if="config.cron_mode !== 'cron'" cols="12" sm="6" md="3">
                     <v-text-field v-model.number="config.retry_count" label="重试次数" type="number" min="0" density="compact" variant="outlined" hide-details />
                   </v-col>
                 </v-row>
