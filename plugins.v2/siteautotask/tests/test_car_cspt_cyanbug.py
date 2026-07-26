@@ -141,13 +141,24 @@ class CsptTests(unittest.TestCase):
 class AzusaTests(unittest.TestCase):
     def test_match_and_claim_task(self):
         info = make_info(name="梓喵", domain="azusa.wiki", url="https://azusa.wiki")
+        csrf_token = "a" * 40
+        info["session"].get.return_value = Response(text=f"ajax.php?csrf_token={csrf_token}")
         info["session"].post.return_value = Response(payload={"msg": "任务认领成功"})
         handler = azusa.AzusaHandler(info)
         self.assertTrue(handler.match())
         self.assertEqual(handler.claim_task("11"), "任务认领成功")
+        self.assertEqual(handler.session.post.call_args.args[0],
+                         f"https://azusa.wiki/ajax.php?csrf_token={csrf_token}")
         self.assertEqual(handler.session.post.call_args.kwargs["data"], {
             "action": "claimTask", "params[exam_id]": "11",
         })
+
+    def test_claim_requires_csrf_token(self):
+        info = make_info(name="梓喵", domain="azusa.wiki", url="https://azusa.wiki")
+        info["session"].get.return_value = Response(text="<html>no token</html>")
+        handler = azusa.AzusaHandler(info)
+        self.assertIn("CSRF Token", handler.claim_task("11"))
+        info["session"].post.assert_not_called()
 
     def test_claim_options_match_task_page(self):
         options = azusa.AzusaHandler.get_claim_options()

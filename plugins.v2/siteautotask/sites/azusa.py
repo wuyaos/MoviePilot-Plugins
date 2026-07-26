@@ -1,4 +1,6 @@
 """梓喵（Azusa）站点任务申领适配。"""
+import re
+
 from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask
 from ..base.decorator import task_info, TaskType
@@ -34,9 +36,20 @@ class AzusaHandler(CapabilityHandler):
     def match(self) -> bool:
         return "azusa.wiki" in self.domain or "梓喵" in self.site_name
 
+    def _get_csrf_token(self):
+        """梓喵领取接口要求 task.php 页面动态生成的 csrf_token。"""
+        response = self._send_get_request(self.site_url + "/task.php")
+        if not response:
+            return ""
+        match = re.search(r"csrf_token=([a-f0-9]{40})", response.text or "", re.I)
+        return match.group(1) if match else ""
+
     def claim_task(self, task_id: str, callback=None):
+        csrf_token = self._get_csrf_token()
+        if not csrf_token:
+            return "任务领取失败：未获取到 CSRF Token"
         response = self._send_post_request(
-            self.site_url + "/ajax.php",
+            f"{self.site_url}/ajax.php?csrf_token={csrf_token}",
             data={"action": "claimTask", "params[exam_id]": task_id},
         )
         if response is None:
