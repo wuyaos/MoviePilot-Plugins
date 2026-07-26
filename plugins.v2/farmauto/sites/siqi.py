@@ -64,6 +64,10 @@ class SiqiConfig(FarmSiteConfig):
         query.update({key: value for key, value in params.items() if value is not None and value != ""})
         return f"{self.get_farm_url()}?{urlencode(query)}"
 
+    def get_farm_url(self) -> str:
+        # 思齐 GET ?action=fetch 返回 JSON 农场数据，而非 HTML 页面
+        return self._action_url("fetch")
+
     def get_warehouse_url(self) -> str:
         return self._action_url("fetch")
 

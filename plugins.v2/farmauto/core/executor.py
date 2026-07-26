@@ -349,11 +349,12 @@ class FarmExecutor:
         for plot in plots:
             land_id = plot["land_id"]
             plot_index = plot["plot_index"]
-            harvest_url = site_config.get_harvest_plot_url(land_id, plot_index)
+            # 思齐收获用 POST plant_game.php + action=harvest
             try:
-                harvested = self.http_client.get(
-                    harvest_url,
+                harvested = self.http_client.post(
+                    site_config.get_farm_url(),
                     cookies,
+                    data={"action": "harvest", "land_id": land_id, "plot_index": plot_index},
                     retryable=False,
                 )
                 harvested.raise_for_status()
@@ -397,7 +398,7 @@ class FarmExecutor:
         target_response.raise_for_status()
         targets = site_config.parse_steal_targets(target_response.text)
         if not targets:
-            return ActionResult("steal", "随机农场", False, message="没有可偷菜目标")
+            return ActionResult("steal", "随机农场", True, message="无可偷菜目标，跳过")
         target = self._siqi_target_fields(targets[0])
         plots = target.get("plots") or target.get("victim_plots") or []
         plot = next(
@@ -432,7 +433,7 @@ class FarmExecutor:
         target_response.raise_for_status()
         targets = site_config.parse_like_targets(target_response.text)
         if not targets:
-            return ActionResult("like", "随机农场", False, message="没有可点赞目标")
+            return ActionResult("like", "随机农场", True, message="无可点赞目标，跳过")
         target = self._siqi_target_fields(targets[0])
         target_id = target.get("target_id")
         response = self.http_client.post(
@@ -586,13 +587,22 @@ class FarmExecutor:
                 parsed = site_config.parse_harvest_result(response.text)
             elif operation == "plant":
                 crop_action = crop.get("action", "plant")
-                url = (
-                    site_config.get_breed_url(crop["type"], crop["id"])
-                    if crop_action == "breed"
-                    else site_config.get_plant_url(crop["type"], crop["id"])
-                )
-                action_url = url
-                response = self.http_client.get(action_url, cookies, retryable=False)
+                if site_config.site_id == "siqi":
+                    # 思齐用 POST plant_game.php + action=plant
+                    response = self.http_client.post(
+                        site_config.get_farm_url(),
+                        cookies,
+                        data={"action": "plant", "land_id": action.get("land_id", ""), "plot_index": action.get("plot_index", ""), "seed_id": crop.get("id", "")},
+                        retryable=False,
+                    )
+                else:
+                    url = (
+                        site_config.get_breed_url(crop["type"], crop["id"])
+                        if crop_action == "breed"
+                        else site_config.get_plant_url(crop["type"], crop["id"])
+                    )
+                    action_url = url
+                    response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_plant_result(response.text, crop_action)
             elif operation == "sell":
@@ -606,8 +616,17 @@ class FarmExecutor:
                     sell_key = sell_key or f"{crop['type']}_{crop['id']}"
                 if not sell_key:
                     return ActionResult("sell", target, False, message="未找到出售标识"), farm_html
-                action_url = site_config.get_sell_url(sell_key)
-                response = self.http_client.get(action_url, cookies, retryable=False)
+                if site_config.site_id == "siqi":
+                    # 思齐用 POST plant_game.php + action=sell_inventory
+                    response = self.http_client.post(
+                        site_config.get_farm_url(),
+                        cookies,
+                        data={"action": "sell_inventory", "seed_id": crop.get("id", ""), "quantity": int(action.get("quantity", 1))},
+                        retryable=False,
+                    )
+                else:
+                    action_url = site_config.get_sell_url(sell_key)
+                    response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_sell_result(response.text)
             else:

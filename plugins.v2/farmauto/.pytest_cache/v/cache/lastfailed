@@ -1,1 +1,7 @@
-{}
+{
+  "tests/test_siqi.py::test_siqi_metadata_and_urls": true,
+  "tests/test_siqi_executor.py::test_captcha_harvest_submits_ocr_result": true,
+  "tests/test_siqi_executor.py::test_captcha_image_url_is_built_when_response_only_has_hash": true,
+  "tests/test_siqi_executor.py::test_captcha_ocr_failure_falls_back_to_each_ready_plot": true,
+  "tests/test_siqi_executor.py::test_captcha_ocr_fallback_logs_reason_and_plot_failure": true
+}
