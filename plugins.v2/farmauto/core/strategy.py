@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .models import WarehouseItem
 
@@ -66,15 +66,18 @@ def _warehouse_model(item: Any) -> WarehouseItem:
     )
 
 
-def plan_smart(snapshot, warehouse, site_config, policy) -> List[dict]:
+def plan_smart(
+    snapshot, warehouse, site_config, policy, crops_override: Optional[Dict] = None
+) -> List[dict]:
     policy = _policy(policy)
     plan: List[dict] = []
     remaining_sales = int(policy["max_sell_per_run"])
     market_prices = snapshot.get("market_prices", {})
     crop_status = snapshot.get("crop_status", {})
     warehouse_items = [_warehouse_model(item) for item in warehouse]
+    crops = crops_override if crops_override is not None else site_config.crops
 
-    for crop_key, crop in site_config.crops.items():
+    for crop_key, crop in crops.items():
         price = int(market_prices.get(crop_key, 0))
         if not should_sell(crop, price, policy):
             continue
@@ -99,22 +102,25 @@ def plan_smart(snapshot, warehouse, site_config, policy) -> List[dict]:
     return plan
 
 
-def plan_harvest(snapshot, warehouse, site_config, policy) -> List[dict]:
+def plan_harvest(
+    snapshot, warehouse, site_config, policy, crops_override: Optional[Dict] = None
+) -> List[dict]:
     policy = _policy(policy)
     plan: List[dict] = []
     crop_status = snapshot.get("crop_status", {})
     market_prices = snapshot.get("market_prices", {})
+    crops = crops_override if crops_override is not None else site_config.crops
 
     if policy["auto_harvest"]:
         if site_config.supports("harvest_all"):
             plan.append({"op": "harvest_all", "crop_key": "all", "source": "field", "quantity": 1})
         else:
             for crop_key, status in crop_status.items():
-                if status.get("can_harvest") and crop_key in site_config.crops:
+                if status.get("can_harvest") and crop_key in crops:
                     plan.append({"op": "harvest", "crop_key": crop_key, "source": "field", "quantity": 1})
 
     if policy["auto_plant"]:
-        for crop_key in site_config.crops:
+        for crop_key in crops:
             plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
 
     threshold = int(policy["expire_threshold_minutes"])
@@ -122,7 +128,7 @@ def plan_harvest(snapshot, warehouse, site_config, policy) -> List[dict]:
     warehouse_items = [_warehouse_model(item) for item in warehouse]
     warehouse_items.sort(key=lambda item: item.expire_minutes if item.expire_minutes is not None else 10**12)
     for item in warehouse_items:
-        crop = site_config.crops.get(item.crop_key or "")
+        crop = crops.get(item.crop_key or "")
         if not crop or not item.sell_key or remaining_sales <= 0:
             continue
         price = int(market_prices.get(item.crop_key, 0))

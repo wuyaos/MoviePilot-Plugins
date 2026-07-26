@@ -28,6 +28,16 @@ FARM_JSON = """{
   "inventory": [{"seed_id": 1, "name": "萝卜", "quantity": 3}]
 }"""
 
+DYNAMIC_FARM_JSON = """{
+  "success": true,
+  "seeds": [
+    {"id": 2, "name": "玉米", "cost": 30, "base_reward": 50, "grow_time": 600},
+    {"id": 3, "name": "南瓜", "cost": 40, "base_reward": 70, "unlock_harvest": 10}
+  ],
+  "user_lands": [{"land_id": 2, "plot_index": 0, "seed_id": 3, "is_ready": 1}],
+  "inventory": [{"seed_id": 3, "name": "南瓜", "quantity": 2}]
+}"""
+
 CAPTCHA_HTML = """
 <script>window.harvestCaptcha = {"imagehash":"hash-123"};</script>
 <img id="harvest-captcha" src="/captcha.php?id=7&amp;scene=harvest">
@@ -98,6 +108,28 @@ def test_siqi_farm_and_warehouse_parsers():
     assert item["crop_key"] == "crop_1"
     assert config.get_sell_key(FARM_JSON, "crop", 1) == "1"
     assert config.parse_warehouse_page(FARM_JSON)[1] is None
+
+
+def test_siqi_resolves_dynamic_crops_and_inventory_keys():
+    config = SiqiConfig()
+
+    assert config.resolve_crops(DYNAMIC_FARM_JSON) == {
+        "crop_2": {
+            "name": "玉米", "cost": 30, "type": "crop", "id": 2,
+            "action": "plant", "grow_time": 600, "unlock_harvest": 0,
+        },
+        "crop_3": {
+            "name": "南瓜", "cost": 40, "type": "crop", "id": 3,
+            "action": "plant", "grow_time": None, "unlock_harvest": 10,
+        },
+    }
+    assert config.resolve_crops("") is None
+    assert config.parse_market_prices(DYNAMIC_FARM_JSON) == {
+        "crop_2": 50,
+        "crop_3": 70,
+    }
+    assert config.parse_crop_status(DYNAMIC_FARM_JSON)["crop_3"]["can_harvest"] is True
+    assert config.parse_warehouse_items(DYNAMIC_FARM_JSON)[0]["crop_key"] == "crop_3"
 
 
 def test_siqi_captcha_target_and_result_parsers():

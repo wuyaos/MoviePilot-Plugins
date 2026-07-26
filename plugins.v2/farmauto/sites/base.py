@@ -51,6 +51,10 @@ class FarmSiteConfig(ABC):
     def parse_market_prices(self, html: str) -> Dict[str, int]:
         raise NotImplementedError
 
+    def resolve_crops(self, farm_html: str) -> Optional[Dict[str, Dict]]:
+        """返回本次运行的有效作物字典；None 表示使用静态 crops。"""
+        return None
+
     def parse_crop_status(self, html: str) -> Dict[str, Dict]:
         source = html or ""
         result: Dict[str, Dict] = {}

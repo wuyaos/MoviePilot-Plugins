@@ -94,6 +94,8 @@ class FarmExecutor:
             if self.trend_store is not None:
                 self.trend_store.record(site_config.site_id, report.market_prices)
             report.crop_status = site_config.parse_crop_status(farm_html)
+            resolved_crops = site_config.resolve_crops(farm_html)
+            crops = resolved_crops if resolved_crops is not None else site_config.crops
             snapshot = {
                 "market_prices": report.market_prices,
                 "crop_status": report.crop_status,
@@ -116,9 +118,15 @@ class FarmExecutor:
             current_action = "生成计划"
             current_url = ""
             if mode == "smart":
-                plan = plan_smart(snapshot, warehouse, site_config, policy)
+                plan = plan_smart(
+                    snapshot, warehouse, site_config, policy,
+                    crops_override=resolved_crops,
+                )
             elif mode == "harvest":
-                plan = plan_harvest(snapshot, warehouse, site_config, policy)
+                plan = plan_harvest(
+                    snapshot, warehouse, site_config, policy,
+                    crops_override=resolved_crops,
+                )
             else:
                 report.status = "skipped"
                 report.message = f"不支持的运行模式：{mode}"
@@ -128,7 +136,7 @@ class FarmExecutor:
             self._log("debug", f"{site_name} 执行计划 {len(plan)} 步")
             if policy["dry_run"]:
                 for action in plan:
-                    crop = site_config.crops.get(action["crop_key"], {})
+                    crop = crops.get(action["crop_key"], {})
                     target = crop.get("name", action["crop_key"])
                     for _ in range(int(action.get("quantity", 1))):
                         result = ActionResult(
@@ -167,6 +175,7 @@ class FarmExecutor:
                         site_config,
                         report.market_prices,
                         allowed,
+                        crops,
                     )
                     report.actions.extend(results)
                     for result in results:
@@ -193,6 +202,7 @@ class FarmExecutor:
                         policy,
                         field_html,
                         report.market_prices,
+                        crops,
                     )
                     report.actions.append(result)
                     self._log_action(site_name, result)
@@ -438,7 +448,7 @@ class FarmExecutor:
         return items
 
     def _execute_batch_sell(
-        self, action_group, cookies, site_config, market_prices, max_items
+        self, action_group, cookies, site_config, market_prices, max_items, crops
     ) -> List[ActionResult]:
         pending = action_group[:max_items]
         if not pending:
@@ -449,7 +459,7 @@ class FarmExecutor:
             return [
                 ActionResult(
                     "sell",
-                    site_config.crops.get(action.get("crop_key", ""), {}).get(
+                    crops.get(action.get("crop_key", ""), {}).get(
                         "name", action.get("crop_key", "")
                     ),
                     False,
@@ -474,7 +484,7 @@ class FarmExecutor:
             results = []
             for index, action in enumerate(pending):
                 crop_key = action.get("crop_key", "")
-                crop = site_config.crops.get(crop_key, {})
+                crop = crops.get(crop_key, {})
                 success = index < sold_count
                 profit = 0
                 if success:
@@ -499,7 +509,7 @@ class FarmExecutor:
             return [
                 ActionResult(
                     "sell",
-                    site_config.crops.get(action.get("crop_key", ""), {}).get(
+                    crops.get(action.get("crop_key", ""), {}).get(
                         "name", action.get("crop_key", "")
                     ),
                     False,
@@ -509,10 +519,10 @@ class FarmExecutor:
             ]
 
     def _execute_action(
-        self, action, cookies, site_config, policy, farm_html, market_prices
+        self, action, cookies, site_config, policy, farm_html, market_prices, crops
     ):
         crop_key = action.get("crop_key", "")
-        crop = site_config.crops.get(crop_key, {})
+        crop = crops.get(crop_key, {})
         target = crop.get("name", crop_key)
         operation = action.get("op", "unknown")
         action_url = ""

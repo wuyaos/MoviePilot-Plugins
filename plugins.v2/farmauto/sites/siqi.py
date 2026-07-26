@@ -66,6 +66,29 @@ class SiqiConfig(FarmSiteConfig):
     def get_warehouse_url(self) -> str:
         return self._action_url("fetch")
 
+    def resolve_crops(self, farm_html: str) -> Optional[Dict[str, Dict]]:
+        data = self._json_dict(farm_html)
+        seeds = data.get("seeds") or []
+        if not seeds:
+            return None
+        crops: Dict[str, Dict] = {}
+        for seed in seeds:
+            if not isinstance(seed, dict):
+                continue
+            seed_id = self._number(seed.get("id") or seed.get("seed_id"))
+            if seed_id is None:
+                continue
+            crops[f"crop_{seed_id}"] = {
+                "name": str(seed.get("name") or f"作物{seed_id}"),
+                "cost": self._number(seed.get("cost")) or 0,
+                "type": "crop",
+                "id": seed_id,
+                "action": "plant",
+                "grow_time": seed.get("grow_time"),
+                "unlock_harvest": self._number(seed.get("unlock_harvest")) or 0,
+            }
+        return crops or None
+
     def parse_market_prices(self, html: str) -> Dict[str, int]:
         data = self._json_dict(html)
         result: Dict[str, int] = {}
@@ -125,9 +148,12 @@ class SiqiConfig(FarmSiteConfig):
             quantity = self._number(item.get("quantity"))
             if seed_id is None or quantity is None:
                 continue
-            crop = self.crops.get(f"crop_{seed_id}")
+            crop_key = f"crop_{seed_id}"
+            crop = self.crops.get(crop_key)
             name = str(item.get("name") or (crop or {}).get("name") or f"作物 {seed_id}")
-            items.append(self._warehouse_item(name, str(quantity), "", str(seed_id)))
+            warehouse_item = self._warehouse_item(name, str(quantity), "", str(seed_id))
+            warehouse_item["crop_key"] = crop_key
+            items.append(warehouse_item)
         if data:
             return items
 
@@ -138,7 +164,11 @@ class SiqiConfig(FarmSiteConfig):
                 continue
             quantity = next((self._number(cell) for cell in cells[1:] if self._number(cell) is not None), None)
             if quantity is not None:
-                items.append(self._warehouse_item(cells[0], str(quantity), "", seed_match.group(1)))
+                warehouse_item = self._warehouse_item(
+                    cells[0], str(quantity), "", seed_match.group(1)
+                )
+                warehouse_item["crop_key"] = f"crop_{seed_match.group(1)}"
+                items.append(warehouse_item)
         return items
 
     def parse_warehouse_page(self, html: str) -> Tuple[List[Dict], Optional[int]]:

@@ -113,6 +113,28 @@ class MultiCropSiteConfig(FakeSiteConfig):
         ]
 
 
+class DynamicCropSiteConfig(FakeSiteConfig):
+    def resolve_crops(self, farm_html):
+        return {
+            "crop_2": {
+                "name": "动态玉米", "cost": 200, "type": "crop", "id": 2,
+                "action": "plant",
+            }
+        }
+
+    def parse_market_prices(self, html):
+        return {"crop_2": 300}
+
+    def parse_crop_status(self, html):
+        return {"crop_2": {"can_harvest": True}}
+
+    def parse_warehouse_items(self, html):
+        return [{
+            "name": "动态玉米", "quantity": 1, "expire_raw": "1小时",
+            "expire_minutes": 60, "sell_key": "warehouse_crop_2", "crop_key": "crop_2",
+        }]
+
+
 class BatchSellSiteConfig(MultiCropSiteConfig):
     capabilities = {"batch_sell"}
 
@@ -183,6 +205,23 @@ def test_dry_run_builds_plan_without_action_requests():
     assert report.total_profit == 0
     assert len(client.urls) == 2
     assert not any("action=" in url for url in client.urls)
+
+
+def test_executor_uses_resolved_dynamic_crops():
+    client = FakeHttpClient()
+    report = FarmExecutor(client, Logger()).run_site(
+        "session=value",
+        DynamicCropSiteConfig(),
+        "smart",
+        {"max_sell_per_run": 2, "request_interval": 0},
+    )
+
+    assert [action.action for action in report.actions] == [
+        "sell", "harvest", "plant", "sell"
+    ]
+    assert {action.target for action in report.actions} == {"动态玉米"}
+    assert any("action=harvest&type=crop&id=2" in url for url in client.urls)
+    assert any("action=plant&type=crop&id=2" in url for url in client.urls)
 
 
 def test_single_action_exception_isolated_and_later_actions_continue():
