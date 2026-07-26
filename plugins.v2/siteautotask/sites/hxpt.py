@@ -14,9 +14,18 @@ from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask
 from ..base.decorator import task_info, TaskType
 from ..base.result import TaskResult
+from ..utils.request import parse_json_response
 
 
 class HxptHandler(CapabilityHandler):
+    @staticmethod
+    def get_claim_options():
+        """好学 task.php 页面实测的可申领任务。"""
+        return [
+            {"id": "2", "label": "精进研习社"},
+            {"id": "4", "label": "测（管理组任务）"},
+        ]
+
     def __init__(self, site_info: dict):
         super().__init__(site_info)
         self.shoutbox_url = self.site_url + "/shoutbox.php"
@@ -73,6 +82,15 @@ class HxptHandler(CapabilityHandler):
                         return prev
         return None
 
+    def claim_task(self, task_id: str):
+        response = self._send_post_request(
+            self.site_url + "/ajax.php",
+            data={"action": "claimTask", "params[exam_id]": task_id},
+        )
+        if response is None:
+            return "任务领取失败"
+        return parse_json_response(response, "任务领取失败").get("msg", "未知错误")
+
     def get_feedback(self, message: str = None):
         if not self._last_message_result:
             return None
@@ -100,3 +118,7 @@ class Tasks(BaseTask):
     def daily_shotbox(self):
         ok, msg = self.client.send_messagebox("好好学习天天向上")
         return TaskResult.ok(msg) if ok else TaskResult.fail(msg)
+
+    @task_info("{client_name}任务申领", "申领好学任务", TaskType.CLAIM)
+    def claim(self, task_id=None):
+        return self.client.claim_task(task_id)

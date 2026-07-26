@@ -357,11 +357,12 @@
     "name": "站点自动任务",
     "description": "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。",
     "labels": "PT,签到,喊话,自动任务",
-    "version": "1.0.13",
+    "version": "1.0.14",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.14": "扩展好学（hxpt.org）适配器：保留原有签到和喊话，新增 task.php 页面实测的任务申领下拉选项（精进研习社、管理组任务），领取接口使用 action=claimTask 与 params[exam_id]。",
       "v1.0.13": "新增梓喵（azusa.wiki）任务申领适配器，支持 task.php 页面实测的每日、七日和月度任务下拉选择；领取接口使用 action=claimTask 与 params[exam_id]。",
       "v1.0.12": "优化内置 Vc-Lib 的 CookieCloud 补取时机：站点筛选、配置页和调度服务查询不再请求 CookieCloud，仅在实际构造并执行 Vc-Lib Handler 时补取；同一插件实例按域名缓存结果，避免单轮重复下载和重复日志。",
       "v1.0.11": "恢复配置页“立即运行一次”开关，但其仅作为本次保存的临时触发字段：初始化后立即移出持久化配置，表单始终回显 false，避免安装、同步或普通重载意外再次补跑；独立 /manual-run API 和命令入口仍保留。",

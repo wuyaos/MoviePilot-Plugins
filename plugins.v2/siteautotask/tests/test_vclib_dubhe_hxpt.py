@@ -219,12 +219,26 @@ class HxptTests(unittest.TestCase):
         feedback = h.get_feedback("求火花")
         self.assertEqual(feedback["rewards"][0]["type"], "火花")
 
+    def test_claim_task_and_options(self):
+        h, session = self.handler({})
+        session.post.return_value = Response(payload={"msg": "任务认领成功"})
+        self.assertEqual(h.claim_task("2"), "任务认领成功")
+        self.assertEqual(session.post.call_args.kwargs["data"], {
+            "action": "claimTask", "params[exam_id]": "2",
+        })
+        self.assertEqual(hxpt.HxptHandler.get_claim_options(), [
+            {"id": "2", "label": "精进研习社"},
+            {"id": "4", "label": "测（管理组任务）"},
+        ])
+
     def test_task_metadata(self):
         h, _ = self.handler({})
         tasks = hxpt.Tasks()
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
         self.assertEqual(meta["daily_shotbox"], "chat")
+        self.assertEqual(meta["daily_checkin"], "checkin")
+        self.assertEqual(meta["claim"], "claim")
 
 
 if __name__ == "__main__":
