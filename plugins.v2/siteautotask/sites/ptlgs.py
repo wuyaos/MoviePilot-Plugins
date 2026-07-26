@@ -21,6 +21,10 @@ from ..base.result import TaskResult
 
 
 class PtlgsHandler(CapabilityHandler):
+
+    @staticmethod
+    def shotbox_messages():
+        return ["黑丝娘，求工分", "黑丝娘，求上传"]
     def __init__(self, site_info: dict):
         super().__init__(site_info)
         self.shoutbox_url = self.site_url + "/shoutbox.php"
@@ -130,9 +134,6 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @staticmethod
-    def shotbox_messages():
-        return ["黑丝娘，求工分", "黑丝娘，求上传"]
 
     @task_info("{client_name}喊话", "执行PTLGS喊话并解析黑丝娘反馈", TaskType.CHAT)
     def daily_shotbox(self):

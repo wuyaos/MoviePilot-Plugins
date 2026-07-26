@@ -14,6 +14,10 @@ from ..base.result import TaskResult
 
 
 class CyanbugHandler(CapabilityHandler):
+
+    @staticmethod
+    def shotbox_messages():
+        return ["青虫娘，求上传", "青虫娘，求魔力"]
     @staticmethod
     def get_site_name():
         return "大青虫"
@@ -42,9 +46,6 @@ class Tasks(BaseTask):
     def daily_checkin(self):
         return self.client.attendance()
 
-    @staticmethod
-    def shotbox_messages():
-        return ["青虫娘，求上传", "青虫娘，求魔力"]
 
     @task_info("{client_name}喊话", "执行大青虫喊话（青虫娘）", TaskType.CHAT)
     def daily_shotbox(self):

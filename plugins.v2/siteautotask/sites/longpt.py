@@ -15,6 +15,10 @@ from ..utils.request import parse_json_response
 class LongPTHandler(CapabilityHandler):
 
     @staticmethod
+    def shotbox_messages():
+        return ["龙宝，求上传", "龙宝，求魔力"]
+
+    @staticmethod
     def get_claim_options():
         """可申领任务选项，id 为站点 exam_id。"""
         return [
@@ -100,9 +104,6 @@ class Tasks(BaseTask):
     def claim(self, task_id=None):
         return self.client.claim_task(task_id)
 
-    @staticmethod
-    def shotbox_messages():
-        return ["龙宝，求上传", "龙宝，求魔力"]
 
     @task_info("{client_name}喊话", "执行 LongPT 喊话并获取反馈", TaskType.CHAT)
     def daily_shotbox(self):

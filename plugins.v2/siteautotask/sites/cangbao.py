@@ -11,6 +11,10 @@ from ..base.result import TaskResult
 class CangbaoHandler(CapabilityHandler):
 
     @staticmethod
+    def shotbox_messages():
+        return ["阁主，求上传", "阁主，求魔力"]
+
+    @staticmethod
     def get_claim_options():
         """可申领任务选项，id 为站点 exam_id。"""
         return [
@@ -100,9 +104,6 @@ class Tasks(BaseTask):
     def claim(self, task_id=None):
         return self.client.claim_task(task_id)
 
-    @staticmethod
-    def shotbox_messages():
-        return ["阁主，求上传", "阁主，求魔力"]
 
     @task_info("{client_name}喊话", "执行藏宝阁喊话并获取反馈", TaskType.CHAT)
     def daily_shotbox(self):
