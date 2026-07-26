@@ -357,11 +357,12 @@
     "name": "站点自动任务",
     "description": "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。",
     "labels": "PT,签到,喊话,自动任务",
-    "version": "1.0.16",
+    "version": "1.0.17",
     "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png",
     "author": "wuyaos",
     "level": 2,
     "history": {
+      "v1.0.17": "删除独立重试服务 siteautotask_retry，重试并入主 cron：每次主 cron 执行后对失败单元连续重试 retry_count 次（0 则不重试）；Zm 喊话反馈改为读喊话区按用户名配对系统反馈；数据页改为按站点卡片展示含主题自适应边框与每任务独立趋势；修复 shotbox_messages 未挂在 Handler 类导致展开失败；梓喵 WAF 拦截标记 TODO 待后续浏览器渲染实现。",
       "v1.0.16": "删除独立勋章 cron（medal_cron）及其服务/入口/UI 控件，勋章检查改由主 cron 统一执行；主 cron 默认改为 4 0,12 * * *（每日两次），仅将精确旧默认值自动迁移，其他自定义 cron 不变。",
       "v1.0.15": "修复梓喵（azusa.wiki）任务领取 403：领取前动态读取 task.php 中的 csrf_token，并以 ajax.php?csrf_token=<token> 携带 action=claimTask 与 params[exam_id] 请求。",
       "v1.0.14": "扩展好学（hxpt.org）适配器：保留原有签到和喊话，新增 task.php 页面实测的任务申领下拉选项（精进研习社、管理组任务），领取接口使用 action=claimTask 与 params[exam_id]。",
