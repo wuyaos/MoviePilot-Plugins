@@ -273,6 +273,7 @@ class SiteAutoTask(_PluginBase):
                 "summary": "执行站点任务（可指定站点和任务用于调试）",
                 "description": (
                     "site_id 指定站点(id 或域名)，task_name 指定任务名(模糊匹配)；"
+                    "scope=zm 触发织梦独立 24h 调度；"
                     "都不传则按配置全量后台执行。调试指定站点/任务时同步返回执行记录。"
                 ),
             },
@@ -295,15 +296,24 @@ class SiteAutoTask(_PluginBase):
         threading.Thread(target=self.run_manual, daemon=True, name="siteautotask_manual_run").start()
         return {"success": True, "message": "已后台启动当天补跑，结果写入历史记录"}
 
-    def api_run(self, site_id: str = "", task_name: str = "") -> Dict[str, Any]:
+    def api_run(self, site_id: str = "", task_name: str = "", scope: str = "") -> Dict[str, Any]:
         """立即执行任务。
 
         - site_id 和 task_name 都为空：按配置全量后台执行（避免 API 超时）。
         - 指定 site_id：调试执行该站点全部任务，同步返回记录。
         - 指定 site_id + task_name：调试执行该站点匹配任务，同步返回记录。
+        - scope=zm：触发织梦独立 24h 调度，读取站内信并刷新下次调度。
         """
         if not self.engine:
             return {"success": False, "message": "插件未初始化"}
+        if scope == "zm":
+            logger.info("收到织梦独立调度触发请求")
+            records = self.run_zm()
+            return {
+                "success": True,
+                "message": f"织梦独立调度执行完成，共 {len(records)} 个任务",
+                "records": records,
+            }
         if not site_id and not task_name:
             threading.Thread(target=self.run_scheduled, daemon=True).start()
             return {"success": True, "message": "已后台启动全量任务，结果写入历史记录"}
