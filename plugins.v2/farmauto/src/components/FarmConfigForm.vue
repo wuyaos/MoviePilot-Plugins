@@ -227,20 +227,24 @@ function saveConfig() {
 
 <template>
   <v-form class="farm-config-form text-body-2" @submit.prevent="saveConfig">
-    <v-card-title class="bg-gradient-farm text-white d-flex align-center ga-2 px-3 py-2">
-      <v-icon icon="mdi-sprout" color="white" size="small" />
-      <span class="text-subtitle-1 text-white">农场配置</span>
-      <v-spacer />
-      <v-btn size="small" variant="outlined" color="white" prepend-icon="mdi-content-save" :loading="loading" @click="saveConfig">
-        保存配置
-      </v-btn>
-      <v-btn size="small" variant="outlined" color="white" prepend-icon="mdi-view-dashboard-outline" @click="emit('switch')">
-        切换详情
-      </v-btn>
-      <v-btn size="small" variant="outlined" color="white" prepend-icon="mdi-close" @click="emit('close')">
-        关闭
-      </v-btn>
-    </v-card-title>
+    <div class="farm-header bg-gradient-farm text-white">
+      <div class="d-flex align-center ga-2 px-3 py-2">
+        <v-icon icon="mdi-sprout" color="white" size="small" />
+        <span class="text-subtitle-1 text-white font-weight-bold">农场配置</span>
+      </div>
+      <div class="d-flex flex-wrap align-center ga-2 px-3 pb-2">
+        <v-spacer />
+        <v-btn size="small" variant="outlined" color="white" border="white" prepend-icon="mdi-content-save" :loading="loading" @click="saveConfig">
+          保存配置
+        </v-btn>
+        <v-btn size="small" variant="outlined" color="white" border="white" prepend-icon="mdi-view-dashboard-outline" @click="emit('switch')">
+          切换详情
+        </v-btn>
+        <v-btn size="small" variant="outlined" color="white" border="white" prepend-icon="mdi-close" @click="emit('close')">
+          关闭
+        </v-btn>
+      </div>
+    </div>
 
     <v-alert
       v-if="error"
@@ -277,7 +281,7 @@ function saveConfig() {
           <div class="pa-4">
             <v-card flat class="config-section rounded border mb-4">
               <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
-                <v-icon icon="mdi-cog-outline" color="purple" size="small" class="mr-2" />
+                <v-icon icon="mdi-cog-outline" color="primary" size="small" class="mr-2" />
                 基础设置
               </v-card-title>
               <v-card-text class="pa-4">
@@ -314,7 +318,7 @@ function saveConfig() {
 
             <v-card flat class="config-section rounded border mb-4">
               <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
-                <v-icon icon="mdi-robot-outline" color="green" size="small" class="mr-2" />
+                <v-icon icon="mdi-robot-outline" color="success" size="small" class="mr-2" />
                 自动化功能
               </v-card-title>
               <v-card-text class="pa-4">
@@ -340,7 +344,7 @@ function saveConfig() {
 
             <v-card flat class="config-section rounded border mb-4">
               <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
-                <v-icon icon="mdi-timer-sand" color="purple" size="small" class="mr-2" />
+                <v-icon icon="mdi-timer-sand" color="info" size="small" class="mr-2" />
                 调度与网络
               </v-card-title>
               <v-card-text class="pa-4">
@@ -363,7 +367,7 @@ function saveConfig() {
 
             <v-card flat class="config-section rounded border">
               <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
-                <v-icon icon="mdi-chart-line" color="amber-darken-3" size="small" class="mr-2" />
+                <v-icon icon="mdi-chart-line" color="warning" size="small" class="mr-2" />
                 交易策略
               </v-card-title>
               <v-card-text class="pa-4">
@@ -391,7 +395,7 @@ function saveConfig() {
           <div class="pa-4">
             <v-card flat class="config-section rounded border mb-4">
               <v-card-title class="config-section-title section-title-bg d-flex flex-wrap align-center ga-2 px-4 py-3">
-                <v-icon icon="mdi-web" color="green" size="small" />
+                <v-icon icon="mdi-web" color="warning" size="small" />
                 <span class="text-subtitle-1">{{ site.title }} 策略</span>
                 <v-spacer />
                 <v-switch
@@ -562,7 +566,7 @@ function saveConfig() {
 
             <v-card v-if="site.value === 'siqi'" flat class="config-section rounded border">
               <v-card-title class="config-section-title section-title-bg text-subtitle-1 d-flex align-center px-4 py-3">
-                <v-icon icon="mdi-shield-alert-outline" color="amber-darken-3" size="small" class="mr-2" />
+                <v-icon icon="mdi-shield-alert-outline" color="warning" size="small" class="mr-2" />
                 思齐专属功能
               </v-card-title>
               <v-card-text class="pa-4">
@@ -601,6 +605,16 @@ function saveConfig() {
 .farm-config-form {
   min-inline-size: 0;
   padding: 0.5rem;
+}
+
+.farm-config-form .farm-header :deep(.v-btn) {
+  color: white !important;
+  border-width: 1px !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
+}
+.farm-config-form .farm-header :deep(.v-btn:hover) {
+  border-color: rgba(255, 255, 255, 1) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
 }
 
 .bg-gradient-farm {

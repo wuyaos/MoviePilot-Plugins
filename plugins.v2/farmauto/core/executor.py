@@ -551,6 +551,10 @@ class FarmExecutor:
                 cost = int(crop.get("cost", 0))
                 if price > 0 and cost > 0:
                     profit = price - cost
+            elif success and operation == "plant":
+                cost = int(crop.get("cost", 0))
+                if cost > 0:
+                    profit = -cost
             result = ActionResult(
                 operation,
                 target,

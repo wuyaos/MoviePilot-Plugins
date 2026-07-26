@@ -576,9 +576,7 @@ class FarmAuto(_PluginBase):
         if last_run in (None, ""):
             return None
         try:
-            return datetime.fromtimestamp(float(last_run) + interval * 60).isoformat(
-                timespec="seconds"
-            )
+            return datetime.fromtimestamp(float(last_run) + interval * 60).strftime("%m-%d %H:%M")
         except (TypeError, ValueError, OSError):
             return None
 
@@ -733,6 +731,8 @@ class FarmAuto(_PluginBase):
             } if isinstance(site_trends, dict) else {},
             "recent_actions": recent_actions[-20:],
         }
+        data["bonus"] = report.get("bonus")
+        data["currency"] = site_config.currency
         detail_message = ""
         if site_id != "siqi":
             try:
@@ -765,6 +765,12 @@ class FarmAuto(_PluginBase):
                 data["market_prices"] = market_prices
                 data["crop_status"] = self._normalize_crop_status(crop_status)
                 data["warehouse"] = self._normalize_warehouse(warehouse)
+                try:
+                    parsed_bonus = site_config.parse_bonus(farm_html)
+                    if parsed_bonus:
+                        data["bonus"] = parsed_bonus
+                except Exception as bonus_error:
+                    logger.debug(f"[FarmAuto] {site_config.site_name} bonus 解析失败：{bonus_error}")
                 self._market_prices[site_id] = market_prices
                 self._trend_store.record(site_id, market_prices)
                 site_trends = self._trend_store.to_dict().get(site_id, {})

@@ -296,6 +296,31 @@ class SiqiConfig(FarmSiteConfig):
                     "effective_plot_count": effective_count or plot_count or 0,
                     "plot_count": plot_count or effective_count or 0,
                 })
+
+            # 补全未解锁的 land（无实际 plot 但有地块元数据）
+            represented_land_ids = {str(plot.get("land_id")) for plot in user_lands}
+            for land_id, land in lands_by_id.items():
+                if land_id in represented_land_ids:
+                    continue
+                unlock_harvest = self._number(
+                    land.get("unlock_harvest")
+                    or land.get("required_harvest")
+                    or land.get("harvest_required")
+                )
+                user_lands.append({
+                    "land_id": land_id,
+                    "name": str(land.get("name") or ""),
+                    "seed_id": None,
+                    "seed_name": "",
+                    "seed": None,
+                    "unlock_harvest": unlock_harvest or 0,
+                    "plot_index": None,
+                    "is_ready": False,
+                    "plant_time": None,
+                    "harvest_time": None,
+                    "effective_plot_count": effective_counts.get(str(land_id), 0) or 0,
+                    "plot_count": self._number(land.get("plot_count")) or 0,
+                })
             result["user_lands"] = user_lands
 
             inventory: List[Dict[str, Any]] = []

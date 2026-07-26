@@ -4,10 +4,13 @@ import { _ as _export_sfc } from './_plugin-vue_export-helper-pcqpp-6-.js';
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,createTextVNode:_createTextVNode,withCtx:_withCtx,toDisplayString:_toDisplayString,openBlock:_openBlock$1,createBlock:_createBlock$1,createCommentVNode:_createCommentVNode,renderList:_renderList,Fragment:_Fragment,createElementBlock:_createElementBlock,withModifiers:_withModifiers} = await importShared('vue');
 
 
-const _hoisted_1 = { class: "pa-4" };
-const _hoisted_2 = { class: "pa-4" };
-const _hoisted_3 = { class: "text-subtitle-1" };
-const _hoisted_4 = { class: "d-flex flex-wrap align-center ga-2 mt-2" };
+const _hoisted_1 = { class: "farm-header bg-gradient-farm text-white" };
+const _hoisted_2 = { class: "d-flex align-center ga-2 px-3 py-2" };
+const _hoisted_3 = { class: "d-flex flex-wrap align-center ga-2 px-3 pb-2" };
+const _hoisted_4 = { class: "pa-4" };
+const _hoisted_5 = { class: "pa-4" };
+const _hoisted_6 = { class: "text-subtitle-1" };
+const _hoisted_7 = { class: "d-flex flex-wrap align-center ga-2 mt-2" };
 
 const {computed,reactive,ref,watch} = await importShared('vue');
 
@@ -246,10 +249,10 @@ return (_ctx, _cache) => {
   const _component_v_icon = _resolveComponent("v-icon");
   const _component_v_spacer = _resolveComponent("v-spacer");
   const _component_v_btn = _resolveComponent("v-btn");
-  const _component_v_card_title = _resolveComponent("v-card-title");
   const _component_v_alert = _resolveComponent("v-alert");
   const _component_v_tab = _resolveComponent("v-tab");
   const _component_v_tabs = _resolveComponent("v-tabs");
+  const _component_v_card_title = _resolveComponent("v-card-title");
   const _component_v_switch = _resolveComponent("v-switch");
   const _component_v_col = _resolveComponent("v-col");
   const _component_v_select = _resolveComponent("v-select");
@@ -268,24 +271,27 @@ return (_ctx, _cache) => {
     onSubmit: _withModifiers(saveConfig, ["prevent"])
   }, {
     default: _withCtx(() => [
-      _createVNode(_component_v_card_title, { class: "bg-gradient-farm text-white d-flex align-center ga-2 px-3 py-2" }, {
-        default: _withCtx(() => [
+      _createElementVNode("div", _hoisted_1, [
+        _createElementVNode("div", _hoisted_2, [
           _createVNode(_component_v_icon, {
             icon: "mdi-sprout",
             color: "white",
             size: "small"
           }),
-          _cache[31] || (_cache[31] = _createElementVNode("span", { class: "text-subtitle-1 text-white" }, "农场配置", -1)),
+          _cache[28] || (_cache[28] = _createElementVNode("span", { class: "text-subtitle-1 text-white font-weight-bold" }, "农场配置", -1))
+        ]),
+        _createElementVNode("div", _hoisted_3, [
           _createVNode(_component_v_spacer),
           _createVNode(_component_v_btn, {
             size: "small",
             variant: "outlined",
             color: "white",
+            border: "white",
             "prepend-icon": "mdi-content-save",
             loading: __props.loading,
             onClick: saveConfig
           }, {
-            default: _withCtx(() => [...(_cache[28] || (_cache[28] = [
+            default: _withCtx(() => [...(_cache[29] || (_cache[29] = [
               _createTextVNode(" 保存配置 ", -1)
             ]))]),
             _: 1
@@ -294,10 +300,11 @@ return (_ctx, _cache) => {
             size: "small",
             variant: "outlined",
             color: "white",
+            border: "white",
             "prepend-icon": "mdi-view-dashboard-outline",
             onClick: _cache[0] || (_cache[0] = $event => (emit('switch')))
           }, {
-            default: _withCtx(() => [...(_cache[29] || (_cache[29] = [
+            default: _withCtx(() => [...(_cache[30] || (_cache[30] = [
               _createTextVNode(" 切换详情 ", -1)
             ]))]),
             _: 1
@@ -306,17 +313,17 @@ return (_ctx, _cache) => {
             size: "small",
             variant: "outlined",
             color: "white",
+            border: "white",
             "prepend-icon": "mdi-close",
             onClick: _cache[1] || (_cache[1] = $event => (emit('close')))
           }, {
-            default: _withCtx(() => [...(_cache[30] || (_cache[30] = [
+            default: _withCtx(() => [...(_cache[31] || (_cache[31] = [
               _createTextVNode(" 关闭 ", -1)
             ]))]),
             _: 1
           })
-        ]),
-        _: 1
-      }),
+        ])
+      ]),
       (error.value)
         ? (_openBlock$1(), _createBlock$1(_component_v_alert, {
             key: 0,
@@ -377,7 +384,7 @@ return (_ctx, _cache) => {
             default: _withCtx(() => [
               _createVNode(_component_v_window_item, { value: "global" }, {
                 default: _withCtx(() => [
-                  _createElementVNode("div", _hoisted_1, [
+                  _createElementVNode("div", _hoisted_4, [
                     _createVNode(_component_v_card, {
                       flat: "",
                       class: "config-section rounded border mb-4"
@@ -387,7 +394,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_v_icon, {
                               icon: "mdi-cog-outline",
-                              color: "purple",
+                              color: "primary",
                               size: "small",
                               class: "mr-2"
                             }),
@@ -515,7 +522,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_v_icon, {
                               icon: "mdi-robot-outline",
-                              color: "green",
+                              color: "success",
                               size: "small",
                               class: "mr-2"
                             }),
@@ -633,7 +640,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_v_icon, {
                               icon: "mdi-timer-sand",
-                              color: "purple",
+                              color: "info",
                               size: "small",
                               class: "mr-2"
                             }),
@@ -741,7 +748,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_v_icon, {
                               icon: "mdi-chart-line",
-                              color: "amber-darken-3",
+                              color: "warning",
                               size: "small",
                               class: "mr-2"
                             }),
@@ -832,7 +839,7 @@ return (_ctx, _cache) => {
                   value: site.value
                 }, {
                   default: _withCtx(() => [
-                    _createElementVNode("div", _hoisted_2, [
+                    _createElementVNode("div", _hoisted_5, [
                       _createVNode(_component_v_card, {
                         flat: "",
                         class: "config-section rounded border mb-4"
@@ -842,10 +849,10 @@ return (_ctx, _cache) => {
                             default: _withCtx(() => [
                               _createVNode(_component_v_icon, {
                                 icon: "mdi-web",
-                                color: "green",
+                                color: "warning",
                                 size: "small"
                               }),
-                              _createElementVNode("span", _hoisted_3, _toDisplayString(site.title) + " 策略", 1),
+                              _createElementVNode("span", _hoisted_6, _toDisplayString(site.title) + " 策略", 1),
                               _createVNode(_component_v_spacer),
                               _createVNode(_component_v_switch, {
                                 modelValue: sitePolicies[site.value].enabled,
@@ -1095,7 +1102,7 @@ return (_ctx, _cache) => {
                                 ]),
                                 _: 2
                               }, 1024),
-                              _createElementVNode("div", _hoisted_4, [
+                              _createElementVNode("div", _hoisted_7, [
                                 _cache[38] || (_cache[38] = _createElementVNode("span", { class: "text-body-2 text-medium-emphasis" }, "生效摘要", -1)),
                                 _createVNode(_component_v_chip_group, {
                                   column: "",
@@ -1213,7 +1220,7 @@ return (_ctx, _cache) => {
                                 default: _withCtx(() => [
                                   _createVNode(_component_v_icon, {
                                     icon: "mdi-shield-alert-outline",
-                                    color: "amber-darken-3",
+                                    color: "warning",
                                     size: "small",
                                     class: "mr-2"
                                   }),
@@ -1348,7 +1355,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-c6da6072"]]);
+const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-7b4997c8"]]);
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 

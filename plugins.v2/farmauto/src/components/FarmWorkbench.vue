@@ -38,6 +38,7 @@ const selectedSiteIds = computed(() => (
 const selectedSite = computed(() => (
   sites.value.find(site => site.site_id === selectedSiteId.value) || sites.value[0] || {}
 ))
+const selectedSiteName = computed(() => selectedSite.value.site_name || '')
 const balance = computed(() => siteDetail.value.bonus ?? selectedSite.value.bonus ?? '—')
 const currency = computed(() => siteDetail.value.currency || selectedSite.value.currency || '')
 const enabled = computed(() => Boolean(status.value.enabled))
@@ -314,84 +315,90 @@ onMounted(() => loadStatus())
 
 <template>
   <v-card flat class="farm-workbench rounded border text-body-2">
-    <v-card-title class="bg-gradient-farm text-white d-flex align-center ga-2 px-3 py-2">
-      <v-icon icon="mdi-sprout" color="white" size="small" />
-      <span class="text-subtitle-1 text-white">农场工作台</span>
-      <v-spacer />
-
-      <div class="d-flex flex-wrap align-center ga-2 farm-header-status">
-        <v-chip
-          size="small"
-          variant="flat"
-          :color="enabled ? 'success' : 'grey-darken-1'"
-          :prepend-icon="enabled ? 'mdi-play-circle-outline' : 'mdi-pause-circle-outline'"
-        >
-          {{ enabled ? '已启用' : '已禁用' }}
-        </v-chip>
-        <v-chip
-          size="small"
-          variant="flat"
-          :color="useProxy ? 'info' : 'teal'"
-          prepend-icon="mdi-earth"
-        >
-          {{ useProxy ? '代理' : '直连' }}
-        </v-chip>
-        <v-chip size="small" variant="flat" color="indigo" prepend-icon="mdi-clock-outline">
-          {{ nextRun === '未安排' ? '未安排' : `下次 ${nextRun}` }}
-        </v-chip>
-        <v-chip
-          size="small"
-          variant="flat"
-          :color="dryRun ? 'warning' : 'success'"
-          :prepend-icon="dryRun ? 'mdi-flask-outline' : 'mdi-shield-check-outline'"
-        >
-          {{ dryRun ? '模拟模式' : '实盘模式' }}
-        </v-chip>
+    <div class="farm-header bg-gradient-farm text-white">
+      <div class="farm-header-row d-flex align-center ga-2 px-3 py-2">
+        <div class="d-flex align-center ga-2 farm-header-left">
+          <v-icon icon="mdi-sprout" color="white" size="small" />
+          <span class="text-subtitle-1 text-white font-weight-bold">农场工作台</span>
+          <span v-if="selectedSiteName" class="text-caption text-white opacity-70 ml-1">· {{ selectedSiteName }}</span>
+        </div>
+        <div class="d-flex flex-wrap align-center justify-center ga-1 farm-header-status farm-header-center">
+          <v-chip
+            size="x-small"
+            variant="flat"
+            :color="enabled ? 'success' : 'grey-darken-1'"
+            :prepend-icon="enabled ? 'mdi-play-circle-outline' : 'mdi-pause-circle-outline'"
+          >
+            {{ enabled ? '已启用' : '已禁用' }}
+          </v-chip>
+          <v-chip
+            size="x-small"
+            variant="flat"
+            :color="useProxy ? 'info' : 'teal'"
+            prepend-icon="mdi-earth"
+          >
+            {{ useProxy ? '代理' : '直连' }}
+          </v-chip>
+          <v-chip size="x-small" variant="flat" color="indigo" prepend-icon="mdi-clock-outline">
+            {{ nextRun === '未安排' ? '未安排' : `下次 ${nextRun}` }}
+          </v-chip>
+          <v-chip
+            size="x-small"
+            variant="flat"
+            :color="dryRun ? 'warning' : 'success'"
+            :prepend-icon="dryRun ? 'mdi-flask-outline' : 'mdi-shield-check-outline'"
+          >
+            {{ dryRun ? '模拟模式' : '实盘模式' }}
+          </v-chip>
+        </div>
+        <div class="d-flex flex-wrap align-center justify-end ga-2 farm-header-right">
+          <v-btn
+            size="small"
+            variant="outlined"
+            color="white"
+            border="white"
+            prepend-icon="mdi-play"
+            :loading="running"
+            @click="runNow"
+          >
+            立即运行
+          </v-btn>
+          <v-btn
+            size="small"
+            variant="outlined"
+            color="white"
+            border="white"
+            prepend-icon="mdi-refresh"
+            :loading="loading || detailLoading"
+            @click="refreshData"
+          >
+            刷新
+          </v-btn>
+          <v-btn
+            v-if="showSwitch"
+            size="small"
+            variant="outlined"
+            color="white"
+            border="white"
+            prepend-icon="mdi-cog"
+            @click="emit('switch', 'config')"
+          >
+            设置
+          </v-btn>
+          <v-btn
+            v-if="showClose"
+            size="small"
+            variant="outlined"
+            color="white"
+            border="white"
+            prepend-icon="mdi-close"
+            @click="emit('close')"
+          >
+            关闭
+          </v-btn>
+        </div>
       </div>
-
-      <div class="d-flex flex-wrap align-center ga-2 farm-header-actions">
-        <v-btn
-          size="small"
-          variant="outlined"
-          color="white"
-          prepend-icon="mdi-play"
-          :loading="running"
-          @click="runNow"
-        >
-          立即运行
-        </v-btn>
-        <v-btn
-          size="small"
-          variant="outlined"
-          color="white"
-          prepend-icon="mdi-refresh"
-          :loading="loading || detailLoading"
-          @click="refreshData"
-        >
-          刷新
-        </v-btn>
-        <v-btn
-          v-if="showSwitch"
-          size="small"
-          variant="outlined"
-          color="white"
-          prepend-icon="mdi-cog"
-          @click="emit('switch', 'config')"
-        >
-          设置
-        </v-btn>
-        <v-btn
-          v-if="showClose"
-          size="small"
-          variant="outlined"
-          color="white"
-          prepend-icon="mdi-close"
-          @click="emit('close')"
-        >
-          关闭
-        </v-btn>
-      </div>
-    </v-card-title>
+    </div>
 
     <v-progress-linear v-if="loading || detailLoading || actionLoading" indeterminate color="success" height="2" />
 
@@ -618,7 +625,21 @@ onMounted(() => loadStatus())
 
 .farm-header-actions :deep(.v-btn) {
   color: white !important;
+  border-width: 1px !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(2px);
 }
+.farm-header-actions :deep(.v-btn:hover) {
+  border-color: rgba(255, 255, 255, 1) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+.farm-header {
+  border-radius: inherit;
+}
+.farm-header-row { position: relative; }
+.farm-header-left { flex: 0 0 auto; }
+.farm-header-center { flex: 1 1 auto; }
+.farm-header-right { flex: 0 0 auto; }
 
 .farm-workbench :deep(.v-card) {
   transition: transform 0.2s ease, box-shadow 0.2s ease;

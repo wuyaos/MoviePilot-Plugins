@@ -160,7 +160,7 @@ def test_smart_executes_warehouse_sell_harvest_plant_and_field_sell():
     ]
     assert all(action.success for action in report.actions)
     assert report.trades_count == 4
-    assert report.total_profit == 100
+    assert report.total_profit == 0
     assert report.status == "completed"
 
 
