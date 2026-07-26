@@ -62,7 +62,7 @@ class SiqiConfig(FarmSiteConfig):
     def _action_url(self, action: str, **params: Any) -> str:
         query = {"action": action}
         query.update({key: value for key, value in params.items() if value is not None and value != ""})
-        return f"{self.get_farm_url()}?{urlencode(query)}"
+        return f"{self.base_url}{self.farm_path}?{urlencode(query)}"
 
     def get_farm_url(self) -> str:
         # 思齐 GET ?action=fetch 返回 JSON 农场数据，而非 HTML 页面
@@ -439,7 +439,7 @@ class SiqiConfig(FarmSiteConfig):
         return {"token": token, "imagehash": token, "image_url": html_lib.unescape(image_match.group(1)) if image_match else ""}
 
     def get_harvest_all_submit_url(self) -> str:
-        return f"{self.get_farm_url()}?{urlencode({'option': 'harvest_all'})}"
+        return f"{self.base_url}{self.farm_path}"
 
     def get_harvest_plot_url(self, land_id: Any, plot_index: Any) -> str:
         return self._action_url("harvest", land_id=land_id, plot_index=plot_index)
@@ -501,7 +501,7 @@ class SiqiConfig(FarmSiteConfig):
         return targets
 
     def get_steal_plot_url(self) -> str:
-        return f"{self.get_farm_url()}?{urlencode({'option': 'steal'})}"
+        return f"{self.base_url}{self.farm_path}"
 
     def get_like_target_url(self) -> str:
         return self._action_url("random_like_targets")
@@ -517,7 +517,7 @@ class SiqiConfig(FarmSiteConfig):
         ]
 
     def get_like_submit_url(self) -> str:
-        return f"{self.get_farm_url()}?{urlencode({'option': 'like'})}"
+        return f"{self.base_url}{self.farm_path}"
 
     def get_visit_submit_url(self) -> str:
         return self._action_url("view_farm_by_username")
@@ -526,7 +526,7 @@ class SiqiConfig(FarmSiteConfig):
         return self._action_url("sell_inventory")
 
     def get_buy_plot_slot_url(self) -> str:
-        return f"{self.get_farm_url()}?{urlencode({'option': 'buy_plot_slot'})}"
+        return f"{self.base_url}{self.farm_path}"
 
     def parse_buy_slot_targets(self, html: str) -> List[Any]:
         data = self._json_dict(html)

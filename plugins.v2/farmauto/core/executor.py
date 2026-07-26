@@ -316,7 +316,7 @@ class FarmExecutor:
                         site_config.get_harvest_all_submit_url(),
                         cookies,
                         data={
-                            "option": "harvest_all",
+                            "action": "harvest_all",
                             "imagehash": imagehash,
                             "imagestring": recognized,
                         },
@@ -413,7 +413,8 @@ class FarmExecutor:
             "land_id": plot.get("land_id", target.get("land_id")),
             "plot_index": plot.get("plot_index", target.get("plot_index")),
         }
-        if any(value is None for value in data.values()):
+        data["action"] = "steal_vegetable"
+        if any(value is None for value in [data.get("victim_id"), data.get("land_id"), data.get("plot_index")]):
             return ActionResult("steal", str(data.get("victim_id") or "随机农场"), False, message="目标缺少可偷坑位")
         response = self.http_client.post(site_config.get_steal_plot_url(), cookies, data=data)
         response.raise_for_status()
@@ -438,7 +439,7 @@ class FarmExecutor:
         target_id = target.get("target_id")
         response = self.http_client.post(
             site_config.get_like_submit_url(), cookies,
-            data={"target_id": target_id},
+            data={"action": "like_farm_batch", "target_id": target_id},
         )
         response.raise_for_status()
         parsed = site_config.parse_like_result(response.text)
@@ -456,7 +457,7 @@ class FarmExecutor:
         land_id = targets[0]
         response = self.http_client.post(
             site_config.get_buy_plot_slot_url(), cookies,
-            data={"land_id": land_id},
+            data={"action": "buy_plot_slot", "land_id": land_id},
         )
         response.raise_for_status()
         parsed = site_config.parse_buy_slot_result(response.text)

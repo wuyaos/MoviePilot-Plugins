@@ -141,6 +141,7 @@ class FarmAuto(_PluginBase):
             "auto_like": bool(config.get("siqi_auto_like", False)),
             "auto_buy_slot": bool(config.get("siqi_auto_buy_slot", False)),
             "captcha_ocr": bool(config.get("siqi_captcha_ocr", True)),
+            "default_seed_id": self._to_int(config.get("siqi_default_seed_id"), 1),
         }
         try:
             overrides = json.loads(config.get("site_overrides") or "{}")
@@ -1028,17 +1029,20 @@ class FarmAuto(_PluginBase):
                     )
                     parser = site_config.parse_sell_result
                 elif action == "buy_plot_slot":
+                    action_data["action"] = "buy_plot_slot"
                     response = http_client.post(
                         site_config.get_buy_plot_slot_url(), cookies, data=action_data
                     )
                     parser = site_config.parse_buy_slot_result
                 elif action == "steal":
                     action_data.pop("target_id", None)
+                    action_data["action"] = "steal_vegetable"
                     response = http_client.post(
                         site_config.get_steal_plot_url(), cookies, data=action_data
                     )
                     parser = site_config.parse_steal_result
                 elif action == "like":
+                    action_data["action"] = "like_farm_batch"
                     response = http_client.post(
                         site_config.get_like_submit_url(), cookies, data=action_data
                     )
