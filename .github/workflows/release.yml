@@ -20,8 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,18 +29,23 @@ jobs:
       - name: Read package.v2.json and create releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          INPUT_PLUGIN_ID: ${{ github.event.inputs.plugin_id }}
         run: |
-          set -e
           python3 << 'PYEOF'
-          import json, os, subprocess, sys, zipfile, tempfile, shutil
+          import json, os, subprocess, zipfile, tempfile, shutil
           from pathlib import Path
 
           repo = os.environ.get("GITHUB_REPOSITORY", "")
           plugin_filter = os.environ.get("INPUT_PLUGIN_ID", "").strip()
+          gh_token = os.environ.get("GH_TOKEN", "")
+
+          print(f"repo={repo} plugin_filter={plugin_filter!r}")
 
           with open("package.v2.json", encoding="utf-8") as f:
               data = json.load(f)
 
+          has_release = False
           for pid, meta in data.items():
               if not isinstance(meta, dict) or "version" not in meta:
                   continue
@@ -54,14 +57,14 @@ jobs:
               version = str(meta["version"])
               tag = f"{pid}_v{version}"
               asset_name = f"{pid.lower()}_v{version}.zip"
-              plugin_dir = Path(f"plugins.v2/{pid.lower()}")
-              if not plugin_dir.exists():
-                  # 兼容大小写
-                  for d in Path("plugins.v2").iterdir():
-                      if d.name.lower() == pid.lower():
-                          plugin_dir = d
-                          break
-              if not plugin_dir.exists():
+
+              # 定位插件目录（兼容大小写）
+              plugin_dir = None
+              for d in Path("plugins.v2").iterdir():
+                  if d.is_dir() and d.name.lower() == pid.lower():
+                      plugin_dir = d
+                      break
+              if not plugin_dir:
                   print(f"⚠️ {pid}: 插件目录不存在，跳过")
                   continue
 
@@ -79,7 +82,6 @@ jobs:
               asset_path = os.path.join(workdir, asset_name)
               with zipfile.ZipFile(asset_path, "w", zipfile.ZIP_DEFLATED) as zf:
                   for root, dirs, files in os.walk(plugin_dir):
-                      # 跳过 __pycache__
                       dirs[:] = [d for d in dirs if d != "__pycache__"]
                       for fn in files:
                           fp = Path(root) / fn
@@ -94,18 +96,27 @@ jobs:
                   latest_note = notes.get(f"v{version}", "")
               body = latest_note if latest_note else f"{pid} v{version}"
 
-              subprocess.run(
+              print(f"📦 创建 release: tag={tag} asset={asset_name}")
+              result = subprocess.run(
                   ["gh", "release", "create", tag,
                    "-R", repo,
                    "--title", title,
                    "--notes", body,
                    "--target", "main",
                    asset_path],
-                  check=True
+                  capture_output=True, text=True
               )
+              if result.returncode != 0:
+                  print(f"❌ {pid} v{version}: 创建失败")
+                  print(f"   stdout: {result.stdout}")
+                  print(f"   stderr: {result.stderr}")
+                  shutil.rmtree(workdir, ignore_errors=True)
+                  continue
 
-              shutil.rmtree(workdir)
-              print(f"✅ {pid} v{version}: Release 已创建 tag={tag} asset={asset_name}")
+              shutil.rmtree(workdir, ignore_errors=True)
+              has_release = True
+              print(f"✅ {pid} v{version}: Release 已创建 tag={tag}")
+
+          if not has_release:
+              print("ℹ️ 无需创建新 Release（所有插件 tag 已存在或无 release 配置）")
           PYEOF
-        env:
-          INPUT_PLUGIN_ID: ${{ github.event.inputs.plugin_id }}
