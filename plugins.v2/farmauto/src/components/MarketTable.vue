@@ -4,8 +4,23 @@ import { computed } from 'vue'
 const props = defineProps({
   market_prices: { type: Object, default: () => ({}) },
   crops: { type: Object, default: () => ({}) },
+  trends: { type: Object, default: () => ({}) },
   loading: { type: Boolean, default: false },
 })
+
+function priceChange(cropKey) {
+  const samples = props.trends?.[cropKey]
+  if (!Array.isArray(samples) || samples.length < 2) return null
+
+  const previousSample = samples[samples.length - 2]
+  const currentSample = samples[samples.length - 1]
+  if (!Array.isArray(previousSample) || !Array.isArray(currentSample)) return null
+
+  const previousPrice = Number(previousSample[1])
+  const currentPrice = Number(currentSample[1])
+  if (!Number.isFinite(previousPrice) || !Number.isFinite(currentPrice) || previousPrice === 0) return null
+  return ((currentPrice - previousPrice) / previousPrice) * 100
+}
 
 const rows = computed(() => Object.entries(props.market_prices || {}).map(([cropKey, rawPrice]) => {
   const crop = props.crops?.[cropKey] || {}
@@ -20,6 +35,7 @@ const rows = computed(() => Object.entries(props.market_prices || {}).map(([crop
     price: Number.isFinite(price) ? price : rawPrice,
     cost: Number.isFinite(cost) ? cost : '—',
     profitRate,
+    priceChange: priceChange(cropKey),
   }
 }))
 
@@ -45,7 +61,7 @@ function formatRate(rate) {
           <th class="text-center">市场价</th>
           <th class="text-center">成本</th>
           <th class="text-center">盈利率</th>
-          <th class="text-center">波动</th>
+          <th class="text-center">波动幅度</th>
         </tr>
       </thead>
       <tbody>
@@ -59,7 +75,12 @@ function formatRate(rate) {
           >
             {{ formatRate(row.profitRate) }}
           </td>
-          <td class="text-center text-medium-emphasis">—</td>
+          <td
+            class="text-center font-weight-medium"
+            :class="row.priceChange === null ? 'text-medium-emphasis' : row.priceChange > 0 ? 'text-error' : row.priceChange < 0 ? 'text-success' : 'text-medium-emphasis'"
+          >
+            {{ formatRate(row.priceChange) }}
+          </td>
         </tr>
       </tbody>
     </v-table>

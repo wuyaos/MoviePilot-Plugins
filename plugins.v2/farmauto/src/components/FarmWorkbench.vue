@@ -510,6 +510,7 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
           <MarketTable
             :market_prices="marketPrices"
             :crops="crops"
+            :trends="trends"
             :loading="detailLoading"
           />
         </v-col>

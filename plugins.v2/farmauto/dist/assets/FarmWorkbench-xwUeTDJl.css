@@ -1,34 +1,39 @@
 
-.bg-green-lighten-5[data-v-456f8675] {
+.bg-green-lighten-5[data-v-396eb15d] {
   background-color: rgba(76, 175, 80, 0.1) !important;
 }
-.bg-brown-lighten-5[data-v-456f8675] {
+.bg-brown-lighten-5[data-v-396eb15d] {
   background-color: rgba(121, 85, 72, 0.1) !important;
 }
-.text-subtitle-2[data-v-456f8675] {
+.text-subtitle-2[data-v-396eb15d] {
   font-size: 0.9rem !important;
   font-weight: 500 !important;
 }
-.text-caption[data-v-456f8675] {
+.text-caption[data-v-396eb15d] {
   font-size: 0.75rem !important;
 }
-.text-body-2[data-v-456f8675] {
+.text-body-2[data-v-396eb15d] {
   font-size: 0.875rem !important;
 }
-.crop-area__item[data-v-456f8675] {
+.horizontal-card[data-v-396eb15d] {
   min-block-size: 76px;
 }
-.crop-area__media[data-v-456f8675] {
+.crop-area__media[data-v-396eb15d] {
   inline-size: 70px;
 }
-.crop-area__details[data-v-456f8675] {
+.crop-area__time[data-v-396eb15d] {
+  font-size: 0.65rem !important;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.crop-area__details[data-v-396eb15d] {
   min-inline-size: 0;
 }
 @media (prefers-color-scheme: dark) {
-.bg-green-lighten-5[data-v-456f8675] {
+.bg-green-lighten-5[data-v-396eb15d] {
     background-color: rgba(76, 175, 80, 0.2) !important;
 }
-.bg-brown-lighten-5[data-v-456f8675] {
+.bg-brown-lighten-5[data-v-396eb15d] {
     background-color: rgba(121, 85, 72, 0.2) !important;
 }
 }
@@ -46,15 +51,15 @@
 }
 }
 
-.bg-blue-lighten-5[data-v-8c982252] {
+.bg-blue-lighten-5[data-v-62e2ba88] {
   background-color: rgba(33, 150, 243, 0.1) !important;
 }
-.text-subtitle-2[data-v-8c982252] {
+.text-subtitle-2[data-v-62e2ba88] {
   font-size: 0.9rem !important;
   font-weight: 500 !important;
 }
 @media (prefers-color-scheme: dark) {
-.bg-blue-lighten-5[data-v-8c982252] {
+.bg-blue-lighten-5[data-v-62e2ba88] {
     background-color: rgba(33, 150, 243, 0.2) !important;
 }
 }
@@ -92,72 +97,81 @@
 }
 }
 
-.cursor-pointer[data-v-abeb59be] { cursor: pointer;
+.cursor-pointer[data-v-a1ca3744] { cursor: pointer;
 }
-.h-100[data-v-abeb59be] { height: 100%;
+.h-100[data-v-a1ca3744] { height: 100%;
+}
+.plot-grid[data-v-a1ca3744] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.plot-card[data-v-a1ca3744] { min-height: 116px;
+}
+.plot-emoji[data-v-a1ca3744] { font-size: 2rem; line-height: 1.2;
 }
 
-.bg-amber-lighten-5[data-v-832cf7cf] {
+.bg-amber-lighten-5[data-v-86fa52ce] {
   background-color: rgba(255, 193, 7, 0.1) !important;
 }
-.text-subtitle-2[data-v-832cf7cf] {
+.text-subtitle-2[data-v-86fa52ce] {
   font-size: 0.9rem !important;
   font-weight: 500 !important;
 }
-.text-caption[data-v-832cf7cf] {
+.text-caption[data-v-86fa52ce] {
   font-size: 0.75rem !important;
 }
 @media (prefers-color-scheme: dark) {
-.bg-amber-lighten-5[data-v-832cf7cf] {
+.bg-amber-lighten-5[data-v-86fa52ce] {
     background-color: rgba(255, 193, 7, 0.2) !important;
 }
 }
 
-.farm-workbench[data-v-0a416b6f] {
+.farm-workbench[data-v-ea9faa73] {
   min-inline-size: 0;
   padding: 0.5rem;
 }
-.bg-gradient-primary[data-v-0a416b6f],
-.bg-gradient-farm[data-v-0a416b6f] {
+.bg-gradient-primary[data-v-ea9faa73],
+.bg-gradient-farm[data-v-ea9faa73] {
   background: linear-gradient(135deg, #43a047, #66bb6a) !important;
   box-shadow: 0 2px 8px rgba(67, 160, 71, 0.3);
 }
-.bg-purple-lighten-5[data-v-0a416b6f] {
+.bg-purple-lighten-5[data-v-ea9faa73] {
   background-color: rgba(156, 39, 176, 0.1) !important;
 }
-.bg-blue-lighten-5[data-v-0a416b6f] {
+.bg-blue-lighten-5[data-v-ea9faa73] {
   background-color: rgba(33, 150, 243, 0.1) !important;
 }
-.bg-green-lighten-5[data-v-0a416b6f] {
+.bg-green-lighten-5[data-v-ea9faa73] {
   background-color: rgba(76, 175, 80, 0.1) !important;
 }
-.bg-brown-lighten-5[data-v-0a416b6f] {
+.bg-brown-lighten-5[data-v-ea9faa73] {
   background-color: rgba(121, 85, 72, 0.1) !important;
 }
-.bg-amber-lighten-5[data-v-0a416b6f] {
+.bg-amber-lighten-5[data-v-ea9faa73] {
   background-color: rgba(255, 193, 7, 0.1) !important;
 }
-.bg-grey-lighten-5[data-v-0a416b6f] {
+.bg-grey-lighten-5[data-v-ea9faa73] {
   background-color: rgba(158, 158, 158, 0.1) !important;
 }
-.text-subtitle-1[data-v-0a416b6f] {
+.text-subtitle-1[data-v-ea9faa73] {
   font-size: 1.1rem !important;
   font-weight: 500 !important;
 }
-.text-subtitle-2[data-v-0a416b6f] {
+.text-subtitle-2[data-v-ea9faa73] {
   font-size: 0.9rem !important;
   font-weight: 500 !important;
 }
-.text-caption[data-v-0a416b6f] {
+.text-caption[data-v-ea9faa73] {
   font-size: 0.75rem !important;
 }
-.text-body-2[data-v-0a416b6f] {
+.text-body-2[data-v-ea9faa73] {
   font-size: 0.875rem !important;
 }
-.magic-anim[data-v-0a416b6f] {
-  animation: magic-pulse-0a416b6f 2s infinite ease-in-out;
+.magic-anim[data-v-ea9faa73] {
+  animation: magic-pulse-ea9faa73 2s infinite ease-in-out;
 }
-@keyframes magic-pulse-0a416b6f {
+@keyframes magic-pulse-ea9faa73 {
 0%, 100% {
     transform: scale(1) rotate(0deg);
     filter: drop-shadow(0 0 2px rgba(156, 39, 176, 0.4));
@@ -168,16 +182,16 @@
 }
 }
 @media (prefers-color-scheme: dark) {
-.bg-purple-lighten-5[data-v-0a416b6f] { background-color: rgba(156, 39, 176, 0.2) !important;
+.bg-purple-lighten-5[data-v-ea9faa73] { background-color: rgba(156, 39, 176, 0.2) !important;
 }
-.bg-blue-lighten-5[data-v-0a416b6f] { background-color: rgba(33, 150, 243, 0.2) !important;
+.bg-blue-lighten-5[data-v-ea9faa73] { background-color: rgba(33, 150, 243, 0.2) !important;
 }
-.bg-green-lighten-5[data-v-0a416b6f] { background-color: rgba(76, 175, 80, 0.2) !important;
+.bg-green-lighten-5[data-v-ea9faa73] { background-color: rgba(76, 175, 80, 0.2) !important;
 }
-.bg-brown-lighten-5[data-v-0a416b6f] { background-color: rgba(121, 85, 72, 0.2) !important;
+.bg-brown-lighten-5[data-v-ea9faa73] { background-color: rgba(121, 85, 72, 0.2) !important;
 }
-.bg-amber-lighten-5[data-v-0a416b6f] { background-color: rgba(255, 193, 7, 0.2) !important;
+.bg-amber-lighten-5[data-v-ea9faa73] { background-color: rgba(255, 193, 7, 0.2) !important;
 }
-.bg-grey-lighten-5[data-v-0a416b6f] { background-color: rgba(158, 158, 158, 0.16) !important;
+.bg-grey-lighten-5[data-v-ea9faa73] { background-color: rgba(158, 158, 158, 0.16) !important;
 }
 }

@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   warehouse: { type: Array, default: () => [] },
@@ -9,7 +9,15 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['sell', 'sell-all'])
+const sellAllDialog = ref(false)
 const items = computed(() => Array.isArray(props.warehouse) ? props.warehouse : [])
+const estimatedTotal = computed(() => items.value.reduce((total, item) => {
+  const unitPrice = numericValue(item.unit_price)
+  const quantity = numericValue(item.quantity)
+  return unitPrice !== null && quantity !== null
+    ? total + unitPrice * quantity
+    : total
+}, 0))
 
 function itemName(item) {
   return item.name || props.crops[item.crop_key]?.name || item.crop_key || '未知物品'
@@ -26,6 +34,29 @@ function expiryText(item) {
   if (expiryState(item) === 'expired') return item.expire_raw || item.expire || '已过期'
   return item.expire_raw || item.expire || (Number.isFinite(Number(item.expire_minutes)) ? `${item.expire_minutes} 分钟` : '—')
 }
+
+function numericValue(value) {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function formatPrice(value) {
+  return numericValue(value) ?? '—'
+}
+
+function itemTotal(item) {
+  const totalPrice = numericValue(item.total_price)
+  if (totalPrice !== null) return totalPrice
+  const unitPrice = numericValue(item.unit_price)
+  const quantity = numericValue(item.quantity)
+  return unitPrice !== null && quantity !== null ? unitPrice * quantity : null
+}
+
+function confirmSellAll() {
+  sellAllDialog.value = false
+  emit('sell-all')
+}
 </script>
 
 <template>
@@ -41,7 +72,7 @@ function expiryText(item) {
         variant="flat"
         :loading="loading"
         :disabled="loading || !items.length"
-        @click="emit('sell-all')"
+        @click="sellAllDialog = true"
       >
         一键出售
       </v-btn>
@@ -52,8 +83,10 @@ function expiryText(item) {
         <tr>
           <th>名称</th>
           <th class="text-center">数量</th>
-          <th class="text-center">过期时间</th>
-          <th class="text-center">操作</th>
+          <th class="text-center">过期</th>
+          <th class="text-center">单价</th>
+          <th class="text-center">总价</th>
+          <th class="text-center">出售</th>
         </tr>
       </thead>
       <tbody>
@@ -66,6 +99,8 @@ function expiryText(item) {
               <v-chip v-if="expiryState(item) === 'expiring'" color="error" size="x-small" class="ml-1">临期</v-chip>
             </span>
           </td>
+          <td class="text-center">{{ formatPrice(item.unit_price) }}</td>
+          <td class="text-center font-weight-medium">{{ formatPrice(itemTotal(item)) }}</td>
           <td class="text-center">
             <v-btn
               color="orange"
@@ -82,6 +117,22 @@ function expiryText(item) {
       </tbody>
     </v-table>
     <v-card-text v-else class="text-center text-medium-emphasis py-6">暂无物品</v-card-text>
+
+    <v-dialog v-model="sellAllDialog" max-width="440">
+      <v-card>
+        <v-card-title>确认出售</v-card-title>
+        <v-card-text>
+          确定一键出售仓库 {{ items.length }} 个物品？预计总价值 {{ estimatedTotal }}<span v-if="currency"> {{ currency }}</span>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="loading" @click="sellAllDialog = false">取消</v-btn>
+          <v-btn color="orange" variant="flat" :loading="loading" :disabled="loading || !items.length" @click="confirmSellAll">
+            确认
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 

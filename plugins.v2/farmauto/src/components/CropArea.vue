@@ -16,17 +16,22 @@ const imageErrors = ref(new Set())
 
 const areaItems = computed(() => props.items.map(cropKey => {
   const definition = props.crops?.[cropKey] || {}
-  const status = props.cropStatus?.[cropKey]
-  const canHarvest = Boolean(status?.can_harvest)
-  const remainingMinutes = status?.remaining_minutes
-  const isGrowing = !canHarvest && remainingMinutes !== null && remainingMinutes !== undefined
+  const status = props.cropStatus?.[cropKey] || {}
+  const remainingMinutes = status.remaining_minutes
+  let state = status.state
+  if (!['empty', 'ripe', 'growing'].includes(state)) {
+    state = status.can_harvest
+      ? 'ripe'
+      : Number(remainingMinutes) > 0 ? 'growing' : 'empty'
+  }
   return {
     cropKey,
     name: definition.name || cropKey,
     cost: definition.cost,
     image: definition.image || '',
-    canHarvest,
-    isGrowing,
+    state,
+    price: status.price,
+    growTime: status.grow_time,
     remainingMinutes,
   }
 }))
@@ -70,10 +75,42 @@ function markImageError(item) {
   imageErrors.value = errors
 }
 
-function statusText(item) {
-  if (item.canHarvest) return '可收获'
-  if (item.isGrowing) return `生长中，剩余 ${item.remainingMinutes} 分钟`
-  return '空地'
+function stateColor(state) {
+  return {
+    empty: 'green',
+    ripe: 'orange',
+    growing: 'blue',
+  }[state] || 'grey'
+}
+
+function stateText(state) {
+  return {
+    empty: '空闲',
+    ripe: '已成熟',
+    growing: '生长中',
+  }[state] || '未知'
+}
+
+function formatRemainingMinutes(value) {
+  const totalMinutes = Math.max(0, Math.floor(Number(value)))
+  if (!Number.isFinite(totalMinutes)) return '—'
+
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
+  return `${days ? `${days}天` : ''}${days || hours ? `${hours}小时` : ''}${minutes}分`
+}
+
+function displayValue(value) {
+  return value === null || value === undefined || value === '' ? '—' : value
+}
+
+function emitCropAction(action, item) {
+  emit('action', {
+    action,
+    crop_key: item.cropKey,
+    cropKey: item.cropKey,
+  })
 }
 </script>
 
@@ -103,9 +140,13 @@ function statusText(item) {
     <v-card-text class="px-3 py-2">
       <v-row dense>
         <v-col v-for="item in areaItems" :key="item.cropKey" cols="12" sm="6">
-          <v-card variant="outlined" class="crop-area__item pa-3">
-            <div class="d-flex align-center">
-              <div class="crop-area__media d-flex align-center justify-center flex-shrink-0">
+          <v-card
+            variant="outlined"
+            :color="stateColor(item.state)"
+            class="horizontal-card crop-area__item"
+          >
+            <div class="d-flex">
+              <div class="crop-area__media flex-shrink-0 pa-2">
                 <v-img
                   v-if="hasUsableImage(item)"
                   :src="item.image"
@@ -120,46 +161,48 @@ function statusText(item) {
                   :icon="cropIcon(item.cropKey, item.name)"
                   :color="animal ? 'brown' : 'green'"
                   size="40"
+                  class="d-block mx-auto"
                 />
+                <div v-if="item.growTime" class="crop-area__time text-center text-caption text-grey mt-1">
+                  成长时间: {{ item.growTime }}
+                </div>
+                <div v-if="item.state === 'growing' && item.remainingMinutes !== null && item.remainingMinutes !== undefined" class="crop-area__time text-center text-caption text-grey">
+                  剩余 {{ formatRemainingMinutes(item.remainingMinutes) }}
+                </div>
               </div>
 
-              <div class="crop-area__details flex-grow-1 min-width-0">
-                <div class="d-flex align-center ga-2">
+              <div class="crop-area__details flex-grow-1 pa-2">
+                <div class="d-flex align-center ga-2 mb-1">
                   <div class="text-body-2 font-weight-bold text-truncate" :title="item.name">
                     {{ item.name }}
                   </div>
-                  <v-chip
-                    size="x-small"
-                    :color="item.canHarvest ? 'orange' : item.isGrowing ? 'info' : 'green'"
-                    variant="tonal"
-                  >
-                    {{ item.canHarvest ? '可收获' : item.isGrowing ? '生长中' : '空地' }}
+                  <v-chip size="x-small" :color="stateColor(item.state)">
+                    {{ stateText(item.state) }}
                   </v-chip>
                   <v-spacer />
                   <v-btn
-                    v-if="item.canHarvest"
-                    color="success"
+                    v-if="item.state === 'empty'"
+                    color="green"
                     size="x-small"
                     variant="flat"
                     :disabled="loading"
-                    @click="emit('action', { action: 'harvest', cropKey: item.cropKey })"
+                    @click="emitCropAction('plant', item)"
+                  >
+                    种植
+                  </v-btn>
+                  <v-btn
+                    v-else-if="item.state === 'ripe'"
+                    color="orange"
+                    size="x-small"
+                    variant="flat"
+                    :disabled="loading"
+                    @click="emitCropAction('harvest', item)"
                   >
                     收获
                   </v-btn>
-                  <v-btn
-                    v-else-if="!item.isGrowing"
-                    color="success"
-                    size="x-small"
-                    variant="flat"
-                    :disabled="loading"
-                    @click="emit('action', { action: 'plant', cropKey: item.cropKey })"
-                  >
-                    {{ animal ? '养殖' : '种植' }}
-                  </v-btn>
                 </div>
-                <div class="text-caption text-medium-emphasis mt-2">
-                  {{ statusText(item) }}
-                  <span v-if="item.cost !== null && item.cost !== undefined"> · 成本 {{ item.cost }}</span>
+                <div class="text-caption text-grey-darken-1">
+                  价格: {{ displayValue(item.price) }}（成本 {{ displayValue(item.cost) }}）
                 </div>
               </div>
             </div>
@@ -192,12 +235,18 @@ function statusText(item) {
   font-size: 0.875rem !important;
 }
 
-.crop-area__item {
+.horizontal-card {
   min-block-size: 76px;
 }
 
 .crop-area__media {
   inline-size: 70px;
+}
+
+.crop-area__time {
+  font-size: 0.65rem !important;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .crop-area__details {
