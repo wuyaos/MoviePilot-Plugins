@@ -207,6 +207,7 @@ class FarmExecutor:
                         report.market_prices,
                         crops,
                         report.crop_status,
+                        siqi_options,
                     )
                     report.actions.append(result)
                     self._log_action(site_name, result)
@@ -568,7 +569,7 @@ class FarmExecutor:
             ]
 
     def _execute_action(
-        self, action, cookies, site_config, policy, farm_html, market_prices, crops, crop_status=None
+        self, action, cookies, site_config, policy, farm_html, market_prices, crops, crop_status=None, siqi_options=None
     ):
         crop_key = action.get("crop_key", "")
         crop = crops.get(crop_key, {})
@@ -596,7 +597,7 @@ class FarmExecutor:
                     response = self.http_client.post(
                         site_config.get_farm_url(),
                         cookies,
-                        data={"action": "plant_all_empty", "seed_id": default_seed},
+                        data={"action": "plant_fill_empty", "seed_id": default_seed},
                         retryable=False,
                     )
                 else:
@@ -661,7 +662,8 @@ class FarmExecutor:
                 crop_icon = site_config.crop_image(crop_name) if hasattr(site_config, "crop_image") else ""
             except Exception:
                 crop_icon = ""
-            value_unit = "魔力值" if operation in ("sell", "plant", "breed") else ("收获值" if operation == "harvest" else "")
+            value_unit = "魔力值" if operation in ("sell", "plant", "breed") else ("收获值" if operation in ("harvest", "harvest_all") else "")
+            action_quantity = int(action.get("quantity", 1) or 1)
             result = ActionResult(
                 operation,
                 target,
@@ -671,7 +673,7 @@ class FarmExecutor:
                 message=message,
                 crop_name=crop_name,
                 crop_icon=crop_icon,
-                quantity=quantity if operation == "sell" else int(action.get("quantity", 1)),
+                quantity=action_quantity,
                 value_unit=value_unit,
             )
             return result, farm_html
