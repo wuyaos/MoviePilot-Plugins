@@ -77,12 +77,22 @@ class CangbaoHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message=None):
+        # 单条展开时重新查询反馈，避免 collect_message_feedback 在发送时未捕获系统反馈。
+        if message:
+            username = self.get_username()
+            if username:
+                self.wait_feedback()
+                fb = self._poll_feedback(username, message)
+                if fb:
+                    return {"site": self.site_name, "message": message, "rewards": [{
+                        "type": "上传量" if "上传" in fb else "魔力值" if "魔力" in fb else "raw_feedback",
+                        "description": fb, "amount": "", "unit": "",
+                        "is_negative": any(k in fb for k in ("已经求过", "明天再来")),
+                    }]}
+            return None
         message_feedbacks = getattr(self, "_message_feedbacks", [])
         if not message_feedbacks and self._last_message_result:
             message_feedbacks = [{"message": message, "text": self._last_message_result}]
-        # 单条展开时仅返回当前消息的反馈。
-        if message:
-            message_feedbacks = [f for f in message_feedbacks if f.get("message") == message]
         if not message_feedbacks:
             return None
         rewards = []
