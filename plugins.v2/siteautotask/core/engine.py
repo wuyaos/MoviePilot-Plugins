@@ -379,8 +379,14 @@ class TaskEngine:
                 if task.get("task_type") == TaskType.CLAIM:
                     task["claim_key"] = claim_task_key(site, task)
                     claim_id = self.plugin.claim_task_id(task["claim_key"]) or None
-                record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
-                records.append(record)
+                # CHAT 多条喊话拆分为单条执行单元，与正式运行一致。
+                if task.get("task_type") == TaskType.CHAT and hasattr(handler, "shotbox_messages"):
+                    for unit_task, _ in self._expand_chat_units(handler, task):
+                        record = self._run_task(handler, unit_task, skip_if_no_claim=True)
+                        records.append(record)
+                else:
+                    record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
+                    records.append(record)
         self.history.append(records, cfg.history_days)
         return records
 
