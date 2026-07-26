@@ -1,4 +1,9 @@
-"""梓喵（Azusa）站点任务申领适配。"""
+"""梓喵（Azusa）站点任务申领适配。
+
+TODO: 梓喵 WAF 基于 TLS 指纹拦截 requests，claim_task 返回 ``Array`` 或 403。
+后续需改用 PlaywrightHelper 浏览器渲染提交 ajax.php，
+或引导用户在站点配置开启 render。
+"""
 import re
 
 from .capabilities import CapabilityHandler
