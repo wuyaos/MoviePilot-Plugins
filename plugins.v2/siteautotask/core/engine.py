@@ -273,7 +273,7 @@ class TaskEngine:
             feedback = None
             if task.get("task_type") == TaskType.CHAT and self.plugin.config.get_feedback:
                 handler.wait_feedback()
-                feedback = handler.get_feedback()
+                feedback = handler.get_feedback(chat_unit_message) if chat_unit_message else handler.get_feedback()
             status = result.message
             if task.get("task_type") == TaskType.CHAT and result.success and sent_messages:
                 status = f"已发送“{'；'.join(sent_messages)}”"

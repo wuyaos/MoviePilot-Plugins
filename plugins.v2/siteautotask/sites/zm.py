@@ -35,22 +35,46 @@ class ZmHandler(CapabilityHandler):
         time.sleep(max(0, int(self.feedback_timeout)))
 
     def get_feedback(self, message=None):
-        # 重新读取喊话区，查找系统 @ 用户名的反馈行（如“@用户：皮总没有理你，明天再来吧”）。
+        # 喊话区最新在上：反馈行在对应喊话行的上方（索引更小）。
+        # 按“当前用户名 + 喊话内容”定位喊话行，再取前一行 @用户名反馈。
         response = self._send_get_request(self.site_url + "/shoutbox.php")
         if not response:
             return None
         html = etree.HTML(response.text or "")
-        for row in html.xpath("//tr[td]"):
-            line = "".join(t.strip() for t in row.xpath(".//td//text()"))
-            # 系统反馈含 @ 用户名；自己发的喊话不含 @。
-            if "@" not in line:
+        rows = ["".join(t.strip() for t in row.xpath(".//td//text()"))
+                for row in html.xpath("//tr[td]")]
+        rows = [r for r in rows if r]
+        username = (self.get_username() or "").strip()
+        target = (message or "").strip()
+        for idx, line in enumerate(rows):
+            # 跳过反馈行（含 @）
+            if "@" in line:
                 continue
-            if any(k in line for k in ("皮总", "明天再来", "电力", "魔力", "上传", "没有理")):
-                is_negative = "没有理" in line or "明天再来" in line
-                return {"site": self.site_name, "message": message, "rewards": [{
-                    "type": "电力", "description": line,
-                    "amount": "", "unit": "", "is_negative": is_negative,
-                }]}
+            # 必须含当前用户名和本条喊话内容
+            if username and username not in line:
+                continue
+            if target and target not in line:
+                continue
+            # 反馈在上一行
+            if idx == 0:
+                break
+            fb = rows[idx - 1]
+            if "@" not in fb or (username and f"@{username}" not in fb):
+                break  # 上一行不是针对自己的反馈
+            is_negative = any(k in fb for k in ("没有理", "明天再来"))
+            is_reward = any(k in fb for k in ("响应", "扣减", "赠送", "电力", "魔力", "上传", "下载"))
+            if "下载" in fb:
+                reward_type = "下载量"
+            elif "魔力" in fb:
+                reward_type = "魔力"
+            elif "上传" in fb:
+                reward_type = "上传量"
+            else:
+                reward_type = "电力"
+            return {"site": self.site_name, "message": message, "rewards": [{
+                "type": reward_type, "description": fb,
+                "amount": "", "unit": "", "is_negative": is_negative and not is_reward,
+            }]}
         return None
 
     def get_latest_message_time(self):
