@@ -1,0 +1,38 @@
+
+.crop-area__item[data-v-92a1ba4f] {
+  min-block-size: 76px;
+}
+
+.price-trend-chart[data-v-299494d2] {
+  position: relative;
+  block-size: 300px;
+  min-inline-size: 0;
+}
+.price-trend-chart__canvas[data-v-299494d2] {
+  inline-size: 100%;
+  block-size: 100%;
+}
+.price-trend-chart__empty[data-v-299494d2] {
+  display: flex;
+  block-size: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+.farm-workbench[data-v-cc3ee2ef] {
+  min-inline-size: 0;
+}
+.farm-workbench__tabs[data-v-cc3ee2ef] {
+  min-inline-size: 12rem;
+  max-inline-size: 36rem;
+}
+@media (max-width: 959px) {
+.farm-workbench__tabs[data-v-cc3ee2ef] {
+    order: 3;
+    inline-size: 100%;
+    max-inline-size: none;
+}
+}
