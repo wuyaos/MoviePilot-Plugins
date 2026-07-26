@@ -625,6 +625,8 @@ class FarmExecutor:
                 message = f"{message} 价格{price}×{quantity}".strip()
             elif success and operation == "plant":
                 cost = int(crop.get("cost", 0))
+                if crop.get("type") == "animal":
+                    operation = "breed"
                 if cost > 0:
                     profit = -cost
                     message = f"{message} 成本{cost}".strip()

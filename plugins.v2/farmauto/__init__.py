@@ -737,8 +737,7 @@ class FarmAuto(_PluginBase):
             recent_actions.append({
                 "action": action,
                 "target": str(raw_action.get("target") or ""),
-                "profit": self._to_int(raw_action.get("profit"), 0)
-                if action == "sell" else 0,
+                "profit": self._to_int(raw_action.get("profit"), 0),
                 "success": bool(raw_action.get("success", False)),
                 "message": str(raw_action.get("message") or ""),
                 "time": raw_action.get("time") or raw_action.get("ts") or report_time,

@@ -1,6 +1,7 @@
 import html as html_lib
 import json
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
@@ -123,6 +124,10 @@ class SiqiConfig(FarmSiteConfig):
             if seed_id is None:
                 continue
             ready = str(plot.get("is_ready", "0")) == "1"
+            harvest_time = self._number(plot.get("harvest_time"))
+            # harvest_time 已过期也算可收获(站点 is_ready 可能未及时更新)
+            if not ready and harvest_time and harvest_time <= time.time():
+                ready = True
             statuses[f"crop_{seed_id}"] = {
                 "can_harvest": ready,
                 "land_id": plot.get("land_id"),
