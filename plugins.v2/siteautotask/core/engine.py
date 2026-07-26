@@ -176,6 +176,8 @@ class TaskEngine:
         now = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S")
         task_label = task.get("selected_option_label") or task.get("label") or task.get("id")
         task_name = display_task(handler.site_name, task_label, task.get("task_type"))
+        # CLAIM 执行键带上 exam_id，使不同任务申领独立跳过/重试。
+        unit_id = str(claim_task_id) if (task.get("task_type") == TaskType.CLAIM or task.get("claim_options")) and claim_task_id else None
         sent_messages = []
         original_send = getattr(handler, "send_messagebox", None)
         if task.get("task_type") == TaskType.CHAT and callable(original_send):
@@ -220,7 +222,7 @@ class TaskEngine:
                         "task_id": task.get("id"), "task_label": task_label,
                         "task_type": task.get("task_type", TaskType.GENERIC),
                         "success": True, "status": "未配置，跳过",
-                        "execution_key": execution_key(handler.domain, task.get("id")),
+                        "execution_key": execution_key(handler.domain, task.get("id"), unit_id),
                         "terminal_success": True,
                         "retryable": False,
                     }
@@ -239,7 +241,7 @@ class TaskEngine:
                 "task_id": task["id"], "task_label": task_label,
                 "task_type": task.get("task_type", TaskType.GENERIC),
                 "success": result.success, "status": status,
-                "execution_key": execution_key(handler.domain, task["id"]),
+                "execution_key": execution_key(handler.domain, task["id"], unit_id),
                 "terminal_success": result.success,
                 "retryable": not result.success,
             }
@@ -272,7 +274,7 @@ class TaskEngine:
                 "task_id": task.get("id"), "task_label": task.get("label"),
                 "task_type": task.get("task_type", TaskType.GENERIC),
                 "success": False, "status": f"执行失败：{e}",
-                "execution_key": execution_key(handler.domain, task.get("id")),
+                "execution_key": execution_key(handler.domain, task.get("id"), unit_id),
                 "terminal_success": False,
                 "retryable": True,
             }

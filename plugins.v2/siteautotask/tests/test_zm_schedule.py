@@ -560,3 +560,42 @@ class ClaimSelectionTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         engine._run_task.assert_called_once()
         self.assertEqual(engine._run_task.call_args.kwargs["claim_task_id"], "6")
+
+    def test_claim_execution_key_includes_exam_id(self):
+        config = types.SimpleNamespace(chat_sites=[13], history_days=30, get_feedback=False)
+        handler = types.SimpleNamespace(site_name="梓喵", domain="azusa.wiki")
+        claim_task = {
+            "id": "azusa_claim",
+            "name": "claim",
+            "label": "梓喵任务申领",
+            "task_type": ENGINE.TaskType.CLAIM,
+            "claim_options": [{"id": "9", "label": "每日任务3（做种积分）"}],
+        }
+        plugin = types.SimpleNamespace(
+            config=config,
+            selected_sites=lambda: [{"id": 23}],
+            tasks_for=lambda _h: [claim_task],
+            task_enabled=lambda _key: False,
+            claim_task_id=lambda _key: "9",
+            retry_records=[],
+            history=Mock(),
+        )
+        plugin.history.successful_task_ids_today.return_value = set()
+        plugin.history.purchased_medal_keys_today.return_value = set()
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = plugin
+        engine.history = plugin.history
+        engine._lock = ENGINE.threading.Lock()
+        engine._build_handler = Mock(return_value=handler)
+        engine._run_task = Mock(return_value={
+            "task_id": "azusa_claim", "success": True,
+            "execution_key": "azusa.wiki:azusa_claim:9",
+        })
+        engine._schedule_failed = Mock()
+        notify_module = types.ModuleType("siteautotask.core.notify")
+        notify_module.send_summary = Mock()
+        sys.modules["siteautotask.core.notify"] = notify_module
+
+        records = engine._run_locked()
+
+        self.assertEqual(records[0]["execution_key"], "azusa.wiki:azusa_claim:9")
