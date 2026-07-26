@@ -162,36 +162,27 @@ def build_page(plugin):
                     ],
                 })
 
-        # 趋势行
-        trend_chips = []
+        # 趋势行：单行文字
+        trend_parts = []
         for run_date, s, t in runs:
             ok = s == t and t > 0
-            label = run_date[-8:] if len(run_date) >= 8 else run_date  # HH:MM:SS
-            trend_chips.append({
-                "component": "VChip",
-                "props": {
-                    "size": "x-small", "variant": "flat",
-                    "color": "success" if ok else "error",
-                    "class": "me-1",
-                },
-                "text": f"{'✅' if ok else '❌'} {label}",
-            })
-
+            trend_parts.append("✅" if ok else "❌")
+        trend_text = " ".join(trend_parts) if trend_parts else "—"
         trend_row = {
             "component": "div",
             "props": {"class": "d-flex align-center pt-2 mt-1"},
             "content": [
-                {"component": "span", "props": {"class": "text-caption text-medium-emphasis me-2"}, "text": "趋势"},
-                *trend_chips,
+                {"component": "span", "props": {"class": "text-caption text-medium-emphasis me-2"}, "text": f"最近{len(runs)}次"},
+                {"component": "span", "props": {"class": "text-body-2"}, "text": trend_text},
             ],
-        } if trend_chips else {"component": "div", "props": {"class": "pt-2"}, "text": ""}
+        } if trend_parts else {"component": "div", "props": {"class": "pt-2"}, "text": ""}
 
         return {
             "component": "VCol",
             "props": {"cols": 12, "md": 6},
             "content": [{
                 "component": "VCard",
-                "props": {"variant": "elevated", "elevation": "2", "class": "h-100"},
+                "props": {"variant": "elevated", "elevation": "3", "border": True, "class": "h-100"},
                 "content": [
                     {"component": "VCardText", "props": {"class": "pa-3"}, "content": [
                         title_row,
