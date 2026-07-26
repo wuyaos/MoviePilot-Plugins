@@ -18,6 +18,14 @@ const actionLoading = ref(false)
 const error = ref('')
 const success = ref('')
 const selectedSeedId = ref('')
+const stealDialog = ref(false)
+const likeDialog = ref(false)
+const visitDialog = ref(false)
+const sellAllDialog = ref(false)
+const stealTargets = ref([])
+const likeUsernames = ref('')
+const visitUsername = ref('')
+const visitResult = ref(null)
 
 const f = computed(() => props.farm || {})
 const bonus = computed(() => f.value.user_bonus ?? '—')
@@ -55,6 +63,10 @@ const likeRemaining = computed(() => f.value.like_remaining ?? 0)
 const canSteal = computed(() => !f.value.steal_done_today)
 const plotSlot = computed(() => f.value.plot_slot || {})
 const buySlotAvailable = computed(() => plotSlot.value.available ?? 0)
+const inventoryTotalValue = computed(() => inventory.value.reduce(
+  (total, item) => total + Number(item.quantity || 0) * Number(item.unit_reward || 0),
+  0,
+))
 
 function seedEmoji(name) {
   const emojiByName = {
@@ -104,11 +116,13 @@ async function doAction(action, params = {}) {
     const r = unwrap(await request('POST', `${apiBase()}/site/siqi/action`, { action, ...params }))
     success.value = r.message || `${action} 操作成功`
     emit('action', { action, result: r })
+    return r
   } catch (e) {
     error.value = e?.message || `${action} 失败`
   } finally {
     actionLoading.value = false
   }
+  return null
 }
 
 function selectSeed(seed) { selectedSeedId.value = seed.seed_id ?? seed.id }
@@ -116,8 +130,48 @@ function plantFill() {
   if (!selectedSeedId.value) { error.value = '请先选择种子'; return }
   doAction('plant', { seed_id: selectedSeedId.value })
 }
-function steal() { doAction('steal') }
-function like() { doAction('like') }
+async function openStealDialog() {
+  stealDialog.value = true
+  const result = await doAction('get_steal_targets')
+  stealTargets.value = Array.isArray(result?.targets) ? result.targets : []
+}
+async function steal(target, plot) {
+  const result = await doAction('steal', {
+    target_id: target.target_id ?? target.victim_id ?? target.id,
+    land_id: plot.land_id,
+    plot_index: plot.plot_index,
+  })
+  if (result?.success) {
+    stealDialog.value = false
+    emit('refresh')
+  }
+}
+async function openLikeDialog() {
+  likeDialog.value = true
+  if (!likeUsernames.value.trim()) await loadLikeTargets()
+}
+async function loadLikeTargets() {
+  const result = await doAction('get_like_targets')
+  const names = Array.isArray(result?.targets) ? result.targets : []
+  likeUsernames.value = names.map(item => (
+    typeof item === 'string' ? item : item.username ?? item.name ?? item.target_id ?? ''
+  )).filter(Boolean).join(', ')
+}
+async function like() {
+  const usernames = likeUsernames.value.split(/[，,\n]+/).map(item => item.trim()).filter(Boolean)
+  if (!usernames.length) { error.value = '请输入至少一个用户名'; return }
+  const result = await doAction('like', { usernames: usernames.join('\n') })
+  if (result?.success) {
+    likeDialog.value = false
+    emit('refresh')
+  }
+}
+async function visit() {
+  const username = visitUsername.value.trim()
+  if (!username) { error.value = '请输入用户名'; return }
+  const result = await doAction('visit', { username })
+  if (result?.success) visitResult.value = result
+}
 function harvestPlot(plot) { doAction('harvest', { land_id: plot.land_id, plot_index: plot.plot_index }) }
 function harvestAll() { doAction('harvest_all') }
 function plant(plot) {
@@ -130,9 +184,13 @@ function plant(plot) {
 }
 function buyPlotSlot(landId) { doAction('buy_plot_slot', { land_id: landId }) }
 function sell(item) { doAction('sell', { seed_id: item.seed_id, quantity: item.quantity }) }
-function sellAll() {
+async function sellAll() {
   if (!inventory.value.length) { error.value = '背包为空'; return }
-  for (const item of inventory.value) doAction('sell', { seed_id: item.seed_id, quantity: item.quantity })
+  sellAllDialog.value = false
+  for (const item of inventory.value) {
+    await doAction('sell', { seed_id: item.seed_id, quantity: item.quantity })
+  }
+  emit('refresh')
 }
 function buySlot() { doAction('buy_plot_slot') }
 function refresh() { emit('refresh') }
@@ -183,12 +241,44 @@ function formatRemain(plot) {
   return h > 0 ? `${h}时${m}分` : `${m}分`
 }
 
+function growSeconds(growTime) {
+  if (typeof growTime === 'number') return growTime
+  const text = String(growTime || '')
+  const days = Number(text.match(/([\d.]+)\s*天/)?.[1] || 0)
+  const hours = Number(text.match(/([\d.]+)\s*(?:小时|时)/)?.[1] || 0)
+  const minutes = Number(text.match(/([\d.]+)\s*分/)?.[1] || 0)
+  const seconds = Number(text.match(/([\d.]+)\s*秒/)?.[1] || 0)
+  return days * 86400 + hours * 3600 + minutes * 60 + seconds
+}
+
 function plotProgress(plot) {
+  if (isPlotReady(plot)) return 100
   const plantedAt = Number(plot?.plant_time)
   const harvestAt = Number(plot?.harvest_time)
-  if (!plantedAt || !harvestAt || harvestAt <= plantedAt) return null
+  const duration = harvestAt > plantedAt ? harvestAt - plantedAt : growSeconds(plot?.seed?.grow_time)
+  if (!plantedAt || !duration) return null
   const elapsed = Date.now() / 1000 - plantedAt
-  return Math.max(0, Math.min(100, (elapsed / (harvestAt - plantedAt)) * 100))
+  return Math.max(0, Math.min(100, (elapsed / duration) * 100))
+}
+
+function plotStageIcon(plot) {
+  const icons = plot?.seed?.stage_icons
+  if (!icons || typeof icons !== 'object') return ''
+  const progress = plotProgress(plot) ?? 0
+  const phase = isPlotReady(plot) ? 'mature' : (progress < 50 ? 'seedling' : 'growth')
+  return icons[phase] || icons.mature || icons.growth || icons.seedling || ''
+}
+
+function assetUrl(path) {
+  if (!path) return ''
+  if (/^(?:https?:|data:)/.test(path)) return path
+  return `https://si-qi.xyz/${String(path).replace(/^\//, '')}`
+}
+
+function stealPlots(target) {
+  return (target.plots || target.victim_plots || target.user_lands || []).filter(plot => (
+    plot?.seed_id && (Number(plot.is_ready) === 1 || Number(plot.harvest_time || 0) <= Date.now() / 1000)
+  ))
 }
 
 function handlePlotClick(plot) {
@@ -286,7 +376,7 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">偷菜</div>
                       <div class="text-caption text-grey">每日一次，自动寻找可偷作物</div>
                     </div>
-                    <v-btn color="red" size="small" variant="flat" :disabled="!canSteal" @click="steal">{{ canSteal ? '去偷菜' : '今日已偷' }}</v-btn>
+                    <v-btn color="red" size="small" variant="flat" :disabled="!canSteal" @click="openStealDialog">{{ canSteal ? '去偷菜' : '今日已偷' }}</v-btn>
                   </div>
                 </v-col>
                 <v-col cols="12">
@@ -296,7 +386,17 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">点赞</div>
                       <div class="text-caption text-grey">剩余 {{ likeRemaining }}/{{ likeMax }}</div>
                     </div>
-                    <v-btn color="pink" size="small" variant="flat" :disabled="likeRemaining <= 0" @click="like">去点赞</v-btn>
+                    <v-btn color="pink" size="small" variant="flat" :disabled="likeRemaining <= 0" @click="openLikeDialog">去点赞</v-btn>
+                  </div>
+                </v-col>
+                <v-col cols="12">
+                  <div class="d-flex align-center ga-2 pa-2 rounded border">
+                    <v-icon icon="mdi-account-search" color="blue" />
+                    <div class="flex-grow-1">
+                      <div class="text-body-2 font-weight-bold">参观农场</div>
+                      <div class="text-caption text-grey">按用户名访问好友农场</div>
+                    </div>
+                    <v-btn color="blue" size="small" variant="flat" @click="visitDialog = true">去参观</v-btn>
                   </div>
                 </v-col>
                 <v-col cols="12">
@@ -350,7 +450,13 @@ function handlePlotClick(plot) {
                   <div class="text-caption font-weight-bold">购买 {{ plot.cost }}</div>
                 </template>
                 <template v-else-if="plot.seed">
-                  <div class="plot-emoji mb-1" aria-hidden="true">{{ seedEmoji(plot.seed.name) }}</div>
+                  <img
+                    v-if="plotStageIcon(plot)"
+                    :src="assetUrl(plotStageIcon(plot))"
+                    :alt="`${plot.seed.name}阶段图`"
+                    class="plot-stage-image mb-1"
+                  >
+                  <div v-else class="plot-emoji mb-1" aria-hidden="true">{{ seedEmoji(plot.seed.name) }}</div>
                   <div class="text-caption font-weight-bold">{{ plot.seed.name }}</div>
                   <div class="text-caption" :class="isPlotReady(plot) ? 'text-orange' : 'text-grey'">
                     {{ isPlotReady(plot) ? '可收获' : `成长中 ${formatRemain(plot)}` }}
@@ -381,7 +487,7 @@ function handlePlotClick(plot) {
         <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-amber-lighten-5">
           <v-icon icon="mdi-bag-personal" color="amber" size="small" class="mr-2" />收获背包
           <v-spacer />
-          <v-btn color="orange" size="small" variant="flat" prepend-icon="mdi-cash" :disabled="!inventory.length" @click="sellAll">一键出售</v-btn>
+          <v-btn color="orange" size="small" variant="flat" prepend-icon="mdi-cash" :disabled="!inventory.length" @click="sellAllDialog = true">一键出售</v-btn>
         </v-card-title>
         <v-card-text class="pa-3">
           <v-table v-if="inventory.length" density="compact">
@@ -407,6 +513,83 @@ function handlePlotClick(plot) {
 
       <!-- 执行记录 -->
       <HistoryTable :history="history" />
+
+      <v-dialog v-model="stealDialog" max-width="720">
+        <v-card>
+          <v-card-title class="d-flex align-center">偷菜目标<v-spacer /><v-btn icon="mdi-close" variant="text" @click="stealDialog = false" /></v-card-title>
+          <v-card-text>
+            <v-progress-linear v-if="actionLoading" indeterminate color="red" class="mb-3" />
+            <v-card v-for="target in stealTargets" :key="target.target_id ?? target.victim_id" variant="outlined" class="mb-3">
+              <v-card-title class="text-subtitle-2">{{ target.name || target.victim_name || `农场 ${target.target_id ?? target.victim_id}` }}</v-card-title>
+              <v-card-text>
+                <div v-if="stealPlots(target).length" class="d-flex flex-wrap ga-2">
+                  <v-btn
+                    v-for="plot in stealPlots(target)"
+                    :key="`${plot.land_id}-${plot.plot_index}`"
+                    color="red"
+                    variant="tonal"
+                    :disabled="actionLoading"
+                    @click="steal(target, plot)"
+                  >
+                    偷取 {{ plot.seed_name || seedNameById(plot.seed_id) || `作物 ${plot.seed_id}` }}（地 {{ plot.land_id }}-{{ Number(plot.plot_index) + 1 }}）
+                  </v-btn>
+                </div>
+                <div v-else class="text-grey">暂无成熟作物</div>
+              </v-card-text>
+            </v-card>
+            <div v-if="!actionLoading && !stealTargets.length" class="text-center text-grey pa-4">暂无可偷菜目标</div>
+          </v-card-text>
+        </v-card>
+      </v-dialog>
+
+      <v-dialog v-model="likeDialog" max-width="560">
+        <v-card>
+          <v-card-title>批量点赞</v-card-title>
+          <v-card-text>
+            <div class="text-caption text-grey mb-2">剩余 {{ likeRemaining }}/{{ likeMax }}</div>
+            <v-textarea v-model="likeUsernames" label="用户名（逗号或换行分隔）" rows="5" variant="outlined" />
+          </v-card-text>
+          <v-card-actions>
+            <v-btn variant="tonal" :loading="actionLoading" @click="loadLikeTargets">随机填充</v-btn>
+            <v-spacer />
+            <v-btn variant="text" @click="likeDialog = false">取消</v-btn>
+            <v-btn color="pink" variant="flat" :loading="actionLoading" @click="like">一键点赞</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-dialog v-model="visitDialog" max-width="640">
+        <v-card>
+          <v-card-title>参观农场</v-card-title>
+          <v-card-text>
+            <div class="d-flex ga-2 align-start">
+              <v-text-field v-model="visitUsername" label="用户名" variant="outlined" @keyup.enter="visit" />
+              <v-btn color="blue" variant="flat" :loading="actionLoading" @click="visit">访问</v-btn>
+            </div>
+            <v-card v-if="visitResult" variant="tonal" color="green" class="mt-2">
+              <v-card-title class="text-subtitle-2">{{ visitResult.target_desc_name || visitResult.target_name || visitResult.request_username || visitUsername }} 的农场</v-card-title>
+              <v-card-text>
+                <div>{{ visitResult.message || visitResult.msg || '访问成功' }}</div>
+                <div v-if="visitResult.user_bonus != null">魔力值：{{ visitResult.user_bonus }}</div>
+                <div v-if="Array.isArray(visitResult.user_lands)">菜地坑位：{{ visitResult.user_lands.length }}</div>
+              </v-card-text>
+            </v-card>
+          </v-card-text>
+          <v-card-actions><v-spacer /><v-btn variant="text" @click="visitDialog = false">关闭</v-btn></v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-dialog v-model="sellAllDialog" max-width="440">
+        <v-card>
+          <v-card-title>确认出售</v-card-title>
+          <v-card-text>确定出售背包中的 {{ inventory.length }} 类作物？总价值 {{ inventoryTotalValue }} 魔力。</v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="sellAllDialog = false">取消</v-btn>
+            <v-btn color="orange" variant="flat" :loading="actionLoading" @click="sellAll">确认出售</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
     </v-card-text>
   </v-card>
 </template>
@@ -421,4 +604,5 @@ function handlePlotClick(plot) {
 }
 .plot-card { min-height: 116px; }
 .plot-emoji { font-size: 2rem; line-height: 1.2; }
+.plot-stage-image { width: 42px; height: 42px; object-fit: contain; }
 </style>

@@ -30,6 +30,19 @@ class SiqiConfig(FarmSiteConfig):
         except (TypeError, ValueError, json.JSONDecodeError):
             return {}
 
+    @classmethod
+    def _without_sensitive_fields(cls, value: Any) -> Any:
+        sensitive = {"cookie", "cookies", "set-cookie", "authorization"}
+        if isinstance(value, dict):
+            return {
+                key: cls._without_sensitive_fields(item)
+                for key, item in value.items()
+                if str(key).lower() not in sensitive
+            }
+        if isinstance(value, list):
+            return [cls._without_sensitive_fields(item) for item in value]
+        return value
+
     @staticmethod
     def _text(fragment: str) -> str:
         text = re.sub(r"<[^>]+>", " ", fragment or "")
@@ -160,7 +173,13 @@ class SiqiConfig(FarmSiteConfig):
             "like_max": 0,
             "like_remaining": 0,
             "like_next_in": None,
-            "plot_slot": {"next_slot_cost_by_land": {}, "available": False},
+            "plot_slot": {
+                "enabled": False,
+                "available": False,
+                "max_per_land": 0,
+                "effective_plot_counts": {},
+                "next_slot_cost_by_land": {},
+            },
         }
         try:
             data = self._json_dict(html)
@@ -198,11 +217,26 @@ class SiqiConfig(FarmSiteConfig):
                 seed_id = self._number(raw_seed.get("seed_id") or raw_seed.get("id"))
                 if seed_id is None:
                     continue
+                raw_stage_icons = raw_seed.get("stage_icons")
+                stage_icons = {
+                    phase: str(raw_stage_icons.get(phase) or "")
+                    for phase in ("seedling", "growth", "mature")
+                    if isinstance(raw_stage_icons, dict) and raw_stage_icons.get(phase)
+                }
+                grow_time = raw_seed.get("grow_time")
                 seed = {
                     "seed_id": seed_id,
                     "name": str(raw_seed.get("name") or f"作物 {seed_id}"),
                     "base_reward": self._number(raw_seed.get("base_reward")) or 0,
                     "cost": self._number(raw_seed.get("cost")) or 0,
+                    "icon": str(raw_seed.get("icon") or ""),
+                    "grow_time": str(grow_time) if grow_time is not None else "",
+                    "unlock_harvest": self._number(
+                        raw_seed.get("unlock_harvest")
+                        or raw_seed.get("required_harvest")
+                        or raw_seed.get("harvest_required")
+                    ) or 0,
+                    "stage_icons": stage_icons,
                 }
                 seeds.append(seed)
                 seed_by_id[seed_id] = seed
@@ -211,9 +245,13 @@ class SiqiConfig(FarmSiteConfig):
             raw_plot_slot = data.get("plot_slot") if isinstance(data.get("plot_slot"), dict) else {}
             raw_costs = raw_plot_slot.get("next_slot_cost_by_land")
             next_costs = dict(raw_costs) if isinstance(raw_costs, dict) else {}
-            effective_counts = raw_plot_slot.get("effective_plot_counts")
-            if not isinstance(effective_counts, dict):
-                effective_counts = {}
+            raw_effective_counts = raw_plot_slot.get("effective_plot_counts")
+            if not isinstance(raw_effective_counts, dict):
+                raw_effective_counts = {}
+            effective_counts = {
+                str(land_id): self._number(count) or 0
+                for land_id, count in raw_effective_counts.items()
+            }
 
             lands_by_id: Dict[str, Dict[str, Any]] = {}
             for raw_land in data.get("lands") or []:
@@ -237,12 +275,23 @@ class SiqiConfig(FarmSiteConfig):
                     )
                 effective_count = self._number(raw_effective_count)
                 plot_count = self._number(raw_plot.get("plot_count", land.get("plot_count")))
+                seed = seed_by_id.get(seed_id) if seed_id is not None else None
+                unlock_harvest = self._number(
+                    raw_plot.get("unlock_harvest")
+                    or land.get("unlock_harvest")
+                    or land.get("required_harvest")
+                    or land.get("harvest_required")
+                )
                 user_lands.append({
                     "land_id": land_id,
                     "name": str(raw_plot.get("name") or land.get("name") or ""),
                     "seed_id": seed_id,
+                    "seed_name": str((seed or {}).get("name") or ""),
+                    "seed": dict(seed) if seed else None,
+                    "unlock_harvest": unlock_harvest or 0,
                     "plot_index": self._number(raw_plot.get("plot_index")),
                     "is_ready": str(raw_plot.get("is_ready", "0")) == "1",
+                    "plant_time": self._number(raw_plot.get("plant_time")),
                     "harvest_time": self._number(raw_plot.get("harvest_time")),
                     "effective_plot_count": effective_count or plot_count or 0,
                     "plot_count": plot_count or effective_count or 0,
@@ -271,14 +320,20 @@ class SiqiConfig(FarmSiteConfig):
                 value = self._number(data.get(field))
                 result[field] = value or 0
             result["like_next_in"] = data.get("like_next_in")
+            enabled = raw_plot_slot.get("enabled")
             available = raw_plot_slot.get("available")
+            if enabled is None:
+                enabled = available
+            if enabled is None:
+                enabled = any(self._number(cost) for cost in next_costs.values())
             if available is None:
-                available = raw_plot_slot.get("enabled")
-            if available is None:
-                available = any(self._number(cost) for cost in next_costs.values())
+                available = enabled
             result["plot_slot"] = {
-                "next_slot_cost_by_land": next_costs,
+                "enabled": bool(enabled),
                 "available": bool(available),
+                "max_per_land": self._number(raw_plot_slot.get("max_per_land")) or 0,
+                "effective_plot_counts": effective_counts,
+                "next_slot_cost_by_land": next_costs,
             }
 
             if not data:
@@ -357,13 +412,19 @@ class SiqiConfig(FarmSiteConfig):
         if data:
             targets = data.get("targets") or data.get("victims")
             if isinstance(targets, list):
-                return [target for target in targets if isinstance(target, dict)]
+                return [
+                    self._without_sensitive_fields(target)
+                    for target in targets
+                    if isinstance(target, dict)
+                ]
             victim_id = data.get("victim_id")
             if victim_id is not None:
                 return [{
                     "target_id": victim_id,
                     "name": data.get("victim_name") or data.get("username") or "",
-                    "plots": data.get("victim_plots") or data.get("user_lands") or [],
+                    "plots": self._without_sensitive_fields(
+                        data.get("victim_plots") or data.get("user_lands") or []
+                    ),
                 }]
             return []
 
@@ -393,6 +454,12 @@ class SiqiConfig(FarmSiteConfig):
 
     def get_like_submit_url(self) -> str:
         return f"{self.get_farm_url()}?{urlencode({'option': 'like'})}"
+
+    def get_visit_submit_url(self) -> str:
+        return self._action_url("view_farm_by_username")
+
+    def get_sell_inventory_url(self) -> str:
+        return self._action_url("sell_inventory")
 
     def get_buy_plot_slot_url(self) -> str:
         return f"{self.get_farm_url()}?{urlencode({'option': 'buy_plot_slot'})}"
@@ -448,6 +515,12 @@ class SiqiConfig(FarmSiteConfig):
 
     def parse_like_result(self, html: str) -> Dict[str, Any]:
         return self._parse_action_result(html, ("点赞成功", "已点赞", "点赞完成"), "点赞成功", "点赞失败")
+
+    def parse_visit_result(self, html: str) -> Dict[str, Any]:
+        return self._parse_action_result(html, ("访问成功", "参观成功", "的农场"), "访问成功", "访问失败")
+
+    def parse_sell_result(self, html: str) -> Dict[str, Any]:
+        return self._parse_action_result(html, ("出售成功", "已出售", "获得"), "出售成功", "出售失败")
 
     def parse_buy_slot_result(self, html: str) -> Dict[str, Any]:
         return self._parse_action_result(html, ("购买成功", "扩地成功", "坑位"), "扩地成功", "扩地失败")

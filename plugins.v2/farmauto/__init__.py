@@ -777,7 +777,10 @@ class FarmAuto(_PluginBase):
         target = crop_key or site_id
         supported_actions = {"harvest", "plant", "sell", "harvest_all"}
         if site_id == "siqi":
-            supported_actions.update({"buy_plot_slot", "steal", "like"})
+            supported_actions.update({
+                "buy_plot_slot", "steal", "like", "visit",
+                "get_steal_targets", "get_like_targets",
+            })
         if action not in supported_actions:
             return {
                 "success": False,
@@ -799,7 +802,8 @@ class FarmAuto(_PluginBase):
         dry_run = bool(policy.get("dry_run", False))
         crop = site_config.crops.get(crop_key) if crop_key else None
         is_siqi_action = site_id == "siqi" and action in {
-            "harvest", "plant", "buy_plot_slot", "steal", "like"
+            "harvest", "plant", "sell", "buy_plot_slot", "steal", "like", "visit",
+            "get_steal_targets", "get_like_targets",
         }
         target = site_config.site_name if action == "harvest_all" else (
             crop.get("name", crop_key) if crop else crop_key or site_config.site_name
@@ -831,12 +835,18 @@ class FarmAuto(_PluginBase):
                     key: value for key, value in (payload or {}).items()
                     if key not in ("action", "crop_key") and value is not None and value != ""
                 }
+                if "target_id" in action_data and "victim_id" not in action_data:
+                    action_data["victim_id"] = action_data["target_id"]
                 required_fields = {
                     "harvest": ("land_id", "plot_index"),
                     "plant": ("land_id", "plot_index", "seed_id"),
+                    "sell": ("seed_id", "quantity"),
                     "buy_plot_slot": ("land_id",),
                     "steal": ("victim_id", "land_id", "plot_index"),
-                    "like": ("target_id",),
+                    "like": (),
+                    "visit": ("username",),
+                    "get_steal_targets": (),
+                    "get_like_targets": (),
                 }
                 missing = [field for field in required_fields[action] if field not in action_data]
                 if missing:
@@ -845,6 +855,34 @@ class FarmAuto(_PluginBase):
                         "message": f"缺少参数：{', '.join(missing)}",
                         "action": action,
                         "target": target,
+                        "dry_run": False,
+                    }
+                if action == "get_steal_targets":
+                    response = http_client.post(
+                        site_config.get_steal_target_url(), cookies, data={}
+                    )
+                    response.raise_for_status()
+                    targets = site_config.parse_steal_targets(response.text)
+                    return {
+                        "success": True,
+                        "message": "偷菜目标已加载",
+                        "action": action,
+                        "target": target,
+                        "targets": targets,
+                        "dry_run": False,
+                    }
+                if action == "get_like_targets":
+                    response = http_client.post(
+                        site_config.get_like_target_url(), cookies, data={}
+                    )
+                    response.raise_for_status()
+                    targets = site_config.parse_like_targets(response.text)
+                    return {
+                        "success": True,
+                        "message": "点赞目标已加载",
+                        "action": action,
+                        "target": target,
+                        "targets": targets,
                         "dry_run": False,
                     }
                 if action == "harvest":
@@ -857,21 +895,32 @@ class FarmAuto(_PluginBase):
                     url = site_config.get_plant_plot_url()
                     response = http_client.post(url, cookies, data=action_data)
                     parser = site_config.parse_plant_result
+                elif action == "sell":
+                    response = http_client.post(
+                        site_config.get_sell_inventory_url(), cookies, data=action_data
+                    )
+                    parser = site_config.parse_sell_result
                 elif action == "buy_plot_slot":
                     response = http_client.post(
                         site_config.get_buy_plot_slot_url(), cookies, data=action_data
                     )
                     parser = site_config.parse_buy_slot_result
                 elif action == "steal":
+                    action_data.pop("target_id", None)
                     response = http_client.post(
                         site_config.get_steal_plot_url(), cookies, data=action_data
                     )
                     parser = site_config.parse_steal_result
-                else:
+                elif action == "like":
                     response = http_client.post(
                         site_config.get_like_submit_url(), cookies, data=action_data
                     )
                     parser = site_config.parse_like_result
+                else:
+                    response = http_client.post(
+                        site_config.get_visit_submit_url(), cookies, data=action_data
+                    )
+                    parser = site_config.parse_visit_result
                 response.raise_for_status()
                 parsed = parser(response.text)
             elif action == "harvest_all":
@@ -903,7 +952,12 @@ class FarmAuto(_PluginBase):
                 response = http_client.get(site_config.get_sell_url(sell_key), cookies)
                 response.raise_for_status()
                 parsed = site_config.parse_sell_result(response.text)
+            safe_parsed = {
+                key: value for key, value in parsed.items()
+                if str(key).lower() not in {"cookie", "cookies", "set-cookie", "authorization"}
+            }
             return {
+                **safe_parsed,
                 "success": bool(parsed.get("success")),
                 "message": parsed.get("message", ""),
                 "action": action,
