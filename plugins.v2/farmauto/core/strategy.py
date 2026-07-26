@@ -4,6 +4,7 @@ from .models import WarehouseItem
 
 DEFAULT_POLICY: Dict[str, Any] = {
     "min_profit_rate": 0.0,
+    "max_profit_rate": 0.0,
     "max_sell_per_run": 50,
     "expire_threshold_minutes": 120,
     "request_interval": 1.0,
@@ -35,9 +36,13 @@ def should_sell(crop: dict, market_price: int, policy: dict) -> bool:
     policy = _policy(policy)
     cost = int(crop.get("cost", 0))
     min_profit_rate = float(policy["min_profit_rate"])
-    if min_profit_rate == 0:
-        return market_price > cost
-    return market_price > 0 and market_price - cost >= cost * min_profit_rate
+    max_profit_rate = float(policy["max_profit_rate"])
+    profit = market_price - cost
+    if market_price <= cost:
+        return False
+    if min_profit_rate > 0 and profit < cost * min_profit_rate:
+        return False
+    return max_profit_rate <= 0 or profit <= cost * max_profit_rate
 
 
 def is_expiry(item: WarehouseItem, threshold_minutes: int) -> bool:

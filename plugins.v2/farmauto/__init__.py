@@ -2,6 +2,7 @@
 import json
 import threading
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from apscheduler.triggers.interval import IntervalTrigger
@@ -30,7 +31,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场自动化，支持智能交易与自动收获"
     plugin_icon = "farm.png"
-    plugin_version = "2.3"
+    plugin_version = "3.0"
     plugin_author = "bfjy"
     author_url = "https://bfjy2024.github.io/bfjy"
     plugin_config_prefix = "farmauto_"
@@ -50,11 +51,19 @@ class FarmAuto(_PluginBase):
         self._harvest_interval_minutes = 61
         self._expire_threshold_minutes = 120
         self._min_profit_rate = 0.0
+        self._max_profit_rate = 0.0
         self._max_sell_per_run = 50
         self._request_interval = 1.0
         self._retry_count = 3
         self._use_proxy = False
         self._dry_run = False
+        self._siqi_options: Dict[str, bool] = {
+            "auto_captcha_harvest": False,
+            "auto_steal": False,
+            "auto_like": False,
+            "auto_buy_slot": False,
+            "captcha_ocr": True,
+        }
         self._site_overrides: Dict[str, Dict[str, Any]] = {}
         self._trend_store = PriceTrendStore()
         self._stats = self._empty_stats()
@@ -106,11 +115,19 @@ class FarmAuto(_PluginBase):
             config.get("expire_threshold_minutes"), 120, 10
         )
         self._min_profit_rate = self._to_float(config.get("min_profit_rate"), 0.0, 0.0)
+        self._max_profit_rate = self._to_float(config.get("max_profit_rate"), 0.0, 0.0)
         self._max_sell_per_run = self._to_int(config.get("max_sell_per_run"), 50, 1)
         self._request_interval = self._to_float(config.get("request_interval"), 1.0, 0.0)
         self._retry_count = self._to_int(config.get("retry_count"), 3, 0)
         self._use_proxy = bool(config.get("use_proxy", False))
         self._dry_run = bool(config.get("dry_run", False))
+        self._siqi_options = {
+            "auto_captcha_harvest": bool(config.get("siqi_auto_captcha_harvest", False)),
+            "auto_steal": bool(config.get("siqi_auto_steal", False)),
+            "auto_like": bool(config.get("siqi_auto_like", False)),
+            "auto_buy_slot": bool(config.get("siqi_auto_buy_slot", False)),
+            "captcha_ocr": bool(config.get("siqi_captcha_ocr", True)),
+        }
         try:
             overrides = json.loads(config.get("site_overrides") or "{}")
             if not isinstance(overrides, dict):
@@ -141,6 +158,10 @@ class FarmAuto(_PluginBase):
 
     def get_state(self) -> bool:
         return self._enabled
+
+    @staticmethod
+    def get_render_mode() -> Tuple[str, str]:
+        return "vue", "dist/assets"
 
     def _start_background_task(self, source: str) -> bool:
         if not type(self)._run_lock.acquire(blocking=False):
@@ -215,6 +236,7 @@ class FarmAuto(_PluginBase):
     def get_effective_policy(self, site_id: str) -> dict:
         global_policy = {
             "min_profit_rate": self._min_profit_rate,
+            "max_profit_rate": self._max_profit_rate,
             "max_sell_per_run": self._max_sell_per_run,
             "expire_threshold_minutes": self._expire_threshold_minutes,
             "request_interval": self._request_interval,
@@ -237,6 +259,36 @@ class FarmAuto(_PluginBase):
             min_interval=max(float(policy.get("request_interval", 0)), 0.3),
         )
 
+    def _siqi_daily_state(self) -> Dict[str, Any]:
+        today = datetime.now().strftime("%Y-%m-%d")
+        stored = self.get_data("siqi_daily") or {}
+        if not isinstance(stored, dict) or stored.get("date") != today:
+            stored = {"date": today, "steal": False, "like": False}
+            self.save_data("siqi_daily", stored)
+        return stored
+
+    def _run_siqi_extras(self, executor, site_config, cookie, policy, report) -> None:
+        if site_config.site_id != "siqi" or policy.get("dry_run", False):
+            return
+        daily = self._siqi_daily_state()
+        results = executor.run_siqi_extras(
+            cookie,
+            site_config,
+            self._siqi_options,
+            {"steal": bool(daily.get("steal")), "like": bool(daily.get("like"))},
+        )
+        for result in results:
+            report.actions.append(result)
+            if result.success:
+                report.trades_count += 1
+            if result.action in ("steal", "like"):
+                daily[result.action] = True
+                self.save_data("siqi_daily", daily)
+        if results:
+            failures = sum(not result.success for result in report.actions)
+            report.status = "partial" if failures else "completed"
+            report.message = f"完成 {report.trades_count} 个操作"
+
     @staticmethod
     def _site_report_dict(report: SiteRunReport) -> Dict[str, Any]:
         return {
@@ -244,6 +296,7 @@ class FarmAuto(_PluginBase):
             "site_name": report.site_name,
             "mode": report.mode,
             "market_prices": report.market_prices,
+            "bonus": getattr(report, "bonus", None),
             "crop_status": report.crop_status,
             "warehouse": report.warehouse,
             "total_profit": report.total_profit,
@@ -285,6 +338,7 @@ class FarmAuto(_PluginBase):
                 )
                 cookie = self._get_site_cookie(site_config)
                 site_report = executor.run_site(cookie, site_config, mode, policy)
+                self._run_siqi_extras(executor, site_config, cookie, policy, site_report)
                 site_reports.append(site_report)
                 self._market_prices[site_id] = dict(site_report.market_prices)
 
@@ -438,6 +492,27 @@ class FarmAuto(_PluginBase):
                 "auth": "bear",
                 "summary": "获取最新市场价格",
             },
+            {
+                "path": "/status",
+                "endpoint": self._api_status,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "获取农场工作台总览",
+            },
+            {
+                "path": "/site/{site_id}",
+                "endpoint": self._api_site_detail,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "获取单站农场详情",
+            },
+            {
+                "path": "/site/{site_id}/action",
+                "endpoint": self._api_site_action,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "手动执行单站农场操作",
+            },
         ]
 
     def _api_run(self) -> Dict[str, Any]:
@@ -457,6 +532,265 @@ class FarmAuto(_PluginBase):
 
     def _api_prices(self) -> Dict[str, Any]:
         return {"success": True, "market_prices": self._market_prices}
+
+    @staticmethod
+    def _timestamp_text(value: Any) -> Optional[str]:
+        if value in (None, ""):
+            return None
+        if isinstance(value, str):
+            return value
+        try:
+            return datetime.fromtimestamp(float(value)).isoformat(timespec="seconds")
+        except (TypeError, ValueError, OSError):
+            return str(value)
+
+    def _next_run_text(self) -> Optional[str]:
+        if not self._enabled or not self._site_ids:
+            return None
+        interval = (
+            self._harvest_interval_minutes
+            if self._mode == "harvest"
+            else self._interval_minutes
+        )
+        last_run = self._stats.get("last_run")
+        if last_run in (None, ""):
+            return None
+        try:
+            return datetime.fromtimestamp(float(last_run) + interval * 60).isoformat(
+                timespec="seconds"
+            )
+        except (TypeError, ValueError, OSError):
+            return None
+
+    def _last_site_report(self, site_id: str) -> Dict[str, Any]:
+        last_result = self._stats.get("last_result") or {}
+        if not isinstance(last_result, dict):
+            return {}
+        reports = last_result.get("site_reports") or []
+        for report in reports:
+            if isinstance(report, dict) and str(report.get("site_id")) == site_id:
+                return report
+        return {}
+
+    @staticmethod
+    def _trend_point_count(site_trends: Any) -> int:
+        if not isinstance(site_trends, dict):
+            return 0
+        return sum(len(samples) for samples in site_trends.values() if isinstance(samples, list))
+
+    @staticmethod
+    def _normalize_crop_status(crop_status: Any) -> Dict[str, Dict[str, Any]]:
+        if not isinstance(crop_status, dict):
+            return {}
+        result: Dict[str, Dict[str, Any]] = {}
+        for crop_key, raw_status in crop_status.items():
+            status = dict(raw_status) if isinstance(raw_status, dict) else {
+                "can_harvest": bool(raw_status)
+            }
+            status.setdefault("remaining_minutes", None)
+            result[str(crop_key)] = status
+        return result
+
+    @staticmethod
+    def _normalize_warehouse(warehouse: Any) -> List[Dict[str, Any]]:
+        if not isinstance(warehouse, list):
+            return []
+        result = []
+        for raw_item in warehouse:
+            if not isinstance(raw_item, dict):
+                continue
+            item = dict(raw_item)
+            item.setdefault("expire_minutes", None)
+            result.append(item)
+        return result
+
+    def _site_history(self, site_id: str, site_name: str) -> List[Dict[str, Any]]:
+        history = self._stats.get("history") or []
+        return [
+            dict(item)
+            for item in history
+            if isinstance(item, dict)
+            and str(item.get("site", "")) in (site_id, site_name)
+        ]
+
+    def _api_status(self) -> Dict[str, Any]:
+        trends = self._trend_store.to_dict()
+        last_result = self._stats.get("last_result") or {}
+        reports = last_result.get("site_reports") or [] if isinstance(last_result, dict) else []
+        site_ids = list(dict.fromkeys(
+            self._site_ids
+            + list((self._market_prices or {}).keys())
+            + list(trends.keys())
+            + [
+                str(report.get("site_id"))
+                for report in reports
+                if isinstance(report, dict) and report.get("site_id")
+            ]
+        ))
+        sites = []
+        for site_id in site_ids:
+            site_config = get_site_config(site_id)
+            if not site_config:
+                continue
+            report = self._last_site_report(site_id)
+            crop_status = self._normalize_crop_status(report.get("crop_status"))
+            warehouse = self._normalize_warehouse(report.get("warehouse"))
+            prices = self._market_prices.get(site_id) or report.get("market_prices") or {}
+            actions = report.get("actions") or []
+            recent_action = (
+                actions[-1].get("action")
+                if actions and isinstance(actions[-1], dict)
+                else None
+            )
+            sites.append({
+                "site_id": site_id,
+                "site_name": site_config.site_name,
+                "currency": site_config.currency,
+                "bonus": report.get("bonus"),
+                "prices_count": len(prices) if isinstance(prices, dict) else 0,
+                "harvestable": [
+                    crop_key
+                    for crop_key in site_config.crops
+                    if crop_status.get(crop_key, {}).get("can_harvest")
+                ],
+                "warehouse_count": len(warehouse),
+                "trend_points": self._trend_point_count(trends.get(site_id)),
+                "recent_action": recent_action,
+            })
+        return {
+            "success": True,
+            "data": {
+                "enabled": bool(self._enabled),
+                "mode": self._mode,
+                "dry_run": bool(self._dry_run),
+                "next_run": self._next_run_text(),
+                "total_profit": self._to_int(self._stats.get("total_profit"), 0),
+                "total_trades": self._to_int(self._stats.get("total_trades"), 0),
+                "last_run": self._timestamp_text(self._stats.get("last_run")),
+                "sites": sites,
+            },
+        }
+
+    def _api_site_detail(self, site_id: str) -> Dict[str, Any]:
+        site_config = get_site_config(site_id)
+        if not site_config:
+            return {"success": False, "message": "站点不存在"}
+        report = self._last_site_report(site_id)
+        history = self._site_history(site_id, site_config.site_name)
+        site_trends = self._trend_store.to_dict().get(site_id, {})
+        return {
+            "success": True,
+            "data": {
+                "site_id": site_id,
+                "site_name": site_config.site_name,
+                "market_prices": self._market_prices.get(site_id)
+                or report.get("market_prices")
+                or {},
+                "crop_status": self._normalize_crop_status(report.get("crop_status")),
+                "warehouse": self._normalize_warehouse(report.get("warehouse")),
+                "trends": {
+                    crop_key: samples[-20:]
+                    for crop_key, samples in site_trends.items()
+                    if isinstance(samples, list)
+                } if isinstance(site_trends, dict) else {},
+                "recent_actions": history[-10:],
+            },
+        }
+
+    def _api_site_action(self, site_id: str, payload: dict) -> Dict[str, Any]:
+        action = str((payload or {}).get("action") or "")
+        crop_key = str((payload or {}).get("crop_key") or "")
+        dry_run = bool(self._dry_run)
+        target = crop_key or site_id
+        if action not in ("harvest", "plant", "sell", "harvest_all"):
+            return {
+                "success": False,
+                "message": "不支持的操作",
+                "action": action,
+                "target": target,
+                "dry_run": dry_run,
+            }
+        site_config = get_site_config(site_id)
+        if not site_config:
+            return {
+                "success": False,
+                "message": "站点不存在",
+                "action": action,
+                "target": target,
+                "dry_run": dry_run,
+            }
+        policy = self.get_effective_policy(site_id)
+        dry_run = bool(policy.get("dry_run", False))
+        crop = site_config.crops.get(crop_key) if crop_key else None
+        target = site_config.site_name if action == "harvest_all" else (
+            crop.get("name", crop_key) if crop else crop_key
+        )
+        if action != "harvest_all" and not crop:
+            return {
+                "success": False,
+                "message": "作物不存在",
+                "action": action,
+                "target": target,
+                "dry_run": dry_run,
+            }
+        if dry_run:
+            return {
+                "success": True,
+                "message": "dry-run：仅记录计划",
+                "action": action,
+                "target": target,
+                "dry_run": True,
+            }
+
+        try:
+            http_client = self._build_http_client(policy)
+            cookies = FarmExecutor._cookie_dict(self._get_site_cookie(site_config))
+            if not cookies:
+                raise ValueError("未提供有效 Cookie")
+            if action == "harvest_all":
+                response = http_client.get(site_config.get_harvest_all_url(), cookies)
+                response.raise_for_status()
+                parsed = site_config.parse_harvest_result(response.text)
+            elif action == "harvest":
+                response = http_client.get(
+                    site_config.get_harvest_url(crop["type"], crop["id"]), cookies
+                )
+                response.raise_for_status()
+                parsed = site_config.parse_harvest_result(response.text)
+            elif action == "plant":
+                crop_action = crop.get("action", "plant")
+                url = (
+                    site_config.get_breed_url(crop["type"], crop["id"])
+                    if crop_action == "breed"
+                    else site_config.get_plant_url(crop["type"], crop["id"])
+                )
+                response = http_client.get(url, cookies)
+                response.raise_for_status()
+                parsed = site_config.parse_plant_result(response.text, crop_action)
+            else:
+                farm_response = http_client.get(site_config.get_farm_url(), cookies)
+                farm_response.raise_for_status()
+                sell_key = site_config.get_sell_key(
+                    farm_response.text, crop["type"], crop["id"]
+                ) or f"{crop['type']}_{crop['id']}"
+                response = http_client.get(site_config.get_sell_url(sell_key), cookies)
+                response.raise_for_status()
+                parsed = site_config.parse_sell_result(response.text)
+            return {
+                "success": bool(parsed.get("success")),
+                "message": parsed.get("message", ""),
+                "action": action,
+                "target": target,
+                "dry_run": False,
+            }
+        except Exception as error:
+            return {
+                "success": False,
+                "message": str(error),
+                "action": action,
+                "target": target,
+                "dry_run": False,
+            }
 
     @eventmanager.register(EventType.PluginAction)
     def run_once_command(self, event: Event = None):
@@ -583,8 +917,12 @@ class FarmAuto(_PluginBase):
             "component": "VForm",
             "content": [
                 {"component": "VAlert", "props": {
+                    "type": "warning", "variant": "tonal", "class": "mb-4",
+                    "text": "思齐的验证码收获、偷菜、点赞和扩地属于高风险行为，默认全部关闭；开启即表示自行承担账号风控风险。OCR 不可用时验证码收获会安全降级为逐格收获。",
+                }},
+                {"component": "VAlert", "props": {
                     "type": "info", "variant": "tonal", "class": "mb-4",
-                    "text": "支持 PlayLet、NovaHD、好学、包子和拾刻；智能交易会按利润执行仓库出售、收获与补种，自动收获模式侧重收获和临期处理。可在表单末尾用 JSON 为单个站点覆盖策略、模式或启用状态。",
+                    "text": "支持 PlayLet、NovaHD、好学、包子、拾刻和思齐；智能交易会按最低与最高利润率组成的盈利区间执行仓库出售、收获与补种，超过上限时保留囤货待涨；自动收获模式侧重收获和临期处理。可在表单末尾用 JSON 为单个站点覆盖策略、模式或启用状态。",
                 }},
                 {"component": "VRow", "content": [
                     col(4, switch("enabled", "启用插件")),
@@ -610,20 +948,34 @@ class FarmAuto(_PluginBase):
                     col(4, number("expire_threshold_minutes", "临期阈值（分钟）", 10)),
                 ]},
                 {"component": "VRow", "content": [
-                    col(4, number("min_profit_rate", "最低利润率", 0, "0 表示售价高于成本即售；0.1 表示 10%")),
-                    col(4, number("max_sell_per_run", "单轮单站最大出售数", 1)),
-                    col(4, number("request_interval", "请求间隔（秒）", 0)),
+                    col(3, number("min_profit_rate", "最低利润率", 0, "0 表示售价高于成本即售；0.1 表示 10%")),
+                    col(3, number("max_profit_rate", "最高利润率", 0, "0=无上限，0.5=50%封顶，超过则不卖防囤货")),
+                    col(3, number("max_sell_per_run", "单轮单站最大出售数", 1)),
+                    col(3, number("request_interval", "请求间隔（秒）", 0)),
                 ]},
                 {"component": "VRow", "content": [
                     col(4, number("retry_count", "重试次数", 0)),
                     col(4, switch("use_proxy", "使用 MP 系统代理")),
                     col(4, switch("dry_run", "仅模拟（不发送操作请求）")),
                 ]},
+                {"component": "VAlert", "props": {
+                    "type": "warning", "variant": "tonal", "class": "mt-2 mb-2",
+                    "text": "思齐专用执行开关（仅选择思齐站点时生效，除 OCR 优先外默认全关）",
+                }},
+                {"component": "VRow", "content": [
+                    col(4, switch("siqi_auto_captcha_harvest", "思齐：验证码收获")),
+                    col(4, switch("siqi_captcha_ocr", "思齐：OCR 优先")),
+                    col(4, switch("siqi_auto_buy_slot", "思齐：自动扩地")),
+                ]},
+                {"component": "VRow", "content": [
+                    col(6, switch("siqi_auto_steal", "思齐：每日偷菜")),
+                    col(6, switch("siqi_auto_like", "思齐：每日点赞")),
+                ]},
                 {"component": "VRow", "content": [
                     col(12, {"component": "VTextarea", "props": {
                         "model": "site_overrides",
                         "label": "单站策略覆盖（JSON，可选）",
-                        "hint": "示例：{\"playlet\":{\"min_profit_rate\":0.1,\"max_sell_per_run\":20}}；支持 min_profit_rate/max_sell_per_run/expire_threshold_minutes/request_interval/use_proxy/dry_run/mode/enabled",
+                        "hint": "示例：{\"playlet\":{\"min_profit_rate\":0.1,\"max_profit_rate\":0.5,\"max_sell_per_run\":20}}；支持 min_profit_rate/max_profit_rate/max_sell_per_run/expire_threshold_minutes/request_interval/use_proxy/dry_run/mode/enabled",
                         "persistent-hint": True,
                         "rows": 4,
                     }}),
@@ -639,11 +991,17 @@ class FarmAuto(_PluginBase):
             "harvest_interval_minutes": 61,
             "expire_threshold_minutes": 120,
             "min_profit_rate": 0.0,
+            "max_profit_rate": 0.0,
             "max_sell_per_run": 50,
             "request_interval": 1.0,
             "retry_count": 3,
             "use_proxy": False,
             "dry_run": False,
+            "siqi_auto_captcha_harvest": False,
+            "siqi_auto_steal": False,
+            "siqi_auto_like": False,
+            "siqi_auto_buy_slot": False,
+            "siqi_captcha_ocr": True,
             "site_overrides": "{}",
         }
 

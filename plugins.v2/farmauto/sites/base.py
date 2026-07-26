@@ -8,6 +8,9 @@ except ImportError:  # 支持按插件根目录加入 sys.path 的离线测试�
     from core.models import CropDef, parse_expire_minutes
 
 
+CAPABILITY_BATCH_SELL = "batch_sell"
+
+
 class FarmSiteConfig(ABC):
     site_id: str = ""
     site_name: str = ""
@@ -45,6 +48,9 @@ class FarmSiteConfig(ABC):
     def supports(self, capability: str) -> bool:
         return capability in self.capabilities
 
+    def supports_batch_sell(self) -> bool:
+        return CAPABILITY_BATCH_SELL in self.capabilities
+
     def crops_as_models(self) -> List[CropDef]:
         return [CropDef(key=key, **crop) for key, crop in self.crops.items()]
 
@@ -62,6 +68,9 @@ class FarmSiteConfig(ABC):
 
     def get_sell_url(self, sell_key: str) -> str:
         return f"{self.get_farm_url()}?action=sell&key={sell_key}"
+
+    def get_batch_sell_url(self) -> str:
+        return f"{self.get_farm_url()}?action=batch_sell&page=1&sort=expire_asc"
 
     def get_harvest_all_url(self) -> str:
         return f"{self.get_farm_url()}?action=harvest_all"
@@ -100,6 +109,24 @@ class FarmSiteConfig(ABC):
     def parse_sell_result(self, html: str) -> Dict[str, Any]:
         success = any(token in html for token in ("成功", "出售", "获得", "已出售", "已经出售"))
         return {"success": success, "message": "出售成功" if success else "出售失败"}
+
+    def parse_batch_sell_result(self, html: str) -> Dict[str, Any]:
+        text = " ".join(re.sub(r"<[^>]+>", " ", html or "").split())
+        success_match = re.search(r"成功(?:出售)?\s*[：:]?\s*(\d+)\s*个", text)
+        failed_match = re.search(r"失败(?:出售)?\s*[：:]?\s*(\d+)\s*个", text)
+        if success_match:
+            sold_count = int(success_match.group(1))
+            failed_count = int(failed_match.group(1)) if failed_match else 0
+            return {
+                "success": failed_count == 0,
+                "sold_count": sold_count,
+                "message": f"批量出售成功 {sold_count} 个，失败 {failed_count} 个",
+            }
+        if failed_match or "失败" in text:
+            failed_count = int(failed_match.group(1)) if failed_match else 0
+            message = f"批量出售失败 {failed_count} 个" if failed_count else "批量出售失败"
+            return {"success": False, "sold_count": 0, "message": message}
+        return {"success": True, "sold_count": -1, "message": "批量出售请求已发出"}
 
     def parse_warehouse_items(self, html: str) -> List[Dict[str, Any]]:
         warehouse_start = html.find("<h2>仓库</h2>")

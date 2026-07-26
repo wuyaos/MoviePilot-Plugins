@@ -62,18 +62,17 @@ def test_siqi_metadata_and_urls():
 
     assert _query(config.get_harvest_captcha_url()) == {"action": ["get_harvest_all_captcha"]}
     assert _query(config.get_harvest_all_submit_url("hash-123")) == {
-        "action": ["harvest_all"],
-        "imagehash": ["hash-123"],
+        "option": ["harvest_all"],
     }
+    assert _query(config.get_harvest_plot_url(2, 0)) == {
+        "action": ["harvest"], "land_id": ["2"], "plot_index": ["0"],
+    }
+    assert config.get_captcha_image_url("hash-123").endswith("captcha.php?imagehash=hash-123")
     assert _query(config.get_steal_target_url()) == {"action": ["get_victim_farm"]}
-    assert _query(config.get_steal_plot_url("42", "2:0")) == {
-        "action": ["steal_vegetable"],
-        "victim_id": ["42"],
-        "land_id": ["2"],
-        "plot_index": ["0"],
-    }
+    assert _query(config.get_steal_plot_url()) == {"option": ["steal"]}
     assert _query(config.get_like_target_url()) == {"action": ["random_like_targets"]}
-    assert _query(config.get_buy_plot_slot_url()) == {"action": ["buy_plot_slot"]}
+    assert _query(config.get_like_submit_url()) == {"option": ["like"]}
+    assert _query(config.get_buy_plot_slot_url()) == {"option": ["buy_plot_slot"]}
 
 
 def test_siqi_farm_and_warehouse_parsers():
@@ -129,6 +128,12 @@ def test_siqi_captcha_target_and_result_parsers():
     }]
     assert config.parse_like_targets(LIKE_TARGETS_HTML) == ["Alice", "Bob"]
     assert config.parse_like_targets('{"success":true,"usernames":["Alice","Bob"]}') == ["Alice", "Bob"]
+    assert config.parse_buy_slot_targets(
+        '{"success":true,"lands":[{"id":2,"can_buy_slot":true},{"id":3,"can_buy_slot":false}]}'
+    ) == [2]
+    assert config.parse_buy_slot_targets(
+        '{"success":true,"plot_slot":{"enabled":true,"next_slot_cost_by_land":{"2":100,"3":null}}}'
+    ) == ["2"]
 
     steal_result = config.parse_steal_result('{"success":true,"reward":5,"msg":"偷菜成功"}')
     assert steal_result["success"] is True

@@ -63,7 +63,13 @@ def test_skit_metadata_and_urls():
     assert config.site_name == "拾刻"
     assert config.get_farm_url() == "https://www.ptskit.org/magic_farm.php"
     assert config.crops["animal_1"]["action"] == "breed"
-    assert config.capabilities == {"harvest_all", "expiry_sale", "warehouse_pagination"}
+    assert config.capabilities == {
+        "harvest_all", "expiry_sale", "warehouse_pagination", "batch_sell"
+    }
+    assert config.supports_batch_sell()
+    assert config.get_batch_sell_url() == (
+        "https://www.ptskit.org/magic_farm.php?action=batch_sell&page=1&sort=expire_asc"
+    )
 
 
 def test_skit_market_status_and_bonus_parsers():

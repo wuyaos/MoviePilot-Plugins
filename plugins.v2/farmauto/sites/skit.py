@@ -2,7 +2,7 @@ import html as html_lib
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from .base import FarmSiteConfig, parse_expire_minutes
+from .base import CAPABILITY_BATCH_SELL, FarmSiteConfig, parse_expire_minutes
 
 
 class SkitConfig(FarmSiteConfig):
@@ -13,7 +13,9 @@ class SkitConfig(FarmSiteConfig):
     currency = "魔力"
     farm_path = "/magic_farm.php"
     warehouse_path = "/magic_farm.php"
-    capabilities = {"harvest_all", "expiry_sale", "warehouse_pagination"}
+    capabilities = {
+        "harvest_all", "expiry_sale", "warehouse_pagination", CAPABILITY_BATCH_SELL
+    }
 
     @staticmethod
     def _cell_text(fragment: str) -> str:

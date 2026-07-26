@@ -149,6 +149,9 @@ class SiqiConfig(FarmSiteConfig):
     def get_harvest_captcha_url(self) -> str:
         return self._action_url("get_harvest_all_captcha")
 
+    def get_captcha_image_url(self, imagehash: str) -> str:
+        return f"{self.base_url}/captcha.php?{urlencode({'imagehash': imagehash})}"
+
     def parse_captcha_info(self, html: str) -> Dict[str, Any]:
         data = self._json_dict(html)
         captcha = data.get("captcha") if isinstance(data.get("captcha"), dict) else data
@@ -166,8 +169,26 @@ class SiqiConfig(FarmSiteConfig):
         token = html_lib.unescape(token_match.group(1)) if token_match else ""
         return {"token": token, "imagehash": token, "image_url": html_lib.unescape(image_match.group(1)) if image_match else ""}
 
-    def get_harvest_all_submit_url(self, token: str) -> str:
-        return self._action_url("harvest_all", imagehash=token)
+    def get_harvest_all_submit_url(self, token: str = "") -> str:
+        return f"{self.get_farm_url()}?{urlencode({'option': 'harvest_all'})}"
+
+    def get_harvest_plot_url(self, land_id: Any, plot_index: Any) -> str:
+        return self._action_url("harvest", land_id=land_id, plot_index=plot_index)
+
+    def parse_ready_plots(self, html: str) -> List[Dict[str, Any]]:
+        data = self._json_dict(html)
+        ready_plots: List[Dict[str, Any]] = []
+        for plot in data.get("user_lands") or []:
+            if not isinstance(plot, dict) or not plot.get("seed_id"):
+                continue
+            is_ready = str(plot.get("is_ready", "0")) == "1"
+            if not is_ready:
+                continue
+            land_id = plot.get("land_id")
+            plot_index = plot.get("plot_index")
+            if land_id is not None and plot_index is not None:
+                ready_plots.append({"land_id": land_id, "plot_index": plot_index})
+        return ready_plots
 
     def get_steal_target_url(self) -> str:
         return self._action_url("get_victim_farm")
@@ -195,17 +216,8 @@ class SiqiConfig(FarmSiteConfig):
                 targets.append({"target_id": target_id.group(1), "name": html_lib.unescape(name.group(1)) if name else ""})
         return targets
 
-    def get_steal_plot_url(self, target_id: Any, plot_id: Any) -> str:
-        land_id: Any = None
-        plot_index: Any = plot_id
-        if isinstance(plot_id, dict):
-            land_id = plot_id.get("land_id")
-            plot_index = plot_id.get("plot_index")
-        elif isinstance(plot_id, (tuple, list)) and len(plot_id) >= 2:
-            land_id, plot_index = plot_id[0], plot_id[1]
-        elif ":" in str(plot_id):
-            land_id, plot_index = str(plot_id).split(":", 1)
-        return self._action_url("steal_vegetable", victim_id=target_id, land_id=land_id, plot_index=plot_index)
+    def get_steal_plot_url(self, target_id: Any = None, plot_id: Any = None) -> str:
+        return f"{self.get_farm_url()}?{urlencode({'option': 'steal'})}"
 
     def get_like_target_url(self) -> str:
         return self._action_url("random_like_targets")
@@ -213,15 +225,49 @@ class SiqiConfig(FarmSiteConfig):
     def parse_like_targets(self, html: str) -> List[Any]:
         data = self._json_dict(html)
         if data:
-            targets = data.get("usernames") or data.get("targets") or []
+            targets = data.get("targets") or data.get("farms") or data.get("usernames") or []
             return list(targets) if isinstance(targets, list) else []
         return [
             html_lib.unescape(value).strip()
-            for value in re.findall(r'data-(?:username|like-target)=["\']([^"\']+)', html or "", re.IGNORECASE)
+            for value in re.findall(r'data-(?:target-id|farm-id|username|like-target)=["\']([^"\']+)', html or "", re.IGNORECASE)
         ]
 
+    def get_like_submit_url(self) -> str:
+        return f"{self.get_farm_url()}?{urlencode({'option': 'like'})}"
+
     def get_buy_plot_slot_url(self) -> str:
-        return self._action_url("buy_plot_slot")
+        return f"{self.get_farm_url()}?{urlencode({'option': 'buy_plot_slot'})}"
+
+    def parse_buy_slot_targets(self, html: str) -> List[Any]:
+        data = self._json_dict(html)
+        plot_slot = data.get("plot_slot") if isinstance(data.get("plot_slot"), dict) else {}
+        next_costs = plot_slot.get("next_slot_cost_by_land") or {}
+        if plot_slot.get("enabled") and isinstance(next_costs, dict):
+            return [land_id for land_id, cost in next_costs.items() if self._number(cost)]
+        candidates = (
+            data.get("buyable_lands")
+            or data.get("available_lands")
+            or data.get("purchasable_lands")
+            or []
+        )
+        result: List[Any] = []
+        for land in candidates if isinstance(candidates, list) else []:
+            if isinstance(land, dict):
+                land_id = land.get("land_id", land.get("id"))
+            else:
+                land_id = land
+            if land_id is not None and land_id != "":
+                result.append(land_id)
+        if result:
+            return result
+        for land in data.get("lands") or []:
+            if not isinstance(land, dict):
+                continue
+            if land.get("can_buy_slot") or land.get("buyable") or land.get("can_expand"):
+                land_id = land.get("land_id", land.get("id"))
+                if land_id is not None and land_id != "":
+                    result.append(land_id)
+        return result
 
     def _parse_action_result(self, html: str, success_tokens: Tuple[str, ...], success_message: str, failure_message: str) -> Dict[str, Any]:
         data = self._json_dict(html)
@@ -237,6 +283,9 @@ class SiqiConfig(FarmSiteConfig):
 
     def parse_steal_result(self, html: str) -> Dict[str, Any]:
         return self._parse_action_result(html, ("偷菜成功", "偷取成功", "获得"), "偷菜成功", "偷菜失败")
+
+    def parse_harvest_captcha_result(self, html: str) -> Dict[str, Any]:
+        return self._parse_action_result(html, ("收获成功", "一键收获", "已收获"), "验证码收获成功", "验证码收获失败")
 
     def parse_like_result(self, html: str) -> Dict[str, Any]:
         return self._parse_action_result(html, ("点赞成功", "已点赞", "点赞完成"), "点赞成功", "点赞失败")
