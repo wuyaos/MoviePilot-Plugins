@@ -1,7 +1,11 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import CropArea from './CropArea.vue'
+import HistoryTable from './HistoryTable.vue'
+import MarketTable from './MarketTable.vue'
 import PriceTrendChart from './PriceTrendChart.vue'
+import SiqiPanel from './SiqiPanel.vue'
+import WarehouseTable from './WarehouseTable.vue'
 
 const props = defineProps({
   api: { type: Object, default: () => ({}) },
@@ -22,6 +26,7 @@ const error = ref('')
 const successMessage = ref('')
 const status = ref({ sites: [] })
 const siteDetail = ref({})
+const history = ref([])
 const selectedSiteId = ref('')
 
 const sites = computed(() => Array.isArray(status.value.sites) ? status.value.sites : [])
@@ -36,6 +41,9 @@ const apiBase = computed(() => `/api/v1/plugin/${props.pluginId}`)
 const cropStatus = computed(() => siteDetail.value.crop_status || {})
 const crops = computed(() => siteDetail.value.crops || {})
 const trends = computed(() => siteDetail.value.trends || {})
+const warehouse = computed(() => Array.isArray(siteDetail.value.warehouse) ? siteDetail.value.warehouse : [])
+const marketPrices = computed(() => siteDetail.value.market_prices || {})
+const siqiExtra = computed(() => siteDetail.value.siqi_extra || null)
 const cropKeys = ['crop_1', 'crop_2', 'crop_3', 'crop_4']
 const animalKeys = ['animal_1', 'animal_2', 'animal_3', 'animal_4']
 
@@ -96,6 +104,18 @@ async function loadStatus() {
   }
 }
 
+async function loadHistory() {
+  try {
+    const response = await request('GET', `${apiBase.value}/stats`)
+    const payload = response?.data ?? response ?? {}
+    if (payload?.success === false) throw new Error(payload.message || '请求未成功')
+    history.value = Array.isArray(payload?.stats?.history) ? payload.stats.history : []
+  } catch (requestError) {
+    history.value = []
+    error.value = requestError?.message || '加载执行记录失败'
+  }
+}
+
 async function loadSiteDetail(siteId = selectedSiteId.value) {
   if (!siteId) {
     siteDetail.value = {}
@@ -121,15 +141,30 @@ async function runNow() {
   error.value = ''
   successMessage.value = ''
   try {
-    const result = unwrapResponse(await request('POST', `${apiBase.value}/run`, {}))
+    const response = await request('POST', `${apiBase.value}/run`, {})
+    const payload = response?.data ?? response ?? {}
+    if (payload?.success === false) throw new Error(payload.message || '提交立即运行失败')
+    const result = payload?.data ?? payload
     emit('action', result)
     await loadStatus()
-    await loadSiteDetail()
+    await Promise.all([loadSiteDetail(), loadHistory()])
   } catch (requestError) {
     error.value = requestError?.message || '提交立即运行失败'
   } finally {
     running.value = false
   }
+}
+
+async function postSiteAction(action, cropKey) {
+  const body = cropKey ? { action, crop_key: cropKey } : { action }
+  const response = await request(
+    'POST',
+    `${apiBase.value}/site/${encodeURIComponent(selectedSiteId.value)}/action`,
+    body,
+  )
+  const payload = response?.data ?? response ?? {}
+  if (payload?.success === false) throw new Error(payload.message || '操作失败')
+  return payload?.data ?? payload
 }
 
 async function handleManualAction({ action, cropKey }) {
@@ -138,12 +173,8 @@ async function handleManualAction({ action, cropKey }) {
   error.value = ''
   successMessage.value = ''
   try {
-    const result = unwrapResponse(await request(
-      'POST',
-      `${apiBase.value}/site/${encodeURIComponent(selectedSiteId.value)}/action`,
-      { action, crop_key: cropKey },
-    ))
-    successMessage.value = result.message || `${result.target || crops.value[cropKey]?.name || cropKey}操作成功`
+    const result = await postSiteAction(action, cropKey)
+    successMessage.value = result.message || `${result.target || crops.value[cropKey]?.name || cropKey || action}操作成功`
     emit('action', result)
     await loadSiteDetail(selectedSiteId.value)
   } catch (requestError) {
@@ -153,12 +184,51 @@ async function handleManualAction({ action, cropKey }) {
   }
 }
 
+async function sellWarehouseItem(cropKey) {
+  await handleManualAction({ action: 'sell', cropKey })
+}
+
+async function sellAllWarehouseItems() {
+  if (!selectedSiteId.value || !warehouse.value.length) return
+  const cropKeys = warehouse.value.map(item => item.crop_key).filter(Boolean)
+  if (!cropKeys.length) {
+    error.value = '仓库物品缺少可出售标识'
+    return
+  }
+
+  actionLoading.value = true
+  error.value = ''
+  successMessage.value = ''
+  const failures = []
+  let successCount = 0
+  try {
+    for (const cropKey of cropKeys) {
+      try {
+        const result = await postSiteAction('sell', cropKey)
+        successCount += 1
+        emit('action', result)
+      } catch (requestError) {
+        failures.push(`${crops.value[cropKey]?.name || cropKey}：${requestError?.message || '出售失败'}`)
+      }
+    }
+    if (failures.length) error.value = failures.join('；')
+    if (successCount) successMessage.value = `已出售 ${successCount} 类仓库物品`
+    await loadSiteDetail(selectedSiteId.value)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function handleSiqiAction({ action }) {
+  await handleManualAction({ action })
+}
+
 watch(selectedSite, site => {
   successMessage.value = ''
   loadSiteDetail(site?.site_id || '')
 })
 
-onMounted(loadStatus)
+onMounted(() => Promise.all([loadStatus(), loadHistory()]))
 </script>
 
 <template>
@@ -271,6 +341,37 @@ onMounted(loadStatus)
             :loading="actionLoading"
             animal
             @action="handleManualAction"
+          />
+        </v-col>
+      </v-row>
+
+      <v-row dense class="mt-1">
+        <v-col cols="12" md="6" class="d-flex flex-column ga-3">
+          <WarehouseTable
+            :warehouse="warehouse"
+            :crops="crops"
+            :currency="currency"
+            :loading="actionLoading || detailLoading"
+            @sell="sellWarehouseItem"
+            @sell_all="sellAllWarehouseItems"
+          />
+          <MarketTable
+            :market_prices="marketPrices"
+            :crops="crops"
+            :loading="detailLoading"
+          />
+        </v-col>
+        <v-col cols="12" md="6">
+          <HistoryTable :history="history" />
+        </v-col>
+      </v-row>
+
+      <v-row v-if="siqiExtra" dense class="mt-1">
+        <v-col cols="12">
+          <SiqiPanel
+            :siqi_extra="siqiExtra"
+            :loading="actionLoading"
+            @action="handleSiqiAction"
           />
         </v-col>
       </v-row>

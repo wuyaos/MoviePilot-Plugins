@@ -678,31 +678,41 @@ class FarmAuto(_PluginBase):
         report = self._last_site_report(site_id)
         history = self._site_history(site_id, site_config.site_name)
         site_trends = self._trend_store.to_dict().get(site_id, {})
-        return {
-            "success": True,
-            "data": {
-                "site_id": site_id,
-                "site_name": site_config.site_name,
-                "market_prices": self._market_prices.get(site_id)
-                or report.get("market_prices")
-                or {},
-                "crop_status": self._normalize_crop_status(report.get("crop_status")),
-                "crops": {
-                    crop_key: {
-                        field: crop.get(field)
-                        for field in ("name", "cost", "type", "id", "action")
-                    }
-                    for crop_key, crop in site_config.crops.items()
-                },
-                "warehouse": self._normalize_warehouse(report.get("warehouse")),
-                "trends": {
-                    crop_key: samples[-20:]
-                    for crop_key, samples in site_trends.items()
-                    if isinstance(samples, list)
-                } if isinstance(site_trends, dict) else {},
-                "recent_actions": history[-10:],
+        data = {
+            "site_id": site_id,
+            "site_name": site_config.site_name,
+            "market_prices": self._market_prices.get(site_id)
+            or report.get("market_prices")
+            or {},
+            "crop_status": self._normalize_crop_status(report.get("crop_status")),
+            "crops": {
+                crop_key: {
+                    field: crop.get(field)
+                    for field in ("name", "cost", "type", "id", "action")
+                }
+                for crop_key, crop in site_config.crops.items()
             },
+            "warehouse": self._normalize_warehouse(report.get("warehouse")),
+            "trends": {
+                crop_key: samples[-20:]
+                for crop_key, samples in site_trends.items()
+                if isinstance(samples, list)
+            } if isinstance(site_trends, dict) else {},
+            "recent_actions": history[-10:],
         }
+        if site_id == "siqi":
+            daily = self.get_data("siqi_daily") or {}
+            is_today = (
+                isinstance(daily, dict)
+                and daily.get("date") == datetime.now().strftime("%Y-%m-%d")
+            )
+            data["siqi_extra"] = {
+                "captcha_ready": True,
+                "steal_done_today": is_today and bool(daily.get("steal")),
+                "like_done_today": is_today and bool(daily.get("like")),
+                "buy_slot_available": 0,
+            }
+        return {"success": True, "data": data}
 
     def _api_site_action(self, site_id: str, payload: dict) -> Dict[str, Any]:
         action = str((payload or {}).get("action") or "")
