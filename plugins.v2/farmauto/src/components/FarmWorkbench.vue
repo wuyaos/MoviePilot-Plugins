@@ -438,7 +438,7 @@ onBeforeUnmount(() => {
         class="mb-3"
       >
         <v-tab v-for="site in sites" :key="site.site_id" :value="site.site_id" :prepend-icon="site.site_id === 'siqi' ? 'mdi-snake' : 'mdi-web'">
-          {{ site.site_name || site.site_id }}
+          {{ site.site_name || site.site_id }}{{ selectedSiteIds.includes(site.site_id) ? ' ✅' : ' ⚪' }}
         </v-tab>
       </v-tabs>
 

@@ -369,9 +369,9 @@ return (_ctx, _cache) => {
                 value: "global",
                 "prepend-icon": "mdi-tune-variant"
               }, {
-                default: _withCtx(() => [...(_cache[30] || (_cache[30] = [
-                  _createTextVNode("全局设置", -1)
-                ]))]),
+                default: _withCtx(() => [
+                  _createTextVNode("全局设置" + _toDisplayString(config.enabled ? ' ✅' : ' ⚪'), 1)
+                ]),
                 _: 1
               }),
               (_openBlock$1(), _createElementBlock(_Fragment, null, _renderList(SITE_ITEMS, (site) => {
@@ -381,7 +381,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-web"
                 }, {
                   default: _withCtx(() => [
-                    _createTextVNode(_toDisplayString(site.title), 1)
+                    _createTextVNode(_toDisplayString(site.title) + _toDisplayString(sitePolicies[site.value]?.enabled ? ' ✅' : ' ⚪'), 1)
                   ]),
                   _: 2
                 }, 1032, ["value"])
@@ -410,7 +410,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[31] || (_cache[31] = _createTextVNode(" 基础设置 ", -1))
+                            _cache[30] || (_cache[30] = _createTextVNode(" 基础设置 ", -1))
                           ]),
                           _: 1
                         }),
@@ -538,7 +538,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[32] || (_cache[32] = _createTextVNode(" 自动化功能 ", -1))
+                            _cache[31] || (_cache[31] = _createTextVNode(" 自动化功能 ", -1))
                           ]),
                           _: 1
                         }),
@@ -656,7 +656,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[33] || (_cache[33] = _createTextVNode(" 调度与网络 ", -1))
+                            _cache[32] || (_cache[32] = _createTextVNode(" 调度与网络 ", -1))
                           ]),
                           _: 1
                         }),
@@ -764,7 +764,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[34] || (_cache[34] = _createTextVNode(" 交易策略 ", -1))
+                            _cache[33] || (_cache[33] = _createTextVNode(" 交易策略 ", -1))
                           ]),
                           _: 1
                         }),
@@ -884,7 +884,7 @@ return (_ctx, _cache) => {
                                 variant: "tonal",
                                 class: "mb-4 pa-3 text-body-2"
                               }, {
-                                default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
+                                default: _withCtx(() => [...(_cache[34] || (_cache[34] = [
                                   _createTextVNode(" 未填写的覆盖项会自动继承全局设置；禁用站点只会将其从 site_ids 中移除。 ", -1)
                                 ]))]),
                                 _: 1
@@ -1115,7 +1115,7 @@ return (_ctx, _cache) => {
                                 _: 2
                               }, 1024),
                               _createElementVNode("div", _hoisted_8, [
-                                _cache[36] || (_cache[36] = _createElementVNode("span", { class: "text-body-2 text-medium-emphasis" }, "生效摘要", -1)),
+                                _cache[35] || (_cache[35] = _createElementVNode("span", { class: "text-body-2 text-medium-emphasis" }, "生效摘要", -1)),
                                 _createVNode(_component_v_chip_group, {
                                   column: "",
                                   class: "ga-2"
@@ -1236,7 +1236,7 @@ return (_ctx, _cache) => {
                                     size: "small",
                                     class: "mr-2"
                                   }),
-                                  _cache[37] || (_cache[37] = _createTextVNode(" 思齐专属功能 ", -1))
+                                  _cache[36] || (_cache[36] = _createTextVNode(" 思齐专属功能 ", -1))
                                 ]),
                                 _: 1
                               }),
@@ -1247,7 +1247,7 @@ return (_ctx, _cache) => {
                                     variant: "tonal",
                                     class: "mb-4 pa-3 text-body-2"
                                   }, {
-                                    default: _withCtx(() => [...(_cache[38] || (_cache[38] = [
+                                    default: _withCtx(() => [...(_cache[37] || (_cache[37] = [
                                       _createTextVNode(" 验证码收获、偷菜、点赞和扩地属于高风险行为；除 OCR 外默认关闭，开启即表示自行承担账号风控风险。 ", -1)
                                     ]))]),
                                     _: 1
@@ -1367,7 +1367,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-20f41117"]]);
+const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-ee5f6620"]]);
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 

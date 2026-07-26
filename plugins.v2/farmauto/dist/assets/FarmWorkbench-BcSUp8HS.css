@@ -309,26 +309,26 @@
 
 /* 参观输入框紧凑样式（全局，穿透 scoped） */
 
-.farm-workbench[data-v-f0cd93ca] {
+.farm-workbench[data-v-45dbdf51] {
   min-inline-size: 0;
   padding: 0.5rem;
   max-width: 1100px;
   margin-inline: auto;
 }
-.farm-header[data-v-f0cd93ca] {
+.farm-header[data-v-45dbdf51] {
   border-radius: inherit;
 }
-.farm-header-row[data-v-f0cd93ca] { position: relative;
+.farm-header-row[data-v-45dbdf51] { position: relative;
 }
-.farm-header-left[data-v-f0cd93ca] { flex: 0 0 auto;
+.farm-header-left[data-v-45dbdf51] { flex: 0 0 auto;
 }
-.farm-header-center[data-v-f0cd93ca] { flex: 1 1 auto;
+.farm-header-center[data-v-45dbdf51] { flex: 1 1 auto;
 }
-.farm-header-right[data-v-f0cd93ca] { flex: 0 0 auto;
+.farm-header-right[data-v-45dbdf51] { flex: 0 0 auto;
 }
-.value-changed[data-v-f0cd93ca] { animation: value-flash-f0cd93ca 0.8s ease;
+.value-changed[data-v-45dbdf51] { animation: value-flash-45dbdf51 0.8s ease;
 }
-@keyframes value-flash-f0cd93ca {
+@keyframes value-flash-45dbdf51 {
 0% { color: inherit;
 }
 30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4);
@@ -336,10 +336,10 @@
 100% { color: inherit; text-shadow: none;
 }
 }
-.magic-anim[data-v-f0cd93ca] {
-  animation: magic-pulse-f0cd93ca 2s infinite ease-in-out;
+.magic-anim[data-v-45dbdf51] {
+  animation: magic-pulse-45dbdf51 2s infinite ease-in-out;
 }
-@keyframes magic-pulse-f0cd93ca {
+@keyframes magic-pulse-45dbdf51 {
 0%, 100% {
     transform: scale(1) rotate(0deg);
     filter: drop-shadow(0 0 2px rgba(156, 39, 176, 0.4));

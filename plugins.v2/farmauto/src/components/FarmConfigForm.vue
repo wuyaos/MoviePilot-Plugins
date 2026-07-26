@@ -302,14 +302,14 @@ function saveConfig() {
       show-arrows
       class="config-tabs mb-3"
     >
-        <v-tab value="global" prepend-icon="mdi-tune-variant">全局设置</v-tab>
+        <v-tab value="global" prepend-icon="mdi-tune-variant">全局设置{{ config.enabled ? ' ✅' : ' ⚪' }}</v-tab>
         <v-tab
           v-for="site in SITE_ITEMS"
           :key="site.value"
           :value="site.value"
           prepend-icon="mdi-web"
         >
-          {{ site.title }}
+          {{ site.title }}{{ sitePolicies[site.value]?.enabled ? ' ✅' : ' ⚪' }}
         </v-tab>
       </v-tabs>
 
