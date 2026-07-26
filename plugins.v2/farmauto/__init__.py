@@ -686,7 +686,27 @@ class FarmAuto(_PluginBase):
         if not site_config:
             return {"success": False, "message": "站点不存在"}
         report = self._last_site_report(site_id)
-        history = self._site_history(site_id, site_config.site_name)
+        last_result = self._stats.get("last_result") or {}
+        report_time = (
+            report.get("time")
+            or report.get("ts")
+            or (last_result.get("finished_at") if isinstance(last_result, dict) else None)
+        )
+        recent_actions = []
+        for raw_action in report.get("actions") or []:
+            if not isinstance(raw_action, dict):
+                continue
+            action = str(raw_action.get("action") or "")
+            recent_actions.append({
+                "action": action,
+                "target": str(raw_action.get("target") or ""),
+                "profit": self._to_int(raw_action.get("profit"), 0)
+                if action == "sell" else 0,
+                "success": bool(raw_action.get("success", False)),
+                "message": str(raw_action.get("message") or ""),
+                "time": raw_action.get("time") or raw_action.get("ts") or report_time,
+                "site": raw_action.get("site") or site_config.site_name,
+            })
         site_trends = self._trend_store.to_dict().get(site_id, {})
         data = {
             "site_id": site_id,
@@ -711,7 +731,7 @@ class FarmAuto(_PluginBase):
                 for crop_key, samples in site_trends.items()
                 if isinstance(samples, list)
             } if isinstance(site_trends, dict) else {},
-            "recent_actions": history[-10:],
+            "recent_actions": recent_actions[-20:],
         }
         detail_message = ""
         if site_id != "siqi":

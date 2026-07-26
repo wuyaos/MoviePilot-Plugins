@@ -260,9 +260,10 @@ return (_ctx, _cache) => {
                               (item.state === 'empty')
                                 ? (_openBlock$7(), _createBlock$6(_component_v_btn, {
                                     key: 0,
-                                    color: "green",
+                                    color: "success",
                                     size: "x-small",
                                     variant: "flat",
+                                    "prepend-icon": "mdi-seed",
                                     disabled: __props.loading,
                                     onClick: $event => (emitCropAction('plant', item))
                                   }, {
@@ -277,6 +278,7 @@ return (_ctx, _cache) => {
                                       color: "orange",
                                       size: "x-small",
                                       variant: "flat",
+                                      "prepend-icon": "mdi-basket",
                                       disabled: __props.loading,
                                       onClick: $event => (emitCropAction('harvest', item))
                                     }, {
@@ -310,7 +312,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$7, [['__scopeId',"data-v-396eb15d"]]);
+const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$7, [['__scopeId',"data-v-a100fa2f"]]);
 
 const {resolveComponent:_resolveComponent$6,createVNode:_createVNode$6,createTextVNode:_createTextVNode$5,withCtx:_withCtx$5,createElementVNode:_createElementVNode$5,renderList:_renderList$4,Fragment:_Fragment$4,openBlock:_openBlock$6,createElementBlock:_createElementBlock$5,toDisplayString:_toDisplayString$5,createBlock:_createBlock$5,createCommentVNode:_createCommentVNode$6} = await importShared('vue');
 
@@ -81069,6 +81071,7 @@ return (_ctx, _cache) => {
                             color: "success",
                             size: "small",
                             variant: "flat",
+                            "prepend-icon": "mdi-seed",
                             disabled: !selectedSeedId.value,
                             onClick: plantFill
                           }, {
@@ -81169,6 +81172,7 @@ return (_ctx, _cache) => {
                                       color: "red",
                                       size: "small",
                                       variant: "flat",
+                                      "prepend-icon": "mdi-incognito",
                                       disabled: !canSteal.value,
                                       onClick: openStealDialog
                                     }, {
@@ -81196,6 +81200,7 @@ return (_ctx, _cache) => {
                                       color: "pink",
                                       size: "small",
                                       variant: "flat",
+                                      "prepend-icon": "mdi-thumb-up",
                                       disabled: likeRemaining.value <= 0,
                                       onClick: openLikeDialog
                                     }, {
@@ -81223,6 +81228,7 @@ return (_ctx, _cache) => {
                                       color: "blue",
                                       size: "small",
                                       variant: "flat",
+                                      "prepend-icon": "mdi-map-marker",
                                       onClick: _cache[2] || (_cache[2] = $event => (visitDialog.value = true))
                                     }, {
                                       default: _withCtx$2(() => [...(_cache[27] || (_cache[27] = [
@@ -81249,6 +81255,7 @@ return (_ctx, _cache) => {
                                       color: "deep-purple",
                                       size: "small",
                                       variant: "flat",
+                                      "prepend-icon": "mdi-home-plus",
                                       disabled: !buySlotAvailable.value,
                                       onClick: buySlot
                                     }, {
@@ -81465,9 +81472,10 @@ return (_ctx, _cache) => {
                                 _createElementVNode$2("td", null, _toDisplayString$2((Number(item.quantity || 0) * Number(item.unit_reward || 0))), 1),
                                 _createElementVNode$2("td", null, [
                                   _createVNode$2(_component_v_btn, {
-                                    size: "small",
+                                    size: "x-small",
                                     color: "orange",
                                     variant: "flat",
+                                    "prepend-icon": "mdi-cash",
                                     onClick: $event => (sell(item))
                                   }, {
                                     default: _withCtx$2(() => [...(_cache[41] || (_cache[41] = [
@@ -81510,7 +81518,8 @@ return (_ctx, _cache) => {
                       _cache[44] || (_cache[44] = _createTextVNode$2("偷菜目标", -1)),
                       _createVNode$2(_component_v_spacer),
                       _createVNode$2(_component_v_btn, {
-                        icon: "mdi-close",
+                        color: "grey",
+                        "prepend-icon": "mdi-close",
                         variant: "text",
                         onClick: _cache[4] || (_cache[4] = $event => (stealDialog.value = false))
                       })
@@ -81548,7 +81557,8 @@ return (_ctx, _cache) => {
                                         return (_openBlock$2(), _createBlock$2(_component_v_btn, {
                                           key: `${plot.land_id}-${plot.plot_index}`,
                                           color: "red",
-                                          variant: "tonal",
+                                          variant: "flat",
+                                          "prepend-icon": "mdi-incognito",
                                           disabled: actionLoading.value,
                                           onClick: $event => (steal(target, plot))
                                         }, {
@@ -81610,6 +81620,7 @@ return (_ctx, _cache) => {
                     default: _withCtx$2(() => [
                       _createVNode$2(_component_v_btn, {
                         variant: "tonal",
+                        "prepend-icon": "mdi-shuffle",
                         loading: actionLoading.value,
                         onClick: loadLikeTargets
                       }, {
@@ -81620,7 +81631,9 @@ return (_ctx, _cache) => {
                       }, 8, ["loading"]),
                       _createVNode$2(_component_v_spacer),
                       _createVNode$2(_component_v_btn, {
+                        color: "grey",
                         variant: "text",
+                        "prepend-icon": "mdi-close",
                         onClick: _cache[7] || (_cache[7] = $event => (likeDialog.value = false))
                       }, {
                         default: _withCtx$2(() => [...(_cache[47] || (_cache[47] = [
@@ -81631,6 +81644,7 @@ return (_ctx, _cache) => {
                       _createVNode$2(_component_v_btn, {
                         color: "pink",
                         variant: "flat",
+                        "prepend-icon": "mdi-check",
                         loading: actionLoading.value,
                         onClick: like
                       }, {
@@ -81675,6 +81689,7 @@ return (_ctx, _cache) => {
                         _createVNode$2(_component_v_btn, {
                           color: "blue",
                           variant: "flat",
+                          "prepend-icon": "mdi-map-marker",
                           loading: actionLoading.value,
                           onClick: visit
                         }, {
@@ -81721,7 +81736,9 @@ return (_ctx, _cache) => {
                     default: _withCtx$2(() => [
                       _createVNode$2(_component_v_spacer),
                       _createVNode$2(_component_v_btn, {
+                        color: "grey",
                         variant: "text",
+                        "prepend-icon": "mdi-close",
                         onClick: _cache[10] || (_cache[10] = $event => (visitDialog.value = false))
                       }, {
                         default: _withCtx$2(() => [...(_cache[51] || (_cache[51] = [
@@ -81762,7 +81779,9 @@ return (_ctx, _cache) => {
                     default: _withCtx$2(() => [
                       _createVNode$2(_component_v_spacer),
                       _createVNode$2(_component_v_btn, {
+                        color: "grey",
                         variant: "text",
+                        "prepend-icon": "mdi-close",
                         onClick: _cache[12] || (_cache[12] = $event => (sellAllDialog.value = false))
                       }, {
                         default: _withCtx$2(() => [...(_cache[53] || (_cache[53] = [
@@ -81773,6 +81792,7 @@ return (_ctx, _cache) => {
                       _createVNode$2(_component_v_btn, {
                         color: "orange",
                         variant: "flat",
+                        "prepend-icon": "mdi-check",
                         loading: actionLoading.value,
                         onClick: sellAll
                       }, {
@@ -81800,7 +81820,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-d715b736"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-3c3d81ca"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 
@@ -81917,6 +81937,7 @@ return (_ctx, _cache) => {
             color: "orange",
             size: "small",
             variant: "flat",
+            "prepend-icon": "mdi-cash",
             loading: __props.loading,
             disabled: __props.loading || !items.value.length,
             onClick: _cache[0] || (_cache[0] = $event => (sellAllDialog.value = true))
@@ -81977,8 +81998,9 @@ return (_ctx, _cache) => {
                     _createElementVNode$1("td", _hoisted_6, [
                       _createVNode$1(_component_v_btn, {
                         color: "orange",
-                        size: "small",
+                        size: "x-small",
                         variant: "flat",
+                        "prepend-icon": "mdi-cash",
                         loading: __props.loading,
                         disabled: __props.loading || !item.crop_key,
                         onClick: $event => (emit('sell', item.crop_key))
@@ -82031,7 +82053,9 @@ return (_ctx, _cache) => {
                 default: _withCtx$1(() => [
                   _createVNode$1(_component_v_spacer),
                   _createVNode$1(_component_v_btn, {
+                    color: "grey",
                     variant: "text",
+                    "prepend-icon": "mdi-close",
                     disabled: __props.loading,
                     onClick: _cache[1] || (_cache[1] = $event => (sellAllDialog.value = false))
                   }, {
@@ -82043,6 +82067,7 @@ return (_ctx, _cache) => {
                   _createVNode$1(_component_v_btn, {
                     color: "orange",
                     variant: "flat",
+                    "prepend-icon": "mdi-check",
                     loading: __props.loading,
                     disabled: __props.loading || !items.value.length,
                     onClick: confirmSellAll
@@ -82068,7 +82093,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const WarehouseTable = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-86fa52ce"]]);
+const WarehouseTable = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-4a4bf1a3"]]);
 
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,openBlock:_openBlock,createBlock:_createBlock,createCommentVNode:_createCommentVNode,renderList:_renderList,Fragment:_Fragment,createElementBlock:_createElementBlock,normalizeClass:_normalizeClass} = await importShared('vue');
 
@@ -82470,7 +82495,7 @@ return (_ctx, _cache) => {
           _createElementVNode("div", _hoisted_2, [
             _createVNode(_component_v_btn, {
               size: "small",
-              variant: "flat",
+              variant: "outlined",
               color: "white",
               "prepend-icon": "mdi-play",
               loading: running.value,
@@ -82483,7 +82508,7 @@ return (_ctx, _cache) => {
             }, 8, ["loading"]),
             _createVNode(_component_v_btn, {
               size: "small",
-              variant: "flat",
+              variant: "outlined",
               color: "white",
               "prepend-icon": "mdi-refresh",
               loading: loading.value || detailLoading.value,
@@ -82498,7 +82523,7 @@ return (_ctx, _cache) => {
               ? (_openBlock(), _createBlock(_component_v_btn, {
                   key: 0,
                   size: "small",
-                  variant: "flat",
+                  variant: "outlined",
                   color: "white",
                   "prepend-icon": "mdi-cog",
                   onClick: _cache[0] || (_cache[0] = $event => (emit('switch', 'config')))
@@ -82513,7 +82538,7 @@ return (_ctx, _cache) => {
               ? (_openBlock(), _createBlock(_component_v_btn, {
                   key: 1,
                   size: "small",
-                  variant: "flat",
+                  variant: "outlined",
                   color: "white",
                   "prepend-icon": "mdi-close",
                   onClick: _cache[1] || (_cache[1] = $event => (emit('close')))
@@ -82785,6 +82810,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ea9faa73"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-1f09aead"]]);
 
 export { FarmWorkbench as F };

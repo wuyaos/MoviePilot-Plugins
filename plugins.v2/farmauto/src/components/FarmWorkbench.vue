@@ -355,7 +355,7 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
       <div class="d-flex flex-wrap align-center ga-2 farm-header-actions">
         <v-btn
           size="small"
-          variant="flat"
+          variant="outlined"
           color="white"
           prepend-icon="mdi-play"
           :loading="running"
@@ -365,7 +365,7 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
         </v-btn>
         <v-btn
           size="small"
-          variant="flat"
+          variant="outlined"
           color="white"
           prepend-icon="mdi-refresh"
           :loading="loading || detailLoading"
@@ -376,7 +376,7 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
         <v-btn
           v-if="showSwitch"
           size="small"
-          variant="flat"
+          variant="outlined"
           color="white"
           prepend-icon="mdi-cog"
           @click="emit('switch', 'config')"
@@ -386,7 +386,7 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
         <v-btn
           v-if="showClose"
           size="small"
-          variant="flat"
+          variant="outlined"
           color="white"
           prepend-icon="mdi-close"
           @click="emit('close')"

@@ -382,7 +382,7 @@ function handlePlotClick(plot) {
             <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-green-lighten-5">
               <v-icon icon="mdi-seed" color="green" size="small" class="mr-2" />种子商店
               <v-spacer />
-              <v-btn color="success" size="small" variant="flat" :disabled="!selectedSeedId" @click="plantFill">一键种植</v-btn>
+              <v-btn color="success" size="small" variant="flat" prepend-icon="mdi-seed" :disabled="!selectedSeedId" @click="plantFill">一键种植</v-btn>
             </v-card-title>
             <v-card-text class="pa-3">
               <v-row dense>
@@ -417,7 +417,7 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">偷菜</div>
                       <div class="text-caption text-grey">每日一次，自动寻找可偷作物</div>
                     </div>
-                    <v-btn color="red" size="small" variant="flat" :disabled="!canSteal" @click="openStealDialog">{{ canSteal ? '去偷菜' : '今日已偷' }}</v-btn>
+                    <v-btn color="red" size="small" variant="flat" prepend-icon="mdi-incognito" :disabled="!canSteal" @click="openStealDialog">{{ canSteal ? '去偷菜' : '今日已偷' }}</v-btn>
                   </div>
                 </v-col>
                 <v-col cols="12">
@@ -427,7 +427,7 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">点赞</div>
                       <div class="text-caption text-grey">剩余 {{ likeRemaining }}/{{ likeMax }}</div>
                     </div>
-                    <v-btn color="pink" size="small" variant="flat" :disabled="likeRemaining <= 0" @click="openLikeDialog">去点赞</v-btn>
+                    <v-btn color="pink" size="small" variant="flat" prepend-icon="mdi-thumb-up" :disabled="likeRemaining <= 0" @click="openLikeDialog">去点赞</v-btn>
                   </div>
                 </v-col>
                 <v-col cols="12">
@@ -437,7 +437,7 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">参观农场</div>
                       <div class="text-caption text-grey">按用户名访问好友农场</div>
                     </div>
-                    <v-btn color="blue" size="small" variant="flat" @click="visitDialog = true">去参观</v-btn>
+                    <v-btn color="blue" size="small" variant="flat" prepend-icon="mdi-map-marker" @click="visitDialog = true">去参观</v-btn>
                   </div>
                 </v-col>
                 <v-col cols="12">
@@ -447,7 +447,7 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">扩地</div>
                       <div class="text-caption text-grey">{{ buySlotAvailable ? '可购买坑位' : '暂无可购买坑位' }}</div>
                     </div>
-                    <v-btn color="deep-purple" size="small" variant="flat" :disabled="!buySlotAvailable" @click="buySlot">扩地</v-btn>
+                    <v-btn color="deep-purple" size="small" variant="flat" prepend-icon="mdi-home-plus" :disabled="!buySlotAvailable" @click="buySlot">扩地</v-btn>
                   </div>
                 </v-col>
               </v-row>
@@ -542,7 +542,7 @@ function handlePlotClick(plot) {
                 <td>{{ item.quantity }}</td>
                 <td>{{ item.unit_reward }}</td>
                 <td>{{ (Number(item.quantity || 0) * Number(item.unit_reward || 0)) }}</td>
-                <td><v-btn size="small" color="orange" variant="flat" @click="sell(item)">出售</v-btn></td>
+                <td><v-btn size="x-small" color="orange" variant="flat" prepend-icon="mdi-cash" @click="sell(item)">出售</v-btn></td>
               </tr>
             </tbody>
           </v-table>
@@ -558,7 +558,7 @@ function handlePlotClick(plot) {
 
       <v-dialog v-model="stealDialog" max-width="720">
         <v-card>
-          <v-card-title class="d-flex align-center">偷菜目标<v-spacer /><v-btn icon="mdi-close" variant="text" @click="stealDialog = false" /></v-card-title>
+          <v-card-title class="d-flex align-center">偷菜目标<v-spacer /><v-btn color="grey" prepend-icon="mdi-close" variant="text" @click="stealDialog = false" /></v-card-title>
           <v-card-text>
             <v-progress-linear v-if="actionLoading" indeterminate color="red" class="mb-3" />
             <v-card v-for="target in stealTargets" :key="target.target_id ?? target.victim_id" variant="outlined" class="mb-3">
@@ -569,7 +569,8 @@ function handlePlotClick(plot) {
                     v-for="plot in stealPlots(target)"
                     :key="`${plot.land_id}-${plot.plot_index}`"
                     color="red"
-                    variant="tonal"
+                    variant="flat"
+                    prepend-icon="mdi-incognito"
                     :disabled="actionLoading"
                     @click="steal(target, plot)"
                   >
@@ -592,10 +593,10 @@ function handlePlotClick(plot) {
             <v-textarea v-model="likeUsernames" label="用户名（逗号或换行分隔）" rows="5" variant="outlined" />
           </v-card-text>
           <v-card-actions>
-            <v-btn variant="tonal" :loading="actionLoading" @click="loadLikeTargets">随机填充</v-btn>
+            <v-btn variant="tonal" prepend-icon="mdi-shuffle" :loading="actionLoading" @click="loadLikeTargets">随机填充</v-btn>
             <v-spacer />
-            <v-btn variant="text" @click="likeDialog = false">取消</v-btn>
-            <v-btn color="pink" variant="flat" :loading="actionLoading" @click="like">一键点赞</v-btn>
+            <v-btn color="grey" variant="text" prepend-icon="mdi-close" @click="likeDialog = false">取消</v-btn>
+            <v-btn color="pink" variant="flat" prepend-icon="mdi-check" :loading="actionLoading" @click="like">一键点赞</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -606,7 +607,7 @@ function handlePlotClick(plot) {
           <v-card-text>
             <div class="d-flex ga-2 align-start">
               <v-text-field v-model="visitUsername" label="用户名" variant="outlined" @keyup.enter="visit" />
-              <v-btn color="blue" variant="flat" :loading="actionLoading" @click="visit">访问</v-btn>
+              <v-btn color="blue" variant="flat" prepend-icon="mdi-map-marker" :loading="actionLoading" @click="visit">访问</v-btn>
             </div>
             <v-card v-if="visitResult" variant="tonal" color="green" class="mt-2">
               <v-card-title class="text-subtitle-2">{{ visitResult.target_desc_name || visitResult.target_name || visitResult.request_username || visitUsername }} 的农场</v-card-title>
@@ -617,7 +618,7 @@ function handlePlotClick(plot) {
               </v-card-text>
             </v-card>
           </v-card-text>
-          <v-card-actions><v-spacer /><v-btn variant="text" @click="visitDialog = false">关闭</v-btn></v-card-actions>
+          <v-card-actions><v-spacer /><v-btn color="grey" variant="text" prepend-icon="mdi-close" @click="visitDialog = false">关闭</v-btn></v-card-actions>
         </v-card>
       </v-dialog>
 
@@ -627,8 +628,8 @@ function handlePlotClick(plot) {
           <v-card-text>确定出售背包中的 {{ inventory.length }} 类作物？总价值 {{ inventoryTotalValue }} 魔力。</v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn variant="text" @click="sellAllDialog = false">取消</v-btn>
-            <v-btn color="orange" variant="flat" :loading="actionLoading" @click="sellAll">确认出售</v-btn>
+            <v-btn color="grey" variant="text" prepend-icon="mdi-close" @click="sellAllDialog = false">取消</v-btn>
+            <v-btn color="orange" variant="flat" prepend-icon="mdi-check" :loading="actionLoading" @click="sellAll">确认出售</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>

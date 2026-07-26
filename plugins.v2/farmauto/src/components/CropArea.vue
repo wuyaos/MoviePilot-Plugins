@@ -182,9 +182,10 @@ function emitCropAction(action, item) {
                   <v-spacer />
                   <v-btn
                     v-if="item.state === 'empty'"
-                    color="green"
+                    color="success"
                     size="x-small"
                     variant="flat"
+                    prepend-icon="mdi-seed"
                     :disabled="loading"
                     @click="emitCropAction('plant', item)"
                   >
@@ -195,6 +196,7 @@ function emitCropAction(action, item) {
                     color="orange"
                     size="x-small"
                     variant="flat"
+                    prepend-icon="mdi-basket"
                     :disabled="loading"
                     @click="emitCropAction('harvest', item)"
                   >

@@ -70,6 +70,7 @@ function confirmSellAll() {
         color="orange"
         size="small"
         variant="flat"
+        prepend-icon="mdi-cash"
         :loading="loading"
         :disabled="loading || !items.length"
         @click="sellAllDialog = true"
@@ -104,8 +105,9 @@ function confirmSellAll() {
           <td class="text-center">
             <v-btn
               color="orange"
-              size="small"
+              size="x-small"
               variant="flat"
+              prepend-icon="mdi-cash"
               :loading="loading"
               :disabled="loading || !item.crop_key"
               @click="emit('sell', item.crop_key)"
@@ -126,8 +128,8 @@ function confirmSellAll() {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" :disabled="loading" @click="sellAllDialog = false">取消</v-btn>
-          <v-btn color="orange" variant="flat" :loading="loading" :disabled="loading || !items.length" @click="confirmSellAll">
+          <v-btn color="grey" variant="text" prepend-icon="mdi-close" :disabled="loading" @click="sellAllDialog = false">取消</v-btn>
+          <v-btn color="orange" variant="flat" prepend-icon="mdi-check" :loading="loading" :disabled="loading || !items.length" @click="confirmSellAll">
             确认
           </v-btn>
         </v-card-actions>
