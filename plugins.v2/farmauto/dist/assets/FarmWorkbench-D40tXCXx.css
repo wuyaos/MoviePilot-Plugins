@@ -97,20 +97,20 @@
 }
 }
 
-.cursor-pointer[data-v-9abb7d1d] { cursor: pointer;
+.cursor-pointer[data-v-d715b736] { cursor: pointer;
 }
-.h-100[data-v-9abb7d1d] { height: 100%;
+.h-100[data-v-d715b736] { height: 100%;
 }
-.plot-grid[data-v-9abb7d1d] {
+.plot-grid[data-v-d715b736] {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 8px;
 }
-.plot-card[data-v-9abb7d1d] { min-height: 116px;
+.plot-card[data-v-d715b736] { min-height: 116px;
 }
-.plot-emoji[data-v-9abb7d1d] { font-size: 2rem; line-height: 1.2;
+.plot-emoji[data-v-d715b736] { font-size: 2rem; line-height: 1.2;
 }
-.plot-stage-image[data-v-9abb7d1d] { width: 42px; height: 42px; object-fit: contain;
+.plot-stage-image[data-v-d715b736] { width: 42px; height: 42px; object-fit: contain;
 }
 
 .bg-amber-lighten-5[data-v-86fa52ce] {

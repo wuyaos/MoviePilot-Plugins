@@ -62,7 +62,8 @@ const likeMax = computed(() => f.value.like_max ?? 0)
 const likeRemaining = computed(() => f.value.like_remaining ?? 0)
 const canSteal = computed(() => !f.value.steal_done_today)
 const plotSlot = computed(() => f.value.plot_slot || {})
-const buySlotAvailable = computed(() => plotSlot.value.available ?? 0)
+const buySlotAvailable = computed(() => plotSlot.value.available === true)
+const failedStageIcons = ref(new Set())
 const inventoryTotalValue = computed(() => inventory.value.reduce(
   (total, item) => total + Number(item.quantity || 0) * Number(item.unit_reward || 0),
   0,
@@ -192,14 +193,40 @@ async function sellAll() {
   }
   emit('refresh')
 }
-function buySlot() { doAction('buy_plot_slot') }
+function buySlot() {
+  const nextSlotCosts = plotSlot.value.next_slot_cost_by_land || {}
+  const landId = Object.keys(nextSlotCosts).find(key => nextSlotCosts[key] != null)
+  if (landId != null) buyPlotSlot(landId)
+}
 function refresh() { emit('refresh') }
 
+function nowSec() {
+  return Date.now() / 1000
+}
+
+function valueForLand(values, landId) {
+  return values?.[landId] ?? values?.[String(landId)]
+}
+
+function effectivePlotCount(land) {
+  const configured = valueForLand(plotSlot.value.effective_plot_counts, land.land_id)
+  return Number(configured ?? land.effective_plot_count ?? land.plot_count ?? 0)
+}
+
+function maxPlotCount(land) {
+  const maxPerLand = Number(plotSlot.value.max_per_land || 0)
+  return maxPerLand > 0 ? maxPerLand : Number(land.plot_count ?? 0)
+}
+
+function landPlotCountLabel(land) {
+  return `${effectivePlotCount(land)}/${maxPlotCount(land)}`
+}
+
 function plotsForLand(land) {
-  const effective = Number(land.effective_plot_count ?? land.plot_count ?? 0)
-  const max = Number(land.plot_count ?? 0)
-  const nextSlotCosts = plotSlot.value.next_slot_cost_by_land || {}
-  const nextSlotCost = nextSlotCosts[land.land_id] ?? nextSlotCosts[String(land.land_id)]
+  const effective = effectivePlotCount(land)
+  const configuredMax = Number(plotSlot.value.max_per_land || 0)
+  const max = configuredMax > 0 ? configuredMax : effective
+  const nextSlotCost = valueForLand(plotSlot.value.next_slot_cost_by_land, land.land_id)
   const plots = []
 
   for (let plotIndex = 0; plotIndex < max; plotIndex += 1) {
@@ -211,10 +238,10 @@ function plotsForLand(land) {
       const plot = source || { land_id: land.land_id, plot_index: plotIndex }
       const hasSeed = plot.seed_id != null && Number(plot.seed_id) !== 0
       const seed = hasSeed
-        ? seeds.value.find(item => String(item.seed_id ?? item.id) === String(plot.seed_id))
+        ? (plot.seed || seeds.value.find(item => String(item.seed_id ?? item.id) === String(plot.seed_id)))
         : null
       plots.push({ ...plot, seed, state: hasSeed ? 'planted' : 'empty' })
-    } else if (plotIndex === effective && nextSlotCost != null) {
+    } else if (nextSlotCost != null) {
       plots.push({
         land_id: land.land_id,
         plot_index: plotIndex,
@@ -229,16 +256,18 @@ function plotsForLand(land) {
 }
 
 function isPlotReady(plot) {
-  return plot?.is_ready === true || Number(plot?.is_ready) === 1
+  const harvestAt = Number(plot?.harvest_time)
+  return plot?.is_ready === true || (harvestAt > 0 && harvestAt <= nowSec())
 }
 
 function formatRemain(plot) {
-  if (!plot?.harvest_time) return ''
-  const diff = Number(plot.harvest_time) - Date.now() / 1000
-  if (diff <= 0) return '可收获'
-  const h = Math.floor(diff / 3600)
-  const m = Math.max(0, Math.floor((diff % 3600) / 60))
-  return h > 0 ? `${h}时${m}分` : `${m}分`
+  if (isPlotReady(plot) || !plot?.harvest_time) return ''
+  const diff = Math.max(0, Number(plot.harvest_time) - nowSec())
+  const days = Math.floor(diff / 86400)
+  const hours = Math.floor((diff % 86400) / 3600)
+  const minutes = Math.floor((diff % 3600) / 60)
+  if (days > 0) return `${days}天${hours}时${minutes}分`
+  return hours > 0 ? `${hours}时${minutes}分` : `${minutes}分`
 }
 
 function growSeconds(growTime) {
@@ -254,10 +283,9 @@ function growSeconds(growTime) {
 function plotProgress(plot) {
   if (isPlotReady(plot)) return 100
   const plantedAt = Number(plot?.plant_time)
-  const harvestAt = Number(plot?.harvest_time)
-  const duration = harvestAt > plantedAt ? harvestAt - plantedAt : growSeconds(plot?.seed?.grow_time)
+  const duration = growSeconds(plot?.seed?.grow_time)
   if (!plantedAt || !duration) return null
-  const elapsed = Date.now() / 1000 - plantedAt
+  const elapsed = nowSec() - plantedAt
   return Math.max(0, Math.min(100, (elapsed / duration) * 100))
 }
 
@@ -266,13 +294,26 @@ function plotStageIcon(plot) {
   if (!icons || typeof icons !== 'object') return ''
   const progress = plotProgress(plot) ?? 0
   const phase = isPlotReady(plot) ? 'mature' : (progress < 50 ? 'seedling' : 'growth')
-  return icons[phase] || icons.mature || icons.growth || icons.seedling || ''
+  return icons[phase] || ''
+}
+
+function plotKey(plot) {
+  return `${plot.land_id}-${plot.plot_index}-${plotStageIcon(plot)}`
+}
+
+function hasFailedStageIcon(plot) {
+  return failedStageIcons.value.has(plotKey(plot))
+}
+
+function markStageIconFailed(plot) {
+  failedStageIcons.value = new Set([...failedStageIcons.value, plotKey(plot)])
 }
 
 function assetUrl(path) {
   if (!path) return ''
   if (/^(?:https?:|data:)/.test(path)) return path
-  return `https://si-qi.xyz/${String(path).replace(/^\//, '')}`
+  const baseUrl = String(f.value.base_url || 'https://si-qi.xyz').replace(/\/$/, '')
+  return `${baseUrl}/${String(path).replace(/^\//, '')}`
 }
 
 function stealPlots(target) {
@@ -404,9 +445,9 @@ function handlePlotClick(plot) {
                     <v-icon icon="mdi-map-marker" color="deep-purple" />
                     <div class="flex-grow-1">
                       <div class="text-body-2 font-weight-bold">扩地</div>
-                      <div class="text-caption text-grey">可购买 {{ buySlotAvailable }} 个坑位</div>
+                      <div class="text-caption text-grey">{{ buySlotAvailable ? '可购买坑位' : '暂无可购买坑位' }}</div>
                     </div>
-                    <v-btn color="deep-purple" size="small" variant="flat" :disabled="buySlotAvailable <= 0" @click="buySlot">购买</v-btn>
+                    <v-btn color="deep-purple" size="small" variant="flat" :disabled="!buySlotAvailable" @click="buySlot">扩地</v-btn>
                   </div>
                 </v-col>
               </v-row>
@@ -427,7 +468,7 @@ function handlePlotClick(plot) {
             <div class="d-flex align-center ga-2 mb-2">
               <div class="text-body-2 font-weight-bold">{{ land.name || `地块 ${land.land_id}` }}</div>
               <v-chip size="x-small" color="green" variant="tonal">
-                {{ land.effective_plot_count ?? land.plot_count ?? 0 }}/{{ land.plot_count ?? 0 }} 坑位
+                {{ landPlotCountLabel(land) }} 坑位
               </v-chip>
             </div>
             <div class="plot-grid">
@@ -451,12 +492,13 @@ function handlePlotClick(plot) {
                 </template>
                 <template v-else-if="plot.seed">
                   <img
-                    v-if="plotStageIcon(plot)"
+                    v-if="plotStageIcon(plot) && !hasFailedStageIcon(plot)"
                     :src="assetUrl(plotStageIcon(plot))"
                     :alt="`${plot.seed.name}阶段图`"
                     class="plot-stage-image mb-1"
+                    @error="markStageIconFailed(plot)"
                   >
-                  <div v-else class="plot-emoji mb-1" aria-hidden="true">{{ seedEmoji(plot.seed.name) }}</div>
+                  <div v-else class="plot-emoji mb-1" aria-hidden="true">{{ plot.seed.icon || seedEmoji(plot.seed.name) }}</div>
                   <div class="text-caption font-weight-bold">{{ plot.seed.name }}</div>
                   <div class="text-caption" :class="isPlotReady(plot) ? 'text-orange' : 'text-grey'">
                     {{ isPlotReady(plot) ? '可收获' : `成长中 ${formatRemain(plot)}` }}
