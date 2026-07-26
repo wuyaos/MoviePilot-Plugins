@@ -7,6 +7,7 @@ const props = defineProps({
   pluginId: { type: String, default: 'FarmAuto' },
   farm: { type: Object, default: () => ({}) },
   history: { type: Array, default: () => [] },
+  currency: { type: String, default: '' },
   loading: { type: Boolean, default: false },
   showSwitch: { type: Boolean, default: false },
   showClose: { type: Boolean, default: false },
@@ -417,7 +418,7 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">偷菜</div>
                       <div class="text-caption text-grey">每日一次，自动寻找可偷作物</div>
                     </div>
-                    <v-btn color="red" size="small" variant="flat" prepend-icon="mdi-incognito" :disabled="!canSteal" @click="openStealDialog">{{ canSteal ? '去偷菜' : '今日已偷' }}</v-btn>
+                    <v-btn color="red" size="small" variant="elevated" prepend-icon="mdi-incognito" :disabled="!canSteal" @click="openStealDialog">{{ canSteal ? '去偷菜' : '今日已偷' }}</v-btn>
                   </div>
                 </v-col>
                 <v-col cols="12">
@@ -427,7 +428,7 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">点赞</div>
                       <div class="text-caption text-grey">剩余 {{ likeRemaining }}/{{ likeMax }}</div>
                     </div>
-                    <v-btn color="pink" size="small" variant="flat" prepend-icon="mdi-thumb-up" :disabled="likeRemaining <= 0" @click="openLikeDialog">去点赞</v-btn>
+                    <v-btn color="pink" size="small" variant="elevated" prepend-icon="mdi-thumb-up" :disabled="likeRemaining <= 0" @click="openLikeDialog">去点赞</v-btn>
                   </div>
                 </v-col>
                 <v-col cols="12">
@@ -437,7 +438,7 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">参观农场</div>
                       <div class="text-caption text-grey">按用户名访问好友农场</div>
                     </div>
-                    <v-btn color="blue" size="small" variant="flat" prepend-icon="mdi-map-marker" @click="visitDialog = true">去参观</v-btn>
+                    <v-btn color="blue" size="small" variant="elevated" prepend-icon="mdi-map-marker" @click="visitDialog = true">去参观</v-btn>
                   </div>
                 </v-col>
                 <v-col cols="12">
@@ -447,7 +448,7 @@ function handlePlotClick(plot) {
                       <div class="text-body-2 font-weight-bold">扩地</div>
                       <div class="text-caption text-grey">{{ buySlotAvailable ? '可购买坑位' : '暂无可购买坑位' }}</div>
                     </div>
-                    <v-btn color="deep-purple" size="small" variant="flat" prepend-icon="mdi-home-plus" :disabled="!buySlotAvailable" @click="buySlot">扩地</v-btn>
+                    <v-btn color="deep-purple" size="small" variant="elevated" prepend-icon="mdi-home-plus" :disabled="!buySlotAvailable" @click="buySlot">扩地</v-btn>
                   </div>
                 </v-col>
               </v-row>
@@ -464,60 +465,57 @@ function handlePlotClick(plot) {
           <v-btn color="success" size="small" variant="flat" prepend-icon="mdi-basket" @click="harvestAll">一键收获</v-btn>
         </v-card-title>
         <v-card-text class="pa-3">
-          <section v-for="land in landsGrouped" :key="land.land_id" class="mb-4">
-            <div class="d-flex align-center ga-2 mb-2">
-              <div class="text-body-2 font-weight-bold">{{ land.name || `地块 ${land.land_id}` }}</div>
-              <v-chip size="x-small" color="green" variant="tonal">
-                {{ landPlotCountLabel(land) }} 坑位
-              </v-chip>
+          <section
+            v-for="land in landsGrouped"
+            :key="land.land_id"
+            class="land-section"
+            :class="{ 'land-section--locked': plotsForLand(land).every(plot => plot.state === 'locked') }"
+          >
+            <div class="land-title">
+              {{ land.name || `地块 ${land.land_id}` }}
+              <span class="land-plot-count">（坑位：{{ landPlotCountLabel(land) }}）</span>
             </div>
+            <div
+              v-if="plotsForLand(land).every(plot => plot.state === 'locked')"
+              class="land-locked-mobile-hint"
+            >未解锁，移动端已折叠显示</div>
             <div class="plot-grid">
-              <v-card
+              <button class="plot"
                 v-for="plot in plotsForLand(land)"
                 :key="`${plot.land_id}-${plot.plot_index}`"
-                flat
-                variant="outlined"
-                class="plot-card pa-3 text-center h-100"
-                :class="{ 'cursor-pointer': plot.state !== 'locked' && (plot.state !== 'planted' || isPlotReady(plot)) }"
-                :color="isPlotReady(plot) ? 'orange' : (plot.state === 'buyable' ? 'deep-purple' : 'grey')"
+                type="button"
+                :class="{
+                  planted: plot.state === 'planted',
+                  ready: isPlotReady(plot),
+                  locked: plot.state === 'locked',
+                  buyable: plot.state === 'buyable',
+                }"
                 @click="handlePlotClick(plot)"
               >
                 <template v-if="plot.state === 'locked'">
-                  <div class="text-h5 mb-1" aria-hidden="true">🔒</div>
-                  <div class="text-caption text-grey">未解锁</div>
+                  🔒<br><small>未解锁</small>
                 </template>
                 <template v-else-if="plot.state === 'buyable'">
-                  <div class="text-h5 mb-1" aria-hidden="true">➕</div>
-                  <div class="text-caption font-weight-bold">购买 {{ plot.cost }}</div>
+                  ➕<br><small>购买 {{ plot.cost }}</small>
                 </template>
                 <template v-else-if="plot.seed">
                   <img
                     v-if="plotStageIcon(plot) && !hasFailedStageIcon(plot)"
                     :src="assetUrl(plotStageIcon(plot))"
-                    :alt="`${plot.seed.name}阶段图`"
-                    class="plot-stage-image mb-1"
+                    :alt="plot.seed.name"
+                    class="stage-img"
                     @error="markStageIconFailed(plot)"
                   >
-                  <div v-else class="plot-emoji mb-1" aria-hidden="true">{{ plot.seed.icon || seedEmoji(plot.seed.name) }}</div>
-                  <div class="text-caption font-weight-bold">{{ plot.seed.name }}</div>
-                  <div class="text-caption" :class="isPlotReady(plot) ? 'text-orange' : 'text-grey'">
+                  <span v-else class="plot-emoji" aria-hidden="true">{{ plot.seed.icon || seedEmoji(plot.seed.name) }}</span>
+                  <br><small class="font-weight-bold">{{ plot.seed.name }}</small><br>
+                  <small :class="isPlotReady(plot) ? 'text-orange' : 'text-grey'">
                     {{ isPlotReady(plot) ? '可收获' : `成长中 ${formatRemain(plot)}` }}
-                  </div>
-                  <v-progress-linear
-                    v-if="plotProgress(plot) !== null"
-                    :model-value="plotProgress(plot)"
-                    color="success"
-                    height="5"
-                    rounded
-                    class="mt-2"
-                  />
+                  </small>
                 </template>
                 <template v-else>
-                  <div class="text-h5 mb-1" aria-hidden="true">🌱</div>
-                  <div class="text-caption font-weight-bold">空地</div>
-                  <div class="text-caption text-grey">点击种植</div>
+                  空地<br><small>点击种植</small>
                 </template>
-              </v-card>
+              </button>
             </div>
           </section>
           <div v-if="!landsGrouped.length" class="text-center text-grey pa-4">暂无菜地数据</div>
@@ -554,7 +552,7 @@ function handlePlotClick(plot) {
       </v-card>
 
       <!-- 执行记录 -->
-      <HistoryTable :history="history" />
+      <HistoryTable :history="history" :currency="currency" />
 
       <v-dialog v-model="stealDialog" max-width="720">
         <v-card>
@@ -640,12 +638,93 @@ function handlePlotClick(plot) {
 <style scoped>
 .cursor-pointer { cursor: pointer; }
 .h-100 { height: 100%; }
+
+.plot {
+  min-height: 78px;
+  padding: 6px;
+  border: 1px solid rgba(166, 124, 82, .32);
+  border-radius: 12px;
+  background: rgba(121, 85, 72, .12);
+  color: inherit;
+  font: inherit;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+  appearance: none;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.plot:hover:not(.locked) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(120, 72, 20, .10);
+}
+.plot.planted {
+  background: rgba(76, 175, 80, .14);
+  border-color: rgba(76, 175, 80, .30);
+}
+.plot.ready {
+  background: rgba(255, 152, 0, .16);
+  border-color: rgba(255, 152, 0, .42);
+}
+.plot.locked {
+  background: rgba(var(--v-theme-surface), .045);
+  border-color: rgba(var(--v-theme-surface), .12);
+  color: rgba(var(--v-theme-surface), .45);
+  cursor: not-allowed;
+}
+.plot.buyable {
+  background: rgba(33, 150, 243, .13);
+  border-color: rgba(33, 150, 243, .34);
+  color: #42a5f5;
+}
 .plot-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px;
+  width: 100%;
 }
-.plot-card { min-height: 116px; }
-.plot-emoji { font-size: 2rem; line-height: 1.2; }
-.plot-stage-image { width: 42px; height: 42px; object-fit: contain; }
+.land-section {
+  padding: 14px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: rgba(var(--v-theme-surface), .72);
+  border: 1px solid rgba(var(--v-theme-surface), .07);
+}
+.land-section:last-child { margin-bottom: 0; }
+.land-title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.land-plot-count {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: .6;
+}
+.land-locked-mobile-hint { display: none; }
+.land-section .plot small { line-height: 1.1; }
+.plot-emoji {
+  display: inline-block;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+.stage-img {
+  width: 40px;
+  height: 40px;
+  image-rendering: auto;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+@media (max-width: 600px) {
+  .land-section--locked { padding: 12px 14px; }
+  .land-section--locked .land-title { margin-bottom: 0; }
+  .land-section--locked .plot-grid { display: none; }
+  .land-section--locked .land-locked-mobile-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    opacity: .45;
+  }
+}
 </style>

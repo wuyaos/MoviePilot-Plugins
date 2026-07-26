@@ -27,7 +27,6 @@ const error = ref('')
 const successMessage = ref('')
 const status = ref({ sites: [], selected_site_ids: [] })
 const siteDetail = ref({})
-const history = ref([])
 const selectedSiteId = ref('')
 
 const sites = computed(() => Array.isArray(status.value.sites) ? status.value.sites : [])
@@ -52,13 +51,9 @@ const warehouse = computed(() => Array.isArray(siteDetail.value.warehouse) ? sit
 const marketPrices = computed(() => siteDetail.value.market_prices || {})
 const siqiExtra = computed(() => siteDetail.value.siqi_extra || null)
 const siqiFarm = computed(() => siteDetail.value.siqi_farm || {})
-const filteredHistory = computed(() => {
-  if (!selectedSiteId.value) return history.value
-  const siteName = selectedSite.value.site_name
-  return history.value.filter(record => (
-    record.site === siteName || record.site_id === selectedSiteId.value
-  ))
-})
+const siteActions = computed(() => (
+  Array.isArray(siteDetail.value.recent_actions) ? siteDetail.value.recent_actions : []
+))
 const cropKeys = computed(() => Object.entries(crops.value)
   .filter(([, definition]) => definition?.type === 'crop')
   .map(([cropKey]) => cropKey))
@@ -140,16 +135,6 @@ async function loadStatus(manageLoading = true) {
   }
 }
 
-async function loadHistory() {
-  try {
-    const payload = unwrapResponse(await request('GET', `${apiBase.value}/stats`))
-    history.value = Array.isArray(payload?.stats?.history) ? payload.stats.history : []
-  } catch (requestError) {
-    history.value = []
-    error.value = requestError?.message || '加载执行记录失败'
-  }
-}
-
 async function loadSiteDetail(siteId = selectedSiteId.value) {
   if (!siteId) {
     siteDetail.value = {}
@@ -177,7 +162,7 @@ async function refreshData() {
   try {
     await loadStatus(false)
     if (error.value) throw new Error(error.value)
-    await Promise.all([loadSiteDetail(), loadHistory()])
+    await loadSiteDetail()
     if (error.value) throw new Error(error.value)
     successMessage.value = '数据已刷新'
   } catch (requestError) {
@@ -201,7 +186,7 @@ async function runNow() {
     successMessage.value = result.message || '任务已在后台启动'
     emit('action', result)
     await loadStatus()
-    await Promise.all([loadSiteDetail(), loadHistory()])
+    await loadSiteDetail()
   } catch (requestError) {
     error.value = requestError?.message || '提交立即运行失败'
   } finally {
@@ -312,7 +297,7 @@ watch(selectedSiteId, siteId => {
   loadSiteDetail(siteId)
 })
 
-onMounted(() => Promise.all([loadStatus(), loadHistory()]))
+onMounted(() => loadStatus())
 </script>
 
 <template>
@@ -334,12 +319,12 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
         <v-chip
           size="small"
           variant="flat"
-          :color="useProxy ? 'info' : 'blue-grey'"
+          :color="useProxy ? 'info' : 'teal'"
           prepend-icon="mdi-earth"
         >
           {{ useProxy ? '代理' : '直连' }}
         </v-chip>
-        <v-chip size="small" variant="flat" color="blue-grey" prepend-icon="mdi-clock-outline">
+        <v-chip size="small" variant="flat" color="indigo" prepend-icon="mdi-clock-outline">
           {{ nextRun === '未安排' ? '未安排' : `下次 ${nextRun}` }}
         </v-chip>
         <v-chip
@@ -430,7 +415,8 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
         :api="api"
         :plugin-id="pluginId"
         :farm="siqiFarm"
-        :history="filteredHistory"
+        :history="siteActions"
+        :currency="currency"
         :loading="detailLoading"
         :show-switch="showSwitch"
         :show-close="showClose"
@@ -518,7 +504,7 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
 
       <v-row dense class="mt-1">
         <v-col cols="12">
-          <HistoryTable :history="filteredHistory" />
+          <HistoryTable :history="siteActions" :currency="currency" />
         </v-col>
       </v-row>
       </template>
