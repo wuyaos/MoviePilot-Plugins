@@ -4,7 +4,6 @@ import CropArea from './CropArea.vue'
 import HistoryTable from './HistoryTable.vue'
 import MarketTable from './MarketTable.vue'
 import PriceTrendChart from './PriceTrendChart.vue'
-import SiqiPanel from './SiqiPanel.vue'
 import SiqiWorkbench from './SiqiWorkbench.vue'
 import WarehouseTable from './WarehouseTable.vue'
 
@@ -28,6 +27,7 @@ const actionLoading = ref(false)
 const error = ref('')
 const successMessage = ref('')
 let successTimer = null
+let balanceTimer = null
 const status = ref({ sites: [], selected_site_ids: [] })
 const siteDetail = ref({})
 const selectedSiteId = ref('')
@@ -53,7 +53,6 @@ const crops = computed(() => siteDetail.value.crops || {})
 const trends = computed(() => siteDetail.value.trends || {})
 const warehouse = computed(() => Array.isArray(siteDetail.value.warehouse) ? siteDetail.value.warehouse : [])
 const marketPrices = computed(() => siteDetail.value.market_prices || {})
-const siqiExtra = computed(() => siteDetail.value.siqi_extra || null)
 const siqiFarm = computed(() => siteDetail.value.siqi_farm || {})
 const siteActions = computed(() => (
   Array.isArray(siteDetail.value.recent_actions) ? siteDetail.value.recent_actions : []
@@ -185,7 +184,11 @@ async function refreshData() {
     if (error.value) throw new Error(error.value)
     if (balance.value !== previousBalance) {
       balanceChanged.value = true
-      setTimeout(() => { balanceChanged.value = false }, 800)
+      if (balanceTimer) clearTimeout(balanceTimer)
+      balanceTimer = setTimeout(() => {
+        balanceChanged.value = false
+        balanceTimer = null
+      }, 800)
     }
     setSuccess('数据已刷新')
   } catch (requestError) {
@@ -325,6 +328,7 @@ watch(selectedSiteId, siteId => {
 onMounted(() => loadStatus())
 onBeforeUnmount(() => {
   if (successTimer) clearTimeout(successTimer)
+  if (balanceTimer) clearTimeout(balanceTimer)
 })
 </script>
 
@@ -554,16 +558,6 @@ onBeforeUnmount(() => {
           </v-col>
         </v-row>
 
-        <v-row v-if="siqiExtra" dense class="mb-3">
-          <v-col cols="12">
-            <SiqiPanel
-              :siqi_extra="siqiExtra"
-              :loading="actionLoading"
-              @action="handleSiqiAction"
-            />
-          </v-col>
-        </v-row>
-
         <v-row dense>
           <v-col cols="12" md="6">
             <WarehouseTable
@@ -590,34 +584,13 @@ onBeforeUnmount(() => {
   padding: 0.5rem;
 }
 
-.bg-gradient-primary,
 .bg-gradient-farm {
   background: linear-gradient(135deg, #43a047, #66bb6a) !important;
   box-shadow: 0 2px 8px rgba(67, 160, 71, 0.3);
 }
 
-.bg-purple-lighten-5 {
-  background-color: rgba(156, 39, 176, 0.1) !important;
-}
-
-.bg-blue-lighten-5 {
-  background-color: rgba(33, 150, 243, 0.1) !important;
-}
-
-.bg-green-lighten-5 {
-  background-color: rgba(76, 175, 80, 0.1) !important;
-}
-
-.bg-brown-lighten-5 {
-  background-color: rgba(121, 85, 72, 0.1) !important;
-}
-
-.bg-amber-lighten-5 {
-  background-color: rgba(255, 193, 7, 0.1) !important;
-}
-
-.bg-grey-lighten-5 {
-  background-color: rgba(158, 158, 158, 0.1) !important;
+.section-title-bg {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 
 .text-subtitle-1 {
@@ -638,16 +611,6 @@ onBeforeUnmount(() => {
   font-size: 0.875rem !important;
 }
 
-.farm-header-actions :deep(.v-btn) {
-  color: white !important;
-  border-width: 1px !important;
-  border-color: rgba(255, 255, 255, 0.6) !important;
-  backdrop-filter: blur(2px);
-}
-.farm-header-actions :deep(.v-btn:hover) {
-  border-color: rgba(255, 255, 255, 1) !important;
-  background: rgba(255, 255, 255, 0.12) !important;
-}
 .farm-header {
   border-radius: inherit;
 }
@@ -679,8 +642,6 @@ onBeforeUnmount(() => {
 .stat-value.refreshing { opacity: 0.3; }
 .value-changed { animation: value-flash 0.8s ease; }
 @keyframes value-flash { 0% { color: inherit; } 30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4); } 100% { color: inherit; text-shadow: none; } }
-.slide-fade-enter-active, .slide-fade-leave-active { transition: all 0.3s ease; }
-.slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-20px); opacity: 0; }
 
 .magic-anim {
   animation: magic-pulse 2s infinite ease-in-out;
@@ -695,14 +656,5 @@ onBeforeUnmount(() => {
     transform: scale(1.04) rotate(1deg);
     filter: drop-shadow(0 0 5px rgba(156, 39, 176, 0.8));
   }
-}
-
-@media (prefers-color-scheme: dark) {
-  .bg-purple-lighten-5 { background-color: rgba(156, 39, 176, 0.2) !important; }
-  .bg-blue-lighten-5 { background-color: rgba(33, 150, 243, 0.2) !important; }
-  .bg-green-lighten-5 { background-color: rgba(76, 175, 80, 0.2) !important; }
-  .bg-brown-lighten-5 { background-color: rgba(121, 85, 72, 0.2) !important; }
-  .bg-amber-lighten-5 { background-color: rgba(255, 193, 7, 0.2) !important; }
-  .bg-grey-lighten-5 { background-color: rgba(158, 158, 158, 0.16) !important; }
 }
 </style>

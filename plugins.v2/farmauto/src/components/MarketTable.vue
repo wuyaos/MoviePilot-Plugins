@@ -93,14 +93,4 @@ function formatRate(rate) {
   background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 
-.text-subtitle-2 {
-  font-size: 0.9rem !important;
-  font-weight: 500 !important;
-}
-
-@media (prefers-color-scheme: dark) {
-  .section-title-bg {
-    background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
-  }
-}
 </style>

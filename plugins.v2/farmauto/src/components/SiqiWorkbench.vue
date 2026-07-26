@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import HistoryTable from './HistoryTable.vue'
 
 const props = defineProps({
@@ -23,12 +23,12 @@ let successTimer = null
 const selectedSeedId = ref('')
 const stealDialog = ref(false)
 const likeDialog = ref(false)
-const visitDialog = ref(false)
 const sellAllDialog = ref(false)
 const stealTargets = ref([])
 const likeUsernames = ref('')
 const visitUsername = ref('')
-const visitResult = ref(null)
+const now = ref(Date.now() / 1000)
+let clockTimer = null
 
 watch(() => props.loading, (loading) => {
   refreshing.value = loading
@@ -155,9 +155,22 @@ function isSeedLocked(seed) {
   return unlockHarvest > 0 && unlockHarvest > (Number(totalHarvest.value) || 0)
 }
 function selectSeed(seed) { selectedSeedId.value = seed.seed_id ?? seed.id }
-function plantFill() {
+async function plantFill() {
   if (!selectedSeedId.value) { error.value = '请先选择种子'; return }
-  doAction('plant', { seed_id: selectedSeedId.value })
+  const emptyPlots = []
+  for (const land of landsGrouped.value) {
+    for (const plot of plotsForLand(land)) {
+      if (plot.state === 'empty') emptyPlots.push(plot)
+    }
+  }
+  if (!emptyPlots.length) { error.value = '暂无可种植的空坑'; return }
+  for (const plot of emptyPlots) {
+    await doAction('plant', {
+      land_id: plot.land_id,
+      plot_index: plot.plot_index,
+      seed_id: selectedSeedId.value,
+    })
+  }
 }
 async function openStealDialog() {
   stealDialog.value = true
@@ -198,8 +211,7 @@ async function like() {
 async function visit() {
   const username = visitUsername.value.trim()
   if (!username) { error.value = '请输入用户名'; return }
-  const result = await doAction('visit', { username })
-  if (result?.success) visitResult.value = result
+  await doAction('visit', { username })
 }
 function harvestPlot(plot) { doAction('harvest', { land_id: plot.land_id, plot_index: plot.plot_index }) }
 function harvestAll() { doAction('harvest_all') }
@@ -229,7 +241,7 @@ function buySlot() {
 function refresh() { emit('refresh') }
 
 function nowSec() {
-  return Date.now() / 1000
+  return now.value
 }
 
 function valueForLand(values, landId) {
@@ -356,9 +368,12 @@ function assetUrl(path) {
 }
 
 function stealPlots(target) {
-  return (target.plots || target.victim_plots || target.user_lands || []).filter(plot => (
-    plot?.seed_id && (Number(plot.is_ready) === 1 || Number(plot.harvest_time || 0) <= Date.now() / 1000)
-  ))
+  return (target.plots || target.victim_plots || target.user_lands || []).filter(plot => {
+    const harvestAt = Number(plot.harvest_time)
+    return plot?.seed_id && (
+      Number(plot.is_ready) === 1 || (harvestAt > 0 && harvestAt <= nowSec())
+    )
+  })
 }
 
 function handlePlotClick(plot) {
@@ -371,8 +386,15 @@ function handlePlotClick(plot) {
   else if (plot.state === 'planted' && isPlotReady(plot)) harvestPlot(plot)
 }
 
+onMounted(() => {
+  clockTimer = setInterval(() => {
+    now.value = Date.now() / 1000
+  }, 60_000)
+})
+
 onBeforeUnmount(() => {
   if (successTimer) clearTimeout(successTimer)
+  if (clockTimer) clearInterval(clockTimer)
 })
 </script>
 
@@ -487,11 +509,11 @@ onBeforeUnmount(() => {
                   <div class="neu-action-content">
                     <div class="neu-action-label">一键点赞</div>
                     <div class="neu-action-desc">
-                      <template v-if="likeMax <= 0">可批量点赞</template>
+                      <template v-if="likeMax <= 0">暂无额度信息</template>
                       <template v-else>剩余 {{ likeRemaining }}/{{ likeMax }}</template>
                     </div>
                   </div>
-                  <v-btn color="warning" size="small" variant="flat" :disabled="likeRemaining <= 0" @click="openLikeDialog" class="farm-action-btn">
+                  <v-btn color="warning" size="small" variant="flat" :disabled="likeMax > 0 && likeRemaining <= 0" @click="openLikeDialog" class="farm-action-btn">
                     去点赞
                   </v-btn>
                 </div>
@@ -676,27 +698,6 @@ onBeforeUnmount(() => {
         </v-card>
       </v-dialog>
 
-      <v-dialog v-model="visitDialog" max-width="640">
-        <v-card>
-          <v-card-title>参观农场</v-card-title>
-          <v-card-text>
-            <div class="d-flex ga-2 align-start">
-              <v-text-field v-model="visitUsername" label="用户名" variant="outlined" @keyup.enter="visit" />
-              <v-btn color="blue" variant="flat" prepend-icon="mdi-map-marker" :loading="actionLoading" @click="visit">访问</v-btn>
-            </div>
-            <v-card v-if="visitResult" variant="tonal" color="green" class="mt-2">
-              <v-card-title class="text-subtitle-2">{{ visitResult.target_desc_name || visitResult.target_name || visitResult.request_username || visitUsername }} 的农场</v-card-title>
-              <v-card-text>
-                <div>{{ visitResult.message || visitResult.msg || '访问成功' }}</div>
-                <div v-if="visitResult.user_bonus != null">魔力值：{{ visitResult.user_bonus }}</div>
-                <div v-if="Array.isArray(visitResult.user_lands)">菜地坑位：{{ visitResult.user_lands.length }}</div>
-              </v-card-text>
-            </v-card>
-          </v-card-text>
-          <v-card-actions><v-spacer /><v-btn color="grey" variant="text" prepend-icon="mdi-close" @click="visitDialog = false">关闭</v-btn></v-card-actions>
-        </v-card>
-      </v-dialog>
-
       <v-dialog v-model="sellAllDialog" max-width="440">
         <v-card>
           <v-card-title>确认出售</v-card-title>
@@ -713,7 +714,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.cursor-pointer { cursor: pointer; }
 .h-100 { height: 100%; }
 
 .stat-card {
@@ -750,14 +750,6 @@ onBeforeUnmount(() => {
 .stat-title { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); font-weight: 600; }
 .stat-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
 .stat-value.refreshing { opacity: 0.3; }
-.value-changed { animation: value-flash 0.8s ease; }
-@keyframes value-flash {
-  0% { color: inherit; }
-  30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4); }
-  100% { color: inherit; text-shadow: none; }
-}
-.slide-fade-enter-active, .slide-fade-leave-active { transition: all 0.3s ease; }
-.slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-20px); opacity: 0; }
 
 /* 种子商店卡片（与 CropArea crop-card 同款布局） */
 .crop-grid {

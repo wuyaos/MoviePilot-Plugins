@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { F as FarmWorkbench } from './FarmWorkbench-BLVY0TN8.js';
+import { F as FarmWorkbench } from './FarmWorkbench-BLP2pw1S.js';
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 
@@ -22,7 +22,7 @@ return (_ctx, _cache) => {
   return (_openBlock(), _createBlock(FarmWorkbench, {
     api: __props.api,
     "plugin-id": __props.pluginId,
-    onAction: _cache[0] || (_cache[0] = $event => (_ctx.$emit('action')))
+    onAction: _cache[0] || (_cache[0] = $event => (_ctx.$emit('action', $event)))
   }, null, 8, ["api", "plugin-id"]))
 }
 }

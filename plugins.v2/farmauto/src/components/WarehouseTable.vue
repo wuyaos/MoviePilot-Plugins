@@ -143,12 +143,4 @@ function confirmSellAll() {
   background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 
-.text-subtitle-2 {
-  font-size: 0.9rem !important;
-  font-weight: 500 !important;
-}
-
-.text-caption {
-  font-size: 0.75rem !important;
-}
 </style>

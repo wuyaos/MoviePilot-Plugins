@@ -11,5 +11,5 @@ defineEmits(['action'])
 </script>
 
 <template>
-  <FarmWorkbench :api="api" :plugin-id="pluginId" @action="$emit('action')" />
+  <FarmWorkbench :api="api" :plugin-id="pluginId" @action="$emit('action', $event)" />
 </template>

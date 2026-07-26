@@ -219,32 +219,6 @@ function emitCropAction(action, item) {
   font-weight: 500 !important;
 }
 
-.text-caption {
-  font-size: 0.75rem !important;
-}
-
-.text-body-2 {
-  font-size: 0.875rem !important;
-}
-
-.horizontal-card {
-  min-block-size: 76px;
-}
-
-.crop-area__media {
-  inline-size: 70px;
-}
-
-.crop-area__time {
-  font-size: 0.65rem !important;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-.crop-area__details {
-  min-inline-size: 0;
-}
-
 /* CropArea 卡片样式（对齐思齐 seed-card 风格） */
 .crop-grid {
   display: grid;
