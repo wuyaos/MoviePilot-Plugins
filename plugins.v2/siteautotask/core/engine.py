@@ -53,15 +53,20 @@ class TaskEngine:
         records = []
         skipped_successful = 0
         run_label = "失败重试" if retry_only else ("手动补跑" if manual_only else "主定时")
-        purchased_medals = self.history.purchased_medal_keys_today()
+        terminal_keys = self.history.terminal_keys_today()
         for site, handler, task, claim_id in self._collect_configured_tasks("main"):
             task_key = task["config_key"]
             if retry_keys is not None and task.get("id") not in retry_keys and task_key not in retry_keys:
                 continue
 
             if task.get("task_type") == TaskType.MEDAL:
-                claim_id = self._remaining_medal_ids(handler, task, claim_id, purchased_medals)
-                if claim_id is None:
+                # 展开后每枚勋章是独立执行单元，按 terminal_keys 跳过已购买成功的。
+                ekey = execution_key(handler.domain, task["id"], str(claim_id) if claim_id else None)
+                if ekey in terminal_keys:
+                    skipped_successful += 1
+                    medal_label = task.get("selected_option_label") or task.get("label") or task.get("id")
+                    task_name = display_task(handler.site_name, medal_label, task.get("task_type"))
+                    logger.info(f"{run_label} - {handler.site_name} - {task_name} -> 当天已购买成功，跳过")
                     continue
             elif should_skip_successful and task.get("id") in successful_today:
                 skipped_successful += 1
@@ -128,6 +133,25 @@ class TaskEngine:
                 task["selected_option_label"] = selected_option.get("label") or task.get("label")
         return task, claim_id, bool(claim_id)
 
+    def _expand_medal_units(self, site, handler, task, claim_id):
+        """将 myPT 多选勋章展开为单枚执行单元；GGPT 固定勋章返回单个。"""
+        if not isinstance(claim_id, (list, tuple)):
+            return [(task, claim_id)]
+        units = []
+        for medal_id in claim_id:
+            if not medal_id:
+                continue
+            unit_task = dict(task)
+            option = next(
+                (opt for opt in task.get("claim_options", [])
+                 if str(opt.get("id")) == str(medal_id)),
+                None,
+            )
+            if option:
+                unit_task["selected_option_label"] = option.get("label") or unit_task.get("label")
+            units.append((unit_task, str(medal_id)))
+        return units
+
     def _collect_configured_tasks(self, scope, site_handlers=None):
         """按配置收集任务组：main 排除织梦喊话，medal 仅勋章，zm 仅织梦喊话。"""
         if site_handlers is None:
@@ -148,28 +172,13 @@ class TaskEngine:
                 if scope == "zm" and (not is_zm or task_type != TaskType.CHAT):
                     continue
                 task, claim_id, enabled = self._configure_task(site, raw_task)
-                if enabled:
+                if not enabled:
+                    continue
+                if task_type == TaskType.MEDAL and isinstance(claim_id, (list, tuple)):
+                    for unit_task, unit_claim_id in self._expand_medal_units(site, handler, task, claim_id):
+                        yield site, handler, unit_task, unit_claim_id
+                else:
                     yield site, handler, task, claim_id
-
-    def _remaining_medal_ids(self, handler, task, claim_id, purchased_medals):
-        """剔除当天已经实际购买成功的单枚勋章，其他状态允许后续 cron 继续检查。"""
-        domain = handler.domain
-        if task.get("claim_options"):
-            selected_ids = list(claim_id or []) if isinstance(claim_id, (list, tuple)) else [claim_id]
-            remaining_ids = [
-                medal_id for medal_id in selected_ids
-                if medal_id and f"{domain}:{medal_id}" not in purchased_medals
-            ]
-            if remaining_ids:
-                return remaining_ids if isinstance(claim_id, (list, tuple)) else remaining_ids[0]
-            logger.info(f"{handler.site_name} - [勋章] -> 当天已购买成功，跳过")
-            return None
-
-        medal_id = str(getattr(handler, "MEDAL_ID", ""))
-        if medal_id and f"{domain}:{medal_id}" in purchased_medals:
-            logger.info(f"{handler.site_name} - [勋章] -> 当天已购买成功，跳过")
-            return None
-        return claim_id
 
     def _run_task(self, handler, task, claim_task_id=None, skip_if_no_claim=False):
         """执行单个任务，并统一记录任务进度、喊话内容与反馈。"""

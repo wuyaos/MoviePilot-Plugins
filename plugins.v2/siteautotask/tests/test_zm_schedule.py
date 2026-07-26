@@ -327,7 +327,7 @@ class MedalDispatchTests(unittest.TestCase):
             history=Mock(),
         )
         plugin.history.successful_task_ids_today.return_value = set()
-        plugin.history.purchased_medal_keys_today.return_value = set()
+        plugin.history.terminal_keys_today.return_value = set()
         engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
         engine.plugin = plugin
         engine.history = plugin.history
@@ -343,7 +343,7 @@ class MedalDispatchTests(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
         engine._run_task.assert_called_once()
-        self.assertEqual(engine._run_task.call_args.kwargs["claim_task_id"], ["8"])
+        self.assertEqual(engine._run_task.call_args.kwargs["claim_task_id"], "8")
 
 class ConfiguredTaskCollectionTests(unittest.TestCase):
     def _engine(self, selected_values=None, switches=None):
@@ -407,7 +407,7 @@ class ConfiguredTaskCollectionTests(unittest.TestCase):
         )
         tasks = list(engine._collect_configured_tasks("medal"))
         self.assertEqual([task[2]["id"] for task in tasks], ["medal", "mypt_medal"])
-        self.assertEqual(tasks[1][3], ["8"])
+        self.assertEqual(tasks[1][3], "8")
 
     def test_zm_scope_contains_only_zm_chat(self):
         engine = self._engine(switches={"1_normal": True, "2_normal": True, "2_zm_chat": True})
@@ -581,7 +581,7 @@ class ClaimSelectionTests(unittest.TestCase):
             history=Mock(),
         )
         plugin.history.successful_task_ids_today.return_value = set()
-        plugin.history.purchased_medal_keys_today.return_value = set()
+        plugin.history.terminal_keys_today.return_value = set()
         engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
         engine.plugin = plugin
         engine.history = plugin.history
