@@ -206,6 +206,7 @@ class FarmExecutor:
                         field_html,
                         report.market_prices,
                         crops,
+                        report.crop_status,
                     )
                     report.actions.append(result)
                     self._log_action(site_name, result)
@@ -567,7 +568,7 @@ class FarmExecutor:
             ]
 
     def _execute_action(
-        self, action, cookies, site_config, policy, farm_html, market_prices, crops
+        self, action, cookies, site_config, policy, farm_html, market_prices, crops, crop_status=None
     ):
         crop_key = action.get("crop_key", "")
         crop = crops.get(crop_key, {})
@@ -590,10 +591,12 @@ class FarmExecutor:
                 crop_action = crop.get("action", "plant")
                 if site_config.site_id == "siqi":
                     # 思齐用 POST plant_game.php + action=plant
+                    # 从 crop_status 获取 land_id/plot_index
+                    cs = (crop_status or {}).get(crop_key, {})
                     response = self.http_client.post(
                         site_config.get_farm_url(),
                         cookies,
-                        data={"action": "plant", "land_id": action.get("land_id", ""), "plot_index": action.get("plot_index", ""), "seed_id": crop.get("id", "")},
+                        data={"action": "plant", "land_id": cs.get("land_id", ""), "plot_index": cs.get("plot_index", ""), "seed_id": crop.get("id", "")},
                         retryable=False,
                     )
                 else:
@@ -608,15 +611,16 @@ class FarmExecutor:
                 parsed = site_config.parse_plant_result(response.text, crop_action)
             elif operation == "sell":
                 sell_key = action.get("sell_key")
-                if action.get("source") == "field":
-                    action_url = site_config.get_farm_url()
-                    latest = self.http_client.get(action_url, cookies)
-                    latest.raise_for_status()
-                    farm_html = latest.text
-                    sell_key = site_config.get_sell_key(farm_html, crop["type"], crop["id"])
-                    sell_key = sell_key or f"{crop['type']}_{crop['id']}"
-                if not sell_key:
-                    return ActionResult("sell", target, False, message="未找到出售标识"), farm_html
+                if site_config.site_id != "siqi":
+                    if action.get("source") == "field":
+                        action_url = site_config.get_farm_url()
+                        latest = self.http_client.get(action_url, cookies)
+                        latest.raise_for_status()
+                        farm_html = latest.text
+                        sell_key = site_config.get_sell_key(farm_html, crop["type"], crop["id"])
+                        sell_key = sell_key or f"{crop['type']}_{crop['id']}"
+                    if not sell_key:
+                        return ActionResult("sell", target, False, message="未找到出售标识"), farm_html
                 if site_config.site_id == "siqi":
                     # 思齐用 POST plant_game.php + action=sell_inventory
                     response = self.http_client.post(
