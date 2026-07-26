@@ -182,7 +182,7 @@ def build_page(plugin):
             "props": {"cols": 12, "md": 6},
             "content": [{
                 "component": "VCard",
-                "props": {"variant": "elevated", "elevation": "3", "border": "opacity-30", "class": "h-100"},
+                "props": {"variant": "elevated", "elevation": "3", "border": "currentColor opacity-30", "class": "h-100"},
                 "content": [
                     {"component": "VCardText", "props": {"class": "pa-3"}, "content": [
                         title_row,
