@@ -82850,7 +82850,7 @@ return (_ctx, _cache) => {
                           class: "rounded border"
                         }, {
                           default: _withCtx(() => [
-                            _createVNode(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5" }, {
+                            _createVNode(_component_v_card_title, { class: "text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg" }, {
                               default: _withCtx(() => [
                                 _createVNode(_component_v_icon, {
                                   icon: "mdi-chart-line",
@@ -82859,6 +82859,7 @@ return (_ctx, _cache) => {
                                   class: "mr-2"
                                 }),
                                 _cache[17] || (_cache[17] = _createTextVNode(" 菜市场价格波动 ", -1)),
+                                _cache[18] || (_cache[18] = _createElementVNode("span", { class: "text-caption text-medium-emphasis ml-2" }, "价格随运行更新 · 波动±20%", -1)),
                                 _createVNode(_component_v_spacer),
                                 _createVNode(_component_v_chip, {
                                   color: "blue-grey-lighten-4",
@@ -83020,6 +83021,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b13a3562"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-5ed474e6"]]);
 
 export { FarmWorkbench as F };

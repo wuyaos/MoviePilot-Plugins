@@ -481,9 +481,10 @@ onMounted(() => loadStatus())
         <v-row dense class="mb-3">
           <v-col cols="12" md="6">
             <v-card flat class="rounded border">
-              <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5">
+              <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 section-title-bg">
                 <v-icon icon="mdi-chart-line" color="blue" size="small" class="mr-2" />
                 菜市场价格波动
+                <span class="text-caption text-medium-emphasis ml-2">价格随运行更新 · 波动±20%</span>
                 <v-spacer />
                 <v-chip color="blue-grey-lighten-4" size="small" variant="flat" class="magic-anim">
                   <v-icon icon="mdi-auto-fix" color="purple" size="small" class="mr-1" />
