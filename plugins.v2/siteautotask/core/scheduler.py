@@ -48,14 +48,7 @@ class TaskScheduler:
             "func": self.plugin.run_scheduled,
             "kwargs": {},
         })
-        if cfg.enabled and cfg.retry_count > 0:
-            services.append({
-                "id": "siteautotask_retry",
-                "name": "站点自动任务失败重试",
-                "trigger": "interval",
-                "func": self.plugin.run_retry,
-                "kwargs": {"minutes": cfg.retry_interval},
-            })
+        # 失败重试已并入主 cron，不再注册独立重试服务。
         # 织梦 24h 电力冷却调度（date trigger）
         if cfg.enabled and self._has_zm_site():
             next_time = self._compute_zm_next_time(cfg)

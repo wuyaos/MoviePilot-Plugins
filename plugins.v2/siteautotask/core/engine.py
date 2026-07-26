@@ -26,8 +26,15 @@ class TaskEngine:
         self._cookiecloud_cache = {}
 
     def run_scheduled(self):
-        """主 cron：执行除织梦喊话外的全部任务，跳过今天已成功任务。"""
-        return self.run(skip_successful=True)
+        """主 cron：执行除织梦喊话外的全部任务，跳过今天已成功任务。
+
+        随后自动重试当天技术失败的执行单元，最多 retry_count 次。
+        """
+        records = self.run(skip_successful=True)
+        # 主 cron 执行后，自动重试本次失败单元（配置为 0 则跳过）。
+        if getattr(self.plugin.config, "retry_count", 0) and getattr(self.plugin.config, "retry_count", 0) > 0:
+            self.retry_failed()
+        return records
 
     def run(self, retry_only=False, manual_only=False, skip_successful=False):
         """执行主任务组；织梦喊话始终由独立调度处理。"""
@@ -322,17 +329,11 @@ class TaskEngine:
                 handler.collect_message_feedback = original_collect
 
     def _schedule_failed(self, records, is_retry=False):
-        """记录仍失败的任务；新失败批次从 0 次开始，实际重试后次数加一。"""
+        """记录仍失败的任务，供主 cron 后续重试。"""
         failed = [record for record in records if is_retryable_failure(record)]
         if not failed or self.plugin.config.retry_count <= 0:
-            if is_retry:
-                self.plugin.retry_records = []
-                self.plugin.retry_attempt = 0
             return
         self.plugin.retry_records = failed
-        self.plugin.retry_attempt = (
-            getattr(self.plugin, "retry_attempt", 0) + 1 if is_retry else 0
-        )
 
     def run_debug(self, site_filter=None, task_filter=None):
         """调试执行：绕过配置开关与 chat_sites 限制，按过滤器直接执行指定任务。
@@ -505,13 +506,16 @@ class TaskEngine:
         self.plugin.reschedule_zm(next_time)
 
     def retry_failed(self):
-        """重试仍启用且当天未终态成功的技术失败执行单元。"""
+        """在主 cron 内对失败单元连续重试，每个单元最多 retry_count 次。"""
+        retry_count = int(getattr(self.plugin.config, "retry_count", 0) or 0)
+        if retry_count <= 0:
+            return []
+        max_attempts = retry_count
         pending = list(getattr(self.plugin, "retry_records", None) or [])
         if not pending:
             return []
 
         terminal_keys = self.history.terminal_keys_today()
-        # 仅保留当天仍可重试的执行单元（技术失败、未终态成功）。
         pending = [
             record for record in pending
             if is_retryable_failure(record)
@@ -519,23 +523,36 @@ class TaskEngine:
         ]
         self.plugin.retry_records = pending
         if not pending:
-            self.plugin.retry_attempt = 0
             logger.info("失败重试：待重试执行单元均已终态成功或不可重试，无需执行")
             return []
-        if getattr(self.plugin, "retry_attempt", 0) >= self.plugin.config.retry_count:
-            self.plugin.retry_records = []
-            self.plugin.retry_attempt = 0
-            logger.info("失败重试：已达到最大重试次数，停止重试")
-            return []
 
-        records = self.run(retry_only=True)
-        if records:
-            self.plugin.retry_records = [
-                record for record in records if is_retryable_failure(record)
+        all_retry_records = []
+        for attempt in range(1, max_attempts + 1):
+            still_failing = [
+                record for record in self.plugin.retry_records
+                if is_retryable_failure(record)
+                and record_execution_key(record) not in self.history.terminal_keys_today()
             ]
-            if not self.plugin.retry_records:
-                self.plugin.retry_attempt = 0
-        return records
+            if not still_failing:
+                logger.info(f"失败重试：第 {attempt - 1} 轮后全部终态成功或不可重试")
+                break
+            self.plugin.retry_records = still_failing
+            logger.info(f"失败重试：第 {attempt}/{max_attempts} 轮，待重试 {len(still_failing)} 个单元")
+            records = self.run(retry_only=True)
+            all_retry_records.extend(records or [])
+            # 更新失败记录：仅保留仍可重试的单元，成功或不可重试的移出。
+            self.plugin.retry_records = [
+                record for record in (records or []) if is_retryable_failure(record)
+            ]
+            # run 返回空列表表示锁冲突，保留失败状态退出。
+            if not records:
+                logger.warning("失败重试：获取不到执行锁，本轮终止")
+                break
+        # 重试结束后，保留仍失败的单元供下次 cron 处理。
+        self.plugin.retry_records = [
+            record for record in all_retry_records if is_retryable_failure(record)
+        ]
+        return all_retry_records
 
     @staticmethod
     def normalize_result(raw):

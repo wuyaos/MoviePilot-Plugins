@@ -442,6 +442,7 @@ class RetryFailedTests(unittest.TestCase):
 
         records = engine.retry_failed()
 
+        # retry_count=3，每轮都重试，成功后不再进入下一轮。
         self.assertEqual(records, [{"task_id": "enabled_fail", "success": True}])
         self.assertEqual(plugin.retry_records, [])
         engine.run.assert_called_once_with(retry_only=True)

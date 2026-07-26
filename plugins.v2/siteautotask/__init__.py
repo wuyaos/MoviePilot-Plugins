@@ -45,7 +45,6 @@ class SiteAutoTask(_PluginBase):
         self.scheduler = TaskScheduler(self)
         self.notification_type = NotificationType.SiteMessage
         self.retry_records = []
-        self.retry_attempt = 0
         self._raw_config: dict = {}
 
     def init_plugin(self, config: Optional[dict] = None):
@@ -106,9 +105,6 @@ class SiteAutoTask(_PluginBase):
     def run_manual(self):
         """人为“立即运行”：仅补跑当天失败或尚未执行的任务。"""
         return self.engine.run(manual_only=True) if self.engine else []
-
-    def run_retry(self):
-        return self.engine.retry_failed() if self.engine else []
 
     def run_zm(self):
         """织梦 24h 电力冷却调度入口。"""
