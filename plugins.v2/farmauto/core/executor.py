@@ -8,6 +8,9 @@ from .strategy import DEFAULT_POLICY, plan_harvest, plan_smart
 from .trend import PriceTrendStore
 
 
+WAREHOUSE_MAX_PAGES = 20
+
+
 class FarmExecutor:
     ACTION_NAMES = {
         "harvest_all": "一键收获",
@@ -466,12 +469,28 @@ class FarmExecutor:
         response.raise_for_status()
         items, next_page = site_config.parse_warehouse_page(response.text)
         page_count = 1
-        while site_config.supports("warehouse_pagination") and next_page is not None and page_count < 10:
-            response = self.http_client.get(site_config.get_warehouse_page_url(next_page), cookies)
+        seen_pages = set()
+        while (
+            site_config.supports("warehouse_pagination")
+            and next_page is not None
+            and page_count < WAREHOUSE_MAX_PAGES
+        ):
+            if next_page in seen_pages:
+                self._log("warning", f"{site_config.site_name} 仓库分页循环检测，中止")
+                break
+            seen_pages.add(next_page)
+            response = self.http_client.get(
+                site_config.get_warehouse_page_url(next_page), cookies
+            )
             response.raise_for_status()
             page_items, next_page = site_config.parse_warehouse_page(response.text)
             items.extend(page_items)
             page_count += 1
+        if next_page is not None and page_count >= WAREHOUSE_MAX_PAGES:
+            self._log(
+                "warning",
+                f"{site_config.site_name} 仓库分页达上限 {WAREHOUSE_MAX_PAGES}，可能存在未处理物品",
+            )
         return items
 
     def _execute_batch_sell(
