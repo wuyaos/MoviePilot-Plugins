@@ -109,6 +109,7 @@ onBeforeUnmount(() => {
 .price-trend-chart {
   position: relative;
   block-size: 300px;
+  min-block-size: 300px;
   min-inline-size: 0;
 }
 

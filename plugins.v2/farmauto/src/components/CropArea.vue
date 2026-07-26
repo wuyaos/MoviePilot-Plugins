@@ -38,7 +38,7 @@ function statusText(item) {
 <template>
   <v-card flat class="rounded border">
     <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2" :class="animal ? 'bg-brown-lighten-5' : 'bg-green-lighten-5'">
-      <v-icon :icon="animal ? 'mdi-cow' : 'mdi-flower'" :color="animal ? 'brown' : 'green'" size="small" class="mr-2" />
+      <v-icon :icon="animal ? 'mdi-cow' : 'mdi-seed'" :color="animal ? 'brown' : 'green'" size="small" class="mr-2" />
       {{ title }}
     </v-card-title>
 
@@ -91,7 +91,38 @@ function statusText(item) {
 </template>
 
 <style scoped>
+.bg-green-lighten-5 {
+  background-color: rgba(76, 175, 80, 0.1) !important;
+}
+
+.bg-brown-lighten-5 {
+  background-color: rgba(121, 85, 72, 0.1) !important;
+}
+
+.text-subtitle-2 {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+}
+
+.text-caption {
+  font-size: 0.75rem !important;
+}
+
+.text-body-2 {
+  font-size: 0.875rem !important;
+}
+
 .crop-area__item {
   min-block-size: 76px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bg-green-lighten-5 {
+    background-color: rgba(76, 175, 80, 0.2) !important;
+  }
+
+  .bg-brown-lighten-5 {
+    background-color: rgba(121, 85, 72, 0.2) !important;
+  }
 }
 </style>

@@ -13,7 +13,10 @@ function run(action) {
 
 <template>
   <v-card v-if="siqi_extra" flat class="rounded border">
-    <v-card-title class="text-subtitle-2 px-3 py-2 bg-deep-purple-lighten-5">🐍 思齐专属</v-card-title>
+    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-purple-lighten-5">
+      <v-icon icon="mdi-snake" color="purple" size="small" class="mr-2" />
+      思齐专属
+    </v-card-title>
     <v-card-text class="pa-3">
       <v-list density="compact" class="pa-0">
         <v-list-item title="验证码状态">
@@ -98,3 +101,20 @@ function run(action) {
     </v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.bg-purple-lighten-5 {
+  background-color: rgba(156, 39, 176, 0.1) !important;
+}
+
+.text-subtitle-2 {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bg-purple-lighten-5 {
+    background-color: rgba(156, 39, 176, 0.2) !important;
+  }
+}
+</style>

@@ -31,7 +31,8 @@ function expiryText(item) {
 <template>
   <v-card flat class="rounded border">
     <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-amber-lighten-5">
-      <span>📦 仓库</span>
+      <v-icon icon="mdi-package-variant" color="amber" size="small" class="mr-2" />
+      <span>仓库</span>
       <span v-if="currency" class="text-caption text-medium-emphasis ml-2">{{ currency }}</span>
       <v-spacer />
       <v-btn
@@ -83,3 +84,24 @@ function expiryText(item) {
     <v-card-text v-else class="text-center text-medium-emphasis py-6">暂无物品</v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.bg-amber-lighten-5 {
+  background-color: rgba(255, 193, 7, 0.1) !important;
+}
+
+.text-subtitle-2 {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+}
+
+.text-caption {
+  font-size: 0.75rem !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bg-amber-lighten-5 {
+    background-color: rgba(255, 193, 7, 0.2) !important;
+  }
+}
+</style>

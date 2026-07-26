@@ -31,8 +31,9 @@ function formatRate(rate) {
 
 <template>
   <v-card flat class="rounded border">
-    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-light-green-lighten-5">
-      <span>💰 菜市场</span>
+    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-lighten-5">
+      <v-icon icon="mdi-cash" color="blue" size="small" class="mr-2" />
+      <span>菜市场</span>
       <v-spacer />
       <v-progress-circular v-if="loading" indeterminate size="18" width="2" color="success" />
     </v-card-title>
@@ -65,3 +66,20 @@ function formatRate(rate) {
     <v-card-text v-else class="text-center text-medium-emphasis py-6">暂无市场价格</v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.bg-blue-lighten-5 {
+  background-color: rgba(33, 150, 243, 0.1) !important;
+}
+
+.text-subtitle-2 {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bg-blue-lighten-5 {
+    background-color: rgba(33, 150, 243, 0.2) !important;
+  }
+}
+</style>

@@ -19,8 +19,9 @@ function getStatus(status) {
 
 <template>
   <v-card flat class="rounded border h-100">
-    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-blue-grey-lighten-5">
-      📋 执行记录
+    <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-grey-lighten-5">
+      <v-icon icon="mdi-history" color="grey" size="small" class="mr-2" />
+      执行记录
     </v-card-title>
 
     <v-table v-if="rows.length" density="compact">
@@ -50,3 +51,20 @@ function getStatus(status) {
     <v-card-text v-else class="text-center text-medium-emphasis py-6">暂无记录</v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.bg-grey-lighten-5 {
+  background-color: rgba(158, 158, 158, 0.1) !important;
+}
+
+.text-subtitle-2 {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bg-grey-lighten-5 {
+    background-color: rgba(158, 158, 158, 0.16) !important;
+  }
+}
+</style>
