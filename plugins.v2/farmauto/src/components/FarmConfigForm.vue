@@ -276,14 +276,13 @@ function saveConfig() {
       {{ error }}
     </v-alert>
 
-    <v-card flat class="rounded border mb-4 config-tabs-card">
-      <v-tabs
-        v-model="activeTab"
-        color="primary"
-        density="default"
-        show-arrows
-        class="config-tabs"
-      >
+    <v-tabs
+      v-model="activeTab"
+      color="primary"
+      density="default"
+      show-arrows
+      class="config-tabs mb-3"
+    >
         <v-tab value="global" prepend-icon="mdi-tune-variant">全局设置</v-tab>
         <v-tab
           v-for="site in SITE_ITEMS"
@@ -615,7 +614,6 @@ function saveConfig() {
         </v-window-item>
 
       </v-window>
-    </v-card>
 
   </v-card>
   </v-form>

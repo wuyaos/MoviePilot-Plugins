@@ -627,7 +627,7 @@ onBeforeUnmount(() => {
 
 /* 顶栏渐变背景（主题色感知） */
 .bg-gradient-farm {
-  background: linear-gradient(135deg, rgba(var(--v-theme-success), 0.55), rgba(var(--v-theme-surface), 0.65)) !important;
+  background: rgba(var(--v-theme-on-surface), 0.06) !important;
   backdrop-filter: blur(16px) saturate(0.9);
   -webkit-backdrop-filter: blur(16px) saturate(0.9);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
