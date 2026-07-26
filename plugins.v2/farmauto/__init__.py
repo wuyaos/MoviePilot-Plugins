@@ -706,6 +706,28 @@ class FarmAuto(_PluginBase):
             "recent_actions": history[-10:],
         }
         if site_id == "siqi":
+            siqi_farm = site_config.parse_farm_info("")
+            try:
+                policy = self.get_effective_policy(site_id)
+                http_client = self._build_http_client(policy)
+                cookies = FarmExecutor._cookie_dict(self._get_site_cookie(site_config))
+                if cookies:
+                    response = http_client.get(site_config.get_warehouse_url(), cookies)
+                    response.raise_for_status()
+                    siqi_farm = site_config.parse_farm_info(response.text)
+                    data["crop_status"] = self._normalize_crop_status(
+                        site_config.parse_crop_status(response.text)
+                    )
+                    data["warehouse"] = self._normalize_warehouse(
+                        site_config.parse_warehouse_items(response.text)
+                    )
+                    market_prices = site_config.parse_market_prices(response.text)
+                    if market_prices:
+                        data["market_prices"] = market_prices
+            except Exception as error:
+                logger.warning(f"思齐农场详情刷新失败：{error}")
+            data["siqi_farm"] = siqi_farm
+
             daily = self.get_data("siqi_daily") or {}
             is_today = (
                 isinstance(daily, dict)
@@ -715,7 +737,7 @@ class FarmAuto(_PluginBase):
                 "captcha_ready": True,
                 "steal_done_today": is_today and bool(daily.get("steal")),
                 "like_done_today": is_today and bool(daily.get("like")),
-                "buy_slot_available": 0,
+                "buy_slot_available": siqi_farm.get("plot_slot", {}).get("available", False),
             }
         return {"success": True, "data": data}
 
@@ -724,7 +746,10 @@ class FarmAuto(_PluginBase):
         crop_key = str((payload or {}).get("crop_key") or "")
         dry_run = bool(self._dry_run)
         target = crop_key or site_id
-        if action not in ("harvest", "plant", "sell", "harvest_all"):
+        supported_actions = {"harvest", "plant", "sell", "harvest_all"}
+        if site_id == "siqi":
+            supported_actions.update({"buy_plot_slot", "steal", "like"})
+        if action not in supported_actions:
             return {
                 "success": False,
                 "message": "不支持的操作",
@@ -744,10 +769,13 @@ class FarmAuto(_PluginBase):
         policy = self.get_effective_policy(site_id)
         dry_run = bool(policy.get("dry_run", False))
         crop = site_config.crops.get(crop_key) if crop_key else None
+        is_siqi_action = site_id == "siqi" and action in {
+            "harvest", "plant", "buy_plot_slot", "steal", "like"
+        }
         target = site_config.site_name if action == "harvest_all" else (
-            crop.get("name", crop_key) if crop else crop_key
+            crop.get("name", crop_key) if crop else crop_key or site_config.site_name
         )
-        if action != "harvest_all" and not crop:
+        if action != "harvest_all" and not crop and not is_siqi_action:
             return {
                 "success": False,
                 "message": "作物不存在",
@@ -769,7 +797,55 @@ class FarmAuto(_PluginBase):
             cookies = FarmExecutor._cookie_dict(self._get_site_cookie(site_config))
             if not cookies:
                 raise ValueError("未提供有效 Cookie")
-            if action == "harvest_all":
+            if is_siqi_action:
+                action_data = {
+                    key: value for key, value in (payload or {}).items()
+                    if key not in ("action", "crop_key") and value is not None and value != ""
+                }
+                required_fields = {
+                    "harvest": ("land_id", "plot_index"),
+                    "plant": ("land_id", "plot_index", "seed_id"),
+                    "buy_plot_slot": ("land_id",),
+                    "steal": ("victim_id", "land_id", "plot_index"),
+                    "like": ("target_id",),
+                }
+                missing = [field for field in required_fields[action] if field not in action_data]
+                if missing:
+                    return {
+                        "success": False,
+                        "message": f"缺少参数：{', '.join(missing)}",
+                        "action": action,
+                        "target": target,
+                        "dry_run": False,
+                    }
+                if action == "harvest":
+                    url = site_config.get_harvest_plot_url(
+                        action_data["land_id"], action_data["plot_index"]
+                    )
+                    response = http_client.post(url, cookies, data=action_data)
+                    parser = site_config.parse_harvest_result
+                elif action == "plant":
+                    url = site_config.get_plant_plot_url()
+                    response = http_client.post(url, cookies, data=action_data)
+                    parser = site_config.parse_plant_result
+                elif action == "buy_plot_slot":
+                    response = http_client.post(
+                        site_config.get_buy_plot_slot_url(), cookies, data=action_data
+                    )
+                    parser = site_config.parse_buy_slot_result
+                elif action == "steal":
+                    response = http_client.post(
+                        site_config.get_steal_plot_url(), cookies, data=action_data
+                    )
+                    parser = site_config.parse_steal_result
+                else:
+                    response = http_client.post(
+                        site_config.get_like_submit_url(), cookies, data=action_data
+                    )
+                    parser = site_config.parse_like_result
+                response.raise_for_status()
+                parsed = parser(response.text)
+            elif action == "harvest_all":
                 response = http_client.get(site_config.get_harvest_all_url(), cookies)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)

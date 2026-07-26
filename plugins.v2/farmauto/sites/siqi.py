@@ -37,7 +37,7 @@ class SiqiConfig(FarmSiteConfig):
 
     @staticmethod
     def _number(value: Any) -> Optional[int]:
-        match = re.search(r"-?\d[\d,]*(?:\.\d+)?", str(value or ""))
+        match = re.search(r"-?\d[\d,]*(?:\.\d+)?", str("" if value is None else value))
         if not match:
             return None
         try:
@@ -146,6 +146,156 @@ class SiqiConfig(FarmSiteConfig):
         match = re.search(r"(?:当前)?魔力(?:值)?\s*[:：]?\s*([\d,.]+)", self._text(html or ""))
         return match.group(1).replace(",", "") if match else None
 
+    def parse_farm_info(self, html: str) -> Dict[str, Any]:
+        """解析 fetch 接口的完整农场数据，缺失字段使用前端可安全消费的默认值。"""
+        result: Dict[str, Any] = {
+            "user_bonus": 0,
+            "user_stats": {"total_harvest": 0, "total_steal_gain": 0},
+            "user_steal_gain": 0,
+            "farm_like_total": 0,
+            "user_farm_like_total": 0,
+            "seeds": [],
+            "user_lands": [],
+            "inventory": [],
+            "like_max": 0,
+            "like_remaining": 0,
+            "like_next_in": None,
+            "plot_slot": {"next_slot_cost_by_land": {}, "available": False},
+        }
+        try:
+            data = self._json_dict(html)
+            bonus = self._number(data.get("user_bonus")) if data else self._number(self.parse_bonus(html))
+            if bonus is not None:
+                result["user_bonus"] = bonus
+
+            raw_stats = data.get("user_stats") if isinstance(data.get("user_stats"), dict) else {}
+            total_harvest = self._number(raw_stats.get("total_harvest"))
+            total_steal_gain = self._number(raw_stats.get("total_steal_gain"))
+            result["user_stats"] = {
+                "total_harvest": total_harvest or 0,
+                "total_steal_gain": total_steal_gain or 0,
+            }
+
+            steal_gain = self._number(data.get("user_steal_gain"))
+            if steal_gain is None:
+                steal_gain = total_steal_gain
+            result["user_steal_gain"] = steal_gain or 0
+
+            like_total = self._number(data.get("farm_like_total"))
+            user_like_total = self._number(data.get("user_farm_like_total"))
+            if like_total is None:
+                like_total = user_like_total
+            if user_like_total is None:
+                user_like_total = like_total
+            result["farm_like_total"] = like_total or 0
+            result["user_farm_like_total"] = user_like_total or 0
+
+            seeds: List[Dict[str, Any]] = []
+            seed_by_id: Dict[int, Dict[str, Any]] = {}
+            for raw_seed in data.get("seeds") or []:
+                if not isinstance(raw_seed, dict):
+                    continue
+                seed_id = self._number(raw_seed.get("seed_id") or raw_seed.get("id"))
+                if seed_id is None:
+                    continue
+                seed = {
+                    "seed_id": seed_id,
+                    "name": str(raw_seed.get("name") or f"作物 {seed_id}"),
+                    "base_reward": self._number(raw_seed.get("base_reward")) or 0,
+                    "cost": self._number(raw_seed.get("cost")) or 0,
+                }
+                seeds.append(seed)
+                seed_by_id[seed_id] = seed
+            result["seeds"] = seeds
+
+            raw_plot_slot = data.get("plot_slot") if isinstance(data.get("plot_slot"), dict) else {}
+            raw_costs = raw_plot_slot.get("next_slot_cost_by_land")
+            next_costs = dict(raw_costs) if isinstance(raw_costs, dict) else {}
+            effective_counts = raw_plot_slot.get("effective_plot_counts")
+            if not isinstance(effective_counts, dict):
+                effective_counts = {}
+
+            lands_by_id: Dict[str, Dict[str, Any]] = {}
+            for raw_land in data.get("lands") or []:
+                if not isinstance(raw_land, dict):
+                    continue
+                land_id = raw_land.get("land_id", raw_land.get("id"))
+                if land_id is not None:
+                    lands_by_id[str(land_id)] = raw_land
+
+            user_lands: List[Dict[str, Any]] = []
+            for raw_plot in data.get("user_lands") or []:
+                if not isinstance(raw_plot, dict):
+                    continue
+                land_id = raw_plot.get("land_id", raw_plot.get("id"))
+                land = lands_by_id.get(str(land_id), {})
+                seed_id = self._number(raw_plot.get("seed_id"))
+                raw_effective_count = raw_plot.get("effective_plot_count")
+                if raw_effective_count is None:
+                    raw_effective_count = effective_counts.get(
+                        str(land_id), effective_counts.get(land_id)
+                    )
+                effective_count = self._number(raw_effective_count)
+                plot_count = self._number(raw_plot.get("plot_count", land.get("plot_count")))
+                user_lands.append({
+                    "land_id": land_id,
+                    "name": str(raw_plot.get("name") or land.get("name") or ""),
+                    "seed_id": seed_id,
+                    "plot_index": self._number(raw_plot.get("plot_index")),
+                    "is_ready": str(raw_plot.get("is_ready", "0")) == "1",
+                    "harvest_time": self._number(raw_plot.get("harvest_time")),
+                    "effective_plot_count": effective_count or plot_count or 0,
+                    "plot_count": plot_count or effective_count or 0,
+                })
+            result["user_lands"] = user_lands
+
+            inventory: List[Dict[str, Any]] = []
+            for raw_item in data.get("inventory") or []:
+                if not isinstance(raw_item, dict):
+                    continue
+                seed_id = self._number(raw_item.get("seed_id") or raw_item.get("id"))
+                if seed_id is None:
+                    continue
+                seed = seed_by_id.get(seed_id, {})
+                inventory.append({
+                    "seed_id": seed_id,
+                    "name": str(raw_item.get("name") or seed.get("name") or f"作物 {seed_id}"),
+                    "quantity": self._number(raw_item.get("quantity")) or 0,
+                    "unit_reward": self._number(
+                        raw_item.get("unit_reward") or raw_item.get("base_unit_reward")
+                    ) or self._number(seed.get("base_reward")) or 0,
+                })
+            result["inventory"] = inventory
+
+            for field in ("like_max", "like_remaining"):
+                value = self._number(data.get(field))
+                result[field] = value or 0
+            result["like_next_in"] = data.get("like_next_in")
+            available = raw_plot_slot.get("available")
+            if available is None:
+                available = raw_plot_slot.get("enabled")
+            if available is None:
+                available = any(self._number(cost) for cost in next_costs.values())
+            result["plot_slot"] = {
+                "next_slot_cost_by_land": next_costs,
+                "available": bool(available),
+            }
+
+            if not data:
+                text = html or ""
+                steal_match = re.search(r'id=["\']user-steal-gain["\'][^>]*>\s*([^<]+)', text)
+                like_match = re.search(r'id=["\']user-farm-like-total["\'][^>]*>\s*([^<]+)', text)
+                if steal_match:
+                    result["user_steal_gain"] = self._number(steal_match.group(1)) or 0
+                    result["user_stats"]["total_steal_gain"] = result["user_steal_gain"]
+                if like_match:
+                    result["farm_like_total"] = self._number(like_match.group(1)) or 0
+                    result["user_farm_like_total"] = result["farm_like_total"]
+        except Exception:
+            # 站点字段可能随版本变化；详情接口应始终返回稳定结构。
+            return result
+        return result
+
     def get_harvest_captcha_url(self) -> str:
         return self._action_url("get_harvest_all_captcha")
 
@@ -174,6 +324,15 @@ class SiqiConfig(FarmSiteConfig):
 
     def get_harvest_plot_url(self, land_id: Any, plot_index: Any) -> str:
         return self._action_url("harvest", land_id=land_id, plot_index=plot_index)
+
+    def get_plant_plot_url(self) -> str:
+        return self._action_url("plant")
+
+    def parse_harvest_result(self, html: str) -> Dict[str, Any]:
+        return self._parse_action_result(html, ("收获成功", "已收获"), "收获成功", "收获失败")
+
+    def parse_plant_result(self, html: str, action: str = "plant") -> Dict[str, Any]:
+        return self._parse_action_result(html, ("种植成功", "已种植"), "种植成功", "种植失败")
 
     def parse_ready_plots(self, html: str) -> List[Dict[str, Any]]:
         data = self._json_dict(html)

@@ -5,6 +5,7 @@ import HistoryTable from './HistoryTable.vue'
 import MarketTable from './MarketTable.vue'
 import PriceTrendChart from './PriceTrendChart.vue'
 import SiqiPanel from './SiqiPanel.vue'
+import SiqiWorkbench from './SiqiWorkbench.vue'
 import WarehouseTable from './WarehouseTable.vue'
 
 const props = defineProps({
@@ -50,6 +51,7 @@ const trends = computed(() => siteDetail.value.trends || {})
 const warehouse = computed(() => Array.isArray(siteDetail.value.warehouse) ? siteDetail.value.warehouse : [])
 const marketPrices = computed(() => siteDetail.value.market_prices || {})
 const siqiExtra = computed(() => siteDetail.value.siqi_extra || null)
+const siqiFarm = computed(() => siteDetail.value.siqi_farm || {})
 const filteredHistory = computed(() => {
   if (!selectedSiteId.value) return history.value
   const siteName = selectedSite.value.site_name
@@ -296,8 +298,13 @@ async function sellAllWarehouseItems() {
   }
 }
 
-async function handleSiqiAction({ action }) {
-  await handleManualAction({ action })
+async function handleSiqiAction({ action, result }) {
+  if (!result) {
+    await handleManualAction({ action })
+    return
+  }
+  emit('action', result)
+  await loadSiteDetail(selectedSiteId.value)
 }
 
 watch(selectedSiteId, siteId => {
@@ -418,6 +425,22 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
         </v-tab>
       </v-tabs>
 
+      <SiqiWorkbench
+        v-if="selectedSiteId === 'siqi' && siqiFarm"
+        :api="api"
+        :plugin-id="pluginId"
+        :farm="siqiFarm"
+        :history="filteredHistory"
+        :loading="detailLoading"
+        :show-switch="showSwitch"
+        :show-close="showClose"
+        @action="handleSiqiAction"
+        @switch="emit('switch')"
+        @close="emit('close')"
+        @refresh="refreshData"
+      />
+
+      <template v-else>
       <v-row dense>
         <v-col cols="12" md="6">
           <v-card flat class="rounded border">
@@ -497,6 +520,7 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
           <HistoryTable :history="filteredHistory" />
         </v-col>
       </v-row>
+      </template>
     </v-card-text>
   </v-card>
 </template>
