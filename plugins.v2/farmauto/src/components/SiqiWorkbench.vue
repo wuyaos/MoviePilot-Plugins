@@ -105,7 +105,7 @@ function seedEmoji(name) {
     羊: '🐑',
   }
   return emojiByName[name] || '🌱'
-}}
+}
 
 function seedNameById(seedId) {
   return seeds.value.find(seed => String(seed.seed_id ?? seed.id) === String(seedId))?.name
