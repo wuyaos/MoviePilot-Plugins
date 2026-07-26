@@ -89,10 +89,6 @@ function refresh() { emit('refresh') }
       <v-icon icon="mdi-sprout" color="white" size="small" />
       <span class="text-white">思齐农场</span>
       <span class="text-caption text-white opacity-70">管理菜地、背包、偷菜与农场互动</span>
-      <v-spacer />
-      <v-btn size="small" variant="outlined" color="white" prepend-icon="mdi-refresh" :loading="loading" @click="refresh">刷新</v-btn>
-      <v-btn v-if="showSwitch" size="small" variant="outlined" color="white" prepend-icon="mdi-cog" @click="emit('switch')">设置</v-btn>
-      <v-btn v-if="showClose" size="small" variant="outlined" color="white" prepend-icon="mdi-close" @click="emit('close')">关闭</v-btn>
     </v-card-title>
 
     <v-progress-linear v-if="actionLoading" indeterminate color="success" height="2" />
