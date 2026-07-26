@@ -100,6 +100,8 @@ class FarmAuto(_PluginBase):
             return default
 
     def init_plugin(self, config: Optional[dict] = None):
+        # 重建运行锁：reload 时旧 daemon 线程可能持有残留锁
+        type(self)._run_lock = threading.Lock()
         config = config or {}
         self._raw_config = dict(config)
         self._enabled = bool(config.get("enabled", False))
@@ -1356,4 +1358,8 @@ class FarmAuto(_PluginBase):
         }
 
     def stop_service(self):
-        pass
+        # 停止/卸载时释放残留锁
+        try:
+            type(self)._run_lock.release()
+        except (RuntimeError, AssertionError):
+            pass  # 锁未被持有，无需释放
