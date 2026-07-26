@@ -33,6 +33,29 @@ const canSteal = computed(() => !f.value.steal_done_today)
 const plotSlot = computed(() => f.value.plot_slot || {})
 const buySlotAvailable = computed(() => plotSlot.value.available ?? 0)
 
+function seedEmoji(name) {
+  const emojiByName = {
+    萝卜: '🥕',
+    西红柿: '🍅',
+    玉米: '🌽',
+    茄子: '🍆',
+    蘑菇: '🍄',
+    樱桃: '🍒',
+    小麦: '🌾',
+    花生: '🥜',
+    土豆: '🥔',
+    鸡: '🐔',
+    猪: '🐷',
+    牛: '🐂',
+    羊: '🐑',
+  }
+  return emojiByName[name] || '🌱'
+}
+
+function seedNameById(seedId) {
+  return seeds.value.find(seed => String(seed.seed_id ?? seed.id) === String(seedId))?.name
+}
+
 function apiBase() { return `plugin/${props.pluginId}` }
 
 async function request(method, path, body) {
@@ -152,7 +175,7 @@ function formatRemain(ts) {
                 <v-col v-for="seed in seeds" :key="seed.seed_id ?? seed.id" cols="6" sm="4">
                   <v-card flat variant="outlined" :class="{ 'border-success': selectedSeedId === (seed.seed_id ?? seed.id) }" class="pa-2 cursor-pointer" @click="selectSeed(seed)">
                     <div class="d-flex align-center ga-2">
-                      <v-icon icon="mdi-seed-outline" color="green" />
+                      <span class="text-h5" aria-hidden="true">{{ seedEmoji(seed.name) }}</span>
                       <div class="flex-grow-1">
                         <div class="text-body-2 font-weight-bold">{{ seed.name }}</div>
                         <div class="text-caption text-grey">{{ seed.cost }} → {{ seed.base_reward }}</div>
@@ -220,7 +243,7 @@ function formatRemain(ts) {
           <v-row dense>
             <v-col v-for="land in lands" :key="`${land.land_id}-${land.plot_index}`" cols="6" sm="4" md="2">
               <v-card flat variant="outlined" :color="land.is_ready ? 'orange' : 'grey'" class="pa-2 text-center cursor-pointer h-100" @click="harvestPlot(land)">
-                <v-icon :icon="land.is_ready ? 'mdi-basket' : 'mdi-sprout'" :color="land.is_ready ? 'orange' : 'green'" size="large" class="mb-1" />
+                <div class="text-h5 mb-1" aria-hidden="true">{{ seedEmoji(seedNameById(land.seed_id)) }}</div>
                 <div class="text-caption font-weight-bold">{{ land.seed_name || land.name || `地块 ${land.land_id}` }}</div>
                 <div class="text-caption" :class="land.is_ready ? 'text-orange' : 'text-grey'">
                   {{ land.is_ready ? '可收获' : (land.harvest_time ? formatRemain(land.harvest_time) : '空地') }}
@@ -247,7 +270,7 @@ function formatRemain(ts) {
             </thead>
             <tbody>
               <tr v-for="item in inventory" :key="item.seed_id">
-                <td>{{ item.name || `作物 ${item.seed_id}` }}</td>
+                <td><span class="mr-1" aria-hidden="true">{{ seedEmoji(item.name || seedNameById(item.seed_id)) }}</span>{{ item.name || `作物 ${item.seed_id}` }}</td>
                 <td>{{ item.quantity }}</td>
                 <td>{{ item.unit_reward }}</td>
                 <td>{{ (Number(item.quantity || 0) * Number(item.unit_reward || 0)) }}</td>
