@@ -76,6 +76,7 @@ sys.modules["siteautotask.sites.capabilities"] = cap
 car = load("siteautotask.sites.car", ROOT / "sites/car.py")
 cspt = load("siteautotask.sites.cspt", ROOT / "sites/cspt.py")
 cyanbug = load("siteautotask.sites.cyanbug", ROOT / "sites/cyanbug.py")
+azusa = load("siteautotask.sites.azusa", ROOT / "sites/azusa.py")
 
 
 class Response:
@@ -135,6 +136,25 @@ class CsptTests(unittest.TestCase):
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
         self.assertEqual(meta["claim"], "claim")
+
+
+class AzusaTests(unittest.TestCase):
+    def test_match_and_claim_task(self):
+        info = make_info(name="梓喵", domain="azusa.wiki", url="https://azusa.wiki")
+        info["session"].post.return_value = Response(payload={"msg": "任务认领成功"})
+        handler = azusa.AzusaHandler(info)
+        self.assertTrue(handler.match())
+        self.assertEqual(handler.claim_task("11"), "任务认领成功")
+        self.assertEqual(handler.session.post.call_args.kwargs["data"], {
+            "action": "claimTask", "params[exam_id]": "11",
+        })
+
+    def test_claim_options_match_task_page(self):
+        options = azusa.AzusaHandler.get_claim_options()
+        self.assertEqual({item["id"] for item in options}, {
+            "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+        })
+        self.assertEqual(options[0]["label"], "每日任务4（魔力+上传）")
 
 
 class CyanbugTests(unittest.TestCase):
