@@ -77,9 +77,21 @@ def test_skit_market_status_and_bonus_parsers():
 
     assert config.parse_market_prices(HTML) == {"crop_1": 900, "animal_1": 1500}
     statuses = config.parse_crop_status(HTML)
-    assert statuses["crop_1"] == {"can_harvest": False, "remaining_minutes": 80}
-    assert statuses["crop_2"] == {"can_harvest": True, "remaining_minutes": None}
-    assert statuses["animal_1"] == {"can_harvest": True, "remaining_minutes": None}
+    assert statuses["crop_1"] == {
+        "can_harvest": False,
+        "remaining_minutes": 80,
+        "state": "growing",
+    }
+    assert statuses["crop_2"] == {
+        "can_harvest": True,
+        "remaining_minutes": None,
+        "state": "ripe",
+    }
+    assert statuses["animal_1"] == {
+        "can_harvest": True,
+        "remaining_minutes": None,
+        "state": "ripe",
+    }
     assert config.parse_bonus(HTML) == "12,345"
 
 

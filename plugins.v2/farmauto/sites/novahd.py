@@ -54,20 +54,7 @@ class NovaHDConfig(FarmSiteConfig):
         return result
 
     def parse_crop_status(self, html: str) -> Dict[str, Dict]:
-        source = html or ""
-        result: Dict[str, Dict] = {}
-        for key, crop in self.crops.items():
-            harvest_pattern = rf"action=harvest(?:&amp;|&)type={crop['type']}(?:&amp;|&)id={crop['id']}"
-            status: Dict[str, Any] = {"can_harvest": bool(re.search(harvest_pattern, source))}
-            name_match = re.search(rf"<h3\b[^>]*>\s*{re.escape(crop['name'])}\s*</h3>", source, re.IGNORECASE)
-            if name_match:
-                next_item = re.search(r'<div\b[^>]*class=["\'][^"\']*farm-item', source[name_match.end():], re.IGNORECASE)
-                end = name_match.end() + next_item.start() if next_item else min(len(source), name_match.end() + 2000)
-                remaining = re.search(r"剩余时间\s*[:：]?\s*([^<]+)", source[name_match.end():end])
-                if remaining:
-                    status["remaining_minutes"] = parse_expire_minutes(self._text(remaining.group(1)))
-            result[key] = status
-        return result
+        return super().parse_crop_status(html)
 
     def parse_warehouse_items(self, html: str) -> List[Dict[str, Any]]:
         items: List[Dict[str, Any]] = []

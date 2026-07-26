@@ -28,7 +28,11 @@ def test_haoxue_parsers():
     config = HaoxueConfig()
     assert config.parse_market_prices(HTML) == {"animal_3": 6500, "crop_2": 1400}
     status = config.parse_crop_status(HTML)
-    assert status["animal_3"] == {"can_harvest": False, "remaining_minutes": 195}
+    assert status["animal_3"] == {
+        "can_harvest": False,
+        "remaining_minutes": 195,
+        "state": "growing",
+    }
     assert status["animal_2"]["can_harvest"] is True
     warehouse = config.parse_warehouse_items(HTML)
     assert warehouse[0]["crop_key"] == "animal_3"

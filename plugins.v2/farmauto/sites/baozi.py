@@ -29,10 +29,7 @@ class BaoziConfig(FarmSiteConfig):
         return result
 
     def parse_crop_status(self, html: str) -> Dict[str, Dict]:
-        return {
-            key: {"can_harvest": f'action=harvest&type={crop["type"]}&id={crop["id"]}' in html}
-            for key, crop in self.crops.items()
-        }
+        return super().parse_crop_status(html)
 
     def parse_warehouse_items(self, html: str) -> List[Dict[str, Any]]:
         warehouse_start = html.find("<!-- 仓库 -->")

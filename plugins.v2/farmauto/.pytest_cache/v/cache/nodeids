@@ -3,6 +3,7 @@
   "tests/test_api.py::test_api_site_action_harvest_calls_corresponding_url",
   "tests/test_api.py::test_api_site_action_sell_fetches_farm_and_calls_sell_url",
   "tests/test_api.py::test_api_site_detail_embeds_crop_images_without_cookie",
+  "tests/test_api.py::test_api_site_detail_fills_prices_for_common_sites",
   "tests/test_api.py::test_api_status_returns_global_and_site_summary",
   "tests/test_core.py::test_auto_harvest_disabled_does_not_assume_field_was_harvested",
   "tests/test_core.py::test_auto_plant_disabled_still_harvests_and_sells",

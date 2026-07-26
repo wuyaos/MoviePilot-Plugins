@@ -12,7 +12,7 @@ HTML = """
 <div class="points-display">当前魔力值: 12,345</div>
 <div class="farm-section">
   <h2>农作物种植区</h2>
-  <div class="farm-item"><h3>小麦</h3><p class="growing-status">剩余时间: 1小时20分钟</p></div>
+  <div class="farm-item"><h3>小麦</h3><p>成长时间: 4小时</p><p class="growing-status">剩余时间: 1小时20分钟</p></div>
   <div class="farm-item"><h3>玉米</h3><a class="btn" href="?action=harvest&amp;type=crop&amp;id=2">收获</a></div>
 </div>
 <div class="farm-section"><h2>动物养殖区</h2>
@@ -35,7 +35,12 @@ def test_playlet_parsers():
     config = PlayLetConfig()
     assert config.parse_market_prices(HTML) == {"crop_1": 880, "animal_1": 1680}
     status = config.parse_crop_status(HTML)
-    assert status["crop_1"] == {"can_harvest": False, "remaining_minutes": 80}
+    assert status["crop_1"] == {
+        "can_harvest": False,
+        "remaining_minutes": 80,
+        "state": "growing",
+        "grow_time": "4小时",
+    }
     assert status["crop_2"]["can_harvest"] is True
     assert status["animal_1"]["can_harvest"] is True
     warehouse = config.parse_warehouse_items(HTML)

@@ -73,37 +73,7 @@ class SkitConfig(FarmSiteConfig):
         return result
 
     def parse_crop_status(self, html: str) -> Dict[str, Dict]:
-        result: Dict[str, Dict] = {}
-        for crop_key, crop in self.crops.items():
-            harvest_pattern = (
-                rf'action=harvest(?:&amp;|&)type={re.escape(crop["type"])}'
-                rf'(?:&amp;|&)id={crop["id"]}'
-            )
-            can_harvest = re.search(harvest_pattern, html, re.IGNORECASE) is not None
-            remaining_minutes = None
-            item_match = re.search(
-                rf'<div[^>]*class=["\'][^"\']*\bfarm-item\b[^"\']*["\'][^>]*>'
-                rf'(?:(?!<div[^>]*class=["\'][^"\']*\bfarm-item\b).)*?'
-                rf'<h3[^>]*>\s*{re.escape(crop["name"])}\s*</h3>'
-                rf'(.*?)(?=<div[^>]*class=["\'][^"\']*\bfarm-item\b|<h2[^>]*>|$)',
-                html,
-                re.DOTALL | re.IGNORECASE,
-            )
-            if item_match:
-                status_match = re.search(
-                    r'<p[^>]*class=["\'][^"\']*\bgrowing-status\b[^"\']*["\'][^>]*>(.*?)</p>',
-                    item_match.group(1),
-                    re.DOTALL | re.IGNORECASE,
-                )
-                if status_match:
-                    status_text = self._cell_text(status_match.group(1))
-                    remaining_text = re.sub(r"^.*?剩余时间\s*[：:]?\s*", "", status_text)
-                    remaining_minutes = parse_expire_minutes(remaining_text)
-            result[crop_key] = {
-                "can_harvest": can_harvest,
-                "remaining_minutes": remaining_minutes,
-            }
-        return result
+        return super().parse_crop_status(html)
 
     def parse_warehouse_items(self, html: str) -> List[Dict[str, Any]]:
         tables = re.findall(

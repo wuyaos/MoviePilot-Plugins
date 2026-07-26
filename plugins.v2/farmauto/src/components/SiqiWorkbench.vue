@@ -26,6 +26,29 @@ const totalSteal = computed(() => f.value.user_steal_gain ?? f.value.user_stats?
 const farmLike = computed(() => f.value.user_farm_like_total ?? f.value.farm_like_total ?? '—')
 const seeds = computed(() => f.value.seeds || [])
 const lands = computed(() => f.value.user_lands || [])
+const landsGrouped = computed(() => {
+  const grouped = new Map()
+  for (const plot of lands.value) {
+    const key = String(plot.land_id)
+    const current = grouped.get(key)
+    if (!current) {
+      grouped.set(key, {
+        land_id: plot.land_id,
+        name: plot.name,
+        effective_plot_count: plot.effective_plot_count,
+        plot_count: plot.plot_count,
+      })
+      continue
+    }
+    current.name ||= plot.name
+    current.effective_plot_count = Math.max(
+      Number(current.effective_plot_count || 0),
+      Number(plot.effective_plot_count || 0),
+    )
+    current.plot_count = Math.max(Number(current.plot_count || 0), Number(plot.plot_count || 0))
+  }
+  return [...grouped.values()]
+})
 const inventory = computed(() => f.value.inventory || [])
 const likeMax = computed(() => f.value.like_max ?? 0)
 const likeRemaining = computed(() => f.value.like_remaining ?? 0)
@@ -95,8 +118,17 @@ function plantFill() {
 }
 function steal() { doAction('steal') }
 function like() { doAction('like') }
-function harvestPlot(land) { doAction('harvest', { land_id: land.land_id, plot_index: land.plot_index }) }
+function harvestPlot(plot) { doAction('harvest', { land_id: plot.land_id, plot_index: plot.plot_index }) }
 function harvestAll() { doAction('harvest_all') }
+function plant(plot) {
+  if (!selectedSeedId.value) { error.value = '请先选择种子'; return }
+  doAction('plant', {
+    land_id: plot.land_id,
+    plot_index: plot.plot_index,
+    seed_id: selectedSeedId.value,
+  })
+}
+function buyPlotSlot(landId) { doAction('buy_plot_slot', { land_id: landId }) }
 function sell(item) { doAction('sell', { seed_id: item.seed_id, quantity: item.quantity }) }
 function sellAll() {
   if (!inventory.value.length) { error.value = '背包为空'; return }
@@ -104,14 +136,65 @@ function sellAll() {
 }
 function buySlot() { doAction('buy_plot_slot') }
 function refresh() { emit('refresh') }
-function formatRemain(ts) {
-  if (!ts) return ''
-  const now = Date.now() / 1000
-  const diff = Number(ts) - now
+
+function plotsForLand(land) {
+  const effective = Number(land.effective_plot_count ?? land.plot_count ?? 0)
+  const max = Number(land.plot_count ?? 0)
+  const nextSlotCosts = plotSlot.value.next_slot_cost_by_land || {}
+  const nextSlotCost = nextSlotCosts[land.land_id] ?? nextSlotCosts[String(land.land_id)]
+  const plots = []
+
+  for (let plotIndex = 0; plotIndex < max; plotIndex += 1) {
+    if (plotIndex < effective) {
+      const source = lands.value.find(plot => (
+        String(plot.land_id) === String(land.land_id)
+        && Number(plot.plot_index) === plotIndex
+      ))
+      const plot = source || { land_id: land.land_id, plot_index: plotIndex }
+      const hasSeed = plot.seed_id != null && Number(plot.seed_id) !== 0
+      const seed = hasSeed
+        ? seeds.value.find(item => String(item.seed_id ?? item.id) === String(plot.seed_id))
+        : null
+      plots.push({ ...plot, seed, state: hasSeed ? 'planted' : 'empty' })
+    } else if (plotIndex === effective && nextSlotCost != null) {
+      plots.push({
+        land_id: land.land_id,
+        plot_index: plotIndex,
+        state: 'buyable',
+        cost: nextSlotCost,
+      })
+    } else {
+      plots.push({ land_id: land.land_id, plot_index: plotIndex, state: 'locked' })
+    }
+  }
+  return plots
+}
+
+function isPlotReady(plot) {
+  return plot?.is_ready === true || Number(plot?.is_ready) === 1
+}
+
+function formatRemain(plot) {
+  if (!plot?.harvest_time) return ''
+  const diff = Number(plot.harvest_time) - Date.now() / 1000
   if (diff <= 0) return '可收获'
   const h = Math.floor(diff / 3600)
-  const m = Math.floor((diff % 3600) / 60)
+  const m = Math.max(0, Math.floor((diff % 3600) / 60))
   return h > 0 ? `${h}时${m}分` : `${m}分`
+}
+
+function plotProgress(plot) {
+  const plantedAt = Number(plot?.plant_time)
+  const harvestAt = Number(plot?.harvest_time)
+  if (!plantedAt || !harvestAt || harvestAt <= plantedAt) return null
+  const elapsed = Date.now() / 1000 - plantedAt
+  return Math.max(0, Math.min(100, (elapsed / (harvestAt - plantedAt)) * 100))
+}
+
+function handlePlotClick(plot) {
+  if (plot.state === 'buyable') buyPlotSlot(plot.land_id)
+  else if (plot.state === 'empty') plant(plot)
+  else if (plot.state === 'planted' && isPlotReady(plot)) harvestPlot(plot)
 }
 </script>
 
@@ -240,19 +323,56 @@ function formatRemain(ts) {
           <v-btn color="success" size="small" variant="flat" prepend-icon="mdi-basket" @click="harvestAll">一键收获</v-btn>
         </v-card-title>
         <v-card-text class="pa-3">
-          <v-row dense>
-            <v-col v-for="land in lands" :key="`${land.land_id}-${land.plot_index}`" cols="6" sm="4" md="2">
-              <v-card flat variant="outlined" :color="land.is_ready ? 'orange' : 'grey'" class="pa-2 text-center cursor-pointer h-100" @click="harvestPlot(land)">
-                <div class="text-h5 mb-1" aria-hidden="true">{{ seedEmoji(seedNameById(land.seed_id)) }}</div>
-                <div class="text-caption font-weight-bold">{{ land.seed_name || land.name || `地块 ${land.land_id}` }}</div>
-                <div class="text-caption" :class="land.is_ready ? 'text-orange' : 'text-grey'">
-                  {{ land.is_ready ? '可收获' : (land.harvest_time ? formatRemain(land.harvest_time) : '空地') }}
-                </div>
-                <v-btn v-if="land.is_ready" size="small" color="success" variant="flat" class="mt-1" prepend-icon="mdi-basket">收获</v-btn>
+          <section v-for="land in landsGrouped" :key="land.land_id" class="mb-4">
+            <div class="d-flex align-center ga-2 mb-2">
+              <div class="text-body-2 font-weight-bold">{{ land.name || `地块 ${land.land_id}` }}</div>
+              <v-chip size="x-small" color="green" variant="tonal">
+                {{ land.effective_plot_count ?? land.plot_count ?? 0 }}/{{ land.plot_count ?? 0 }} 坑位
+              </v-chip>
+            </div>
+            <div class="plot-grid">
+              <v-card
+                v-for="plot in plotsForLand(land)"
+                :key="`${plot.land_id}-${plot.plot_index}`"
+                flat
+                variant="outlined"
+                class="plot-card pa-3 text-center h-100"
+                :class="{ 'cursor-pointer': plot.state !== 'locked' && (plot.state !== 'planted' || isPlotReady(plot)) }"
+                :color="isPlotReady(plot) ? 'orange' : (plot.state === 'buyable' ? 'deep-purple' : 'grey')"
+                @click="handlePlotClick(plot)"
+              >
+                <template v-if="plot.state === 'locked'">
+                  <div class="text-h5 mb-1" aria-hidden="true">🔒</div>
+                  <div class="text-caption text-grey">未解锁</div>
+                </template>
+                <template v-else-if="plot.state === 'buyable'">
+                  <div class="text-h5 mb-1" aria-hidden="true">➕</div>
+                  <div class="text-caption font-weight-bold">购买 {{ plot.cost }}</div>
+                </template>
+                <template v-else-if="plot.seed">
+                  <div class="plot-emoji mb-1" aria-hidden="true">{{ seedEmoji(plot.seed.name) }}</div>
+                  <div class="text-caption font-weight-bold">{{ plot.seed.name }}</div>
+                  <div class="text-caption" :class="isPlotReady(plot) ? 'text-orange' : 'text-grey'">
+                    {{ isPlotReady(plot) ? '可收获' : `成长中 ${formatRemain(plot)}` }}
+                  </div>
+                  <v-progress-linear
+                    v-if="plotProgress(plot) !== null"
+                    :model-value="plotProgress(plot)"
+                    color="success"
+                    height="5"
+                    rounded
+                    class="mt-2"
+                  />
+                </template>
+                <template v-else>
+                  <div class="text-h5 mb-1" aria-hidden="true">🌱</div>
+                  <div class="text-caption font-weight-bold">空地</div>
+                  <div class="text-caption text-grey">点击种植</div>
+                </template>
               </v-card>
-            </v-col>
-          </v-row>
-          <div v-if="!lands.length" class="text-center text-grey pa-4">暂无菜地数据</div>
+            </div>
+          </section>
+          <div v-if="!landsGrouped.length" class="text-center text-grey pa-4">暂无菜地数据</div>
         </v-card-text>
       </v-card>
 
@@ -294,4 +414,11 @@ function formatRemain(ts) {
 <style scoped>
 .cursor-pointer { cursor: pointer; }
 .h-100 { height: 100%; }
+.plot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.plot-card { min-height: 116px; }
+.plot-emoji { font-size: 2rem; line-height: 1.2; }
 </style>

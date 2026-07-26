@@ -196,6 +196,32 @@ def test_api_site_detail_embeds_crop_images_without_cookie():
     assert "cookie" not in response["data"]
 
 
+def test_api_site_detail_fills_prices_for_common_sites():
+    plugin = build_plugin()
+    plugin._stats = {
+        **plugin._empty_stats(),
+        "last_result": {
+            "site_reports": [{
+                "site_id": "playlet",
+                "market_prices": {"crop_1": 120},
+                "crop_status": {"crop_1": {"can_harvest": True}},
+                "warehouse": [{"crop_key": "crop_1", "quantity": 2}],
+            }]
+        },
+    }
+
+    data = plugin._api_site_detail("playlet")["data"]
+
+    assert data["crop_status"]["crop_1"] == {
+        "can_harvest": True,
+        "remaining_minutes": None,
+        "state": "ripe",
+        "price": 120,
+    }
+    assert data["warehouse"][0]["unit_price"] == 120
+    assert data["warehouse"][0]["total_price"] == 240
+
+
 def test_api_site_action_dry_run_does_not_build_client_or_request():
     plugin = build_plugin()
     plugin._dry_run = True

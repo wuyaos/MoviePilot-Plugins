@@ -51,9 +51,37 @@ class FarmSiteConfig(ABC):
     def parse_market_prices(self, html: str) -> Dict[str, int]:
         raise NotImplementedError
 
-    @abstractmethod
     def parse_crop_status(self, html: str) -> Dict[str, Dict]:
-        raise NotImplementedError
+        source = html or ""
+        result: Dict[str, Dict] = {}
+        for crop_key, crop in self.crops.items():
+            harvest_pattern = (
+                rf"action=harvest(?:&amp;|&)type={re.escape(crop['type'])}"
+                rf"(?:&amp;|&)id={crop['id']}"
+            )
+            item_html = ""
+            name_match = re.search(
+                rf"<h3\b[^>]*>\s*{re.escape(crop['name'])}\s*</h3>",
+                source,
+                re.IGNORECASE,
+            )
+            if name_match:
+                next_item = re.search(
+                    r'<div\b[^>]*class=["\'][^"\']*farm-item',
+                    source[name_match.end():],
+                    re.IGNORECASE,
+                )
+                end = (
+                    name_match.end() + next_item.start()
+                    if next_item
+                    else min(len(source), name_match.end() + 2000)
+                )
+                item_html = source[name_match.end():end]
+            result[crop_key] = self._crop_status(
+                can_harvest=bool(re.search(harvest_pattern, item_html or source)),
+                item_html=item_html,
+            )
+        return result
 
     @abstractmethod
     def get_sell_key(self, html: str, item_type: str, item_id: int) -> Optional[str]:
@@ -177,6 +205,40 @@ class FarmSiteConfig(ABC):
 
     def parse_market_trend(self, html: str) -> Dict[str, List[int]]:
         return {}
+
+    @staticmethod
+    def _state_from_status(can_harvest: bool, remaining_minutes: Optional[int]) -> str:
+        if can_harvest:
+            return "ripe"
+        if remaining_minutes is not None and remaining_minutes > 0:
+            return "growing"
+        return "empty"
+
+    @staticmethod
+    def _status_text(fragment: str) -> str:
+        return " ".join(re.sub(r"<[^>]+>", " ", fragment or "").split())
+
+    def _crop_status(self, can_harvest: bool, item_html: str = "") -> Dict[str, Any]:
+        status_text = self._status_text(item_html)
+        remaining_match = re.search(
+            r"剩余时间\s*[:：]?\s*((?:\d+\s*(?:天|小时|分钟)\s*)+)",
+            status_text,
+        )
+        remaining_minutes = (
+            parse_expire_minutes(remaining_match.group(1)) if remaining_match else None
+        )
+        status: Dict[str, Any] = {
+            "can_harvest": can_harvest,
+            "remaining_minutes": remaining_minutes,
+            "state": self._state_from_status(can_harvest, remaining_minutes),
+        }
+        grow_time_match = re.search(
+            r"成长时间\s*[:：]?\s*((?:\d+\s*(?:天|小时|分钟)\s*)+)",
+            status_text,
+        )
+        if grow_time_match:
+            status["grow_time"] = "".join(grow_time_match.group(1).split())
+        return status
 
     def _warehouse_item(self, name: str, quantity: str, expire: str, sell_key: str) -> Dict[str, Any]:
         crop = self.get_crop_by_name(name.strip())

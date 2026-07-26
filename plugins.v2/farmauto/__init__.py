@@ -713,6 +713,27 @@ class FarmAuto(_PluginBase):
             } if isinstance(site_trends, dict) else {},
             "recent_actions": history[-10:],
         }
+        if site_id != "siqi":
+            market_prices = data["market_prices"] if isinstance(data["market_prices"], dict) else {}
+            for crop_key, status in data["crop_status"].items():
+                if "state" not in status:
+                    if status.get("can_harvest"):
+                        status["state"] = "ripe"
+                    elif isinstance(status.get("remaining_minutes"), (int, float)) and status["remaining_minutes"] > 0:
+                        status["state"] = "growing"
+                    else:
+                        status["state"] = "empty"
+                status["price"] = market_prices.get(crop_key)
+            for item in data["warehouse"]:
+                unit_price = market_prices.get(item.get("crop_key"))
+                item["unit_price"] = unit_price
+                quantity = item.get("quantity")
+                item["total_price"] = (
+                    unit_price * quantity
+                    if isinstance(unit_price, (int, float)) and isinstance(quantity, (int, float))
+                    else None
+                )
+
         if site_id == "siqi":
             siqi_farm = site_config.parse_farm_info("")
             try:

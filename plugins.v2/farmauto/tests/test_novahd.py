@@ -29,7 +29,11 @@ def test_novahd_parsers():
     config = NovaHDConfig()
     assert config.parse_market_prices(HTML) == {"crop_3": 2500, "animal_4": 12000}
     status = config.parse_crop_status(HTML)
-    assert status["crop_3"] == {"can_harvest": False, "remaining_minutes": 125}
+    assert status["crop_3"] == {
+        "can_harvest": False,
+        "remaining_minutes": 125,
+        "state": "growing",
+    }
     assert status["crop_4"]["can_harvest"] is True
     warehouse = config.parse_warehouse_items(HTML)
     assert warehouse[0]["crop_key"] == "crop_3"
