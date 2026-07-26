@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import _sfc_main from './__federation_expose_AppPage-6UvD43mD.js';
+import _sfc_main from './__federation_expose_AppPage-BTiihSAr.js';
 
 true&&(function polyfill() {
   const relList = document.createElement("link").relList;

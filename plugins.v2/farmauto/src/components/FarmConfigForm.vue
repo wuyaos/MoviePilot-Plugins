@@ -617,12 +617,6 @@ function saveConfig() {
   background: rgba(255, 255, 255, 0.12) !important;
 }
 
-.bg-gradient-farm {
-  background: linear-gradient(135deg, #43a047, #66bb6a) !important;
-  box-shadow: 0 2px 8px rgba(67, 160, 71, 0.3);
-}
-
-.config-tabs-card,
 .config-section {
   overflow: hidden;
 }

@@ -309,32 +309,24 @@
 
 /* 参观输入框紧凑样式（全局，穿透 scoped） */
 
-.farm-workbench[data-v-1c3f62d3] {
+.farm-workbench[data-v-b0815af2] {
   min-inline-size: 0;
   padding: 0.5rem;
 }
-.bg-gradient-farm[data-v-1c3f62d3] {
-  background: linear-gradient(135deg, #43a047, #66bb6a) !important;
-  box-shadow: 0 2px 8px rgba(67, 160, 71, 0.3);
-}
-.text-subtitle-1[data-v-1c3f62d3] {
-  font-size: 1.1rem !important;
-  font-weight: 500 !important;
-}
-.farm-header[data-v-1c3f62d3] {
+.farm-header[data-v-b0815af2] {
   border-radius: inherit;
 }
-.farm-header-row[data-v-1c3f62d3] { position: relative;
+.farm-header-row[data-v-b0815af2] { position: relative;
 }
-.farm-header-left[data-v-1c3f62d3] { flex: 0 0 auto;
+.farm-header-left[data-v-b0815af2] { flex: 0 0 auto;
 }
-.farm-header-center[data-v-1c3f62d3] { flex: 1 1 auto;
+.farm-header-center[data-v-b0815af2] { flex: 1 1 auto;
 }
-.farm-header-right[data-v-1c3f62d3] { flex: 0 0 auto;
+.farm-header-right[data-v-b0815af2] { flex: 0 0 auto;
 }
-.value-changed[data-v-1c3f62d3] { animation: value-flash-1c3f62d3 0.8s ease;
+.value-changed[data-v-b0815af2] { animation: value-flash-b0815af2 0.8s ease;
 }
-@keyframes value-flash-1c3f62d3 {
+@keyframes value-flash-b0815af2 {
 0% { color: inherit;
 }
 30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4);
@@ -342,10 +334,10 @@
 100% { color: inherit; text-shadow: none;
 }
 }
-.magic-anim[data-v-1c3f62d3] {
-  animation: magic-pulse-1c3f62d3 2s infinite ease-in-out;
+.magic-anim[data-v-b0815af2] {
+  animation: magic-pulse-b0815af2 2s infinite ease-in-out;
 }
-@keyframes magic-pulse-1c3f62d3 {
+@keyframes magic-pulse-b0815af2 {
 0%, 100% {
     transform: scale(1) rotate(0deg);
     filter: drop-shadow(0 0 2px rgba(156, 39, 176, 0.4));

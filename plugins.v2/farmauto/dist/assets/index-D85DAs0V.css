@@ -8,6 +8,12 @@
   background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 
+/* 顶栏渐变背景（主题色感知） */
+.bg-gradient-farm {
+  background: linear-gradient(135deg, rgb(var(--v-theme-success)), rgb(var(--v-theme-success))) !important;
+  box-shadow: 0 2px 8px rgba(var(--v-theme-success), 0.3);
+}
+
 /* 统计卡（KoWming 风格） */
 .stat-card {
   display: flex;

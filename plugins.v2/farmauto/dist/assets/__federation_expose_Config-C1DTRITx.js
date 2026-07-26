@@ -1355,7 +1355,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-776fa381"]]);
+const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-3526151d"]]);
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 

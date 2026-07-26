@@ -387,7 +387,7 @@
     "labels": "农场,自动化,站点",
     "version": "3.0.3",
     "icon": "farm.png",
-    "author": "bfjy",
+    "author": "wuyaos",
     "level": 2,
     "history": {
       "v3.0.3": "全面 code review：修复解析器失败误判、思齐动态种子/每日状态/状态覆盖 Bug；HTTP 重试副作用保护与手动 API 并发锁；前端事件透传/响应式时钟/死代码清理；抽取共享 CSS 与按钮语义色统一；OCR/逐格收获 debug 日志；仓库分页上限配置化",

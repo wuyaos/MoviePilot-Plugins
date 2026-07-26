@@ -82775,6 +82775,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-1c3f62d3"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b0815af2"]]);
 
 export { FarmWorkbench as F };

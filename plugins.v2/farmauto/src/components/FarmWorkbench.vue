@@ -583,16 +583,6 @@ onBeforeUnmount(() => {
   padding: 0.5rem;
 }
 
-.bg-gradient-farm {
-  background: linear-gradient(135deg, #43a047, #66bb6a) !important;
-  box-shadow: 0 2px 8px rgba(67, 160, 71, 0.3);
-}
-
-.text-subtitle-1 {
-  font-size: 1.1rem !important;
-  font-weight: 500 !important;
-}
-
 .farm-header {
   border-radius: inherit;
 }
