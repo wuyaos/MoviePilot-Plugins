@@ -5,6 +5,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
 
+from core.captcha import OcrRecognizer
 from core.executor import FarmExecutor
 from sites.siqi import SiqiConfig
 
@@ -58,8 +59,15 @@ class FakeOcr:
 
 
 class Logger:
+    def __init__(self):
+        self.debug_messages = []
+        self.error_messages = []
+
+    def debug(self, message):
+        self.debug_messages.append(message)
+
     def error(self, message):
-        pass
+        self.error_messages.append(message)
 
 
 def test_captcha_harvest_submits_ocr_result():
@@ -123,6 +131,34 @@ def test_captcha_ocr_failure_falls_back_to_each_ready_plot():
     assert client.calls[-1][0] == "GET"
     assert "action=harvest&land_id=2&plot_index=0" in client.calls[-1][1]
     assert not any(call[0] == "POST" for call in client.calls)
+
+
+def test_captcha_ocr_fallback_logs_reason_and_plot_failure():
+    client = FakeHttpClient([
+        FakeResponse('{"success":true,"captcha":{"imagehash":"hash-1","image_url":"/captcha.php?id=1"}}'),
+        FakeResponse('{"success":true,"user_lands":[{"land_id":2,"plot_index":0,"seed_id":1,"is_ready":1}]}'),
+        FakeResponse("收获失败"),
+    ])
+    logger = Logger()
+    executor = FarmExecutor(client, logger, ocr_recognizer=FakeOcr(None))
+
+    results = executor.run_siqi_extras(
+        "session=value", SiqiConfig(),
+        {"auto_captcha_harvest": True, "captcha_ocr": True},
+    )
+
+    assert results[0].success is False
+    assert any("OCR 未识别出验证码" in message for message in logger.debug_messages)
+    assert any("逐格收获地块 2-0 失败" in message for message in logger.debug_messages)
+
+
+def test_ocr_without_host_logs_debug(monkeypatch):
+    logger = Logger()
+    monkeypatch.setattr("core.captcha.logger", logger)
+    monkeypatch.setattr(OcrRecognizer, "_ocr_host", staticmethod(lambda: None))
+
+    assert OcrRecognizer().recognize("https://example.com/captcha", {}, FakeHttpClient([])) is None
+    assert logger.debug_messages == ["[FarmAuto] OCR 未配置 OCR_HOST，跳过识别"]
 
 
 def test_daily_steal_done_skips_request():

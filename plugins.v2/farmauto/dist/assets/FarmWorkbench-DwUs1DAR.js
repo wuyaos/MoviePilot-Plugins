@@ -81977,7 +81977,6 @@ const _sfc_main = {
   props: {
   api: { type: Object, default: () => ({}) },
   pluginId: { type: String, default: 'FarmAuto' },
-  initialTab: { type: String, default: 'main' },
   showClose: { type: Boolean, default: false },
   showSwitch: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
@@ -82776,6 +82775,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-f5af6597"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-1c3f62d3"]]);
 
 export { FarmWorkbench as F };

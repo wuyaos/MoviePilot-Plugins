@@ -10,7 +10,6 @@ import WarehouseTable from './WarehouseTable.vue'
 const props = defineProps({
   api: { type: Object, default: () => ({}) },
   pluginId: { type: String, default: 'FarmAuto' },
-  initialTab: { type: String, default: 'main' },
   showClose: { type: Boolean, default: false },
   showSwitch: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },

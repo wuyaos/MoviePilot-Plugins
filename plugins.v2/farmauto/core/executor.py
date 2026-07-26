@@ -304,7 +304,11 @@ class FarmExecutor:
                 if image_url and not str(image_url).startswith(("http://", "https://")):
                     image_url = f"{site_config.base_url.rstrip('/')}/{str(image_url).lstrip('/')}"
                 recognized = self.ocr_recognizer.recognize(image_url, cookies, self.http_client) if image_url else None
-                if imagehash and recognized:
+                if not imagehash:
+                    self._log("debug", f"{site_config.site_name} 验证码收获未取得 imagehash，降级逐格收获")
+                elif not recognized:
+                    self._log("debug", f"{site_config.site_name} OCR 未识别出验证码，降级逐格收获")
+                else:
                     submitted = self.http_client.post(
                         site_config.get_harvest_all_submit_url(),
                         cookies,
@@ -321,8 +325,17 @@ class FarmExecutor:
                             "harvest_captcha", "全部成熟作物", True,
                             message=parsed.get("message", "验证码收获成功"),
                         )
-            except Exception:
-                pass
+                    self._log(
+                        "debug",
+                        f"{site_config.site_name} 验证码收获提交失败，降级逐格收获："
+                        f"{parsed.get('message', '未知响应')}",
+                    )
+            except Exception as error:
+                self._log(
+                    "debug",
+                    f"{site_config.site_name} OCR 验证码收获异常，降级逐格收获："
+                    f"{self._error_context(error)}",
+                )
         return self._do_siqi_plot_harvest(cookies, site_config)
 
     def _do_siqi_plot_harvest(self, cookies, site_config) -> ActionResult:
@@ -331,17 +344,31 @@ class FarmExecutor:
         plots = site_config.parse_ready_plots(response.text)
         failures = 0
         for plot in plots:
+            land_id = plot["land_id"]
+            plot_index = plot["plot_index"]
+            harvest_url = site_config.get_harvest_plot_url(land_id, plot_index)
             try:
                 harvested = self.http_client.get(
-                    site_config.get_harvest_plot_url(plot["land_id"], plot["plot_index"]),
+                    harvest_url,
                     cookies,
                     retryable=False,
                 )
                 harvested.raise_for_status()
-                if not site_config.parse_harvest_result(harvested.text).get("success"):
+                parsed = site_config.parse_harvest_result(harvested.text)
+                if not parsed.get("success"):
                     failures += 1
-            except Exception:
+                    self._log(
+                        "debug",
+                        f"{site_config.site_name} 逐格收获地块 {land_id}-{plot_index} 失败："
+                        f"{parsed.get('message', '未知响应')}",
+                    )
+            except Exception as error:
                 failures += 1
+                self._log(
+                    "debug",
+                    f"{site_config.site_name} 逐格收获地块 {land_id}-{plot_index} 异常："
+                    f"{self._error_context(error, harvest_url)}",
+                )
         success = bool(plots) and failures == 0
         message = (
             f"逐格收获已尝试 {len(plots)} 格" + (f"，失败 {failures} 格" if failures else "")

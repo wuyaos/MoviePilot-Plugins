@@ -309,32 +309,32 @@
 
 /* 参观输入框紧凑样式（全局，穿透 scoped） */
 
-.farm-workbench[data-v-f5af6597] {
+.farm-workbench[data-v-1c3f62d3] {
   min-inline-size: 0;
   padding: 0.5rem;
 }
-.bg-gradient-farm[data-v-f5af6597] {
+.bg-gradient-farm[data-v-1c3f62d3] {
   background: linear-gradient(135deg, #43a047, #66bb6a) !important;
   box-shadow: 0 2px 8px rgba(67, 160, 71, 0.3);
 }
-.text-subtitle-1[data-v-f5af6597] {
+.text-subtitle-1[data-v-1c3f62d3] {
   font-size: 1.1rem !important;
   font-weight: 500 !important;
 }
-.farm-header[data-v-f5af6597] {
+.farm-header[data-v-1c3f62d3] {
   border-radius: inherit;
 }
-.farm-header-row[data-v-f5af6597] { position: relative;
+.farm-header-row[data-v-1c3f62d3] { position: relative;
 }
-.farm-header-left[data-v-f5af6597] { flex: 0 0 auto;
+.farm-header-left[data-v-1c3f62d3] { flex: 0 0 auto;
 }
-.farm-header-center[data-v-f5af6597] { flex: 1 1 auto;
+.farm-header-center[data-v-1c3f62d3] { flex: 1 1 auto;
 }
-.farm-header-right[data-v-f5af6597] { flex: 0 0 auto;
+.farm-header-right[data-v-1c3f62d3] { flex: 0 0 auto;
 }
-.value-changed[data-v-f5af6597] { animation: value-flash-f5af6597 0.8s ease;
+.value-changed[data-v-1c3f62d3] { animation: value-flash-1c3f62d3 0.8s ease;
 }
-@keyframes value-flash-f5af6597 {
+@keyframes value-flash-1c3f62d3 {
 0% { color: inherit;
 }
 30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4);
@@ -342,10 +342,10 @@
 100% { color: inherit; text-shadow: none;
 }
 }
-.magic-anim[data-v-f5af6597] {
-  animation: magic-pulse-f5af6597 2s infinite ease-in-out;
+.magic-anim[data-v-1c3f62d3] {
+  animation: magic-pulse-1c3f62d3 2s infinite ease-in-out;
 }
-@keyframes magic-pulse-f5af6597 {
+@keyframes magic-pulse-1c3f62d3 {
 0%, 100% {
     transform: scale(1) rotate(0deg);
     filter: drop-shadow(0 0 2px rgba(156, 39, 176, 0.4));

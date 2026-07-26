@@ -1364,7 +1364,6 @@ const _sfc_main = {
   __name: 'Config',
   props: {
   initialConfig: { type: Object, default: () => ({}) },
-  api: { type: Object, default: () => ({}) },
 },
   emits: ['save', 'switch', 'close'],
   setup(__props, { emit: __emit }) {

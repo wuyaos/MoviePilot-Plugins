@@ -3,7 +3,6 @@ import FarmConfigForm from './FarmConfigForm.vue'
 
 const props = defineProps({
   initialConfig: { type: Object, default: () => ({}) },
-  api: { type: Object, default: () => ({}) },
 })
 
 const emit = defineEmits(['save', 'switch', 'close'])
