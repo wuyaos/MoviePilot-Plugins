@@ -1,0 +1,649 @@
+"""MoviePilot V2 农场自动化插件入口。"""
+import json
+import threading
+import time
+from typing import Any, Dict, List, Optional, Tuple
+
+from apscheduler.triggers.interval import IntervalTrigger
+from app.core.event import Event, eventmanager
+from app.db.site_oper import SiteOper
+from app.log import logger
+from app.plugins import _PluginBase
+from app.schemas import NotificationType
+from app.schemas.types import EventType
+
+from .core.executor import FarmExecutor
+from .core.http_client import FarmHttpClient
+from .core.models import RunReport, SiteRunReport
+from .core.reporting import (
+    build_history_rows,
+    build_price_sections,
+    build_stat_cards,
+    format_notification,
+)
+from .core.strategy import effective_site_mode, effective_site_policy, site_is_enabled
+from .core.trend import PriceTrendStore
+from .sites import SITE_CONFIGS, SITE_OPTIONS, get_site_config
+
+
+class FarmAuto(_PluginBase):
+    plugin_name = "农场自动化Pro"
+    plugin_desc = "多站点农场自动化，支持智能交易与自动收获"
+    plugin_icon = "farm.png"
+    plugin_version = "2.3"
+    plugin_author = "bfjy"
+    author_url = "https://bfjy2024.github.io/bfjy"
+    plugin_config_prefix = "farmauto_"
+    plugin_order = 30
+    auth_level = 2
+
+    _enabled = False
+    _notify = True
+    _run_lock = threading.Lock()
+
+    def __init__(self):
+        super().__init__()
+        self._raw_config: Dict[str, Any] = {}
+        self._mode = "smart"
+        self._site_ids: List[str] = []
+        self._interval_minutes = 61
+        self._harvest_interval_minutes = 61
+        self._expire_threshold_minutes = 120
+        self._min_profit_rate = 0.0
+        self._max_sell_per_run = 50
+        self._request_interval = 1.0
+        self._retry_count = 3
+        self._use_proxy = False
+        self._dry_run = False
+        self._site_overrides: Dict[str, Dict[str, Any]] = {}
+        self._trend_store = PriceTrendStore()
+        self._stats = self._empty_stats()
+        self._market_prices: Dict[str, Dict[str, int]] = {}
+
+    @staticmethod
+    def _empty_stats() -> Dict[str, Any]:
+        return {
+            "total_profit": 0,
+            "total_trades": 0,
+            "last_run": None,
+            "history": [],
+            "last_result": {},
+        }
+
+    @staticmethod
+    def _to_int(value: Any, default: int, min_value: int = 0) -> int:
+        try:
+            return max(min_value, int(value))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _to_float(value: Any, default: float, min_value: float = 0.0) -> float:
+        try:
+            return max(min_value, float(value))
+        except (TypeError, ValueError):
+            return default
+
+    def init_plugin(self, config: Optional[dict] = None):
+        config = config or {}
+        self._raw_config = dict(config)
+        self._enabled = bool(config.get("enabled", False))
+        self._notify = bool(config.get("notify", True))
+        run_once = bool(config.get("run_once", False))
+        self._mode = config.get("mode") if config.get("mode") in ("smart", "harvest") else "smart"
+        site_ids = config.get("site_ids", [])
+        if isinstance(site_ids, list):
+            self._site_ids = [str(site_id) for site_id in site_ids if str(site_id) in SITE_CONFIGS]
+        elif site_ids:
+            self._site_ids = [str(site_ids)] if str(site_ids) in SITE_CONFIGS else []
+        else:
+            self._site_ids = []
+        self._interval_minutes = self._to_int(config.get("interval_minutes"), 61, 1)
+        self._harvest_interval_minutes = self._to_int(
+            config.get("harvest_interval_minutes"), 61, 5
+        )
+        self._expire_threshold_minutes = self._to_int(
+            config.get("expire_threshold_minutes"), 120, 10
+        )
+        self._min_profit_rate = self._to_float(config.get("min_profit_rate"), 0.0, 0.0)
+        self._max_sell_per_run = self._to_int(config.get("max_sell_per_run"), 50, 1)
+        self._request_interval = self._to_float(config.get("request_interval"), 1.0, 0.0)
+        self._retry_count = self._to_int(config.get("retry_count"), 3, 0)
+        self._use_proxy = bool(config.get("use_proxy", False))
+        self._dry_run = bool(config.get("dry_run", False))
+        try:
+            overrides = json.loads(config.get("site_overrides") or "{}")
+            if not isinstance(overrides, dict):
+                raise ValueError("顶层必须是 JSON 对象")
+            self._site_overrides = {
+                str(site_id): override
+                for site_id, override in overrides.items()
+                if isinstance(override, dict)
+            }
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            logger.warning(f"农场自动化单站策略覆盖解析失败，已忽略：{error}")
+            self._site_overrides = {}
+
+        stored_stats = config.get("stats", self.get_data("stats") or {})
+        self._stats = {**self._empty_stats(), **stored_stats} if isinstance(stored_stats, dict) else self._empty_stats()
+        stored_prices = config.get("market_prices", self.get_data("market_prices") or {})
+        self._market_prices = stored_prices if isinstance(stored_prices, dict) else {}
+        stored_trends = config.get("trends", self.get_data("trends") or {})
+        self._trend_store = PriceTrendStore.from_dict(stored_trends)
+
+        if run_once:
+            self._raw_config["run_once"] = False
+            self.update_config(self._raw_config)
+            if self._site_ids:
+                self._start_background_task("配置页立即运行")
+            else:
+                logger.warning("农场自动化未选择站点，忽略配置页立即运行请求")
+
+    def get_state(self) -> bool:
+        return self._enabled
+
+    def _start_background_task(self, source: str) -> bool:
+        if not type(self)._run_lock.acquire(blocking=False):
+            logger.warning(f"农场自动化任务正在运行，忽略{source}请求")
+            return False
+        try:
+            threading.Thread(
+                target=self.run_farm_task,
+                kwargs={"lock_acquired": True},
+                daemon=True,
+                name="farmauto_run",
+            ).start()
+        except Exception:
+            type(self)._run_lock.release()
+            raise
+        return True
+
+    @staticmethod
+    def _site_value(site: Any, name: str, default: Any = "") -> Any:
+        if isinstance(site, dict):
+            return site.get(name, default)
+        return getattr(site, name, default)
+
+    @classmethod
+    def _cookie_from_site(cls, site: Any) -> str:
+        site_cookie = cls._site_value(site, "cookie", "") if site else ""
+        if isinstance(site_cookie, dict):
+            return "; ".join(
+                f"{key}={value}" for key, value in site_cookie.items()
+            ).strip()
+        return str(site_cookie or "").strip()
+
+    @classmethod
+    def _site_matches_domain(cls, site: Any, candidate: str) -> bool:
+        candidate = candidate.lower().lstrip(".")
+        domain = str(cls._site_value(site, "domain", "") or "").lower().lstrip(".")
+        url = str(cls._site_value(site, "url", "") or "").lower()
+        return (
+            domain == candidate
+            or domain.endswith(f".{candidate}")
+            or candidate.endswith(f".{domain}")
+            or f"//{candidate}" in url
+            or f".{candidate}" in url
+        )
+
+    def _get_site_cookie(self, site_config) -> str:
+        site_oper = SiteOper()
+        for domain in site_config.domains:
+            try:
+                site = site_oper.get_by_domain(domain)
+                cookie = self._cookie_from_site(site)
+                if cookie:
+                    logger.info(f"{site_config.site_name} 已读取站点 Cookie")
+                    return cookie
+            except Exception as error:
+                logger.debug(f"{site_config.site_name} 按域名读取 Cookie 失败：{error}")
+
+        try:
+            sites = site_oper.list() or []
+        except Exception as error:
+            logger.warning(f"{site_config.site_name} 读取站点列表失败：{error}")
+            sites = []
+        for site in sites:
+            if any(self._site_matches_domain(site, candidate) for candidate in site_config.domains):
+                cookie = self._cookie_from_site(site)
+                if cookie:
+                    logger.info(f"{site_config.site_name} 已从站点列表读取 Cookie")
+                    return cookie
+        logger.warning(f"{site_config.site_name} 未找到可用 Cookie")
+        return ""
+
+    def get_effective_policy(self, site_id: str) -> dict:
+        global_policy = {
+            "min_profit_rate": self._min_profit_rate,
+            "max_sell_per_run": self._max_sell_per_run,
+            "expire_threshold_minutes": self._expire_threshold_minutes,
+            "request_interval": self._request_interval,
+            "use_proxy": self._use_proxy,
+            "dry_run": self._dry_run,
+        }
+        return effective_site_policy(global_policy, self._site_overrides, site_id)
+
+    def get_effective_mode(self, site_id: str) -> str:
+        return effective_site_mode(self._mode, self._site_overrides, site_id)
+
+    def is_site_enabled(self, site_id: str) -> bool:
+        return site_is_enabled(self._site_overrides, site_id)
+
+    def _build_http_client(self, policy: dict) -> FarmHttpClient:
+        return FarmHttpClient(
+            timeout=15,
+            retry_count=self._retry_count,
+            use_proxy=bool(policy.get("use_proxy", False)),
+            min_interval=max(float(policy.get("request_interval", 0)), 0.3),
+        )
+
+    @staticmethod
+    def _site_report_dict(report: SiteRunReport) -> Dict[str, Any]:
+        return {
+            "site_id": report.site_id,
+            "site_name": report.site_name,
+            "mode": report.mode,
+            "market_prices": report.market_prices,
+            "total_profit": report.total_profit,
+            "trades_count": report.trades_count,
+            "status": report.status,
+            "message": report.message,
+            "actions": [vars(action) for action in report.actions],
+        }
+
+    def run_farm_task(self, lock_acquired: bool = False) -> Optional[RunReport]:
+        if not lock_acquired and not type(self)._run_lock.acquire(blocking=False):
+            logger.warning("农场自动化任务正在运行，跳过本次触发")
+            return None
+        started_at = time.time()
+        try:
+            per_site_clients = any(
+                isinstance(override, dict) and "use_proxy" in override
+                for override in self._site_overrides.values()
+            )
+            shared_executor = None
+            if not per_site_clients:
+                shared_executor = FarmExecutor(
+                    self._build_http_client(self.get_effective_policy("")),
+                    logger,
+                    self._trend_store,
+                )
+            site_reports: List[SiteRunReport] = []
+            for site_id in self._site_ids:
+                if not self.is_site_enabled(site_id):
+                    logger.info(f"农场自动化站点 {site_id} 已被单站策略禁用，跳过")
+                    continue
+                site_config = get_site_config(site_id)
+                if not site_config:
+                    continue
+                policy = self.get_effective_policy(site_id)
+                mode = self.get_effective_mode(site_id)
+                executor = shared_executor or FarmExecutor(
+                    self._build_http_client(policy), logger, self._trend_store
+                )
+                cookie = self._get_site_cookie(site_config)
+                site_report = executor.run_site(cookie, site_config, mode, policy)
+                site_reports.append(site_report)
+                self._market_prices[site_id] = dict(site_report.market_prices)
+
+            total_profit = sum(item.total_profit for item in site_reports)
+            total_trades = sum(item.trades_count for item in site_reports)
+            failed = sum(item.status == "failed" for item in site_reports)
+            partial = sum(item.status == "partial" for item in site_reports)
+            if not site_reports:
+                status, message = "skipped", "未选择有效站点"
+            elif failed == len(site_reports):
+                status, message = "failed", "全部站点执行失败"
+            elif failed or partial:
+                status, message = "partial", "部分站点或操作未完成"
+            else:
+                status, message = "completed", "全部站点执行完成"
+            report = RunReport(
+                started_at=started_at,
+                finished_at=time.time(),
+                site_reports=site_reports,
+                total_profit=total_profit,
+                total_trades=total_trades,
+                status=status,
+                message=message,
+            )
+            try:
+                self._record_report(report)
+            except Exception as error:
+                logger.error(f"农场自动化统计持久化失败：{error}")
+            if self._notify:
+                try:
+                    self.post_message(
+                        mtype=NotificationType.SiteMessage,
+                        title="【农场自动化Pro】",
+                        text=format_notification(report),
+                    )
+                except Exception as error:
+                    logger.error(f"农场自动化通知发送失败：{error}")
+            return report
+        except Exception as error:
+            logger.error(f"农场自动化多站编排失败：{error}")
+            report = RunReport(
+                started_at=started_at,
+                finished_at=time.time(),
+                status="failed",
+                message=str(error),
+            )
+            try:
+                self._record_report(report)
+            except Exception as save_error:
+                logger.error(f"农场自动化失败统计持久化失败：{save_error}")
+            return report
+        finally:
+            type(self)._run_lock.release()
+
+    def _record_report(self, report: RunReport) -> None:
+        site_results = [self._site_report_dict(item) for item in report.site_reports]
+        last_result = {
+            "started_at": report.started_at,
+            "finished_at": report.finished_at,
+            "total_profit": report.total_profit,
+            "total_trades": report.total_trades,
+            "status": report.status,
+            "message": report.message,
+            "site_reports": site_results,
+        }
+        history = list(self._stats.get("history") or [])
+        for site_report in report.site_reports:
+            history.append({
+                "time": report.finished_at,
+                "site": site_report.site_name,
+                "action": site_report.message,
+                "profit": site_report.total_profit,
+                "status": site_report.status,
+            })
+        if not report.site_reports:
+            history.append({
+                "time": report.finished_at,
+                "site": "-",
+                "action": report.message,
+                "profit": 0,
+                "status": report.status,
+            })
+        updated_stats = {
+            "total_profit": int(self._stats.get("total_profit", 0)) + report.total_profit,
+            "total_trades": int(self._stats.get("total_trades", 0)) + report.total_trades,
+            "last_run": report.finished_at,
+            "history": history[-20:],
+            "last_result": last_result,
+        }
+        trends = self._trend_store.to_dict()
+        self.save_data("stats", updated_stats)
+        self.save_data("market_prices", self._market_prices)
+        self.save_data("trends", trends)
+        self._stats = updated_stats
+        persisted_config = dict(self._raw_config)
+        persisted_config["run_once"] = False
+        persisted_config.update({
+            "stats": updated_stats,
+            "market_prices": self._market_prices,
+            "trends": trends,
+        })
+        self.update_config(persisted_config)
+        self._raw_config = persisted_config
+
+    def get_service(self) -> List[Dict[str, Any]]:
+        if not self._enabled or not self._site_ids:
+            return []
+        interval = (
+            self._harvest_interval_minutes
+            if self._mode == "harvest"
+            else self._interval_minutes
+        )
+        return [{
+            "id": "FarmAuto",
+            "name": "农场自动化定时任务",
+            "trigger": IntervalTrigger(minutes=interval),
+            "func": self.run_farm_task,
+            "kwargs": {},
+        }]
+
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        return [{
+            "cmd": "/farmauto_run",
+            "event": EventType.PluginAction,
+            "desc": "立即执行农场自动化任务",
+            "category": "站点",
+            "data": {"action": "farmauto_run"},
+        }]
+
+    def get_api(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "path": "/run",
+                "endpoint": self._api_run,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "立即运行农场自动化任务",
+            },
+            {
+                "path": "/stats",
+                "endpoint": self._api_stats,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "获取农场统计与市场价格",
+            },
+            {
+                "path": "/prices",
+                "endpoint": self._api_prices,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "获取最新市场价格",
+            },
+        ]
+
+    def _api_run(self) -> Dict[str, Any]:
+        started = self._start_background_task("API")
+        return {
+            "success": started,
+            "message": "任务已在后台启动" if started else "已有任务正在运行",
+        }
+
+    def _api_stats(self) -> Dict[str, Any]:
+        return {
+            "success": True,
+            "stats": self._stats,
+            "market_prices": self._market_prices,
+            "trends": self._trend_store.to_dict(),
+        }
+
+    def _api_prices(self) -> Dict[str, Any]:
+        return {"success": True, "market_prices": self._market_prices}
+
+    @eventmanager.register(EventType.PluginAction)
+    def run_once_command(self, event: Event = None):
+        event_data = event.event_data if event and event.event_data else {}
+        if event_data.get("action") != "farmauto_run":
+            return
+        started = self._start_background_task("命令")
+        self.post_message(
+            channel=event_data.get("channel"),
+            userid=event_data.get("user"),
+            mtype=NotificationType.SiteMessage,
+            title="【农场自动化Pro】",
+            text="任务已在后台启动。" if started else "已有任务正在运行。",
+        )
+
+    def _last_run_report(self) -> RunReport:
+        last_result = self._stats.get("last_result") or {}
+        site_reports = []
+        for item in last_result.get("site_reports", []):
+            site_reports.append(SiteRunReport(
+                site_id=item.get("site_id", ""),
+                site_name=item.get("site_name", item.get("site_id", "")),
+                mode=item.get("mode", self._mode),
+                market_prices=item.get("market_prices", {}),
+                total_profit=int(item.get("total_profit", 0)),
+                trades_count=int(item.get("trades_count", 0)),
+                status=item.get("status", "completed"),
+                message=item.get("message", ""),
+            ))
+        if not site_reports:
+            for site_id, prices in self._market_prices.items():
+                config = get_site_config(site_id)
+                site_reports.append(SiteRunReport(
+                    site_id=site_id,
+                    site_name=config.site_name if config else site_id,
+                    mode=self._mode,
+                    market_prices=prices,
+                ))
+        return RunReport(
+            started_at=float(last_result.get("started_at", 0)),
+            finished_at=float(last_result.get("finished_at", 0)),
+            site_reports=site_reports,
+            total_profit=int(last_result.get("total_profit", 0)),
+            total_trades=int(last_result.get("total_trades", 0)),
+            status=last_result.get("status", "暂无数据"),
+            message=last_result.get("message", ""),
+        )
+
+    def get_page(self) -> List[dict]:
+        try:
+            report = self._last_run_report()
+            prices = build_price_sections(
+                report.site_reports, SITE_CONFIGS, self._trend_store
+            )
+            price_content = prices or [{
+                "component": "VAlert",
+                "props": {
+                    "type": "info",
+                    "variant": "tonal",
+                    "text": "暂无市场价格，请先运行一次任务。",
+                },
+            }]
+            history_rows = build_history_rows(self._stats.get("history") or [])
+            history_content = [{
+                "component": "VTable",
+                "props": {"density": "comfortable"},
+                "content": [{
+                    "component": "thead",
+                    "content": [{
+                        "component": "tr",
+                        "content": [
+                            {"component": "th", "text": title}
+                            for title in ("时间", "站点", "结果", "利润", "状态")
+                        ],
+                    }],
+                }, {
+                    "component": "tbody",
+                    "content": history_rows,
+                }],
+            }] if history_rows else [{
+                "component": "VAlert",
+                "props": {"type": "info", "variant": "tonal", "text": "暂无执行记录。"},
+            }]
+            return [
+                {
+                    "component": "VCard",
+                    "props": {"title": "数据面板", "class": "mb-4"},
+                    "content": [{
+                        "component": "VCardText",
+                        "content": [{"component": "VRow", "content": build_stat_cards(report)}] + price_content,
+                    }],
+                },
+                {
+                    "component": "VCard",
+                    "props": {"title": "执行记录"},
+                    "content": [{"component": "VCardText", "content": history_content}],
+                },
+            ]
+        except Exception as error:
+            logger.error(f"农场自动化详情页加载失败：{error}")
+            return [{
+                "component": "VAlert",
+                "props": {"type": "error", "variant": "tonal", "text": f"详情页加载失败：{error}"},
+            }]
+
+    def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        def col(cols: int, component: dict) -> dict:
+            return {
+                "component": "VCol",
+                "props": {"cols": 12, "md": cols},
+                "content": [component],
+            }
+
+        def switch(model: str, label: str) -> dict:
+            return {"component": "VSwitch", "props": {"model": model, "label": label}}
+
+        def number(model: str, label: str, minimum: Any, hint: str = "") -> dict:
+            props = {"model": model, "label": label, "type": "number", "min": minimum}
+            if hint:
+                props.update({"hint": hint, "persistent-hint": True})
+            return {"component": "VTextField", "props": props}
+
+        return [{
+            "component": "VForm",
+            "content": [
+                {"component": "VAlert", "props": {
+                    "type": "info", "variant": "tonal", "class": "mb-4",
+                    "text": "支持 PlayLet、NovaHD、好学、包子和拾刻；智能交易会按利润执行仓库出售、收获与补种，自动收获模式侧重收获和临期处理。可在表单末尾用 JSON 为单个站点覆盖策略、模式或启用状态。",
+                }},
+                {"component": "VRow", "content": [
+                    col(4, switch("enabled", "启用插件")),
+                    col(4, switch("notify", "发送通知")),
+                    col(4, switch("run_once", "立即运行一次")),
+                ]},
+                {"component": "VRow", "content": [
+                    col(4, {"component": "VSelect", "props": {
+                        "model": "mode", "label": "运行模式",
+                        "items": [
+                            {"title": "智能交易", "value": "smart"},
+                            {"title": "自动收获", "value": "harvest"},
+                        ],
+                    }}),
+                    col(8, {"component": "VSelect", "props": {
+                        "model": "site_ids", "label": "站点", "items": SITE_OPTIONS,
+                        "multiple": True, "chips": True,
+                    }}),
+                ]},
+                {"component": "VRow", "content": [
+                    col(4, number("interval_minutes", "智能交易间隔（分钟）", 1)),
+                    col(4, number("harvest_interval_minutes", "自动收获间隔（分钟）", 5)),
+                    col(4, number("expire_threshold_minutes", "临期阈值（分钟）", 10)),
+                ]},
+                {"component": "VRow", "content": [
+                    col(4, number("min_profit_rate", "最低利润率", 0, "0 表示售价高于成本即售；0.1 表示 10%")),
+                    col(4, number("max_sell_per_run", "单轮单站最大出售数", 1)),
+                    col(4, number("request_interval", "请求间隔（秒）", 0)),
+                ]},
+                {"component": "VRow", "content": [
+                    col(4, number("retry_count", "重试次数", 0)),
+                    col(4, switch("use_proxy", "使用 MP 系统代理")),
+                    col(4, switch("dry_run", "仅模拟（不发送操作请求）")),
+                ]},
+                {"component": "VRow", "content": [
+                    col(12, {"component": "VTextarea", "props": {
+                        "model": "site_overrides",
+                        "label": "单站策略覆盖（JSON，可选）",
+                        "hint": "示例：{\"playlet\":{\"min_profit_rate\":0.1,\"max_sell_per_run\":20}}；支持 min_profit_rate/max_sell_per_run/expire_threshold_minutes/request_interval/use_proxy/dry_run/mode/enabled",
+                        "persistent-hint": True,
+                        "rows": 4,
+                    }}),
+                ]},
+            ],
+        }], {
+            "enabled": False,
+            "notify": True,
+            "run_once": False,
+            "mode": "smart",
+            "site_ids": [],
+            "interval_minutes": 61,
+            "harvest_interval_minutes": 61,
+            "expire_threshold_minutes": 120,
+            "min_profit_rate": 0.0,
+            "max_sell_per_run": 50,
+            "request_interval": 1.0,
+            "retry_count": 3,
+            "use_proxy": False,
+            "dry_run": False,
+            "site_overrides": "{}",
+        }
+
+    def stop_service(self):
+        pass

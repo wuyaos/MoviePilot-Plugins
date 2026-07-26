@@ -364,7 +364,7 @@
     "history": {
       "v1.0.14": "扩展好学（hxpt.org）适配器：保留原有签到和喊话，新增 task.php 页面实测的任务申领下拉选项（精进研习社、管理组任务），领取接口使用 action=claimTask 与 params[exam_id]。",
       "v1.0.13": "新增梓喵（azusa.wiki）任务申领适配器，支持 task.php 页面实测的每日、七日和月度任务下拉选择；领取接口使用 action=claimTask 与 params[exam_id]。",
-      "v1.0.12": "优化内置 Vc-Lib 的 CookieCloud 补取时机：站点筛选、配置页和调度服务查询不再请求 CookieCloud，仅在实际构造并执行 Vc-Lib Handler 时补取；同一插件实例按域名缓存结果，避免单轮重复下载和重复日志。",
+      "v1.0.12":  "优化内置 Vc-Lib 的 CookieCloud 补取时机：站点筛选、配置页和调度服务查询不再请求 CookieCloud，仅在实际构造并执行 Vc-Lib Handler 时补取；同一插件实例按域名缓存结果，避免单轮重复下载和重复日志。",
       "v1.0.11": "恢复配置页“立即运行一次”开关，但其仅作为本次保存的临时触发字段：初始化后立即移出持久化配置，表单始终回显 false，避免安装、同步或普通重载意外再次补跑；独立 /manual-run API 和命令入口仍保留。",
       "v1.0.10": "移除会随配置保存和插件重载携带的 onlyonce 开关，新增独立 POST /manual-run API 与 /siteautotask_manual_run 命令触发当天补跑，避免安装或重载意外执行；MoviePilot 未配置 Vc-Lib 时自动插入内置站点，运行时从 CookieCloud 获取 vclib.online Cookie，未匹配则明确跳过；跳过日志去除[喊话]喊话等重复语义，CLAIM 跳过显示选中任务名称，勋章购买展示精简名称。",
       "v1.0.9": "修复 myPT 钻石勋章购买参数：依据站点页面实际脚本改用 params[medal_id]，恢复钻石勋章下拉选项并显示勋章名称；“需要更多魔力值”改为成功跳过；CLAIM 结果展示用户选中的具体任务名称并统一使用[任务]类型，GENERIC 类型改为[其他]。",
@@ -377,6 +377,21 @@
       "v1.0.2": "新增调试 API：POST /api/v1/plugin/SiteAutoTask/run，支持 site_id 和 task_name 参数指定站点和任务，绕过配置开关直接执行，方便本地真实调试；新增 /siteautotask_run 命令全量执行。",
       "v1.0.1": "完成 22 个站点适配（8 重叠 + 10 ptautotask 独有 + 4 groupchatzone 独有）；修复重试锁冲突、retry_notify 控制、feedback_timeout 接入、图标资源缺失。",
       "v1.0.0": "初始模块化合并版本：统一任务结果、站点能力与运行数据页；首批接入青蛙站点。"
+    }
+  },
+  "FarmAuto": {
+    "name": "农场自动化Pro",
+    "description": "多站点农场自动化，支持智能交易与自动收获",
+    "labels": "农场,自动化,站点",
+    "version": "2.3",
+    "icon": "farm.png",
+    "author": "bfjy",
+    "level": 2,
+    "history": {
+      "v2.2": "新增市场价格趋势滚动记录与展示，支持通过 JSON 配置单站策略、模式、代理和启用状态覆盖",
+      "v2.1": "新增拾刻农场(skit)适配；增强 PlayLet/NovaHD/好学 解析（仓库分页、剩余时间、货币余额、多策略兜底）",
+      "v2.0": "重构为多站点架构：统一HTTP客户端、能力协议、纯策略执行器、统计仅编排层更新一次、dry-run、最低利润率、临期阈值",
+      "v2.3": "新增思齐农场(siqi)适配器（验证码/偷菜/点赞/扩地能力层，默认不执行，待 executor 开关接入）"
     }
   }
 }
