@@ -244,6 +244,8 @@ class FarmAuto(_PluginBase):
             "site_name": report.site_name,
             "mode": report.mode,
             "market_prices": report.market_prices,
+            "crop_status": report.crop_status,
+            "warehouse": report.warehouse,
             "total_profit": report.total_profit,
             "trades_count": report.trades_count,
             "status": report.status,
