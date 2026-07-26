@@ -66,9 +66,12 @@ class CangbaoHandler(CapabilityHandler):
             return None
         for row in html.xpath("//td[contains(@class, 'shoutrow')][position() <= 20]"):
             text = re.sub(r"\s+", " ", "".join(row.xpath(".//text()[not(ancestor::span[@class='date'])]")).strip())
-            if not text.startswith("系统:") or f"感谢 @{username} 的支持" not in text:
+            if not text.startswith("系统:"):
                 continue
-            if keyword and keyword not in text:
+            if f"@{username}" not in text:
+                continue
+            # 成功反馈含“感谢...奖励”，负面反馈含“已经求过/明天再来”。
+            if keyword and keyword not in text and "已经求过" not in text and "明天再来" not in text:
                 continue
             return text
         return None
