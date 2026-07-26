@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 
 const DEFAULT_CONFIG = {
   enabled: false,
@@ -17,6 +17,10 @@ const DEFAULT_CONFIG = {
   retry_count: 3,
   use_proxy: false,
   dry_run: false,
+  auto_harvest: true,
+  auto_plant: true,
+  auto_sell: true,
+  expiry_sale: true,
   siqi_auto_captcha_harvest: false,
   siqi_captcha_ocr: true,
   siqi_auto_buy_slot: false,
@@ -39,23 +43,19 @@ const MODE_ITEMS = [
   { title: '自动收获', value: 'harvest' },
 ]
 
-const SITE_MODE_ITEMS = [
-  { title: '继承全局', value: 'inherit' },
-  ...MODE_ITEMS,
-]
-
-const BOOLEAN_OVERRIDE_ITEMS = [
-  { title: '继承全局', value: 'inherit' },
-  { title: '启用', value: true },
-  { title: '禁用', value: false },
-]
-
 const NUMERIC_OVERRIDE_FIELDS = [
   'min_profit_rate',
   'max_profit_rate',
   'expire_threshold_minutes',
   'max_sell_per_run',
   'request_interval',
+]
+
+const AUTOMATION_FIELDS = [
+  'auto_harvest',
+  'auto_plant',
+  'auto_sell',
+  'expiry_sale',
 ]
 
 const props = defineProps({
@@ -69,6 +69,39 @@ const config = reactive({ ...DEFAULT_CONFIG })
 const sitePolicies = reactive({})
 const error = ref('')
 
+const siteModeItems = computed(() => [
+  { title: `继承全局（${config.mode === 'harvest' ? '自动收获' : '智能交易'}）`, value: 'inherit' },
+  ...MODE_ITEMS,
+])
+
+const OVERRIDE_UNITS = {
+  min_profit_rate: '',
+  max_profit_rate: '',
+  expire_threshold_minutes: '分钟',
+  max_sell_per_run: '',
+  request_interval: '秒',
+}
+
+function inheritPlaceholder(field) {
+  return `继承全局（${config[field]}${OVERRIDE_UNITS[field] || ''}）`
+}
+
+function booleanOverrideItems(field) {
+  return [
+    { title: `继承全局（${config[field] ? '启用' : '禁用'}）`, value: 'inherit' },
+    { title: '启用', value: true },
+    { title: '禁用', value: false },
+  ]
+}
+
+function automationItems(field) {
+  return [
+    { title: `继承全局（${config[field] ? '开启' : '关闭'}）`, value: 'inherit' },
+    { title: '开启', value: true },
+    { title: '关闭', value: false },
+  ]
+}
+
 function emptySitePolicy(enabled = false) {
   return {
     enabled,
@@ -80,6 +113,10 @@ function emptySitePolicy(enabled = false) {
     request_interval: null,
     use_proxy: 'inherit',
     dry_run: 'inherit',
+    auto_harvest: 'inherit',
+    auto_plant: 'inherit',
+    auto_sell: 'inherit',
+    expiry_sale: 'inherit',
   }
 }
 
@@ -111,6 +148,9 @@ function policyFromOverride(siteId, overrides, selectedSiteIds) {
   }
   if (typeof source.use_proxy === 'boolean') policy.use_proxy = source.use_proxy
   if (typeof source.dry_run === 'boolean') policy.dry_run = source.dry_run
+  for (const field of AUTOMATION_FIELDS) {
+    if (typeof source[field] === 'boolean') policy[field] = source[field]
+  }
   return policy
 }
 
@@ -129,6 +169,9 @@ function buildOverrides() {
     }
     if (typeof policy.use_proxy === 'boolean') override.use_proxy = policy.use_proxy
     if (typeof policy.dry_run === 'boolean') override.dry_run = policy.dry_run
+    for (const field of AUTOMATION_FIELDS) {
+      if (typeof policy[field] === 'boolean') override[field] = policy[field]
+    }
     if (Object.keys(override).length) overrides[site.value] = override
   }
   return overrides
@@ -151,7 +194,7 @@ watch(
 )
 
 
-function inheritedValue(siteId, field) {
+function effectiveSiteValue(siteId, field) {
   const value = sitePolicies[siteId]?.[field]
   return value === null || value === undefined || value === '' || value === 'inherit'
     ? config[field]
@@ -159,12 +202,12 @@ function inheritedValue(siteId, field) {
 }
 
 function modeLabel(siteId) {
-  return inheritedValue(siteId, 'mode') === 'harvest' ? '自动收获' : '智能交易'
+  return effectiveSiteValue(siteId, 'mode') === 'harvest' ? '自动收获' : '智能交易'
 }
 
 function profitSummary(siteId) {
-  const minimum = inheritedValue(siteId, 'min_profit_rate')
-  const maximum = inheritedValue(siteId, 'max_profit_rate')
+  const minimum = effectiveSiteValue(siteId, 'min_profit_rate')
+  const maximum = effectiveSiteValue(siteId, 'max_profit_rate')
   return `${minimum ?? 0} ~ ${maximum ? maximum : '不限'}`
 }
 
@@ -183,15 +226,18 @@ function saveConfig() {
 </script>
 
 <template>
-  <v-form class="farm-config-form text-body-1" @submit.prevent="saveConfig">
-    <v-card-title class="text-subtitle-1 d-flex align-center ga-2 px-3 py-2 bg-gradient-farm text-white">
+  <v-form class="farm-config-form text-body-2" @submit.prevent="saveConfig">
+    <v-card-title class="bg-gradient-farm text-white d-flex align-center ga-2 px-3 py-2">
       <v-icon icon="mdi-sprout" color="white" size="small" />
-      <span class="text-white">农场配置</span>
+      <span class="text-subtitle-1 text-white">农场配置</span>
       <v-spacer />
-      <v-btn size="small" variant="text" color="white" prepend-icon="mdi-view-dashboard-outline" @click="emit('switch')">
+      <v-btn size="small" variant="outlined" color="white" prepend-icon="mdi-content-save" :loading="loading" @click="saveConfig">
+        保存配置
+      </v-btn>
+      <v-btn size="small" variant="outlined" color="white" prepend-icon="mdi-view-dashboard-outline" @click="emit('switch')">
         切换详情
       </v-btn>
-      <v-btn size="small" variant="text" color="white" prepend-icon="mdi-close" @click="emit('close')">
+      <v-btn size="small" variant="outlined" color="white" prepend-icon="mdi-close" @click="emit('close')">
         关闭
       </v-btn>
     </v-card-title>
@@ -259,7 +305,7 @@ function saveConfig() {
               </v-card-text>
             </v-card>
 
-            <v-card flat class="config-section rounded border">
+            <v-card flat class="config-section rounded border mb-4">
               <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-green-lighten-5">
                 <v-icon icon="mdi-chart-timeline-variant" color="green" size="small" class="mr-2" />
                 调度与策略
@@ -299,6 +345,29 @@ function saveConfig() {
                 </v-row>
               </v-card-text>
             </v-card>
+
+            <v-card flat class="config-section rounded border">
+              <v-card-title class="config-section-title text-subtitle-1 d-flex align-center px-4 py-3 bg-blue-lighten-5">
+                <v-icon icon="mdi-robot-outline" color="primary" size="small" class="mr-2" />
+                自动化功能
+              </v-card-title>
+              <v-card-text class="pa-4">
+                <v-row>
+                  <v-col cols="12" md="6">
+                    <v-switch v-model="config.auto_harvest" label="自动收获" hint="成熟作物自动收获" persistent-hint color="primary" density="compact" />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-switch v-model="config.auto_plant" label="自动种植/养殖" hint="空地自动补种" persistent-hint color="primary" density="compact" />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-switch v-model="config.auto_sell" label="自动出售" hint="盈利区间内自动出售" persistent-hint color="primary" density="compact" />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-switch v-model="config.expiry_sale" label="临期自动出售" hint="剩余时间低于阈值强制出售" persistent-hint color="primary" density="compact" />
+                  </v-col>
+                </v-row>
+              </v-card-text>
+            </v-card>
           </div>
         </v-window-item>
 
@@ -330,7 +399,7 @@ function saveConfig() {
                   <v-col cols="12" md="6">
                     <v-select
                       v-model="sitePolicies[site.value].mode"
-                      :items="SITE_MODE_ITEMS"
+                      :items="siteModeItems"
                       label="运行模式"
                       density="compact"
                       variant="outlined"
@@ -346,6 +415,7 @@ function saveConfig() {
                       clearable
                       density="compact"
                       variant="outlined"
+                      :placeholder="inheritPlaceholder('min_profit_rate')"
                       @click:clear="sitePolicies[site.value].min_profit_rate = null"
                     />
                   </v-col>
@@ -359,6 +429,7 @@ function saveConfig() {
                       clearable
                       density="compact"
                       variant="outlined"
+                      :placeholder="inheritPlaceholder('max_profit_rate')"
                       @click:clear="sitePolicies[site.value].max_profit_rate = null"
                     />
                   </v-col>
@@ -371,6 +442,7 @@ function saveConfig() {
                       clearable
                       density="compact"
                       variant="outlined"
+                      :placeholder="inheritPlaceholder('expire_threshold_minutes')"
                       @click:clear="sitePolicies[site.value].expire_threshold_minutes = null"
                     />
                   </v-col>
@@ -383,6 +455,7 @@ function saveConfig() {
                       clearable
                       density="compact"
                       variant="outlined"
+                      :placeholder="inheritPlaceholder('max_sell_per_run')"
                       @click:clear="sitePolicies[site.value].max_sell_per_run = null"
                     />
                   </v-col>
@@ -396,13 +469,14 @@ function saveConfig() {
                       clearable
                       density="compact"
                       variant="outlined"
+                      :placeholder="inheritPlaceholder('request_interval')"
                       @click:clear="sitePolicies[site.value].request_interval = null"
                     />
                   </v-col>
                   <v-col cols="12" md="6">
                     <v-select
                       v-model="sitePolicies[site.value].use_proxy"
-                      :items="BOOLEAN_OVERRIDE_ITEMS"
+                      :items="booleanOverrideItems('use_proxy')"
                       label="代理设置"
                       density="compact"
                       variant="outlined"
@@ -411,8 +485,44 @@ function saveConfig() {
                   <v-col cols="12" md="6">
                     <v-select
                       v-model="sitePolicies[site.value].dry_run"
-                      :items="BOOLEAN_OVERRIDE_ITEMS"
+                      :items="booleanOverrideItems('dry_run')"
                       label="模拟模式"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-select
+                      v-model="sitePolicies[site.value].auto_harvest"
+                      :items="automationItems('auto_harvest')"
+                      label="自动收获"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-select
+                      v-model="sitePolicies[site.value].auto_plant"
+                      :items="automationItems('auto_plant')"
+                      label="自动种植/养殖"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-select
+                      v-model="sitePolicies[site.value].auto_sell"
+                      :items="automationItems('auto_sell')"
+                      label="自动出售"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-select
+                      v-model="sitePolicies[site.value].expiry_sale"
+                      :items="automationItems('expiry_sale')"
+                      label="临期自动出售"
                       density="compact"
                       variant="outlined"
                     />
@@ -424,11 +534,15 @@ function saveConfig() {
                   <v-chip-group column class="ga-2">
                     <v-chip size="small" variant="tonal" color="primary">模式：{{ modeLabel(site.value) }}</v-chip>
                     <v-chip size="small" variant="tonal" color="success">利润：{{ profitSummary(site.value) }}</v-chip>
-                    <v-chip size="small" variant="tonal" color="blue">最大出售：{{ inheritedValue(site.value, 'max_sell_per_run') }}</v-chip>
-                    <v-chip size="small" variant="tonal" color="info">代理：{{ inheritedValue(site.value, 'use_proxy') ? '启用' : '禁用' }}</v-chip>
-                    <v-chip size="small" variant="tonal" :color="inheritedValue(site.value, 'dry_run') ? 'warning' : 'success'">
-                      Dry Run：{{ inheritedValue(site.value, 'dry_run') ? '启用' : '禁用' }}
+                    <v-chip size="small" variant="tonal" color="blue">最大出售：{{ effectiveSiteValue(site.value, 'max_sell_per_run') }}</v-chip>
+                    <v-chip size="small" variant="tonal" color="info">代理：{{ effectiveSiteValue(site.value, 'use_proxy') ? '启用' : '禁用' }}</v-chip>
+                    <v-chip size="small" variant="tonal" :color="effectiveSiteValue(site.value, 'dry_run') ? 'warning' : 'success'">
+                      Dry Run：{{ effectiveSiteValue(site.value, 'dry_run') ? '启用' : '禁用' }}
                     </v-chip>
+                    <v-chip size="small" variant="tonal" color="success">收获:{{ effectiveSiteValue(site.value, 'auto_harvest') ? '开' : '关' }}</v-chip>
+                    <v-chip size="small" variant="tonal" color="success">补种:{{ effectiveSiteValue(site.value, 'auto_plant') ? '开' : '关' }}</v-chip>
+                    <v-chip size="small" variant="tonal" color="success">出售:{{ effectiveSiteValue(site.value, 'auto_sell') ? '开' : '关' }}</v-chip>
+                    <v-chip size="small" variant="tonal" color="success">临期:{{ effectiveSiteValue(site.value, 'expiry_sale') ? '开' : '关' }}</v-chip>
                   </v-chip-group>
                 </div>
               </v-card-text>
@@ -445,29 +559,19 @@ function saveConfig() {
                 </v-alert>
                 <v-row>
                   <v-col cols="12" sm="6" md="4">
-                    <div class="siqi-switch-card pa-3 rounded border">
-                      <v-switch v-model="config.siqi_auto_captcha_harvest" label="验证码收获" color="warning" density="compact" hide-details />
-                    </div>
+                    <v-switch v-model="config.siqi_auto_captcha_harvest" label="验证码收获" color="primary" density="compact" hide-details />
                   </v-col>
                   <v-col cols="12" sm="6" md="4">
-                    <div class="siqi-switch-card pa-3 rounded border">
-                      <v-switch v-model="config.siqi_captcha_ocr" label="OCR 优先" color="warning" density="compact" hide-details />
-                    </div>
+                    <v-switch v-model="config.siqi_captcha_ocr" label="OCR 优先" color="primary" density="compact" hide-details />
                   </v-col>
                   <v-col cols="12" sm="6" md="4">
-                    <div class="siqi-switch-card pa-3 rounded border">
-                      <v-switch v-model="config.siqi_auto_buy_slot" label="自动扩地" color="warning" density="compact" hide-details />
-                    </div>
+                    <v-switch v-model="config.siqi_auto_buy_slot" label="自动扩地" color="primary" density="compact" hide-details />
                   </v-col>
                   <v-col cols="12" sm="6" md="4">
-                    <div class="siqi-switch-card pa-3 rounded border">
-                      <v-switch v-model="config.siqi_auto_steal" label="每日偷菜" color="warning" density="compact" hide-details />
-                    </div>
+                    <v-switch v-model="config.siqi_auto_steal" label="每日偷菜" color="primary" density="compact" hide-details />
                   </v-col>
                   <v-col cols="12" sm="6" md="4">
-                    <div class="siqi-switch-card pa-3 rounded border">
-                      <v-switch v-model="config.siqi_auto_like" label="每日点赞" color="warning" density="compact" hide-details />
-                    </div>
+                    <v-switch v-model="config.siqi_auto_like" label="每日点赞" color="primary" density="compact" hide-details />
                   </v-col>
                 </v-row>
               </v-card-text>
@@ -478,15 +582,6 @@ function saveConfig() {
       </v-window>
     </v-card>
 
-    <v-card-actions class="justify-end pa-4">
-      <v-btn size="default" variant="text" prepend-icon="mdi-close" class="mr-2" @click="emit('close')">关闭</v-btn>
-      <v-btn size="default" variant="outlined" color="primary" prepend-icon="mdi-view-dashboard-outline" class="mr-2" @click="emit('switch')">
-        切换到详情
-      </v-btn>
-      <v-btn size="default" type="submit" color="primary" prepend-icon="mdi-content-save" :loading="loading">
-        保存配置
-      </v-btn>
-    </v-card-actions>
   </v-form>
 </template>
 
@@ -517,11 +612,6 @@ function saveConfig() {
 
 .config-section-title {
   border-block-end: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-}
-
-.siqi-switch-card {
-  min-block-size: 4rem;
-  background: rgba(var(--v-theme-surface-variant), 0.18);
 }
 
 :deep(.v-field-label),

@@ -8,7 +8,7 @@ const props = defineProps({
   loading: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['sell', 'sell_all'])
+const emit = defineEmits(['sell', 'sell-all'])
 const items = computed(() => Array.isArray(props.warehouse) ? props.warehouse : [])
 
 function itemName(item) {
@@ -41,7 +41,7 @@ function expiryText(item) {
         variant="elevated"
         :loading="loading"
         :disabled="loading || !items.length"
-        @click="emit('sell_all')"
+        @click="emit('sell-all')"
       >
         一键出售
       </v-btn>

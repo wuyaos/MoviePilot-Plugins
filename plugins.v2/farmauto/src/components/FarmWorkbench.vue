@@ -50,6 +50,13 @@ const trends = computed(() => siteDetail.value.trends || {})
 const warehouse = computed(() => Array.isArray(siteDetail.value.warehouse) ? siteDetail.value.warehouse : [])
 const marketPrices = computed(() => siteDetail.value.market_prices || {})
 const siqiExtra = computed(() => siteDetail.value.siqi_extra || null)
+const filteredHistory = computed(() => {
+  if (!selectedSiteId.value) return history.value
+  const siteName = selectedSite.value.site_name
+  return history.value.filter(record => (
+    record.site === siteName || record.site_id === selectedSiteId.value
+  ))
+})
 const cropKeys = computed(() => Object.entries(crops.value)
   .filter(([, definition]) => definition?.type === 'crop')
   .map(([cropKey]) => cropKey))
@@ -209,6 +216,27 @@ async function postSiteAction(action, cropKey) {
   ))
 }
 
+async function harvestAllCurrent() {
+  if (!selectedSiteId.value) {
+    error.value = '请先选择站点'
+    return
+  }
+
+  actionLoading.value = true
+  error.value = ''
+  successMessage.value = ''
+  try {
+    const result = await postSiteAction('harvest_all')
+    successMessage.value = result.message || (dryRun.value ? 'dry-run：已生成一键收获计划' : '一键收获成功')
+    emit('action', result)
+    await loadSiteDetail(selectedSiteId.value)
+  } catch (requestError) {
+    error.value = requestError?.message || '一键收获失败'
+  } finally {
+    actionLoading.value = false
+  }
+}
+
 async function handleManualAction({ action, cropKey }) {
   if (!selectedSiteId.value) return
   actionLoading.value = true
@@ -231,7 +259,14 @@ async function sellWarehouseItem(cropKey) {
 }
 
 async function sellAllWarehouseItems() {
-  if (!selectedSiteId.value || !warehouse.value.length) return
+  if (!selectedSiteId.value) {
+    error.value = '请先选择站点'
+    return
+  }
+  if (!warehouse.value.length) {
+    error.value = '仓库为空，无可出售物品'
+    return
+  }
   const cropKeys = warehouse.value.map(item => item.crop_key).filter(Boolean)
   if (!cropKeys.length) {
     error.value = '仓库物品缺少可出售标识'
@@ -275,9 +310,9 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
 
 <template>
   <v-card flat class="farm-workbench rounded border text-body-2">
-    <v-card-title class="text-subtitle-1 d-flex flex-wrap align-center ga-2 px-3 py-2 bg-gradient-farm text-white">
+    <v-card-title class="bg-gradient-farm text-white d-flex align-center ga-2 px-3 py-2">
       <v-icon icon="mdi-sprout" color="white" size="small" />
-      <span class="text-white">农场工作台</span>
+      <span class="text-subtitle-1 text-white">农场工作台</span>
       <v-spacer />
 
       <div class="d-flex flex-wrap align-center ga-2 farm-header-status">
@@ -409,6 +444,7 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
             :crops="crops"
             :loading="actionLoading"
             @action="handleManualAction"
+            @harvest-all="harvestAllCurrent"
           />
           <CropArea
             title="动物养殖区"
@@ -418,28 +454,8 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
             :loading="actionLoading"
             animal
             @action="handleManualAction"
+            @harvest-all="harvestAllCurrent"
           />
-        </v-col>
-      </v-row>
-
-      <v-row dense class="mt-1">
-        <v-col cols="12" md="6" class="d-flex flex-column ga-3">
-          <WarehouseTable
-            :warehouse="warehouse"
-            :crops="crops"
-            :currency="currency"
-            :loading="actionLoading || detailLoading"
-            @sell="sellWarehouseItem"
-            @sell_all="sellAllWarehouseItems"
-          />
-          <MarketTable
-            :market_prices="marketPrices"
-            :crops="crops"
-            :loading="detailLoading"
-          />
-        </v-col>
-        <v-col cols="12" md="6">
-          <HistoryTable :history="history" />
         </v-col>
       </v-row>
 
@@ -450,6 +466,35 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
             :loading="actionLoading"
             @action="handleSiqiAction"
           />
+        </v-col>
+      </v-row>
+
+      <v-row dense class="mt-1">
+        <v-col cols="12">
+          <WarehouseTable
+            :warehouse="warehouse"
+            :crops="crops"
+            :currency="currency"
+            :loading="actionLoading || detailLoading"
+            @sell="sellWarehouseItem"
+            @sell-all="sellAllWarehouseItems"
+          />
+        </v-col>
+      </v-row>
+
+      <v-row dense class="mt-1">
+        <v-col cols="12">
+          <MarketTable
+            :market_prices="marketPrices"
+            :crops="crops"
+            :loading="detailLoading"
+          />
+        </v-col>
+      </v-row>
+
+      <v-row dense class="mt-1">
+        <v-col cols="12">
+          <HistoryTable :history="filteredHistory" />
         </v-col>
       </v-row>
     </v-card-text>

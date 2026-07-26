@@ -31,7 +31,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场自动化，支持智能交易与自动收获"
     plugin_icon = "farm.png"
-    plugin_version = "3.0.1"
+    plugin_version = "3.0.2"
     plugin_author = "bfjy"
     author_url = "https://bfjy2024.github.io/bfjy"
     plugin_config_prefix = "farmauto_"
@@ -57,6 +57,10 @@ class FarmAuto(_PluginBase):
         self._retry_count = 3
         self._use_proxy = False
         self._dry_run = False
+        self._auto_harvest = True
+        self._auto_plant = True
+        self._auto_sell = True
+        self._expiry_sale = True
         self._siqi_options: Dict[str, bool] = {
             "auto_captcha_harvest": False,
             "auto_steal": False,
@@ -121,6 +125,10 @@ class FarmAuto(_PluginBase):
         self._retry_count = self._to_int(config.get("retry_count"), 3, 0)
         self._use_proxy = bool(config.get("use_proxy", False))
         self._dry_run = bool(config.get("dry_run", False))
+        self._auto_harvest = bool(config.get("auto_harvest", True))
+        self._auto_plant = bool(config.get("auto_plant", True))
+        self._auto_sell = bool(config.get("auto_sell", True))
+        self._expiry_sale = bool(config.get("expiry_sale", True))
         self._siqi_options = {
             "auto_captcha_harvest": bool(config.get("siqi_auto_captcha_harvest", False)),
             "auto_steal": bool(config.get("siqi_auto_steal", False)),
@@ -242,6 +250,10 @@ class FarmAuto(_PluginBase):
             "request_interval": self._request_interval,
             "use_proxy": self._use_proxy,
             "dry_run": self._dry_run,
+            "auto_harvest": self._auto_harvest,
+            "auto_plant": self._auto_plant,
+            "auto_sell": self._auto_sell,
+            "expiry_sale": self._expiry_sale,
         }
         return effective_site_policy(global_policy, self._site_overrides, site_id)
 
@@ -677,8 +689,11 @@ class FarmAuto(_PluginBase):
             "crop_status": self._normalize_crop_status(report.get("crop_status")),
             "crops": {
                 crop_key: {
-                    field: crop.get(field)
-                    for field in ("name", "cost", "type", "id", "action")
+                    **{
+                        field: crop.get(field)
+                        for field in ("name", "cost", "type", "id", "action")
+                    },
+                    "image": site_config.crop_image(crop["name"]),
                 }
                 for crop_key, crop in site_config.crops.items()
             },
@@ -965,6 +980,12 @@ class FarmAuto(_PluginBase):
                     col(4, switch("use_proxy", "使用 MP 系统代理")),
                     col(4, switch("dry_run", "仅模拟（不发送操作请求）")),
                 ]},
+                {"component": "VRow", "content": [
+                    col(3, switch("auto_harvest", "自动收获")),
+                    col(3, switch("auto_plant", "自动种植养殖")),
+                    col(3, switch("auto_sell", "自动出售")),
+                    col(3, switch("expiry_sale", "临期自动出售")),
+                ]},
                 {"component": "VAlert", "props": {
                     "type": "warning", "variant": "tonal", "class": "mt-2 mb-2",
                     "text": "思齐专用执行开关（仅选择思齐站点时生效，除 OCR 优先外默认全关）",
@@ -982,7 +1003,7 @@ class FarmAuto(_PluginBase):
                     col(12, {"component": "VTextarea", "props": {
                         "model": "site_overrides",
                         "label": "单站策略覆盖（JSON，可选）",
-                        "hint": "示例：{\"playlet\":{\"min_profit_rate\":0.1,\"max_profit_rate\":0.5,\"max_sell_per_run\":20}}；支持 min_profit_rate/max_profit_rate/max_sell_per_run/expire_threshold_minutes/request_interval/use_proxy/dry_run/mode/enabled",
+                        "hint": "示例：{\"playlet\":{\"min_profit_rate\":0.1,\"max_profit_rate\":0.5,\"max_sell_per_run\":20}}；支持 min_profit_rate/max_profit_rate/max_sell_per_run/expire_threshold_minutes/request_interval/use_proxy/dry_run/auto_harvest/auto_plant/auto_sell/expiry_sale/mode/enabled",
                         "persistent-hint": True,
                         "rows": 4,
                     }}),
@@ -1004,6 +1025,10 @@ class FarmAuto(_PluginBase):
             "retry_count": 3,
             "use_proxy": False,
             "dry_run": False,
+            "auto_harvest": True,
+            "auto_plant": True,
+            "auto_sell": True,
+            "expiry_sale": True,
             "siqi_auto_captcha_harvest": False,
             "siqi_auto_steal": False,
             "siqi_auto_like": False,

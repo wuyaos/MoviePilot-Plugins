@@ -184,6 +184,18 @@ def test_api_status_returns_global_and_site_summary():
     assert len(sites) >= 1
 
 
+def test_api_site_detail_embeds_crop_images_without_cookie():
+    plugin = build_plugin()
+
+    response = plugin._api_site_detail("playlet")
+
+    assert response["success"] is True
+    assert response["data"]["crops"]["crop_1"]["image"].startswith(
+        "data:image/png;base64,"
+    )
+    assert "cookie" not in response["data"]
+
+
 def test_api_site_action_dry_run_does_not_build_client_or_request():
     plugin = build_plugin()
     plugin._dry_run = True

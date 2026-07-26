@@ -1,5 +1,7 @@
+import base64
 import re
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
@@ -10,8 +12,20 @@ except ImportError:  # 支持按插件根目录加入 sys.path 的离线测试�
 
 CAPABILITY_BATCH_SELL = "batch_sell"
 
+IMAGE_FILES = {
+    "小麦": "crop_wheat.png",
+    "玉米": "crop_corn.png",
+    "土豆": "crop_potato.png",
+    "花生": "crop_peanut.png",
+    "鸡": "animal_chicken1.png",
+    "猪": "animal_pig2.png",
+    "牛": "animal_cow1.png",
+    "羊": "animal_sheep.png",
+}
+
 
 class FarmSiteConfig(ABC):
+    _image_cache: Dict[str, str] = {}
     site_id: str = ""
     site_name: str = ""
     domains: List[str] = []
@@ -50,6 +64,21 @@ class FarmSiteConfig(ABC):
 
     def supports_batch_sell(self) -> bool:
         return CAPABILITY_BATCH_SELL in self.capabilities
+
+    def crop_image(self, name: str) -> str:
+        if name in FarmSiteConfig._image_cache:
+            return FarmSiteConfig._image_cache[name]
+        filename = IMAGE_FILES.get(name)
+        if not filename:
+            return ""
+        try:
+            image_bytes = (Path(__file__).parents[1] / "public" / filename).read_bytes()
+            image = f"data:image/png;base64,{base64.b64encode(image_bytes).decode('ascii')}"
+            FarmSiteConfig._image_cache[name] = image
+        except Exception:
+            # 图片缺失时不缓存空值，便于文件就绪后重试
+            image = ""
+        return image
 
     def crops_as_models(self) -> List[CropDef]:
         return [CropDef(key=key, **crop) for key, crop in self.crops.items()]
