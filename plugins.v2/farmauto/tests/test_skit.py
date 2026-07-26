@@ -61,7 +61,7 @@ def test_skit_metadata_and_urls():
 
     assert config.site_id == "skit"
     assert config.site_name == "拾刻"
-    assert config.get_farm_url() == "https://ptskit.org/magic_farm.php"
+    assert config.get_farm_url() == "https://www.ptskit.org/magic_farm.php"
     assert config.crops["animal_1"]["action"] == "breed"
     assert config.capabilities == {"harvest_all", "expiry_sale", "warehouse_pagination"}
 

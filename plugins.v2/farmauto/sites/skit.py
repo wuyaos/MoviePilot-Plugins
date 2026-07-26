@@ -8,8 +8,8 @@ from .base import FarmSiteConfig, parse_expire_minutes
 class SkitConfig(FarmSiteConfig):
     site_id = "skit"
     site_name = "拾刻"
-    domains = ["ptskit.org"]
-    base_url = "https://ptskit.org"
+    domains = ["ptskit.org", "www.ptskit.org"]
+    base_url = "https://www.ptskit.org"
     currency = "魔力"
     farm_path = "/magic_farm.php"
     warehouse_path = "/magic_farm.php"
