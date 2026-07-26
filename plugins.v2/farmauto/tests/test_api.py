@@ -161,6 +161,7 @@ def test_api_status_returns_global_and_site_summary():
     assert data["enabled"] is True
     assert data["mode"] == "smart"
     assert data["dry_run"] is False
+    assert data["selected_site_ids"] == ["playlet"]
     assert data["next_run"] is not None
     assert data["total_profit"] == 123
     assert data["total_trades"] == 4

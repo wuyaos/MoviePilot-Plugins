@@ -31,7 +31,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场自动化，支持智能交易与自动收获"
     plugin_icon = "farm.png"
-    plugin_version = "3.0"
+    plugin_version = "3.0.1"
     plugin_author = "bfjy"
     author_url = "https://bfjy2024.github.io/bfjy"
     plugin_config_prefix = "farmauto_"
@@ -652,6 +652,7 @@ class FarmAuto(_PluginBase):
                 "enabled": bool(self._enabled),
                 "mode": self._mode,
                 "dry_run": bool(self._dry_run),
+                "selected_site_ids": list(self._site_ids),
                 "next_run": self._next_run_text(),
                 "total_profit": self._to_int(self._stats.get("total_profit"), 0),
                 "total_trades": self._to_int(self._stats.get("total_trades"), 0),

@@ -24,12 +24,15 @@ const running = ref(false)
 const actionLoading = ref(false)
 const error = ref('')
 const successMessage = ref('')
-const status = ref({ sites: [] })
+const status = ref({ sites: [], selected_site_ids: [] })
 const siteDetail = ref({})
 const history = ref([])
 const selectedSiteId = ref('')
 
 const sites = computed(() => Array.isArray(status.value.sites) ? status.value.sites : [])
+const selectedSiteIds = computed(() => (
+  Array.isArray(status.value.selected_site_ids) ? status.value.selected_site_ids : []
+))
 const selectedSite = computed(() => (
   sites.value.find(site => site.site_id === selectedSiteId.value) || sites.value[0] || {}
 ))
@@ -114,8 +117,8 @@ function unwrapResponse(response) {
   return payload ?? {}
 }
 
-async function loadStatus() {
-  loading.value = true
+async function loadStatus(manageLoading = true) {
+  if (manageLoading) loading.value = true
   error.value = ''
   try {
     status.value = unwrapResponse(await request('GET', `${apiBase.value}/status`))
@@ -124,7 +127,7 @@ async function loadStatus() {
   } catch (requestError) {
     error.value = requestError?.message || '加载农场状态失败'
   } finally {
-    loading.value = false
+    if (manageLoading) loading.value = false
   }
 }
 
@@ -159,16 +162,34 @@ async function loadSiteDetail(siteId = selectedSiteId.value) {
 }
 
 async function refreshData() {
-  await loadStatus()
-  await Promise.all([loadSiteDetail(), loadHistory()])
-}
-
-async function runNow() {
-  running.value = true
+  loading.value = true
   error.value = ''
   successMessage.value = ''
   try {
+    await loadStatus(false)
+    if (error.value) throw new Error(error.value)
+    await Promise.all([loadSiteDetail(), loadHistory()])
+    if (error.value) throw new Error(error.value)
+    successMessage.value = '数据已刷新'
+  } catch (requestError) {
+    error.value = `刷新数据失败：${requestError?.message || '未知错误'}`
+  } finally {
+    loading.value = false
+  }
+}
+
+async function runNow() {
+  error.value = ''
+  successMessage.value = ''
+  if (!selectedSiteIds.value.length) {
+    error.value = '请先在配置页选择至少一个站点'
+    return
+  }
+
+  running.value = true
+  try {
     const result = unwrapResponse(await request('POST', `${apiBase.value}/run`, {}))
+    successMessage.value = result.message || '任务已在后台启动'
     emit('action', result)
     await loadStatus()
     await Promise.all([loadSiteDetail(), loadHistory()])
@@ -254,36 +275,83 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
 
 <template>
   <v-card flat class="farm-workbench rounded border text-body-2">
-    <v-card-title class="text-subtitle-1 d-flex align-center px-3 py-2 bg-gradient-farm">
-      <v-icon icon="mdi-sprout" color="white" size="small" class="mr-2" />
+    <v-card-title class="text-subtitle-1 d-flex flex-wrap align-center ga-2 px-3 py-2 bg-gradient-farm text-white">
+      <v-icon icon="mdi-sprout" color="white" size="small" />
       <span class="text-white">农场工作台</span>
       <v-spacer />
-      <v-btn-group variant="outlined" density="compact" class="farm-header-actions">
-        <v-btn
-          icon="mdi-refresh"
-          color="white"
+
+      <div class="d-flex flex-wrap align-center ga-2 farm-header-status">
+        <v-chip
           size="small"
-          aria-label="刷新农场数据"
+          variant="flat"
+          :color="enabled ? 'success' : 'grey-darken-1'"
+          :prepend-icon="enabled ? 'mdi-play-circle-outline' : 'mdi-pause-circle-outline'"
+        >
+          {{ enabled ? '已启用' : '已禁用' }}
+        </v-chip>
+        <v-chip
+          size="small"
+          variant="flat"
+          :color="useProxy ? 'info' : 'blue-grey'"
+          prepend-icon="mdi-earth"
+        >
+          {{ useProxy ? '代理' : '直连' }}
+        </v-chip>
+        <v-chip size="small" variant="flat" color="blue-grey" prepend-icon="mdi-clock-outline">
+          {{ nextRun === '未安排' ? '未安排' : `下次 ${nextRun}` }}
+        </v-chip>
+        <v-chip
+          size="small"
+          variant="flat"
+          :color="dryRun ? 'warning' : 'success'"
+          :prepend-icon="dryRun ? 'mdi-flask-outline' : 'mdi-shield-check-outline'"
+        >
+          {{ dryRun ? '模拟模式' : '实盘模式' }}
+        </v-chip>
+      </div>
+
+      <div class="d-flex flex-wrap align-center ga-2 farm-header-actions">
+        <v-btn
+          size="small"
+          variant="outlined"
+          color="white"
+          prepend-icon="mdi-play"
+          :loading="running"
+          @click="runNow"
+        >
+          立即运行
+        </v-btn>
+        <v-btn
+          size="small"
+          variant="outlined"
+          color="white"
+          prepend-icon="mdi-refresh"
           :loading="loading || detailLoading"
           @click="refreshData"
-        />
+        >
+          刷新
+        </v-btn>
         <v-btn
           v-if="showSwitch"
-          icon="mdi-cog"
-          color="white"
           size="small"
-          aria-label="切换到配置"
+          variant="outlined"
+          color="white"
+          prepend-icon="mdi-cog"
           @click="emit('switch', 'config')"
-        />
+        >
+          设置
+        </v-btn>
         <v-btn
           v-if="showClose"
-          icon="mdi-close"
-          color="white"
           size="small"
-          aria-label="关闭"
+          variant="outlined"
+          color="white"
+          prepend-icon="mdi-close"
           @click="emit('close')"
-        />
-      </v-btn-group>
+        >
+          关闭
+        </v-btn>
+      </div>
     </v-card-title>
 
     <v-progress-linear v-if="loading || detailLoading || actionLoading" indeterminate color="success" height="2" />
@@ -302,75 +370,6 @@ onMounted(() => Promise.all([loadStatus(), loadHistory()]))
       >
         {{ successMessage }}
       </v-alert>
-
-      <v-card flat class="rounded border mb-3">
-        <v-card-title class="text-subtitle-2 d-flex align-center px-3 py-2 bg-purple-lighten-5">
-          <v-icon icon="mdi-information" color="purple" size="small" class="mr-2" />
-          插件运行状态
-        </v-card-title>
-        <v-card-text class="px-3 py-2">
-          <v-row dense align="center">
-            <v-col cols="3">
-              <div class="text-caption text-medium-emphasis text-center">插件状态</div>
-              <div class="d-flex align-center justify-center mt-1">
-                <v-icon
-                  icon="mdi-play-circle-outline"
-                  :color="enabled ? 'success' : 'grey'"
-                  size="small"
-                  class="mr-1"
-                />
-                <span :class="enabled ? 'text-success' : 'text-medium-emphasis'">
-                  {{ enabled ? '已启用' : '已禁用' }}
-                </span>
-              </div>
-            </v-col>
-            <v-col cols="3">
-              <div class="text-caption text-medium-emphasis text-center">代理状态</div>
-              <div class="d-flex align-center justify-center mt-1">
-                <v-icon
-                  icon="mdi-earth"
-                  :color="useProxy ? 'info' : 'grey'"
-                  size="small"
-                  class="mr-1"
-                />
-                <span :class="useProxy ? 'text-info' : 'text-medium-emphasis'">
-                  {{ useProxy ? '已启用' : '未启用' }}
-                </span>
-              </div>
-            </v-col>
-            <v-col cols="3">
-              <div class="text-caption text-medium-emphasis text-center">下次执行时间</div>
-              <div class="d-flex align-center justify-center mt-1">
-                <v-icon icon="mdi-clock-outline" color="grey" size="small" class="mr-1" />
-                <span class="text-body-2 text-truncate" :title="nextRun">{{ nextRun }}</span>
-              </div>
-            </v-col>
-            <v-col cols="3">
-              <div class="text-caption text-medium-emphasis text-center">运行操作</div>
-              <div class="d-flex align-center justify-center flex-wrap ga-2 mt-1">
-                <v-switch
-                  :model-value="dryRun"
-                  label="Dry Run"
-                  color="warning"
-                  density="compact"
-                  hide-details
-                  readonly
-                />
-                <v-btn
-                  color="success"
-                  variant="elevated"
-                  size="small"
-                  prepend-icon="mdi-play"
-                  :loading="running"
-                  @click="runNow"
-                >
-                  立即运行
-                </v-btn>
-              </div>
-            </v-col>
-          </v-row>
-        </v-card-text>
-      </v-card>
 
       <v-tabs
         v-if="sites.length"

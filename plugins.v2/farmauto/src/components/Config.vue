@@ -1,28 +1,19 @@
 <script setup>
-import { onMounted } from 'vue'
-import FarmWorkbench from './FarmWorkbench.vue'
+import FarmConfigForm from './FarmConfigForm.vue'
 
-defineProps({
+const props = defineProps({
   initialConfig: { type: Object, default: () => ({}) },
   api: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['layout', 'switch', 'close'])
-
-onMounted(() => {
-  emit('layout', { maxWidth: '80rem' })
-})
+const emit = defineEmits(['save', 'switch', 'close'])
 </script>
 
 <template>
-  <FarmWorkbench
-    :api="api"
-    plugin-id="FarmAuto"
-    initial-tab="config"
-    show-close
-    show-switch
-    compact
-    @switch="$emit('switch')"
-    @close="$emit('close')"
+  <FarmConfigForm
+    :initial-config="props.initialConfig"
+    @save="emit('save', $event)"
+    @switch="emit('switch')"
+    @close="emit('close')"
   />
 </template>
