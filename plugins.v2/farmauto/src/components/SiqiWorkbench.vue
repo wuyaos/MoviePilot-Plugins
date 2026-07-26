@@ -81,6 +81,15 @@ function sellAll() {
 }
 function buySlot() { doAction('buy_plot_slot') }
 function refresh() { emit('refresh') }
+function formatRemain(ts) {
+  if (!ts) return ''
+  const now = Date.now() / 1000
+  const diff = Number(ts) - now
+  if (diff <= 0) return '可收获'
+  const h = Math.floor(diff / 3600)
+  const m = Math.floor((diff % 3600) / 60)
+  return h > 0 ? `${h}时${m}分` : `${m}分`
+}
 </script>
 
 <template>
@@ -142,8 +151,13 @@ function refresh() { emit('refresh') }
               <v-row dense>
                 <v-col v-for="seed in seeds" :key="seed.seed_id ?? seed.id" cols="6" sm="4">
                   <v-card flat variant="outlined" :class="{ 'border-success': selectedSeedId === (seed.seed_id ?? seed.id) }" class="pa-2 cursor-pointer" @click="selectSeed(seed)">
-                    <div class="text-body-2 font-weight-bold">{{ seed.name }}</div>
-                    <div class="text-caption text-grey">成本 {{ seed.cost }} → 收益 {{ seed.base_reward }}</div>
+                    <div class="d-flex align-center ga-2">
+                      <v-icon icon="mdi-seed-outline" color="green" />
+                      <div class="flex-grow-1">
+                        <div class="text-body-2 font-weight-bold">{{ seed.name }}</div>
+                        <div class="text-caption text-grey">{{ seed.cost }} → {{ seed.base_reward }}</div>
+                      </div>
+                    </div>
                   </v-card>
                 </v-col>
               </v-row>
@@ -203,23 +217,18 @@ function refresh() { emit('refresh') }
           <v-btn color="success" size="small" variant="flat" prepend-icon="mdi-basket" @click="harvestAll">一键收获</v-btn>
         </v-card-title>
         <v-card-text class="pa-3">
-          <div v-for="land in lands" :key="land.land_id" class="mb-3">
-            <div class="text-body-2 font-weight-bold mb-1">
-              {{ land.name || `地块 ${land.land_id}` }}
-              <span class="text-caption text-grey">（坑位：{{ land.effective_plot_count ?? land.plot_count ?? 0 }}）</span>
-            </div>
-            <v-row dense>
-              <v-col cols="6" sm="4" md="3">
-                <v-card flat variant="outlined" :color="land.is_ready ? 'orange' : 'grey'" class="pa-2 text-center cursor-pointer" @click="harvestPlot(land)">
-                  <div class="text-caption">{{ land.seed_name || land.seed_id || '空地' }}</div>
-                  <div class="text-caption" :class="land.is_ready ? 'text-orange' : 'text-grey'">
-                    {{ land.is_ready ? '可收获' : (land.harvest_time ? `剩余 ${land.harvest_time}` : '空地') }}
-                  </div>
-                  <v-btn v-if="land.is_ready" size="small" color="success" variant="flat" class="mt-1">收获</v-btn>
-                </v-card>
-              </v-col>
-            </v-row>
-          </div>
+          <v-row dense>
+            <v-col v-for="land in lands" :key="`${land.land_id}-${land.plot_index}`" cols="6" sm="4" md="2">
+              <v-card flat variant="outlined" :color="land.is_ready ? 'orange' : 'grey'" class="pa-2 text-center cursor-pointer h-100" @click="harvestPlot(land)">
+                <v-icon :icon="land.is_ready ? 'mdi-basket' : 'mdi-sprout'" :color="land.is_ready ? 'orange' : 'green'" size="large" class="mb-1" />
+                <div class="text-caption font-weight-bold">{{ land.seed_name || land.name || `地块 ${land.land_id}` }}</div>
+                <div class="text-caption" :class="land.is_ready ? 'text-orange' : 'text-grey'">
+                  {{ land.is_ready ? '可收获' : (land.harvest_time ? formatRemain(land.harvest_time) : '空地') }}
+                </div>
+                <v-btn v-if="land.is_ready" size="small" color="success" variant="flat" class="mt-1" prepend-icon="mdi-basket">收获</v-btn>
+              </v-card>
+            </v-col>
+          </v-row>
           <div v-if="!lands.length" class="text-center text-grey pa-4">暂无菜地数据</div>
         </v-card-text>
       </v-card>
