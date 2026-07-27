@@ -31,7 +31,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场统一自动运营，支持独立收获、补种与出售策略"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
-    plugin_version = "3.2.0"
+    plugin_version = "3.2.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "farmauto_"
@@ -796,7 +796,7 @@ class FarmAuto(_PluginBase):
                 for crop_key, samples in site_trends.items()
                 if isinstance(samples, list)
             } if isinstance(site_trends, dict) else {},
-            "recent_actions": recent_actions[-20:],
+            "recent_actions": recent_actions[:20],
         }
         data["bonus"] = report.get("bonus")
         data["currency"] = site_config.currency
@@ -1053,7 +1053,7 @@ class FarmAuto(_PluginBase):
                     "buy_plot_slot": ("land_id",),
                     "steal": ("victim_id", "land_id", "plot_index"),
                     "like": (),
-                    "visit": ("username",),
+                    "visit": (),
                     "get_steal_targets": (),
                     "get_like_targets": (),
                 }
@@ -1068,7 +1068,8 @@ class FarmAuto(_PluginBase):
                     }
                 if action == "get_steal_targets":
                     response = http_client.post(
-                        site_config.get_steal_target_url(), cookies, data={}
+                        site_config.get_steal_target_url(), cookies,
+                        data={"action": "get_victim_farm"},
                     )
                     response.raise_for_status()
                     targets = site_config.parse_steal_targets(response.text)
@@ -1082,7 +1083,8 @@ class FarmAuto(_PluginBase):
                     }
                 if action == "get_like_targets":
                     response = http_client.post(
-                        site_config.get_like_target_url(), cookies, data={}
+                        site_config.get_like_target_url(), cookies,
+                        data={"action": "random_like_targets"},
                     )
                     response.raise_for_status()
                     targets = site_config.parse_like_targets(response.text)
@@ -1121,42 +1123,54 @@ class FarmAuto(_PluginBase):
                     response = http_client.post(
                         site_config.get_steal_plot_url(), cookies, data=action_data
                     )
-                    parser = site_config.parse_steal_result
+                    response.raise_for_status()
+                    parsed = site_config.parse_steal_result(response.text)
+                    if parsed.get("success"):
+                        finished = http_client.post(
+                            site_config.get_action_submit_url(), cookies,
+                            data={"action": "finish_stealing"},
+                        )
+                        finished.raise_for_status()
+                    parser = None
                 elif action == "like":
-                    action_data["action"] = "like_farm_batch"
+                    usernames = action_data.get("usernames")
+                    if not usernames:
+                        return {
+                            "success": False,
+                            "message": "缺少参数：usernames",
+                            "action": action,
+                            "target": target,
+                            "dry_run": False,
+                        }
                     response = http_client.post(
-                        site_config.get_like_submit_url(), cookies, data=action_data
+                        site_config.get_like_submit_url(), cookies,
+                        data={"action": "like_farm_batch", "usernames": usernames},
                     )
                     parser = site_config.parse_like_result
                 else:
                     if action_data.get("random"):
-                        target_response = http_client.post(
-                            site_config.get_like_target_url(), cookies, data={}
-                        )
-                        target_response.raise_for_status()
-                        like_targets = site_config.parse_like_targets(target_response.text)
-                        random_username = ""
-                        if isinstance(like_targets, list) and like_targets:
-                            first = like_targets[0]
-                            random_username = (
-                                first.get("username") or first.get("name")
-                                or (first if isinstance(first, str) else "")
-                            )
-                        if not random_username:
+                        action_data = {"action": "view_random_farm"}
+                    else:
+                        username = str(action_data.get("username") or "").strip()
+                        if not username:
                             return {
                                 "success": False,
-                                "message": "暂无可随机访问的农场",
+                                "message": "缺少参数：username",
                                 "action": action,
                                 "target": target,
                                 "dry_run": False,
                             }
-                        action_data = {"username": random_username}
+                        action_data = {
+                            "action": "view_farm_by_username",
+                            "username": username,
+                        }
                     response = http_client.post(
                         site_config.get_visit_submit_url(), cookies, data=action_data
                     )
                     parser = site_config.parse_visit_result
-                response.raise_for_status()
-                parsed = parser(response.text)
+                if parser is not None:
+                    response.raise_for_status()
+                    parsed = parser(response.text)
             elif action == "harvest_all":
                 response = http_client.get(site_config.get_harvest_all_url(), cookies)
                 response.raise_for_status()

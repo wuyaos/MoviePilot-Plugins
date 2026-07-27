@@ -133,7 +133,9 @@ async function request(method, path, body) {
 function unwrap(r) {
   const p = r && Object.prototype.hasOwnProperty.call(r, 'success') ? r : (r?.data ?? r)
   if (p?.success === false) throw new Error(p.message || '请求未成功')
-  if (p && Object.prototype.hasOwnProperty.call(p, 'success')) return p.data ?? {}
+  if (p && Object.prototype.hasOwnProperty.call(p, 'success')) {
+    return Object.prototype.hasOwnProperty.call(p, 'data') ? p.data ?? {} : p
+  }
   return p ?? {}
 }
 

@@ -75,9 +75,9 @@ def test_siqi_metadata_and_urls():
         "action": ["harvest"], "land_id": ["2"], "plot_index": ["0"],
     }
     assert config.get_captcha_image_url("hash-123").endswith("captcha.php?imagehash=hash-123")
-    assert _query(config.get_steal_target_url()) == {"action": ["get_victim_farm"]}
+    assert config.get_steal_target_url() == "https://si-qi.xyz/plant_game.php"
     assert config.get_steal_plot_url() == "https://si-qi.xyz/plant_game.php"
-    assert _query(config.get_like_target_url()) == {"action": ["random_like_targets"]}
+    assert config.get_like_target_url() == "https://si-qi.xyz/plant_game.php"
     assert config.get_like_submit_url() == "https://si-qi.xyz/plant_game.php"
     assert config.get_buy_plot_slot_url() == "https://si-qi.xyz/plant_game.php"
 
@@ -188,8 +188,12 @@ def test_siqi_captcha_target_and_result_parsers():
         '{"success":true,"victim_id":42,"victim_name":"Alice","victim_plots":[{"land_id":2,"plot_index":0}]}'
     ) == [{
         "target_id": 42,
+        "victim_id": 42,
         "name": "Alice",
+        "victim_name": "Alice",
         "plots": [{"land_id": 2, "plot_index": 0}],
+        "max_steal_count": 0,
+        "steal_count_today": 0,
     }]
     assert config.parse_like_targets(LIKE_TARGETS_HTML) == ["Alice", "Bob"]
     assert config.parse_like_targets('{"success":true,"usernames":["Alice","Bob"]}') == ["Alice", "Bob"]

@@ -105,10 +105,18 @@ class FakeResponse:
 class FakeHttpClient:
     def __init__(self):
         self.urls = []
+        self.posts = []
+        self.post_responses = []
 
     def get(self, url, cookies):
         self.urls.append(url)
         return FakeResponse("出售成功" if "action=sell" in url else "农场首页")
+
+    def post(self, url, cookies, data=None, **_kwargs):
+        self.posts.append((url, data))
+        if self.post_responses:
+            return FakeResponse(self.post_responses.pop(0))
+        return FakeResponse('{"success":true,"msg":"成功"}')
 
 
 def build_plugin():
@@ -262,6 +270,33 @@ def test_api_site_detail_embeds_crop_images_without_cookie():
     assert "cookie" not in response["data"]
 
 
+def test_api_site_detail_keeps_newest_actions_first_and_limits_twenty():
+    plugin = build_plugin()
+    persisted = [
+        {"time": float(index), "action": "plant", "target": str(index)}
+        for index in range(1, 26)
+    ]
+    plugin._stats = {
+        **plugin._empty_stats(),
+        "action_history": {"playlet": persisted},
+        "last_result": {
+            "site_reports": [{
+                "site_id": "playlet",
+                "actions": [{
+                    "time": 26.0, "action": "sell", "target": "最新动作",
+                    "success": True,
+                }],
+            }],
+        },
+    }
+
+    actions = plugin._api_site_detail("playlet")["data"]["recent_actions"]
+
+    assert len(actions) == 20
+    assert [item["time"] for item in actions[:3]] == [26.0, 25.0, 24.0]
+    assert actions[-1]["time"] == 7.0
+
+
 def test_api_site_detail_fills_prices_for_common_sites():
     plugin = build_plugin()
     plugin._stats = {
@@ -364,6 +399,35 @@ def test_api_site_action_sell_fetches_farm_and_calls_sell_url():
     assert response["dry_run"] is False
     assert client.urls[0].endswith("/magic_fram.php")
     assert client.urls[1].endswith("action=sell&key=crop_1")
+
+
+def test_siqi_interaction_actions_use_post_form_protocol():
+    plugin = build_plugin()
+    client = FakeHttpClient()
+    plugin._build_http_client = lambda _policy: client
+    plugin._get_site_cookie = lambda _site_config: "session=secret"
+
+    client.post_responses = ['{"success":true,"usernames":["alice","bob"]}']
+    targets = plugin._api_site_action("siqi", {"action": "get_like_targets"})
+    assert targets["targets"] == ["alice", "bob"]
+    assert client.posts[-1] == (
+        "https://si-qi.xyz/plant_game.php", {"action": "random_like_targets"},
+    )
+
+    liked = plugin._api_site_action("siqi", {
+        "action": "like", "usernames": "alice\nbob",
+    })
+    assert liked["success"] is True
+    assert client.posts[-1] == (
+        "https://si-qi.xyz/plant_game.php",
+        {"action": "like_farm_batch", "usernames": "alice\nbob"},
+    )
+
+    visited = plugin._api_site_action("siqi", {"action": "visit", "random": True})
+    assert visited["success"] is True
+    assert client.posts[-1] == (
+        "https://si-qi.xyz/plant_game.php", {"action": "view_random_farm"},
+    )
 
 
 def test_api_site_action_harvest_calls_corresponding_url():

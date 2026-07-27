@@ -226,6 +226,49 @@ def test_daily_steal_done_skips_request():
     assert client.calls == []
 
 
+def test_siqi_steal_uses_form_actions_and_finishes_session():
+    client = FakeHttpClient([
+        FakeResponse('{"success":true,"victim_id":"123","victim_plots":[{"land_id":"1","plot_index":"2","is_ready":"1"}]}'),
+        FakeResponse('{"success":true,"msg":"偷菜成功"}'),
+        FakeResponse('{"success":true}'),
+    ])
+    executor = FarmExecutor(client, Logger(), ocr_recognizer=FakeOcr(None))
+
+    results = executor.run_siqi_extras(
+        "session=value", SiqiConfig(), {"auto_steal": True},
+    )
+
+    assert results[0].success is True
+    assert client.calls == [
+        ("POST", "https://si-qi.xyz/plant_game.php", {"action": "get_victim_farm"}),
+        ("POST", "https://si-qi.xyz/plant_game.php", {
+            "victim_id": "123", "land_id": "1", "plot_index": "2",
+            "action": "steal_vegetable",
+        }),
+        ("POST", "https://si-qi.xyz/plant_game.php", {"action": "finish_stealing"}),
+    ]
+
+
+def test_siqi_like_uses_usernames_form_field():
+    client = FakeHttpClient([
+        FakeResponse('{"success":true,"usernames":["alice"]}'),
+        FakeResponse('{"success":true,"msg":"点赞成功"}'),
+    ])
+    executor = FarmExecutor(client, Logger(), ocr_recognizer=FakeOcr(None))
+
+    results = executor.run_siqi_extras(
+        "session=value", SiqiConfig(), {"auto_like": True},
+    )
+
+    assert results[0].success is True
+    assert client.calls == [
+        ("POST", "https://si-qi.xyz/plant_game.php", {"action": "random_like_targets"}),
+        ("POST", "https://si-qi.xyz/plant_game.php", {
+            "action": "like_farm_batch", "usernames": "alice",
+        }),
+    ]
+
+
 def test_siqi_empty_targets_are_skipped_not_failed():
     client = FakeHttpClient([
         FakeResponse('{"success":true,"targets":[]}'),

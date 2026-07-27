@@ -565,7 +565,7 @@ class SiqiConfig(FarmSiteConfig):
         return result
 
     def get_steal_target_url(self) -> str:
-        return self._action_url("get_victim_farm")
+        return self.get_action_submit_url()
 
     def parse_steal_targets(self, html: str) -> List[Dict[str, Any]]:
         data = self._json_dict(html)
@@ -579,13 +579,18 @@ class SiqiConfig(FarmSiteConfig):
                 ]
             victim_id = data.get("victim_id")
             if victim_id is not None:
-                return [{
+                target = {
                     "target_id": victim_id,
+                    "victim_id": victim_id,
                     "name": data.get("victim_name") or data.get("username") or "",
+                    "victim_name": data.get("victim_name") or data.get("username") or "",
                     "plots": self._without_sensitive_fields(
                         data.get("victim_plots") or data.get("user_lands") or []
                     ),
-                }]
+                    "max_steal_count": self._number(data.get("max_steal_count")) or 0,
+                    "steal_count_today": self._number(data.get("steal_count_today")) or 0,
+                }
+                return [target]
             return []
 
         targets: List[Dict[str, Any]] = []
@@ -600,7 +605,7 @@ class SiqiConfig(FarmSiteConfig):
         return f"{self.base_url}{self.farm_path}"
 
     def get_like_target_url(self) -> str:
-        return self._action_url("random_like_targets")
+        return self.get_action_submit_url()
 
     def parse_like_targets(self, html: str) -> List[Any]:
         data = self._json_dict(html)
@@ -616,7 +621,7 @@ class SiqiConfig(FarmSiteConfig):
         return f"{self.base_url}{self.farm_path}"
 
     def get_visit_submit_url(self) -> str:
-        return self._action_url("view_farm_by_username")
+        return self.get_action_submit_url()
 
     def get_sell_inventory_url(self) -> str:
         return self._action_url("sell_inventory")

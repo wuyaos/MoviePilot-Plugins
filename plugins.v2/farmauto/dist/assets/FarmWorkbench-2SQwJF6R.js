@@ -365,27 +365,34 @@ function logMeta(item) {
   }
 }
 
-const rows = computed$5(() => (Array.isArray(props.history) ? props.history : []).slice(-50).reverse());
+const rows = computed$5(() => (Array.isArray(props.history) ? props.history : []).slice(0, 50));
+
+const CHINA_TIME_OPTIONS = {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'Asia/Shanghai',
+};
 
 function formatTime(value) {
   if (value == null || value === '') return '—'
-  if (typeof value === 'string' && /^\d{1,2}:\d{2}(?::\d{2})?$/.test(value)) {
-    return value.slice(0, 5)
-  }
+  const text = String(value).trim();
+  if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(text)) return text.slice(0, 5)
+
   const numericValue = Number(value);
-  // 数字时间戳：秒(<1e12) 或 毫秒(>=1e12)
-  if (Number.isFinite(numericValue) && /^\d+(\.\d+)?$/.test(String(value).trim())) {
+  // ActionResult 使用 Unix 秒时间戳；固定按站点所在的中国时区显示，不依赖浏览器时区。
+  if (Number.isFinite(numericValue) && /^\d+(\.\d+)?$/.test(text)) {
     const ms = numericValue < 1e12 ? numericValue * 1000 : numericValue;
     const date = new Date(ms);
-    if (!Number.isNaN(date.getTime())) {
-      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-    }
+    if (!Number.isNaN(date.getTime())) return date.toLocaleTimeString('zh-CN', CHINA_TIME_OPTIONS)
   }
-  // 字符串日期（如思齐 user_logs.created_at '2026-07-27 01:45:07'）
-  const date = new Date(String(value).replace(' ', 'T'));
-  if (!Number.isNaN(date.getTime())) {
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-  }
+
+  // 思齐 created_at 是不带时区的中国本地时间，直接保留原始时分，避免二次时区换算。
+  const localDateTime = text.match(/^\d{4}-\d{2}-\d{2}[ T](\d{2}):(\d{2})(?::\d{2})?$/);
+  if (localDateTime) return `${localDateTime[1]}:${localDateTime[2]}`
+
+  const date = new Date(text);
+  if (!Number.isNaN(date.getTime())) return date.toLocaleTimeString('zh-CN', CHINA_TIME_OPTIONS)
   return '—'
 }
 
@@ -427,10 +434,10 @@ return (_ctx, _cache) => {
                 _createElementVNode$5("tbody", null, [
                   (_openBlock$5(true), _createElementBlock$5(_Fragment$4, null, _renderList$4(rows.value, (item, index) => {
                     return (_openBlock$5(), _createElementBlock$5("tr", {
-                      key: `${item.time}-${item.action}-${item.target}-${index}`,
+                      key: `${item.time ?? item.created_at}-${item.action}-${item.target}-${index}`,
                       class: _normalizeClass$4({ 'failed-row': item.success === false })
                     }, [
-                      _createElementVNode$5("td", _hoisted_2$5, _toDisplayString$4(formatTime(item.time)), 1),
+                      _createElementVNode$5("td", _hoisted_2$5, _toDisplayString$4(formatTime(item.time ?? item.created_at)), 1),
                       _createElementVNode$5("td", null, [
                         _createElementVNode$5("span", {
                           class: _normalizeClass$4(["history-action", logMeta(item).actionClass])
@@ -473,7 +480,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-164978bf"]]);
+const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-5be10bed"]]);
 
 const {resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,createElementVNode:_createElementVNode$4,openBlock:_openBlock$4,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$4,withCtx:_withCtx$3,renderList:_renderList$3,Fragment:_Fragment$3,createElementBlock:_createElementBlock$4,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$3,createTextVNode:_createTextVNode$3} = await importShared('vue');
 
@@ -80622,7 +80629,9 @@ async function request(method, path, body) {
 function unwrap(r) {
   const p = r && Object.prototype.hasOwnProperty.call(r, 'success') ? r : (r?.data ?? r);
   if (p?.success === false) throw new Error(p.message || '请求未成功')
-  if (p && Object.prototype.hasOwnProperty.call(p, 'success')) return p.data ?? {}
+  if (p && Object.prototype.hasOwnProperty.call(p, 'success')) {
+    return Object.prototype.hasOwnProperty.call(p, 'data') ? p.data ?? {} : p
+  }
   return p ?? {}
 }
 
@@ -81814,7 +81823,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-b0ae35c0"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-2772feb7"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 

@@ -503,7 +503,8 @@ class FarmExecutor:
 
     def _do_siqi_steal(self, cookies, site_config) -> ActionResult:
         target_response = self.http_client.post(
-            site_config.get_steal_target_url(), cookies, data={}
+            site_config.get_steal_target_url(), cookies,
+            data={"action": "get_victim_farm"},
         )
         target_response.raise_for_status()
         targets = site_config.parse_steal_targets(target_response.text)
@@ -531,6 +532,12 @@ class FarmExecutor:
         response = self.http_client.post(site_config.get_steal_plot_url(), cookies, data=data)
         response.raise_for_status()
         parsed = site_config.parse_steal_result(response.text)
+        if parsed.get("success"):
+            finished = self.http_client.post(
+                site_config.get_action_submit_url(), cookies,
+                data={"action": "finish_stealing"},
+            )
+            finished.raise_for_status()
         message = f"{str(parsed.get('message') or '')} 目标{data['victim_id']}".strip()
         return ActionResult(
             "steal",
@@ -541,7 +548,8 @@ class FarmExecutor:
 
     def _do_siqi_like(self, cookies, site_config) -> ActionResult:
         target_response = self.http_client.post(
-            site_config.get_like_target_url(), cookies, data={}
+            site_config.get_like_target_url(), cookies,
+            data={"action": "random_like_targets"},
         )
         target_response.raise_for_status()
         targets = site_config.parse_like_targets(target_response.text)
@@ -550,16 +558,16 @@ class FarmExecutor:
                 "like", "随机农场", True, skipped=True, message="无可点赞目标，跳过"
             )
         target = self._siqi_target_fields(targets[0])
-        target_id = target.get("target_id")
+        username = target.get("username") or target.get("name") or target.get("target_id")
         response = self.http_client.post(
             site_config.get_like_submit_url(), cookies,
-            data={"action": "like_farm_batch", "target_id": target_id},
+            data={"action": "like_farm_batch", "usernames": str(username)},
         )
         response.raise_for_status()
         parsed = site_config.parse_like_result(response.text)
-        message = f"{str(parsed.get('message') or '')} 目标{target_id}".strip()
+        message = f"{str(parsed.get('message') or '')} 目标{username}".strip()
         return ActionResult(
-            "like", str(target_id), bool(parsed.get("success")), message=message
+            "like", str(username), bool(parsed.get("success")), message=message
         )
 
     def _do_siqi_buy_slot(self, cookies, site_config) -> ActionResult:
