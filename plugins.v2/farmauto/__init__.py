@@ -712,7 +712,7 @@ class FarmAuto(_PluginBase):
                 "dry_run": bool(self._dry_run),
                 "selected_site_ids": list(self._site_ids),
                 "next_run": self._next_run_text(),
-                "total_profit": self._to_int(self._stats.get("total_profit"), 0),
+                "total_profit": self._to_int(self._stats.get("total_profit"), 0, min_value=-10**12),
                 "total_trades": self._to_int(self._stats.get("total_trades"), 0),
                 "last_run": self._timestamp_text(self._stats.get("last_run")),
                 "sites": sites,
@@ -738,7 +738,7 @@ class FarmAuto(_PluginBase):
             recent_actions.append({
                 "action": action,
                 "target": str(raw_action.get("target") or ""),
-                "profit": self._to_int(raw_action.get("profit"), 0),
+                "profit": self._to_int(raw_action.get("profit"), 0, min_value=-10**12),
                 "success": bool(raw_action.get("success", False)),
                 "message": str(raw_action.get("message") or ""),
                 "time": raw_action.get("time") or raw_action.get("ts") or report_time,
