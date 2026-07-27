@@ -335,8 +335,9 @@ function formatRemain(plot) {
   const days = Math.floor(diff / 86400)
   const hours = Math.floor((diff % 86400) / 3600)
   const minutes = Math.floor((diff % 3600) / 60)
-  if (days > 0) return `${days}天${hours}时${minutes}分`
-  return hours > 0 ? `${hours}时${minutes}分` : `${minutes}分`
+  // 紧凑显示，防菜地溢出
+  if (days > 0) return `${days}d${hours}h`
+  return hours > 0 ? `${hours}h${minutes}m` : `${minutes}m`
 }
 
 function growSeconds(growTime) {
@@ -911,13 +912,13 @@ onBeforeUnmount(() => {
 }
 .unlock-hint { margin-left: 8px; font-size: 11px; }
 .land-locked-mobile-hint { display: none; }
-.land-section .plot small { line-height: 1.1; }
+.land-section .plot small { line-height: 1.1; font-size: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plot-emoji {
   display: inline-block;
-  font-size: 1.8rem;
+  font-size: 1.4rem;
   line-height: 1.2;
   max-width: 80%;
-  max-height: 50%;
+  max-height: 42%;
 }
 .stage-img {
   width: 36px;
