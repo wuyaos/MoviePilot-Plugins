@@ -53,6 +53,7 @@ const DEFAULT_CONFIG = {
   siqi_auto_buy_slot: false,
   siqi_auto_steal: false,
   siqi_auto_like: false,
+  siqi_default_seed_id: 1,
   site_overrides: '{}',
 };
 
@@ -296,7 +297,7 @@ return (_ctx, _cache) => {
                   color: "white",
                   size: "small"
                 }),
-                _cache[31] || (_cache[31] = _createElementVNode("span", { class: "text-subtitle-1 text-white font-weight-bold" }, "农场配置", -1))
+                _cache[32] || (_cache[32] = _createElementVNode("span", { class: "text-subtitle-1 text-white font-weight-bold" }, "农场配置", -1))
               ]),
               _createVNode(_component_v_spacer),
               _createElementVNode("div", _hoisted_4, [
@@ -372,7 +373,7 @@ return (_ctx, _cache) => {
                 "prepend-icon": "mdi-tune-variant"
               }, {
                 default: _withCtx(() => [
-                  _cache[32] || (_cache[32] = _createTextVNode("全局设置", -1)),
+                  _cache[33] || (_cache[33] = _createTextVNode("全局设置", -1)),
                   _createElementVNode("span", {
                     class: _normalizeClass(["tab-status-dot", config.enabled ? 'on' : 'off'])
                   }, null, 2)
@@ -399,7 +400,7 @@ return (_ctx, _cache) => {
           }, 8, ["modelValue"]),
           _createVNode(_component_v_window, {
             modelValue: activeTab.value,
-            "onUpdate:modelValue": _cache[30] || (_cache[30] = $event => ((activeTab).value = $event))
+            "onUpdate:modelValue": _cache[31] || (_cache[31] = $event => ((activeTab).value = $event))
           }, {
             default: _withCtx(() => [
               _createVNode(_component_v_window_item, { value: "global" }, {
@@ -418,7 +419,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[33] || (_cache[33] = _createTextVNode(" 基础设置 ", -1))
+                            _cache[34] || (_cache[34] = _createTextVNode(" 基础设置 ", -1))
                           ]),
                           _: 1
                         }),
@@ -546,7 +547,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[34] || (_cache[34] = _createTextVNode(" 自动化功能 ", -1))
+                            _cache[35] || (_cache[35] = _createTextVNode(" 自动化功能 ", -1))
                           ]),
                           _: 1
                         }),
@@ -664,7 +665,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[35] || (_cache[35] = _createTextVNode(" 调度与网络 ", -1))
+                            _cache[36] || (_cache[36] = _createTextVNode(" 调度与网络 ", -1))
                           ]),
                           _: 1
                         }),
@@ -823,7 +824,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[36] || (_cache[36] = _createTextVNode(" 交易策略 ", -1))
+                            _cache[37] || (_cache[37] = _createTextVNode(" 交易策略 ", -1))
                           ]),
                           _: 1
                         }),
@@ -943,7 +944,7 @@ return (_ctx, _cache) => {
                                 variant: "tonal",
                                 class: "mb-4 pa-3 text-body-2"
                               }, {
-                                default: _withCtx(() => [...(_cache[37] || (_cache[37] = [
+                                default: _withCtx(() => [...(_cache[38] || (_cache[38] = [
                                   _createTextVNode(" 未填写的覆盖项会自动继承全局设置；禁用站点只会将其从 site_ids 中移除。 ", -1)
                                 ]))]),
                                 _: 1
@@ -1174,7 +1175,7 @@ return (_ctx, _cache) => {
                                 _: 2
                               }, 1024),
                               _createElementVNode("div", _hoisted_8, [
-                                _cache[38] || (_cache[38] = _createElementVNode("span", { class: "text-body-2 text-medium-emphasis" }, "生效摘要", -1)),
+                                _cache[39] || (_cache[39] = _createElementVNode("span", { class: "text-body-2 text-medium-emphasis" }, "生效摘要", -1)),
                                 _createVNode(_component_v_chip_group, {
                                   column: "",
                                   class: "ga-2"
@@ -1295,7 +1296,7 @@ return (_ctx, _cache) => {
                                     size: "small",
                                     class: "mr-2"
                                   }),
-                                  _cache[39] || (_cache[39] = _createTextVNode(" 思齐专属功能 ", -1))
+                                  _cache[40] || (_cache[40] = _createTextVNode(" 思齐专属功能 ", -1))
                                 ]),
                                 _: 1
                               }),
@@ -1306,7 +1307,7 @@ return (_ctx, _cache) => {
                                     variant: "tonal",
                                     class: "mb-4 pa-3 text-body-2"
                                   }, {
-                                    default: _withCtx(() => [...(_cache[40] || (_cache[40] = [
+                                    default: _withCtx(() => [...(_cache[41] || (_cache[41] = [
                                       _createTextVNode(" 验证码收获、偷菜、点赞和扩地属于高风险行为；除 OCR 外默认关闭，开启即表示自行承担账号风控风险。 ", -1)
                                     ]))]),
                                     _: 1
@@ -1400,6 +1401,31 @@ return (_ctx, _cache) => {
                                       })
                                     ]),
                                     _: 1
+                                  }),
+                                  _createVNode(_component_v_row, { class: "mt-2" }, {
+                                    default: _withCtx(() => [
+                                      _createVNode(_component_v_col, {
+                                        cols: "12",
+                                        sm: "6",
+                                        md: "4"
+                                      }, {
+                                        default: _withCtx(() => [
+                                          _createVNode(_component_v_text_field, {
+                                            modelValue: config.siqi_default_seed_id,
+                                            "onUpdate:modelValue": _cache[30] || (_cache[30] = $event => ((config.siqi_default_seed_id) = $event)),
+                                            modelModifiers: { number: true },
+                                            type: "number",
+                                            label: "默认种植种子 ID",
+                                            hint: "思齐 fetch 返回的种子 id（萝卜=1）；可在工作台种子商店查看",
+                                            "persistent-hint": "",
+                                            density: "compact",
+                                            "hide-details": ""
+                                          }, null, 8, ["modelValue"])
+                                        ]),
+                                        _: 1
+                                      })
+                                    ]),
+                                    _: 1
                                   })
                                 ]),
                                 _: 1
@@ -1426,7 +1452,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-b63f52e9"]]);
+const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-05d62241"]]);
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 

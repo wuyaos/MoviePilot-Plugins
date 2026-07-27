@@ -6,16 +6,20 @@ const {resolveComponent:_resolveComponent$6,createVNode:_createVNode$6,toDisplay
 
 const _hoisted_1$6 = { class: "crop-grid" };
 const _hoisted_2$6 = { class: "crop-icon" };
-const _hoisted_3$3 = { class: "crop-info" };
-const _hoisted_4$3 = ["title"];
-const _hoisted_5$3 = { class: "crop-meta" };
-const _hoisted_6$3 = { key: 0 };
-const _hoisted_7$3 = { class: "crop-status" };
-const _hoisted_8$2 = {
+const _hoisted_3$3 = {
+  key: 1,
+  class: "crop-emoji"
+};
+const _hoisted_4$3 = { class: "crop-info" };
+const _hoisted_5$3 = ["title"];
+const _hoisted_6$3 = { class: "crop-meta" };
+const _hoisted_7$3 = { key: 0 };
+const _hoisted_8$2 = { class: "crop-status" };
+const _hoisted_9$2 = {
   key: 0,
   class: "crop-remain"
 };
-const _hoisted_9$2 = { class: "crop-action" };
+const _hoisted_10$2 = { class: "crop-action" };
 
 const {computed: computed$6,ref: ref$4} = await importShared('vue');
 
@@ -55,37 +59,13 @@ const areaItems = computed$6(() => props.items.map(cropKey => {
     name: definition.name || cropKey,
     cost: definition.cost,
     image: definition.image || '',
+    emoji: definition.emoji || '',
     state,
     price: status.price,
     growTime: status.grow_time,
     remainingMinutes,
   }
 }));
-
-function cropIcon(cropKey, name) {
-  const iconsByKey = {
-    crop_1: 'mdi-grain',
-    crop_2: 'mdi-corn',
-    crop_3: 'mdi-peanut-outline',
-    crop_4: 'mdi-carrot',
-    animal_1: 'mdi-bird',
-    animal_2: 'mdi-pig',
-    animal_3: 'mdi-sheep',
-    animal_4: 'mdi-cow',
-  };
-  if (iconsByKey[cropKey]) return iconsByKey[cropKey]
-
-  const cropName = String(name || '').toLowerCase();
-  if (cropName.includes('小麦') || cropName.includes('wheat')) return 'mdi-grain'
-  if (cropName.includes('玉米') || cropName.includes('corn')) return 'mdi-corn'
-  if (cropName.includes('花生') || cropName.includes('peanut')) return 'mdi-peanut-outline'
-  if (cropName.includes('土豆') || cropName.includes('马铃薯') || cropName.includes('potato')) return 'mdi-carrot'
-  if (cropName.includes('鸡') || cropName.includes('chicken')) return 'mdi-bird'
-  if (cropName.includes('猪') || cropName.includes('pig')) return 'mdi-pig'
-  if (cropName.includes('羊') || cropName.includes('sheep')) return 'mdi-sheep'
-  if (cropName.includes('牛') || cropName.includes('cow')) return 'mdi-cow'
-  return props.animal ? 'mdi-cow' : 'mdi-seed'
-}
 
 function imageErrorKey(item) {
   return `${item.cropKey}:${item.image}`
@@ -210,25 +190,20 @@ return (_ctx, _cache) => {
                         contain: "",
                         onError: $event => (markImageError(item))
                       }, null, 8, ["src", "onError"]))
-                    : (_openBlock$6(), _createBlock$5(_component_v_icon, {
-                        key: 1,
-                        icon: cropIcon(item.cropKey, item.name),
-                        color: __props.animal ? 'brown' : 'green',
-                        size: "36"
-                      }, null, 8, ["icon", "color"]))
+                    : (_openBlock$6(), _createElementBlock$6("span", _hoisted_3$3, _toDisplayString$5(item.emoji || '🌱'), 1))
                 ]),
-                _createElementVNode$6("div", _hoisted_3$3, [
+                _createElementVNode$6("div", _hoisted_4$3, [
                   _createElementVNode$6("div", {
                     class: "crop-name",
                     title: item.name
-                  }, _toDisplayString$5(item.name), 9, _hoisted_4$3),
-                  _createElementVNode$6("div", _hoisted_5$3, [
+                  }, _toDisplayString$5(item.name), 9, _hoisted_5$3),
+                  _createElementVNode$6("div", _hoisted_6$3, [
                     _createTextVNode$5(" 价格 " + _toDisplayString$5(displayValue(item.price)) + " · 成本 " + _toDisplayString$5(displayValue(item.cost)) + " ", 1),
                     (item.growTime)
-                      ? (_openBlock$6(), _createElementBlock$6("span", _hoisted_6$3, " · 成长 " + _toDisplayString$5(item.growTime), 1))
+                      ? (_openBlock$6(), _createElementBlock$6("span", _hoisted_7$3, " · 成长 " + _toDisplayString$5(item.growTime), 1))
                       : _createCommentVNode$6("", true)
                   ]),
-                  _createElementVNode$6("div", _hoisted_7$3, [
+                  _createElementVNode$6("div", _hoisted_8$2, [
                     _createVNode$6(_component_v_chip, {
                       size: "x-small",
                       color: stateColor(item.state),
@@ -240,11 +215,11 @@ return (_ctx, _cache) => {
                       _: 2
                     }, 1032, ["color"]),
                     (item.state === 'growing' && item.remainingMinutes !== null && item.remainingMinutes !== undefined)
-                      ? (_openBlock$6(), _createElementBlock$6("span", _hoisted_8$2, " 剩余 " + _toDisplayString$5(formatRemainingMinutes(item.remainingMinutes)), 1))
+                      ? (_openBlock$6(), _createElementBlock$6("span", _hoisted_9$2, " 剩余 " + _toDisplayString$5(formatRemainingMinutes(item.remainingMinutes)), 1))
                       : _createCommentVNode$6("", true)
                   ])
                 ]),
-                _createElementVNode$6("div", _hoisted_9$2, [
+                _createElementVNode$6("div", _hoisted_10$2, [
                   (item.state === 'empty')
                     ? (_openBlock$6(), _createBlock$5(_component_v_btn, {
                         key: 0,
@@ -290,7 +265,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-b7609b4a"]]);
+const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-90b862d3"]]);
 
 const {resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,createTextVNode:_createTextVNode$4,withCtx:_withCtx$4,createElementVNode:_createElementVNode$5,renderList:_renderList$4,Fragment:_Fragment$4,openBlock:_openBlock$5,createElementBlock:_createElementBlock$5,toDisplayString:_toDisplayString$4,normalizeClass:_normalizeClass$4,createBlock:_createBlock$4,createCommentVNode:_createCommentVNode$5} = await importShared('vue');
 
@@ -348,13 +323,19 @@ function logMeta(item) {
   const unit = item?.value_unit || (action === 'harvest' ? '收获值' : '魔力值');
   // 兼容 user_logs.value / recent_actions.profit
   const value = Number(item?.value ?? item?.profit ?? 0);
+  // 魔力列优先显示本次变动值；无变动时回退余额 balance_after，保证每行都有值
+  const balance = Number(item?.balance_after ?? '');
+  const hasChange = value !== 0;
+  const magicText = hasChange
+    ? `${value > 0 ? '+' : ''}${value} ${unit}`
+    : (Number.isFinite(balance) ? `${balance} ${unit}` : '');
   return {
     actionText: mapped[0],
     actionClass: mapped[1] ? `history-action--${mapped[1]}` : '',
     detailText: parts.map(p => typeof p === 'string' ? p : (p.name || '')).filter(Boolean).join(' '),
     hasIcon: !!parts.find(p => typeof p === 'object' && p.icon),
     iconSrc: (parts.find(p => typeof p === 'object' && p.icon) || {}).icon,
-    valueText: value !== 0 ? `${value > 0 ? '+' : ''}${value} ${unit}` : '',
+    valueText: magicText,
     valueClass: value > 0 ? 'history-value--plus' : (value < 0 ? 'history-value--minus' : ''),
   }
 }
@@ -367,11 +348,20 @@ function formatTime(value) {
     return value.slice(0, 5)
   }
   const numericValue = Number(value);
-  const date = Number.isFinite(numericValue)
-    ? new Date(numericValue < 1e12 ? numericValue * 1000 : numericValue)
-    : new Date(value);
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  // 数字时间戳：秒(<1e12) 或 毫秒(>=1e12)
+  if (Number.isFinite(numericValue) && /^\d+(\.\d+)?$/.test(String(value).trim())) {
+    const ms = numericValue < 1e12 ? numericValue * 1000 : numericValue;
+    const date = new Date(ms);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    }
+  }
+  // 字符串日期（如思齐 user_logs.created_at '2026-07-27 01:45:07'）
+  const date = new Date(String(value).replace(' ', 'T'));
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  }
+  return '—'
 }
 
 return (_ctx, _cache) => {
@@ -409,7 +399,7 @@ return (_ctx, _cache) => {
                 _createElementVNode$5("tr", null, [
                   _createElementVNode$5("th", null, "时间"),
                   _createElementVNode$5("th", null, "操作"),
-                  _createElementVNode$5("th", { class: "text-end" }, "费用")
+                  _createElementVNode$5("th", { class: "text-end" }, "魔力")
                 ])
               ], -1)),
               _createElementVNode$5("tbody", null, [
@@ -463,7 +453,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-27fad96b"]]);
+const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-08fe9715"]]);
 
 const {resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,createElementVNode:_createElementVNode$4,openBlock:_openBlock$4,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$4,withCtx:_withCtx$3,renderList:_renderList$3,Fragment:_Fragment$3,createElementBlock:_createElementBlock$4,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$3,createTextVNode:_createTextVNode$3} = await importShared('vue');
 
@@ -80458,6 +80448,7 @@ const _sfc_main$2 = {
   pluginId: { type: String, default: 'FarmAuto' },
   farm: { type: Object, default: () => ({}) },
   history: { type: Array, default: () => [] },
+  rawLogs: { type: Array, default: () => [] },
   currency: { type: String, default: '' },
   loading: { type: Boolean, default: false },
   showSwitch: { type: Boolean, default: false },
@@ -80543,7 +80534,9 @@ function seedMatureIcon(seed) {
   return ''
 }
 
-function seedEmoji(name) {
+function seedEmoji(name, seed) {
+  // 优先用后端统一 emoji（crop_emoji），缺失时本地回退
+  if (seed?.emoji) return seed.emoji
   const emojiByName = {
     萝卜: '🥕',
     西红柿: '🍅',
@@ -80874,6 +80867,10 @@ return (_ctx, _cache) => {
   const _component_v_card = _resolveComponent$2("v-card");
   const _component_v_text_field = _resolveComponent$2("v-text-field");
   const _component_v_table = _resolveComponent$2("v-table");
+  const _component_v_expansion_panel_title = _resolveComponent$2("v-expansion-panel-title");
+  const _component_v_expansion_panel_text = _resolveComponent$2("v-expansion-panel-text");
+  const _component_v_expansion_panel = _resolveComponent$2("v-expansion-panel");
+  const _component_v_expansion_panels = _resolveComponent$2("v-expansion-panels");
   const _component_v_dialog = _resolveComponent$2("v-dialog");
   const _component_v_textarea = _resolveComponent$2("v-textarea");
   const _component_v_card_actions = _resolveComponent$2("v-card-actions");
@@ -81086,7 +81083,7 @@ return (_ctx, _cache) => {
                                         height: "40",
                                         contain: ""
                                       }, null, 8, ["src"]))
-                                    : (_openBlock$2(), _createElementBlock$2("span", _hoisted_12$1, _toDisplayString$2(seedEmoji(seed.name)), 1))
+                                    : (_openBlock$2(), _createElementBlock$2("span", _hoisted_12$1, _toDisplayString$2(seedEmoji(seed.name, seed)), 1))
                                 ]),
                                 _createElementVNode$2("div", _hoisted_13$1, [
                                   _createElementVNode$2("div", {
@@ -81360,7 +81357,7 @@ return (_ctx, _cache) => {
                                             class: "stage-img",
                                             onError: $event => (markStageIconFailed(plot))
                                           }, null, 40, _hoisted_38))
-                                        : (_openBlock$2(), _createElementBlock$2("span", _hoisted_39, _toDisplayString$2(plot.seed.icon || seedEmoji(plot.seed.name)), 1)),
+                                        : (_openBlock$2(), _createElementBlock$2("span", _hoisted_39, _toDisplayString$2(plot.seed.icon || seedEmoji(plot.seed.name, plot.seed)), 1)),
                                       _cache[41] || (_cache[41] = _createElementVNode$2("br", null, null, -1)),
                                       _createElementVNode$2("small", _hoisted_40, _toDisplayString$2(plot.seed.name), 1),
                                       _cache[42] || (_cache[42] = _createElementVNode$2("br", null, null, -1)),
@@ -81448,7 +81445,7 @@ return (_ctx, _cache) => {
                                         key: item.seed_id
                                       }, [
                                         _createElementVNode$2("td", null, [
-                                          _createElementVNode$2("span", _hoisted_42, _toDisplayString$2(seedEmoji(item.name || seedNameById(item.seed_id))), 1),
+                                          _createElementVNode$2("span", _hoisted_42, _toDisplayString$2(seedEmoji(item.name || seedNameById(item.seed_id), item)), 1),
                                           _createTextVNode$2(_toDisplayString$2(item.name || `作物 ${item.seed_id}`), 1)
                                         ]),
                                         _createElementVNode$2("td", null, _toDisplayString$2(item.quantity), 1),
@@ -81499,7 +81496,43 @@ return (_ctx, _cache) => {
                   _createVNode$2(HistoryTable, {
                     history: __props.history,
                     currency: __props.currency
-                  }, null, 8, ["history", "currency"])
+                  }, null, 8, ["history", "currency"]),
+                  (__props.rawLogs && __props.rawLogs.length)
+                    ? (_openBlock$2(), _createBlock$2(_component_v_expansion_panels, {
+                        key: 0,
+                        flat: "",
+                        class: "mt-2"
+                      }, {
+                        default: _withCtx$2(() => [
+                          _createVNode$2(_component_v_expansion_panel, null, {
+                            default: _withCtx$2(() => [
+                              _createVNode$2(_component_v_expansion_panel_title, { class: "text-subtitle-2" }, {
+                                default: _withCtx$2(() => [
+                                  _createVNode$2(_component_v_icon, {
+                                    icon: "mdi-script-text-outline",
+                                    size: "small",
+                                    class: "mr-2"
+                                  }),
+                                  _createTextVNode$2(" 站点原始记录（" + _toDisplayString$2(__props.rawLogs.length) + "） ", 1)
+                                ]),
+                                _: 1
+                              }),
+                              _createVNode$2(_component_v_expansion_panel_text, null, {
+                                default: _withCtx$2(() => [
+                                  _createVNode$2(HistoryTable, {
+                                    history: __props.rawLogs,
+                                    currency: __props.currency
+                                  }, null, 8, ["history", "currency"])
+                                ]),
+                                _: 1
+                              })
+                            ]),
+                            _: 1
+                          })
+                        ]),
+                        _: 1
+                      }))
+                    : _createCommentVNode$2("", true)
                 ]),
                 _: 1
               })
@@ -81728,7 +81761,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-9ced7c71"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-3148b9a3"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 
@@ -82564,7 +82597,8 @@ return (_ctx, _cache) => {
                 api: __props.api,
                 "plugin-id": __props.pluginId,
                 farm: siqiFarm.value,
-                history: (siqiFarm.value && Array.isArray(siqiFarm.value.user_logs) && siqiFarm.value.user_logs.length) ? siqiFarm.value.user_logs : siteActions.value,
+                history: siteActions.value,
+                "raw-logs": siqiFarm.value && Array.isArray(siqiFarm.value.user_logs) ? siqiFarm.value.user_logs : [],
                 currency: currency.value,
                 loading: detailLoading.value,
                 "show-switch": __props.showSwitch,
@@ -82573,7 +82607,7 @@ return (_ctx, _cache) => {
                 onSwitch: _cache[5] || (_cache[5] = $event => (emit('switch'))),
                 onClose: _cache[6] || (_cache[6] = $event => (emit('close'))),
                 onRefresh: refreshData
-              }, null, 8, ["api", "plugin-id", "farm", "history", "currency", "loading", "show-switch", "show-close"]))
+              }, null, 8, ["api", "plugin-id", "farm", "history", "raw-logs", "currency", "loading", "show-switch", "show-close"]))
             : (_openBlock(), _createElementBlock(_Fragment, { key: 4 }, [
                 _createVNode(_component_v_row, {
                   dense: "",
@@ -82822,6 +82856,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-da5443c7"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-c733a637"]]);
 
 export { FarmWorkbench as F };

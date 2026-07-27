@@ -1,20 +1,20 @@
 
-.farm-config-form[data-v-b63f52e9] {
+.farm-config-form[data-v-05d62241] {
   min-inline-size: 0;
   padding: 0.5rem;
   margin-inline: auto;
 }
-.config-section[data-v-b63f52e9] {
+.config-section[data-v-05d62241] {
   overflow: hidden;
 }
-.config-tabs[data-v-b63f52e9] {
+.config-tabs[data-v-05d62241] {
   border-block-end: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
-.config-section[data-v-b63f52e9] {
+.config-section[data-v-05d62241] {
   background: rgba(var(--v-theme-surface), 0.96);
   box-shadow: 0 2px 10px rgba(28, 40, 52, 0.06);
 }
-.config-section-title[data-v-b63f52e9] {
+.config-section-title[data-v-05d62241] {
   border-block-end: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
