@@ -585,6 +585,11 @@ class FarmExecutor:
         target = crop.get("name", crop_key)
         operation = action.get("op", "unknown")
         action_url = ""
+        # 思齐 plant_all: crop_key=all 时用默认种子名作为 target
+        if site_config.site_id == "siqi" and crop_key == "all" and operation == "plant":
+            default_seed_id = (siqi_options or {}).get("default_seed_id") or 1
+            seed_crop = next((c for c in crops.values() if c.get("id") == default_seed_id), {})
+            target = seed_crop.get("name", f"种子{default_seed_id}")
 
         try:
             if operation == "harvest_all":

@@ -13,6 +13,7 @@ except ImportError:  # 支持按插件根目录加入 sys.path 的离线测试�
 
 CAPABILITY_BATCH_SELL = "batch_sell"
 CAPABILITY_SELL_INVENTORY = "sell_inventory"
+CAPABILITY_PLANT_ALL = "plant_all"
 
 IMAGE_FILES = {
     "小麦": "crop_wheat.png",
@@ -109,6 +110,9 @@ class FarmSiteConfig(ABC):
 
     def supports_sell_inventory(self) -> bool:
         return CAPABILITY_SELL_INVENTORY in self.capabilities
+
+    def supports_plant_all(self) -> bool:
+        return CAPABILITY_PLANT_ALL in self.capabilities
 
     def to_land_states(self, farm_html: str) -> List["LandState"]:
         """把站点农场页解析为统一 LandState 列表。
@@ -240,6 +244,10 @@ class FarmSiteConfig(ABC):
         text = self._action_result_text(html)
         if self._has_action_failure(text):
             return {"success": False, "message": f"{action_name}失败"}
+        # 先检查失败关键词（没有空地/已满/不足/失败），避免误判成功
+        failure_tokens = ("没有空地", "已满", "不足", "失败", "无法", "不能", "已种植")
+        if any(token in text for token in failure_tokens):
+            return {"success": False, "message": f"{action_name}失败：没有空地或不可种植"}
         success = "成功" in text or action_name in text or "完成" in text
         return {"success": success, "message": f"{action_name}{'成功' if success else '失败'}"}
 

@@ -16,7 +16,7 @@ class SiqiConfig(FarmSiteConfig):
     currency = "魔力"
     farm_path = "/plant_game.php"
     warehouse_path = "/plant_game.php"
-    capabilities = {"captcha", "social", "sell_inventory"}
+    capabilities = {"captcha", "social", "sell_inventory", "plant_all"}
 
     # 思齐通过 fetch 动态下发种子商店；源码中唯一固定的默认种子是 ID 1 萝卜。
     crops = {
@@ -539,7 +539,13 @@ class SiqiConfig(FarmSiteConfig):
         return self._parse_action_result(html, ("收获成功", "已收获"), "收获成功", "收获失败")
 
     def parse_plant_result(self, html: str, action: str = "plant") -> Dict[str, Any]:
-        return self._parse_action_result(html, ("种植成功", "已种植"), "种植成功", "种植失败")
+        result = self._parse_action_result(html, ("种植成功", "已种植"), "种植成功", "种植失败")
+        # 没有空地等失败关键词覆盖成功误判
+        text = self._text(html or "")
+        if any(token in text for token in ("没有空地", "已满", "不足", "无法", "不能")):
+            result["success"] = False
+            result["message"] = "种植失败：没有空地或不可种植"
+        return result
 
     def parse_ready_plots(self, html: str) -> List[Dict[str, Any]]:
         data = self._json_dict(html)

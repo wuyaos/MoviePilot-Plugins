@@ -22,6 +22,7 @@ _STATUS_EMOJIS = {
 _ACTION_CATEGORIES = (
     ({"harvest", "harvest_all"}, "🌾", "收获"),
     ({"plant"}, "🌱", "种植"),
+    ({"breed"}, "🐣", "养殖"),
     ({"sell"}, "💰", "出售"),
     ({"steal"}, "🥷", "偷菜"),
     ({"like"}, "👍", "点赞"),

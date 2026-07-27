@@ -66,7 +66,7 @@ def test_siqi_metadata_and_urls():
     assert config.domains == ["si-qi.xyz", "siqi.xyz"]
     assert config.get_farm_url() == "https://si-qi.xyz/plant_game.php?action=fetch"
     assert config.get_warehouse_url().endswith("?action=fetch")
-    assert config.capabilities == {"captcha", "social", "sell_inventory"}
+    assert config.capabilities == {"captcha", "social", "sell_inventory", "plant_all"}
     assert config.currency == "魔力"
     assert config.crops["crop_1"]["action"] == "plant"
 

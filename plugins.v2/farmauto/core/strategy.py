@@ -224,13 +224,23 @@ def plan_run(
 
     # 3. 种植空地（未在收获流程中补种的空地；harvest_all 站点收获后全部空地需补种）
     if policy["auto_plant"]:
-        planted = {a["crop_key"] for a in plan if a.get("op") == "plant"}
-        for crop_key in crops:
-            if crop_key in planted:
-                continue
-            status = crop_status.get(crop_key, {})
-            if isinstance(status, dict) and status.get("can_harvest"):
-                continue
-            plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
+        # plant_all 类站点(思齐): plant_fill_empty 一次种满所有空地，只生成 1 个 plant
+        if site_config.supports_plant_all():
+            if not any(a.get("op") == "plant" for a in plan):
+                plan.append({"op": "plant", "crop_key": "all", "source": "field", "quantity": 1})
+        else:
+            planted = {a["crop_key"] for a in plan if a.get("op") == "plant"}
+            for crop_key in crops:
+                if crop_key in planted:
+                    continue
+                status = crop_status.get(crop_key, {})
+                if not isinstance(status, dict):
+                    continue
+                # 仅对空地种植（state=empty）；成长中/可收获不重复种植
+                if status.get("can_harvest"):
+                    continue
+                if status.get("state") and status.get("state") != "empty":
+                    continue
+                plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
 
     return plan
