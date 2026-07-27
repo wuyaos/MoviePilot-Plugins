@@ -501,16 +501,29 @@ class FarmExecutor:
         )
         return result
 
+    @staticmethod
+    def _siqi_daily_exhausted(data: Dict[str, Any]) -> bool:
+        message = str(data.get("message") or data.get("msg") or "")
+        return any(token in message for token in ("已用完", "额度用完", "今日已", "达到上限"))
+
     def _do_siqi_steal(self, cookies, site_config) -> ActionResult:
         target_response = self.http_client.post(
             site_config.get_steal_target_url(), cookies,
             data={"action": "get_victim_farm"},
         )
         target_response.raise_for_status()
+        raw_target = site_config._json_dict(target_response.text)
+        if self._siqi_daily_exhausted(raw_target):
+            return ActionResult(
+                "steal", "随机农场", True, skipped=True,
+                reason="daily_exhausted", message=str(raw_target.get("message") or raw_target.get("msg")),
+            )
         targets = site_config.parse_steal_targets(target_response.text)
         if not targets:
+            self._log("info", f"{site_config.site_name} 偷菜：跳过，无可偷菜目标")
             return ActionResult(
-                "steal", "随机农场", True, skipped=True, message="无可偷菜目标，跳过"
+                "steal", "随机农场", True, skipped=True,
+                reason="no_target", message="无可偷菜目标，跳过",
             )
         target = self._siqi_target_fields(targets[0])
         plots = target.get("plots") or target.get("victim_plots") or []
@@ -528,7 +541,10 @@ class FarmExecutor:
         }
         data["action"] = "steal_vegetable"
         if any(value is None for value in [data.get("victim_id"), data.get("land_id"), data.get("plot_index")]):
-            return ActionResult("steal", str(data.get("victim_id") or "随机农场"), False, message="目标缺少可偷坑位")
+            return ActionResult(
+                "steal", str(data.get("victim_id") or "随机农场"), True,
+                skipped=True, reason="no_ready_plot", message="目标没有成熟可偷坑位，跳过",
+            )
         response = self.http_client.post(site_config.get_steal_plot_url(), cookies, data=data)
         response.raise_for_status()
         parsed = site_config.parse_steal_result(response.text)
@@ -552,33 +568,101 @@ class FarmExecutor:
             data={"action": "random_like_targets"},
         )
         target_response.raise_for_status()
+        raw_targets = site_config._json_dict(target_response.text)
+        remaining = site_config._number(raw_targets.get("remaining_in_window"))
+        if remaining is not None and remaining <= 0:
+            return ActionResult(
+                "like", "随机农场", True, skipped=True,
+                reason="daily_exhausted", message="今日点赞额度已用完",
+            )
+        if self._siqi_daily_exhausted(raw_targets):
+            return ActionResult(
+                "like", "随机农场", True, skipped=True,
+                reason="daily_exhausted", message=str(raw_targets.get("message") or raw_targets.get("msg")),
+            )
         targets = site_config.parse_like_targets(target_response.text)
         if not targets:
             return ActionResult(
-                "like", "随机农场", True, skipped=True, message="无可点赞目标，跳过"
+                "like", "随机农场", True, skipped=True,
+                reason="no_target", message="无可点赞目标，跳过",
             )
-        target = self._siqi_target_fields(targets[0])
-        username = target.get("username") or target.get("name") or target.get("target_id")
+        quota = site_config.parse_like_quota(target_response.text)
+        remaining = quota["remaining"]
+        max_count = quota["maximum"]
+        limit = max(0, int(remaining)) if remaining is not None else len(targets)
+        usernames: List[str] = []
+        for raw_target in targets:
+            target = self._siqi_target_fields(raw_target)
+            username = target.get("username") or target.get("name") or target.get("target_id")
+            if username and str(username) not in usernames:
+                usernames.append(str(username))
+            if len(usernames) >= limit:
+                break
+        if not usernames:
+            self._log("info", f"{site_config.site_name} 点赞：跳过，无可点赞目标")
+            return ActionResult(
+                "like", "随机农场", True, skipped=True,
+                reason="no_target", message="无可点赞目标，跳过",
+            )
         response = self.http_client.post(
             site_config.get_like_submit_url(), cookies,
-            data={"action": "like_farm_batch", "usernames": str(username)},
+            data={"action": "like_farm_batch", "usernames": "\n".join(usernames)},
         )
         response.raise_for_status()
         parsed = site_config.parse_like_result(response.text)
-        message = f"{str(parsed.get('message') or '')} 目标{username}".strip()
+        result_remaining = site_config._number(parsed.get("remaining_in_window"))
+        if result_remaining is None and parsed.get("success") and remaining is not None:
+            result_remaining = max(0, int(remaining) - len(usernames))
+        quota = f"，剩余 {int(result_remaining)}/{int(max_count)}" if result_remaining is not None and max_count else ""
+        message = f"{str(parsed.get('message') or '')} 目标{'、'.join(usernames)}{quota}".strip()
         return ActionResult(
-            "like", str(username), bool(parsed.get("success")), message=message
+            "like", "、".join(usernames), bool(parsed.get("success")),
+            message=message, quantity=len(usernames),
+            reason="daily_exhausted" if result_remaining == 0 else "",
         )
 
     def _do_siqi_buy_slot(self, cookies, site_config) -> ActionResult:
+        # 提交前重新读取余额、土地解锁状态和下一坑位价格，绝不信任旧页面数据。
         farm_response = self.http_client.get(site_config.get_warehouse_url(), cookies)
         farm_response.raise_for_status()
+        farm_data = site_config._json_dict(farm_response.text)
+        farm_info = site_config.parse_farm_info(farm_response.text)
         targets = site_config.parse_buy_slot_targets(farm_response.text)
         if not targets:
             return ActionResult(
-                "buy_slot", "农场坑位", True, skipped=True, message="没有可购买坑位，跳过"
+                "buy_slot", "农场坑位", True, skipped=True,
+                reason="no_buyable_slot", message="没有可购买坑位，跳过",
             )
         land_id = targets[0]
+        land = next(
+            (item for item in farm_data.get("lands") or []
+             if str(item.get("id", item.get("land_id"))) == str(land_id)),
+            {},
+        )
+        total_harvest = site_config._number(
+            (farm_data.get("user_stats") or {}).get("total_harvest")
+        ) or 0
+        unlock_harvest = site_config._number(land.get("unlock_harvest")) or 0
+        if unlock_harvest > total_harvest:
+            return ActionResult(
+                "buy_slot", str(land_id), True, skipped=True,
+                reason="land_locked", message=f"地块未解锁，还需总收获 {unlock_harvest}",
+            )
+        costs = farm_info.get("plot_slot", {}).get("next_slot_cost_by_land", {})
+        cost = site_config._number(costs.get(str(land_id), costs.get(land_id)))
+        bonus = site_config._number(farm_info.get("user_bonus")) or 0
+        if cost is None or cost <= 0:
+            self._log("info", f"{site_config.site_name} 扩地：跳过，下一坑位价格不可用")
+            return ActionResult(
+                "buy_slot", str(land_id), True, skipped=True,
+                reason="no_buyable_slot", message="下一坑位价格不可用，跳过",
+            )
+        if bonus < cost:
+            self._log("info", f"{site_config.site_name} 扩地：跳过，魔力不足，还差 {cost - bonus}")
+            return ActionResult(
+                "buy_slot", str(land_id), True, skipped=True,
+                reason="insufficient_bonus", message=f"魔力不足，还差 {cost - bonus}",
+            )
         response = self.http_client.post(
             site_config.get_buy_plot_slot_url(), cookies,
             data={"action": "buy_plot_slot", "land_id": land_id},

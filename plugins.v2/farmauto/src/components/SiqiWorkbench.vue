@@ -27,9 +27,13 @@ const selectedSeedId = ref('')
 const stealDialog = ref(false)
 const likeDialog = ref(false)
 const sellAllDialog = ref(false)
+const buySlotDialog = ref(false)
 const stealTargets = ref([])
 const likeUsernames = ref('')
+const loadedLikeRemaining = ref(null)
+const loadedLikeMax = ref(null)
 const visitUsername = ref('')
+const visitCooldownUntil = ref(0)
 const now = ref(Date.now() / 1000)
 let clockTimer = null
 
@@ -78,11 +82,36 @@ const landsGrouped = computed(() => {
   return [...grouped.values()]
 })
 const inventory = computed(() => f.value.inventory || [])
-const likeMax = computed(() => f.value.like_max ?? 0)
-const likeRemaining = computed(() => f.value.like_remaining ?? 0)
+const likeMax = computed(() => loadedLikeMax.value ?? f.value.like_max ?? 0)
+const likeRemaining = computed(() => loadedLikeRemaining.value ?? f.value.like_remaining ?? 0)
 const canSteal = computed(() => !f.value.steal_done_today)
+const canLike = computed(() => !f.value.like_done_today && !(likeMax.value > 0 && likeRemaining.value <= 0))
 const plotSlot = computed(() => f.value.plot_slot || {})
-const buySlotAvailable = computed(() => plotSlot.value.available === true)
+const nextBuySlot = computed(() => {
+  const costs = plotSlot.value.next_slot_cost_by_land || {}
+  for (const [landId, rawCost] of Object.entries(costs)) {
+    if (rawCost == null) continue
+    const land = landsGrouped.value.find(item => String(item.land_id) === String(landId))
+    const unlocked = !land || Number(land.unlock_harvest || 0) <= (Number(totalHarvest.value) || 0)
+    if (unlocked) return { landId, cost: Number(rawCost), landName: land?.name || `地块 ${landId}` }
+  }
+  return null
+})
+const buySlotAvailable = computed(() => (
+  plotSlot.value.available === true
+  && nextBuySlot.value != null
+  && nextBuySlot.value.cost <= userBonus.value
+))
+const buySlotReason = computed(() => {
+  if (!nextBuySlot.value) return '暂无可购买坑位'
+  if (nextBuySlot.value.cost > userBonus.value) {
+    return `魔力不足，还差 ${nextBuySlot.value.cost - userBonus.value}`
+  }
+  return `可购买 ${nextBuySlot.value.landName} 下一坑位`
+})
+const visitCooldownSeconds = computed(() => Math.max(
+  0, Math.ceil((visitCooldownUntil.value - Date.now()) / 1000),
+))
 const failedStageIcons = ref(new Set())
 const inventoryTotalValue = computed(() => inventory.value.reduce(
   (total, item) => total + Number(item.quantity || 0) * Number(item.unit_reward || 0),
@@ -190,6 +219,7 @@ async function plantFill() {
   }
 }
 async function openStealDialog() {
+  if (!canSteal.value || actionLoading.value) return
   stealDialog.value = true
   const result = await doAction('get_steal_targets')
   stealTargets.value = Array.isArray(result?.targets) ? result.targets : []
@@ -200,27 +230,33 @@ async function steal(target, plot) {
     land_id: plot.land_id,
     plot_index: plot.plot_index,
   })
-  if (result?.success) {
+  if (result?.success && !result?.skipped) {
     stealDialog.value = false
     emit('refresh')
   }
 }
 async function openLikeDialog() {
+  if (!canLike.value || actionLoading.value) return
   likeDialog.value = true
   if (!likeUsernames.value.trim()) await loadLikeTargets()
 }
 async function loadLikeTargets() {
+  if (!canLike.value || actionLoading.value) return
   const result = await doAction('get_like_targets')
+  if (result?.remaining_in_window != null) loadedLikeRemaining.value = Number(result.remaining_in_window)
+  if (result?.max_in_window != null) loadedLikeMax.value = Number(result.max_in_window)
   const names = Array.isArray(result?.targets) ? result.targets : []
-  likeUsernames.value = names.map(item => (
+  const orderedNames = names.map(item => (
     typeof item === 'string' ? item : item.username ?? item.name ?? item.target_id ?? ''
-  )).filter(Boolean).join(', ')
+  )).filter(Boolean)
+  const limit = loadedLikeRemaining.value == null ? orderedNames.length : loadedLikeRemaining.value
+  likeUsernames.value = orderedNames.slice(0, Math.max(0, limit)).join(', ')
 }
 async function like() {
   const usernames = likeUsernames.value.split(/[，,\n]+/).map(item => item.trim()).filter(Boolean)
   if (!usernames.length) { error.value = '请输入至少一个用户名'; return }
   const result = await doAction('like', { usernames: usernames.join('\n') })
-  if (result?.success) {
+  if (result?.success && !result?.skipped) {
     likeDialog.value = false
     emit('refresh')
   }
@@ -228,10 +264,14 @@ async function like() {
 async function visit() {
   const username = visitUsername.value.trim()
   if (!username) { error.value = '请输入用户名'; return }
-  await doAction('visit', { username })
+  if (visitCooldownSeconds.value > 0 || actionLoading.value) return
+  const result = await doAction('visit', { username })
+  if (result?.success && !result?.skipped) visitCooldownUntil.value = Date.now() + 10_000
 }
 async function visitRandom() {
-  await doAction('visit', { random: true })
+  if (visitCooldownSeconds.value > 0 || actionLoading.value) return
+  const result = await doAction('visit', { random: true })
+  if (result?.success && !result?.skipped) visitCooldownUntil.value = Date.now() + 10_000
 }
 function harvestPlot(plot) { doAction('harvest', { land_id: plot.land_id, plot_index: plot.plot_index }) }
 function harvestAll() { doAction('harvest_all') }
@@ -254,9 +294,16 @@ async function sellAll() {
   emit('refresh')
 }
 function buySlot() {
-  const nextSlotCosts = plotSlot.value.next_slot_cost_by_land || {}
-  const landId = Object.keys(nextSlotCosts).find(key => nextSlotCosts[key] != null)
-  if (landId != null) buyPlotSlot(landId)
+  if (!buySlotAvailable.value || actionLoading.value) return
+  buySlotDialog.value = true
+}
+async function confirmBuySlot() {
+  if (!nextBuySlot.value || !buySlotAvailable.value) return
+  const result = await doAction('buy_plot_slot', { land_id: nextBuySlot.value.landId })
+  if (result?.success && !result?.skipped) {
+    buySlotDialog.value = false
+    emit('refresh')
+  }
 }
 function refresh() { emit('refresh') }
 
@@ -410,7 +457,7 @@ function handlePlotClick(plot) {
 onMounted(() => {
   clockTimer = setInterval(() => {
     now.value = Date.now() / 1000
-  }, 60_000)
+  }, 1_000)
 })
 
 onBeforeUnmount(() => {
@@ -531,7 +578,7 @@ onBeforeUnmount(() => {
                     <div class="neu-action-label">偷菜</div>
                     <div class="neu-action-desc">每日一次，自动寻找可偷作物</div>
                   </div>
-                  <v-btn :color="canSteal ? 'error' : 'grey'" size="small" variant="flat" :disabled="!canSteal" @click="openStealDialog" class="farm-action-btn">
+                  <v-btn :color="canSteal ? 'error' : 'grey'" size="small" variant="flat" :disabled="!canSteal || actionLoading" @click="openStealDialog" class="farm-action-btn">
                     {{ canSteal ? '去偷菜' : '今日已偷' }}
                   </v-btn>
                 </div>
@@ -540,33 +587,33 @@ onBeforeUnmount(() => {
                   <div class="neu-action-content">
                     <div class="neu-action-label">一键点赞</div>
                     <div class="neu-action-desc">
-                      <template v-if="likeMax <= 0">暂无额度信息</template>
-                      <template v-else>剩余 {{ likeRemaining }}/{{ likeMax }}</template>
+                      <template v-if="likeMax <= 0">打开后获取剩余次数</template>
+                      <template v-else>剩余次数：{{ likeRemaining }}/{{ likeMax }}（按顺序点赞直到次数用完）</template>
                     </div>
                   </div>
-                  <v-btn color="warning" size="small" variant="flat" :disabled="likeMax > 0 && likeRemaining <= 0" @click="openLikeDialog" class="farm-action-btn">
-                    去点赞
+                  <v-btn color="warning" size="small" variant="flat" :disabled="!canLike || actionLoading" @click="openLikeDialog" class="farm-action-btn">
+                    {{ f.like_done_today ? '今日已赞' : '去点赞' }}
                   </v-btn>
                 </div>
                 <div class="neu-action-card neu-action-card--visit">
                   <div class="neu-action-icon">🚜</div>
                   <div class="neu-action-content">
                     <div class="neu-action-label">参观农场</div>
-                    <div class="neu-action-desc">输入用户名或访问好友农场</div>
+                    <div class="neu-action-desc">{{ visitCooldownSeconds > 0 ? `请等待 ${visitCooldownSeconds} 秒` : '输入用户名或访问好友农场' }}</div>
                   </div>
                   <div class="visit-action-row">
                     <v-text-field v-model="visitUsername" density="compact" hide-details placeholder="用户名" variant="outlined" class="visit-username-input" @keyup.enter="visit" />
-                    <v-btn color="info" size="small" variant="flat" :disabled="!visitUsername.trim()" @click="visit" class="visit-btn">访问</v-btn>
-                    <v-btn color="primary" size="small" variant="flat" @click="visitRandom" class="visit-btn">随机访问</v-btn>
+                    <v-btn color="info" size="small" variant="flat" :disabled="!visitUsername.trim() || visitCooldownSeconds > 0 || actionLoading" @click="visit" class="visit-btn">访问</v-btn>
+                    <v-btn color="primary" size="small" variant="flat" :disabled="visitCooldownSeconds > 0 || actionLoading" @click="visitRandom" class="visit-btn">随机访问</v-btn>
                   </div>
                 </div>
                 <div class="neu-action-card neu-action-card--slot">
                   <div class="neu-action-icon">🏗</div>
                   <div class="neu-action-content">
                     <div class="neu-action-label">扩地</div>
-                    <div class="neu-action-desc">{{ buySlotAvailable ? '可购买下一个坑位' : '暂无可购买坑位' }}</div>
+                    <div class="neu-action-desc">{{ buySlotReason }}</div>
                   </div>
-                  <v-btn color="primary" size="small" variant="flat" :disabled="!buySlotAvailable" @click="buySlot" class="farm-action-btn">
+                  <v-btn color="primary" size="small" variant="flat" :disabled="!buySlotAvailable || actionLoading" @click="buySlot" class="farm-action-btn">
                     扩地
                   </v-btn>
                 </div>
@@ -728,7 +775,9 @@ onBeforeUnmount(() => {
         <v-card>
           <v-card-title>批量点赞</v-card-title>
           <v-card-text>
-            <div class="text-caption text-grey mb-2">剩余 {{ likeRemaining }}/{{ likeMax }}</div>
+            <div class="text-caption text-grey mb-2">
+              剩余次数：{{ likeRemaining }}/{{ likeMax }}（按顺序点赞直到次数用完）
+            </div>
             <v-textarea v-model="likeUsernames" label="用户名（逗号或换行分隔）" rows="5" variant="outlined" />
           </v-card-text>
           <v-card-actions>
@@ -736,6 +785,23 @@ onBeforeUnmount(() => {
             <v-spacer />
             <v-btn color="grey" variant="text" prepend-icon="mdi-close" @click="likeDialog = false">取消</v-btn>
             <v-btn color="warning" variant="flat" prepend-icon="mdi-check" :loading="actionLoading" @click="like">一键点赞</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-dialog v-model="buySlotDialog" max-width="440">
+        <v-card>
+          <v-card-title>确认扩地</v-card-title>
+          <v-card-text v-if="nextBuySlot">
+            <div>地块：{{ nextBuySlot.landName }}</div>
+            <div>下一坑位：{{ nextBuySlot.landId }}-{{ effectivePlotCount(landsGrouped.find(item => String(item.land_id) === String(nextBuySlot.landId)) || {}) + 1 }}号地</div>
+            <div>所需魔力：{{ nextBuySlot.cost }}</div>
+            <div>当前魔力：{{ userBonus }}</div>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn color="grey" variant="text" prepend-icon="mdi-close" @click="buySlotDialog = false">取消</v-btn>
+            <v-btn color="primary" variant="flat" prepend-icon="mdi-land-plots-circle" :loading="actionLoading" @click="confirmBuySlot">确认扩地</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>

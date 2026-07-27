@@ -82,6 +82,38 @@ def test_siqi_metadata_and_urls():
     assert config.get_buy_plot_slot_url() == "https://si-qi.xyz/plant_game.php"
 
 
+def test_siqi_page_stats_merge_with_fetch_data():
+    config = SiqiConfig()
+    page = '''
+    <span id="user-steal-gain">1,995</span>
+    <span id="user-farm-like-total">13</span>
+    '''
+    stats = config.parse_page_stats(page)
+    assert stats == {"user_steal_gain": 1995, "user_farm_like_total": 13}
+
+    merged = config.merge_page_stats(
+        config.parse_farm_info('{"user_stats":{"total_harvest":"73000"}}'), stats
+    )
+    assert merged["user_steal_gain"] == 1995
+    assert merged["user_stats"]["total_steal_gain"] == 1995
+    assert merged["farm_like_total"] == 13
+    assert merged["user_farm_like_total"] == 13
+
+    missing = config.parse_page_stats("<html></html>")
+    assert missing == {"user_steal_gain": None, "user_farm_like_total": None}
+    parsed = config.parse_farm_info('{"user_stats":{"total_harvest":1}}')
+    assert parsed["user_steal_gain"] is None
+    assert parsed["user_farm_like_total"] is None
+
+
+def test_siqi_like_quota_uses_real_response_fields():
+    config = SiqiConfig()
+    quota = config.parse_like_quota(
+        '{"remaining_in_window":3,"max_per_window":3,"next_available_in":0}'
+    )
+    assert quota == {"remaining": 3, "maximum": 3}
+
+
 def test_siqi_farm_and_warehouse_parsers():
     config = SiqiConfig()
 

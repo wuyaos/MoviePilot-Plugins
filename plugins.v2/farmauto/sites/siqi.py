@@ -276,14 +276,46 @@ class SiqiConfig(FarmSiteConfig):
         match = re.search(r"(?:当前)?魔力(?:值)?\s*[:：]?\s*([\d,.]+)", self._text(html or ""))
         return match.group(1).replace(",", "") if match else None
 
+    def parse_page_stats(self, html: str) -> Dict[str, Optional[int]]:
+        """解析页面专属统计；fetch JSON 不下发偷菜收获和被点赞总数。"""
+        text = html or ""
+        result: Dict[str, Optional[int]] = {
+            "user_steal_gain": None,
+            "user_farm_like_total": None,
+        }
+        patterns = {
+            "user_steal_gain": r'id=["\']user-steal-gain["\'][^>]*>\s*([^<]+)',
+            "user_farm_like_total": r'id=["\']user-farm-like-total["\'][^>]*>\s*([^<]+)',
+        }
+        for field, pattern in patterns.items():
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                result[field] = self._number(match.group(1))
+        return result
+
+    @staticmethod
+    def merge_page_stats(farm_info: Dict[str, Any], page_stats: Dict[str, Any]) -> Dict[str, Any]:
+        result = dict(farm_info or {})
+        stats = dict(result.get("user_stats") or {})
+        steal_gain = page_stats.get("user_steal_gain")
+        like_total = page_stats.get("user_farm_like_total")
+        if steal_gain is not None:
+            result["user_steal_gain"] = steal_gain
+            stats["total_steal_gain"] = steal_gain
+        if like_total is not None:
+            result["farm_like_total"] = like_total
+            result["user_farm_like_total"] = like_total
+        result["user_stats"] = stats
+        return result
+
     def parse_farm_info(self, html: str) -> Dict[str, Any]:
-        """解析 fetch 接口的完整农场数据，缺失字段使用前端可安全消费的默认值。"""
+        """解析 fetch 接口的完整农场数据，缺失统计保留 None 避免误显示为 0。"""
         result: Dict[str, Any] = {
             "user_bonus": 0,
-            "user_stats": {"total_harvest": 0, "total_steal_gain": 0},
-            "user_steal_gain": 0,
-            "farm_like_total": 0,
-            "user_farm_like_total": 0,
+            "user_stats": {"total_harvest": 0, "total_steal_gain": None},
+            "user_steal_gain": None,
+            "farm_like_total": None,
+            "user_farm_like_total": None,
             "seeds": [],
             "user_lands": [],
             "inventory": [],
@@ -310,13 +342,13 @@ class SiqiConfig(FarmSiteConfig):
             total_steal_gain = self._number(raw_stats.get("total_steal_gain"))
             result["user_stats"] = {
                 "total_harvest": total_harvest or 0,
-                "total_steal_gain": total_steal_gain or 0,
+                "total_steal_gain": total_steal_gain,
             }
 
             steal_gain = self._number(data.get("user_steal_gain"))
             if steal_gain is None:
                 steal_gain = total_steal_gain
-            result["user_steal_gain"] = steal_gain or 0
+            result["user_steal_gain"] = steal_gain
 
             like_total = self._number(data.get("farm_like_total"))
             user_like_total = self._number(data.get("user_farm_like_total"))
@@ -324,8 +356,8 @@ class SiqiConfig(FarmSiteConfig):
                 like_total = user_like_total
             if user_like_total is None:
                 user_like_total = like_total
-            result["farm_like_total"] = like_total or 0
-            result["user_farm_like_total"] = user_like_total or 0
+            result["farm_like_total"] = like_total
+            result["user_farm_like_total"] = user_like_total
 
             seeds: List[Dict[str, Any]] = []
             seed_by_id: Dict[int, Dict[str, Any]] = {}
@@ -502,15 +534,7 @@ class SiqiConfig(FarmSiteConfig):
             result["user_logs"] = logs
 
             if not data:
-                text = html or ""
-                steal_match = re.search(r'id=["\']user-steal-gain["\'][^>]*>\s*([^<]+)', text)
-                like_match = re.search(r'id=["\']user-farm-like-total["\'][^>]*>\s*([^<]+)', text)
-                if steal_match:
-                    result["user_steal_gain"] = self._number(steal_match.group(1)) or 0
-                    result["user_stats"]["total_steal_gain"] = result["user_steal_gain"]
-                if like_match:
-                    result["farm_like_total"] = self._number(like_match.group(1)) or 0
-                    result["user_farm_like_total"] = result["farm_like_total"]
+                result = self.merge_page_stats(result, self.parse_page_stats(html))
         except Exception:
             # 站点字段可能随版本变化；详情接口应始终返回稳定结构。
             return result
@@ -607,6 +631,19 @@ class SiqiConfig(FarmSiteConfig):
     def get_like_target_url(self) -> str:
         return self.get_action_submit_url()
 
+    def parse_like_quota(self, html: str) -> Dict[str, Optional[int]]:
+        data = self._json_dict(html)
+        remaining = self._number(data.get("remaining_in_window"))
+        maximum = self._number(data.get("max_per_window"))
+        if maximum is None:
+            maximum = self._number(data.get("max_in_window"))
+        if maximum is None:
+            maximum = self._number(data.get("like_max"))
+        # 思齐当前接口只返回 remaining_in_window；首次查询时剩余值就是本窗口初始额度。
+        if maximum is None and remaining is not None:
+            maximum = remaining
+        return {"remaining": remaining, "maximum": maximum}
+
     def parse_like_targets(self, html: str) -> List[Any]:
         data = self._json_dict(html)
         if data:
@@ -633,7 +670,7 @@ class SiqiConfig(FarmSiteConfig):
         data = self._json_dict(html)
         plot_slot = data.get("plot_slot") if isinstance(data.get("plot_slot"), dict) else {}
         next_costs = plot_slot.get("next_slot_cost_by_land") or {}
-        if plot_slot.get("enabled") and isinstance(next_costs, dict):
+        if (plot_slot.get("enabled") or plot_slot.get("available")) and isinstance(next_costs, dict):
             return [land_id for land_id, cost in next_costs.items() if self._number(cost)]
         candidates = (
             data.get("buyable_lands")

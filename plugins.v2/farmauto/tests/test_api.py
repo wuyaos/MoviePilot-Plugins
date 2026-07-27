@@ -130,6 +130,33 @@ def build_plugin():
     return plugin
 
 
+def test_manual_siqi_interaction_notification_filters_skips_and_deduplicates_limit():
+    plugin = build_plugin()
+    plugin._notify = True
+    sent = []
+    stored = {}
+    plugin.post_message = lambda **kwargs: sent.append(kwargs)
+    plugin.get_data = lambda key: stored.get(key)
+    plugin.save_data = lambda key, value: stored.__setitem__(key, dict(value))
+
+    plugin._notify_siqi_interaction(
+        "buy_slot", True, "魔力不足", skipped=True, reason="insufficient_bonus"
+    )
+    assert sent == []
+
+    plugin._notify_siqi_interaction(
+        "like", True, "今日点赞额度已用完", skipped=True, reason="daily_exhausted"
+    )
+    plugin._notify_siqi_interaction(
+        "like", True, "今日点赞额度已用完", skipped=True, reason="daily_exhausted"
+    )
+    plugin._notify_siqi_interaction("visit", False, "访问失败")
+
+    assert len(sent) == 2
+    assert "首次达到上限" in sent[0]["text"]
+    assert "访问：❌ 失败" in sent[1]["text"]
+
+
 def test_siqi_daily_flags_only_successful_actions():
     plugin = build_plugin()
     plugin._siqi_options = {"auto_steal": True, "auto_like": True}
@@ -428,6 +455,42 @@ def test_siqi_interaction_actions_use_post_form_protocol():
     assert client.posts[-1] == (
         "https://si-qi.xyz/plant_game.php", {"action": "view_random_farm"},
     )
+
+
+def test_siqi_target_queries_use_cache_and_daily_guard():
+    plugin = build_plugin()
+    client = FakeHttpClient()
+    plugin._build_http_client = lambda _policy: client
+    plugin._get_site_cookie = lambda _site_config: "session=secret"
+    daily = {"date": "2099-01-01", "steal": False, "like": False}
+    plugin._siqi_daily_state = lambda: daily
+
+    client.post_responses = ['{"success":true,"usernames":["alice"]}']
+    first = plugin._api_site_action("siqi", {"action": "get_like_targets"})
+    second = plugin._api_site_action("siqi", {"action": "get_like_targets"})
+    assert first["targets"] == ["alice"]
+    assert second["cached"] is True
+    assert len(client.posts) == 1
+
+    daily["like"] = True
+    cached_after_quota = plugin._api_site_action("siqi", {"action": "get_like_targets"})
+    assert cached_after_quota["cached"] is True
+    assert cached_after_quota["targets"] == ["alice"]
+    assert len(client.posts) == 1
+
+
+def test_siqi_visit_has_backend_cooldown():
+    plugin = build_plugin()
+    client = FakeHttpClient()
+    plugin._build_http_client = lambda _policy: client
+    plugin._get_site_cookie = lambda _site_config: "session=secret"
+
+    first = plugin._api_site_action("siqi", {"action": "visit", "random": True})
+    second = plugin._api_site_action("siqi", {"action": "visit", "random": True})
+    assert first["success"] is True
+    assert second["skipped"] is True
+    assert second["reason"] == "cooldown"
+    assert len(client.posts) == 1
 
 
 def test_api_site_action_harvest_calls_corresponding_url():

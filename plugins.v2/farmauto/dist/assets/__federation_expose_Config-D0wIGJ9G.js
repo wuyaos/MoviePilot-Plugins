@@ -7,7 +7,7 @@ const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElement
 const _hoisted_1 = { class: "farm-header bg-gradient-farm text-white" };
 const _hoisted_2 = { class: "farm-header-row d-flex align-center ga-2 px-3 py-2" };
 const _hoisted_3 = { class: "d-flex align-center ga-2 farm-header-left" };
-const _hoisted_4 = { class: "d-flex flex-wrap align-center justify-end ga-3 farm-header-right" };
+const _hoisted_4 = { class: "d-flex flex-wrap align-center justify-end ga-2 farm-header-right" };
 const _hoisted_5 = { class: "pa-4" };
 const _hoisted_6 = { class: "pa-4" };
 const _hoisted_7 = { class: "text-subtitle-1" };
@@ -332,7 +332,7 @@ return (_ctx, _cache) => {
               _createElementVNode("div", _hoisted_4, [
                 _createVNode(_component_v_btn, {
                   icon: "mdi-content-save",
-                  size: "default",
+                  size: "small",
                   variant: "outlined",
                   color: "white",
                   border: "white",
@@ -341,7 +341,7 @@ return (_ctx, _cache) => {
                 }, null, 8, ["loading"]),
                 _createVNode(_component_v_btn, {
                   icon: "mdi-view-dashboard-outline",
-                  size: "default",
+                  size: "small",
                   variant: "outlined",
                   color: "white",
                   border: "white",
@@ -349,7 +349,7 @@ return (_ctx, _cache) => {
                 }),
                 _createVNode(_component_v_btn, {
                   icon: "mdi-close",
-                  size: "default",
+                  size: "small",
                   variant: "outlined",
                   color: "white",
                   border: "white",
@@ -1416,7 +1416,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-b763dc31"]]);
+const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-65bbd9d2"]]);
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 

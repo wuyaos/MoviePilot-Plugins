@@ -249,10 +249,10 @@ def test_siqi_steal_uses_form_actions_and_finishes_session():
     ]
 
 
-def test_siqi_like_uses_usernames_form_field():
+def test_siqi_like_uses_remaining_quota_in_target_order():
     client = FakeHttpClient([
-        FakeResponse('{"success":true,"usernames":["alice"]}'),
-        FakeResponse('{"success":true,"msg":"点赞成功"}'),
+        FakeResponse('{"success":true,"usernames":["alice","bob","carol","dave"],"remaining_in_window":3,"max_per_window":3}'),
+        FakeResponse('{"success":true,"msg":"点赞成功","remaining_in_window":0}'),
     ])
     executor = FarmExecutor(client, Logger(), ocr_recognizer=FakeOcr(None))
 
@@ -261,10 +261,14 @@ def test_siqi_like_uses_usernames_form_field():
     )
 
     assert results[0].success is True
+    assert results[0].target == "alice、bob、carol"
+    assert results[0].quantity == 3
+    assert results[0].reason == "daily_exhausted"
+    assert "剩余 0/3" in results[0].message
     assert client.calls == [
         ("POST", "https://si-qi.xyz/plant_game.php", {"action": "random_like_targets"}),
         ("POST", "https://si-qi.xyz/plant_game.php", {
-            "action": "like_farm_batch", "usernames": "alice",
+            "action": "like_farm_batch", "usernames": "alice\nbob\ncarol",
         }),
     ]
 
@@ -284,6 +288,45 @@ def test_siqi_empty_targets_are_skipped_not_failed():
 
     assert [result.action for result in results] == ["steal", "like", "buy_slot"]
     assert all(result.success and result.skipped for result in results)
+
+
+def test_siqi_buy_slot_checks_balance_before_posting():
+    fetch = {
+        "success": True,
+        "user_bonus": 50,
+        "user_stats": {"total_harvest": 1000},
+        "lands": [{"id": 1, "unlock_harvest": 0}],
+        "user_lands": [],
+        "plot_slot": {
+            "available": True,
+            "next_slot_cost_by_land": {"1": 100},
+        },
+    }
+    import json
+    client = FakeHttpClient([FakeResponse(json.dumps(fetch))])
+    executor = FarmExecutor(client, Logger(), ocr_recognizer=FakeOcr(None))
+
+    result = executor._do_siqi_buy_slot({"session": "value"}, SiqiConfig())
+
+    assert result.success is True and result.skipped is True
+    assert result.reason == "insufficient_bonus"
+    assert "还差 50" in result.message
+    assert client.calls == [("GET", "https://si-qi.xyz/plant_game.php?action=fetch", None)]
+
+
+def test_siqi_daily_exhausted_is_skipped_with_reason():
+    client = FakeHttpClient([
+        FakeResponse('{"success":false,"message":"今日偷菜次数已用完"}'),
+    ])
+    executor = FarmExecutor(client, Logger(), ocr_recognizer=FakeOcr(None))
+
+    result = executor.run_siqi_extras(
+        "session=value", SiqiConfig(), {"auto_steal": True},
+    )[0]
+
+    assert result.success is True and result.skipped is True
+    assert result.reason == "daily_exhausted"
+    assert len(client.calls) == 1
 
 
 def test_all_siqi_switches_closed_do_not_request():

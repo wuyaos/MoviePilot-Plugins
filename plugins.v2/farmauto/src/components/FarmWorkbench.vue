@@ -319,7 +319,10 @@ async function handleSiqiAction({ action, result }) {
     return
   }
   emit('action', result)
-  await loadSiteDetail(selectedSiteId.value)
+  // 目标查询和访问都是只读动作，刷新会销毁当前弹窗并产生额外站点请求。
+  if (!['get_steal_targets', 'get_like_targets', 'visit'].includes(action) && !result.skipped) {
+    await loadSiteDetail(selectedSiteId.value)
+  }
 }
 
 watch(selectedSiteId, siteId => {
@@ -376,10 +379,10 @@ onBeforeUnmount(() => {
             {{ dryRun ? '模拟模式' : '实盘模式' }}
           </v-chip>
         </div>
-        <div class="d-flex flex-wrap align-center justify-end ga-3 farm-header-right">
+        <div class="d-flex flex-wrap align-center justify-end ga-2 farm-header-right">
           <v-btn
             icon="mdi-play"
-            size="default"
+            size="small"
             variant="outlined"
             color="white"
             border="white"
@@ -388,7 +391,7 @@ onBeforeUnmount(() => {
           />
           <v-btn
             icon="mdi-refresh"
-            size="default"
+            size="small"
             variant="outlined"
             color="white"
             border="white"
@@ -398,7 +401,7 @@ onBeforeUnmount(() => {
           <v-btn
             v-if="showSwitch"
             icon="mdi-cog"
-            size="default"
+            size="small"
             variant="outlined"
             color="white"
             border="white"
@@ -407,7 +410,7 @@ onBeforeUnmount(() => {
           <v-btn
             v-if="showClose"
             icon="mdi-close"
-            size="default"
+            size="small"
             variant="outlined"
             color="white"
             border="white"
@@ -452,7 +455,7 @@ onBeforeUnmount(() => {
         :key="`siqi-${refreshKey}`"
         :api="api"
         :plugin-id="pluginId"
-        :farm="siqiFarm"
+        :farm="{ ...siqiFarm, ...(siteDetail.siqi_extra || {}) }"
         :history="siteActions"
         :raw-logs="siqiFarm && Array.isArray(siqiFarm.user_logs) ? siqiFarm.user_logs : []"
         :currency="currency"

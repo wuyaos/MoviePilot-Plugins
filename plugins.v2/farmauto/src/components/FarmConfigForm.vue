@@ -275,10 +275,10 @@ function saveConfig() {
           <span class="text-subtitle-1 text-white font-weight-bold">农场配置</span>
         </div>
         <v-spacer />
-        <div class="d-flex flex-wrap align-center justify-end ga-3 farm-header-right">
+        <div class="d-flex flex-wrap align-center justify-end ga-2 farm-header-right">
           <v-btn
             icon="mdi-content-save"
-            size="default"
+            size="small"
             variant="outlined"
             color="white"
             border="white"
@@ -287,7 +287,7 @@ function saveConfig() {
           />
           <v-btn
             icon="mdi-view-dashboard-outline"
-            size="default"
+            size="small"
             variant="outlined"
             color="white"
             border="white"
@@ -295,7 +295,7 @@ function saveConfig() {
           />
           <v-btn
             icon="mdi-close"
-            size="default"
+            size="small"
             variant="outlined"
             color="white"
             border="white"

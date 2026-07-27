@@ -31,7 +31,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场统一自动运营，支持独立收获、补种与出售策略"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
-    plugin_version = "3.2.1"
+    plugin_version = "3.2.6"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "farmauto_"
@@ -71,6 +71,8 @@ class FarmAuto(_PluginBase):
         self._trend_store = PriceTrendStore()
         self._stats = self._empty_stats()
         self._market_prices: Dict[str, Dict[str, int]] = {}
+        self._siqi_target_cache: Dict[str, Dict[str, Any]] = {}
+        self._siqi_visit_last_at = 0.0
 
     @staticmethod
     def _empty_stats() -> Dict[str, Any]:
@@ -100,6 +102,8 @@ class FarmAuto(_PluginBase):
     def init_plugin(self, config: Optional[dict] = None):
         # 重建运行锁：reload 时旧 daemon 线程可能持有残留锁
         type(self)._run_lock = threading.Lock()
+        self._siqi_target_cache = {}
+        self._siqi_visit_last_at = 0.0
         config = dict(config or {})
         obsolete_keys = {
             "mode", "harvest_interval_minutes", "siqi_auto_captcha_harvest",
@@ -294,11 +298,73 @@ class FarmAuto(_PluginBase):
 
     def _siqi_daily_state(self) -> Dict[str, Any]:
         today = datetime.now().strftime("%Y-%m-%d")
-        stored = self.get_data("siqi_daily") or {}
+        try:
+            stored = self.get_data("siqi_daily") or {}
+        except (AttributeError, NotImplementedError):
+            stored = {}
         if not isinstance(stored, dict) or stored.get("date") != today:
             stored = {"date": today, "steal": False, "like": False}
-            self.save_data("siqi_daily", stored)
+            try:
+                self.save_data("siqi_daily", stored)
+            except (AttributeError, NotImplementedError):
+                pass
         return stored
+
+    def _notify_siqi_interaction(
+        self,
+        action: str,
+        success: bool,
+        message: str = "",
+        target: str = "",
+        skipped: bool = False,
+        reason: str = "",
+    ) -> None:
+        """推送手动思齐互动结果；普通跳过静默，达到上限每日仅首次通知。"""
+        labels = {"steal": "偷菜", "like": "点赞", "buy_slot": "扩地", "visit": "访问"}
+        label = labels.get(action)
+        if not label:
+            return
+        detail = str(message or target or "无详情").strip()
+        outcome = (
+            "首次达到上限" if reason == "daily_exhausted"
+            else "跳过" if skipped
+            else "成功" if success else "失败"
+        )
+        logger.info(f"[FarmAuto] 思齐互动 {label}：{outcome}，{detail}")
+        if not self._notify:
+            return
+        if skipped and reason != "daily_exhausted":
+            return
+        if reason == "daily_exhausted":
+            today = datetime.now().strftime("%Y-%m-%d")
+            try:
+                notified = self.get_data("siqi_interaction_limit_notified") or {}
+            except (AttributeError, NotImplementedError):
+                notified = {}
+            if not isinstance(notified, dict) or notified.get("date") != today:
+                notified = {"date": today, "actions": {}}
+            actions = notified.get("actions")
+            if not isinstance(actions, dict):
+                actions = {}
+            if actions.get(action):
+                return
+            actions[action] = True
+            notified["actions"] = actions
+            try:
+                self.save_data("siqi_interaction_limit_notified", notified)
+            except (AttributeError, NotImplementedError):
+                pass
+            outcome = "⚠️ 首次达到上限"
+        else:
+            outcome = "✅ 成功" if success else "❌ 失败"
+        try:
+            self.post_message(
+                mtype=NotificationType.SiteMessage,
+                title="【农场自动化Pro】思齐互动",
+                text=f"{labels[action]}：{outcome}\n{detail}",
+            )
+        except Exception as error:
+            logger.error(f"[FarmAuto] 思齐{label}通知发送失败：{error}")
 
     def _run_siqi_extras(self, executor, site_config, cookie, policy, report) -> None:
         if site_config.site_id != "siqi" or policy.get("dry_run", False):
@@ -310,15 +376,26 @@ class FarmAuto(_PluginBase):
             cookie,
             site_config,
             self._siqi_options,
-            {"steal": bool(daily.get("steal")), "like": bool(daily.get("like"))},
+            {"steal": bool(daily.get("steal")), "like": False},
         )
         for result in results:
+            # 点赞额度按滚动窗口判断；已知达到上限后，后续定时探测仍执行但不重复通知。
+            already_exhausted = result.action == "like" and bool(daily.get("like"))
+            if result.action == "like" and (
+                (result.success and not result.skipped) or result.reason == "daily_exhausted"
+            ):
+                daily["like"] = True
+                self.save_data("siqi_daily", daily)
+                if already_exhausted and result.reason == "daily_exhausted":
+                    result.reason = "daily_already_exhausted"
             report.actions.append(result)
             if result.success and not result.skipped:
                 report.trades_count += 1
-                if result.action in ("steal", "like"):
-                    daily[result.action] = True
-                    self.save_data("siqi_daily", daily)
+            if result.action == "steal" and (
+                (result.success and not result.skipped) or result.reason == "daily_exhausted"
+            ):
+                daily["steal"] = True
+                self.save_data("siqi_daily", daily)
         if results and original_status not in ("failed", "partial"):
             failures = sum(not result.success for result in report.actions)
             report.status = "partial" if failures else "completed"
@@ -894,6 +971,30 @@ class FarmAuto(_PluginBase):
                     market_prices = site_config.parse_market_prices(response.text)
                     if market_prices:
                         data["market_prices"] = market_prices
+                    page_response = http_client.get(site_config.get_action_submit_url(), cookies)
+                    page_response.raise_for_status()
+                    siqi_farm = site_config.merge_page_stats(
+                        siqi_farm, site_config.parse_page_stats(page_response.text)
+                    )
+                    # 点赞额度不在 fetch/page 中，复用 60 秒目标缓存做一次只读查询。
+                    now = time.monotonic()
+                    cached_like = self._siqi_target_cache.get("get_like_targets") or {}
+                    if now - float(cached_like.get("at") or 0) >= 60:
+                        like_response = http_client.post(
+                            site_config.get_action_submit_url(), cookies,
+                            data={"action": "random_like_targets"},
+                        )
+                        like_response.raise_for_status()
+                        quota = site_config.parse_like_quota(like_response.text)
+                        cached_like = {
+                            "at": now,
+                            "targets": site_config.parse_like_targets(like_response.text),
+                            "remaining_in_window": quota["remaining"],
+                            "max_in_window": quota["maximum"],
+                        }
+                        self._siqi_target_cache["get_like_targets"] = cached_like
+                    siqi_farm["like_remaining"] = cached_like.get("remaining_in_window")
+                    siqi_farm["like_max"] = cached_like.get("max_in_window")
             except Exception as error:
                 logger.warning(f"[FarmAuto] 思齐农场详情刷新失败：{error}")
             data["siqi_farm"] = siqi_farm
@@ -906,7 +1007,10 @@ class FarmAuto(_PluginBase):
             data["siqi_extra"] = {
                 "captcha_ready": True,
                 "steal_done_today": is_today and bool(daily.get("steal")),
-                "like_done_today": is_today and bool(daily.get("like")),
+                "like_done_today": (
+                    siqi_farm.get("like_remaining") is not None
+                    and siqi_farm.get("like_remaining") <= 0
+                ),
                 "buy_slot_available": siqi_farm.get("plot_slot", {}).get("available", False),
             }
         response = {"success": True, "data": data}
@@ -1066,36 +1170,99 @@ class FarmAuto(_PluginBase):
                         "target": target,
                         "dry_run": False,
                     }
-                if action == "get_steal_targets":
+                if action in ("get_steal_targets", "get_like_targets"):
+                    daily = self._siqi_daily_state()
+                    daily_key = "steal" if action == "get_steal_targets" else "like"
+                    if daily_key == "steal" and daily.get("steal"):
+                        return {
+                            "success": True, "skipped": True,
+                            "reason": "daily_done",
+                            "message": "今日偷菜已完成",
+                            "action": action, "target": target, "targets": [], "dry_run": False,
+                        }
+                    now = time.monotonic()
+                    cached = self._siqi_target_cache.get(action) or {}
+                    age = now - float(cached.get("at") or 0)
+                    if cached and age < 60:
+                        return {
+                            "success": True, "cached": True,
+                            "message": "使用一分钟内的目标缓存",
+                            "action": action, "target": target,
+                            "targets": cached.get("targets") or [],
+                            "remaining_in_window": cached.get("remaining_in_window"),
+                            "max_in_window": cached.get("max_in_window"),
+                            "dry_run": False,
+                        }
+                    form_action = (
+                        "get_victim_farm" if action == "get_steal_targets"
+                        else "random_like_targets"
+                    )
                     response = http_client.post(
-                        site_config.get_steal_target_url(), cookies,
-                        data={"action": "get_victim_farm"},
+                        site_config.get_action_submit_url(), cookies,
+                        data={"action": form_action},
                     )
                     response.raise_for_status()
-                    targets = site_config.parse_steal_targets(response.text)
-                    return {
-                        "success": True,
-                        "message": "偷菜目标已加载",
-                        "action": action,
-                        "target": target,
-                        "targets": targets,
-                        "dry_run": False,
-                    }
-                if action == "get_like_targets":
-                    response = http_client.post(
-                        site_config.get_like_target_url(), cookies,
-                        data={"action": "random_like_targets"},
+                    raw_targets = site_config._json_dict(response.text)
+                    message = str(raw_targets.get("message") or raw_targets.get("msg") or "")
+                    logger.info(
+                        f"[FarmAuto] 思齐互动目标查询：{('偷菜' if action == 'get_steal_targets' else '点赞')}，"
+                        f"响应成功={bool(raw_targets.get('success', True))}"
                     )
-                    response.raise_for_status()
-                    targets = site_config.parse_like_targets(response.text)
+                    if any(token in message for token in ("已用完", "额度用完", "今日已", "达到上限")):
+                        interaction = "steal" if action == "get_steal_targets" else "like"
+                        self._notify_siqi_interaction(
+                            interaction, True, message, target,
+                            skipped=True, reason="daily_exhausted",
+                        )
+                        return {
+                            "success": True, "skipped": True,
+                            "reason": "daily_exhausted", "message": message,
+                            "action": action, "target": target, "targets": [], "dry_run": False,
+                        }
+                    quota = {"remaining": None, "maximum": None}
+                    if action == "get_like_targets":
+                        quota = site_config.parse_like_quota(response.text)
+                        remaining = quota["remaining"]
+                        if remaining is not None and remaining <= 0:
+                            self._notify_siqi_interaction(
+                                "like", True, "今日点赞额度已用完", target,
+                                skipped=True, reason="daily_exhausted",
+                            )
+                            return {
+                                "success": True, "skipped": True,
+                                "reason": "daily_exhausted", "message": "今日点赞额度已用完",
+                                "action": action, "target": target, "targets": [], "dry_run": False,
+                            }
+                        targets = site_config.parse_like_targets(response.text)
+                    else:
+                        targets = site_config.parse_steal_targets(response.text)
+                    cache_entry = {"at": now, "targets": targets}
+                    if action == "get_like_targets":
+                        cache_entry["remaining_in_window"] = quota["remaining"]
+                        cache_entry["max_in_window"] = quota["maximum"]
+                    self._siqi_target_cache[action] = cache_entry
+                    logger.info(
+                        f"[FarmAuto] 思齐互动目标查询完成：{('偷菜' if action == 'get_steal_targets' else '点赞')}，"
+                        f"目标数={len(targets)}，剩余次数={quota['remaining']}"
+                    )
                     return {
                         "success": True,
-                        "message": "点赞目标已加载",
-                        "action": action,
-                        "target": target,
+                        "message": "偷菜目标已加载" if action == "get_steal_targets" else "点赞目标已加载",
+                        "action": action, "target": target,
                         "targets": targets,
+                        "remaining_in_window": quota["remaining"] if action == "get_like_targets" else None,
+                        "max_in_window": quota["maximum"] if action == "get_like_targets" else None,
                         "dry_run": False,
                     }
+                if action == "steal":
+                    daily = self._siqi_daily_state()
+                    if daily.get("steal"):
+                        return {
+                            "success": True, "skipped": True,
+                            "reason": "daily_done",
+                            "message": "今日偷菜已完成",
+                            "action": action, "target": target, "dry_run": False,
+                        }
                 if action == "harvest":
                     url = site_config.get_harvest_plot_url(
                         action_data["land_id"], action_data["plot_index"]
@@ -1112,11 +1279,18 @@ class FarmAuto(_PluginBase):
                     )
                     parser = site_config.parse_sell_result
                 elif action == "buy_plot_slot":
-                    action_data["action"] = "buy_plot_slot"
-                    response = http_client.post(
-                        site_config.get_buy_plot_slot_url(), cookies, data=action_data
+                    # 手动扩地也复用执行层的实时 fetch/余额/解锁检查。
+                    guarded = FarmExecutor(http_client, logger)._do_siqi_buy_slot(
+                        cookies, site_config
                     )
-                    parser = site_config.parse_buy_slot_result
+                    self._notify_siqi_interaction(
+                        "buy_slot", guarded.success, guarded.message, guarded.target,
+                        skipped=guarded.skipped, reason=guarded.reason,
+                    )
+                    return {
+                        **vars(guarded), "action": action,
+                        "target": guarded.target, "dry_run": False,
+                    }
                 elif action == "steal":
                     action_data.pop("target_id", None)
                     action_data["action"] = "steal_vegetable"
@@ -1148,6 +1322,15 @@ class FarmAuto(_PluginBase):
                     )
                     parser = site_config.parse_like_result
                 else:
+                    now = time.monotonic()
+                    wait_seconds = 3 - (now - self._siqi_visit_last_at)
+                    if wait_seconds > 0:
+                        return {
+                            "success": True, "skipped": True,
+                            "reason": "cooldown",
+                            "message": f"请等待 {max(1, int(wait_seconds + 0.999))} 秒后再次访问",
+                            "action": action, "target": target, "dry_run": False,
+                        }
                     if action_data.get("random"):
                         action_data = {"action": "view_random_farm"}
                     else:
@@ -1167,6 +1350,7 @@ class FarmAuto(_PluginBase):
                     response = http_client.post(
                         site_config.get_visit_submit_url(), cookies, data=action_data
                     )
+                    self._siqi_visit_last_at = now
                     parser = site_config.parse_visit_result
                 if parser is not None:
                     response.raise_for_status()
@@ -1200,6 +1384,23 @@ class FarmAuto(_PluginBase):
                 response = http_client.get(site_config.get_sell_url(sell_key), cookies)
                 response.raise_for_status()
                 parsed = site_config.parse_sell_result(response.text)
+            if site_id == "siqi" and action in ("steal", "like") and parsed.get("success"):
+                daily = self._siqi_daily_state()
+                daily[action] = True
+                try:
+                    self.save_data("siqi_daily", daily)
+                except (AttributeError, NotImplementedError):
+                    pass
+                self._siqi_target_cache.pop(
+                    "get_steal_targets" if action == "steal" else "get_like_targets", None
+                )
+            if site_id == "siqi" and action in ("steal", "like", "visit"):
+                self._notify_siqi_interaction(
+                    action, bool(parsed.get("success")),
+                    str(parsed.get("message") or ""), target,
+                    skipped=bool(parsed.get("skipped", False)),
+                    reason=str(parsed.get("reason") or ""),
+                )
             safe_parsed = {
                 key: value for key, value in parsed.items()
                 if str(key).lower() not in {"cookie", "cookies", "set-cookie", "authorization"}
@@ -1213,6 +1414,9 @@ class FarmAuto(_PluginBase):
                 "dry_run": False,
             }
         except Exception as error:
+            if site_id == "siqi" and action in ("steal", "like", "buy_plot_slot", "visit"):
+                notification_action = "buy_slot" if action == "buy_plot_slot" else action
+                self._notify_siqi_interaction(notification_action, False, str(error), target)
             return {
                 "success": False,
                 "message": str(error),

@@ -64,6 +64,7 @@ class ActionResult:
     profit: int = 0
     message: str = ""
     skipped: bool = False
+    reason: str = ""
     crop_name: str = ""
     crop_icon: str = ""
     land_name: str = ""

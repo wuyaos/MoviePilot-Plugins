@@ -73,6 +73,42 @@ def test_format_notification_groups_actions_and_failures():
     assert text.endswith("状态：partial 部分站点或操作未完成")
 
 
+def test_notification_reports_interaction_outcomes_and_filters_normal_skips():
+    report = RunReport(
+        started_at=1,
+        finished_at=2,
+        site_reports=[SiteRunReport(
+            site_id="siqi",
+            site_name="思齐",
+            actions=[
+                ActionResult("steal", "好友A", True, profit=5),
+                ActionResult("like", "好友B", False, message="接口失败"),
+                ActionResult(
+                    "buy_slot", "地块1", True, skipped=True,
+                    reason="insufficient_bonus", message="魔力不足",
+                ),
+                ActionResult(
+                    "visit", "随机农场", True, skipped=True,
+                    reason="daily_exhausted", message="今日访问额度已用完",
+                ),
+            ],
+            total_profit=5,
+            trades_count=1,
+            status="partial",
+        )],
+        total_profit=5,
+        total_trades=1,
+        status="partial",
+    )
+
+    text = format_notification(report)
+
+    assert "🥷 偷菜：✅1（好友A×1） 魔力 +5" in text
+    assert "👍 点赞：❌1（接口失败） 魔力 +0" in text
+    assert "🏗 扩地" not in text
+    assert "🚜 参观：⚠️达到上限（今日访问额度已用完） 魔力 +0" in text
+
+
 def test_format_notification_handles_empty_site_reports():
     report = RunReport(
         started_at=0,
