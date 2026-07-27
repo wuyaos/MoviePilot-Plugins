@@ -244,10 +244,14 @@ class FarmSiteConfig(ABC):
         text = self._action_result_text(html)
         if self._has_action_failure(text):
             return {"success": False, "message": f"{action_name}失败"}
-        # 先检查失败关键词（没有空地/已满/不足/失败），避免误判成功
-        failure_tokens = ("没有空地", "已满", "不足", "失败", "无法", "不能", "已种植")
+        # 没有空地/已满属于正常跳过，不算失败也不计入成功
+        skip_tokens = ("没有空地", "已满", "已种植", "未解锁")
+        if any(token in text for token in skip_tokens):
+            return {"success": True, "skipped": True, "message": f"无空地，跳过{action_name}"}
+        # 真正的失败关键词
+        failure_tokens = ("不足", "失败", "无法", "不能")
         if any(token in text for token in failure_tokens):
-            return {"success": False, "message": f"{action_name}失败：没有空地或不可种植"}
+            return {"success": False, "message": f"{action_name}失败"}
         success = "成功" in text or action_name in text or "完成" in text
         return {"success": success, "message": f"{action_name}{'成功' if success else '失败'}"}
 

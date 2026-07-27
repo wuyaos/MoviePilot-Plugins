@@ -540,13 +540,14 @@ class SiqiConfig(FarmSiteConfig):
 
     def parse_plant_result(self, html: str, action: str = "plant") -> Dict[str, Any]:
         result = self._parse_action_result(html, ("种植成功", "已种植"), "种植成功", "种植失败")
-        # 没有空地等失败关键词覆盖 JSON success 误判
+        # 没有空地/已满属于正常跳过，不算失败也不计入成功
         msg = str(result.get("message") or "")
         text = self._text(html or "")
         combined = msg + " " + text
-        if any(token in combined for token in ("没有空地", "已满", "不足", "无法", "不能", "未解锁")):
-            result["success"] = False
-            result["message"] = "种植失败：没有空地或不可种植"
+        if any(token in combined for token in ("没有空地", "已满", "已种植", "未解锁")):
+            result["success"] = True
+            result["skipped"] = True
+            result["message"] = "无空地，跳过种植"
         return result
 
     def parse_ready_plots(self, html: str) -> List[Dict[str, Any]]:

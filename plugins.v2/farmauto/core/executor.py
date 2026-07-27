@@ -639,7 +639,12 @@ class FarmExecutor:
                     except Exception:
                         pass
             elif operation == "harvest":
-                action_url = site_config.get_harvest_url(crop["type"], crop["id"])
+                if site_config.site_id == "siqi":
+                    # 思齐用 land_id+plot_index 收获，而非 type/id
+                    st = (crop_status or {}).get(crop_key, {})
+                    action_url = site_config.get_harvest_plot_url(st.get("land_id"), st.get("plot_index"))
+                else:
+                    action_url = site_config.get_harvest_url(crop["type"], crop["id"])
                 response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)
@@ -726,12 +731,17 @@ class FarmExecutor:
                     if reward > 0:
                         profit = reward * quantity
             elif success and operation == "plant":
-                cost = int(crop.get("cost", 0))
-                if crop.get("type") == "animal":
-                    operation = "breed"
-                if cost > 0:
-                    profit = -cost
-                    message = f"{message} 成本{cost}".strip()
+                # skipped(无空地) 不扣魔力
+                if parsed.get("skipped"):
+                    profit = 0
+                    operation = "plant"
+                else:
+                    cost = int(crop.get("cost", 0))
+                    if crop.get("type") == "animal":
+                        operation = "breed"
+                    if cost > 0:
+                        profit = -cost
+                        message = f"{message} 成本{cost}".strip()
             # 填充 KoWming logMeta 所需字段(所有站点统一)
             crop_name = str(crop.get("name") or target or "")
             crop_icon = ""
