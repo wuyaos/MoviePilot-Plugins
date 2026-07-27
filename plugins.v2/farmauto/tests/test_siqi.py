@@ -93,11 +93,13 @@ def test_siqi_farm_and_warehouse_parsers():
 
     assert config.parse_market_prices(FARM_JSON) == {"crop_1": 20}
     assert config.parse_bonus(FARM_JSON) == "12345"
-    assert config.parse_crop_status(FARM_JSON)["crop_1"] == {
+    assert config.parse_crop_status(FARM_JSON)["crop_1_2_0"] == {
         "can_harvest": True,
         "land_id": 2,
         "plot_index": 0,
         "harvest_time": 1700000000,
+        "seed_id": 1,
+        "crop_key": "crop_1",
     }
     item = config.parse_warehouse_items(FARM_JSON)[0]
     assert item["name"] == "萝卜"
@@ -126,7 +128,7 @@ def test_siqi_resolves_dynamic_crops_and_inventory_keys():
         "crop_2": 50,
         "crop_3": 70,
     }
-    assert config.parse_crop_status(DYNAMIC_FARM_JSON)["crop_3"]["can_harvest"] is True
+    assert config.parse_crop_status(DYNAMIC_FARM_JSON)["crop_3_2_0"]["can_harvest"] is True
     assert config.parse_warehouse_items(DYNAMIC_FARM_JSON)[0]["crop_key"] == "crop_3"
 
 

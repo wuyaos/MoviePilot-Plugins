@@ -660,6 +660,10 @@ class FarmExecutor:
                     # 思齐用 POST plant_game.php + action=plant_all_empty 批量种空地
                     # seed_id 取思齐配置页的 default_seed_id(回退 crop.id)
                     default_seed = (siqi_options or {}).get("default_seed_id") or crop.get("id", 1)
+                    # target 显示实际种植的种子名(default_seed 对应的 crop), 而非 plan 传入的 crop.name
+                    seed_crop = next((c for c in crops.values() if c.get("id") == default_seed), crop)
+                    target = seed_crop.get("name", target)
+                    crop = seed_crop
                     response = self.http_client.post(
                         site_config.get_farm_url(),
                         cookies,
