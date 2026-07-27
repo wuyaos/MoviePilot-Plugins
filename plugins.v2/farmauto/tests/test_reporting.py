@@ -67,7 +67,8 @@ def test_format_notification_groups_actions_and_failures():
     assert "【PlayLet】⚠️  魔力 -500" in text
     assert "🌾 收获：✅2（小麦×2） 魔力" in text
     assert "🌱 种植：✅1（玉米×1） 魔力" in text
-    assert "💰 出售：✅0 魔力 +0 ❌1（牛：出售失败）" in text
+    # 失败操作不计入通知，出售组无成功不显示
+    assert "💰 出售" not in text
     assert "📋 其他：✅1（其他目标×1） 魔力" in text
     assert "【思齐】✅  魔力 +0" in text
     assert "👍 点赞：✅1（好友×1） 魔力" in text

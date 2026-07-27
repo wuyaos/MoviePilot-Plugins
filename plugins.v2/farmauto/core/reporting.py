@@ -36,12 +36,24 @@ def _signed(value: int) -> str:
 
 
 def _format_site_detail(site_report: SiteRunReport) -> str:
+    # 过滤无意义操作：harvest_all 收获0（target=all 且无明细）不计入通知
+    meaningful_actions = []
+    for action in site_report.actions:
+        if action.action == "harvest_all" and action.success:
+            target_str = str(action.target or "")
+            # harvest_all 未拆分明细（target=all）且无魔力收获，视为无收获
+            if target_str == "all" and int(action.profit or 0) == 0:
+                continue
+        meaningful_actions.append(action)
+    # 站点无有意义操作不显示
+    if not meaningful_actions:
+        return ""
     lines = [
         f"【{site_report.site_name}】{_STATUS_EMOJIS.get(site_report.status, '⚠️')}  "
         f"魔力 {_signed(site_report.total_profit)}"
     ]
     grouped_actions = [[] for _ in range(len(_ACTION_CATEGORIES) + 1)]
-    for action in site_report.actions:
+    for action in meaningful_actions:
         category_index = next(
             (
                 index
@@ -54,10 +66,10 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
 
     categories = (*_ACTION_CATEGORIES, (set(), "📋", "其他"))
     for (_, icon, label), actions in zip(categories, grouped_actions):
-        if not actions:
-            continue
+        # 仅显示成功操作，失败(没有空地等)不计入通知
         successful_actions = [action for action in actions if action.success]
-        failed_actions = [action for action in actions if not action.success]
+        if not successful_actions:
+            continue
         # 该组魔力变化 = 成功操作 profit 之和
         group_profit = sum(int(a.profit or 0) for a in successful_actions)
         # 按目标名聚合计数
@@ -69,16 +81,8 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
         success_detail = (
             f"（{'、'.join(successful_targets)}）" if successful_targets else ""
         )
-        line = f"  {icon} {label}：✅{len(successful_actions)}{success_detail} 魔力 {_signed(group_profit)}"
-        # 失败为 0 不显示
-        if failed_actions:
-            failed_details = [
-                f"{action.target or '未知目标'}：{action.message or '失败'}"
-                for action in failed_actions
-            ]
-            line += f" ❌{len(failed_actions)}（{'、'.join(failed_details)}）"
-        lines.append(line)
-    return "\n".join(lines)
+        lines.append(f"  {icon} {label}：✅{len(successful_actions)}{success_detail} 魔力 {_signed(group_profit)}")
+    return "\n".join(lines) if len(lines) > 1 else ""
 
 
 def format_notification(report: RunReport) -> str:
@@ -86,7 +90,8 @@ def format_notification(report: RunReport) -> str:
     partial = sum(item.status == "partial" for item in report.site_reports)
     failed = sum(item.status == "failed" for item in report.site_reports)
     site_details = "\n\n".join(
-        _format_site_detail(item) for item in report.site_reports
+        detail for detail in (_format_site_detail(item) for item in report.site_reports)
+        if detail
     ) or "无站点执行结果"
     finished_at = datetime.fromtimestamp(report.finished_at).strftime(
         "%Y-%m-%d %H:%M:%S"
