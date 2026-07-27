@@ -113,11 +113,11 @@ def test_siqi_resolves_dynamic_crops_and_inventory_keys():
 
     assert config.resolve_crops(DYNAMIC_FARM_JSON) == {
         "crop_2": {
-            "name": "玉米", "cost": 30, "type": "crop", "id": 2,
+            "name": "玉米", "cost": 30, "base_reward": 50, "type": "crop", "id": 2,
             "action": "plant", "grow_time": 600, "unlock_harvest": 0,
         },
         "crop_3": {
-            "name": "南瓜", "cost": 40, "type": "crop", "id": 3,
+            "name": "南瓜", "cost": 40, "base_reward": 70, "type": "crop", "id": 3,
             "action": "plant", "grow_time": None, "unlock_harvest": 10,
         },
     }

@@ -725,7 +725,7 @@ class FarmExecutor:
                 crop_icon = site_config.crop_image(crop_name) if hasattr(site_config, "crop_image") else ""
             except Exception:
                 crop_icon = ""
-            value_unit = "魔力值" if operation in ("sell", "plant", "breed") else ("收获值" if operation in ("harvest", "harvest_all") else "")
+            value_unit = "魔力值" if operation in ("sell", "plant", "breed") else ("魔力值" if site_config.site_id == "siqi" and operation in ("harvest", "harvest_all") else ("收获值" if operation in ("harvest", "harvest_all") else ""))
             action_quantity = int(action.get("quantity", 1) or 1)
             result = ActionResult(
                 operation,

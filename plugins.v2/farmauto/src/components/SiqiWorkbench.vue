@@ -835,9 +835,9 @@ onBeforeUnmount(() => {
 .visit-btn { min-width: 84px !important; flex: 0 0 84px; }
 
 .plot {
-  min-height: 78px;
-  height: 78px;
-  padding: 6px;
+  width: 86px;
+  height: 86px;
+  padding: 4px;
   border: 1.5px solid rgba(166, 124, 82, .32);
   border-radius: 12px;
   background: rgba(121, 85, 72, .12);
@@ -846,6 +846,10 @@ onBeforeUnmount(() => {
   line-height: 1.1;
   text-align: center;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -880,9 +884,10 @@ onBeforeUnmount(() => {
 .plot--insufficient { filter: grayscale(1); opacity: 0.5; cursor: not-allowed; }
 .plot-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fill, 86px);
   gap: 10px;
   width: 100%;
+  justify-content: start;
 }
 .land-section {
   padding: 14px;
@@ -910,12 +915,17 @@ onBeforeUnmount(() => {
 .land-section .plot small { line-height: 1.1; }
 .plot-emoji {
   display: inline-block;
-  font-size: 2rem;
+  font-size: 1.8rem;
   line-height: 1.2;
+  max-width: 80%;
+  max-height: 50%;
 }
 .stage-img {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
+  max-width: 80%;
+  max-height: 50%;
+  object-fit: contain;
   image-rendering: auto;
   object-fit: contain;
   vertical-align: middle;

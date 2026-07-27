@@ -86,6 +86,7 @@ class SiqiConfig(FarmSiteConfig):
             crops[f"crop_{seed_id}"] = {
                 "name": str(seed.get("name") or f"作物{seed_id}"),
                 "cost": self._number(seed.get("cost")) or 0,
+                "base_reward": self._number(seed.get("base_reward")) or 0,
                 "type": "crop",
                 "id": seed_id,
                 "action": "plant",
