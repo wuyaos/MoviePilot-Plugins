@@ -79,39 +79,39 @@
   flex: 0 0 auto;
 }
 
-.history-scroll[data-v-5be10bed] {
+.history-scroll[data-v-d0ba15f1] {
   max-height: 360px;
   overflow-y: auto;
 }
-.failed-row td[data-v-5be10bed],
-.failed-row .profit[data-v-5be10bed] {
+.failed-row td[data-v-d0ba15f1],
+.failed-row .profit[data-v-d0ba15f1] {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)) !important;
 }
-.history-action[data-v-5be10bed] {
+.history-action[data-v-d0ba15f1] {
   font-weight: 700;
   margin-right: 6px;
 }
-.history-action--plant[data-v-5be10bed] { color: rgb(var(--v-theme-success));
+.history-action--plant[data-v-d0ba15f1] { color: rgb(var(--v-theme-success));
 }
-.history-action--harvest[data-v-5be10bed] { color: rgb(var(--v-theme-warning));
+.history-action--harvest[data-v-d0ba15f1] { color: rgb(var(--v-theme-warning));
 }
-.history-action--sell[data-v-5be10bed] { color: rgb(var(--v-theme-info));
+.history-action--sell[data-v-d0ba15f1] { color: rgb(var(--v-theme-info));
 }
-.history-action--steal[data-v-5be10bed] { color: rgb(var(--v-theme-error));
+.history-action--steal[data-v-d0ba15f1] { color: rgb(var(--v-theme-error));
 }
-.history-action--like[data-v-5be10bed] { color: rgb(var(--v-theme-secondary));
+.history-action--like[data-v-d0ba15f1] { color: rgb(var(--v-theme-secondary));
 }
-.history-detail[data-v-5be10bed] {
+.history-detail[data-v-d0ba15f1] {
   font-size: 0.8rem;
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
-.action-emoji[data-v-5be10bed] { margin-right: 4px;
+.action-emoji[data-v-d0ba15f1] { margin-right: 4px;
 }
-.crop-emoji-inline[data-v-5be10bed] { margin-right: 2px;
+.crop-emoji-inline[data-v-d0ba15f1] { margin-right: 2px;
 }
-.history-value--plus[data-v-5be10bed] { color: rgb(var(--v-theme-success));
+.history-value--plus[data-v-d0ba15f1] { color: rgb(var(--v-theme-success));
 }
-.history-value--minus[data-v-5be10bed] { color: rgb(var(--v-theme-error));
+.history-value--minus[data-v-d0ba15f1] { color: rgb(var(--v-theme-error));
 }
 
 .price-trend-chart[data-v-cf0ce03a] {

@@ -368,15 +368,23 @@ function logMeta(item) {
 const rows = computed$5(() => (Array.isArray(props.history) ? props.history : []).slice(0, 50));
 
 const CHINA_TIME_OPTIONS = {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
   hour: '2-digit',
   minute: '2-digit',
   hour12: false,
   timeZone: 'Asia/Shanghai',
 };
 
+function formatDateTime(date) {
+  return date.toLocaleString('zh-CN', CHINA_TIME_OPTIONS).replaceAll('/', '-')
+}
+
 function formatTime(value) {
   if (value == null || value === '') return '—'
   const text = String(value).trim();
+  // 旧记录可能只有时分，缺少日期来源时原样保留，避免伪造日期。
   if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(text)) return text.slice(0, 5)
 
   const numericValue = Number(value);
@@ -384,15 +392,15 @@ function formatTime(value) {
   if (Number.isFinite(numericValue) && /^\d+(\.\d+)?$/.test(text)) {
     const ms = numericValue < 1e12 ? numericValue * 1000 : numericValue;
     const date = new Date(ms);
-    if (!Number.isNaN(date.getTime())) return date.toLocaleTimeString('zh-CN', CHINA_TIME_OPTIONS)
+    if (!Number.isNaN(date.getTime())) return formatDateTime(date)
   }
 
-  // 思齐 created_at 是不带时区的中国本地时间，直接保留原始时分，避免二次时区换算。
-  const localDateTime = text.match(/^\d{4}-\d{2}-\d{2}[ T](\d{2}):(\d{2})(?::\d{2})?$/);
-  if (localDateTime) return `${localDateTime[1]}:${localDateTime[2]}`
+  // 思齐 created_at 是不带时区的中国本地时间，直接保留原始日期和时分。
+  const localDateTime = text.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/);
+  if (localDateTime) return `${localDateTime[1]} ${localDateTime[2]}:${localDateTime[3]}`
 
   const date = new Date(text);
-  if (!Number.isNaN(date.getTime())) return date.toLocaleTimeString('zh-CN', CHINA_TIME_OPTIONS)
+  if (!Number.isNaN(date.getTime())) return formatDateTime(date)
   return '—'
 }
 
@@ -480,7 +488,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-5be10bed"]]);
+const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-d0ba15f1"]]);
 
 const {resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,createElementVNode:_createElementVNode$4,openBlock:_openBlock$4,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$4,withCtx:_withCtx$3,renderList:_renderList$3,Fragment:_Fragment$3,createElementBlock:_createElementBlock$4,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$3,createTextVNode:_createTextVNode$3} = await importShared('vue');
 
