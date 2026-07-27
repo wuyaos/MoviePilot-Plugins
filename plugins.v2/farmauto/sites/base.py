@@ -1,5 +1,6 @@
 import base64
 import re
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -22,6 +23,14 @@ IMAGE_FILES = {
     "猪": "animal_pig2.png",
     "牛": "animal_cow1.png",
     "羊": "animal_sheep.png",
+}
+
+# 统一作物 emoji 回退表（通用农场与思齐共用，避免 mdi 矢单色图标与 emoji 混杂）
+CROP_EMOJI = {
+    "小麦": "🌾", "玉米": "🌽", "土豆": "🥔", "花生": "🥜",
+    "鸡": "🐔", "猪": "🐷", "牛": "🐂", "羊": "🐑",
+    "萝卜": "🥕", "西红柿": "🍅", "茄子": "🍆",
+    "蘑菇": "🍄", "樱桃": "🍒", "水稻": "🍚", "稻": "🍚",
 }
 
 
@@ -100,6 +109,50 @@ class FarmSiteConfig(ABC):
 
     def supports_sell_inventory(self) -> bool:
         return CAPABILITY_SELL_INVENTORY in self.capabilities
+
+    def to_land_states(self, farm_html: str) -> List["LandState"]:
+        """把站点农场页解析为统一 LandState 列表。
+
+        通用实现基于 parse_crop_status（按 crop_key 索引，无地块概念），
+        合成 land_id = f"{site_id}:{crop_key}"；思齐覆写为从 user_lands 解析真实地块。
+        """
+        from ..core.models import LandState  # 局部导入避免循环依赖
+        crop_status = self.parse_crop_status(farm_html)
+        land_states: List[LandState] = []
+        now = time.time()
+        for crop_key, status in crop_status.items():
+            if not isinstance(status, dict):
+                continue
+            crop = self.crops.get(crop_key, {})
+            remaining = status.get("remaining_minutes")
+            can_harvest = bool(status.get("can_harvest"))
+            state = status.get("state") or self._state_from_status(can_harvest, remaining)
+            land_states.append(LandState(
+                land_id=f"{self.site_id}:{crop_key}",
+                site_id=self.site_id,
+                crop_key=crop_key,
+                plot_index=None,
+                state=state,
+                can_harvest=can_harvest,
+                seed_id=crop.get("id"),
+                seed_name=crop.get("name"),
+                harvest_time=(now + remaining * 60) if remaining and remaining > 0 else None,
+                remaining_minutes=remaining,
+                grow_time=None,
+                cost=crop.get("cost"),
+                sellable=False,
+            ))
+        return land_states
+
+    def crop_emoji(self, name: str) -> str:
+        """返回作物/动物的统一 emoji 回退图标。"""
+        return CROP_EMOJI.get(str(name or ""), "🌱")
+
+    def crop_icon(self, name: str) -> Dict[str, str]:
+        """返回统一图标结构：站点 PNG/URL 优先，缺失时回退 emoji。"""
+        image = self.crop_image(name)
+        emoji = self.crop_emoji(name)
+        return {"image": image, "emoji": emoji}
 
     def crop_image(self, name: str) -> str:
         if name in FarmSiteConfig._image_cache:

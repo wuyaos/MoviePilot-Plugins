@@ -83,6 +83,7 @@ class FarmAuto(_PluginBase):
             "last_run": None,
             "history": [],
             "last_result": {},
+            "action_history": {},
         }
 
     @staticmethod
@@ -461,12 +462,36 @@ class FarmAuto(_PluginBase):
                 "profit": 0,
                 "status": report.status,
             })
+        # 持久化执行历史(每站最近 50 条)，供前端统一展示
+        action_history = dict(self._stats.get("action_history") or {})
+        for site_report in report.site_reports:
+            sid = site_report.site_id
+            rows = list(action_history.get(sid) or [])
+            for action in site_report.actions:
+                rows.append({
+                    "time": action.time,
+                    "action": action.action,
+                    "target": action.target,
+                    "crop_name": action.crop_name,
+                    "crop_icon": action.crop_icon,
+                    "land_name": action.land_name,
+                    "plot_index": action.plot_index,
+                    "quantity": action.quantity,
+                    "value": action.profit,
+                    "value_unit": action.value_unit,
+                    "balance_after": action.balance_after,
+                    "success": action.success,
+                    "message": action.message,
+                    "site": site_report.site_name,
+                })
+            action_history[sid] = rows[-50:]
         updated_stats = {
             "total_profit": int(self._stats.get("total_profit", 0)) + report.total_profit,
             "total_trades": int(self._stats.get("total_trades", 0)) + report.total_trades,
             "last_run": report.finished_at,
             "history": history[-20:],
             "last_result": last_result,
+            "action_history": action_history,
         }
         trends = self._trend_store.to_dict()
         self.save_data("stats", updated_stats)
@@ -569,6 +594,13 @@ class FarmAuto(_PluginBase):
                 "methods": ["POST"],
                 "auth": "bear",
                 "summary": "手动执行单站农场操作",
+            },
+            {
+                "path": "/siqi/seeds",
+                "endpoint": self._api_siqi_seeds,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "获取思齐当前种子列表（实时拉取）",
             },
         ]
 
@@ -724,24 +756,26 @@ class FarmAuto(_PluginBase):
         if not site_config:
             return {"success": False, "message": "站点不存在"}
         report = self._last_site_report(site_id)
-        last_result = self._stats.get("last_result") or {}
-        report_time = (
-            report.get("time")
-            or report.get("ts")
-            or (last_result.get("finished_at") if isinstance(last_result, dict) else None)
-        )
-        recent_actions = []
-        for raw_action in report.get("actions") or []:
+        # 执行记录优先取持久化的 action_history(含本次+历史)，保证刷新后仍有数据且时间可解析
+        action_history = self._stats.get("action_history") or {}
+        persisted_actions = list(action_history.get(site_id) or [])
+        recent_actions = [dict(item) for item in persisted_actions[-20:]][::-1]
+        # 本次运行尚未落盘的实时动作补充到顶部
+        live_actions = report.get("actions") or []
+        live_seen = {item.get("time") for item in recent_actions if isinstance(item, dict)}
+        for raw_action in live_actions:
             if not isinstance(raw_action, dict):
                 continue
-            action = str(raw_action.get("action") or "")
-            recent_actions.append({
-                "action": action,
+            ts = raw_action.get("time")
+            if ts in live_seen:
+                continue
+            recent_actions.insert(0, {
+                "action": str(raw_action.get("action") or ""),
                 "target": str(raw_action.get("target") or ""),
                 "profit": self._to_int(raw_action.get("profit"), 0, min_value=-10**12),
                 "success": bool(raw_action.get("success", False)),
                 "message": str(raw_action.get("message") or ""),
-                "time": raw_action.get("time") or raw_action.get("ts") or report_time,
+                "time": ts,
                 "site": raw_action.get("site") or site_config.site_name,
                 "crop_name": str(raw_action.get("crop_name") or ""),
                 "crop_icon": str(raw_action.get("crop_icon") or ""),
@@ -749,6 +783,7 @@ class FarmAuto(_PluginBase):
                 "plot_index": raw_action.get("plot_index"),
                 "quantity": self._to_int(raw_action.get("quantity"), 0),
                 "value_unit": str(raw_action.get("value_unit") or ""),
+                "balance_after": raw_action.get("balance_after"),
             })
         site_trends = self._trend_store.to_dict().get(site_id, {})
         data = {
@@ -765,6 +800,7 @@ class FarmAuto(_PluginBase):
                         for field in ("name", "cost", "type", "id", "action")
                     },
                     "image": site_config.crop_image(crop["name"]),
+                    "emoji": site_config.crop_emoji(crop["name"]),
                 }
                 for crop_key, crop in site_config.crops.items()
             },
@@ -891,6 +927,56 @@ class FarmAuto(_PluginBase):
         if detail_message:
             response["message"] = detail_message
         return response
+
+    def _api_siqi_seeds(self) -> Dict[str, Any]:
+        """实时拉取思齐当前种子列表，供配置页默认种子选择器使用。"""
+        site_config = get_site_config("siqi")
+        if not site_config:
+            return {"success": False, "message": "思齐站点未注册"}
+        try:
+            policy = self.get_effective_policy("siqi")
+            http_client = self._build_http_client(policy)
+            cookies = FarmExecutor._cookie_dict(self._get_site_cookie(site_config))
+            if not cookies:
+                return {"success": False, "message": "未提供有效 Cookie"}
+            farm_url = site_config.get_farm_url()
+            farm_response = http_client.get(farm_url, cookies)
+            farm_response.raise_for_status()
+            farm_html = farm_response.text
+            if not site_config.check_auth(farm_html):
+                return {"success": False, "message": "Cookie 已失效"}
+            # fetch JSON 的 seeds 字段含 name/cost/base_reward/icon/stage_icons/grow_time
+            data = site_config._json_dict(farm_html)
+            seeds = []
+            for seed in data.get("seeds") or []:
+                if not isinstance(seed, dict):
+                    continue
+                seed_id = site_config._number(seed.get("id") or seed.get("seed_id"))
+                if seed_id is None:
+                    continue
+                raw_stage = seed.get("stage_icons") or {}
+                seeds.append({
+                    "seed_id": seed_id,
+                    "name": str(seed.get("name") or f"作物{seed_id}"),
+                    "cost": site_config._number(seed.get("cost")) or 0,
+                    "base_reward": site_config._number(seed.get("base_reward")) or 0,
+                    "icon": str(seed.get("icon") or ""),
+                    "grow_time": seed.get("grow_time"),
+                    "unlock_harvest": site_config._number(
+                        seed.get("unlock_harvest")
+                        or seed.get("required_harvest")
+                        or seed.get("harvest_required")
+                    ) or 0,
+                    "stage_icons": {
+                        phase: str(raw_stage.get(phase) or "")
+                        for phase in ("seedling", "growth", "mature")
+                        if isinstance(raw_stage, dict) and raw_stage.get(phase)
+                    } if isinstance(raw_stage, dict) else {},
+                })
+            return {"success": True, "data": {"seeds": seeds}}
+        except Exception as error:
+            logger.warning(f"[FarmAuto] 思齐种子列表拉取失败: {error}")
+            return {"success": False, "message": str(error)}
 
     def _api_site_action(self, site_id: str, payload: dict) -> Dict[str, Any]:
         action = str((payload or {}).get("action") or "")

@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from .captcha import OcrRecognizer
 from .http_client import AuthError, FarmHttpClient
 from .models import ActionResult, SiteRunReport
-from .strategy import DEFAULT_POLICY, plan_harvest, plan_smart
+from .strategy import DEFAULT_POLICY, plan_run
 from .trend import PriceTrendStore
 
 
@@ -93,6 +93,7 @@ class FarmExecutor:
             if not site_config.check_auth(farm_html):
                 raise AuthError("Cookie 已失效")
 
+            report.bonus = site_config.parse_bonus(farm_html)
             report.market_prices = site_config.parse_market_prices(farm_html)
             if self.trend_store is not None:
                 self.trend_store.record(site_config.site_id, report.market_prices)
@@ -120,13 +121,9 @@ class FarmExecutor:
 
             current_action = "生成计划"
             current_url = ""
-            if mode == "smart":
-                plan = plan_smart(
-                    snapshot, warehouse, site_config, policy,
-                    crops_override=resolved_crops,
-                )
-            elif mode == "harvest":
-                plan = plan_harvest(
+            # 统一使用 plan_run（合并智能交易+临期出售+自动收获）；旧 smart/harvest 兼容映射
+            if mode in ("smart", "harvest", "auto"):
+                plan = plan_run(
                     snapshot, warehouse, site_config, policy,
                     crops_override=resolved_crops,
                 )
@@ -145,6 +142,7 @@ class FarmExecutor:
                         result = ActionResult(
                             action["op"], target, True, message="dry-run：仅记录计划"
                         )
+                        result.balance_after = getattr(report, "bonus", None)
                         report.actions.append(result)
                         self._log_action(site_name, result)
                 report.status = "skipped"
@@ -209,6 +207,13 @@ class FarmExecutor:
                         report.crop_status,
                         siqi_options,
                     )
+                    try:
+                        latest_bonus = site_config.parse_bonus(field_html)
+                        if latest_bonus is not None:
+                            report.bonus = latest_bonus
+                    except Exception:
+                        latest_bonus = None
+                    result.balance_after = latest_bonus if latest_bonus is not None else getattr(report, "bonus", None)
                     report.actions.append(result)
                     self._log_action(site_name, result)
                     if result.success:

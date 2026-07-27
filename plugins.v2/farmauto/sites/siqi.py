@@ -159,6 +159,58 @@ class SiqiConfig(FarmSiteConfig):
             statuses[key] = {"can_harvest": bool(re.search(pattern, source, re.IGNORECASE))}
         return statuses
 
+    def to_land_states(self, farm_html: str) -> List["LandState"]:
+        """思齐覆写：从 fetch JSON 的 user_lands 解析真实地块。"""
+        from ..core.models import LandState
+        data = self._json_dict(farm_html)
+        lands: List[LandState] = []
+        now = time.time()
+        # seeds 用于反查 name/cost/grow_time
+        seed_map: Dict[int, Dict[str, Any]] = {}
+        for seed in data.get("seeds") or []:
+            sid = self._number(seed.get("id"))
+            if sid is not None:
+                seed_map[sid] = seed
+        for plot in data.get("user_lands") or []:
+            if not isinstance(plot, dict):
+                continue
+            land_id = plot.get("land_id")
+            plot_index = plot.get("plot_index")
+            seed_id = self._number(plot.get("seed_id"))
+            ready = str(plot.get("is_ready", "0")) == "1"
+            harvest_time = self._number(plot.get("harvest_time"))
+            if not ready and harvest_time and harvest_time <= now:
+                ready = True
+            seed = seed_map.get(seed_id) if seed_id else None
+            crop_key = f"crop_{seed_id}" if seed_id else None
+            if seed_id and not ready:
+                remaining = max(0, int((harvest_time - now) / 60)) if harvest_time else None
+                state = "growing"
+            elif seed_id and ready:
+                remaining = 0
+                state = "ripe"
+            else:
+                remaining = None
+                state = "empty"
+            grow_time_raw = (seed or {}).get("grow_time")
+            grow_time = self._number(grow_time_raw) if isinstance(grow_time_raw, (int, float, str)) else None
+            lands.append(LandState(
+                land_id=str(land_id),
+                site_id=self.site_id,
+                crop_key=crop_key,
+                plot_index=self._number(plot_index),
+                state=state,
+                can_harvest=ready,
+                seed_id=seed_id,
+                seed_name=str((seed or {}).get("name") or ""),
+                harvest_time=harvest_time,
+                remaining_minutes=remaining,
+                grow_time=grow_time,
+                cost=self._number((seed or {}).get("cost")),
+                sellable=False,
+            ))
+        return lands
+
     def parse_warehouse_items(self, html: str) -> List[Dict[str, Any]]:
         data = self._json_dict(html)
         items: List[Dict[str, Any]] = []
@@ -282,6 +334,7 @@ class SiqiConfig(FarmSiteConfig):
                     "base_reward": self._number(raw_seed.get("base_reward")) or 0,
                     "cost": self._number(raw_seed.get("cost")) or 0,
                     "icon": str(raw_seed.get("icon") or ""),
+                    "emoji": self.crop_emoji(str(raw_seed.get("name") or "")),
                     "grow_time": str(grow_time) if grow_time is not None else "",
                     "unlock_harvest": self._number(
                         raw_seed.get("unlock_harvest")

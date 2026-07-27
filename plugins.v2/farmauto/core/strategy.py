@@ -154,3 +154,83 @@ def plan_harvest(
         })
         remaining_sales -= quantity
     return plan
+
+
+def plan_run(
+    snapshot, warehouse, site_config, policy, crops_override: Optional[Dict] = None
+) -> List[dict]:
+    """统一运行计划：合并智能交易 + 临期出售 + 自动收获。
+
+    流程：收获成熟 → 出售(盈利 should_sell 优先 / 临期兜底 expiry_sale) → 种植空地。
+    不亏钱约束：盈利出售走 should_sell(profit>0)；临期出售是唯一允许亏钱的出口。
+    通用农场与思齐共用；sell_inventory 类站点跳过 field sell。
+    """
+    policy = _policy(policy)
+    plan: List[dict] = []
+    remaining_sales = int(policy["max_sell_per_run"])
+    market_prices = snapshot.get("market_prices", {})
+    crop_status = snapshot.get("crop_status", {})
+    warehouse_items = [_warehouse_model(item) for item in warehouse]
+    crops = crops_override if crops_override is not None else site_config.crops
+    threshold = int(policy["expire_threshold_minutes"])
+
+    # 1. 收获成熟作物（收获免费，即使亏损也该收获成熟作物）
+    if policy["auto_harvest"]:
+        if site_config.supports("harvest_all"):
+            plan.append({"op": "harvest_all", "crop_key": "all", "source": "field", "quantity": 1})
+        else:
+            for crop_key, status in crop_status.items():
+                if not isinstance(status, dict) or not status.get("can_harvest"):
+                    continue
+                if crop_key not in crops:
+                    continue
+                plan.append({"op": "harvest", "crop_key": crop_key, "source": "field", "quantity": 1})
+                # 收获后立即补种（同地块）
+                if policy["auto_plant"]:
+                    plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
+                # sell_inventory 类站点收获后进背包，field sell 无货，跳过
+                if (
+                    policy["auto_sell"]
+                    and remaining_sales > 0
+                    and not site_config.supports_sell_inventory()
+                    and should_sell(crops[crop_key], int(market_prices.get(crop_key, 0)), policy)
+                ):
+                    plan.append({"op": "sell", "crop_key": crop_key, "source": "field", "quantity": 1})
+                    remaining_sales -= 1
+
+    # 2. 出售仓库：盈利出售优先（should_sell 保证 profit>0），临期兜底（允许亏钱）
+    warehouse_items.sort(key=lambda item: item.expire_minutes if item.expire_minutes is not None else 10**12)
+    for item in warehouse_items:
+        if remaining_sales <= 0:
+            break
+        crop = crops.get(item.crop_key or "")
+        if not crop or not item.sell_key:
+            continue
+        price = int(market_prices.get(item.crop_key, 0))
+        profit_sale = policy["auto_sell"] and should_sell(crop, price, policy)
+        expiry_sale = (
+            policy["expiry_sale"]
+            and site_config.supports("expiry_sale")
+            and is_expiry(item, threshold)
+        )
+        if not (profit_sale or expiry_sale):
+            continue
+        quantity = min(item.quantity, remaining_sales)
+        plan.append({
+            "op": "sell", "crop_key": item.crop_key, "source": "warehouse",
+            "quantity": quantity, "sell_key": item.sell_key,
+        })
+        remaining_sales -= quantity
+
+    # 3. 种植空地（未在收获流程中补种的空地；harvest_all 站点收获后全部空地需补种）
+    if policy["auto_plant"]:
+        planted = {a["crop_key"] for a in plan if a.get("op") == "plant"}
+        for crop_key in crops:
+            if crop_key in planted:
+                continue
+            status = crop_status.get(crop_key, {})
+            if isinstance(status, dict) and status.get("can_harvest"):
+                continue
+            plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
+
+    return plan
