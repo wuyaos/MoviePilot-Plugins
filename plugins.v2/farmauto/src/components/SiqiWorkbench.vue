@@ -828,6 +828,7 @@ onBeforeUnmount(() => {
 
 .plot {
   min-height: 78px;
+  height: 78px;
   padding: 6px;
   border: 1.5px solid rgba(166, 124, 82, .32);
   border-radius: 12px;
@@ -871,7 +872,7 @@ onBeforeUnmount(() => {
 .plot--insufficient { filter: grayscale(1); opacity: 0.5; cursor: not-allowed; }
 .plot-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
   width: 100%;
 }

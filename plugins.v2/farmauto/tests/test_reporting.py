@@ -62,15 +62,15 @@ def test_format_notification_groups_actions_and_failures():
 
     assert text.startswith("━━━━━━━━━━━━━━\n🌾 农场自动化 Pro 运行报告")
     assert datetime.fromtimestamp(1000.0).strftime("%Y-%m-%d %H:%M:%S") in text
-    assert "📊 站点：2（✅成功 1 / ⚠️部分 1 / ❌失败 0）" in text
+    assert "📊 站点：2（✅ 1 ⚠️ 1 ）" in text
     assert "💰 魔力变化：-500" in text
-    assert "【PlayLet】⚠️ -500 魔力" in text
-    assert "🌾 收获：✅2（小麦×2）" in text
-    assert "🌱 种植：✅1（玉米×1）" in text
-    assert "💰 出售：✅0 ❌1（牛：出售失败）" in text
-    assert "📋 其他：✅1（其他目标×1）" in text
-    assert "【思齐】✅ +0 魔力" in text
-    assert "👍 点赞：✅1（好友×1）" in text
+    assert "【PlayLet】⚠️  魔力 -500" in text
+    assert "🌾 收获：✅2（小麦×2） 魔力" in text
+    assert "🌱 种植：✅1（玉米×1） 魔力" in text
+    assert "💰 出售：✅0 魔力 +0 ❌1（牛：出售失败）" in text
+    assert "📋 其他：✅1（其他目标×1） 魔力" in text
+    assert "【思齐】✅  魔力 +0" in text
+    assert "👍 点赞：✅1（好友×1） 魔力" in text
     assert text.endswith("状态：partial 部分站点或操作未完成")
 
 
@@ -85,7 +85,7 @@ def test_format_notification_handles_empty_site_reports():
 
     text = format_notification(report)
 
-    assert "📊 站点：0（✅成功 0 / ⚠️部分 0 / ❌失败 0）" in text
+    assert "📊 站点：0" in text
     assert "无站点执行结果" in text
     assert text.endswith("状态：skipped 未选择有效站点")
 

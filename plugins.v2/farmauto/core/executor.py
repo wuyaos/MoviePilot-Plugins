@@ -543,10 +543,11 @@ class FarmExecutor:
                 success = index < sold_count
                 profit = 0
                 if success:
+                    # 利润口径：sell 仅计售价收入，成本由 plant profit=-cost 承担
                     price = int(market_prices.get(crop_key, 0))
-                    cost = int(crop.get("cost", 0))
-                    if price > 0 and cost > 0:
-                        profit = price - cost
+                    qty = max(1, int(action.get("quantity", 1)))
+                    if price > 0:
+                        profit = price * qty
                 results.append(ActionResult(
                     "sell",
                     crop.get("name", crop_key),
@@ -584,10 +585,42 @@ class FarmExecutor:
 
         try:
             if operation == "harvest_all":
+                # 背包对比拆分：执行前记录库存快照，执行后对比差值
+                inv_before: Dict[str, int] = {}
+                try:
+                    for item in site_config.parse_warehouse_items(farm_html):
+                        name = str(item.get("name") or "")
+                        qty = int(item.get("quantity") or 0)
+                        if name and qty > 0:
+                            inv_before[name] = inv_before.get(name, 0) + qty
+                except Exception:
+                    inv_before = {}
                 action_url = site_config.get_harvest_all_url()
                 response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)
+                # 收获后重新拉农场页对比背包差值，生成收获明细
+                if parsed.get("success"):
+                    try:
+                        after_resp = self.http_client.get(site_config.get_farm_url(), cookies, retryable=False)
+                        after_resp.raise_for_status()
+                        farm_html = after_resp.text
+                        inv_after: Dict[str, int] = {}
+                        for item in site_config.parse_warehouse_items(farm_html):
+                            name = str(item.get("name") or "")
+                            qty = int(item.get("quantity") or 0)
+                            if name and qty > 0:
+                                inv_after[name] = inv_after.get(name, 0) + qty
+                        diff = {
+                            name: inv_after.get(name, 0) - inv_before.get(name, 0)
+                            for name in inv_after
+                            if inv_after.get(name, 0) > inv_before.get(name, 0)
+                        }
+                        if diff:
+                            parsed["harvest_detail"] = "、".join(f"{name}×{qty}" for name, qty in diff.items())
+                            parsed["harvest_crops"] = diff
+                    except Exception:
+                        pass
             elif operation == "harvest":
                 action_url = site_config.get_harvest_url(crop["type"], crop["id"])
                 response = self.http_client.get(action_url, cookies, retryable=False)
@@ -647,12 +680,34 @@ class FarmExecutor:
             profit = 0
             message = str(parsed.get("message") or "")
             if success and operation == "sell":
+                # 利润口径：sell 仅计售价收入，种植成本由 plant profit=-cost 承担
+                # 避免同一作物 plant(-cost)+sell((price-cost)*qty) 重复扣 cost
                 price = int(market_prices.get(crop_key, 0))
-                cost = int(crop.get("cost", 0))
                 quantity = max(1, int(action.get("quantity", 1)))
                 if price > 0:
-                    profit = (price - cost) * quantity
+                    profit = price * quantity
                 message = f"{message} 价格{price}×{quantity}".strip()
+            elif success and operation == "harvest_all":
+                # harvest_all 背包对比明细覆盖 target，思齐收获给 base_reward 魔力
+                detail = str(parsed.get("harvest_detail") or "")
+                if detail:
+                    target = f"收获了{detail}"
+                if site_config.site_id == "siqi":
+                    harvest_crops = parsed.get("harvest_crops") or {}
+                    profit = sum(
+                        int(next(
+                            (c.get("base_reward", 0) for c in crops.values() if c.get("name") == name),
+                            0,
+                        ) or 0) * qty
+                        for name, qty in harvest_crops.items()
+                    )
+            elif success and operation == "harvest":
+                # 思齐单作物收获直接给 base_reward 魔力
+                if site_config.site_id == "siqi":
+                    reward = int(crop.get("base_reward", 0) or 0)
+                    quantity = max(1, int(action.get("quantity", 1)))
+                    if reward > 0:
+                        profit = reward * quantity
             elif success and operation == "plant":
                 cost = int(crop.get("cost", 0))
                 if crop.get("type") == "animal":

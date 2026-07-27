@@ -194,7 +194,7 @@ def test_smart_executes_warehouse_sell_harvest_plant_and_field_sell():
     ]
     assert all(action.success for action in report.actions)
     assert report.trades_count == 4
-    assert report.total_profit == 0
+    assert report.total_profit == 200
     assert report.status == "completed"
 
 
@@ -238,7 +238,8 @@ def test_single_action_exception_isolated_and_later_actions_continue():
     assert [action.success for action in report.actions] == [True, False, True, True]
     assert report.actions[1].message == "single action failed"
     assert report.trades_count == 3
-    assert report.total_profit == 100
+    # sell profit 口径改为 price*qty（成本由 plant profit=-cost 承担）：150*1*2=300
+    assert report.total_profit == 300
     assert report.status == "partial"
 
 
@@ -249,7 +250,8 @@ def test_harvest_failure_blocks_plant_and_field_sell_for_crop():
     assert [action.action for action in report.actions] == ["harvest", "sell"]
     assert [action.success for action in report.actions] == [False, True]
     assert report.trades_count == 1
-    assert report.total_profit == 50
+    # sell profit 改为 price*qty：150*1=150（旧口径 (150-100)=50）
+    assert report.total_profit == 150
     assert report.status == "partial"
 
 
@@ -262,9 +264,10 @@ def test_batch_sell_posts_once_and_accumulates_each_item_profit():
         "batch_keys[]": ["warehouse_crop_1", "warehouse_crop_2"]
     }
     assert [action.success for action in report.actions] == [True, True]
-    assert [action.profit for action in report.actions] == [50, 100]
+    # sell profit 改为 price*qty：crop_1 150、crop_2 300
+    assert [action.profit for action in report.actions] == [150, 300]
     assert report.trades_count == 2
-    assert report.total_profit == 150
+    assert report.total_profit == 450
 
 
 def test_batch_sell_does_not_duplicate_a_single_warehouse_key_by_quantity():
@@ -279,7 +282,8 @@ def test_batch_sell_does_not_duplicate_a_single_warehouse_key_by_quantity():
 
     assert client.posts[0]["data"] == {"batch_keys[]": ["warehouse_crop_1"]}
     assert len(report.actions) == 1
-    assert report.total_profit == 50
+    # sell profit 改为 price*qty：150*2=300（旧口径 (150-100)*1=50）
+    assert report.total_profit == 300
 
 
 def test_batch_sell_failure_is_isolated_and_marks_the_batch_failed():

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 
 const DEFAULT_CONFIG = {
   enabled: false,
@@ -64,6 +64,7 @@ const AUTOMATION_FIELDS = [
 const props = defineProps({
   initialConfig: { type: Object, default: () => ({}) },
   loading: { type: Boolean, default: false },
+  api: { type: Object, default: () => ({}) },
 })
 
 const emit = defineEmits(['save', 'switch', 'close'])
@@ -79,6 +80,42 @@ function setSuccess(msg) {
   successTimer = setTimeout(() => { successMessage.value = '' }, 3000)
 }
 onBeforeUnmount(() => { if (successTimer) clearTimeout(successTimer) })
+
+// 思齐种子列表（onMounted 拉取，供默认种子下拉选择）
+const siqiSeeds = ref([])
+function windowToken() {
+  if (typeof window === 'undefined') return ''
+  return window.__MOVIEPILOT_TOKEN__
+    || window.MoviePilot?.token
+    || window.localStorage?.getItem('token')
+    || ''
+}
+async function fetchSeeds() {
+  const hasHostApi = typeof props.api?.get === 'function'
+  let payload
+  try {
+    if (hasHostApi) {
+      payload = await props.api.get('plugin/FarmAuto/siqi/seeds')
+    } else {
+      const token = windowToken()
+      const headers = {}
+      if (token) headers.Authorization = `Bearer ${token}`
+      const res = await fetch('/api/v1/plugin/FarmAuto/siqi/seeds', { headers })
+      payload = await res.json().catch(() => ({}))
+    }
+  } catch (e) {
+    siqiSeeds.value = []
+    return
+  }
+  const data = payload?.data ?? payload ?? {}
+  siqiSeeds.value = Array.isArray(data.seeds) ? data.seeds : []
+}
+onMounted(fetchSeeds)
+function seedTitle(seed) {
+  const emoji = seed.emoji || seed.icon || ''
+  const cost = seed.cost != null ? `（成本 ${seed.cost}）` : ''
+  return `${emoji} ${seed.name || '未知种子'}${cost}`
+}
 
 const siteModeItems = computed(() => [
   { title: `继承全局（${config.mode === 'harvest' ? '自动收获' : '智能交易'}）`, value: 'inherit' },
@@ -638,11 +675,30 @@ function saveConfig() {
                 </v-row>
                 <v-row class="mt-2">
                   <v-col cols="12" sm="6" md="4">
+                    <v-select
+                      v-if="siqiSeeds.length"
+                      v-model="config.siqi_default_seed_id"
+                      :items="siqiSeeds"
+                      item-title="name"
+                      item-value="seed_id"
+                      label="默认种植种子"
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                    >
+                      <template #item="{ props, item }">
+                        <v-list-item v-bind="props" :title="seedTitle(item.raw)" />
+                      </template>
+                      <template #selection="{ item }">
+                        <span>{{ seedTitle(item.raw) }}</span>
+                      </template>
+                    </v-select>
                     <v-text-field
+                      v-else
                       v-model.number="config.siqi_default_seed_id"
                       type="number"
                       label="默认种植种子 ID"
-                      hint="思齐 fetch 返回的种子 id（萝卜=1）；可在工作台种子商店查看"
+                      hint="无 Cookie 无法拉取种子列表，请手动输入 ID（萝卜=1）"
                       persistent-hint
                       density="compact"
                       hide-details

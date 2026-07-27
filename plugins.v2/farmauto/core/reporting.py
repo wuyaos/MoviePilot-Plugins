@@ -30,10 +30,14 @@ _ACTION_CATEGORIES = (
 )
 
 
+def _signed(value: int) -> str:
+    return f"{'+' if value >= 0 else ''}{value}"
+
+
 def _format_site_detail(site_report: SiteRunReport) -> str:
     lines = [
-        f"【{site_report.site_name}】{_STATUS_EMOJIS.get(site_report.status, '⚠️')} "
-        f"{'+' if site_report.total_profit >= 0 else ''}{site_report.total_profit} 魔力"
+        f"【{site_report.site_name}】{_STATUS_EMOJIS.get(site_report.status, '⚠️')}  "
+        f"魔力 {_signed(site_report.total_profit)}"
     ]
     grouped_actions = [[] for _ in range(len(_ACTION_CATEGORIES) + 1)]
     for action in site_report.actions:
@@ -53,6 +57,8 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
             continue
         successful_actions = [action for action in actions if action.success]
         failed_actions = [action for action in actions if not action.success]
+        # 该组魔力变化 = 成功操作 profit 之和
+        group_profit = sum(int(a.profit or 0) for a in successful_actions)
         # 按目标名聚合计数
         target_counts = {}
         for action in successful_actions:
@@ -62,15 +68,15 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
         success_detail = (
             f"（{'、'.join(successful_targets)}）" if successful_targets else ""
         )
-        failed_details = [
-            f"{action.target or '未知目标'}：{action.message or '失败'}"
-            for action in failed_actions
-        ]
-        failure_detail = f"（{'、'.join(failed_details)}）" if failed_details else ""
-        lines.append(
-            f"  {icon} {label}：✅{len(successful_actions)}{success_detail}"
-            + (f" ❌{len(failed_actions)}{failure_detail}" if failed_actions else "")
-        )
+        line = f"  {icon} {label}：✅{len(successful_actions)}{success_detail} 魔力 {_signed(group_profit)}"
+        # 失败为 0 不显示
+        if failed_actions:
+            failed_details = [
+                f"{action.target or '未知目标'}：{action.message or '失败'}"
+                for action in failed_actions
+            ]
+            line += f" ❌{len(failed_actions)}（{'、'.join(failed_details)}）"
+        lines.append(line)
     return "\n".join(lines)
 
 
@@ -84,15 +90,23 @@ def format_notification(report: RunReport) -> str:
     finished_at = datetime.fromtimestamp(report.finished_at).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
+    # 站点统计只显示非 0 项
+    status_parts = []
+    if completed:
+        status_parts.append(f"✅ {completed}")
+    if partial:
+        status_parts.append(f"⚠️ {partial}")
+    if failed:
+        status_parts.append(f"❌ {failed}")
+    site_summary = f"{len(report.site_reports)}（{' '.join(status_parts)} ）" if status_parts else f"{len(report.site_reports)}"
     status_message = f" {report.message}" if report.message else ""
     return (
         "━━━━━━━━━━━━━━\n"
         "🌾 农场自动化 Pro 运行报告\n"
         "━━━━━━━━━━━━━━\n"
         f"⏰ 时间：{finished_at}\n"
-        f"📊 站点：{len(report.site_reports)}（✅成功 {completed} / "
-        f"⚠️部分 {partial} / ❌失败 {failed}）\n"
-        f"💰 魔力变化：{'+' if report.total_profit >= 0 else ''}{report.total_profit}\n"
+        f"📊 站点：{site_summary}\n"
+        f"💰 魔力变化：{_signed(report.total_profit)}\n"
         f"🔄 总操作：{report.total_trades} 次\n\n"
         f"{site_details}\n\n"
         f"状态：{report.status}{status_message}"
