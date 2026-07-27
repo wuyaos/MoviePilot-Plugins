@@ -6,7 +6,7 @@ if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
 
 from core.models import WarehouseItem, parse_expire_minutes
-from core.strategy import is_expiry, plan_harvest, plan_smart, should_sell
+from core.strategy import is_expiry, plan_harvest, plan_run, plan_smart, should_sell
 from sites.playlet import PlayLetConfig
 
 
@@ -110,6 +110,46 @@ def test_expiry_and_profit_sales_can_both_be_disabled():
     )
 
     assert "sell" not in [step["op"] for step in plan]
+
+
+def test_plan_run_merges_harvest_sell_and_expiry():
+    """plan_run 统一流程：收获→出售(盈利/临期)→种植；不亏钱除临期。"""
+    config = PlayLetConfig()
+    snapshot = {
+        "market_prices": {"crop_1": 800},
+        "crop_status": {"crop_1": {"can_harvest": True}},
+    }
+    warehouse = [{
+        "name": "小麦", "quantity": 2, "expire_raw": "30分钟",
+        "expire_minutes": 30, "sell_key": "crop_1_1", "crop_key": "crop_1",
+    }]
+    plan = plan_run(snapshot, warehouse, config, {})
+    ops = [step["op"] for step in plan]
+    assert "harvest_all" in ops and "plant" in ops and "sell" in ops
+    # 盈利出售走 warehouse
+    sell_steps = [step for step in plan if step["op"] == "sell"]
+    assert sell_steps and all(step["source"] == "warehouse" for step in sell_steps)
+
+
+def test_plan_run_expiry_only_allows_loss():
+    """临期但亏钱的仓库项，仅 expiry_sale 允许出售。"""
+    config = PlayLetConfig()
+    crop_1 = PlayLetConfig.crops["crop_1"]  # cost=500
+    assert crop_1["cost"] == 500
+    snapshot = {
+        "market_prices": {"crop_1": 100},  # 市价 100 < 成本 500，亏钱
+        "crop_status": {},
+    }
+    warehouse = [{
+        "name": "小麦", "quantity": 1, "expire_raw": "30分钟",
+        "expire_minutes": 30, "sell_key": "crop_1_1", "crop_key": "crop_1",
+    }]
+    # 关闭临期出售：不应出售亏钱项
+    plan = plan_run(snapshot, warehouse, config, {"expiry_sale": False})
+    assert "sell" not in [step["op"] for step in plan]
+    # 开启临期出售：允许亏钱出售临期项
+    plan = plan_run(snapshot, warehouse, config, {"expiry_sale": True})
+    assert any(step["op"] == "sell" for step in plan)
 
 
 if __name__ == "__main__":

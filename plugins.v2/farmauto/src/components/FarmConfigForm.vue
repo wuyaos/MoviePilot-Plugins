@@ -28,6 +28,7 @@ const DEFAULT_CONFIG = {
   siqi_auto_buy_slot: false,
   siqi_auto_steal: false,
   siqi_auto_like: false,
+  siqi_default_seed_id: 1,
   site_overrides: '{}',
 }
 
@@ -633,6 +634,19 @@ function saveConfig() {
                   </v-col>
                   <v-col cols="12" sm="6" md="4">
                     <v-switch v-model="config.siqi_auto_like" label="每日点赞" color="primary" density="compact" hide-details />
+                  </v-col>
+                </v-row>
+                <v-row class="mt-2">
+                  <v-col cols="12" sm="6" md="4">
+                    <v-text-field
+                      v-model.number="config.siqi_default_seed_id"
+                      type="number"
+                      label="默认种植种子 ID"
+                      hint="思齐 fetch 返回的种子 id（萝卜=1）；可在工作台种子商店查看"
+                      persistent-hint
+                      density="compact"
+                      hide-details
+                    />
                   </v-col>
                 </v-row>
               </v-card-text>

@@ -42,13 +42,19 @@ function logMeta(item) {
   const unit = item?.value_unit || (action === 'harvest' ? '收获值' : '魔力值')
   // 兼容 user_logs.value / recent_actions.profit
   const value = Number(item?.value ?? item?.profit ?? 0)
+  // 魔力列优先显示本次变动值；无变动时回退余额 balance_after，保证每行都有值
+  const balance = Number(item?.balance_after ?? '')
+  const hasChange = value !== 0
+  const magicText = hasChange
+    ? `${value > 0 ? '+' : ''}${value} ${unit}`
+    : (Number.isFinite(balance) ? `${balance} ${unit}` : '')
   return {
     actionText: mapped[0],
     actionClass: mapped[1] ? `history-action--${mapped[1]}` : '',
     detailText: parts.map(p => typeof p === 'string' ? p : (p.name || '')).filter(Boolean).join(' '),
     hasIcon: !!parts.find(p => typeof p === 'object' && p.icon),
     iconSrc: (parts.find(p => typeof p === 'object' && p.icon) || {}).icon,
-    valueText: value !== 0 ? `${value > 0 ? '+' : ''}${value} ${unit}` : '',
+    valueText: magicText,
     valueClass: value > 0 ? 'history-value--plus' : (value < 0 ? 'history-value--minus' : ''),
   }
 }
@@ -61,11 +67,20 @@ function formatTime(value) {
     return value.slice(0, 5)
   }
   const numericValue = Number(value)
-  const date = Number.isFinite(numericValue)
-    ? new Date(numericValue < 1e12 ? numericValue * 1000 : numericValue)
-    : new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  // 数字时间戳：秒(<1e12) 或 毫秒(>=1e12)
+  if (Number.isFinite(numericValue) && /^\d+(\.\d+)?$/.test(String(value).trim())) {
+    const ms = numericValue < 1e12 ? numericValue * 1000 : numericValue
+    const date = new Date(ms)
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    }
+  }
+  // 字符串日期（如思齐 user_logs.created_at '2026-07-27 01:45:07'）
+  const date = new Date(String(value).replace(' ', 'T'))
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  }
+  return '—'
 }
 </script>
 
@@ -81,7 +96,7 @@ function formatTime(value) {
         <tr>
           <th>时间</th>
           <th>操作</th>
-          <th class="text-end">费用</th>
+          <th class="text-end">魔力</th>
         </tr>
       </thead>
       <tbody>

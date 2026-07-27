@@ -29,37 +29,13 @@ const areaItems = computed(() => props.items.map(cropKey => {
     name: definition.name || cropKey,
     cost: definition.cost,
     image: definition.image || '',
+    emoji: definition.emoji || '',
     state,
     price: status.price,
     growTime: status.grow_time,
     remainingMinutes,
   }
 }))
-
-function cropIcon(cropKey, name) {
-  const iconsByKey = {
-    crop_1: 'mdi-grain',
-    crop_2: 'mdi-corn',
-    crop_3: 'mdi-peanut-outline',
-    crop_4: 'mdi-carrot',
-    animal_1: 'mdi-bird',
-    animal_2: 'mdi-pig',
-    animal_3: 'mdi-sheep',
-    animal_4: 'mdi-cow',
-  }
-  if (iconsByKey[cropKey]) return iconsByKey[cropKey]
-
-  const cropName = String(name || '').toLowerCase()
-  if (cropName.includes('小麦') || cropName.includes('wheat')) return 'mdi-grain'
-  if (cropName.includes('玉米') || cropName.includes('corn')) return 'mdi-corn'
-  if (cropName.includes('花生') || cropName.includes('peanut')) return 'mdi-peanut-outline'
-  if (cropName.includes('土豆') || cropName.includes('马铃薯') || cropName.includes('potato')) return 'mdi-carrot'
-  if (cropName.includes('鸡') || cropName.includes('chicken')) return 'mdi-bird'
-  if (cropName.includes('猪') || cropName.includes('pig')) return 'mdi-pig'
-  if (cropName.includes('羊') || cropName.includes('sheep')) return 'mdi-sheep'
-  if (cropName.includes('牛') || cropName.includes('cow')) return 'mdi-cow'
-  return props.animal ? 'mdi-cow' : 'mdi-seed'
-}
 
 function imageErrorKey(item) {
   return `${item.cropKey}:${item.image}`
@@ -154,12 +130,7 @@ function emitCropAction(action, item) {
               contain
               @error="markImageError(item)"
             />
-            <v-icon
-              v-else
-              :icon="cropIcon(item.cropKey, item.name)"
-              :color="animal ? 'brown' : 'green'"
-              size="36"
-            />
+            <span v-else class="crop-emoji">{{ item.emoji || '🌱' }}</span>
           </div>
           <div class="crop-info">
             <div class="crop-name" :title="item.name">{{ item.name }}</div>
@@ -251,6 +222,10 @@ function emitCropAction(action, item) {
   justify-content: center;
   border-radius: 10px;
   background: rgba(var(--v-theme-on-surface), 0.04);
+}
+.crop-emoji {
+  font-size: 28px;
+  line-height: 1;
 }
 .crop-info {
   flex: 1;

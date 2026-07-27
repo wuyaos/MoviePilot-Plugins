@@ -7,6 +7,7 @@ const props = defineProps({
   pluginId: { type: String, default: 'FarmAuto' },
   farm: { type: Object, default: () => ({}) },
   history: { type: Array, default: () => [] },
+  rawLogs: { type: Array, default: () => [] },
   currency: { type: String, default: '' },
   loading: { type: Boolean, default: false },
   showSwitch: { type: Boolean, default: false },
@@ -88,7 +89,9 @@ function seedMatureIcon(seed) {
   return ''
 }
 
-function seedEmoji(name) {
+function seedEmoji(name, seed) {
+  // 优先用后端统一 emoji（crop_emoji），缺失时本地回退
+  if (seed?.emoji) return seed.emoji
   const emojiByName = {
     萝卜: '🥕',
     西红柿: '🍅',
@@ -487,7 +490,7 @@ onBeforeUnmount(() => {
                       height="40"
                       contain
                     />
-                    <span v-else>{{ seedEmoji(seed.name) }}</span>
+                    <span v-else>{{ seedEmoji(seed.name, seed) }}</span>
                   </div>
                   <div class="crop-info">
                     <div class="crop-name" :title="seed.name">{{ seed.name }}</div>
@@ -620,7 +623,7 @@ onBeforeUnmount(() => {
                     class="stage-img"
                     @error="markStageIconFailed(plot)"
                   />
-                  <span v-else class="plot-emoji" aria-hidden="true">{{ plot.seed.icon || seedEmoji(plot.seed.name) }}</span>
+                  <span v-else class="plot-emoji" aria-hidden="true">{{ plot.seed.icon || seedEmoji(plot.seed.name, plot.seed) }}</span>
                   <br/><small class="font-weight-bold">{{ plot.seed.name }}</small><br/>
                   <small :class="isPlotReady(plot) ? 'text-orange' : 'text-grey'">
                     {{ isPlotReady(plot) ? '可收获' : `成长中 ${formatRemain(plot)}` }}
@@ -652,7 +655,7 @@ onBeforeUnmount(() => {
                 </thead>
                 <tbody>
                   <tr v-for="item in inventory" :key="item.seed_id">
-                    <td><span class="mr-1" aria-hidden="true">{{ seedEmoji(item.name || seedNameById(item.seed_id)) }}</span>{{ item.name || `作物 ${item.seed_id}` }}</td>
+                    <td><span class="mr-1" aria-hidden="true">{{ seedEmoji(item.name || seedNameById(item.seed_id), item) }}</span>{{ item.name || `作物 ${item.seed_id}` }}</td>
                     <td>{{ item.quantity }}</td>
                     <td>{{ item.unit_reward }}</td>
                     <td>{{ (Number(item.quantity || 0) * Number(item.unit_reward || 0)) }}</td>
@@ -669,6 +672,17 @@ onBeforeUnmount(() => {
         </v-col>
         <v-col cols="12" md="6">
           <HistoryTable :history="history" :currency="currency" />
+          <v-expansion-panels v-if="rawLogs && rawLogs.length" flat class="mt-2">
+            <v-expansion-panel>
+              <v-expansion-panel-title class="text-subtitle-2">
+                <v-icon icon="mdi-script-text-outline" size="small" class="mr-2" />
+                站点原始记录（{{ rawLogs.length }}）
+              </v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <HistoryTable :history="rawLogs" :currency="currency" />
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
         </v-col>
       </v-row>
 

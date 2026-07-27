@@ -37,6 +37,9 @@ class FakeSiteConfig(FarmSiteConfig):
     def parse_market_prices(self, html):
         return {"crop_1": 150}
 
+    def parse_bonus(self, html):
+        return 888
+
     def parse_crop_status(self, html):
         return {"crop_1": {"can_harvest": True}}
 
@@ -165,7 +168,7 @@ def run_multi_crop_smart(client, site_config, dry_run=False):
         "session=value",
         site_config,
         "smart",
-        {"max_sell_per_run": 2, "request_interval": 0, "dry_run": dry_run},
+        {"max_sell_per_run": 2, "request_interval": 0, "dry_run": dry_run, "auto_plant": False},
     )
 
 
@@ -185,8 +188,9 @@ def run_smart(client, dry_run=False):
 def test_smart_executes_warehouse_sell_harvest_plant_and_field_sell():
     report = run_smart(FakeHttpClient())
 
+    # plan_run 统一顺序：收获→补种→仓库出售（盈利 should_sell）
     assert [action.action for action in report.actions] == [
-        "sell", "harvest", "plant", "sell"
+        "harvest", "plant", "sell", "sell"
     ]
     assert all(action.success for action in report.actions)
     assert report.trades_count == 4
@@ -199,7 +203,7 @@ def test_dry_run_builds_plan_without_action_requests():
     report = run_smart(client, dry_run=True)
 
     assert [action.action for action in report.actions] == [
-        "sell", "harvest", "plant", "sell"
+        "harvest", "plant", "sell", "sell"
     ]
     assert report.trades_count == 0
     assert report.total_profit == 0
@@ -217,7 +221,7 @@ def test_executor_uses_resolved_dynamic_crops():
     )
 
     assert [action.action for action in report.actions] == [
-        "sell", "harvest", "plant", "sell"
+        "harvest", "plant", "sell", "sell"
     ]
     assert {action.target for action in report.actions} == {"动态玉米"}
     assert any("action=harvest&type=crop&id=2" in url for url in client.urls)
@@ -227,11 +231,12 @@ def test_executor_uses_resolved_dynamic_crops():
 def test_single_action_exception_isolated_and_later_actions_continue():
     report = run_smart(FakeHttpClient(fail_token="action=plant"))
 
+    # plan_run 顺序：harvest→plant(fail)→sell→sell；plant 失败不影响后续 sell
     assert [action.action for action in report.actions] == [
-        "sell", "harvest", "plant", "sell"
+        "harvest", "plant", "sell", "sell"
     ]
-    assert [action.success for action in report.actions] == [True, True, False, True]
-    assert report.actions[2].message == "single action failed"
+    assert [action.success for action in report.actions] == [True, False, True, True]
+    assert report.actions[1].message == "single action failed"
     assert report.trades_count == 3
     assert report.total_profit == 100
     assert report.status == "partial"
@@ -240,8 +245,9 @@ def test_single_action_exception_isolated_and_later_actions_continue():
 def test_harvest_failure_blocks_plant_and_field_sell_for_crop():
     report = run_smart(FakeHttpClient(fail_token="action=harvest"))
 
-    assert [action.action for action in report.actions] == ["sell", "harvest"]
-    assert [action.success for action in report.actions] == [True, False]
+    # plan_run：harvest 失败 → blocked_crops 跳过该 crop 的 plant/field_sell，仅剩仓库 sell
+    assert [action.action for action in report.actions] == ["harvest", "sell"]
+    assert [action.success for action in report.actions] == [False, True]
     assert report.trades_count == 1
     assert report.total_profit == 50
     assert report.status == "partial"
@@ -318,3 +324,30 @@ def test_market_prices_are_recorded_in_trend_store():
     samples = trend_store.get("fake", "crop_1")
     assert len(samples) == 1
     assert samples[0][1] == 150
+
+
+def test_action_result_has_time_and_balance_after():
+    """Phase1: ActionResult 必须携带执行时刻 time 与操作后余额 balance_after。"""
+    from core.models import ActionResult
+
+    result = ActionResult("plant", "小麦", True, profit=-100)
+    assert isinstance(result.time, float) and result.time > 0
+    assert result.balance_after is None
+
+    settled = ActionResult("sell", "小麦", True, profit=50, balance_after=1234)
+    assert settled.balance_after == 1234
+    assert isinstance(settled.time, float) and settled.time > 0
+
+
+def test_run_site_records_bonus_and_balance_after():
+    """run_site 执行后 report.bonus 与 dry-run 记录 balance_after 应可取。"""
+    executor = FarmExecutor(FakeHttpClient(), Logger(), PriceTrendStore())
+    report = executor.run_site(
+        "session=value",
+        FakeSiteConfig(),
+        "smart",
+        {"request_interval": 0, "dry_run": True},
+    )
+    assert report.bonus == 888
+    assert report.actions, "dry-run 应记录计划操作"
+    assert all(action.balance_after == 888 for action in report.actions)
