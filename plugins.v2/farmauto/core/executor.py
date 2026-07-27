@@ -591,7 +591,7 @@ class FarmExecutor:
                 # 执行前从 crop_status 收集可收获作物名，作为收获明细
                 harvestable_names = [
                     crops.get(ck, {}).get("name", ck)
-                    for ck, st in (snapshot.get("crop_status") or {}).items()
+                    for ck, st in (crop_status or {}).items()
                     if st.get("can_harvest") and ck in crops
                 ]
                 if harvestable_names:
