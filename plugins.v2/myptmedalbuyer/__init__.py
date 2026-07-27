@@ -23,7 +23,7 @@ class MyPTMedalBuyer(_PluginBase):
     plugin_name = "myPT勋章续购"
     plugin_desc = "自动续购 myPT(cc.mypt.cc) 勋章，避免到期后忘记手动购买"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "myptmedalbuyer_"

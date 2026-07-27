@@ -27,7 +27,7 @@ class TangLottery(_PluginBase):
     plugin_name = "不可躺自动抽奖助手"
     plugin_desc = "按每日目标次数自动拆解并执行不可躺抽奖。"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tanglottery.png"
-    plugin_version = "3.0.2"
+    plugin_version = "3.0.3"
     plugin_author = "jiangbkvir,bfjy,wuyaos"
     author_url = "https://github.com/jiangbkvir/MoviePilot-Plugins"
     plugin_config_prefix = "tanglottery_"

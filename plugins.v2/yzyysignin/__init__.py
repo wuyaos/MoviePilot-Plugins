@@ -22,7 +22,7 @@ class YzyySignin(_PluginBase):
     plugin_name = "yzyy论坛签到"
     plugin_desc = "yzyy论坛每日签到，自动获取签到码完成签到"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.2.11"
+    plugin_version = "1.2.12"
     plugin_author = "bfjy, wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "yzyysignin_"

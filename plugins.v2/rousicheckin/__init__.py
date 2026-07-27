@@ -25,7 +25,7 @@ class RousiCheckin(_PluginBase):
     plugin_name = "肉丝自动签到"
     plugin_desc = "rousi.pro JWT Token 自动签到、站内信增量推送与过期提醒"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "rousicheckin_"

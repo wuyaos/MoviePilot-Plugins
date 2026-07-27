@@ -3,11 +3,12 @@
         "name": "pter勋章自动领取",
         "description": "定时检测 pterclub 当前页可换领勋章，按配置自动换领并记录历史",
         "labels": "pter,勋章,自动换领",
-        "version": "1.0.11",
+        "version": "1.0.12",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.12": "补充调度生命周期日志并保持公开无参服务入口",
             "v1.0.10": "修复运行历史检测勋章数/可领取数显示：no_available 轮次重新纳入历史并显示真实检测数(17)与可领取数(0)；修复 _save_round 在 no_available 时仍写空数组覆盖历史的 bug；补 no_available/dry_run 轮次说明列语义文字；回退路径 candidate_count 不再把 buy_skip 计入候选",
             "v1.0.9": "修复运行历史说明列重复 disabled 文案 + 旧脏数据：新增 _dedup_note 去重；过滤旧 no_available 轮次",
             "v1.0.8": "修复运行历史旧脏数据：过滤旧版本残留的 no_available（无可领取）轮次，避免显示可领取数=17 的错误行；当前已不再记录此类轮次",
@@ -25,11 +26,12 @@
         "name": "myPT勋章续购",
         "description": "自动续购 myPT(cc.mypt.cc) 勋章，避免到期后忘记手动购买",
         "labels": "myPT,勋章,续购",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.2": "新增公开调度入口并移除业务参数式服务注册",
             "v1.0.1": "为 medal.php/userdetails.php/ajax.php 请求增加 3 次重试，仅对无响应和 HTTP 5xx 退避重试，避免整点短暂无响应直接失败；默认 cron 调整为 09:07 避开整点高峰（仅影响新配置）",
             "v1.0.0": "初始版本：自动续购 myPT(cc.mypt.cc) 勋章；从 MP 站点表读 cookie；解析 medal.php 按钮状态；POST ajax.php action=buyMedal 购买；支持勾选多个勋章；到期前 N 天开始尝试续购；frost_style 详情页"
         }
@@ -66,11 +68,12 @@
         "name": "媒体库封面生成",
         "description": "自动生成媒体库封面（模块化重构版），支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin",
         "labels": "封面,媒体库",
-        "version": "1.4.7",
+        "version": "1.4.8",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png",
         "author": "wuyaos",
         "level": 1,
         "history": {
+            "v1.4.8": "移除无触发器伪服务，停止操作迁移至 API，并规范 Cron 生命周期",
             "v1.4.7": "版本对齐",
             "v1.4.6": "版本对齐",
             "v1.4.5": "远程命令规范化：/update_covers 重命名为 /cover_update，统一插件命名约定",
@@ -107,11 +110,12 @@
         "name": "AnimeZ保活",
         "description": "定时访问AnimeZ站点并从种子页选种提交下载器，满足60天登录+90天下载保活要求",
         "labels": "保活,AnimeZ",
-        "version": "2.6.0",
+        "version": "2.6.1",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v2.6.1": "规范随机 Cron 解析、时区和异常保护，提升重载注册稳定性",
             "v2.6.0": "修复登录页 HTTP 200 误判保活成功和首次运行空状态被跳过；严格执行仅 Free 与最大体积限制（按站点十进制 GB 计算）；避免访问成功重复重试；区分种子页抓取失败与无候选；修复相对下载链接；统一访问/抓取状态及详情页；配置页强制保活改为与立即运行组合的一次性操作，同时保留 /az_force",
             "v2.5.10": "修复访问和下载均未到保活间隔时提前返回，导致到期种子未执行 H&R 检查、无法移除 H&R 标签的问题；H&R 清理现独立于保活间隔，每次定时触发都会检查",
             "v2.5.9": "修复更新插件时触发强制下载：onlyonce 立即执行改用 force=False 遵守间隔；force_keepalive 不在 init_plugin 自动执行（清残留但不触发）；删除 get_service 的 AzKeepAliveRunNow/ForceRun 手动服务注册，切断更新后注册服务意外触发 force 路径；强制保活仅保留 /az_force 命令入口",
@@ -143,11 +147,12 @@
         "name": "自动转移做种(自用)",
         "description": "定期转移下载器中已完成的做种任务到另一个下载器，先暂停源再做种迁移避免双端同时下载",
         "labels": "转移,做种",
-        "version": "2.0.1",
+        "version": "2.0.2",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/seedtransfer.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v2.0.2": "修复配置校验自动停用与热重载状态残留，规范 Cron 服务注册",
             "v2.0.1": "放宽目的端可做种判定：qB 认 uploading/stalledUP/forcedUP，TR 认 seeding/seed_pending（不再只认暂停态，避免目的端校验后自动做种时迁移卡住）；换迁移语义图标 seedtransfer.png",
             "v2.0.0": "基于官方 TorrentTransfer v1.10.3 简化增强：迁移前先暂停源端做种避免双端同时下载；支持已完成暂停状态种子迁移；scan_limit 截断大量种子；目的端做种确认后才删源；失败自动恢复源端做种（原做种恢复做种原暂停保持暂停）；适配 qB add_torrent 新返回值"
         }
@@ -156,11 +161,12 @@
         "name": "PT站点自动签到",
         "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
         "labels": "签到,PT",
-        "version": "1.5.0",
+        "version": "1.5.1",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.1": "随机签到时间首次生成后持久化，保证重启重载不漂移",
             "v1.5.0": "修复 DStudio 空 POST 签到误报（补齐浏览器表单请求头并在提交前后检查签到表单与明确状态文案）；新增 yzyy 论坛 Discuz zqlj_sign 动态签到码专用适配器，纳入统一自动签到调度。",
             "v1.4.9": "移除详情页未使用的表格行构建函数，并补充拆分后的配置页与详情页辅助模块结构说明。",
             "v1.4.8": "拆分配置页无状态表单构建工具，保持动态站点选项、字段、默认值和配置页结构不变。",
@@ -236,11 +242,12 @@
         "name": "H&R助手Pro",
         "description": "PT站H&R种子自动标签管理，支持多条件OR判定（做种时间/分享率/上传倍数）、按种子大小分级、自动发现下载器种子",
         "labels": "H&R,PT,做种",
-        "version": "1.2.5",
+        "version": "1.2.6",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hitandrun.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.2.6": "检查、发现和通知汇总迁移为标准公共调度服务",
             "v1.2.5": "同步上游 InfinityPacer/hitandrun #259：适配 Transmission SDK 字段名变更，date_done/date_added/date_active 用 getattr 兼容 done_date/added_date/activity_date 新旧两套字段，tracker 兼容 trackers[0].announce 的 dict 与对象两种形态",
             "v1.2.4": "详情页新增批量操作按钮：有已满足记录时显示「清除已满足」，有缺失种子记录时显示「清除缺失种子」；新增对应 API 端点 /clear_compliant 和 /clear_missing",
             "v1.2.3": "新增命令 /hnr_clear_compliant（批量清除已满足H&R记录）和 /hnr_clear_missing（批量清除H&R未满足且种子已不在下载器的记录）",
@@ -255,11 +262,12 @@
         "name": "论坛签到",
         "description": "论坛站点签到（蜂巢 pting.club + 药丸 invites.fun），单插件双站调度，支持 Cookie/账号登录、失败重试与历史记录",
         "labels": "签到,论坛,蜂巢,药丸",
-        "version": "1.0.11",
+        "version": "1.0.12",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.12": "移除公共与内部 Cron 重复注册，统一长期任务由 MoviePilot 调度",
             "v1.0.11": "签到日历单元格去掉奖励数字行，仅保留日期与站点签到状态图标；单元格高度 40px→32px 更紧凑；顶部统计区与历史记录表奖励展示不变",
             "v1.0.10": "奖励兜底：lastCheckinMoney 未取到(None/0/空)时，用本次money与同站点上一条成功记录money的差值作为本轮奖励，差值>0 才写入；解决接口未返回 lastCheckinMoney 导致历史奖励全显示0/已领取的问题",
             "v1.0.9": "修复奖励列显示异常(0/已领取/—)：奖励列对 success_new/success_already 有正数奖励均展示真实数值，无奖励的已签到才显示\"已领取\"；lastCheckinMoney 缺省值由 0 改为 None 以区分真实0与未解析；蜂巢 fallback 改用签到前首页文本判断 canCheckin，避免新签到被误判为已签到；当天已有 success_new 时不再被新的 success_already 覆盖",
@@ -278,11 +286,12 @@
         "name": "肉丝自动签到",
         "description": "rousi.pro JWT Token 自动签到、站内信增量推送与过期提醒",
         "labels": "肉丝,签到,JWT,站内信",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.4": "规范定时服务时区与公开调度入口",
             "v1.0.3": "修复定时签到因认证失败被永久停掉：__handle_auth_failed 不再自动停用插件(删除 _enabled=False + update_config)，保留启用态让 cron 下一周期自动重试，避免 Token 一旦过期就注销定时任务且需手动重开；__is_auth_failed 收窄为仅 HTTP 401（移除 code==100 单独判定），避免限流/维护等临时故障被误判为 Token 失效；同步配置页失效处理说明文案",
             "v1.0.1": "修复定时任务不触发：get_service 的 service id 从 RousiCheckin.Signin 改为插件级 RousiCheckin，调度入口从私有 __signin+kwargs 改为公开无参 signin() wrapper（内部 manual=False），与仓库内能正常定时的插件惯例对齐；签到逻辑与随机抖动不变",
             "v1.0.0": "初始版本：rousi.pro JWT Token 手动配置；每日 cron 签到并支持0-3分钟随机抖动；签到前读取 attendance stats 去重；成功后增量拉取站内信并合并推送；解析 JWT exp 做过期提醒；401/登录过期当日通知一次、写历史并自动停用插件；提供配置页、详情页和 POST /RousiCheckin/run 手动触发 API"
@@ -292,11 +301,12 @@
         "name": "yzyy论坛签到",
         "description": "yzyy论坛每日签到，限定当前用户打卡按钮状态判定，自动获取签到码完成签到",
         "labels": "yzyy,签到,论坛",
-        "version": "1.2.11",
+        "version": "1.2.12",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "bfjy, wuyaos",
         "level": 2,
         "history": {
+            "v1.2.12": "规范定时服务时区与公开调度入口，补充空 Cron 诊断",
             "v1.2.10": "修复签到误判失败：签到请求响应含'恭喜您，打卡成功'即判成功，不再重新GET签到页按按钮验证(按钮未及时更新导致误判)",
             "v1.2.9": "修复签到链接正则兼容 lxml 输出的 &amp; 实体编码；CookieCloud 匹配到的 Cookie 保存到插件配置下次复用；Cookie 失效时自动从 CookieCloud 重新获取并重试一次",
             "v1.2.8": "Cookie 留空时自动从 CookieCloud 按 site_url 域名获取 Cookie",
@@ -307,11 +317,12 @@
         "name": "不可躺自动领红包",
         "description": "自动发现并串行领取不可躺(tangpt.top)红包,支持 fast 模式、限流感知、Cookie 过期熔断和历史统计",
         "labels": "不可躺,红包,自动领取",
-        "version": "1.0.11",
+        "version": "1.0.12",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacketclaim.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.12": "规范定时服务：统一时区与公开调度入口，修复重载时启用状态初始化",
             "v1.0.11": "插件改名 TangRedPacket→TangRedPacketClaim：区分 bfjy2024 仓库同名「不可躺发红包」插件，避免双仓库订阅冲突；同步改类名/目录/配置前缀/API 路径/图标/命令；数据库配置需从旧 key 迁移",
             "v1.0.10": "修复每日配额统计与领取后状态：新增独立按日持久化计数并兼容旧事件初始化，站点快照按日期校准且不倒退，跨午夜按结束日/最后成功日展示；站点达上限后立即停止剩余领取；批外及提前停止项统一计入跳过并按实际尝试数判断认证失败；仅原始站点快照标记本站，叠加成功或本地下界提升标记校准；兼容旧汇总展示",
             "v1.0.9": "修复领取历史只显示3条的问题：get_page 之前 events 截断到50条导致 round_summary 只剩最近3轮，改为 round_rows 取全部事件(上限500)，领取明细表格仍保留最近50条",
@@ -330,11 +341,12 @@
         "name": "SunnyPT自动签到",
         "description": "通过用户名密码登录 SunnyPT 获取 token 自动签到，token 缓存复用，无需 Cookie",
         "labels": "sunnypt,签到,自动登录",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 1,
         "history": {
+            "v1.1.1": "修复 Cron 字段错位并安全消费立即运行开关，规范服务入口",
             "v1.0.0": "初始版本:用户名密码 POST /login 获取 token;POST /api/v1/attendance/check-in 签到;token 缓存复用(解码 JWT exp,提前1h刷新);token 失效(code=400000)自动重新登录重试一次;已签到 code=400001;GET /api/v1/attendance/status 丰富历史记录(连续/累计天数/魔力值);独立于 autoptcheckin 的 cookie 体系",
             "v1.1.0": "新增通知渠道选择;美化配置页(分组卡片+图标)和数据页(统计卡片+签到历史);补充 get_api 抽象方法;目录名改为小写修复安装404"
         }
@@ -343,11 +355,12 @@
         "name": "GGPT勋章购买",
         "description": "自动续购 GGPT 疯狂星期四勋章，按真实到期时间触发购买，避免到期后忘记手动购买",
         "labels": "ggpt,勋章,自动化",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png",
         "author": "jiangbkvir,wuyaos",
         "level": 1,
         "history": {
+            "v1.0.3": "规范定时服务注册，移除保存配置时隐式执行购买任务",
             "v1.0.0": "初始版本:自动购买 GGPT 疯狂星期四勋章(ID=35,7天有效);从 MP 站点表读 GGPT 站点 Cookie;POST /ajax.php action=buyMedal 购买;每日 08:00 检查勋章页面;已购买时读个人中心过期时间;到期前定时续购;购买记录和通知提醒",
             "v1.0.1": "修复到期时间解析错误导致「该买没买」:勋章页 __medal_html_context 改用 data-id 锚定的购买按钮定位单行 <tr>(避免正则贪婪跨行匹配整表);__parse_owned_expire_time 只在单行内取日期(修复 find(35) 误命中「分享率 3.935」里的 35);个人中心 __parse_userdetails_expire_time 改用 title=勋章名 img 锚定取其后最近的过期时间(替换 min(future_times) 碰运气);logger.warn 全部改为 logger.warning",
             "v1.0.2": "配置页新增立即运行开关和执行周期(Cron)配置(默认每天 08:00);购买记录改为 VTable 列表(日期/时间/状态/勋章/站点/说明);移除勋章 ID 配置项(固定为疯狂星期四)"
@@ -357,11 +370,12 @@
         "name": "站点自动任务",
         "description": "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。",
         "labels": "PT,签到,喊话,自动任务",
-        "version": "1.0.17",
+        "version": "1.0.18",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.18": "主 Cron 与织梦 date 任务改用标准时区触发器和纯服务声明",
             "v1.0.17": "删除独立重试服务 siteautotask_retry，重试并入主 cron：每次主 cron 执行后对失败单元连续重试 retry_count 次（0 则不重试）；Zm 喊话反馈改为读喊话区按用户名配对系统反馈；数据页改为按站点卡片展示含主题自适应边框与每任务独立趋势；修复 shotbox_messages 未挂在 Handler 类导致展开失败；梓喵 WAF 拦截标记 TODO 待后续浏览器渲染实现。",
             "v1.0.16": "删除独立勋章 cron（medal_cron）及其服务/入口/UI 控件，勋章检查改由主 cron 统一执行；主 cron 默认改为 4 0,12 * * *（每日两次），仅将精确旧默认值自动迁移，其他自定义 cron 不变。",
             "v1.0.15": "修复梓喵（azusa.wiki）任务领取 403：领取前动态读取 task.php 中的 csrf_token，并以 ajax.php?csrf_token=<token> 携带 action=claimTask 与 params[exam_id] 请求。",
@@ -386,11 +400,12 @@
         "name": "农场自动化Pro",
         "description": "多站点农场统一自动运营，支持独立收获、补种与出售策略",
         "labels": "农场,自动化,站点",
-        "version": "3.2.6",
+        "version": "3.2.7",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v3.2.7": "停止服务不再强制释放运行锁，避免重载期间新旧任务并发",
             "v3.2.6": "补充思齐偷菜、点赞、扩地、访问及统一运行流程的插件日志；记录目标查询、成功/失败和正常跳过原因，不改变通知降噪规则。",
             "v3.2.5": "点赞读取真实 remaining_in_window/max_per_window，按返回顺序最多批量点赞剩余次数；详情页复用目标缓存显示剩余次数，减少重复请求。",
             "v3.2.4": "手动思齐互动接入独立通知，成功/失败即时推送、达到上限每日首次推送；统一扩地内部动作名为 buy_slot，外部 API 继续兼容 buy_plot_slot。",
@@ -415,5 +430,19 @@
             "v2.0": "重构为多站点架构：统一HTTP客户端、能力协议、纯策略执行器、统计仅编排层更新一次、dry-run、最低利润率、临期阈值"
         },
         "release": true
+    },
+    "TangLottery": {
+        "name": "不可躺自动抽奖助手",
+        "description": "按每日目标次数自动拆解并执行不可躺抽奖；增强定时服务注册稳定性和 Cron 诊断日志",
+        "labels": "站点,抽奖",
+        "version": "3.0.3",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tanglottery.png",
+        "author": "jiangbkvir,bfjy,wuyaos",
+        "level": 1,
+        "history": {
+            "v3.0.3": "修复 Cron 触发器字段错位，改用标准时区触发器与公开调度入口",
+            "v3.0.2": "本地修正版：Cron 安全规范化并增强服务未注册原因日志；Cookie 固定从站点管理读取；限制目标次数上限为1000",
+            "v1.0.1": "按每日目标次数自动拆解并执行不可躺抽奖"
+        }
     }
 }
