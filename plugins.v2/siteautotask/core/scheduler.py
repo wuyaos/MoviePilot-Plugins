@@ -49,15 +49,14 @@ class TaskScheduler:
             "kwargs": {},
         })
         # 失败重试已并入主 cron，不再注册独立重试服务。
-        # 织梦 24h 电力冷却调度（date trigger）
+        # 织梦 24h 电力冷却调度（固定 cron 每天 0:10）
         if cfg.enabled and self._has_zm_site():
-            next_time = self._compute_zm_next_time(cfg)
             services.append({
                 "id": "siteautotask_zm",
                 "name": "织梦24h电力调度",
-                "trigger": "date",
+                "trigger": CronTrigger.from_crontab("10 0 * * *"),
                 "func": self.plugin.run_zm,
-                "kwargs": {"run_date": next_time},
+                "kwargs": {},
             })
         return services
 
