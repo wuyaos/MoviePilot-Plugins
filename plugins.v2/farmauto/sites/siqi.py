@@ -129,14 +129,25 @@ class SiqiConfig(FarmSiteConfig):
             land_id = plot.get("land_id")
             plot_index = plot.get("plot_index")
             if seed_id is not None and seed_id != 0:
-                # 已种植的 plot
+                # 已种植的 plot：每个地块独立条目（key 含 land_id+plot_index 区分）
+                # 保留 crop_{seed_id} 作为作物信息入口（取第一个地块），供 plan_run 查 crops
                 ready = str(plot.get("is_ready", "0")) == "1"
                 harvest_time = self._number(plot.get("harvest_time"))
                 if not ready and harvest_time and harvest_time <= time.time():
                     ready = True
-                key = f"crop_{seed_id}"
-                if key not in statuses or (ready and not statuses[key].get("can_harvest")):
-                    statuses[key] = {
+                plot_key = f"crop_{seed_id}_{land_id}_{plot_index}"
+                statuses[plot_key] = {
+                    "can_harvest": ready,
+                    "land_id": land_id,
+                    "plot_index": plot_index,
+                    "harvest_time": plot.get("harvest_time"),
+                    "seed_id": seed_id,
+                    "crop_key": f"crop_{seed_id}",
+                }
+                # 兼容：同时保留 crop_{seed_id} 聚合条目（用于 plan_run 遍历 crops 判断是否可收获）
+                agg_key = f"crop_{seed_id}"
+                if agg_key not in statuses or (ready and not statuses[agg_key].get("can_harvest")):
+                    statuses[agg_key] = {
                         "can_harvest": ready,
                         "land_id": land_id,
                         "plot_index": plot_index,

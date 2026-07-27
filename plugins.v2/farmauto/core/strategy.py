@@ -182,20 +182,22 @@ def plan_run(
             for crop_key, status in crop_status.items():
                 if not isinstance(status, dict) or not status.get("can_harvest"):
                     continue
-                if crop_key not in crops:
+                # 思齐逐地块条目 key 含 land_id/plot_index，用 crop_key 字段查 crops
+                ref_crop_key = status.get("crop_key") or crop_key
+                if ref_crop_key not in crops:
                     continue
                 plan.append({"op": "harvest", "crop_key": crop_key, "source": "field", "quantity": 1})
                 # 收获后立即补种（同地块）
                 if policy["auto_plant"]:
-                    plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
+                    plan.append({"op": "plant", "crop_key": ref_crop_key, "source": "field", "quantity": 1})
                 # sell_inventory 类站点收获后进背包，field sell 无货，跳过
                 if (
                     policy["auto_sell"]
                     and remaining_sales > 0
                     and not site_config.supports_sell_inventory()
-                    and should_sell(crops[crop_key], int(market_prices.get(crop_key, 0)), policy)
+                    and should_sell(crops[ref_crop_key], int(market_prices.get(ref_crop_key, 0)), policy)
                 ):
-                    plan.append({"op": "sell", "crop_key": crop_key, "source": "field", "quantity": 1})
+                    plan.append({"op": "sell", "crop_key": ref_crop_key, "source": "field", "quantity": 1})
                     remaining_sales -= 1
 
     # 2. 出售仓库：盈利出售优先（should_sell 保证 profit>0），临期兜底（允许亏钱）

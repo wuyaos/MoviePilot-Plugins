@@ -585,6 +585,12 @@ class FarmExecutor:
         target = crop.get("name", crop_key)
         operation = action.get("op", "unknown")
         action_url = ""
+        # 思齐逐地块条目(crop_{seed_id}_{land}_{plot}) 用 crop_status 的 crop_key 字段查 crops
+        st_info = (crop_status or {}).get(crop_key, {}) if isinstance(crop_status, dict) else {}
+        ref_crop_key = st_info.get("crop_key") if isinstance(st_info, dict) else None
+        if ref_crop_key and ref_crop_key in crops:
+            crop = crops[ref_crop_key]
+            target = crop.get("name", target)
         # 思齐 plant_all: crop_key=all 时用默认种子名作为 target
         if site_config.site_id == "siqi" and crop_key == "all" and operation == "plant":
             default_seed_id = (siqi_options or {}).get("default_seed_id") or 1
