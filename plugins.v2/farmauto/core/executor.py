@@ -594,8 +594,6 @@ class FarmExecutor:
                     for ck, st in (crop_status or {}).items()
                     if st.get("can_harvest") and ck in crops
                 ]
-                if harvestable_names:
-                    parsed["harvest_detail"] = "、".join(harvestable_names)
                 # 背包对比拆分：执行前记录库存快照，执行后对比差值
                 inv_before: Dict[str, int] = {}
                 try:
@@ -610,6 +608,9 @@ class FarmExecutor:
                 response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)
+                # 收获明细（从执行前可收获作物名生成，覆盖 target='收获了xxx')
+                if harvestable_names:
+                    parsed["harvest_detail"] = "、".join(harvestable_names)
                 # 收获后重新拉农场页对比背包差值，生成收获明细
                 if parsed.get("success"):
                     try:
