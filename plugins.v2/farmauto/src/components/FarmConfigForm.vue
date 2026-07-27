@@ -91,11 +91,13 @@ function windowToken() {
     || ''
 }
 async function fetchSeeds() {
-  const hasHostApi = typeof props.api?.get === 'function'
+  const hostApi = props.api?.get ? props.api : (typeof window !== 'undefined' && window.MoviePilotAPI ? window.MoviePilotAPI : null)
   let payload
   try {
-    if (hasHostApi) {
-      payload = await props.api.get('plugin/FarmAuto/siqi/seeds')
+    if (hostApi && typeof hostApi.get === 'function') {
+      // 宿主 API（axios 实例）返回 .data，联邦 api 返回 {success,data}
+      const raw = await hostApi.get('plugin/FarmAuto/siqi/seeds')
+      payload = raw?.data ?? raw
     } else {
       const token = windowToken()
       const headers = {}
