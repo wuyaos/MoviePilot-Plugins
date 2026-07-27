@@ -35,8 +35,8 @@ class ZmHandler(CapabilityHandler):
         time.sleep(max(0, int(self.feedback_timeout)))
 
     def get_feedback(self, message=None):
-        # 喊话区最新在上：反馈行在对应喊话行的上方（索引更小）。
-        # 按“当前用户名 + 喊话内容”定位喊话行，再取前一行 @用户名反馈。
+        # 喊话区最新在上：反馈行格式为「zmpt@用户名：皮总响应/没有理...」
+        # 直接搜索含 @用户名 的反馈行，不依赖喊话行定位（喊话行易被挤出当前页）
         response = self._send_get_request(self.site_url + "/shoutbox.php")
         if not response:
             return None
@@ -46,23 +46,21 @@ class ZmHandler(CapabilityHandler):
         rows = [r for r in rows if r]
         username = (self.get_username() or "").strip()
         target = (message or "").strip()
-        for idx, line in enumerate(rows):
-            # 跳过反馈行（含 @）
-            if "@" in line:
+        if not username:
+            return None
+        # 从最新到最旧遍历，找第一条 @username 且与喊话内容匹配的反馈行
+        # 喊话内容含「上传」/「电力」时优先匹配对应奖励类型的反馈
+        prefer = "上传量" if (target and "上传" in target) else ("电力" if (target and "电力" in target) else None)
+        fallback = None
+        for line in rows:
+            if f"@{username}" not in line:
                 continue
-            # 必须含当前用户名和本条喊话内容
-            if username and username not in line:
-                continue
-            if target and target not in line:
-                continue
-            # 反馈在上一行
-            if idx == 0:
-                break
-            fb = rows[idx - 1]
-            if "@" not in fb or (username and f"@{username}" not in fb):
-                break  # 上一行不是针对自己的反馈
+            fb = line
             is_negative = any(k in fb for k in ("没有理", "明天再来"))
             is_reward = any(k in fb for k in ("响应", "扣减", "赠送", "电力", "魔力", "上传", "下载"))
+            # 无奖励也无负面关键词，跳过非反馈行
+            if not is_negative and not is_reward:
+                continue
             if "下载" in fb:
                 reward_type = "下载量"
             elif "魔力" in fb:
@@ -71,11 +69,15 @@ class ZmHandler(CapabilityHandler):
                 reward_type = "上传量"
             else:
                 reward_type = "电力"
-            return {"site": self.site_name, "message": message, "rewards": [{
+            record = {"site": self.site_name, "message": message, "rewards": [{
                 "type": reward_type, "description": fb,
                 "amount": "", "unit": "", "is_negative": is_negative and not is_reward,
             }]}
-        return None
+            if prefer and reward_type == prefer:
+                return record
+            if fallback is None:
+                fallback = record
+        return fallback
 
     def get_latest_message_time(self):
         def extract(response):
