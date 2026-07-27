@@ -92,8 +92,15 @@ class FarmSiteConfig(ABC):
                     else min(len(source), name_match.end() + 2000)
                 )
                 item_html = source[name_match.end():end]
+            harvestable = bool(re.search(harvest_pattern, item_html or source))
+            plant_action = crop.get("action", "plant")
+            plant_pattern = (
+                rf"action={re.escape(plant_action)}(?:&amp;|&)type={re.escape(crop['type'])}"
+                rf"(?:&amp;|&)id={crop['id']}"
+            )
             result[crop_key] = self._crop_status(
-                can_harvest=bool(re.search(harvest_pattern, item_html or source)),
+                can_harvest=harvestable,
+                can_plant=bool(re.search(plant_pattern, item_html or source)),
                 item_html=item_html,
             )
         return result
@@ -313,7 +320,12 @@ class FarmSiteConfig(ABC):
     def _status_text(fragment: str) -> str:
         return " ".join(re.sub(r"<[^>]+>", " ", fragment or "").split())
 
-    def _crop_status(self, can_harvest: bool, item_html: str = "") -> Dict[str, Any]:
+    def _crop_status(
+        self,
+        can_harvest: bool,
+        item_html: str = "",
+        can_plant: bool = False,
+    ) -> Dict[str, Any]:
         status_text = self._status_text(item_html)
         remaining_match = re.search(
             r"剩余时间\s*[:：]?\s*((?:\d+\s*(?:天|小时|分钟)\s*)+)",
@@ -322,10 +334,19 @@ class FarmSiteConfig(ABC):
         remaining_minutes = (
             parse_expire_minutes(remaining_match.group(1)) if remaining_match else None
         )
+        if can_harvest:
+            state = "ripe"
+        elif remaining_minutes is not None and remaining_minutes > 0:
+            state = "growing"
+        elif can_plant:
+            state = "empty"
+        else:
+            # 作物卡缺失或页面无明确种植/成长/收获证据时禁止自动种植。
+            state = "unknown"
         status: Dict[str, Any] = {
             "can_harvest": can_harvest,
             "remaining_minutes": remaining_minutes,
-            "state": self._state_from_status(can_harvest, remaining_minutes),
+            "state": state,
         }
         grow_time_match = re.search(
             r"成长时间\s*[:：]?\s*((?:\d+\s*(?:天|小时|分钟)\s*)+)",

@@ -119,6 +119,19 @@ class SiqiConfig(FarmSiteConfig):
                     break
         return result
 
+    @staticmethod
+    def _plot_state(plot: Dict[str, Any]) -> str:
+        """以思齐 fetch 的权威字段判定地块状态，不用残留 harvest_time 推断成熟。"""
+        plot_index = plot.get("plot_index")
+        seed_id = plot.get("seed_id")
+        if plot_index is None:
+            return "locked"
+        if seed_id in (None, "", 0, "0"):
+            return "empty"
+        if str(plot.get("is_ready", "0")) == "1":
+            return "ripe"
+        return "growing"
+
     def parse_crop_status(self, html: str) -> Dict[str, Dict]:
         data = self._json_dict(html)
         statuses: Dict[str, Dict] = {}
@@ -128,28 +141,25 @@ class SiqiConfig(FarmSiteConfig):
             seed_id = self._number(plot.get("seed_id"))
             land_id = plot.get("land_id")
             plot_index = plot.get("plot_index")
+            state = self._plot_state(plot)
+            common = {
+                "can_harvest": state == "ripe",
+                "land_id": land_id,
+                "plot_index": plot_index,
+                "harvest_time": plot.get("harvest_time"),
+                "state": state,
+            }
             if seed_id is not None and seed_id != 0:
-                # 已种植的 plot：以站点 is_ready 为准判可收获
-                # harvest_time 过期不单独判可收获(站点 is_ready=0 表示未成熟/已收, 旧 harvest_time 是残留值)
-                ready = str(plot.get("is_ready", "0")) == "1"
-                harvest_time = self._number(plot.get("harvest_time"))
-                plot_key = f"crop_{seed_id}_{land_id}_{plot_index}"
-                statuses[plot_key] = {
-                    "can_harvest": ready,
-                    "land_id": land_id,
-                    "plot_index": plot_index,
-                    "harvest_time": plot.get("harvest_time"),
+                statuses[f"crop_{seed_id}_{land_id}_{plot_index}"] = {
+                    **common,
                     "seed_id": seed_id,
                     "crop_key": f"crop_{seed_id}",
                 }
             else:
-                # 空地也记录(供 plant 使用)
-                statuses[f"empty_{land_id}_{plot_index}"] = {
-                    "can_harvest": False,
-                    "land_id": land_id,
-                    "plot_index": plot_index,
-                    "harvest_time": None,
-                    "is_empty": True,
+                prefix = "empty" if state == "empty" else "locked"
+                statuses[f"{prefix}_{land_id}_{plot_index}"] = {
+                    **common,
+                    "is_empty": state == "empty",
                 }
         if statuses:
             return statuses
@@ -162,7 +172,10 @@ class SiqiConfig(FarmSiteConfig):
 
     def to_land_states(self, farm_html: str) -> List["LandState"]:
         """思齐覆写：从 fetch JSON 的 user_lands 解析真实地块。"""
-        from ..core.models import LandState
+        try:
+            from ..core.models import LandState
+        except ImportError:  # 测试以插件根目录作为 sys.path 时的兼容导入
+            from core.models import LandState
         data = self._json_dict(farm_html)
         lands: List[LandState] = []
         now = time.time()
@@ -178,21 +191,17 @@ class SiqiConfig(FarmSiteConfig):
             land_id = plot.get("land_id")
             plot_index = plot.get("plot_index")
             seed_id = self._number(plot.get("seed_id"))
-            ready = str(plot.get("is_ready", "0")) == "1"
+            state = self._plot_state(plot)
+            ready = state == "ripe"
             harvest_time = self._number(plot.get("harvest_time"))
-            if not ready and harvest_time and harvest_time <= now:
-                ready = True
             seed = seed_map.get(seed_id) if seed_id else None
             crop_key = f"crop_{seed_id}" if seed_id else None
-            if seed_id and not ready:
-                remaining = max(0, int((harvest_time - now) / 60)) if harvest_time else None
-                state = "growing"
-            elif seed_id and ready:
+            if state == "growing":
+                remaining = max(0, int((harvest_time - now) / 60)) if harvest_time and harvest_time > now else None
+            elif state == "ripe":
                 remaining = 0
-                state = "ripe"
             else:
                 remaining = None
-                state = "empty"
             grow_time_raw = (seed or {}).get("grow_time")
             grow_time = self._number(grow_time_raw) if isinstance(grow_time_raw, (int, float, str)) else None
             lands.append(LandState(
@@ -526,8 +535,12 @@ class SiqiConfig(FarmSiteConfig):
         token = html_lib.unescape(token_match.group(1)) if token_match else ""
         return {"token": token, "imagehash": token, "image_url": html_lib.unescape(image_match.group(1)) if image_match else ""}
 
-    def get_harvest_all_submit_url(self) -> str:
+    def get_action_submit_url(self) -> str:
+        """返回无 fetch 查询参数的动作 POST 地址，避免 query action 覆盖 form action。"""
         return f"{self.base_url}{self.farm_path}"
+
+    def get_harvest_all_submit_url(self) -> str:
+        return self.get_action_submit_url()
 
     def get_harvest_plot_url(self, land_id: Any, plot_index: Any) -> str:
         return self._action_url("harvest", land_id=land_id, plot_index=plot_index)

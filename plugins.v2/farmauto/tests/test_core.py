@@ -6,8 +6,12 @@ if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
 
 from core.models import WarehouseItem, parse_expire_minutes
-from core.strategy import is_expiry, plan_harvest, plan_run, plan_smart, should_sell
+from core.strategy import (
+    is_expiry, plan_generic_run, plan_harvest, plan_run, plan_siqi_run,
+    plan_smart, should_sell,
+)
 from sites.playlet import PlayLetConfig
+from sites.siqi import SiqiConfig
 
 
 def test_default_action_result_parsers_reject_failure_text():
@@ -129,6 +133,47 @@ def test_plan_run_merges_harvest_sell_and_expiry():
     # 盈利出售走 warehouse
     sell_steps = [step for step in plan if step["op"] == "sell"]
     assert sell_steps and all(step["source"] == "warehouse" for step in sell_steps)
+
+
+def test_generic_plan_skips_harvest_all_without_ready_crop():
+    config = PlayLetConfig()
+    snapshot = {
+        "market_prices": {},
+        "crop_status": {
+            "crop_1": {"can_harvest": False, "state": "growing"},
+            "crop_2": {"can_harvest": False, "state": "unknown"},
+        },
+    }
+
+    plan = plan_generic_run(snapshot, [], config, {})
+
+    assert "harvest_all" not in [step["op"] for step in plan]
+    assert "plant" not in [step["op"] for step in plan]
+
+
+def test_siqi_plan_harvests_each_ready_plot_and_plants_once():
+    config = SiqiConfig()
+    snapshot = {
+        "market_prices": {"crop_1": 20},
+        "crop_status": {
+            "crop_1_1_0": {
+                "can_harvest": True, "state": "ripe", "crop_key": "crop_1",
+                "land_id": 1, "plot_index": 0,
+            },
+            "crop_1_1_1": {
+                "can_harvest": True, "state": "ripe", "crop_key": "crop_1",
+                "land_id": 1, "plot_index": 1,
+            },
+            "empty_1_2": {"can_harvest": False, "state": "empty", "plot_index": 2},
+            "locked_2_None": {"can_harvest": False, "state": "locked", "plot_index": None},
+        },
+    }
+
+    plan = plan_siqi_run(snapshot, [], config, {})
+
+    assert [step["op"] for step in plan] == ["harvest", "harvest", "plant"]
+    assert [step["crop_key"] for step in plan[:2]] == ["crop_1_1_0", "crop_1_1_1"]
+    assert plan[-1]["crop_key"] == "all"
 
 
 def test_plan_run_expiry_only_allows_loss():

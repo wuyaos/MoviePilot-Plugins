@@ -98,6 +98,7 @@ def test_siqi_farm_and_warehouse_parsers():
         "land_id": 2,
         "plot_index": 0,
         "harvest_time": 1700000000,
+        "state": "ripe",
         "seed_id": 1,
         "crop_key": "crop_1",
     }
@@ -108,6 +109,28 @@ def test_siqi_farm_and_warehouse_parsers():
     assert item["crop_key"] == "crop_1"
     assert config.get_sell_key(FARM_JSON, "crop", 1) == "1"
     assert config.parse_warehouse_page(FARM_JSON)[1] is None
+
+
+def test_siqi_old_harvest_time_does_not_override_is_ready_and_locked_land_is_not_empty():
+    config = SiqiConfig()
+    payload = """{
+      "success": true,
+      "seeds": [{"id": 1, "name": "萝卜", "cost": 10}],
+      "user_lands": [
+        {"land_id": 1, "plot_index": 0, "seed_id": 1, "is_ready": 0, "harvest_time": 1},
+        {"land_id": 2, "plot_index": null, "seed_id": null, "is_ready": 0}
+      ]
+    }"""
+
+    status = config.parse_crop_status(payload)
+    lands = config.to_land_states(payload)
+
+    assert status["crop_1_1_0"]["state"] == "growing"
+    assert status["crop_1_1_0"]["can_harvest"] is False
+    assert status["locked_2_None"]["state"] == "locked"
+    assert status["locked_2_None"]["is_empty"] is False
+    assert [land.state for land in lands] == ["growing", "locked"]
+    assert not any(land.can_harvest for land in lands)
 
 
 def test_siqi_resolves_dynamic_crops_and_inventory_keys():

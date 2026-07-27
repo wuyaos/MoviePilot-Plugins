@@ -147,6 +147,27 @@ def test_siqi_daily_flags_only_successful_actions():
     assert report.trades_count == 1
 
 
+def test_siqi_skipped_social_action_does_not_count_or_consume_daily_limit():
+    plugin = build_plugin()
+    plugin._siqi_options = {"auto_steal": True}
+    saved = []
+    plugin._siqi_daily_state = lambda: {
+        "date": "2099-01-01", "steal": False, "like": False,
+    }
+    plugin.save_data = lambda key, value: saved.append((key, dict(value)))
+    executor = types.SimpleNamespace(run_siqi_extras=lambda *_args, **_kwargs: [
+        ActionResult("steal", "随机农场", True, skipped=True, message="无可偷菜目标，跳过"),
+    ])
+    site = types.SimpleNamespace(site_id="siqi")
+    report = SiteRunReport("siqi", "思齐", "smart")
+
+    plugin._run_siqi_extras(executor, site, "cookie", {}, report)
+
+    assert report.trades_count == 0
+    assert saved == []
+    assert report.status == "completed"
+
+
 def test_siqi_extras_preserve_existing_failed_report_status():
     plugin = build_plugin()
     plugin._siqi_options = {"auto_like": True}

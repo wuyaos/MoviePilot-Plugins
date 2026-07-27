@@ -31,7 +31,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场自动化，支持智能交易与自动收获"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
-    plugin_version = "3.1.0"
+    plugin_version = "3.1.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "farmauto_"
@@ -309,7 +309,7 @@ class FarmAuto(_PluginBase):
         )
         for result in results:
             report.actions.append(result)
-            if result.success:
+            if result.success and not result.skipped:
                 report.trades_count += 1
                 if result.action in ("steal", "like"):
                     daily[result.action] = True

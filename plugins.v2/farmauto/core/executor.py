@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from .captcha import OcrRecognizer
 from .http_client import AuthError, FarmHttpClient
 from .models import ActionResult, SiteRunReport
-from .strategy import DEFAULT_POLICY, plan_run
+from .strategy import DEFAULT_POLICY, plan_run, plan_siqi_run, plan_warehouse_sales
 from .trend import PriceTrendStore
 
 
@@ -107,6 +107,11 @@ class FarmExecutor:
                 "market_prices": report.market_prices,
                 "crop_status": report.crop_status,
             }
+            # 思齐实盘从初始 fetch 直接进入独立状态机；避免通用仓库预读额外消耗一次 fetch 快照。
+            if site_config.site_id == "siqi" and not policy["dry_run"]:
+                return self._run_siqi_staged(
+                    report, cookies, site_config, policy, crops, farm_html, siqi_options,
+                )
             current_action = "拉取仓库"
             current_url = site_config.get_warehouse_url()
             warehouse = self._fetch_warehouse(cookies, site_config)
@@ -199,16 +204,14 @@ class FarmExecutor:
                     allowed = max(0, int(policy["max_sell_per_run"]) - sold_count)
                     quantity = min(quantity, allowed)
                 for _ in range(quantity):
-                    result, field_html = self._execute_action(
+                    result, field_html = self._execute_generic_action(
                         action,
                         cookies,
                         site_config,
-                        policy,
                         field_html,
                         report.market_prices,
                         crops,
                         report.crop_status,
-                        siqi_options,
                     )
                     try:
                         latest_bonus = site_config.parse_bonus(field_html)
@@ -259,6 +262,95 @@ class FarmExecutor:
                 f"{site_name} {current_action} 异常："
                 f"{self._error_context(error, current_url)}",
             )
+        return report
+
+    def _run_siqi_staged(
+        self, report, cookies, site_config, policy, crops, farm_html, siqi_options
+    ) -> SiteRunReport:
+        """思齐独立状态机：逐格收获 → 刷新 → 一次种植 → 刷新背包 → 出售。"""
+        interval = max(0.0, float(policy["request_interval"]))
+
+        def record(result: ActionResult, latest_html: str) -> None:
+            try:
+                balance = site_config.parse_bonus(latest_html)
+                if balance is not None:
+                    report.bonus = balance
+            except Exception:
+                balance = None
+            result.balance_after = balance if balance is not None else report.bonus
+            report.actions.append(result)
+            self._log_action(site_config.site_name, result)
+            if result.success and not getattr(result, "skipped", False):
+                report.trades_count += 1
+                report.total_profit += result.profit
+
+        def refresh() -> str:
+            response = self.http_client.get(site_config.get_farm_url(), cookies, retryable=False)
+            response.raise_for_status()
+            html = response.text
+            if not site_config.check_auth(html):
+                raise AuthError("Cookie 已失效")
+            resolved = site_config.resolve_crops(html)
+            if resolved is not None:
+                site_config.crops = resolved
+                crops.clear()
+                crops.update(resolved)
+            report.market_prices = site_config.parse_market_prices(html)
+            report.crop_status = site_config.parse_crop_status(html)
+            report.bonus = site_config.parse_bonus(html)
+            return html
+
+        # 阶段一：只执行初始快照中明确 ripe 的逐地块收获。
+        initial_plan = plan_siqi_run(
+            {"market_prices": report.market_prices, "crop_status": report.crop_status},
+            [], site_config, {**policy, "auto_plant": False, "auto_sell": False, "expiry_sale": False},
+            crops_override=crops,
+        )
+        for action in initial_plan:
+            result, farm_html = self._execute_siqi_action(
+                action, cookies, site_config, farm_html,
+                report.market_prices, crops, report.crop_status, siqi_options,
+            )
+            record(result, farm_html)
+            time.sleep(interval)
+
+        # 阶段二：收获全部结束后刷新真实地块；存在已解锁空地时只种一次。
+        farm_html = refresh()
+        has_empty_plot = any(
+            isinstance(status, dict)
+            and status.get("state") == "empty"
+            and status.get("plot_index") is not None
+            for status in report.crop_status.values()
+        )
+        if policy["auto_plant"] and has_empty_plot:
+            action = {"op": "plant", "crop_key": "all", "source": "field", "quantity": 1}
+            result, farm_html = self._execute_siqi_action(
+                action, cookies, site_config, farm_html,
+                report.market_prices, crops, report.crop_status, siqi_options,
+            )
+            record(result, farm_html)
+            time.sleep(interval)
+            farm_html = refresh()
+
+        # 阶段三：重新读取真实背包，只对当前库存生成出售计划。
+        warehouse = self._fetch_warehouse(cookies, site_config)
+        report.warehouse = warehouse
+        sell_plan = plan_warehouse_sales(
+            warehouse, report.market_prices, crops, site_config, policy,
+        )
+        for action in sell_plan:
+            for _ in range(int(action.get("quantity", 1))):
+                single_action = {**action, "quantity": 1}
+                result, farm_html = self._execute_siqi_action(
+                    single_action, cookies, site_config, farm_html,
+                    report.market_prices, crops, report.crop_status, siqi_options,
+                )
+                record(result, farm_html)
+                time.sleep(interval)
+
+        failures = sum(not action.success for action in report.actions)
+        report.status = "partial" if failures else "completed"
+        report.message = f"完成 {report.trades_count} 个操作" if report.actions else "无可执行操作"
         return report
 
     def run_siqi_extras(
@@ -381,7 +473,7 @@ class FarmExecutor:
                 self._log(
                     "debug",
                     f"{site_config.site_name} 逐格收获地块 {land_id}-{plot_index} 异常："
-                    f"{self._error_context(error, harvest_url)}",
+                    f"{self._error_context(error, site_config.get_harvest_plot_url(land_id, plot_index))}",
                 )
         success = bool(plots) and failures == 0
         message = (
@@ -408,7 +500,9 @@ class FarmExecutor:
         target_response.raise_for_status()
         targets = site_config.parse_steal_targets(target_response.text)
         if not targets:
-            return ActionResult("steal", "随机农场", True, message="无可偷菜目标，跳过")
+            return ActionResult(
+                "steal", "随机农场", True, skipped=True, message="无可偷菜目标，跳过"
+            )
         target = self._siqi_target_fields(targets[0])
         plots = target.get("plots") or target.get("victim_plots") or []
         plot = next(
@@ -444,7 +538,9 @@ class FarmExecutor:
         target_response.raise_for_status()
         targets = site_config.parse_like_targets(target_response.text)
         if not targets:
-            return ActionResult("like", "随机农场", True, message="无可点赞目标，跳过")
+            return ActionResult(
+                "like", "随机农场", True, skipped=True, message="无可点赞目标，跳过"
+            )
         target = self._siqi_target_fields(targets[0])
         target_id = target.get("target_id")
         response = self.http_client.post(
@@ -463,7 +559,9 @@ class FarmExecutor:
         farm_response.raise_for_status()
         targets = site_config.parse_buy_slot_targets(farm_response.text)
         if not targets:
-            return ActionResult("buy_slot", "农场坑位", False, message="没有可购买坑位")
+            return ActionResult(
+                "buy_slot", "农场坑位", True, skipped=True, message="没有可购买坑位，跳过"
+            )
         land_id = targets[0]
         response = self.http_client.post(
             site_config.get_buy_plot_slot_url(), cookies,
@@ -577,25 +675,106 @@ class FarmExecutor:
                 for action in pending
             ]
 
-    def _execute_action(
-        self, action, cookies, site_config, policy, farm_html, market_prices, crops, crop_status=None, siqi_options=None
+    def _execute_siqi_action(
+        self, action, cookies, site_config, farm_html, market_prices, crops,
+        crop_status=None, siqi_options=None,
+    ):
+        """执行思齐核心动作；与普通农场 URL、参数和收益口径完全隔离。"""
+        crop_key = action.get("crop_key", "")
+        operation = action.get("op", "unknown")
+        status = (crop_status or {}).get(crop_key, {})
+        ref_crop_key = status.get("crop_key") if isinstance(status, dict) else None
+        crop = crops.get(ref_crop_key or crop_key, {})
+        target = crop.get("name", crop_key)
+        submit_url = site_config.get_action_submit_url()
+        try:
+            if operation == "harvest":
+                action_url = site_config.get_harvest_plot_url(
+                    status.get("land_id"), status.get("plot_index")
+                )
+                response = self.http_client.get(action_url, cookies, retryable=False)
+                response.raise_for_status()
+                parsed = site_config.parse_harvest_result(response.text)
+            elif operation == "plant":
+                seed_id = (siqi_options or {}).get("default_seed_id") or 1
+                crop = next((item for item in crops.values() if item.get("id") == seed_id), {})
+                target = crop.get("name", f"种子{seed_id}")
+                response = self.http_client.post(
+                    submit_url, cookies,
+                    data={"action": "plant_fill_empty", "seed_id": seed_id},
+                    retryable=False,
+                )
+                response.raise_for_status()
+                parsed = site_config.parse_plant_result(response.text, "plant")
+            elif operation == "sell":
+                response = self.http_client.post(
+                    submit_url, cookies,
+                    data={
+                        "action": "sell_inventory",
+                        "seed_id": crop.get("id", ""),
+                        "quantity": int(action.get("quantity", 1)),
+                    },
+                    retryable=False,
+                )
+                response.raise_for_status()
+                parsed = site_config.parse_sell_result(response.text)
+            else:
+                return ActionResult(operation, target, False, message="未知思齐操作"), farm_html
+
+            success = bool(parsed.get("success"))
+            skipped = bool(parsed.get("skipped", False))
+            quantity = max(1, int(action.get("quantity", 1)))
+            profit = 0
+            message = str(parsed.get("message") or "")
+            if success and not skipped and operation == "harvest":
+                profit = int(crop.get("base_reward", 0) or 0) * quantity
+            elif success and not skipped and operation == "plant":
+                profit = -int(crop.get("cost", 0) or 0)
+                if profit:
+                    message = f"{message} 成本{-profit}".strip()
+            elif success and not skipped and operation == "sell":
+                price = int(market_prices.get(ref_crop_key or crop_key, 0))
+                profit = price * quantity
+                message = f"{message} 价格{price}×{quantity}".strip()
+
+            crop_name = str(crop.get("name") or target)
+            try:
+                crop_icon = site_config.crop_image(crop_name)
+            except Exception:
+                crop_icon = ""
+            result = ActionResult(
+                operation, target, success,
+                profit=profit,
+                message=message,
+                skipped=skipped,
+                crop_name=crop_name,
+                crop_icon=crop_icon,
+                land_name=(
+                    f"地块{status.get('land_id')}"
+                    if isinstance(status, dict) and status.get("land_id") is not None else ""
+                ),
+                plot_index=status.get("plot_index") if isinstance(status, dict) else None,
+                quantity=quantity,
+                value_unit="魔力值",
+            )
+            return result, farm_html
+        except Exception as error:
+            self._log(
+                "error",
+                f"{site_config.site_name} {self.ACTION_NAMES.get(operation, operation)} "
+                f"异常：{self._error_context(error)}",
+            )
+            return ActionResult(operation, target, False, message=str(error)), farm_html
+
+    def _execute_generic_action(
+        self, action, cookies, site_config, farm_html, market_prices, crops, crop_status=None
     ):
         crop_key = action.get("crop_key", "")
         crop = crops.get(crop_key, {})
         target = crop.get("name", crop_key)
         operation = action.get("op", "unknown")
         action_url = ""
-        # 思齐逐地块条目(crop_{seed_id}_{land}_{plot}) 用 crop_status 的 crop_key 字段查 crops
         st_info = (crop_status or {}).get(crop_key, {}) if isinstance(crop_status, dict) else {}
-        ref_crop_key = st_info.get("crop_key") if isinstance(st_info, dict) else None
-        if ref_crop_key and ref_crop_key in crops:
-            crop = crops[ref_crop_key]
-            target = crop.get("name", target)
-        # 思齐 plant_all: crop_key=all 时用默认种子名作为 target
-        if site_config.site_id == "siqi" and crop_key == "all" and operation == "plant":
-            default_seed_id = (siqi_options or {}).get("default_seed_id") or 1
-            seed_crop = next((c for c in crops.values() if c.get("id") == default_seed_id), {})
-            target = seed_crop.get("name", f"种子{default_seed_id}")
 
         try:
             if operation == "harvest_all":
@@ -645,64 +824,33 @@ class FarmExecutor:
                     except Exception:
                         pass
             elif operation == "harvest":
-                if site_config.site_id == "siqi":
-                    # 思齐用 land_id+plot_index 收获，而非 type/id
-                    st = (crop_status or {}).get(crop_key, {})
-                    action_url = site_config.get_harvest_plot_url(st.get("land_id"), st.get("plot_index"))
-                else:
-                    action_url = site_config.get_harvest_url(crop["type"], crop["id"])
+                action_url = site_config.get_harvest_url(crop["type"], crop["id"])
                 response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)
             elif operation == "plant":
                 crop_action = crop.get("action", "plant")
-                if site_config.site_id == "siqi":
-                    # 思齐用 POST plant_game.php + action=plant_all_empty 批量种空地
-                    # seed_id 取思齐配置页的 default_seed_id(回退 crop.id)
-                    default_seed = (siqi_options or {}).get("default_seed_id") or crop.get("id", 1)
-                    # target 显示实际种植的种子名(default_seed 对应的 crop), 而非 plan 传入的 crop.name
-                    seed_crop = next((c for c in crops.values() if c.get("id") == default_seed), crop)
-                    target = seed_crop.get("name", target)
-                    crop = seed_crop
-                    response = self.http_client.post(
-                        site_config.get_farm_url(),
-                        cookies,
-                        data={"action": "plant_fill_empty", "seed_id": default_seed},
-                        retryable=False,
-                    )
-                else:
-                    url = (
-                        site_config.get_breed_url(crop["type"], crop["id"])
-                        if crop_action == "breed"
-                        else site_config.get_plant_url(crop["type"], crop["id"])
-                    )
-                    action_url = url
-                    response = self.http_client.get(action_url, cookies, retryable=False)
+                action_url = (
+                    site_config.get_breed_url(crop["type"], crop["id"])
+                    if crop_action == "breed"
+                    else site_config.get_plant_url(crop["type"], crop["id"])
+                )
+                response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_plant_result(response.text, crop_action)
             elif operation == "sell":
                 sell_key = action.get("sell_key")
-                if site_config.site_id != "siqi":
-                    if action.get("source") == "field":
-                        action_url = site_config.get_farm_url()
-                        latest = self.http_client.get(action_url, cookies)
-                        latest.raise_for_status()
-                        farm_html = latest.text
-                        sell_key = site_config.get_sell_key(farm_html, crop["type"], crop["id"])
-                        sell_key = sell_key or f"{crop['type']}_{crop['id']}"
-                    if not sell_key:
-                        return ActionResult("sell", target, False, message="未找到出售标识"), farm_html
-                if site_config.site_id == "siqi":
-                    # 思齐用 POST plant_game.php + action=sell_inventory
-                    response = self.http_client.post(
-                        site_config.get_farm_url(),
-                        cookies,
-                        data={"action": "sell_inventory", "seed_id": crop.get("id", ""), "quantity": int(action.get("quantity", 1))},
-                        retryable=False,
-                    )
-                else:
-                    action_url = site_config.get_sell_url(sell_key)
-                    response = self.http_client.get(action_url, cookies, retryable=False)
+                if action.get("source") == "field":
+                    action_url = site_config.get_farm_url()
+                    latest = self.http_client.get(action_url, cookies)
+                    latest.raise_for_status()
+                    farm_html = latest.text
+                    sell_key = site_config.get_sell_key(farm_html, crop["type"], crop["id"])
+                    sell_key = sell_key or f"{crop['type']}_{crop['id']}"
+                if not sell_key:
+                    return ActionResult("sell", target, False, message="未找到出售标识"), farm_html
+                action_url = site_config.get_sell_url(sell_key)
+                response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_sell_result(response.text)
             else:
@@ -720,26 +868,9 @@ class FarmExecutor:
                     profit = price * quantity
                 message = f"{message} 价格{price}×{quantity}".strip()
             elif success and operation == "harvest_all":
-                # harvest_all 背包对比明细覆盖 target，思齐收获给 base_reward 魔力
                 detail = str(parsed.get("harvest_detail") or "")
                 if detail:
                     target = f"收获了{detail}"
-                if site_config.site_id == "siqi":
-                    harvest_crops = parsed.get("harvest_crops") or {}
-                    profit = sum(
-                        int(next(
-                            (c.get("base_reward", 0) for c in crops.values() if c.get("name") == name),
-                            0,
-                        ) or 0) * qty
-                        for name, qty in harvest_crops.items()
-                    )
-            elif success and operation == "harvest":
-                # 思齐单作物收获直接给 base_reward 魔力
-                if site_config.site_id == "siqi":
-                    reward = int(crop.get("base_reward", 0) or 0)
-                    quantity = max(1, int(action.get("quantity", 1)))
-                    if reward > 0:
-                        profit = reward * quantity
             elif success and operation == "plant":
                 # skipped(无空地) 不扣魔力
                 if parsed.get("skipped"):
@@ -759,8 +890,13 @@ class FarmExecutor:
                 crop_icon = site_config.crop_image(crop_name) if hasattr(site_config, "crop_image") else ""
             except Exception:
                 crop_icon = ""
-            value_unit = "魔力值" if operation in ("sell", "plant", "breed") else ("魔力值" if site_config.site_id == "siqi" and operation in ("harvest", "harvest_all") else ("收获值" if operation in ("harvest", "harvest_all") else ""))
+            value_unit = (
+                "魔力值" if operation in ("sell", "plant", "breed")
+                else ("收获值" if operation in ("harvest", "harvest_all") else "")
+            )
             action_quantity = int(action.get("quantity", 1) or 1)
+            land_id = st_info.get("land_id") if isinstance(st_info, dict) else None
+            plot_index = st_info.get("plot_index") if isinstance(st_info, dict) else None
             result = ActionResult(
                 operation,
                 target,
@@ -768,8 +904,11 @@ class FarmExecutor:
                 double=bool(parsed.get("double", False)),
                 profit=profit,
                 message=message,
+                skipped=bool(parsed.get("skipped", False)),
                 crop_name=crop_name,
                 crop_icon=crop_icon,
+                land_name=f"地块{land_id}" if land_id is not None else "",
+                plot_index=plot_index,
                 quantity=action_quantity,
                 value_unit=value_unit,
             )

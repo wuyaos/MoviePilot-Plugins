@@ -185,16 +185,14 @@ def run_smart(client, dry_run=False):
     )
 
 
-def test_smart_executes_warehouse_sell_harvest_plant_and_field_sell():
+def test_smart_executes_harvest_plant_and_warehouse_sell():
     report = run_smart(FakeHttpClient())
 
-    # plan_run 统一顺序：收获→补种→仓库出售（盈利 should_sell）
-    assert [action.action for action in report.actions] == [
-        "harvest", "plant", "sell", "sell"
-    ]
+    # 通用流程：收获→补种→仅出售真实仓库库存，不再生成 field sell。
+    assert [action.action for action in report.actions] == ["harvest", "plant", "sell"]
     assert all(action.success for action in report.actions)
-    assert report.trades_count == 4
-    assert report.total_profit == 200
+    assert report.trades_count == 3
+    assert report.total_profit == 50
     assert report.status == "completed"
 
 
@@ -202,9 +200,7 @@ def test_dry_run_builds_plan_without_action_requests():
     client = FakeHttpClient()
     report = run_smart(client, dry_run=True)
 
-    assert [action.action for action in report.actions] == [
-        "harvest", "plant", "sell", "sell"
-    ]
+    assert [action.action for action in report.actions] == ["harvest", "plant", "sell"]
     assert report.trades_count == 0
     assert report.total_profit == 0
     assert len(client.urls) == 2
@@ -220,9 +216,7 @@ def test_executor_uses_resolved_dynamic_crops():
         {"max_sell_per_run": 2, "request_interval": 0},
     )
 
-    assert [action.action for action in report.actions] == [
-        "harvest", "plant", "sell", "sell"
-    ]
+    assert [action.action for action in report.actions] == ["harvest", "plant", "sell"]
     assert {action.target for action in report.actions} == {"动态玉米"}
     assert any("action=harvest&type=crop&id=2" in url for url in client.urls)
     assert any("action=plant&type=crop&id=2" in url for url in client.urls)
@@ -231,15 +225,12 @@ def test_executor_uses_resolved_dynamic_crops():
 def test_single_action_exception_isolated_and_later_actions_continue():
     report = run_smart(FakeHttpClient(fail_token="action=plant"))
 
-    # plan_run 顺序：harvest→plant(fail)→sell→sell；plant 失败不影响后续 sell
-    assert [action.action for action in report.actions] == [
-        "harvest", "plant", "sell", "sell"
-    ]
-    assert [action.success for action in report.actions] == [True, False, True, True]
+    # plant 失败不影响后续真实仓库出售。
+    assert [action.action for action in report.actions] == ["harvest", "plant", "sell"]
+    assert [action.success for action in report.actions] == [True, False, True]
     assert report.actions[1].message == "single action failed"
-    assert report.trades_count == 3
-    # sell profit 口径改为 price*qty（成本由 plant profit=-cost 承担）：150*1*2=300
-    assert report.total_profit == 300
+    assert report.trades_count == 2
+    assert report.total_profit == 150
     assert report.status == "partial"
 
 

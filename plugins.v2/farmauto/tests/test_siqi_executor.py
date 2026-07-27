@@ -174,6 +174,23 @@ def test_daily_steal_done_skips_request():
     assert client.calls == []
 
 
+def test_siqi_empty_targets_are_skipped_not_failed():
+    client = FakeHttpClient([
+        FakeResponse('{"success":true,"targets":[]}'),
+        FakeResponse('{"success":true,"targets":[]}'),
+        FakeResponse('{"success":true,"user_lands":[]}'),
+    ])
+    executor = FarmExecutor(client, Logger(), ocr_recognizer=FakeOcr(None))
+
+    results = executor.run_siqi_extras(
+        "session=value", SiqiConfig(),
+        {"auto_steal": True, "auto_like": True, "auto_buy_slot": True},
+    )
+
+    assert [result.action for result in results] == ["steal", "like", "buy_slot"]
+    assert all(result.success and result.skipped for result in results)
+
+
 def test_all_siqi_switches_closed_do_not_request():
     client = FakeHttpClient([])
     executor = FarmExecutor(client, Logger(), ocr_recognizer=FakeOcr(None))

@@ -83,6 +83,7 @@ class ActionResult:
     double: bool = False
     profit: int = 0
     message: str = ""
+    skipped: bool = False
     crop_name: str = ""
     crop_icon: str = ""
     land_name: str = ""
