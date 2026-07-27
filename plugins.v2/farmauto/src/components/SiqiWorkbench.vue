@@ -631,9 +631,8 @@ onBeforeUnmount(() => {
                     @error="markStageIconFailed(plot)"
                   />
                   <span v-else class="plot-emoji" aria-hidden="true">{{ plot.seed.icon || seedEmoji(plot.seed.name, plot.seed) }}</span>
-                  <br/><small class="font-weight-bold">{{ plot.seed.name }}</small><br/>
                   <small :class="isPlotReady(plot) ? 'text-orange' : 'text-grey'">
-                    {{ isPlotReady(plot) ? '可收获' : `成长中 ${formatRemain(plot)}` }}
+                    {{ isPlotReady(plot) ? '可收获' : formatRemain(plot) }}
                   </small>
                 </template>
                 <template v-else>

@@ -588,6 +588,14 @@ class FarmExecutor:
 
         try:
             if operation == "harvest_all":
+                # 执行前从 crop_status 收集可收获作物名，作为收获明细
+                harvestable_names = [
+                    crops.get(ck, {}).get("name", ck)
+                    for ck, st in (snapshot.get("crop_status") or {}).items()
+                    if st.get("can_harvest") and ck in crops
+                ]
+                if harvestable_names:
+                    parsed["harvest_detail"] = "、".join(harvestable_names)
                 # 背包对比拆分：执行前记录库存快照，执行后对比差值
                 inv_before: Dict[str, int] = {}
                 try:

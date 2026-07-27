@@ -39,15 +39,14 @@ function logMeta(item) {
   // 失败消息
   if (item?.success === false && item?.message) parts.push(item.message)
 
-  const unit = item?.value_unit || (action === 'harvest' ? '收获值' : '魔力值')
+  const unit = '魔力值'
   // 兼容 user_logs.value / recent_actions.profit
   const value = Number(item?.value ?? item?.profit ?? 0)
-  // 魔力列优先显示本次变动值；无变动时回退余额 balance_after，保证每行都有值
+  // 魔力列：有变动显示±value，无变动回退余额 balance_after；保证每行都有值
   const balance = Number(item?.balance_after ?? '')
   const hasChange = value !== 0
-  const magicText = hasChange
-    ? `${value > 0 ? '+' : ''}${value} ${unit}`
-    : (Number.isFinite(balance) ? `${balance} ${unit}` : '')
+  const displayValue = hasChange ? value : (Number.isFinite(balance) ? balance : 0)
+  const magicText = `${displayValue > 0 ? '+' : ''}${displayValue} ${unit}`
   return {
     actionText: mapped[0],
     actionClass: mapped[1] ? `history-action--${mapped[1]}` : '',
@@ -55,11 +54,11 @@ function logMeta(item) {
     hasIcon: !!parts.find(p => typeof p === 'object' && p.icon),
     iconSrc: (parts.find(p => typeof p === 'object' && p.icon) || {}).icon,
     valueText: magicText,
-    valueClass: value > 0 ? 'history-value--plus' : (value < 0 ? 'history-value--minus' : ''),
+    valueClass: displayValue > 0 ? 'history-value--plus' : (displayValue < 0 ? 'history-value--minus' : ''),
   }
 }
 
-const rows = computed(() => (Array.isArray(props.history) ? props.history : []).slice(-20).reverse())
+const rows = computed(() => (Array.isArray(props.history) ? props.history : []).slice(-50).reverse())
 
 function formatTime(value) {
   if (value == null || value === '') return '—'
@@ -91,7 +90,8 @@ function formatTime(value) {
       执行记录
     </v-card-title>
 
-    <v-table v-if="rows.length" density="compact">
+    <div v-if="rows.length" class="history-scroll">
+    <v-table density="compact">
       <thead>
         <tr>
           <th>时间</th>
@@ -127,11 +127,16 @@ function formatTime(value) {
         </tr>
       </tbody>
     </v-table>
+    </div>
     <v-card-text v-else class="text-center text-medium-emphasis py-6">暂无记录</v-card-text>
   </v-card>
 </template>
 
 <style scoped>
+.history-scroll {
+  max-height: 360px;
+  overflow-y: auto;
+}
 .failed-row td,
 .failed-row .profit {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)) !important;
