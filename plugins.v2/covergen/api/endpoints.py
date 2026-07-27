@@ -29,6 +29,7 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
         ("delete_saved_cover", plugin.api_delete_saved_cover, "bear", ["POST", "GET"], "删除已保存封面"),
         ("generate_now", plugin.api_generate_now, "bear", ["POST", "GET"], "立即生成封面"),
         ("generate_library_now", plugin.api_generate_library_now, "bear", ["POST", "GET"], "生成指定库封面"),
+        ("stop_task", plugin.api_stop_task, "bear", ["POST"], "停止当前封面更新任务"),
         ("set_cover_style", plugin.api_set_cover_style, "bear", ["POST", "GET"], "保存封面风格"),
         ("toggle_style_variant", plugin.api_toggle_style_variant, "bear", ["POST"], "切换静态/动态"),
         ("select_style_1", plugin.api_select_style_1, "bear", ["POST"], "选择风格1"),

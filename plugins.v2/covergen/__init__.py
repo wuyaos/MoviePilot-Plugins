@@ -117,6 +117,10 @@ class CoverGen(_PluginBase):
             # 运行后恢复 engine.cfg 到当前已清开关的 cfg
             self._engine.cfg = self._cfg
 
+    def scheduled_run(self):
+        """MoviePilot 公共调度入口。"""
+        self._run_all(trigger="cron")
+
     def _run_all(self, *, trigger: str = ""):
         if self._engine:
             self._engine.run(self._servers, trigger=trigger)
@@ -168,13 +172,12 @@ class CoverGen(_PluginBase):
         return build_api_routes(self)
 
     def get_service(self) -> List[Dict[str, Any]]:
-        if not self._scheduler:
-            return []
-        return self._scheduler.build_services(
-            enabled=self._cfg.enabled, cron=self._cfg.cron,
-            run_fn=self._run_all, stop_fn=self.stop_task,
-            service_id=self.SERVICE_ID, stop_id=self.STOP_SERVICE_ID,
-            run_kwargs={"trigger": "cron"})
+        return Scheduler.build_services(
+            enabled=self._cfg.enabled,
+            cron=self._cfg.cron,
+            run_fn=self.scheduled_run,
+            service_id=self.SERVICE_ID,
+        )
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -197,8 +200,11 @@ class CoverGen(_PluginBase):
 
     def stop_task(self):
         if self._scheduler:
-            return True, self._scheduler.request_stop()
-        return True, "调度器未初始化"
+            return self._scheduler.request_stop()
+        return "调度器未初始化"
+
+    def api_stop_task(self):
+        return {"code": 0, "msg": self.stop_task()}
 
     # ---- API 处理方法 ----
 

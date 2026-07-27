@@ -28,45 +28,25 @@ class Scheduler:
 
     # ---- 定时任务注册 ----
 
-    def build_services(self, *, enabled: bool, cron: str, run_fn: Callable,
-                       stop_fn: Callable, service_id: str, stop_id: str,
-                       run_kwargs: Optional[dict] = None,
-                       legacy_id: str = "", legacy_stop_id: str = "") -> list:
-        """构建 get_service() 的服务列表。"""
-        services = []
-        kw = run_kwargs or {}
-        if enabled and cron:
-            services.append({
-                "id": service_id,
-                "name": "媒体库封面更新服务",
-                "trigger": CronTrigger.from_crontab(cron),
-                "func": run_fn,
-                "kwargs": kw,
-            })
-            if legacy_id and legacy_id != service_id:
-                services.append({
-                    "id": legacy_id,
-                    "name": "媒体库封面更新服务（兼容旧ID）",
-                    "trigger": None,
-                    "func": run_fn,
-                    "kwargs": {},
-                })
-        services.append({
-            "id": stop_id,
-            "name": "停止当前更新任务",
-            "trigger": None,
-            "func": stop_fn,
+    @staticmethod
+    def build_services(*, enabled: bool, cron: str, run_fn: Callable,
+                       service_id: str, func_kwargs: Optional[dict] = None) -> list:
+        """构建仅含有效公共调度任务的服务列表。"""
+        if not enabled or not cron:
+            return []
+        try:
+            trigger = CronTrigger.from_crontab(cron, timezone=settings.TZ)
+        except Exception as err:
+            logger.warning(f"{LOG_PREFIX} Cron 配置无效：cron={cron!r}，error={err}")
+            return []
+        return [{
+            "id": service_id,
+            "name": "媒体库封面更新服务",
+            "trigger": trigger,
+            "func": run_fn,
+            "func_kwargs": dict(func_kwargs or {}),
             "kwargs": {},
-        })
-        if legacy_stop_id and legacy_stop_id != stop_id:
-            services.append({
-                "id": legacy_stop_id,
-                "name": "停止当前更新任务（兼容旧ID）",
-                "trigger": None,
-                "func": stop_fn,
-                "kwargs": {},
-            })
-        return services
+        }]
 
     # ---- 立即运行（一次性） ----
 

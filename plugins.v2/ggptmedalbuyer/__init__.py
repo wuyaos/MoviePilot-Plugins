@@ -12,6 +12,7 @@ import urllib3
 from apscheduler.triggers.cron import CronTrigger
 from urllib3.exceptions import InsecureRequestWarning
 
+from app.core.config import settings
 from app.db.site_oper import SiteOper
 from app.log import logger
 from app.plugins import _PluginBase
@@ -70,10 +71,7 @@ class GGPTMedalBuyer(_PluginBase):
             self.update_config(self.__config_snapshot(run_once=False))
             logger.info("收到配置页立即运行请求，后台启动 GGPT 勋章检查任务")
             threading.Thread(target=self.run_buy_task, kwargs={"force": False}, daemon=True).start()
-        elif self._enabled:
-            logger.info("插件配置已保存，后台启动 GGPT 勋章检查任务")
-            threading.Thread(target=self.run_buy_task, kwargs={"force": False}, daemon=True).start()
-        else:
+        elif not self._enabled:
             self.__cancel_purchase_timer()
 
     def get_state(self) -> bool:
@@ -102,25 +100,17 @@ class GGPTMedalBuyer(_PluginBase):
             logger.warning("GGPT 勋章购买定时服务未注册：Cron 为空")
             return []
         try:
-            trigger = CronTrigger.from_crontab(self._cron)
+            trigger = CronTrigger.from_crontab(self._cron, timezone=settings.TZ)
         except Exception as err:
             logger.warning(f"GGPT 勋章购买 Cron 配置无效：cron={repr(self._cron)}，error={err}")
             return []
-        return [
-            {
-                "id": "GGPTMedalBuyerDailyRefresh",
-                "name": "GGPT勋章每日刷新",
-                "trigger": "cron",
-                "func": self.daily_refresh_task,
-                "kwargs": {
-                    "minute": str(trigger.fields[6]),
-                    "hour": str(trigger.fields[5]),
-                    "day": str(trigger.fields[2]),
-                    "month": str(trigger.fields[1]),
-                    "day_of_week": str(trigger.fields[4]),
-                },
-            }
-        ]
+        return [{
+            "id": "GGPTMedalBuyerDailyRefresh",
+            "name": "GGPT勋章每日刷新",
+            "trigger": trigger,
+            "func": self.scheduled_run,
+            "kwargs": {},
+        }]
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return self.__form_components(), self.__form_data()
@@ -519,6 +509,10 @@ class GGPTMedalBuyer(_PluginBase):
         logger.info("收到 API 立即检查请求，后台启动 GGPT 勋章检查任务")
         threading.Thread(target=self.run_buy_task, kwargs={"force": False}, daemon=True).start()
         return {"success": True, "message": "任务已开始，完成后会写入购买记录并按配置发送通知"}
+
+    def scheduled_run(self) -> Dict[str, Any]:
+        """MoviePilot 公共调度入口。"""
+        return self.daily_refresh_task()
 
     def daily_refresh_task(self) -> Dict[str, Any]:
         logger.info("开始执行 GGPT 勋章每日刷新任务：刷新预计购买时间，若已到期则自动购买")

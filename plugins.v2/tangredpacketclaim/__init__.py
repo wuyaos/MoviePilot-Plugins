@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from apscheduler.triggers.cron import CronTrigger
 
+from app.core.config import settings
 from app.core.event import Event, eventmanager
 from app.db.site_oper import SiteOper
 from app.log import logger
@@ -94,8 +95,7 @@ class TangRedPacketClaim(_PluginBase):
 
     def init_plugin(self, config: dict = None):
         config = config or {}
-        if "enabled" in config:
-            self._enabled = bool(config.get("enabled"))
+        self._enabled = bool(config.get("enabled", False))
         self._notify = bool(config.get("notify", True))
         self._cron = self.__safe_str(config.get("cron"), "*/10 * * * *")
         self._site_domain = self.__safe_str(config.get("site_domain"), self.SITE_DOMAIN)
@@ -170,7 +170,7 @@ class TangRedPacketClaim(_PluginBase):
             logger.warning("不可躺自动领红包定时服务未注册：Cron 为空")
             return []
         try:
-            trigger = CronTrigger.from_crontab(self._cron)
+            trigger = CronTrigger.from_crontab(self._cron, timezone=settings.TZ)
         except Exception as err:
             logger.warning(f"不可躺自动领红包 Cron 配置无效：cron={repr(self._cron)}，error={err}")
             return []
@@ -179,9 +179,14 @@ class TangRedPacketClaim(_PluginBase):
                 "id": "TangRedPacketClaim",
                 "name": "不可躺自动领红包",
                 "trigger": trigger,
-                "func": self.run_claim_task
+                "func": self.scheduled_run,
+                "kwargs": {},
             }
         ]
+
+    def scheduled_run(self) -> Dict[str, Any]:
+        """MoviePilot 公共调度入口。"""
+        return self.run_claim_task()
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return [
@@ -586,7 +591,7 @@ class TangRedPacketClaim(_PluginBase):
             ]
 
     def stop_service(self):
-        pass
+        logger.info("不可躺自动领红包服务停止，公共调度任务由 MoviePilot 清理")
 
     def run_once_api(self) -> Dict[str, Any]:
         if not self._enabled:

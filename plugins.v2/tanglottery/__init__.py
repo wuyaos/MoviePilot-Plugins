@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from apscheduler.triggers.cron import CronTrigger
 
+from app.core.config import settings
 from app.core.event import Event, eventmanager
 from app.db.site_oper import SiteOper
 from app.log import logger
@@ -50,8 +51,7 @@ class TangLottery(_PluginBase):
 
     def init_plugin(self, config: dict = None):
         config = config or {}
-        if "enabled" in config:
-            self._enabled = bool(config.get("enabled"))
+        self._enabled = bool(config.get("enabled", False))
         self._target_count = self.__safe_int(config.get("target_count"), 100, min_value=1,
                                            max_value=self.DAILY_LIMIT_COUNT)
         self._cron = self.__normalize_cron(config.get("cron"))
@@ -111,25 +111,21 @@ class TangLottery(_PluginBase):
             logger.warning("不可躺自动抽奖助手定时服务未注册：Cron 为空")
             return []
         try:
-            trigger = CronTrigger.from_crontab(self._cron)
+            trigger = CronTrigger.from_crontab(self._cron, timezone=settings.TZ)
         except Exception as err:
             logger.warning(f"不可躺自动抽奖助手 Cron 配置无效：cron={repr(self._cron)}，error={err}")
             return []
-        return [
-            {
-                "id": "TangLottery",
-                "name": "不可躺自动抽奖",
-                "trigger": "cron",
-                "func": self.run_lottery_task,
-                "kwargs": {
-                    "minute": str(trigger.fields[6]),
-                    "hour": str(trigger.fields[5]),
-                    "day": str(trigger.fields[2]),
-                    "month": str(trigger.fields[1]),
-                    "day_of_week": str(trigger.fields[4])
-                }
-            }
-        ]
+        return [{
+            "id": "TangLottery",
+            "name": "不可躺自动抽奖",
+            "trigger": trigger,
+            "func": self.scheduled_run,
+            "kwargs": {},
+        }]
+
+    def scheduled_run(self) -> Dict[str, Any]:
+        """MoviePilot 公共调度入口。"""
+        return self.run_lottery_task()
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return [
@@ -353,7 +349,7 @@ class TangLottery(_PluginBase):
         ]
 
     def stop_service(self):
-        pass
+        logger.info("不可躺自动抽奖服务停止，公共调度任务由 MoviePilot 清理")
 
     def run_once_api(self) -> Dict[str, Any]:
         if not self._enabled:
