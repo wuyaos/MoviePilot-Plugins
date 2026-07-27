@@ -79,35 +79,39 @@
   flex: 0 0 auto;
 }
 
-.history-scroll[data-v-ed06d2e1] {
+.history-scroll[data-v-164978bf] {
   max-height: 360px;
   overflow-y: auto;
 }
-.failed-row td[data-v-ed06d2e1],
-.failed-row .profit[data-v-ed06d2e1] {
+.failed-row td[data-v-164978bf],
+.failed-row .profit[data-v-164978bf] {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)) !important;
 }
-.history-action[data-v-ed06d2e1] {
+.history-action[data-v-164978bf] {
   font-weight: 700;
   margin-right: 6px;
 }
-.history-action--plant[data-v-ed06d2e1] { color: rgb(var(--v-theme-success));
+.history-action--plant[data-v-164978bf] { color: rgb(var(--v-theme-success));
 }
-.history-action--harvest[data-v-ed06d2e1] { color: rgb(var(--v-theme-warning));
+.history-action--harvest[data-v-164978bf] { color: rgb(var(--v-theme-warning));
 }
-.history-action--sell[data-v-ed06d2e1] { color: rgb(var(--v-theme-info));
+.history-action--sell[data-v-164978bf] { color: rgb(var(--v-theme-info));
 }
-.history-action--steal[data-v-ed06d2e1] { color: rgb(var(--v-theme-error));
+.history-action--steal[data-v-164978bf] { color: rgb(var(--v-theme-error));
 }
-.history-action--like[data-v-ed06d2e1] { color: rgb(var(--v-theme-secondary));
+.history-action--like[data-v-164978bf] { color: rgb(var(--v-theme-secondary));
 }
-.history-detail[data-v-ed06d2e1] {
+.history-detail[data-v-164978bf] {
   font-size: 0.8rem;
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
-.history-value--plus[data-v-ed06d2e1] { color: rgb(var(--v-theme-success));
+.action-emoji[data-v-164978bf] { margin-right: 4px;
 }
-.history-value--minus[data-v-ed06d2e1] { color: rgb(var(--v-theme-error));
+.crop-emoji-inline[data-v-164978bf] { margin-right: 2px;
+}
+.history-value--plus[data-v-164978bf] { color: rgb(var(--v-theme-success));
+}
+.history-value--minus[data-v-164978bf] { color: rgb(var(--v-theme-error));
 }
 
 .price-trend-chart[data-v-cf0ce03a] {

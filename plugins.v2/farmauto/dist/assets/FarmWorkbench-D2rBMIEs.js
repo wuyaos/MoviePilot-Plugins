@@ -10,8 +10,8 @@ const _hoisted_3$4 = {
   key: 1,
   class: "crop-emoji"
 };
-const _hoisted_4$3 = { class: "crop-info" };
-const _hoisted_5$3 = ["title"];
+const _hoisted_4$4 = { class: "crop-info" };
+const _hoisted_5$4 = ["title"];
 const _hoisted_6$3 = { class: "crop-meta" };
 const _hoisted_7$3 = { key: 0 };
 const _hoisted_8$2 = { class: "crop-status" };
@@ -192,11 +192,11 @@ return (_ctx, _cache) => {
                       }, null, 8, ["src", "onError"]))
                     : (_openBlock$6(), _createElementBlock$6("span", _hoisted_3$4, _toDisplayString$5(item.emoji || '🌱'), 1))
                 ]),
-                _createElementVNode$6("div", _hoisted_4$3, [
+                _createElementVNode$6("div", _hoisted_4$4, [
                   _createElementVNode$6("div", {
                     class: "crop-name",
                     title: item.name
-                  }, _toDisplayString$5(item.name), 9, _hoisted_5$3),
+                  }, _toDisplayString$5(item.name), 9, _hoisted_5$4),
                   _createElementVNode$6("div", _hoisted_6$3, [
                     _createTextVNode$5(" 价格 " + _toDisplayString$5(displayValue(item.price)) + " · 成本 " + _toDisplayString$5(displayValue(item.cost)) + " ", 1),
                     (item.growTime)
@@ -267,7 +267,7 @@ return (_ctx, _cache) => {
 };
 const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-90b862d3"]]);
 
-const {resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,createTextVNode:_createTextVNode$4,withCtx:_withCtx$4,createElementVNode:_createElementVNode$5,renderList:_renderList$4,Fragment:_Fragment$4,openBlock:_openBlock$5,createElementBlock:_createElementBlock$5,toDisplayString:_toDisplayString$4,normalizeClass:_normalizeClass$4,createBlock:_createBlock$4,createCommentVNode:_createCommentVNode$5} = await importShared('vue');
+const {resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,createTextVNode:_createTextVNode$4,withCtx:_withCtx$4,createElementVNode:_createElementVNode$5,renderList:_renderList$4,Fragment:_Fragment$4,openBlock:_openBlock$5,createElementBlock:_createElementBlock$5,toDisplayString:_toDisplayString$4,createCommentVNode:_createCommentVNode$5,normalizeClass:_normalizeClass$4,createBlock:_createBlock$4} = await importShared('vue');
 
 
 const _hoisted_1$5 = {
@@ -275,7 +275,15 @@ const _hoisted_1$5 = {
   class: "history-scroll"
 };
 const _hoisted_2$5 = { class: "text-no-wrap" };
-const _hoisted_3$3 = { class: "history-detail" };
+const _hoisted_3$3 = {
+  key: 0,
+  class: "action-emoji"
+};
+const _hoisted_4$3 = { class: "history-detail" };
+const _hoisted_5$3 = {
+  key: 0,
+  class: "crop-emoji-inline"
+};
 
 const {computed: computed$5} = await importShared('vue');
 
@@ -291,29 +299,41 @@ const _sfc_main$5 = {
 
 const props = __props;
 
-// KoWming logMeta 对齐: action -> [中文, class]
+// KoWming logMeta 对齐: action -> [中文, class, emoji]
 const actionMap = {
-  harvest: ['收获', 'harvest'],
-  harvest_all: ['一键收获', 'harvest'],
-  plant: ['种植', 'plant'],
-  breed: ['养殖', 'plant'],
-  sell: ['售出', 'sell'],
-  steal: ['偷菜', 'steal'],
-  like: ['点赞', 'like'],
-  buy_slot: ['购买坑位', 'plant'],
-  buy_decor: ['购买装饰', 'plant'],
-  visit: ['参观', 'like'],
+  harvest: ['收获', 'harvest', '🌾'],
+  harvest_all: ['一键收获', 'harvest', '🌾'],
+  plant: ['种植', 'plant', '🌱'],
+  breed: ['养殖', 'plant', '🐣'],
+  sell: ['售出', 'sell', '💰'],
+  steal: ['偷菜', 'steal', '🥷'],
+  like: ['点赞', 'like', '👍'],
+  buy_slot: ['购买坑位', 'plant', '🏗'],
+  buy_decor: ['购买装饰', 'plant', '🏗'],
+  visit: ['参观', 'like', '🚜'],
 };
+
+// 作物 emoji 回退映射（crop_icon 为 data URI 图片时不用，用名称匹配 emoji）
+const CROP_EMOJI_FALLBACK = {
+  萝卜: '🥕', 西红柿: '🍅', 玉米: '🌽', 茄子: '🍆', 蘑菇: '🍄', 樱桃: '🍒',
+  小麦: '🌾', 花生: '🥜', 土豆: '🥔', 南瓜: '🎃', 白菜: '🥬', 辣椒: '🌶',
+  鸡: '🐔', 猪: '🐷', 牛: '🐂', 羊: '🐑', 鱼: '🐟', 鸭: '🦆',
+};
+function cropEmoji(name) {
+  if (!name) return ''
+  return CROP_EMOJI_FALLBACK[String(name).trim()] || '🌱'
+}
 
 function logMeta(item) {
   const action = String(item?.action || '').trim();
-  const mapped = actionMap[action] || [action || '未知', ''];
+  const mapped = actionMap[action] || [action || '未知', '', ''];
+  const actionEmoji = mapped[2] || '';
   const parts = [];
-  // 种子图标(兼容 user_logs.seed_icon / recent_actions.crop_icon)
-  const icon = item?.seed_icon || item?.crop_icon || '';
+  // 作物 emoji（统一用 emoji，不用 data URI 图片）
   const name = item?.seed_name || item?.crop_name || item?.target || '';
-  if (icon) parts.push({ icon, name });
-  else if (name) parts.push({ name });
+  if (name && name !== 'all' && !/收获/.test(name)) {
+    parts.push({ emoji: cropEmoji(name), name });
+  }
   // 地块信息
   const plotIdx = item?.plot_index;
   const hasPlotIndex = plotIdx !== undefined && plotIdx !== null && !Number.isNaN(Number(plotIdx));
@@ -335,9 +355,11 @@ function logMeta(item) {
   return {
     actionText: mapped[0],
     actionClass: mapped[1] ? `history-action--${mapped[1]}` : '',
+    actionEmoji,
     detailText: parts.map(p => typeof p === 'string' ? p : (p.name || '')).filter(Boolean).join(' '),
-    hasIcon: !!parts.find(p => typeof p === 'object' && p.icon),
-    iconSrc: (parts.find(p => typeof p === 'object' && p.icon) || {}).icon,
+    cropEmoji: parts.find(p => typeof p === 'object' && p.emoji)?.emoji || '',
+    hasIcon: false,
+    iconSrc: '',
     valueText: magicText,
     valueClass: displayValue > 0 ? 'history-value--plus' : (displayValue < 0 ? 'history-value--minus' : ''),
   }
@@ -370,7 +392,6 @@ function formatTime(value) {
 return (_ctx, _cache) => {
   const _component_v_icon = _resolveComponent$5("v-icon");
   const _component_v_card_title = _resolveComponent$5("v-card-title");
-  const _component_v_img = _resolveComponent$5("v-img");
   const _component_v_table = _resolveComponent$5("v-table");
   const _component_v_card_text = _resolveComponent$5("v-card-text");
   const _component_v_card = _resolveComponent$5("v-card");
@@ -413,18 +434,15 @@ return (_ctx, _cache) => {
                       _createElementVNode$5("td", null, [
                         _createElementVNode$5("span", {
                           class: _normalizeClass$4(["history-action", logMeta(item).actionClass])
-                        }, _toDisplayString$4(logMeta(item).actionText), 3),
-                        _createElementVNode$5("span", _hoisted_3$3, [
-                          (logMeta(item).hasIcon)
-                            ? (_openBlock$5(), _createBlock$4(_component_v_img, {
-                                key: 0,
-                                src: logMeta(item).iconSrc,
-                                width: "20",
-                                height: "20",
-                                contain: "",
-                                class: "d-inline-block mr-1",
-                                style: {"vertical-align":"middle"}
-                              }, null, 8, ["src"]))
+                        }, [
+                          (logMeta(item).actionEmoji)
+                            ? (_openBlock$5(), _createElementBlock$5("span", _hoisted_3$3, _toDisplayString$4(logMeta(item).actionEmoji), 1))
+                            : _createCommentVNode$5("", true),
+                          _createTextVNode$4(" " + _toDisplayString$4(logMeta(item).actionText), 1)
+                        ], 2),
+                        _createElementVNode$5("span", _hoisted_4$3, [
+                          (logMeta(item).cropEmoji)
+                            ? (_openBlock$5(), _createElementBlock$5("span", _hoisted_5$3, _toDisplayString$4(logMeta(item).cropEmoji), 1))
                             : _createCommentVNode$5("", true),
                           _createTextVNode$4(" " + _toDisplayString$4(logMeta(item).detailText), 1)
                         ])
@@ -455,7 +473,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-ed06d2e1"]]);
+const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-164978bf"]]);
 
 const {resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,createElementVNode:_createElementVNode$4,openBlock:_openBlock$4,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$4,withCtx:_withCtx$3,renderList:_renderList$3,Fragment:_Fragment$3,createElementBlock:_createElementBlock$4,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$3,createTextVNode:_createTextVNode$3} = await importShared('vue');
 
