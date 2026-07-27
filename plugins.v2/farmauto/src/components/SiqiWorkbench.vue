@@ -18,6 +18,8 @@ const emit = defineEmits(['action', 'switch', 'close', 'refresh'])
 
 const actionLoading = ref(false)
 const refreshing = ref(props.loading)
+// 内容区刷新动画 key
+const refreshKey = ref(0)
 const error = ref('')
 const success = ref('')
 let successTimer = null
@@ -33,6 +35,10 @@ let clockTimer = null
 
 watch(() => props.loading, (loading) => {
   refreshing.value = loading
+})
+// farm 数据更新后递增 refreshKey，触发内容渐入
+watch(() => props.farm, () => {
+  refreshKey.value++
 })
 
 const f = computed(() => props.farm || {})
@@ -421,6 +427,7 @@ onBeforeUnmount(() => {
     <v-progress-linear v-if="actionLoading" indeterminate color="success" height="2" />
 
     <v-card-text class="pa-4">
+      <div :key="refreshKey" class="siqi-fade">
       <v-alert v-if="error" type="error" variant="tonal" closable class="mb-3" @click:close="error = ''">{{ error }}</v-alert>
       <v-alert v-if="success" type="success" variant="tonal" closable class="mb-3" @click:close="success = ''">{{ success }}</v-alert>
 
@@ -742,6 +749,7 @@ onBeforeUnmount(() => {
           </v-card-actions>
         </v-card>
       </v-dialog>
+      </div>
     </v-card-text>
   </v-card>
 </template>
@@ -944,5 +952,13 @@ onBeforeUnmount(() => {
   padding-top: 0 !important;
   padding-bottom: 0 !important;
   height: 30px !important;
+}
+/* 内容区刷新渐入动画 */
+.siqi-fade {
+  animation: siqi-fade-in 0.3s ease;
+}
+@keyframes siqi-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

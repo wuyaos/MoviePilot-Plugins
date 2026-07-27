@@ -22,6 +22,19 @@ function priceChange(cropKey) {
   return ((currentPrice - previousPrice) / previousPrice) * 100
 }
 
+// 波动区间：最近样本的最大-最小价差百分比，衡量近期波动程度
+function priceRangeRate(cropKey) {
+  const samples = props.trends?.[cropKey]
+  if (!Array.isArray(samples) || samples.length < 2) return null
+  const prices = samples.map(s => Number(s[1])).filter(Number.isFinite)
+  if (prices.length < 2) return null
+  const max = Math.max(...prices)
+  const min = Math.min(...prices)
+  const base = (max + min) / 2 || max
+  if (!base) return null
+  return max === min ? 0 : ((max - min) / base) * 100
+}
+
 const rows = computed(() => Object.entries(props.market_prices || {}).map(([cropKey, rawPrice]) => {
   const crop = props.crops?.[cropKey] || {}
   const price = Number(rawPrice)
@@ -36,12 +49,20 @@ const rows = computed(() => Object.entries(props.market_prices || {}).map(([crop
     cost: Number.isFinite(cost) ? cost : '—',
     profitRate,
     priceChange: priceChange(cropKey),
+    priceRange: priceRangeRate(cropKey),
   }
 }))
 
 function formatRate(rate) {
   if (rate === null) return '—'
+  if (rate === 0) return '稳定'
   return `${rate > 0 ? '+' : ''}${rate.toFixed(2)}%`
+}
+
+function formatRange(rate) {
+  if (rate === null) return '—'
+  if (rate === 0) return '稳定'
+  return `±${rate.toFixed(2)}%`
 }
 </script>
 
@@ -61,7 +82,8 @@ function formatRate(rate) {
           <th class="text-center">市场价</th>
           <th class="text-center">成本</th>
           <th class="text-center">盈利率</th>
-          <th class="text-center">波动幅度</th>
+          <th class="text-center">较上次</th>
+          <th class="text-center">波动区间</th>
         </tr>
       </thead>
       <tbody>
@@ -80,6 +102,12 @@ function formatRate(rate) {
             :class="row.priceChange === null ? 'text-medium-emphasis' : row.priceChange > 0 ? 'text-error' : row.priceChange < 0 ? 'text-success' : 'text-medium-emphasis'"
           >
             {{ formatRate(row.priceChange) }}
+          </td>
+          <td
+            class="text-center font-weight-medium"
+            :class="row.priceRange === null || row.priceRange === 0 ? 'text-medium-emphasis' : 'text-warning'"
+          >
+            {{ formatRange(row.priceRange) }}
           </td>
         </tr>
       </tbody>

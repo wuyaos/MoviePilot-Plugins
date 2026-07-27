@@ -99,7 +99,10 @@ class FarmExecutor:
                 self.trend_store.record(site_config.site_id, report.market_prices)
             report.crop_status = site_config.parse_crop_status(farm_html)
             resolved_crops = site_config.resolve_crops(farm_html)
-            crops = resolved_crops if resolved_crops is not None else site_config.crops
+            if resolved_crops is not None:
+                # 回写 site_config.crops，使 detail API 能输出完整动态作物
+                site_config.crops = resolved_crops
+            crops = site_config.crops
             snapshot = {
                 "market_prices": report.market_prices,
                 "crop_status": report.crop_status,

@@ -160,6 +160,7 @@ async function loadSiteDetail(siteId = selectedSiteId.value) {
   try {
     const detail = unwrapResponse(await request('GET', `${apiBase.value}/site/${encodeURIComponent(siteId)}`))
     if (siteId === selectedSiteId.value) siteDetail.value = detail
+    refreshKey.value++
   } catch (requestError) {
     if (siteId === selectedSiteId.value) {
       siteDetail.value = {}
@@ -190,6 +191,7 @@ async function refreshData() {
       }, 800)
     }
     setSuccess('数据已刷新')
+    refreshKey.value++
   } catch (requestError) {
     error.value = `刷新数据失败：${requestError?.message || '未知错误'}`
   } finally {
@@ -445,6 +447,7 @@ onBeforeUnmount(() => {
 
       <SiqiWorkbench
         v-if="selectedSiteId === 'siqi' && siqiFarm"
+        :key="`siqi-${refreshKey}`"
         :api="api"
         :plugin-id="pluginId"
         :farm="siqiFarm"
@@ -461,6 +464,7 @@ onBeforeUnmount(() => {
       />
 
       <template v-else>
+        <div :key="`farm-${refreshKey}`" class="farm-content-fade">
         <v-row dense class="mb-3">
           <v-col cols="12" md="4">
             <div class="stat-card" :class="{ refreshing }">
@@ -569,6 +573,7 @@ onBeforeUnmount(() => {
             <HistoryTable :history="siteActions" :currency="currency" />
           </v-col>
         </v-row>
+        </div>
       </template>
     </v-card-text>
   </v-card>
@@ -728,4 +733,12 @@ onBeforeUnmount(() => {
 .v-card .v-table { width: 100%; }
 .v-card .v-table > .v-table__wrapper > table { width: 100%; }
 .v-card .v-table > .v-table__wrapper { overflow-x: auto; }
+/* 内容区刷新渐入动画：标题/表头固定不闪烁，数据块渐入 */
+.farm-content-fade {
+  animation: farm-fade-in 0.3s ease;
+}
+@keyframes farm-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>
