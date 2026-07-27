@@ -343,25 +343,25 @@ to { opacity: 1; transform: translateY(0);
 }
 }
 
-.farm-workbench[data-v-ddf27e5d] {
+.farm-workbench[data-v-b5d08aa5] {
   min-inline-size: 0;
   padding: 0.5rem;
   margin-inline: auto;
 }
-.farm-header[data-v-ddf27e5d] {
+.farm-header[data-v-b5d08aa5] {
   border-radius: inherit;
 }
-.farm-header-row[data-v-ddf27e5d] { position: relative;
+.farm-header-row[data-v-b5d08aa5] { position: relative;
 }
-.farm-header-left[data-v-ddf27e5d] { flex: 0 0 auto;
+.farm-header-left[data-v-b5d08aa5] { flex: 0 0 auto;
 }
-.farm-header-center[data-v-ddf27e5d] { flex: 1 1 auto;
+.farm-header-center[data-v-b5d08aa5] { flex: 1 1 auto;
 }
-.farm-header-right[data-v-ddf27e5d] { flex: 0 0 auto;
+.farm-header-right[data-v-b5d08aa5] { flex: 0 0 auto;
 }
-.value-changed[data-v-ddf27e5d] { animation: value-flash-ddf27e5d 0.8s ease;
+.value-changed[data-v-b5d08aa5] { animation: value-flash-b5d08aa5 0.8s ease;
 }
-@keyframes value-flash-ddf27e5d {
+@keyframes value-flash-b5d08aa5 {
 0% { color: inherit;
 }
 30% { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4);
@@ -369,10 +369,10 @@ to { opacity: 1; transform: translateY(0);
 100% { color: inherit; text-shadow: none;
 }
 }
-.magic-anim[data-v-ddf27e5d] {
-  animation: magic-pulse-ddf27e5d 2s infinite ease-in-out;
+.magic-anim[data-v-b5d08aa5] {
+  animation: magic-pulse-b5d08aa5 2s infinite ease-in-out;
 }
-@keyframes magic-pulse-ddf27e5d {
+@keyframes magic-pulse-b5d08aa5 {
 0%, 100% {
     transform: scale(1) rotate(0deg);
     filter: drop-shadow(0 0 2px rgba(156, 39, 176, 0.4));

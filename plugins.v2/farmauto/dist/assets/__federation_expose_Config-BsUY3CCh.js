@@ -105,6 +105,14 @@ onBeforeUnmount(() => { if (successTimer) clearTimeout(successTimer); });
 
 // 思齐种子列表（onMounted 拉取，供默认种子下拉选择）
 const siqiSeeds = ref([]);
+const siqiTotalHarvest = ref(0);
+// 可购买种子：unlock_harvest<=0 或已解锁（unlock_harvest<=total_harvest）
+const availableSeeds = computed(() =>
+  siqiSeeds.value.filter(seed => {
+    const unlock = Number(seed.unlock_harvest || 0);
+    return unlock <= 0 || unlock <= Number(siqiTotalHarvest.value || 0)
+  })
+);
 function windowToken() {
   if (typeof window === 'undefined') return ''
   return window.__MOVIEPILOT_TOKEN__
@@ -133,6 +141,7 @@ async function fetchSeeds() {
   }
   const data = payload?.data ?? payload ?? {};
   siqiSeeds.value = Array.isArray(data.seeds) ? data.seeds : [];
+  siqiTotalHarvest.value = Number(data.total_harvest || 0);
 }
 onMounted(fetchSeeds);
 function seedTitle(seed) {
@@ -1438,24 +1447,18 @@ return (_ctx, _cache) => {
                                           }, null, 8, ["modelValue"])
                                         ]),
                                         _: 1
-                                      })
-                                    ]),
-                                    _: 1
-                                  }),
-                                  _createVNode(_component_v_row, { class: "mt-2" }, {
-                                    default: _withCtx(() => [
+                                      }),
                                       _createVNode(_component_v_col, {
                                         cols: "12",
-                                        sm: "6",
                                         md: "4"
                                       }, {
                                         default: _withCtx(() => [
-                                          (siqiSeeds.value.length)
+                                          (availableSeeds.value.length)
                                             ? (_openBlock$1(), _createBlock$1(_component_v_select, {
                                                 key: 0,
                                                 modelValue: config.siqi_default_seed_id,
                                                 "onUpdate:modelValue": _cache[30] || (_cache[30] = $event => ((config.siqi_default_seed_id) = $event)),
-                                                items: siqiSeeds.value,
+                                                items: availableSeeds.value,
                                                 "item-title": "name",
                                                 "item-value": "seed_id",
                                                 label: "默认种植种子",
@@ -1516,7 +1519,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-3fd181a6"]]);
+const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-fad9556f"]]);
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 

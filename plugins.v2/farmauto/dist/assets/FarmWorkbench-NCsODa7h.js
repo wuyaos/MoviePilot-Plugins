@@ -82114,6 +82114,8 @@ const emit = __emit;
 const loading = ref(false);
 const detailLoading = ref(false);
 const refreshing = ref(false);
+// 内容区刷新动画 key：数据更新后递增，触发渐入过渡
+const refreshKey = ref(0);
 const balanceChanged = ref(false);
 const running = ref(false);
 const actionLoading = ref(false);
@@ -82631,7 +82633,7 @@ return (_ctx, _cache) => {
             : _createCommentVNode("", true),
           (selectedSiteId.value === 'siqi' && siqiFarm.value)
             ? (_openBlock(), _createBlock(SiqiWorkbench, {
-                key: `siqi-${_ctx.refreshKey}`,
+                key: `siqi-${refreshKey.value}`,
                 api: __props.api,
                 "plugin-id": __props.pluginId,
                 farm: siqiFarm.value,
@@ -82647,7 +82649,7 @@ return (_ctx, _cache) => {
                 onRefresh: refreshData
               }, null, 8, ["api", "plugin-id", "farm", "history", "raw-logs", "currency", "loading", "show-switch", "show-close"]))
             : (_openBlock(), _createElementBlock("div", {
-                key: `farm-${_ctx.refreshKey}`,
+                key: `farm-${refreshKey.value}`,
                 class: "farm-content-fade"
               }, [
                 _createVNode(_component_v_row, {
@@ -82897,6 +82899,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ddf27e5d"]]);
+const FarmWorkbench = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b5d08aa5"]]);
 
 export { FarmWorkbench as F };
