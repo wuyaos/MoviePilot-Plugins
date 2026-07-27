@@ -80823,8 +80823,9 @@ function formatRemain(plot) {
   const days = Math.floor(diff / 86400);
   const hours = Math.floor((diff % 86400) / 3600);
   const minutes = Math.floor((diff % 3600) / 60);
-  if (days > 0) return `${days}天${hours}时${minutes}分`
-  return hours > 0 ? `${hours}时${minutes}分` : `${minutes}分`
+  // 紧凑显示，防菜地溢出
+  if (days > 0) return `${days}d${hours}h`
+  return hours > 0 ? `${hours}h${minutes}m` : `${minutes}m`
 }
 
 function growSeconds(growTime) {
@@ -81813,7 +81814,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-360faf48"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-b0ae35c0"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 

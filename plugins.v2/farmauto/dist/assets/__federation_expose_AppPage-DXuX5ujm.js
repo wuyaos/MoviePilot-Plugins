@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { F as FarmWorkbench } from './FarmWorkbench-D2rBMIEs.js';
+import { F as FarmWorkbench } from './FarmWorkbench-BHuJGBK-.js';
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 
