@@ -386,11 +386,12 @@
         "name": "农场自动化Pro",
         "description": "多站点农场自动化，支持智能交易与自动收获",
         "labels": "农场,自动化,站点",
-        "version": "3.1.2",
+        "version": "3.1.3",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v3.1.3": "思齐单格收获改为与站点页面及 KoWming 一致的 plant_game.php 表单 POST API，修复 GET 返回整页 HTML 被误判成功和污染日志；增加真实请求参数与 HTML 响应日志防回归测试。",
             "v3.1.2": "修复思齐 is_ready 不随时间刷新导致成熟地块漏收获：按 is_ready 或已到 harvest_time 判定成熟，并统一逐格收获降级逻辑；清理未引用的数据模型、解析钩子和旧历史方法。",
             "v3.1.1": "自动运营流程分流：普通农场按收获、明确空位种植/养殖、真实仓库出售执行；思齐按逐地块收获、刷新、一次默认种子批量种植、刷新背包出售执行；修复重复收获、残留成熟时间误判、锁定地误种、默认种子记录、无目标社交额度及动作 POST 地址冲突。",
             "v3.1.0": "通知改版(每组魔力变化+失败为0不显示)；harvest_all 背包对比拆分收获明细；利润口径修正(sell=售价*数量,思齐收获=base_reward魔力,成本由种植承担)；思齐菜地尺寸统一+种子图标缩放适配；配置页默认种子下拉只显示可购买；执行记录最大高度滚动+emoji统一；波动区间列；刷新渐入动画",

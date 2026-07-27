@@ -689,10 +689,16 @@ class FarmExecutor:
         submit_url = site_config.get_action_submit_url()
         try:
             if operation == "harvest":
-                action_url = site_config.get_harvest_plot_url(
-                    status.get("land_id"), status.get("plot_index")
+                response = self.http_client.post(
+                    submit_url,
+                    cookies,
+                    data={
+                        "action": "harvest",
+                        "land_id": status.get("land_id"),
+                        "plot_index": status.get("plot_index"),
+                    },
+                    retryable=False,
                 )
-                response = self.http_client.get(action_url, cookies, retryable=False)
                 response.raise_for_status()
                 parsed = site_config.parse_harvest_result(response.text)
             elif operation == "plant":

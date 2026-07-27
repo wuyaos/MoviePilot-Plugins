@@ -682,7 +682,8 @@ class SiqiConfig(FarmSiteConfig):
             return result
         text = self._text(html or "")
         success = any(token in text for token in success_tokens)
-        return {"success": success, "message": text or (success_message if success else failure_message)}
+        # HTML 页面只用于关键词判定，禁止把整页正文写入插件日志。
+        return {"success": success, "message": success_message if success else failure_message}
 
     def parse_steal_result(self, html: str) -> Dict[str, Any]:
         return self._parse_action_result(html, ("偷菜成功", "偷取成功", "获得"), "偷菜成功", "偷菜失败")

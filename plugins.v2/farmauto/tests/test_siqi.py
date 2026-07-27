@@ -111,6 +111,15 @@ def test_siqi_farm_and_warehouse_parsers():
     assert config.parse_warehouse_page(FARM_JSON)[1] is None
 
 
+def test_siqi_html_action_response_does_not_leak_page_text_into_message():
+    config = SiqiConfig()
+    html = "<html><body>思齐种菜赚魔力<script>const text='收获成功';</script>" + "页面正文" * 200 + "</body></html>"
+
+    result = config.parse_harvest_result(html)
+
+    assert result == {"success": True, "message": "收获成功"}
+
+
 def test_siqi_expired_harvest_time_marks_ripe_and_locked_land_stays_locked():
     config = SiqiConfig()
     payload = """{

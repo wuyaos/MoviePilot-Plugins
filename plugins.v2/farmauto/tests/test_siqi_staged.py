@@ -39,8 +39,6 @@ class StagedClient:
 
     def get(self, url, cookies, retryable=True):
         self.calls.append(("GET", url, None))
-        if "action=harvest" in url:
-            return Response('{"success":true,"msg":"收获成功"}')
         # 初始 fetch：is_ready 未刷新，但 harvest_time 已过期；收获后两格空；随后种玉米。
         responses = [
             self._farm([
@@ -69,6 +67,8 @@ class StagedClient:
 
     def post(self, url, cookies, data=None, json=None, allow_redirects=True, retryable=False):
         self.calls.append(("POST", url, data))
+        if data and data.get("action") == "harvest":
+            return Response('{"success":true,"msg":"收获成功","reward":20}')
         if data and data.get("action") == "plant_fill_empty":
             return Response('{"success":true,"msg":"种植成功"}')
         if data and data.get("action") == "sell_inventory":
@@ -118,6 +118,11 @@ def test_siqi_staged_flow_harvests_all_then_plants_default_seed_once_and_sells_i
 
     assert [action.action for action in report.actions] == ["harvest", "harvest", "plant", "sell", "sell"]
     assert [action.plot_index for action in report.actions[:2]] == [0, 1]
+    harvest_calls = [call for call in client.calls if call[0] == "POST" and call[2].get("action") == "harvest"]
+    assert harvest_calls == [
+        ("POST", "https://si-qi.xyz/plant_game.php", {"action": "harvest", "land_id": 1, "plot_index": 0}),
+        ("POST", "https://si-qi.xyz/plant_game.php", {"action": "harvest", "land_id": 1, "plot_index": 1}),
+    ]
     assert report.actions[2].target == "玉米"
     assert report.actions[2].profit == -30
     plant_calls = [call for call in client.calls if call[0] == "POST" and call[2].get("action") == "plant_fill_empty"]
