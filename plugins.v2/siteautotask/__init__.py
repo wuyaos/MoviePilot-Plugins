@@ -110,8 +110,8 @@ class SiteAutoTask(_PluginBase):
         """织梦 24h 电力冷却调度入口。"""
         return self.engine.run_zm() if self.engine else []
 
-    def reschedule_zm(self, run_at=None):
-        """重新注册织梦 cron 任务（固定每天 0:10，run_at 参数保留兼容但忽略）。"""
+    def reschedule_zm(self, run_at):
+        """重新注册织梦 date trigger 任务（自包含，不依赖 MP reload）。"""
         scheduler = getattr(self, "scheduler", None)
         if not scheduler or not scheduler.scheduler:
             logger.warning("调度器未就绪，织梦重新调度跳过")
@@ -119,11 +119,10 @@ class SiteAutoTask(_PluginBase):
         for job in scheduler.scheduler.get_jobs():
             if job.name == "siteautotask_zm":
                 job.remove()
-        from apscheduler.triggers.cron import CronTrigger
         scheduler.scheduler.add_job(
-            self.engine.run_zm, CronTrigger.from_crontab("10 0 * * *"),
+            self.engine.run_zm, "date", run_date=run_at,
             name="siteautotask_zm")
-        logger.info("织梦 cron 已注册：10 0 * * *（每天 0:10）")
+        logger.info(f"织梦下次执行已注册：{run_at.strftime('%Y-%m-%d %H:%M:%S')}")
 
     def save_config(self):
         """持久化状态字段，同时保留当前有效任务开关与下拉选择。"""

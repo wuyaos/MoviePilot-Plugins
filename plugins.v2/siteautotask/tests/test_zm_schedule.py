@@ -127,15 +127,19 @@ class ZmNextTimeTests(unittest.TestCase):
         plugin.selected_sites.return_value = []
         return SCHEDULER.TaskScheduler(plugin)
 
-    def test_no_mail_time_returns_now_plus_24h(self):
+    def test_no_mail_time_returns_today_or_next_0010(self):
         s = self._scheduler()
         cfg = self._cfg("")
         from datetime import datetime
         import pytz
-        now = datetime.now(tz=pytz.timezone("UTC"))
+        from app.core.config import settings
+        tz = pytz.timezone(settings.TZ)
+        now = datetime.now(tz=tz)
         nxt = s._compute_zm_next_time(cfg)
-        delta = (nxt - now).total_seconds()
-        self.assertAlmostEqual(delta, 24 * 3600, delta=5)
+        # 回退到当天/次日 0:10
+        self.assertEqual(nxt.hour, 0)
+        self.assertEqual(nxt.minute, 10)
+        self.assertGreater(nxt, now)
 
     def test_mail_time_plus_24h(self):
         s = self._scheduler()
@@ -150,17 +154,19 @@ class ZmNextTimeTests(unittest.TestCase):
         # 允许几秒误差
         self.assertAlmostEqual((nxt - expected).total_seconds(), 0, delta=5)
 
-    def test_expired_mail_time_returns_now_plus_24h(self):
+    def test_expired_mail_time_returns_today_or_next_0010(self):
         s = self._scheduler()
         import pytz
-        tz = pytz.timezone("UTC")
+        from app.core.config import settings
+        tz = pytz.timezone(settings.TZ)
         now = datetime.now(tz=tz)
-        # 重载时不补执行已过期任务，顺延到 24 小时后。
+        # 重载时不补执行已过期任务，顺延到当天/次日 0:10。
         mail_time = (now - timedelta(hours=25)).strftime("%Y-%m-%d %H:%M:%S")
         cfg = self._cfg(mail_time)
         nxt = s._compute_zm_next_time(cfg)
-        delta = (nxt - now).total_seconds()
-        self.assertAlmostEqual(delta, 24 * 3600, delta=5)
+        self.assertEqual(nxt.hour, 0)
+        self.assertEqual(nxt.minute, 10)
+        self.assertGreater(nxt, now)
 
     def test_malformed_mail_time_falls_back(self):
         s = self._scheduler()

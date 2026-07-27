@@ -49,14 +49,15 @@ class TaskScheduler:
             "kwargs": {},
         })
         # 失败重试已并入主 cron，不再注册独立重试服务。
-        # 织梦 24h 电力冷却调度（固定 cron 每天 0:10）
+        # 织梦 24h 电力冷却调度（date trigger，起点 0:10）
         if cfg.enabled and self._has_zm_site():
+            next_time = self._compute_zm_next_time(cfg)
             services.append({
                 "id": "siteautotask_zm",
                 "name": "织梦24h电力调度",
-                "trigger": CronTrigger.from_crontab("10 0 * * *"),
+                "trigger": "date",
                 "func": self.plugin.run_zm,
-                "kwargs": {},
+                "kwargs": {"run_date": next_time},
             })
         return services
 
@@ -73,10 +74,15 @@ class TaskScheduler:
         return False
 
     def _compute_zm_next_time(self, cfg):
-        """计算织梦下次执行时间；重载时不补执行过期任务。"""
+        """计算织梦下次执行时间；重载时不补执行过期任务。
+
+        起点固定为每天 0:10：若 mail_time+24h 已过或无邮件时间，回退到当天/次日 0:10。
+        """
         tz = pytz.timezone(settings.TZ)
         now = datetime.now(tz=tz)
-        fallback_time = now + timedelta(hours=24)
+        # 当天 0:10，若已过则次日 0:10
+        today_0010 = now.replace(hour=0, minute=10, second=0, microsecond=0)
+        fallback_time = today_0010 if today_0010 > now else today_0010 + timedelta(days=1)
         if not cfg.zm_mail_time:
             return fallback_time
         try:
