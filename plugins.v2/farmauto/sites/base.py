@@ -11,6 +11,7 @@ except ImportError:  # 支持按插件根目录加入 sys.path 的离线测试�
 
 
 CAPABILITY_BATCH_SELL = "batch_sell"
+CAPABILITY_SELL_INVENTORY = "sell_inventory"
 
 IMAGE_FILES = {
     "小麦": "crop_wheat.png",
@@ -96,6 +97,9 @@ class FarmSiteConfig(ABC):
 
     def supports_batch_sell(self) -> bool:
         return CAPABILITY_BATCH_SELL in self.capabilities
+
+    def supports_sell_inventory(self) -> bool:
+        return CAPABILITY_SELL_INVENTORY in self.capabilities
 
     def crop_image(self, name: str) -> str:
         if name in FarmSiteConfig._image_cache:

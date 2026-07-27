@@ -102,7 +102,8 @@ def plan_smart(
             plan.append({"op": "harvest", "crop_key": crop_key, "source": "field", "quantity": 1})
             if policy["auto_plant"]:
                 plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
-            if should_sell_flag and policy["auto_sell"] and remaining_sales > 0:
+            # sell_inventory 类站点(如思齐)收获后作物进背包, field sell 时背包还没货, 跳过
+            if should_sell_flag and policy["auto_sell"] and remaining_sales > 0 and not site_config.supports_sell_inventory():
                 plan.append({"op": "sell", "crop_key": crop_key, "source": "field", "quantity": 1})
                 remaining_sales -= 1
     return plan

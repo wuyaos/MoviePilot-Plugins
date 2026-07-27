@@ -16,7 +16,7 @@ class SiqiConfig(FarmSiteConfig):
     currency = "魔力"
     farm_path = "/plant_game.php"
     warehouse_path = "/plant_game.php"
-    capabilities = {"captcha", "social"}
+    capabilities = {"captcha", "social", "sell_inventory"}
 
     # 思齐通过 fetch 动态下发种子商店；源码中唯一固定的默认种子是 ID 1 萝卜。
     crops = {
@@ -231,6 +231,7 @@ class SiqiConfig(FarmSiteConfig):
                 "effective_plot_counts": {},
                 "next_slot_cost_by_land": {},
             },
+            "user_logs": [],
         }
         try:
             data = self._json_dict(html)
@@ -411,6 +412,27 @@ class SiqiConfig(FarmSiteConfig):
                 "effective_plot_counts": effective_counts,
                 "next_slot_cost_by_land": next_costs,
             }
+
+            # 操作记录(对齐 KoWming p-history-list, 来自 fetch JSON user_logs)
+            raw_logs = data.get("user_logs") if isinstance(data.get("user_logs"), list) else []
+            logs: List[Dict[str, Any]] = []
+            for raw_log in raw_logs:
+                if not isinstance(raw_log, dict):
+                    continue
+                action = str(raw_log.get("action") or "").strip()
+                value = self._number(raw_log.get("value")) or 0
+                logs.append({
+                    "action": action,
+                    "seed_name": str(raw_log.get("seed_name") or ""),
+                    "seed_icon": str(raw_log.get("seed_icon") or ""),
+                    "land_name": str(raw_log.get("land_name") or ""),
+                    "plot_index": self._number(raw_log.get("plot_index")),
+                    "quantity": self._number(raw_log.get("quantity")) or 0,
+                    "value": value,
+                    "value_unit": "收获值" if action == "harvest" else "魔力值",
+                    "created_at": str(raw_log.get("created_at") or ""),
+                })
+            result["user_logs"] = logs
 
             if not data:
                 text = html or ""

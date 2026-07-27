@@ -24,19 +24,24 @@ function logMeta(item) {
   const action = String(item?.action || '').trim()
   const mapped = actionMap[action] || [action || '未知', '']
   const parts = []
-  // 种子图标
-  if (item?.crop_icon) parts.push({ icon: item.crop_icon, name: item.crop_name })
-  else if (item?.crop_name) parts.push({ name: item.crop_name })
+  // 种子图标(兼容 user_logs.seed_icon / recent_actions.crop_icon)
+  const icon = item?.seed_icon || item?.crop_icon || ''
+  const name = item?.seed_name || item?.crop_name || item?.target || ''
+  if (icon) parts.push({ icon, name })
+  else if (name) parts.push({ name })
   // 地块信息
-  const hasPlotIndex = item?.plot_index !== undefined && item?.plot_index !== null && !Number.isNaN(Number(item.plot_index))
-  if (item?.land_name) parts.push(`(${item.land_name}${hasPlotIndex ? `-${Number(item.plot_index) + 1}号地` : ''})`)
-  // 数量
-  if (item?.quantity && Number(item.quantity) > 0) parts.push(`数量：${Number(item.quantity)}`)
+  const plotIdx = item?.plot_index
+  const hasPlotIndex = plotIdx !== undefined && plotIdx !== null && !Number.isNaN(Number(plotIdx))
+  if (item?.land_name) parts.push(`(${item.land_name}${hasPlotIndex ? `-${Number(plotIdx) + 1}号地` : ''})`)
+  // 数量(仅 >1 显示)
+  const qty = Number(item?.quantity || 0)
+  if (qty > 1) parts.push(`数量：${qty}`)
   // 失败消息
   if (item?.success === false && item?.message) parts.push(item.message)
 
   const unit = item?.value_unit || (action === 'harvest' ? '收获值' : '魔力值')
-  const value = Number(item?.profit || 0)
+  // 兼容 user_logs.value / recent_actions.profit
+  const value = Number(item?.value ?? item?.profit ?? 0)
   return {
     actionText: mapped[0],
     actionClass: mapped[1] ? `history-action--${mapped[1]}` : '',
