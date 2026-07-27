@@ -945,8 +945,11 @@ class FarmAuto(_PluginBase):
             farm_html = farm_response.text
             if not site_config.check_auth(farm_html):
                 return {"success": False, "message": "Cookie 已失效"}
-            # fetch JSON 的 seeds 字段含 name/cost/base_reward/icon/stage_icons/grow_time
             data = site_config._json_dict(farm_html)
+            total_harvest = 0
+            raw_stats = data.get("user_stats") if isinstance(data.get("user_stats"), dict) else {}
+            if raw_stats:
+                total_harvest = site_config._number(raw_stats.get("total_harvest")) or 0
             seeds = []
             for seed in data.get("seeds") or []:
                 if not isinstance(seed, dict):
@@ -973,7 +976,7 @@ class FarmAuto(_PluginBase):
                         if isinstance(raw_stage, dict) and raw_stage.get(phase)
                     } if isinstance(raw_stage, dict) else {},
                 })
-            return {"success": True, "data": {"seeds": seeds}}
+            return {"success": True, "data": {"seeds": seeds, "total_harvest": total_harvest}}
         except Exception as error:
             logger.warning(f"[FarmAuto] 思齐种子列表拉取失败: {error}")
             return {"success": False, "message": str(error)}

@@ -20,6 +20,8 @@ const emit = defineEmits(['action', 'switch', 'close'])
 const loading = ref(false)
 const detailLoading = ref(false)
 const refreshing = ref(false)
+// 内容区刷新动画 key：数据更新后递增，触发渐入过渡
+const refreshKey = ref(0)
 const balanceChanged = ref(false)
 const running = ref(false)
 const actionLoading = ref(false)

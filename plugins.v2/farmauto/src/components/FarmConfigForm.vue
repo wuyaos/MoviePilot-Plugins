@@ -83,6 +83,14 @@ onBeforeUnmount(() => { if (successTimer) clearTimeout(successTimer) })
 
 // 思齐种子列表（onMounted 拉取，供默认种子下拉选择）
 const siqiSeeds = ref([])
+const siqiTotalHarvest = ref(0)
+// 可购买种子：unlock_harvest<=0 或已解锁（unlock_harvest<=total_harvest）
+const availableSeeds = computed(() =>
+  siqiSeeds.value.filter(seed => {
+    const unlock = Number(seed.unlock_harvest || 0)
+    return unlock <= 0 || unlock <= Number(siqiTotalHarvest.value || 0)
+  })
+)
 function windowToken() {
   if (typeof window === 'undefined') return ''
   return window.__MOVIEPILOT_TOKEN__
@@ -111,6 +119,7 @@ async function fetchSeeds() {
   }
   const data = payload?.data ?? payload ?? {}
   siqiSeeds.value = Array.isArray(data.seeds) ? data.seeds : []
+  siqiTotalHarvest.value = Number(data.total_harvest || 0)
 }
 onMounted(fetchSeeds)
 function seedTitle(seed) {
@@ -674,13 +683,11 @@ function saveConfig() {
                   <v-col cols="12" sm="6" md="4">
                     <v-switch v-model="config.siqi_auto_like" label="每日点赞" color="primary" density="compact" hide-details />
                   </v-col>
-                </v-row>
-                <v-row class="mt-2">
-                  <v-col cols="12" sm="6" md="4">
+                  <v-col cols="12" md="4">
                     <v-select
-                      v-if="siqiSeeds.length"
+                      v-if="availableSeeds.length"
                       v-model="config.siqi_default_seed_id"
-                      :items="siqiSeeds"
+                      :items="availableSeeds"
                       item-title="name"
                       item-value="seed_id"
                       label="默认种植种子"
