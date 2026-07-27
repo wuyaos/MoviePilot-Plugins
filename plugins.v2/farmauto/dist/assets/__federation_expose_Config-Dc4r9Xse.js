@@ -1,7 +1,7 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
 import { _ as _export_sfc } from './_plugin-vue_export-helper-pcqpp-6-.js';
 
-const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,openBlock:_openBlock$1,createBlock:_createBlock$1,createCommentVNode:_createCommentVNode,normalizeClass:_normalizeClass,renderList:_renderList,Fragment:_Fragment,createElementBlock:_createElementBlock,withModifiers:_withModifiers} = await importShared('vue');
+const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,openBlock:_openBlock$1,createBlock:_createBlock$1,createCommentVNode:_createCommentVNode,normalizeClass:_normalizeClass,renderList:_renderList,Fragment:_Fragment,createElementBlock:_createElementBlock,mergeProps:_mergeProps,withModifiers:_withModifiers} = await importShared('vue');
 
 
 const _hoisted_1 = { class: "farm-header bg-gradient-farm text-white" };
@@ -13,7 +13,7 @@ const _hoisted_6 = { class: "pa-4" };
 const _hoisted_7 = { class: "text-subtitle-1" };
 const _hoisted_8 = { class: "d-flex flex-wrap align-center ga-2 mt-2" };
 
-const {computed,onBeforeUnmount,reactive,ref,watch} = await importShared('vue');
+const {computed,onBeforeUnmount,onMounted,reactive,ref,watch} = await importShared('vue');
 
 
 
@@ -22,6 +22,7 @@ const _sfc_main$1 = {
   props: {
   initialConfig: { type: Object, default: () => ({}) },
   loading: { type: Boolean, default: false },
+  api: { type: Object, default: () => ({}) },
 },
   emits: ['save', 'switch', 'close'],
   setup(__props, { emit: __emit }) {
@@ -101,6 +102,42 @@ function setSuccess(msg) {
   successTimer = setTimeout(() => { successMessage.value = ''; }, 3000);
 }
 onBeforeUnmount(() => { if (successTimer) clearTimeout(successTimer); });
+
+// 思齐种子列表（onMounted 拉取，供默认种子下拉选择）
+const siqiSeeds = ref([]);
+function windowToken() {
+  if (typeof window === 'undefined') return ''
+  return window.__MOVIEPILOT_TOKEN__
+    || window.MoviePilot?.token
+    || window.localStorage?.getItem('token')
+    || ''
+}
+async function fetchSeeds() {
+  const hasHostApi = typeof props.api?.get === 'function';
+  let payload;
+  try {
+    if (hasHostApi) {
+      payload = await props.api.get('plugin/FarmAuto/siqi/seeds');
+    } else {
+      const token = windowToken();
+      const headers = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch('/api/v1/plugin/FarmAuto/siqi/seeds', { headers });
+      payload = await res.json().catch(() => ({}));
+    }
+  } catch (e) {
+    siqiSeeds.value = [];
+    return
+  }
+  const data = payload?.data ?? payload ?? {};
+  siqiSeeds.value = Array.isArray(data.seeds) ? data.seeds : [];
+}
+onMounted(fetchSeeds);
+function seedTitle(seed) {
+  const emoji = seed.emoji || seed.icon || '';
+  const cost = seed.cost != null ? `（成本 ${seed.cost}）` : '';
+  return `${emoji} ${seed.name || '未知种子'}${cost}`
+}
 
 const siteModeItems = computed(() => [
   { title: `继承全局（${config.mode === 'harvest' ? '自动收获' : '智能交易'}）`, value: 'inherit' },
@@ -276,6 +313,7 @@ return (_ctx, _cache) => {
   const _component_v_window_item = _resolveComponent("v-window-item");
   const _component_v_chip = _resolveComponent("v-chip");
   const _component_v_chip_group = _resolveComponent("v-chip-group");
+  const _component_v_list_item = _resolveComponent("v-list-item");
   const _component_v_window = _resolveComponent("v-window");
   const _component_v_form = _resolveComponent("v-form");
 
@@ -297,7 +335,7 @@ return (_ctx, _cache) => {
                   color: "white",
                   size: "small"
                 }),
-                _cache[32] || (_cache[32] = _createElementVNode("span", { class: "text-subtitle-1 text-white font-weight-bold" }, "农场配置", -1))
+                _cache[33] || (_cache[33] = _createElementVNode("span", { class: "text-subtitle-1 text-white font-weight-bold" }, "农场配置", -1))
               ]),
               _createVNode(_component_v_spacer),
               _createElementVNode("div", _hoisted_4, [
@@ -373,7 +411,7 @@ return (_ctx, _cache) => {
                 "prepend-icon": "mdi-tune-variant"
               }, {
                 default: _withCtx(() => [
-                  _cache[33] || (_cache[33] = _createTextVNode("全局设置", -1)),
+                  _cache[34] || (_cache[34] = _createTextVNode("全局设置", -1)),
                   _createElementVNode("span", {
                     class: _normalizeClass(["tab-status-dot", config.enabled ? 'on' : 'off'])
                   }, null, 2)
@@ -400,7 +438,7 @@ return (_ctx, _cache) => {
           }, 8, ["modelValue"]),
           _createVNode(_component_v_window, {
             modelValue: activeTab.value,
-            "onUpdate:modelValue": _cache[31] || (_cache[31] = $event => ((activeTab).value = $event))
+            "onUpdate:modelValue": _cache[32] || (_cache[32] = $event => ((activeTab).value = $event))
           }, {
             default: _withCtx(() => [
               _createVNode(_component_v_window_item, { value: "global" }, {
@@ -419,7 +457,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[34] || (_cache[34] = _createTextVNode(" 基础设置 ", -1))
+                            _cache[35] || (_cache[35] = _createTextVNode(" 基础设置 ", -1))
                           ]),
                           _: 1
                         }),
@@ -547,7 +585,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[35] || (_cache[35] = _createTextVNode(" 自动化功能 ", -1))
+                            _cache[36] || (_cache[36] = _createTextVNode(" 自动化功能 ", -1))
                           ]),
                           _: 1
                         }),
@@ -665,7 +703,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[36] || (_cache[36] = _createTextVNode(" 调度与网络 ", -1))
+                            _cache[37] || (_cache[37] = _createTextVNode(" 调度与网络 ", -1))
                           ]),
                           _: 1
                         }),
@@ -824,7 +862,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[37] || (_cache[37] = _createTextVNode(" 交易策略 ", -1))
+                            _cache[38] || (_cache[38] = _createTextVNode(" 交易策略 ", -1))
                           ]),
                           _: 1
                         }),
@@ -944,7 +982,7 @@ return (_ctx, _cache) => {
                                 variant: "tonal",
                                 class: "mb-4 pa-3 text-body-2"
                               }, {
-                                default: _withCtx(() => [...(_cache[38] || (_cache[38] = [
+                                default: _withCtx(() => [...(_cache[39] || (_cache[39] = [
                                   _createTextVNode(" 未填写的覆盖项会自动继承全局设置；禁用站点只会将其从 site_ids 中移除。 ", -1)
                                 ]))]),
                                 _: 1
@@ -1175,7 +1213,7 @@ return (_ctx, _cache) => {
                                 _: 2
                               }, 1024),
                               _createElementVNode("div", _hoisted_8, [
-                                _cache[39] || (_cache[39] = _createElementVNode("span", { class: "text-body-2 text-medium-emphasis" }, "生效摘要", -1)),
+                                _cache[40] || (_cache[40] = _createElementVNode("span", { class: "text-body-2 text-medium-emphasis" }, "生效摘要", -1)),
                                 _createVNode(_component_v_chip_group, {
                                   column: "",
                                   class: "ga-2"
@@ -1296,7 +1334,7 @@ return (_ctx, _cache) => {
                                     size: "small",
                                     class: "mr-2"
                                   }),
-                                  _cache[40] || (_cache[40] = _createTextVNode(" 思齐专属功能 ", -1))
+                                  _cache[41] || (_cache[41] = _createTextVNode(" 思齐专属功能 ", -1))
                                 ]),
                                 _: 1
                               }),
@@ -1307,7 +1345,7 @@ return (_ctx, _cache) => {
                                     variant: "tonal",
                                     class: "mb-4 pa-3 text-body-2"
                                   }, {
-                                    default: _withCtx(() => [...(_cache[41] || (_cache[41] = [
+                                    default: _withCtx(() => [...(_cache[42] || (_cache[42] = [
                                       _createTextVNode(" 验证码收获、偷菜、点赞和扩地属于高风险行为；除 OCR 外默认关闭，开启即表示自行承担账号风控风险。 ", -1)
                                     ]))]),
                                     _: 1
@@ -1410,17 +1448,41 @@ return (_ctx, _cache) => {
                                         md: "4"
                                       }, {
                                         default: _withCtx(() => [
-                                          _createVNode(_component_v_text_field, {
-                                            modelValue: config.siqi_default_seed_id,
-                                            "onUpdate:modelValue": _cache[30] || (_cache[30] = $event => ((config.siqi_default_seed_id) = $event)),
-                                            modelModifiers: { number: true },
-                                            type: "number",
-                                            label: "默认种植种子 ID",
-                                            hint: "思齐 fetch 返回的种子 id（萝卜=1）；可在工作台种子商店查看",
-                                            "persistent-hint": "",
-                                            density: "compact",
-                                            "hide-details": ""
-                                          }, null, 8, ["modelValue"])
+                                          (siqiSeeds.value.length)
+                                            ? (_openBlock$1(), _createBlock$1(_component_v_select, {
+                                                key: 0,
+                                                modelValue: config.siqi_default_seed_id,
+                                                "onUpdate:modelValue": _cache[30] || (_cache[30] = $event => ((config.siqi_default_seed_id) = $event)),
+                                                items: siqiSeeds.value,
+                                                "item-title": "name",
+                                                "item-value": "seed_id",
+                                                label: "默认种植种子",
+                                                density: "compact",
+                                                variant: "outlined",
+                                                "hide-details": ""
+                                              }, {
+                                                item: _withCtx(({ props, item }) => [
+                                                  _createVNode(_component_v_list_item, _mergeProps({ ref_for: true }, props, {
+                                                    title: seedTitle(item.raw)
+                                                  }), null, 16, ["title"])
+                                                ]),
+                                                selection: _withCtx(({ item }) => [
+                                                  _createElementVNode("span", null, _toDisplayString(seedTitle(item.raw)), 1)
+                                                ]),
+                                                _: 1
+                                              }, 8, ["modelValue", "items"]))
+                                            : (_openBlock$1(), _createBlock$1(_component_v_text_field, {
+                                                key: 1,
+                                                modelValue: config.siqi_default_seed_id,
+                                                "onUpdate:modelValue": _cache[31] || (_cache[31] = $event => ((config.siqi_default_seed_id) = $event)),
+                                                modelModifiers: { number: true },
+                                                type: "number",
+                                                label: "默认种植种子 ID",
+                                                hint: "无 Cookie 无法拉取种子列表，请手动输入 ID（萝卜=1）",
+                                                "persistent-hint": "",
+                                                density: "compact",
+                                                "hide-details": ""
+                                              }, null, 8, ["modelValue"]))
                                         ]),
                                         _: 1
                                       })
@@ -1452,7 +1514,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-05d62241"]]);
+const FarmConfigForm = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-be3b686b"]]);
 
 const {openBlock:_openBlock,createBlock:_createBlock} = await importShared('vue');
 
@@ -1461,6 +1523,7 @@ const _sfc_main = {
   __name: 'Config',
   props: {
   initialConfig: { type: Object, default: () => ({}) },
+  api: { type: Object, default: () => ({}) },
 },
   emits: ['save', 'switch', 'close'],
   setup(__props, { emit: __emit }) {
@@ -1472,10 +1535,11 @@ const emit = __emit;
 return (_ctx, _cache) => {
   return (_openBlock(), _createBlock(FarmConfigForm, {
     "initial-config": props.initialConfig,
+    api: props.api,
     onSave: _cache[0] || (_cache[0] = $event => (emit('save', $event))),
     onSwitch: _cache[1] || (_cache[1] = $event => (emit('switch'))),
     onClose: _cache[2] || (_cache[2] = $event => (emit('close')))
-  }, null, 8, ["initial-config"]))
+  }, null, 8, ["initial-config", "api"]))
 }
 }
 

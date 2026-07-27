@@ -1,20 +1,20 @@
 
-.farm-config-form[data-v-05d62241] {
+.farm-config-form[data-v-be3b686b] {
   min-inline-size: 0;
   padding: 0.5rem;
   margin-inline: auto;
 }
-.config-section[data-v-05d62241] {
+.config-section[data-v-be3b686b] {
   overflow: hidden;
 }
-.config-tabs[data-v-05d62241] {
+.config-tabs[data-v-be3b686b] {
   border-block-end: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
-.config-section[data-v-05d62241] {
+.config-section[data-v-be3b686b] {
   background: rgba(var(--v-theme-surface), 0.96);
   box-shadow: 0 2px 10px rgba(28, 40, 52, 0.06);
 }
-.config-section-title[data-v-05d62241] {
+.config-section-title[data-v-be3b686b] {
   border-block-end: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
