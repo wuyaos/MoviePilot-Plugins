@@ -6,7 +6,7 @@ const {resolveComponent:_resolveComponent$6,createVNode:_createVNode$6,toDisplay
 
 const _hoisted_1$6 = { class: "crop-grid" };
 const _hoisted_2$6 = { class: "crop-icon" };
-const _hoisted_3$3 = {
+const _hoisted_3$4 = {
   key: 1,
   class: "crop-emoji"
 };
@@ -190,7 +190,7 @@ return (_ctx, _cache) => {
                         contain: "",
                         onError: $event => (markImageError(item))
                       }, null, 8, ["src", "onError"]))
-                    : (_openBlock$6(), _createElementBlock$6("span", _hoisted_3$3, _toDisplayString$5(item.emoji || '🌱'), 1))
+                    : (_openBlock$6(), _createElementBlock$6("span", _hoisted_3$4, _toDisplayString$5(item.emoji || '🌱'), 1))
                 ]),
                 _createElementVNode$6("div", _hoisted_4$3, [
                   _createElementVNode$6("div", {
@@ -270,8 +270,12 @@ const CropArea = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-90b
 const {resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,createTextVNode:_createTextVNode$4,withCtx:_withCtx$4,createElementVNode:_createElementVNode$5,renderList:_renderList$4,Fragment:_Fragment$4,openBlock:_openBlock$5,createElementBlock:_createElementBlock$5,toDisplayString:_toDisplayString$4,normalizeClass:_normalizeClass$4,createBlock:_createBlock$4,createCommentVNode:_createCommentVNode$5} = await importShared('vue');
 
 
-const _hoisted_1$5 = { class: "text-no-wrap" };
-const _hoisted_2$5 = { class: "history-detail" };
+const _hoisted_1$5 = {
+  key: 0,
+  class: "history-scroll"
+};
+const _hoisted_2$5 = { class: "text-no-wrap" };
+const _hoisted_3$3 = { class: "history-detail" };
 
 const {computed: computed$5} = await importShared('vue');
 
@@ -320,15 +324,14 @@ function logMeta(item) {
   // 失败消息
   if (item?.success === false && item?.message) parts.push(item.message);
 
-  const unit = item?.value_unit || (action === 'harvest' ? '收获值' : '魔力值');
+  const unit = '魔力值';
   // 兼容 user_logs.value / recent_actions.profit
   const value = Number(item?.value ?? item?.profit ?? 0);
-  // 魔力列优先显示本次变动值；无变动时回退余额 balance_after，保证每行都有值
+  // 魔力列：有变动显示±value，无变动回退余额 balance_after；保证每行都有值
   const balance = Number(item?.balance_after ?? '');
   const hasChange = value !== 0;
-  const magicText = hasChange
-    ? `${value > 0 ? '+' : ''}${value} ${unit}`
-    : (Number.isFinite(balance) ? `${balance} ${unit}` : '');
+  const displayValue = hasChange ? value : (Number.isFinite(balance) ? balance : 0);
+  const magicText = `${displayValue > 0 ? '+' : ''}${displayValue} ${unit}`;
   return {
     actionText: mapped[0],
     actionClass: mapped[1] ? `history-action--${mapped[1]}` : '',
@@ -336,11 +339,11 @@ function logMeta(item) {
     hasIcon: !!parts.find(p => typeof p === 'object' && p.icon),
     iconSrc: (parts.find(p => typeof p === 'object' && p.icon) || {}).icon,
     valueText: magicText,
-    valueClass: value > 0 ? 'history-value--plus' : (value < 0 ? 'history-value--minus' : ''),
+    valueClass: displayValue > 0 ? 'history-value--plus' : (displayValue < 0 ? 'history-value--minus' : ''),
   }
 }
 
-const rows = computed$5(() => (Array.isArray(props.history) ? props.history : []).slice(-20).reverse());
+const rows = computed$5(() => (Array.isArray(props.history) ? props.history : []).slice(-50).reverse());
 
 function formatTime(value) {
   if (value == null || value === '') return '—'
@@ -390,53 +393,52 @@ return (_ctx, _cache) => {
         _: 1
       }),
       (rows.value.length)
-        ? (_openBlock$5(), _createBlock$4(_component_v_table, {
-            key: 0,
-            density: "compact"
-          }, {
-            default: _withCtx$4(() => [
-              _cache[1] || (_cache[1] = _createElementVNode$5("thead", null, [
-                _createElementVNode$5("tr", null, [
-                  _createElementVNode$5("th", null, "时间"),
-                  _createElementVNode$5("th", null, "操作"),
-                  _createElementVNode$5("th", { class: "text-end" }, "魔力")
+        ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_1$5, [
+            _createVNode$5(_component_v_table, { density: "compact" }, {
+              default: _withCtx$4(() => [
+                _cache[1] || (_cache[1] = _createElementVNode$5("thead", null, [
+                  _createElementVNode$5("tr", null, [
+                    _createElementVNode$5("th", null, "时间"),
+                    _createElementVNode$5("th", null, "操作"),
+                    _createElementVNode$5("th", { class: "text-end" }, "魔力")
+                  ])
+                ], -1)),
+                _createElementVNode$5("tbody", null, [
+                  (_openBlock$5(true), _createElementBlock$5(_Fragment$4, null, _renderList$4(rows.value, (item, index) => {
+                    return (_openBlock$5(), _createElementBlock$5("tr", {
+                      key: `${item.time}-${item.action}-${item.target}-${index}`,
+                      class: _normalizeClass$4({ 'failed-row': item.success === false })
+                    }, [
+                      _createElementVNode$5("td", _hoisted_2$5, _toDisplayString$4(formatTime(item.time)), 1),
+                      _createElementVNode$5("td", null, [
+                        _createElementVNode$5("span", {
+                          class: _normalizeClass$4(["history-action", logMeta(item).actionClass])
+                        }, _toDisplayString$4(logMeta(item).actionText), 3),
+                        _createElementVNode$5("span", _hoisted_3$3, [
+                          (logMeta(item).hasIcon)
+                            ? (_openBlock$5(), _createBlock$4(_component_v_img, {
+                                key: 0,
+                                src: logMeta(item).iconSrc,
+                                width: "20",
+                                height: "20",
+                                contain: "",
+                                class: "d-inline-block mr-1",
+                                style: {"vertical-align":"middle"}
+                              }, null, 8, ["src"]))
+                            : _createCommentVNode$5("", true),
+                          _createTextVNode$4(" " + _toDisplayString$4(logMeta(item).detailText), 1)
+                        ])
+                      ]),
+                      _createElementVNode$5("td", {
+                        class: _normalizeClass$4(["text-end text-no-wrap profit", logMeta(item).valueClass])
+                      }, _toDisplayString$4(logMeta(item).valueText), 3)
+                    ], 2))
+                  }), 128))
                 ])
-              ], -1)),
-              _createElementVNode$5("tbody", null, [
-                (_openBlock$5(true), _createElementBlock$5(_Fragment$4, null, _renderList$4(rows.value, (item, index) => {
-                  return (_openBlock$5(), _createElementBlock$5("tr", {
-                    key: `${item.time}-${item.action}-${item.target}-${index}`,
-                    class: _normalizeClass$4({ 'failed-row': item.success === false })
-                  }, [
-                    _createElementVNode$5("td", _hoisted_1$5, _toDisplayString$4(formatTime(item.time)), 1),
-                    _createElementVNode$5("td", null, [
-                      _createElementVNode$5("span", {
-                        class: _normalizeClass$4(["history-action", logMeta(item).actionClass])
-                      }, _toDisplayString$4(logMeta(item).actionText), 3),
-                      _createElementVNode$5("span", _hoisted_2$5, [
-                        (logMeta(item).hasIcon)
-                          ? (_openBlock$5(), _createBlock$4(_component_v_img, {
-                              key: 0,
-                              src: logMeta(item).iconSrc,
-                              width: "20",
-                              height: "20",
-                              contain: "",
-                              class: "d-inline-block mr-1",
-                              style: {"vertical-align":"middle"}
-                            }, null, 8, ["src"]))
-                          : _createCommentVNode$5("", true),
-                        _createTextVNode$4(" " + _toDisplayString$4(logMeta(item).detailText), 1)
-                      ])
-                    ]),
-                    _createElementVNode$5("td", {
-                      class: _normalizeClass$4(["text-end text-no-wrap profit", logMeta(item).valueClass])
-                    }, _toDisplayString$4(logMeta(item).valueText), 3)
-                  ], 2))
-                }), 128))
-              ])
-            ]),
-            _: 1
-          }))
+              ]),
+              _: 1
+            })
+          ]))
         : (_openBlock$5(), _createBlock$4(_component_v_card_text, {
             key: 1,
             class: "text-center text-medium-emphasis py-6"
@@ -453,7 +455,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-08fe9715"]]);
+const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-ed06d2e1"]]);
 
 const {resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,createElementVNode:_createElementVNode$4,openBlock:_openBlock$4,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$4,withCtx:_withCtx$3,renderList:_renderList$3,Fragment:_Fragment$3,createElementBlock:_createElementBlock$4,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$3,createTextVNode:_createTextVNode$3} = await importShared('vue');
 
@@ -80436,32 +80438,31 @@ const _hoisted_39 = {
   class: "plot-emoji",
   "aria-hidden": "true"
 };
-const _hoisted_40 = { class: "font-weight-bold" };
-const _hoisted_41 = {
+const _hoisted_40 = {
   key: 0,
   class: "text-center text-grey pa-4"
 };
-const _hoisted_42 = {
+const _hoisted_41 = {
   class: "mr-1",
   "aria-hidden": "true"
 };
-const _hoisted_43 = {
+const _hoisted_42 = {
   key: 1,
   class: "text-center text-grey pa-4"
 };
-const _hoisted_44 = {
+const _hoisted_43 = {
   key: 0,
   class: "d-flex flex-wrap ga-2"
 };
-const _hoisted_45 = {
+const _hoisted_44 = {
   key: 1,
   class: "text-grey"
 };
-const _hoisted_46 = {
+const _hoisted_45 = {
   key: 1,
   class: "text-center text-grey pa-4"
 };
-const _hoisted_47 = { class: "text-caption text-grey mb-2" };
+const _hoisted_46 = { class: "text-caption text-grey mb-2" };
 
 const {computed: computed$2,onBeforeUnmount: onBeforeUnmount$1,onMounted: onMounted$1,ref: ref$2,watch: watch$1} = await importShared('vue');
 
@@ -81393,17 +81394,14 @@ return (_ctx, _cache) => {
                                               onError: $event => (markStageIconFailed(plot))
                                             }, null, 40, _hoisted_38))
                                           : (_openBlock$2(), _createElementBlock$2("span", _hoisted_39, _toDisplayString$2(plot.seed.icon || seedEmoji(plot.seed.name, plot.seed)), 1)),
-                                        _cache[41] || (_cache[41] = _createElementVNode$2("br", null, null, -1)),
-                                        _createElementVNode$2("small", _hoisted_40, _toDisplayString$2(plot.seed.name), 1),
-                                        _cache[42] || (_cache[42] = _createElementVNode$2("br", null, null, -1)),
                                         _createElementVNode$2("small", {
                                           class: _normalizeClass$2(isPlotReady(plot) ? 'text-orange' : 'text-grey')
-                                        }, _toDisplayString$2(isPlotReady(plot) ? '可收获' : `成长中 ${formatRemain(plot)}`), 3)
+                                        }, _toDisplayString$2(isPlotReady(plot) ? '可收获' : formatRemain(plot)), 3)
                                       ], 64))
                                     : (_openBlock$2(), _createElementBlock$2(_Fragment$2, { key: 3 }, [
-                                        _cache[43] || (_cache[43] = _createTextVNode$2(" 空地", -1)),
-                                        _cache[44] || (_cache[44] = _createElementVNode$2("br", null, null, -1)),
-                                        _cache[45] || (_cache[45] = _createElementVNode$2("small", null, "点击种植", -1))
+                                        _cache[41] || (_cache[41] = _createTextVNode$2(" 空地", -1)),
+                                        _cache[42] || (_cache[42] = _createElementVNode$2("br", null, null, -1)),
+                                        _cache[43] || (_cache[43] = _createElementVNode$2("small", null, "点击种植", -1))
                                       ], 64))
                             ], 10, _hoisted_35))
                           }), 128))
@@ -81411,7 +81409,7 @@ return (_ctx, _cache) => {
                       ], 2))
                     }), 128)),
                     (!landsGrouped.value.length)
-                      ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_41, "暂无菜地数据"))
+                      ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_40, "暂无菜地数据"))
                       : _createCommentVNode$2("", true)
                   ]),
                   _: 1
@@ -81439,7 +81437,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               class: "mr-2"
                             }),
-                            _cache[47] || (_cache[47] = _createTextVNode$2("收获背包 ", -1)),
+                            _cache[45] || (_cache[45] = _createTextVNode$2("收获背包 ", -1)),
                             _createVNode$2(_component_v_spacer),
                             _createVNode$2(_component_v_btn, {
                               color: "warning",
@@ -81449,7 +81447,7 @@ return (_ctx, _cache) => {
                               disabled: !inventory.value.length,
                               onClick: _cache[3] || (_cache[3] = $event => (sellAllDialog.value = true))
                             }, {
-                              default: _withCtx$2(() => [...(_cache[46] || (_cache[46] = [
+                              default: _withCtx$2(() => [...(_cache[44] || (_cache[44] = [
                                 _createTextVNode$2("一键出售", -1)
                               ]))]),
                               _: 1
@@ -81465,7 +81463,7 @@ return (_ctx, _cache) => {
                                   density: "compact"
                                 }, {
                                   default: _withCtx$2(() => [
-                                    _cache[49] || (_cache[49] = _createElementVNode$2("thead", null, [
+                                    _cache[47] || (_cache[47] = _createElementVNode$2("thead", null, [
                                       _createElementVNode$2("tr", null, [
                                         _createElementVNode$2("th", null, "物品"),
                                         _createElementVNode$2("th", null, "数量"),
@@ -81480,7 +81478,7 @@ return (_ctx, _cache) => {
                                           key: item.seed_id
                                         }, [
                                           _createElementVNode$2("td", null, [
-                                            _createElementVNode$2("span", _hoisted_42, _toDisplayString$2(seedEmoji(item.name || seedNameById(item.seed_id), item)), 1),
+                                            _createElementVNode$2("span", _hoisted_41, _toDisplayString$2(seedEmoji(item.name || seedNameById(item.seed_id), item)), 1),
                                             _createTextVNode$2(_toDisplayString$2(item.name || `作物 ${item.seed_id}`), 1)
                                           ]),
                                           _createElementVNode$2("td", null, _toDisplayString$2(item.quantity), 1),
@@ -81494,7 +81492,7 @@ return (_ctx, _cache) => {
                                               "prepend-icon": "mdi-cash",
                                               onClick: $event => (sell(item))
                                             }, {
-                                              default: _withCtx$2(() => [...(_cache[48] || (_cache[48] = [
+                                              default: _withCtx$2(() => [...(_cache[46] || (_cache[46] = [
                                                 _createTextVNode$2("出售", -1)
                                               ]))]),
                                               _: 1
@@ -81506,13 +81504,13 @@ return (_ctx, _cache) => {
                                   ]),
                                   _: 1
                                 }))
-                              : (_openBlock$2(), _createElementBlock$2("div", _hoisted_43, [
+                              : (_openBlock$2(), _createElementBlock$2("div", _hoisted_42, [
                                   _createVNode$2(_component_v_icon, {
                                     icon: "mdi-bag-personal-outline",
                                     size: "40",
                                     class: "mb-2 opacity-50"
                                   }),
-                                  _cache[50] || (_cache[50] = _createElementVNode$2("div", null, "背包空空如也", -1))
+                                  _cache[48] || (_cache[48] = _createElementVNode$2("div", null, "背包空空如也", -1))
                                 ]))
                           ]),
                           _: 1
@@ -81584,7 +81582,7 @@ return (_ctx, _cache) => {
                   default: _withCtx$2(() => [
                     _createVNode$2(_component_v_card_title, { class: "d-flex align-center" }, {
                       default: _withCtx$2(() => [
-                        _cache[51] || (_cache[51] = _createTextVNode$2("偷菜目标", -1)),
+                        _cache[49] || (_cache[49] = _createTextVNode$2("偷菜目标", -1)),
                         _createVNode$2(_component_v_spacer),
                         _createVNode$2(_component_v_btn, {
                           color: "grey",
@@ -81621,7 +81619,7 @@ return (_ctx, _cache) => {
                               _createVNode$2(_component_v_card_text, null, {
                                 default: _withCtx$2(() => [
                                   (stealPlots(target).length)
-                                    ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_44, [
+                                    ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_43, [
                                         (_openBlock$2(true), _createElementBlock$2(_Fragment$2, null, _renderList$2(stealPlots(target), (plot) => {
                                           return (_openBlock$2(), _createBlock$2(_component_v_btn, {
                                             key: `${plot.land_id}-${plot.plot_index}`,
@@ -81638,7 +81636,7 @@ return (_ctx, _cache) => {
                                           }, 1032, ["disabled", "onClick"]))
                                         }), 128))
                                       ]))
-                                    : (_openBlock$2(), _createElementBlock$2("div", _hoisted_45, "暂无成熟作物"))
+                                    : (_openBlock$2(), _createElementBlock$2("div", _hoisted_44, "暂无成熟作物"))
                                 ]),
                                 _: 2
                               }, 1024)
@@ -81647,7 +81645,7 @@ return (_ctx, _cache) => {
                           }, 1024))
                         }), 128)),
                         (!actionLoading.value && !stealTargets.value.length)
-                          ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_46, "暂无可偷菜目标"))
+                          ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_45, "暂无可偷菜目标"))
                           : _createCommentVNode$2("", true)
                       ]),
                       _: 1
@@ -81667,14 +81665,14 @@ return (_ctx, _cache) => {
                 _createVNode$2(_component_v_card, null, {
                   default: _withCtx$2(() => [
                     _createVNode$2(_component_v_card_title, null, {
-                      default: _withCtx$2(() => [...(_cache[52] || (_cache[52] = [
+                      default: _withCtx$2(() => [...(_cache[50] || (_cache[50] = [
                         _createTextVNode$2("批量点赞", -1)
                       ]))]),
                       _: 1
                     }),
                     _createVNode$2(_component_v_card_text, null, {
                       default: _withCtx$2(() => [
-                        _createElementVNode$2("div", _hoisted_47, "剩余 " + _toDisplayString$2(likeRemaining.value) + "/" + _toDisplayString$2(likeMax.value), 1),
+                        _createElementVNode$2("div", _hoisted_46, "剩余 " + _toDisplayString$2(likeRemaining.value) + "/" + _toDisplayString$2(likeMax.value), 1),
                         _createVNode$2(_component_v_textarea, {
                           modelValue: likeUsernames.value,
                           "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((likeUsernames).value = $event)),
@@ -81693,7 +81691,7 @@ return (_ctx, _cache) => {
                           loading: actionLoading.value,
                           onClick: loadLikeTargets
                         }, {
-                          default: _withCtx$2(() => [...(_cache[53] || (_cache[53] = [
+                          default: _withCtx$2(() => [...(_cache[51] || (_cache[51] = [
                             _createTextVNode$2("随机填充", -1)
                           ]))]),
                           _: 1
@@ -81705,7 +81703,7 @@ return (_ctx, _cache) => {
                           "prepend-icon": "mdi-close",
                           onClick: _cache[7] || (_cache[7] = $event => (likeDialog.value = false))
                         }, {
-                          default: _withCtx$2(() => [...(_cache[54] || (_cache[54] = [
+                          default: _withCtx$2(() => [...(_cache[52] || (_cache[52] = [
                             _createTextVNode$2("取消", -1)
                           ]))]),
                           _: 1
@@ -81717,7 +81715,7 @@ return (_ctx, _cache) => {
                           loading: actionLoading.value,
                           onClick: like
                         }, {
-                          default: _withCtx$2(() => [...(_cache[55] || (_cache[55] = [
+                          default: _withCtx$2(() => [...(_cache[53] || (_cache[53] = [
                             _createTextVNode$2("一键点赞", -1)
                           ]))]),
                           _: 1
@@ -81740,7 +81738,7 @@ return (_ctx, _cache) => {
                 _createVNode$2(_component_v_card, null, {
                   default: _withCtx$2(() => [
                     _createVNode$2(_component_v_card_title, null, {
-                      default: _withCtx$2(() => [...(_cache[56] || (_cache[56] = [
+                      default: _withCtx$2(() => [...(_cache[54] || (_cache[54] = [
                         _createTextVNode$2("确认出售", -1)
                       ]))]),
                       _: 1
@@ -81760,7 +81758,7 @@ return (_ctx, _cache) => {
                           "prepend-icon": "mdi-close",
                           onClick: _cache[9] || (_cache[9] = $event => (sellAllDialog.value = false))
                         }, {
-                          default: _withCtx$2(() => [...(_cache[57] || (_cache[57] = [
+                          default: _withCtx$2(() => [...(_cache[55] || (_cache[55] = [
                             _createTextVNode$2("取消", -1)
                           ]))]),
                           _: 1
@@ -81772,7 +81770,7 @@ return (_ctx, _cache) => {
                           loading: actionLoading.value,
                           onClick: sellAll
                         }, {
-                          default: _withCtx$2(() => [...(_cache[58] || (_cache[58] = [
+                          default: _withCtx$2(() => [...(_cache[56] || (_cache[56] = [
                             _createTextVNode$2("确认出售", -1)
                           ]))]),
                           _: 1
@@ -81797,7 +81795,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-eda6596e"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-360faf48"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 
