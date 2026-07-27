@@ -119,9 +119,9 @@ class SiqiConfig(FarmSiteConfig):
                     break
         return result
 
-    @staticmethod
-    def _plot_state(plot: Dict[str, Any]) -> str:
-        """以思齐 fetch 的权威字段判定地块状态，不用残留 harvest_time 推断成熟。"""
+    @classmethod
+    def _plot_state(cls, plot: Dict[str, Any], now: Optional[float] = None) -> str:
+        """按站点实时语义判断地块；is_ready 可能不会随时间自动刷新。"""
         plot_index = plot.get("plot_index")
         seed_id = plot.get("seed_id")
         if plot_index is None:
@@ -129,6 +129,10 @@ class SiqiConfig(FarmSiteConfig):
         if seed_id in (None, "", 0, "0"):
             return "empty"
         if str(plot.get("is_ready", "0")) == "1":
+            return "ripe"
+        harvest_time = cls._number(plot.get("harvest_time"))
+        current_time = time.time() if now is None else float(now)
+        if harvest_time is not None and harvest_time <= current_time:
             return "ripe"
         return "growing"
 
@@ -569,8 +573,7 @@ class SiqiConfig(FarmSiteConfig):
         for plot in data.get("user_lands") or []:
             if not isinstance(plot, dict) or not plot.get("seed_id"):
                 continue
-            is_ready = str(plot.get("is_ready", "0")) == "1"
-            if not is_ready:
+            if self._plot_state(plot) != "ripe":
                 continue
             land_id = plot.get("land_id")
             plot_index = plot.get("plot_index")

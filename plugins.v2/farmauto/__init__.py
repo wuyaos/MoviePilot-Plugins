@@ -31,7 +31,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场自动化，支持智能交易与自动收获"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
-    plugin_version = "3.1.1"
+    plugin_version = "3.1.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "farmauto_"
@@ -693,15 +693,6 @@ class FarmAuto(_PluginBase):
             item.setdefault("expire_minutes", None)
             result.append(item)
         return result
-
-    def _site_history(self, site_id: str, site_name: str) -> List[Dict[str, Any]]:
-        history = self._stats.get("history") or []
-        return [
-            dict(item)
-            for item in history
-            if isinstance(item, dict)
-            and str(item.get("site", "")) in (site_id, site_name)
-        ]
 
     def _api_status(self) -> Dict[str, Any]:
         trends = self._trend_store.to_dict()

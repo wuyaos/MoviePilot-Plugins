@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
-    from ..core.models import CropDef, parse_expire_minutes
+    from ..core.models import parse_expire_minutes
 except ImportError:  # 支持按插件根目录加入 sys.path 的离线测试方式
-    from core.models import CropDef, parse_expire_minutes
+    from core.models import parse_expire_minutes
 
 
 CAPABILITY_BATCH_SELL = "batch_sell"
@@ -180,9 +180,6 @@ class FarmSiteConfig(ABC):
             image = ""
         return image
 
-    def crops_as_models(self) -> List[CropDef]:
-        return [CropDef(key=key, **crop) for key, crop in self.crops.items()]
-
     def get_farm_url(self) -> str:
         return f"{self.base_url}{self.farm_path}"
 
@@ -304,9 +301,6 @@ class FarmSiteConfig(ABC):
 
     def parse_bonus(self, html: str) -> Optional[str]:
         return None
-
-    def parse_market_trend(self, html: str) -> Dict[str, List[int]]:
-        return {}
 
     @staticmethod
     def _state_from_status(can_harvest: bool, remaining_minutes: Optional[int]) -> str:

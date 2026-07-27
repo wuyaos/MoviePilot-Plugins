@@ -41,11 +41,11 @@ class StagedClient:
         self.calls.append(("GET", url, None))
         if "action=harvest" in url:
             return Response('{"success":true,"msg":"收获成功"}')
-        # 初始 fetch：两格成熟；收获后 refresh：两格空；种植后 refresh：玉米生长且背包有萝卜。
+        # 初始 fetch：is_ready 未刷新，但 harvest_time 已过期；收获后两格空；随后种玉米。
         responses = [
             self._farm([
-                {"land_id": 1, "plot_index": 0, "seed_id": 1, "is_ready": 1},
-                {"land_id": 1, "plot_index": 1, "seed_id": 1, "is_ready": 1},
+                {"land_id": 1, "plot_index": 0, "seed_id": 1, "is_ready": 0, "harvest_time": 1},
+                {"land_id": 1, "plot_index": 1, "seed_id": 1, "is_ready": 0, "harvest_time": 1},
                 {"land_id": 2, "plot_index": None, "seed_id": None, "is_ready": 0},
             ]),
             self._farm([

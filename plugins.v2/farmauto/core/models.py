@@ -1,7 +1,7 @@
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -12,26 +12,6 @@ class CropDef:
     type: str
     id: int
     action: str = "plant"
-
-
-@dataclass(frozen=True)
-class MarketPrice:
-    crop_key: str
-    price: int
-    ts: float
-
-
-@dataclass
-class PriceTrend:
-    crop_key: str
-    samples: List[Tuple[float, int]] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class CropStatus:
-    crop_key: str
-    can_harvest: bool
-    remaining_minutes: Optional[int] = None
 
 
 @dataclass
