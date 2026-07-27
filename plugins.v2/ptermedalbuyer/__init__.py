@@ -102,7 +102,7 @@ class PterMedalBuyer(_PluginBase):
         }]
 
     def stop_service(self):
-        pass
+        logger.info("pter 勋章自动领取服务停止，公共调度任务由 MoviePilot 清理")
 
     def scheduled_run(self):
         return self.run_buy_task(force=False, trigger="cron")

@@ -84,59 +84,63 @@ class TorrentTransfer(_PluginBase):
         self.__ensure_plugin_log_file()
         config = config or {}
 
-        # 读取配置
-        if config:
-            self._enabled = config.get("enabled")
-            self._onlyonce = config.get("onlyonce")
-            self._cron = config.get("cron")
-            self._notify = config.get("notify")
-            self._nolabels = config.get("nolabels")
-            self._includelabels = config.get("includelabels")
-            self._includecategory = config.get("includecategory")
-            self._frompath = config.get("frompath")
-            self._topath = config.get("topath")
-            self._fromdownloader = config.get("fromdownloader")
-            self._todownloader = config.get("todownloader")
-            self._deletesource = config.get("deletesource")
-            self._deleteduplicate = config.get("deleteduplicate")
-            self._fromtorrentpath = config.get("fromtorrentpath")
-            self._nopaths = config.get("nopaths")
-            self._autostart = config.get("autostart")
-            self._skipverify = config.get("skipverify")
-            self._transferemptylabel = config.get("transferemptylabel")
-            self._add_torrent_tags = config.get("add_torrent_tags") or ""
-            self._torrent_tags = self._add_torrent_tags.strip().split(",") if self._add_torrent_tags else []
-            self._remainoldcat = config.get("remainoldcat")
-            self._remainoldtag = config.get("remainoldtag")
-            self._scan_limit = int(config.get("scan_limit") or 500)
-            self._pause_source = config.get("pause_source", True)
+        # 每次初始化都从当前配置重建运行态，避免热重载沿用旧实例字段。
+        self._enabled = bool(config.get("enabled", False))
+        self._onlyonce = bool(config.get("onlyonce", False))
+        self._cron = str(config.get("cron") or "").strip()
+        self._notify = bool(config.get("notify", False))
+        self._nolabels = config.get("nolabels")
+        self._includelabels = config.get("includelabels")
+        self._includecategory = config.get("includecategory")
+        self._frompath = config.get("frompath")
+        self._topath = config.get("topath")
+        self._fromdownloader = config.get("fromdownloader")
+        self._todownloader = config.get("todownloader")
+        self._deletesource = bool(config.get("deletesource", False))
+        self._deleteduplicate = bool(config.get("deleteduplicate", False))
+        self._fromtorrentpath = config.get("fromtorrentpath")
+        self._nopaths = config.get("nopaths")
+        self._autostart = bool(config.get("autostart", False))
+        self._skipverify = bool(config.get("skipverify", False))
+        self._transferemptylabel = bool(config.get("transferemptylabel", False))
+        self._add_torrent_tags = config.get("add_torrent_tags") or ""
+        self._torrent_tags = self._add_torrent_tags.strip().split(",") if self._add_torrent_tags else []
+        self._remainoldcat = bool(config.get("remainoldcat", False))
+        self._remainoldtag = bool(config.get("remainoldtag", False))
+        self._scan_limit = int(config.get("scan_limit") or 500)
+        self._pause_source = bool(config.get("pause_source", True))
 
-        # 启动定时任务 & 立即运行一次
-        if self.get_state() or self._onlyonce:
+        # 插件内部调度器仅承担校验轮询和 one-shot；长期转移任务由 get_service 声明。
+        if self._enabled or self._onlyonce:
+            if not self.__has_required_config():
+                logger.error("自动转移做种配置不完整，跳过任务启动但保留启用状态")
+                if self._onlyonce:
+                    self._onlyonce = False
+                    config["onlyonce"] = False
+                    self.update_config(config=config)
+                return
             if not self.__validate_config():
-                self._enabled = False
-                self._onlyonce = False
-                config["enabled"] = self._enabled
-                config["onlyonce"] = self._onlyonce
-                self.update_config(config=config)
+                logger.error("自动转移做种配置校验失败，跳过任务启动但保留启用状态")
+                if self._onlyonce:
+                    self._onlyonce = False
+                    config["onlyonce"] = False
+                    self.update_config(config=config)
                 return
 
-            # 定时服务
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-
             if self._autostart or self._deletesource:
-                # 追加种子校验服务
                 self._scheduler.add_job(self.check_recheck, 'interval', minutes=0.5)
 
             if self._onlyonce:
-                logger.info(f"转移做种服务启动，立即运行一次")
-                self._scheduler.add_job(self.transfer, 'date',
-                                        run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(
-                                            seconds=3))
+                logger.info("转移做种服务启动，立即运行一次")
+                self._scheduler.add_job(
+                    self.transfer,
+                    'date',
+                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                )
                 self._onlyonce = False
-                config["onlyonce"] = self._onlyonce
+                config["onlyonce"] = False
                 self.update_config(config=config)
-            # 启动服务
             if self._scheduler.get_jobs():
                 self._scheduler.print_jobs()
                 self._scheduler.start()
@@ -172,11 +176,7 @@ class TorrentTransfer(_PluginBase):
         return service
 
     def get_state(self):
-        return True if self._enabled \
-                       and self._cron \
-                       and self._fromdownloader \
-                       and self._todownloader \
-                       and self._fromtorrentpath else False
+        return bool(self._enabled)
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -196,17 +196,29 @@ class TorrentTransfer(_PluginBase):
             "kwargs": {} # 定时器参数
         }]
         """
-        if self.get_state():
-            return [
-                {
-                    "id": "TorrentTransfer",
-                    "name": "转移做种服务",
-                    "trigger": CronTrigger.from_crontab(self._cron),
-                    "func": self.transfer,
-                    "kwargs": {}
-                }
-            ]
-        return []
+        if not self._enabled:
+            return []
+        if not self.__has_required_config():
+            logger.warning("转移做种定时服务未注册：配置不完整")
+            return []
+        if not self.__validate_config():
+            return []
+        try:
+            trigger = CronTrigger.from_crontab(self._cron, timezone=settings.TZ)
+        except Exception as err:
+            logger.error(f"转移做种 Cron 配置无效：cron={self._cron!r}，error={err}")
+            return []
+        return [{
+            "id": "TorrentTransfer",
+            "name": "转移做种服务",
+            "trigger": trigger,
+            "func": self.scheduled_transfer,
+            "kwargs": {},
+        }]
+
+    def scheduled_transfer(self):
+        """MoviePilot 公共转移调度入口。"""
+        return self.transfer()
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
@@ -651,10 +663,16 @@ class TorrentTransfer(_PluginBase):
     def get_page(self) -> List[dict]:
         return []
 
+    def __has_required_config(self) -> bool:
+        return bool(
+            self._cron
+            and self._fromdownloader
+            and self._todownloader
+            and self._fromtorrentpath
+        )
+
     def __validate_config(self) -> bool:
-        """
-        校验配置
-        """
+        """校验已填写配置的语义与路径。"""
         # 检查配置
         if self._fromtorrentpath and not Path(self._fromtorrentpath).exists():
             logger.error(f"源下载器种子文件保存路径不存在：{self._fromtorrentpath}")

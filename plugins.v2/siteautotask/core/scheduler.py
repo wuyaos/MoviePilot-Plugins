@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from app.core.config import settings
 from app.log import logger
 
@@ -39,25 +40,31 @@ class TaskScheduler:
 
     def services(self):
         cfg = self.plugin.config
+        if not cfg.enabled:
+            return []
         services = []
-        if cfg.enabled and cfg.cron:
-            services.append({
-            "id": "siteautotask",
-            "name": "站点自动任务",
-            "trigger": CronTrigger.from_crontab(str(cfg.cron)),
-            "func": self.plugin.run_scheduled,
-            "kwargs": {},
-        })
-        # 失败重试已并入主 cron，不再注册独立重试服务。
-        # 织梦 24h 电力冷却调度（date trigger）
-        if cfg.enabled and self._has_zm_site():
+        if cfg.cron:
+            try:
+                main_trigger = CronTrigger.from_crontab(str(cfg.cron), timezone=settings.TZ)
+            except Exception as err:
+                logger.error(f"站点自动任务 Cron 配置无效：cron={cfg.cron!r}，error={err}")
+            else:
+                services.append({
+                    "id": "siteautotask",
+                    "name": "站点自动任务",
+                    "trigger": main_trigger,
+                    "func": self.plugin.run_scheduled,
+                    "kwargs": {},
+                })
+        # 织梦 24h 电力冷却使用公共 date 服务；动态续排仍由内部 Scheduler 管理。
+        if self._has_zm_site():
             next_time = self._compute_zm_next_time(cfg)
             services.append({
                 "id": "siteautotask_zm",
                 "name": "织梦24h电力调度",
-                "trigger": "date",
+                "trigger": DateTrigger(run_date=next_time, timezone=settings.TZ),
                 "func": self.plugin.run_zm,
-                "kwargs": {"run_date": next_time},
+                "kwargs": {},
             })
         return services
 

@@ -135,18 +135,27 @@ class YzyySignin(_PluginBase):
         }
 
     def get_service(self) -> List[Dict[str, Any]]:
-        if self._enabled and self._cron:
-            try:
-                return [{
-                    "id": "YzyySignin",
-                    "name": "yzyy论坛签到服务",
-                    "trigger": CronTrigger.from_crontab(self._cron),
-                    "func": self.__signin,
-                    "kwargs": {}
-                }]
-            except Exception as e:
-                logger.error(f"yzyy论坛签到 Cron 配置无效: {e}")
-        return []
+        if not self._enabled:
+            return []
+        if not self._cron:
+            logger.warning("yzyy论坛签到定时服务未注册：Cron 为空")
+            return []
+        try:
+            trigger = CronTrigger.from_crontab(self._cron, timezone=settings.TZ)
+        except Exception as err:
+            logger.error(f"yzyy论坛签到 Cron 配置无效: {err}")
+            return []
+        return [{
+            "id": "YzyySignin",
+            "name": "yzyy论坛签到服务",
+            "trigger": trigger,
+            "func": self.scheduled_run,
+            "kwargs": {},
+        }]
+
+    def scheduled_run(self):
+        """MoviePilot 公共调度入口。"""
+        return self.__signin()
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return [

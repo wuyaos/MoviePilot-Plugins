@@ -56,7 +56,7 @@ class AzKeepAlive(_PluginBase):
         self._initialized_at = time.monotonic()
         self._ensure_plugin_log_file()
         config = config or {}
-        self._enabled = bool(config.get("enabled"))
+        self._enabled = bool(config.get("enabled", False))
         self._notify = bool(config.get("notify", True))
         self._cron = str(config.get("cron") or "").strip()
         self._onlyonce = bool(config.get("onlyonce"))
@@ -197,27 +197,24 @@ class AzKeepAlive(_PluginBase):
     def get_service(self) -> List[Dict[str, Any]]:
         if not self._enabled:
             return []
-        services = []
-        if self._cron:
-            try:
-                if self._cron.count(" ") != 4:
-                    logger.error("AnimeZ保活 cron 错误: 需要 5 位 cron 表达式，跳过定时注册")
-                else:
-                    services.append({"id": "AzKeepAlive", "name": "AnimeZ保活定时任务",
-                                     "trigger": CronTrigger.from_crontab(self._cron),
-                                     "func": self._safe_run_task, "kwargs": {}})
-                    logger.info(f"AnimeZ保活已注册定时任务: {self._cron}")
-            except Exception as e:
-                logger.error(f"AnimeZ保活 cron 错误: {e}，跳过定时注册")
-        else:
-            # 使用 init_plugin 已持久化的随机时间，避免每次重载漂移
-            cron_str = self._random_cron
-            logger.info(f"AnimeZ保活随机触发时间：{cron_str}")
-            services.append({"id": "AzKeepAlive",
-                             "name": f"AnimeZ保活定时任务 {cron_str}",
-                             "trigger": CronTrigger.from_crontab(cron_str),
-                             "func": self._safe_run_task, "kwargs": {}})
-        return services
+        cron_str = self._cron or self._random_cron
+        if not cron_str:
+            logger.warning("AnimeZ保活无可用 Cron，跳过定时注册")
+            return []
+        try:
+            trigger = CronTrigger.from_crontab(cron_str, timezone=app_settings.TZ)
+        except Exception as err:
+            logger.error(f"AnimeZ保活 Cron 配置无效：cron={cron_str!r}，error={err}")
+            return []
+        name = "AnimeZ保活定时任务" if self._cron else f"AnimeZ保活定时任务 {cron_str}"
+        logger.info(f"AnimeZ保活已注册定时任务: {cron_str}")
+        return [{
+            "id": "AzKeepAlive",
+            "name": name,
+            "trigger": trigger,
+            "func": self._safe_run_task,
+            "kwargs": {},
+        }]
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         try:

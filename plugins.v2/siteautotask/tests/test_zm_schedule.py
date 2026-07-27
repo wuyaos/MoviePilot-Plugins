@@ -35,6 +35,7 @@ stub_module("apscheduler.schedulers")
 stub_module("apscheduler.schedulers.background", BackgroundScheduler=Mock)
 stub_module("apscheduler.triggers")
 stub_module("apscheduler.triggers.cron", CronTrigger=Mock)
+stub_module("apscheduler.triggers.date", DateTrigger=Mock)
 
 
 def load(name, path):
@@ -172,8 +173,9 @@ class ZmNextTimeTests(unittest.TestCase):
 class SchedulerEntryTests(unittest.TestCase):
     def setUp(self):
         SCHEDULER.CronTrigger = types.SimpleNamespace(
-            from_crontab=lambda expression: ("cron", expression)
+            from_crontab=lambda expression, timezone=None: ("cron", expression, timezone)
         )
+        SCHEDULER.DateTrigger = lambda run_date, timezone=None: ("date", run_date, timezone)
 
     def _plugin(self):
         config = types.SimpleNamespace(

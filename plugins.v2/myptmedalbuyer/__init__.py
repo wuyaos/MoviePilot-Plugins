@@ -104,12 +104,16 @@ class MyPTMedalBuyer(_PluginBase):
             "id": "MyPTMedalBuyerCron",
             "name": "myPT勋章续购",
             "trigger": trigger,
-            "func": self.run_buy_task,
-            "kwargs": {"force": False}
+            "func": self.scheduled_run,
+            "kwargs": {},
         }]
 
     def stop_service(self):
-        pass
+        logger.info("myPT 勋章续购服务停止，公共调度任务由 MoviePilot 清理")
+
+    def scheduled_run(self):
+        """MoviePilot 公共调度入口。"""
+        return self.run_buy_task(force=False)
 
     def run_buy_task(self, force: bool = False) -> Dict[str, Any]:
         if not self._lock.acquire(blocking=False):

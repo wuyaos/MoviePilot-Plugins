@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from apscheduler.triggers.cron import CronTrigger
 
+from app.core.config import settings
 from app.core.event import Event, eventmanager
 from app.log import logger
 from app.plugins import _PluginBase
@@ -49,7 +50,7 @@ class SunnyPTSignin(_PluginBase):
 
     def init_plugin(self, config: dict = None):
         config = config or {}
-        self._enabled = bool(config.get("enabled"))
+        self._enabled = bool(config.get("enabled", False))
         self._username = (config.get("username") or "").strip()
         self._password = config.get("password") or ""
         self._cron = self.__normalize_cron(config.get("cron"))
@@ -57,12 +58,15 @@ class SunnyPTSignin(_PluginBase):
         self._notify_type = config.get("notify_type") or "Plugin"
         self._run_once = bool(config.get("run_once", False))
 
-        if self._run_once and self._enabled and self._username and self._password:
-            logger.info("SunnyPT 自动签到：立即运行一次")
-            threading.Thread(target=self.__signin_task, daemon=True).start()
-            # 自动关闭立即运行开关
+        if self._run_once:
+            # 无论执行条件是否满足都先消费开关，避免重载后重复执行。
             self._run_once = False
             self.__update_config()
+            if self._enabled and self._username and self._password:
+                logger.info("SunnyPT 自动签到：立即运行一次")
+                threading.Thread(target=self.__signin_task, daemon=True).start()
+            else:
+                logger.warning("SunnyPT 立即运行已取消：插件未启用或账号配置不完整")
 
     def get_state(self) -> bool:
         return self._enabled
@@ -105,25 +109,21 @@ class SunnyPTSignin(_PluginBase):
             logger.warning("SunnyPT 签到定时服务未注册：Cron 为空")
             return []
         try:
-            trigger = CronTrigger.from_crontab(self._cron)
+            trigger = CronTrigger.from_crontab(self._cron, timezone=settings.TZ)
         except Exception as err:
             logger.warning(f"SunnyPT 签到 Cron 配置无效：cron={repr(self._cron)}，error={err}")
             return []
-        return [
-            {
-                "id": "SunnyPTSignin",
-                "name": "SunnyPT 自动签到",
-                "trigger": "cron",
-                "func": self.__signin_task,
-                "kwargs": {
-                    "minute": str(trigger.fields[6]),
-                    "hour": str(trigger.fields[5]),
-                    "day": str(trigger.fields[2]),
-                    "month": str(trigger.fields[1]),
-                    "day_of_week": str(trigger.fields[4]),
-                },
-            }
-        ]
+        return [{
+            "id": "SunnyPTSignin",
+            "name": "SunnyPT 自动签到",
+            "trigger": trigger,
+            "func": self.scheduled_run,
+            "kwargs": {},
+        }]
+
+    def scheduled_run(self):
+        """MoviePilot 公共调度入口。"""
+        return self.__signin_task()
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         notify_type_items = [
@@ -459,7 +459,7 @@ class SunnyPTSignin(_PluginBase):
         }
 
     def stop_service(self):
-        pass
+        logger.info("SunnyPT 签到服务停止，公共调度任务由 MoviePilot 清理")
 
     # ===================== 核心签到逻辑 =====================
 

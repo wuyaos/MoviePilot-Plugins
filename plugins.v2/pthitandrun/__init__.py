@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import settings
 from app.core.context import Context, TorrentInfo
@@ -78,18 +80,16 @@ class PtHitAndRun(_PluginBase):
             get_data=self.get_data, save_data=self.save_data,
             send_message=self._send_message,
         )
-        summary_cron = self._parse_cron(self._cfg.notify_summary_cron)
-        if self._cfg.onlyonce or summary_cron:
+        if self._cfg.onlyonce:
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-            if self._cfg.onlyonce:
-                self._cfg.onlyonce = False
-                self._update_config()
-                self._scheduler.add_job(self._checker.full_scan, "date",
-                                        run_date=datetime.now(pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                        name="H&R全量扫描")
-            if summary_cron:
-                self._scheduler.add_job(self._checker.send_notify_summary, "cron",
-                                        **summary_cron, name="H&R通知汇总")
+            self._cfg.onlyonce = False
+            self._update_config()
+            self._scheduler.add_job(
+                self._checker.full_scan,
+                "date",
+                run_date=datetime.now(pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                name="H&R全量扫描",
+            )
             self._scheduler.start()
 
     # ---- 下载器 ----
@@ -213,19 +213,51 @@ class PtHitAndRun(_PluginBase):
         services = [{
             "id": "PtHitAndRunCheck",
             "name": "H&R状态检查",
-            "trigger": "interval",
-            "func": self._checker.check,
-            "kwargs": {"minutes": self._cfg.check_period},
+            "trigger": IntervalTrigger(minutes=self._cfg.check_period, timezone=settings.TZ),
+            "func": self.scheduled_check,
+            "kwargs": {},
         }]
         if self._cfg.auto_discover:
             services.append({
                 "id": "PtHitAndRunDiscover",
                 "name": "H&R自动发现",
-                "trigger": "interval",
-                "func": self._checker.auto_discover,
-                "kwargs": {"minutes": self._cfg.check_period * 2},
+                "trigger": IntervalTrigger(minutes=self._cfg.check_period * 2, timezone=settings.TZ),
+                "func": self.scheduled_discover,
+                "kwargs": {},
             })
+        summary_cron = (self._cfg.notify_summary_cron or "").strip()
+        if summary_cron:
+            try:
+                summary_trigger = CronTrigger.from_crontab(summary_cron, timezone=settings.TZ)
+            except Exception as err:
+                logger.warning(f"{LOG_PREFIX}通知汇总 Cron 配置无效：cron={summary_cron!r}，error={err}")
+            else:
+                services.append({
+                    "id": "PtHitAndRunSummary",
+                    "name": "H&R通知汇总",
+                    "trigger": summary_trigger,
+                    "func": self.scheduled_summary,
+                    "kwargs": {},
+                })
         return services
+
+    def scheduled_check(self):
+        """MoviePilot 公共 H&R 检查入口。"""
+        if self._checker:
+            return self._checker.check()
+        return None
+
+    def scheduled_discover(self):
+        """MoviePilot 公共 H&R 发现入口。"""
+        if self._checker:
+            return self._checker.auto_discover()
+        return None
+
+    def scheduled_summary(self):
+        """MoviePilot 公共 H&R 汇总通知入口。"""
+        if self._checker:
+            return self._checker.send_notify_summary()
+        return None
 
     def get_state(self) -> bool:
         return bool(self._cfg and self._cfg.enabled)
@@ -596,20 +628,6 @@ class PtHitAndRun(_PluginBase):
         if self._cfg:
             excludes = {"site_infos", "site_configs"}
             self.update_config(self._cfg.to_dict(exclude=excludes))
-
-    def _parse_cron(self, cron: str) -> dict:
-        value = (cron or "0 8 * * *").strip() or "0 8 * * *"
-        parts = value.split()
-        if len(parts) != 5:
-            logger.warning(f"{LOG_PREFIX}通知汇总 cron 配置无效: {cron}，回退为 0 8 * * *")
-            parts = "0 8 * * *".split()
-        return {
-            "minute": parts[0],
-            "hour": parts[1],
-            "day": parts[2],
-            "month": parts[3],
-            "day_of_week": parts[4],
-        }
 
     def _get_brush_plugin_options(self) -> List[Dict[str, Any]]:
         opts = [{"title": "不监听刷流插件", "value": ""}]

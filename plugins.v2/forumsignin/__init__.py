@@ -40,10 +40,6 @@ class ForumSignin(_PluginBase):
 
     _enabled = False
     _scheduler: Optional[BackgroundScheduler] = None
-    _active_enabled = None
-    _active_cron = None
-    _active_timed_update_enabled = None
-    _active_timed_update_cron = None
 
     def init_plugin(self, config: dict = None):
         """插件初始化"""
@@ -51,49 +47,9 @@ class ForumSignin(_PluginBase):
         self._sync_attrs_from_config()
         self._init_services()
 
-        if not self._scheduler or not self._scheduler.running:
-            self.stop_service()
+        self.stop_service()
+        if self.config.update_info_now or self.config.onlyonce:
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-            logger.info("双站签到调度器未运行，已创建新的实例。")
-            self._active_enabled = not self._enabled
-
-        signin_job_id = "forumsignin_dual_signin_cron"
-        signin_config_changed = self._enabled != self._active_enabled or self.config.cron != self._active_cron
-        if signin_config_changed:
-            logger.info("检测到双站签到任务配置变更，正在更新...")
-            if self._scheduler.get_job(signin_job_id):
-                self._scheduler.remove_job(signin_job_id)
-                logger.info("已移除旧的双站签到周期任务。")
-            if self._enabled and self.config.cron:
-                self._scheduler.add_job(
-                    func=self.__signin,
-                    trigger=CronTrigger.from_crontab(self.config.cron),
-                    name="蜂巢药丸双站签到",
-                    id=signin_job_id
-                )
-                logger.info(f"已添加新的双站签到周期任务，周期：{self.config.cron}")
-
-        info_update_job_id = "forumsignin_fengchao_info_update_cron"
-        info_update_config_changed = (
-            self._enabled != self._active_enabled or
-            self.config.timed_update_enabled != self._active_timed_update_enabled or
-            self.config.timed_update_cron != self._active_timed_update_cron
-        )
-        if info_update_config_changed:
-            logger.info("检测到蜂巢个人信息更新任务配置变更，正在更新...")
-            if self._scheduler.get_job(info_update_job_id):
-                self._scheduler.remove_job(info_update_job_id)
-                logger.info("已移除旧的蜂巢个人信息更新周期任务。")
-            if self._enabled and self.config.timed_update_enabled:
-                cron_to_use = self.config.timed_update_cron if self.config.timed_update_cron else "0 */2 * * *"
-                self._scheduler.add_job(
-                    func=self.__update_user_info,
-                    kwargs={'is_scheduled_run': True},
-                    trigger=CronTrigger.from_crontab(cron_to_use),
-                    name="蜂巢个人信息定时更新",
-                    id=info_update_job_id
-                )
-                logger.info(f"已添加新的蜂巢个人信息更新周期任务，周期：{cron_to_use}")
 
         if self.config.update_info_now:
             logger.info("立即更新蜂巢个人信息")
@@ -121,10 +77,6 @@ class ForumSignin(_PluginBase):
             self._scheduler.print_jobs()
             self._scheduler.start()
 
-        self._active_enabled = self._enabled
-        self._active_cron = self.config.cron
-        self._active_timed_update_enabled = self.config.timed_update_enabled
-        self._active_timed_update_cron = self.config.timed_update_cron
         self._sync_attrs_from_config()
 
     def _sync_attrs_from_config(self):
@@ -425,25 +377,46 @@ class ForumSignin(_PluginBase):
         pass
 
     def get_service(self) -> List[Dict[str, Any]]:
-        """注册插件公共服务。"""
+        """注册由 MoviePilot 管理的长期公共服务。"""
+        if not self._enabled:
+            return []
         services = []
-        if self._enabled and self.config.cron:
-            services.append({
-                "id": "ForumSignin",
-                "name": "蜂巢药丸双站签到服务",
-                "trigger": CronTrigger.from_crontab(self.config.cron),
-                "func": self.__signin,
-                "kwargs": {}
-            })
-        if self._enabled and self.config.timed_update_enabled:
-            services.append({
-                "id": "ForumSigninInfoUpdate",
-                "name": "蜂巢个人信息定时更新服务",
-                "trigger": CronTrigger.from_crontab(self.config.timed_update_cron or "0 */2 * * *"),
-                "func": self.__update_user_info,
-                "kwargs": {"is_scheduled_run": True}
-            })
+        if self.config.cron:
+            try:
+                signin_trigger = CronTrigger.from_crontab(self.config.cron, timezone=settings.TZ)
+            except Exception as err:
+                logger.error(f"论坛签到 Cron 配置无效：cron={self.config.cron!r}，error={err}")
+            else:
+                services.append({
+                    "id": "ForumSignin",
+                    "name": "蜂巢药丸双站签到服务",
+                    "trigger": signin_trigger,
+                    "func": self.scheduled_signin,
+                    "kwargs": {},
+                })
+        if self.config.timed_update_enabled:
+            info_cron = self.config.timed_update_cron or "0 */2 * * *"
+            try:
+                info_trigger = CronTrigger.from_crontab(info_cron, timezone=settings.TZ)
+            except Exception as err:
+                logger.error(f"蜂巢信息更新 Cron 配置无效：cron={info_cron!r}，error={err}")
+            else:
+                services.append({
+                    "id": "ForumSigninInfoUpdate",
+                    "name": "蜂巢个人信息定时更新服务",
+                    "trigger": info_trigger,
+                    "func": self.scheduled_info_update,
+                    "kwargs": {},
+                })
         return services
+
+    def scheduled_signin(self):
+        """MoviePilot 公共签到调度入口。"""
+        return self.__signin()
+
+    def scheduled_info_update(self):
+        """MoviePilot 公共用户信息更新入口。"""
+        return self.__update_user_info(is_scheduled_run=True)
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return build_form()

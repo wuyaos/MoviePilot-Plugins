@@ -345,7 +345,8 @@ class SiteAutoTask(_PluginBase):
         )
 
     def get_service(self):
-        return self.scheduler.services()
+        """声明公共服务；TaskScheduler 实例只提供纯构建与动态 Zm 续排能力。"""
+        return TaskScheduler(self).services()
 
     def stop_service(self):
         if hasattr(self, "scheduler") and self.scheduler:
