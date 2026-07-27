@@ -70,7 +70,6 @@ def test_siqi_metadata_and_urls():
     assert config.currency == "魔力"
     assert config.crops["crop_1"]["action"] == "plant"
 
-    assert _query(config.get_harvest_captcha_url()) == {"action": ["get_harvest_all_captcha"]}
     assert config.get_harvest_all_submit_url() == "https://si-qi.xyz/plant_game.php"
     assert _query(config.get_harvest_plot_url(2, 0)) == {
         "action": ["harvest"], "land_id": ["2"], "plot_index": ["0"],
@@ -142,7 +141,6 @@ def test_siqi_expired_harvest_time_marks_ripe_and_locked_land_stays_locked():
     assert status["locked_2_None"]["state"] == "locked"
     assert status["locked_2_None"]["is_empty"] is False
     assert [land.state for land in lands] == ["ripe", "growing", "locked"]
-    assert [(plot["land_id"], plot["plot_index"]) for plot in config.parse_ready_plots(payload)] == [(1, 0)]
 
 
 def test_siqi_resolves_dynamic_crops_and_inventory_keys():

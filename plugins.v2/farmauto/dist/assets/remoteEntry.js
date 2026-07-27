@@ -5,8 +5,8 @@ const currentImports = {};
       dynamicLoadingCss(["FarmWorkbench-t9ccRW16.css"], false, './Page');
       return __federation_import('./__federation_expose_Page-je7wqXKX.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},
 "./Config":()=>{
-      dynamicLoadingCss(["__federation_expose_Config-BExhcTeP.css"], false, './Config');
-      return __federation_import('./__federation_expose_Config-BsUY3CCh.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},
+      dynamicLoadingCss(["__federation_expose_Config-Bu7aalI8.css"], false, './Config');
+      return __federation_import('./__federation_expose_Config-IfooYDKv.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},
 "./Dashboard":()=>{
       dynamicLoadingCss([], false, './Dashboard');
       return __federation_import('./__federation_expose_Dashboard-RUQHjp7Y.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},

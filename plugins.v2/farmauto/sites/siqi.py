@@ -516,9 +516,6 @@ class SiqiConfig(FarmSiteConfig):
             return result
         return result
 
-    def get_harvest_captcha_url(self) -> str:
-        return self._action_url("get_harvest_all_captcha")
-
     def get_captcha_image_url(self, imagehash: str) -> str:
         return f"{self.base_url}/captcha.php?{urlencode({'imagehash': imagehash})}"
 
@@ -566,20 +563,6 @@ class SiqiConfig(FarmSiteConfig):
             result["skipped"] = True
             result["message"] = "无空地，跳过种植"
         return result
-
-    def parse_ready_plots(self, html: str) -> List[Dict[str, Any]]:
-        data = self._json_dict(html)
-        ready_plots: List[Dict[str, Any]] = []
-        for plot in data.get("user_lands") or []:
-            if not isinstance(plot, dict) or not plot.get("seed_id"):
-                continue
-            if self._plot_state(plot) != "ripe":
-                continue
-            land_id = plot.get("land_id")
-            plot_index = plot.get("plot_index")
-            if land_id is not None and plot_index is not None:
-                ready_plots.append({"land_id": land_id, "plot_index": plot_index})
-        return ready_plots
 
     def get_steal_target_url(self) -> str:
         return self._action_url("get_victim_farm")
@@ -688,8 +671,8 @@ class SiqiConfig(FarmSiteConfig):
     def parse_steal_result(self, html: str) -> Dict[str, Any]:
         return self._parse_action_result(html, ("偷菜成功", "偷取成功", "获得"), "偷菜成功", "偷菜失败")
 
-    def parse_harvest_captcha_result(self, html: str) -> Dict[str, Any]:
-        return self._parse_action_result(html, ("收获成功", "一键收获", "已收获"), "验证码收获成功", "验证码收获失败")
+    def parse_harvest_all_result(self, html: str) -> Dict[str, Any]:
+        return self._parse_action_result(html, ("收获成功", "一键收获", "已收获"), "一键收获成功", "一键收获失败")
 
     def parse_like_result(self, html: str) -> Dict[str, Any]:
         return self._parse_action_result(html, ("点赞成功", "已点赞", "点赞完成"), "点赞成功", "点赞失败")

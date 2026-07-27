@@ -80,7 +80,6 @@ class ActionResult:
 class SiteRunReport:
     site_id: str
     site_name: str
-    mode: str
     market_prices: Dict[str, int] = field(default_factory=dict)
     crop_status: Dict[str, Dict] = field(default_factory=dict)
     warehouse: List[Dict] = field(default_factory=list)

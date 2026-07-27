@@ -17,7 +17,6 @@ class FarmExecutor:
         "harvest": "收获",
         "plant": "种植",
         "sell": "出售",
-        "harvest_captcha": "验证码收获",
         "steal": "偷菜",
         "like": "点赞",
         "buy_slot": "扩地",
@@ -70,12 +69,12 @@ class FarmExecutor:
                 cookies[key.strip()] = value.strip()
         return cookies
 
-    def run_site(self, cookie: str, site_config, mode: str, policy: dict, siqi_options: dict = None) -> SiteRunReport:
+    def run_site(self, cookie: str, site_config, policy: dict, siqi_options: dict = None) -> SiteRunReport:
         policy = {**DEFAULT_POLICY, **(policy or {})}
-        report = SiteRunReport(site_config.site_id, site_config.site_name, mode)
+        report = SiteRunReport(site_config.site_id, site_config.site_name)
         site_name = site_config.site_name
         dry_run = bool(policy.get("dry_run", False))
-        self._log("info", f"{site_name} 开始执行（mode={mode}, dry_run={dry_run}）")
+        self._log("info", f"{site_name} 开始执行（dry_run={dry_run}）")
         cookies = self._cookie_dict(cookie)
         if not cookies:
             report.status = "failed"
@@ -129,17 +128,10 @@ class FarmExecutor:
 
             current_action = "生成计划"
             current_url = ""
-            # 统一使用 plan_run（合并智能交易+临期出售+自动收获）；旧 smart/harvest 兼容映射
-            if mode in ("smart", "harvest", "auto"):
-                plan = plan_run(
-                    snapshot, warehouse, site_config, policy,
-                    crops_override=resolved_crops,
-                )
-            else:
-                report.status = "skipped"
-                report.message = f"不支持的运行模式：{mode}"
-                self._log("error", f"{site_name} 生成计划 异常：{report.message}")
-                return report
+            plan = plan_run(
+                snapshot, warehouse, site_config, policy,
+                crops_override=resolved_crops,
+            )
 
             self._log("debug", f"{site_name} 执行计划 {len(plan)} 步")
             if policy["dry_run"]:
@@ -300,30 +292,43 @@ class FarmExecutor:
             report.bonus = site_config.parse_bonus(html)
             return html
 
-        # 阶段一：只执行初始快照中明确 ripe 的逐地块收获。
-        initial_plan = plan_siqi_run(
+        # 阶段一：OCR 开启时优先使用站点原生一键收获；失败才逐格降级。
+        harvest_plan = plan_siqi_run(
             {"market_prices": report.market_prices, "crop_status": report.crop_status},
             [], site_config, {**policy, "auto_plant": False, "auto_sell": False, "expiry_sale": False},
             crops_override=crops,
         )
-        for action in initial_plan:
-            result, farm_html = self._execute_siqi_action(
-                action, cookies, site_config, farm_html,
-                report.market_prices, crops, report.crop_status, siqi_options,
+        harvest_plan = [action for action in harvest_plan if action.get("op") == "harvest"]
+        batch_result = None
+        if harvest_plan and (siqi_options or {}).get("captcha_ocr", True):
+            batch_result = self._try_siqi_harvest_all(
+                cookies, site_config, harvest_plan, crops, report.crop_status,
             )
-            record(result, farm_html)
-            time.sleep(interval)
+        if batch_result is None:
+            for action in harvest_plan:
+                result, farm_html = self._execute_siqi_action(
+                    action, cookies, site_config, farm_html,
+                    report.market_prices, crops, report.crop_status, siqi_options,
+                )
+                record(result, farm_html)
+                time.sleep(interval)
 
         # 阶段二：收获全部结束后刷新真实地块；存在已解锁空地时只种一次。
         farm_html = refresh()
-        has_empty_plot = any(
+        if batch_result is not None:
+            record(batch_result, farm_html)
+            time.sleep(interval)
+        empty_plot_count = sum(
             isinstance(status, dict)
             and status.get("state") == "empty"
             and status.get("plot_index") is not None
             for status in report.crop_status.values()
         )
-        if policy["auto_plant"] and has_empty_plot:
-            action = {"op": "plant", "crop_key": "all", "source": "field", "quantity": 1}
+        if policy["auto_plant"] and empty_plot_count:
+            action = {
+                "op": "plant", "crop_key": "all", "source": "field",
+                "quantity": empty_plot_count,
+            }
             result, farm_html = self._execute_siqi_action(
                 action, cookies, site_config, farm_html,
                 report.market_prices, crops, report.crop_status, siqi_options,
@@ -371,9 +376,6 @@ class FarmExecutor:
 
         results: List[ActionResult] = []
         actions = (
-            ("auto_captcha_harvest", "harvest_captcha", lambda: self._do_siqi_captcha_harvest(
-                cookies, site_config, bool(options.get("captcha_ocr", True))
-            )),
             ("auto_steal", "steal", lambda: self._do_siqi_steal(cookies, site_config)),
             ("auto_like", "like", lambda: self._do_siqi_like(cookies, site_config)),
             ("auto_buy_slot", "buy_slot", lambda: self._do_siqi_buy_slot(cookies, site_config)),
@@ -396,10 +398,19 @@ class FarmExecutor:
             self._log_action(site_config.site_name, result)
         return results
 
-    def _do_siqi_captcha_harvest(self, cookies, site_config, use_ocr=True) -> ActionResult:
-        if use_ocr:
+    def _try_siqi_harvest_all(
+        self, cookies, site_config, harvest_plan, crops, crop_status
+    ) -> Optional[ActionResult]:
+        """每轮刷新验证码并尝试原生一键收获，三轮失败后返回 None 逐格降级。"""
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
             try:
-                response = self.http_client.get(site_config.get_harvest_captcha_url(), cookies)
+                response = self.http_client.post(
+                    site_config.get_action_submit_url(),
+                    cookies,
+                    data={"action": "get_harvest_all_captcha"},
+                    retryable=False,
+                )
                 response.raise_for_status()
                 captcha = site_config.parse_captcha_info(response.text)
                 imagehash = captcha.get("imagehash")
@@ -408,79 +419,76 @@ class FarmExecutor:
                 )
                 if image_url and not str(image_url).startswith(("http://", "https://")):
                     image_url = f"{site_config.base_url.rstrip('/')}/{str(image_url).lstrip('/')}"
-                recognized = self.ocr_recognizer.recognize(image_url, cookies, self.http_client) if image_url else None
-                if not imagehash:
-                    self._log("debug", f"{site_config.site_name} 验证码收获未取得 imagehash，降级逐格收获")
-                elif not recognized:
-                    self._log("debug", f"{site_config.site_name} OCR 未识别出验证码，降级逐格收获")
-                else:
-                    submitted = self.http_client.post(
-                        site_config.get_harvest_all_submit_url(),
-                        cookies,
-                        data={
-                            "action": "harvest_all",
-                            "imagehash": imagehash,
-                            "imagestring": recognized,
-                        },
-                    )
-                    submitted.raise_for_status()
-                    parsed = site_config.parse_harvest_captcha_result(submitted.text)
-                    if parsed.get("success"):
-                        return ActionResult(
-                            "harvest_captcha", "全部成熟作物", True,
-                            message=parsed.get("message", "验证码收获成功"),
-                        )
+                if not imagehash or not image_url:
                     self._log(
                         "debug",
-                        f"{site_config.site_name} 验证码收获提交失败，降级逐格收获："
-                        f"{parsed.get('message', '未知响应')}",
+                        f"{site_config.site_name} OCR 一键收获第 {attempt}/{max_attempts} 轮"
+                        "未取得完整验证码参数",
                     )
-            except Exception as error:
-                self._log(
-                    "debug",
-                    f"{site_config.site_name} OCR 验证码收获异常，降级逐格收获："
-                    f"{self._error_context(error)}",
-                )
-        return self._do_siqi_plot_harvest(cookies, site_config)
+                    continue
 
-    def _do_siqi_plot_harvest(self, cookies, site_config) -> ActionResult:
-        response = self.http_client.get(site_config.get_warehouse_url(), cookies)
-        response.raise_for_status()
-        plots = site_config.parse_ready_plots(response.text)
-        failures = 0
-        for plot in plots:
-            land_id = plot["land_id"]
-            plot_index = plot["plot_index"]
-            # 思齐收获用 POST plant_game.php + action=harvest
-            try:
-                harvested = self.http_client.post(
-                    site_config.get_farm_url(),
+                recognized = self.ocr_recognizer.recognize(
+                    image_url, cookies, self.http_client
+                )
+                if not recognized:
+                    self._log(
+                        "debug",
+                        f"{site_config.site_name} OCR 一键收获第 {attempt}/{max_attempts} 轮"
+                        "识别失败，刷新验证码重试",
+                    )
+                    continue
+
+                submitted = self.http_client.post(
+                    site_config.get_harvest_all_submit_url(),
                     cookies,
-                    data={"action": "harvest", "land_id": land_id, "plot_index": plot_index},
+                    data={
+                        "action": "harvest_all",
+                        "imagehash": imagehash,
+                        "imagestring": recognized,
+                    },
                     retryable=False,
                 )
-                harvested.raise_for_status()
-                parsed = site_config.parse_harvest_result(harvested.text)
+                submitted.raise_for_status()
+                parsed = site_config.parse_harvest_all_result(submitted.text)
                 if not parsed.get("success"):
-                    failures += 1
                     self._log(
                         "debug",
-                        f"{site_config.site_name} 逐格收获地块 {land_id}-{plot_index} 失败："
-                        f"{parsed.get('message', '未知响应')}",
+                        f"{site_config.site_name} OCR 一键收获第 {attempt}/{max_attempts} 轮"
+                        f"提交失败，刷新验证码重试：{parsed.get('message', '未知响应')}",
                     )
+                    continue
+
+                names: Dict[str, int] = {}
+                for action in harvest_plan:
+                    status = crop_status.get(action.get("crop_key", ""), {})
+                    crop = crops.get(status.get("crop_key", ""), {})
+                    name = str(crop.get("name") or "作物")
+                    names[name] = names.get(name, 0) + 1
+                target = "、".join(
+                    f"{name}×{count}" for name, count in names.items()
+                ) or "全部成熟作物"
+                reward = int(parsed.get("reward") or 0)
+                return ActionResult(
+                    "harvest_all",
+                    target,
+                    True,
+                    profit=reward,
+                    message=str(parsed.get("message") or "一键收获成功"),
+                    quantity=len(harvest_plan),
+                    value_unit="魔力值",
+                )
             except Exception as error:
-                failures += 1
                 self._log(
                     "debug",
-                    f"{site_config.site_name} 逐格收获地块 {land_id}-{plot_index} 异常："
-                    f"{self._error_context(error, site_config.get_harvest_plot_url(land_id, plot_index))}",
+                    f"{site_config.site_name} OCR 一键收获第 {attempt}/{max_attempts} 轮"
+                    f"异常，刷新验证码重试：{self._error_context(error)}",
                 )
-        success = bool(plots) and failures == 0
-        message = (
-            f"逐格收获已尝试 {len(plots)} 格" + (f"，失败 {failures} 格" if failures else "")
-            if plots else "没有成熟作物可逐格收获"
+
+        self._log(
+            "debug",
+            f"{site_config.site_name} OCR 一键收获连续 {max_attempts} 轮失败，降级逐格收获",
         )
-        return ActionResult("harvest_captcha", "成熟作物", success, message=message)
+        return None
 
     @staticmethod
     def _siqi_target_fields(target: Any) -> Dict[str, Any]:
@@ -735,7 +743,7 @@ class FarmExecutor:
             if success and not skipped and operation == "harvest":
                 profit = int(crop.get("base_reward", 0) or 0) * quantity
             elif success and not skipped and operation == "plant":
-                profit = -int(crop.get("cost", 0) or 0)
+                profit = -int(crop.get("cost", 0) or 0) * quantity
                 if profit:
                     message = f"{message} 成本{-profit}".strip()
             elif success and not skipped and operation == "sell":

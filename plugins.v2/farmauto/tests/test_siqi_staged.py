@@ -81,6 +81,34 @@ class Logger:
         pass
 
 
+class BatchHarvestClient(StagedClient):
+    def __init__(self, ocr_success=True):
+        super().__init__()
+        self.ocr_success = ocr_success
+
+    def post(self, url, cookies, data=None, json=None, allow_redirects=True, retryable=False):
+        self.calls.append(("POST", url, data))
+        if data and data.get("action") == "get_harvest_all_captcha":
+            return Response('{"success":true,"captcha":{"imagehash":"hash-1","image_url":"/captcha.php?id=1"}}')
+        if data and data.get("action") == "harvest_all":
+            return Response('{"success":true,"msg":"一键收获成功","reward":40}')
+        if data and data.get("action") == "plant_fill_empty":
+            return Response('{"success":true,"msg":"种植成功"}')
+        if data and data.get("action") == "sell_inventory":
+            return Response('{"success":true,"msg":"出售成功"}')
+        if data and data.get("action") == "harvest":
+            return Response('{"success":true,"msg":"逐格收获成功","reward":20}')
+        raise AssertionError(f"unexpected POST {data}")
+
+
+class BatchOcr:
+    def __init__(self, value):
+        self.value = value
+
+    def recognize(self, _image_url, _cookies, _http_client):
+        return self.value
+
+
 class NoEmptyClient(StagedClient):
     def get(self, url, cookies, retryable=True):
         self.calls.append(("GET", url, None))
@@ -96,7 +124,7 @@ class NoEmptyClient(StagedClient):
 def test_siqi_staged_flow_without_ready_or_empty_plot_skips_harvest_and_plant():
     client = NoEmptyClient()
     report = FarmExecutor(client, Logger()).run_site(
-        "session=value", SiqiConfig(), "smart",
+        "session=value", SiqiConfig(),
         {"request_interval": 0}, {"default_seed_id": 3},
     )
 
@@ -106,14 +134,46 @@ def test_siqi_staged_flow_without_ready_or_empty_plot_skips_harvest_and_plant():
     assert report.message == "无可执行操作"
 
 
-def test_siqi_staged_flow_harvests_all_then_plants_default_seed_once_and_sells_inventory():
+def test_siqi_staged_flow_uses_native_batch_harvest_when_ocr_succeeds():
+    client = BatchHarvestClient()
+    report = FarmExecutor(client, Logger(), ocr_recognizer=BatchOcr("AB12")).run_site(
+        "session=value", SiqiConfig(),
+        {"request_interval": 0, "max_sell_per_run": 2},
+        {"default_seed_id": 3, "captcha_ocr": True},
+    )
+
+    assert [action.action for action in report.actions] == ["harvest_all", "plant", "sell", "sell"]
+    assert report.actions[0].target == "萝卜×2"
+    assert report.actions[0].profit == 40
+    harvest_calls = [call for call in client.calls if call[0] == "POST" and call[2].get("action") in ("harvest_all", "harvest")]
+    assert harvest_calls == [("POST", "https://si-qi.xyz/plant_game.php", {
+        "action": "harvest_all", "imagehash": "hash-1", "imagestring": "AB12",
+    })]
+
+
+def test_siqi_staged_flow_ocr_failure_falls_back_to_each_plot():
+    client = BatchHarvestClient()
+    report = FarmExecutor(client, Logger(), ocr_recognizer=BatchOcr(None)).run_site(
+        "session=value", SiqiConfig(),
+        {"request_interval": 0, "max_sell_per_run": 2},
+        {"default_seed_id": 3, "captcha_ocr": True},
+    )
+
+    assert [action.action for action in report.actions[:2]] == ["harvest", "harvest"]
+    harvest_calls = [call for call in client.calls if call[0] == "POST" and call[2].get("action") in ("harvest_all", "harvest")]
+    assert harvest_calls == [
+        ("POST", "https://si-qi.xyz/plant_game.php", {"action": "harvest", "land_id": 1, "plot_index": 0}),
+        ("POST", "https://si-qi.xyz/plant_game.php", {"action": "harvest", "land_id": 1, "plot_index": 1}),
+    ]
+
+
+def test_siqi_staged_flow_harvests_each_plot_when_ocr_disabled():
     client = StagedClient()
     report = FarmExecutor(client, Logger()).run_site(
         "session=value",
         SiqiConfig(),
-        "smart",
         {"request_interval": 0, "max_sell_per_run": 2},
-        {"default_seed_id": 3},
+        {"default_seed_id": 3, "captcha_ocr": False},
     )
 
     assert [action.action for action in report.actions] == ["harvest", "harvest", "plant", "sell", "sell"]
@@ -124,7 +184,8 @@ def test_siqi_staged_flow_harvests_all_then_plants_default_seed_once_and_sells_i
         ("POST", "https://si-qi.xyz/plant_game.php", {"action": "harvest", "land_id": 1, "plot_index": 1}),
     ]
     assert report.actions[2].target == "玉米"
-    assert report.actions[2].profit == -30
+    assert report.actions[2].quantity == 2
+    assert report.actions[2].profit == -60
     plant_calls = [call for call in client.calls if call[0] == "POST" and call[2].get("action") == "plant_fill_empty"]
     assert plant_calls == [("POST", "https://si-qi.xyz/plant_game.php", {
         "action": "plant_fill_empty", "seed_id": 3,

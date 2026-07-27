@@ -114,11 +114,9 @@ class FakeHttpClient:
 def build_plugin():
     plugin = FarmAuto()
     plugin._enabled = True
-    plugin._mode = "smart"
     plugin._dry_run = False
     plugin._site_ids = ["playlet"]
     plugin._interval_minutes = 60
-    plugin._harvest_interval_minutes = 60
     plugin._stats = plugin._empty_stats()
     plugin._market_prices = {}
     return plugin
@@ -136,7 +134,7 @@ def test_siqi_daily_flags_only_successful_actions():
         ActionResult("like", "目标B", True, message="点赞成功"),
     ])
     site = types.SimpleNamespace(site_id="siqi")
-    report = SiteRunReport("siqi", "思齐", "smart")
+    report = SiteRunReport("siqi", "思齐")
 
     plugin._run_siqi_extras(executor, site, "cookie", {}, report)
 
@@ -159,7 +157,7 @@ def test_siqi_skipped_social_action_does_not_count_or_consume_daily_limit():
         ActionResult("steal", "随机农场", True, skipped=True, message="无可偷菜目标，跳过"),
     ])
     site = types.SimpleNamespace(site_id="siqi")
-    report = SiteRunReport("siqi", "思齐", "smart")
+    report = SiteRunReport("siqi", "思齐")
 
     plugin._run_siqi_extras(executor, site, "cookie", {}, report)
 
@@ -180,7 +178,7 @@ def test_siqi_extras_preserve_existing_failed_report_status():
     ])
     site = types.SimpleNamespace(site_id="siqi")
     report = SiteRunReport(
-        "siqi", "思齐", "smart", status="failed", message="认证失败",
+        "siqi", "思齐", status="failed", message="认证失败",
     )
 
     plugin._run_siqi_extras(executor, site, "cookie", {}, report)
@@ -227,7 +225,7 @@ def test_api_status_returns_global_and_site_summary():
     assert response["success"] is True
     data = response["data"]
     assert data["enabled"] is True
-    assert data["mode"] == "smart"
+    assert "mode" not in data
     assert data["dry_run"] is False
     assert data["selected_site_ids"] == ["playlet"]
     assert data["next_run"] is not None

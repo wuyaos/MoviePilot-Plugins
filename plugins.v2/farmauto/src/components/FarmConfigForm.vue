@@ -5,12 +5,10 @@ const DEFAULT_CONFIG = {
   enabled: false,
   notify: true,
   run_once: false,
-  mode: 'smart',
   site_ids: [],
   cron_mode: 'cron',
   cron: '5 */4 * * *',
   interval_minutes: 61,
-  harvest_interval_minutes: 61,
   expire_threshold_minutes: 120,
   min_profit_rate: 0,
   max_profit_rate: 0,
@@ -23,7 +21,6 @@ const DEFAULT_CONFIG = {
   auto_plant: true,
   auto_sell: true,
   expiry_sale: true,
-  siqi_auto_captcha_harvest: false,
   siqi_captcha_ocr: true,
   siqi_auto_buy_slot: false,
   siqi_auto_steal: false,
@@ -39,11 +36,6 @@ const SITE_ITEMS = [
   { title: '包子', value: 'baozi' },
   { title: '拾刻', value: 'skit' },
   { title: '思齐', value: 'siqi' },
-]
-
-const MODE_ITEMS = [
-  { title: '智能交易', value: 'smart' },
-  { title: '自动收获', value: 'harvest' },
 ]
 
 const NUMERIC_OVERRIDE_FIELDS = [
@@ -128,11 +120,6 @@ function seedTitle(seed) {
   return `${emoji} ${seed.name || '未知种子'}${cost}`
 }
 
-const siteModeItems = computed(() => [
-  { title: `继承全局（${config.mode === 'harvest' ? '自动收获' : '智能交易'}）`, value: 'inherit' },
-  ...MODE_ITEMS,
-])
-
 const OVERRIDE_UNITS = {
   min_profit_rate: '',
   max_profit_rate: '',
@@ -164,7 +151,6 @@ function automationItems(field) {
 function emptySitePolicy(enabled = false) {
   return {
     enabled,
-    mode: 'inherit',
     min_profit_rate: null,
     max_profit_rate: null,
     expire_threshold_minutes: null,
@@ -199,7 +185,6 @@ function policyFromOverride(siteId, overrides, selectedSiteIds) {
     : {}
   const policy = emptySitePolicy(selectedSiteIds.includes(siteId) || source.enabled === true)
 
-  if (source.mode === 'smart' || source.mode === 'harvest') policy.mode = source.mode
   for (const field of NUMERIC_OVERRIDE_FIELDS) {
     if (typeof source[field] === 'number' && Number.isFinite(source[field])) {
       policy[field] = source[field]
@@ -220,7 +205,6 @@ function buildOverrides() {
     if (!policy) continue
 
     const override = {}
-    if (policy.mode === 'smart' || policy.mode === 'harvest') override.mode = policy.mode
     for (const field of NUMERIC_OVERRIDE_FIELDS) {
       if (typeof policy[field] === 'number' && Number.isFinite(policy[field])) {
         override[field] = policy[field]
@@ -258,10 +242,6 @@ function effectiveSiteValue(siteId, field) {
   return value === null || value === undefined || value === '' || value === 'inherit'
     ? config[field]
     : value
-}
-
-function modeLabel(siteId) {
-  return effectiveSiteValue(siteId, 'mode') === 'harvest' ? '自动收获' : '智能交易'
 }
 
 function profitSummary(siteId) {
@@ -384,17 +364,6 @@ function saveConfig() {
                     <v-switch v-model="config.run_once" label="立即运行一次" color="primary" density="compact" hide-details />
                   </v-col>
                   <v-col cols="12" sm="4">
-                    <v-select
-                      v-model="config.mode"
-                      :items="MODE_ITEMS"
-                      label="运行模式"
-                      density="compact"
-                      variant="outlined"
-                      hint="smart=全自动交易，harvest=只收获+补种+临期出售，可再用下方开关微调"
-                      persistent-hint
-                    />
-                  </v-col>
-                  <v-col cols="12" sm="4">
                     <v-switch v-model="config.use_proxy" label="使用 MP 系统代理" color="info" density="compact" hide-details />
                   </v-col>
                   <v-col cols="12" sm="4">
@@ -444,10 +413,7 @@ function saveConfig() {
                     <v-text-field v-model="config.cron" label="Cron 表达式（5位）" placeholder="5 */4 * * *" hint="如 5 */4 * * *（每4小时第5分钟）" persistent-hint density="compact" variant="outlined" />
                   </v-col>
                   <v-col v-if="config.cron_mode !== 'cron'" cols="12" sm="6" md="3">
-                    <v-text-field v-model.number="config.interval_minutes" label="智能交易间隔（分钟）" type="number" min="1" density="compact" variant="outlined" />
-                  </v-col>
-                  <v-col v-if="config.cron_mode !== 'cron'" cols="12" sm="6" md="3">
-                    <v-text-field v-model.number="config.harvest_interval_minutes" label="自动收获间隔（分钟）" type="number" min="5" density="compact" variant="outlined" />
+                    <v-text-field v-model.number="config.interval_minutes" label="运行间隔（分钟）" type="number" min="1" density="compact" variant="outlined" />
                   </v-col>
                   <v-col v-if="config.cron_mode !== 'cron'" cols="12" sm="6" md="3">
                     <v-text-field v-model.number="config.request_interval" label="请求间隔（秒）" type="number" min="0" step="0.1" density="compact" variant="outlined" />
@@ -506,15 +472,6 @@ function saveConfig() {
                 </v-alert>
 
                 <v-row>
-                  <v-col cols="12" md="6">
-                    <v-select
-                      v-model="sitePolicies[site.value].mode"
-                      :items="siteModeItems"
-                      label="运行模式"
-                      density="compact"
-                      variant="outlined"
-                    />
-                  </v-col>
                   <v-col cols="12" md="6">
                     <v-text-field
                       v-model.number="sitePolicies[site.value].min_profit_rate"
@@ -642,7 +599,6 @@ function saveConfig() {
                 <div class="d-flex flex-wrap align-center ga-2 mt-2">
                   <span class="text-body-2 text-medium-emphasis">生效摘要</span>
                   <v-chip-group column class="ga-2">
-                    <v-chip size="small" variant="tonal" color="primary">模式：{{ modeLabel(site.value) }}</v-chip>
                     <v-chip size="small" variant="tonal" color="success">利润：{{ profitSummary(site.value) }}</v-chip>
                     <v-chip size="small" variant="tonal" color="blue">最大出售：{{ effectiveSiteValue(site.value, 'max_sell_per_run') }}</v-chip>
                     <v-chip size="small" variant="tonal" color="info">代理：{{ effectiveSiteValue(site.value, 'use_proxy') ? '启用' : '禁用' }}</v-chip>
@@ -665,14 +621,11 @@ function saveConfig() {
               </v-card-title>
               <v-card-text class="pa-4">
                 <v-alert type="warning" variant="tonal" class="mb-4 pa-3 text-body-2">
-                  验证码收获、偷菜、点赞和扩地属于高风险行为；除 OCR 外默认关闭，开启即表示自行承担账号风控风险。
+                  自动收获开启时，OCR 将优先调用站点原生一键收获；识别失败自动逐格收获。偷菜、点赞和扩地属于高风险行为。
                 </v-alert>
                 <v-row>
                   <v-col cols="12" sm="6" md="4">
-                    <v-switch v-model="config.siqi_auto_captcha_harvest" label="验证码自动收获" color="primary" density="compact" hide-details />
-                  </v-col>
-                  <v-col cols="12" sm="6" md="4">
-                    <v-switch v-model="config.siqi_captcha_ocr" label="OCR 优先识别" color="primary" density="compact" hide-details />
+                    <v-switch v-model="config.siqi_captcha_ocr" label="OCR 一键收获" color="primary" density="compact" hide-details />
                   </v-col>
                   <v-col cols="12" sm="6" md="4">
                     <v-switch v-model="config.siqi_auto_buy_slot" label="自动扩地" color="primary" density="compact" hide-details />

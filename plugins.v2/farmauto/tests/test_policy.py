@@ -6,7 +6,7 @@ if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
 
 from core.executor import FarmExecutor
-from core.strategy import effective_site_mode, effective_site_policy, site_is_enabled
+from core.strategy import effective_site_policy, site_is_enabled
 from sites.base import FarmSiteConfig
 
 
@@ -64,21 +64,22 @@ def enabled_site_ids(site_ids, overrides):
     return [site_id for site_id in site_ids if site_is_enabled(overrides, site_id)]
 
 
-def test_effective_mode_and_enabled_overrides():
+def test_enabled_override_and_effective_policy():
     overrides = {
-        "playlet": {"mode": "harvest"},
+        "playlet": {"min_profit_rate": 0.2},
         "skit": {"enabled": False},
     }
 
-    assert effective_site_mode("smart", overrides, "playlet") == "harvest"
-    assert effective_site_mode("smart", overrides, "novahd") == "smart"
-    assert "mode" not in effective_site_policy({}, overrides, "playlet")
+    assert effective_site_policy({}, overrides, "playlet")["min_profit_rate"] == 0.2
+    assert "mode" not in effective_site_policy(
+        {}, {"playlet": {"mode": "harvest"}}, "playlet"
+    )
     assert not site_is_enabled(overrides, "skit")
     assert site_is_enabled(overrides, "playlet")
     assert enabled_site_ids(["playlet", "skit"], overrides) == ["playlet"]
 
 
-def test_min_profit_rate_override_is_used_by_smart_plan():
+def test_min_profit_rate_override_is_used_by_unified_plan():
     global_policy = {
         "min_profit_rate": 0.0,
         "max_sell_per_run": 2,
@@ -89,7 +90,7 @@ def test_min_profit_rate_override_is_used_by_smart_plan():
     policy = effective_site_policy(global_policy, overrides, "playlet")
 
     report = FarmExecutor(FakeHttpClient(), Logger()).run_site(
-        "session=value", FakeSiteConfig(), "smart", policy
+        "session=value", FakeSiteConfig(), policy
     )
 
     assert policy["min_profit_rate"] == 0.2

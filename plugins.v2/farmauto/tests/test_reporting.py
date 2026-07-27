@@ -25,7 +25,6 @@ def _run_report() -> RunReport:
             SiteRunReport(
                 site_id="playlet",
                 site_name="PlayLet",
-                mode="smart",
                 actions=[
                     ActionResult("harvest", "小麦", True),
                     ActionResult("harvest", "小麦", True),
@@ -41,7 +40,6 @@ def _run_report() -> RunReport:
             SiteRunReport(
                 site_id="siqi",
                 site_name="思齐",
-                mode="smart",
                 actions=[ActionResult("like", "好友", True)],
                 total_profit=0,
                 trades_count=1,
@@ -124,7 +122,6 @@ def test_build_price_sections_uses_crop_names_and_trends():
     report = SiteRunReport(
         site_id="playlet",
         site_name="PlayLet",
-        mode="smart",
         market_prices={"crop_1": 880, "unknown": 7},
     )
     trends = PriceTrendStore()

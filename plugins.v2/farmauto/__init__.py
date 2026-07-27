@@ -22,16 +22,16 @@ from .core.reporting import (
     build_stat_cards,
     format_notification,
 )
-from .core.strategy import effective_site_mode, effective_site_policy, site_is_enabled
+from .core.strategy import effective_site_policy, site_is_enabled
 from .core.trend import PriceTrendStore
 from .sites import SITE_CONFIGS, SITE_OPTIONS, get_site_config
 
 
 class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
-    plugin_desc = "多站点农场自动化，支持智能交易与自动收获"
+    plugin_desc = "多站点农场统一自动运营，支持独立收获、补种与出售策略"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
-    plugin_version = "3.1.3"
+    plugin_version = "3.2.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "farmauto_"
@@ -45,12 +45,10 @@ class FarmAuto(_PluginBase):
     def __init__(self):
         super().__init__()
         self._raw_config: Dict[str, Any] = {}
-        self._mode = "smart"
         self._site_ids: List[str] = []
         self._cron_mode = "cron"
         self._cron = "5 */4 * * *"
         self._interval_minutes = 61
-        self._harvest_interval_minutes = 61
         self._expire_threshold_minutes = 120
         self._min_profit_rate = 0.0
         self._max_profit_rate = 0.0
@@ -63,8 +61,7 @@ class FarmAuto(_PluginBase):
         self._auto_plant = True
         self._auto_sell = True
         self._expiry_sale = True
-        self._siqi_options: Dict[str, bool] = {
-            "auto_captcha_harvest": False,
+        self._siqi_options: Dict[str, Any] = {
             "auto_steal": False,
             "auto_like": False,
             "auto_buy_slot": False,
@@ -103,12 +100,18 @@ class FarmAuto(_PluginBase):
     def init_plugin(self, config: Optional[dict] = None):
         # 重建运行锁：reload 时旧 daemon 线程可能持有残留锁
         type(self)._run_lock = threading.Lock()
-        config = config or {}
-        self._raw_config = dict(config)
+        config = dict(config or {})
+        obsolete_keys = {
+            "mode", "harvest_interval_minutes", "siqi_auto_captcha_harvest",
+        }
+        self._raw_config = {
+            key: value for key, value in config.items() if key not in obsolete_keys
+        }
+        config_cleaned = self._raw_config != config
+        config = self._raw_config
         self._enabled = bool(config.get("enabled", False))
         self._notify = bool(config.get("notify", True))
         run_once = bool(config.get("run_once", False))
-        self._mode = config.get("mode") if config.get("mode") in ("smart", "harvest") else "smart"
         site_ids = config.get("site_ids", [])
         if isinstance(site_ids, list):
             self._site_ids = [str(site_id) for site_id in site_ids if str(site_id) in SITE_CONFIGS]
@@ -119,9 +122,6 @@ class FarmAuto(_PluginBase):
         self._interval_minutes = self._to_int(config.get("interval_minutes"), 61, 1)
         self._cron_mode = str(config.get("cron_mode") or "cron")
         self._cron = str(config.get("cron") or "5 */4 * * *")
-        self._harvest_interval_minutes = self._to_int(
-            config.get("harvest_interval_minutes"), 61, 5
-        )
         self._expire_threshold_minutes = self._to_int(
             config.get("expire_threshold_minutes"), 120, 10
         )
@@ -137,7 +137,6 @@ class FarmAuto(_PluginBase):
         self._auto_sell = bool(config.get("auto_sell", True))
         self._expiry_sale = bool(config.get("expiry_sale", True))
         self._siqi_options = {
-            "auto_captcha_harvest": bool(config.get("siqi_auto_captcha_harvest", False)),
             "auto_steal": bool(config.get("siqi_auto_steal", False)),
             "auto_like": bool(config.get("siqi_auto_like", False)),
             "auto_buy_slot": bool(config.get("siqi_auto_buy_slot", False)),
@@ -149,10 +148,17 @@ class FarmAuto(_PluginBase):
             if not isinstance(overrides, dict):
                 raise ValueError("顶层必须是 JSON 对象")
             self._site_overrides = {
-                str(site_id): override
+                str(site_id): {
+                    key: value for key, value in override.items() if key != "mode"
+                }
                 for site_id, override in overrides.items()
                 if isinstance(override, dict)
             }
+            if self._site_overrides != overrides:
+                self._raw_config["site_overrides"] = json.dumps(
+                    self._site_overrides, ensure_ascii=False, separators=(",", ":")
+                )
+                config_cleaned = True
         except (TypeError, ValueError, json.JSONDecodeError) as error:
             logger.warning(f"[FarmAuto] 单站策略覆盖解析失败，已忽略：{error}")
             self._site_overrides = {}
@@ -164,6 +170,8 @@ class FarmAuto(_PluginBase):
         stored_trends = config.get("trends", self.get_data("trends") or {})
         self._trend_store = PriceTrendStore.from_dict(stored_trends)
 
+        if config_cleaned:
+            self.update_config(self._raw_config)
         if run_once:
             self._raw_config["run_once"] = False
             self.update_config(self._raw_config)
@@ -273,9 +281,6 @@ class FarmAuto(_PluginBase):
         }
         return effective_site_policy(global_policy, self._site_overrides, site_id)
 
-    def get_effective_mode(self, site_id: str) -> str:
-        return effective_site_mode(self._mode, self._site_overrides, site_id)
-
     def is_site_enabled(self, site_id: str) -> bool:
         return site_is_enabled(self._site_overrides, site_id)
 
@@ -327,7 +332,6 @@ class FarmAuto(_PluginBase):
         return {
             "site_id": report.site_id,
             "site_name": report.site_name,
-            "mode": report.mode,
             "market_prices": report.market_prices,
             "bonus": getattr(report, "bonus", None),
             "crop_status": report.crop_status,
@@ -344,9 +348,7 @@ class FarmAuto(_PluginBase):
             logger.warning("[FarmAuto] 任务正在运行，跳过本次触发")
             return None
         started_at = time.time()
-        logger.info(
-            f"[FarmAuto] 开始多站任务（{len(self._site_ids)} 站, mode={self._mode}）"
-        )
+        logger.info(f"[FarmAuto] 开始多站任务（{len(self._site_ids)} 站）")
         try:
             per_site_clients = any(
                 isinstance(override, dict) and "use_proxy" in override
@@ -370,12 +372,11 @@ class FarmAuto(_PluginBase):
                 if not site_config:
                     continue
                 policy = self.get_effective_policy(site_id)
-                mode = self.get_effective_mode(site_id)
                 executor = shared_executor or FarmExecutor(
                     self._build_http_client(policy), logger, self._trend_store
                 )
                 cookie = self._get_site_cookie(site_config)
-                site_report = executor.run_site(cookie, site_config, mode, policy, self._siqi_options)
+                site_report = executor.run_site(cookie, site_config, policy, self._siqi_options)
                 self._run_siqi_extras(executor, site_config, cookie, policy, site_report)
                 site_reports.append(site_report)
                 self._market_prices[site_id] = dict(site_report.market_prices)
@@ -528,15 +529,10 @@ class FarmAuto(_PluginBase):
             except Exception as err:
                 logger.error(f"[FarmAuto] cron 定时任务配置错误：{err}")
                 return []
-        interval = (
-            self._harvest_interval_minutes
-            if self._mode == "harvest"
-            else self._interval_minutes
-        )
         return [{
             "id": "FarmAuto",
             "name": "农场自动化定时任务",
-            "trigger": IntervalTrigger(minutes=interval),
+            "trigger": IntervalTrigger(minutes=self._interval_minutes),
             "func": self.run_farm_task,
             "kwargs": {},
         }]
@@ -731,7 +727,6 @@ class FarmAuto(_PluginBase):
             "success": True,
             "data": {
                 "enabled": bool(self._enabled),
-                "mode": self._mode,
                 "dry_run": bool(self._dry_run),
                 "selected_site_ids": list(self._site_ids),
                 "next_run": self._next_run_text(),
@@ -1235,7 +1230,6 @@ class FarmAuto(_PluginBase):
             site_reports.append(SiteRunReport(
                 site_id=item.get("site_id", ""),
                 site_name=item.get("site_name", item.get("site_id", "")),
-                mode=item.get("mode", self._mode),
                 market_prices=item.get("market_prices", {}),
                 total_profit=int(item.get("total_profit", 0)),
                 trades_count=int(item.get("trades_count", 0)),
@@ -1248,8 +1242,7 @@ class FarmAuto(_PluginBase):
                 site_reports.append(SiteRunReport(
                     site_id=site_id,
                     site_name=config.site_name if config else site_id,
-                    mode=self._mode,
-                    market_prices=prices,
+                        market_prices=prices,
                 ))
         return RunReport(
             started_at=float(last_result.get("started_at", 0)),
@@ -1340,11 +1333,11 @@ class FarmAuto(_PluginBase):
             "content": [
                 {"component": "VAlert", "props": {
                     "type": "warning", "variant": "tonal", "class": "mb-4",
-                    "text": "思齐的验证码收获、偷菜、点赞和扩地属于高风险行为，默认全部关闭；开启即表示自行承担账号风控风险。OCR 不可用时验证码收获会安全降级为逐格收获。",
+                    "text": "思齐自动收获由全局开关控制；OCR 开启时优先调用原生一键收获，失败自动逐格降级。偷菜、点赞和扩地属于高风险行为，默认关闭。",
                 }},
                 {"component": "VAlert", "props": {
                     "type": "info", "variant": "tonal", "class": "mb-4",
-                    "text": "支持 PlayLet、NovaHD、好学、包子、拾刻和思齐；智能交易会按最低与最高利润率组成的盈利区间执行仓库出售、收获与补种，超过上限时保留囤货待涨；自动收获模式侧重收获和临期处理。可在表单末尾用 JSON 为单个站点覆盖策略、模式或启用状态。",
+                    "text": "支持 PlayLet、NovaHD、好学、包子、拾刻和思齐；自动收获、补种、盈利出售与临期出售由独立开关控制。可在表单末尾用 JSON 为单个站点覆盖策略或启用状态。",
                 }},
                 {"component": "VRow", "content": [
                     col(4, switch("enabled", "启用插件")),
@@ -1352,14 +1345,7 @@ class FarmAuto(_PluginBase):
                     col(4, switch("run_once", "立即运行一次")),
                 ]},
                 {"component": "VRow", "content": [
-                    col(4, {"component": "VSelect", "props": {
-                        "model": "mode", "label": "运行模式",
-                        "items": [
-                            {"title": "智能交易", "value": "smart"},
-                            {"title": "自动收获", "value": "harvest"},
-                        ],
-                    }}),
-                    col(8, {"component": "VSelect", "props": {
+                    col(12, {"component": "VSelect", "props": {
                         "model": "site_ids", "label": "站点", "items": SITE_OPTIONS,
                         "multiple": True, "chips": True,
                     }}),
@@ -1380,9 +1366,8 @@ class FarmAuto(_PluginBase):
                     }}),
                 ]},
                 {"component": "VRow", "content": [
-                    col(4, number("interval_minutes", "智能交易间隔（分钟）", 1)),
-                    col(4, number("harvest_interval_minutes", "自动收获间隔（分钟）", 5)),
-                    col(4, number("expire_threshold_minutes", "临期阈值（分钟）", 10)),
+                    col(6, number("interval_minutes", "运行间隔（分钟）", 1)),
+                    col(6, number("expire_threshold_minutes", "临期阈值（分钟）", 10)),
                 ]},
                 {"component": "VRow", "content": [
                     col(3, number("min_profit_rate", "最低利润率", 0, "0 表示售价高于成本即售；0.1 表示 10%")),
@@ -1403,12 +1388,11 @@ class FarmAuto(_PluginBase):
                 ]},
                 {"component": "VAlert", "props": {
                     "type": "warning", "variant": "tonal", "class": "mt-2 mb-2",
-                    "text": "思齐专用执行开关（仅选择思齐站点时生效，除 OCR 优先外默认全关）",
+                    "text": "思齐专用执行开关（OCR 开启时优先一键收获，失败自动逐格降级）",
                 }},
                 {"component": "VRow", "content": [
-                    col(4, switch("siqi_auto_captcha_harvest", "思齐：验证码收获")),
-                    col(4, switch("siqi_captcha_ocr", "思齐：OCR 优先")),
-                    col(4, switch("siqi_auto_buy_slot", "思齐：自动扩地")),
+                    col(6, switch("siqi_captcha_ocr", "思齐：OCR 一键收获")),
+                    col(6, switch("siqi_auto_buy_slot", "思齐：自动扩地")),
                 ]},
                 {"component": "VRow", "content": [
                     col(6, switch("siqi_auto_steal", "思齐：每日偷菜")),
@@ -1418,7 +1402,7 @@ class FarmAuto(_PluginBase):
                     col(12, {"component": "VTextarea", "props": {
                         "model": "site_overrides",
                         "label": "单站策略覆盖（JSON，可选）",
-                        "hint": "示例：{\"playlet\":{\"min_profit_rate\":0.1,\"max_profit_rate\":0.5,\"max_sell_per_run\":20}}；支持 min_profit_rate/max_profit_rate/max_sell_per_run/expire_threshold_minutes/request_interval/use_proxy/dry_run/auto_harvest/auto_plant/auto_sell/expiry_sale/mode/enabled",
+                        "hint": "示例：{\"playlet\":{\"min_profit_rate\":0.1,\"max_profit_rate\":0.5,\"max_sell_per_run\":20}}；支持 min_profit_rate/max_profit_rate/max_sell_per_run/expire_threshold_minutes/request_interval/use_proxy/dry_run/auto_harvest/auto_plant/auto_sell/expiry_sale/enabled",
                         "persistent-hint": True,
                         "rows": 4,
                     }}),
@@ -1428,12 +1412,10 @@ class FarmAuto(_PluginBase):
             "enabled": False,
             "notify": True,
             "run_once": False,
-            "mode": "smart",
             "site_ids": [],
             "cron_mode": "cron",
             "cron": "5 */4 * * *",
             "interval_minutes": 61,
-            "harvest_interval_minutes": 61,
             "expire_threshold_minutes": 120,
             "min_profit_rate": 0.0,
             "max_profit_rate": 0.0,
@@ -1446,7 +1428,6 @@ class FarmAuto(_PluginBase):
             "auto_plant": True,
             "auto_sell": True,
             "expiry_sale": True,
-            "siqi_auto_captcha_harvest": False,
             "siqi_auto_steal": False,
             "siqi_auto_like": False,
             "siqi_auto_buy_slot": False,

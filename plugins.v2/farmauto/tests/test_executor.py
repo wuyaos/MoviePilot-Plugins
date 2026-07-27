@@ -163,20 +163,18 @@ class BatchSellHttpClient(FakeHttpClient):
         return FakeResponse("一键出售完成: 成功 2 个, 失败 0 个")
 
 
-def run_multi_crop_smart(client, site_config, dry_run=False):
+def run_multi_crop(client, site_config, dry_run=False):
     return FarmExecutor(client, Logger()).run_site(
         "session=value",
         site_config,
-        "smart",
         {"max_sell_per_run": 2, "request_interval": 0, "dry_run": dry_run, "auto_plant": False},
     )
 
 
-def run_smart(client, dry_run=False):
+def run_unified(client, dry_run=False):
     return FarmExecutor(client, Logger()).run_site(
         "session=value",
         FakeSiteConfig(),
-        "smart",
         {
             "max_sell_per_run": 2,
             "request_interval": 0,
@@ -185,8 +183,8 @@ def run_smart(client, dry_run=False):
     )
 
 
-def test_smart_executes_harvest_plant_and_warehouse_sell():
-    report = run_smart(FakeHttpClient())
+def test_unified_flow_executes_harvest_plant_and_warehouse_sell():
+    report = run_unified(FakeHttpClient())
 
     # 通用流程：收获→补种→仅出售真实仓库库存，不再生成 field sell。
     assert [action.action for action in report.actions] == ["harvest", "plant", "sell"]
@@ -198,7 +196,7 @@ def test_smart_executes_harvest_plant_and_warehouse_sell():
 
 def test_dry_run_builds_plan_without_action_requests():
     client = FakeHttpClient()
-    report = run_smart(client, dry_run=True)
+    report = run_unified(client, dry_run=True)
 
     assert [action.action for action in report.actions] == ["harvest", "plant", "sell"]
     assert report.trades_count == 0
@@ -212,7 +210,6 @@ def test_executor_uses_resolved_dynamic_crops():
     report = FarmExecutor(client, Logger()).run_site(
         "session=value",
         DynamicCropSiteConfig(),
-        "smart",
         {"max_sell_per_run": 2, "request_interval": 0},
     )
 
@@ -223,7 +220,7 @@ def test_executor_uses_resolved_dynamic_crops():
 
 
 def test_single_action_exception_isolated_and_later_actions_continue():
-    report = run_smart(FakeHttpClient(fail_token="action=plant"))
+    report = run_unified(FakeHttpClient(fail_token="action=plant"))
 
     # plant 失败不影响后续真实仓库出售。
     assert [action.action for action in report.actions] == ["harvest", "plant", "sell"]
@@ -235,7 +232,7 @@ def test_single_action_exception_isolated_and_later_actions_continue():
 
 
 def test_harvest_failure_blocks_plant_and_field_sell_for_crop():
-    report = run_smart(FakeHttpClient(fail_token="action=harvest"))
+    report = run_unified(FakeHttpClient(fail_token="action=harvest"))
 
     # plan_run：harvest 失败 → blocked_crops 跳过该 crop 的 plant/field_sell，仅剩仓库 sell
     assert [action.action for action in report.actions] == ["harvest", "sell"]
@@ -248,7 +245,7 @@ def test_harvest_failure_blocks_plant_and_field_sell_for_crop():
 
 def test_batch_sell_posts_once_and_accumulates_each_item_profit():
     client = BatchSellHttpClient()
-    report = run_multi_crop_smart(client, BatchSellSiteConfig())
+    report = run_multi_crop(client, BatchSellSiteConfig())
 
     assert len(client.posts) == 1
     assert client.posts[0]["data"] == {
@@ -269,7 +266,7 @@ def test_batch_sell_does_not_duplicate_a_single_warehouse_key_by_quantity():
         "expire_minutes": 60, "sell_key": "warehouse_crop_1", "crop_key": "crop_1",
     }]
 
-    report = run_multi_crop_smart(client, site_config)
+    report = run_multi_crop(client, site_config)
 
     assert client.posts[0]["data"] == {"batch_keys[]": ["warehouse_crop_1"]}
     assert len(report.actions) == 1
@@ -279,7 +276,7 @@ def test_batch_sell_does_not_duplicate_a_single_warehouse_key_by_quantity():
 
 def test_batch_sell_failure_is_isolated_and_marks_the_batch_failed():
     client = BatchSellHttpClient(post_error=RuntimeError("batch action failed"))
-    report = run_multi_crop_smart(client, BatchSellSiteConfig())
+    report = run_multi_crop(client, BatchSellSiteConfig())
 
     assert len(client.posts) == 1
     assert [action.success for action in report.actions] == [False, False]
@@ -289,7 +286,7 @@ def test_batch_sell_failure_is_isolated_and_marks_the_batch_failed():
 
 def test_site_without_batch_sell_keeps_individual_get_requests():
     client = FakeHttpClient()
-    report = run_multi_crop_smart(client, MultiCropSiteConfig())
+    report = run_multi_crop(client, MultiCropSiteConfig())
 
     sell_urls = [url for url in client.urls if "action=sell" in url]
     assert len(sell_urls) == 2
@@ -299,7 +296,7 @@ def test_site_without_batch_sell_keeps_individual_get_requests():
 
 def test_batch_sell_dry_run_does_not_post_or_send_sell_get_requests():
     client = BatchSellHttpClient()
-    report = run_multi_crop_smart(client, BatchSellSiteConfig(), dry_run=True)
+    report = run_multi_crop(client, BatchSellSiteConfig(), dry_run=True)
 
     assert len(report.actions) == 2
     assert not client.posts
@@ -312,7 +309,6 @@ def test_market_prices_are_recorded_in_trend_store():
     FarmExecutor(FakeHttpClient(), Logger(), trend_store).run_site(
         "session=value",
         FakeSiteConfig(),
-        "smart",
         {"request_interval": 0, "dry_run": True},
     )
 
@@ -340,7 +336,6 @@ def test_run_site_records_bonus_and_balance_after():
     report = executor.run_site(
         "session=value",
         FakeSiteConfig(),
-        "smart",
         {"request_interval": 0, "dry_run": True},
     )
     assert report.bonus == 888

@@ -22,11 +22,6 @@ def effective_site_policy(global_policy: dict, site_overrides: dict, site_id: st
     return {key: value for key, value in policy.items() if key not in ("enabled", "mode")}
 
 
-def effective_site_mode(default_mode: str, site_overrides: dict, site_id: str) -> str:
-    override = site_overrides.get(site_id, {}) if isinstance(site_overrides, dict) else {}
-    return override.get("mode", default_mode) if isinstance(override, dict) else default_mode
-
-
 def site_is_enabled(site_overrides: dict, site_id: str) -> bool:
     override = site_overrides.get(site_id, {}) if isinstance(site_overrides, dict) else {}
     return not (isinstance(override, dict) and override.get("enabled") is False)
@@ -67,93 +62,6 @@ def _warehouse_model(item: Any) -> WarehouseItem:
         sell_key=item.get("sell_key", ""),
         crop_key=item.get("crop_key"),
     )
-
-
-def plan_smart(
-    snapshot, warehouse, site_config, policy, crops_override: Optional[Dict] = None
-) -> List[dict]:
-    policy = _policy(policy)
-    plan: List[dict] = []
-    remaining_sales = int(policy["max_sell_per_run"])
-    market_prices = snapshot.get("market_prices", {})
-    crop_status = snapshot.get("crop_status", {})
-    warehouse_items = [_warehouse_model(item) for item in warehouse]
-    crops = crops_override if crops_override is not None else site_config.crops
-
-    for crop_key, crop in crops.items():
-        price = int(market_prices.get(crop_key, 0))
-        # 收获不受 should_sell 限制（收获免费，即使亏损也该收获成熟作物）
-        can_harvest = crop_status.get(crop_key, {}).get("can_harvest") and policy["auto_harvest"]
-        should_sell_flag = should_sell(crop, price, policy)
-        if not should_sell_flag and not can_harvest:
-            continue
-        if should_sell_flag and policy["auto_sell"]:
-            for item in warehouse_items:
-                if remaining_sales <= 0 or item.crop_key != crop_key or not item.sell_key:
-                    continue
-                quantity = min(item.quantity, remaining_sales)
-                if quantity > 0:
-                    plan.append({
-                        "op": "sell", "crop_key": crop_key, "source": "warehouse",
-                        "quantity": quantity, "sell_key": item.sell_key,
-                    })
-                    remaining_sales -= quantity
-        if can_harvest:
-            plan.append({"op": "harvest", "crop_key": crop_key, "source": "field", "quantity": 1})
-            if policy["auto_plant"]:
-                plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
-            # sell_inventory 类站点(如思齐)收获后作物进背包, field sell 时背包还没货, 跳过
-            if should_sell_flag and policy["auto_sell"] and remaining_sales > 0 and not site_config.supports_sell_inventory():
-                plan.append({"op": "sell", "crop_key": crop_key, "source": "field", "quantity": 1})
-                remaining_sales -= 1
-    return plan
-
-
-def plan_harvest(
-    snapshot, warehouse, site_config, policy, crops_override: Optional[Dict] = None
-) -> List[dict]:
-    policy = _policy(policy)
-    plan: List[dict] = []
-    crop_status = snapshot.get("crop_status", {})
-    market_prices = snapshot.get("market_prices", {})
-    crops = crops_override if crops_override is not None else site_config.crops
-
-    if policy["auto_harvest"]:
-        if site_config.supports("harvest_all"):
-            plan.append({"op": "harvest_all", "crop_key": "all", "source": "field", "quantity": 1})
-        else:
-            for crop_key, status in crop_status.items():
-                if status.get("can_harvest") and crop_key in crops:
-                    plan.append({"op": "harvest", "crop_key": crop_key, "source": "field", "quantity": 1})
-
-    if policy["auto_plant"]:
-        for crop_key in crops:
-            plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
-
-    threshold = int(policy["expire_threshold_minutes"])
-    remaining_sales = int(policy["max_sell_per_run"])
-    warehouse_items = [_warehouse_model(item) for item in warehouse]
-    warehouse_items.sort(key=lambda item: item.expire_minutes if item.expire_minutes is not None else 10**12)
-    for item in warehouse_items:
-        crop = crops.get(item.crop_key or "")
-        if not crop or not item.sell_key or remaining_sales <= 0:
-            continue
-        price = int(market_prices.get(item.crop_key, 0))
-        profit_sale = policy["auto_sell"] and should_sell(crop, price, policy)
-        expiry_sale = (
-            policy["expiry_sale"]
-            and site_config.supports("expiry_sale")
-            and is_expiry(item, threshold)
-        )
-        if not (profit_sale or expiry_sale):
-            continue
-        quantity = min(item.quantity, remaining_sales)
-        plan.append({
-            "op": "sell", "crop_key": item.crop_key, "source": "warehouse",
-            "quantity": quantity, "sell_key": item.sell_key,
-        })
-        remaining_sales -= quantity
-    return plan
 
 
 def plan_warehouse_sales(
@@ -217,8 +125,8 @@ def plan_generic_run(
             status = crop_status.get(crop_key, {})
             if not isinstance(status, dict):
                 continue
-            # 本轮收获后对应位置会变为空；初始明确 empty 的位置也可种植。
-            if crop_key in harvestable or status.get("state") == "empty":
+            # 仅在本轮确实会收获，或初始状态明确为空时补种。
+            if (policy["auto_harvest"] and crop_key in harvestable) or status.get("state") == "empty":
                 plan.append({"op": "plant", "crop_key": crop_key, "source": "field", "quantity": 1})
 
     plan.extend(plan_warehouse_sales(warehouse, market_prices, crops, site_config, policy))

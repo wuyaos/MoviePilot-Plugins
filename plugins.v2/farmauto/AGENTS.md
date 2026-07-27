@@ -13,7 +13,7 @@ MoviePilot V2「农场自动化 Pro」多站点插件。
 - `__init__.py`：MoviePilot V2 生命周期入口，装配配置、调度、事件、API、统计和页面
 - `core/models.py`：作物、仓库、动作和运行报告 dataclass
 - `core/http_client.py`：统一 Session、限速、重试/退避、认证异常和代理回退
-- `core/strategy.py`：无网络与全局状态的智能交易/收获计划
+- `core/strategy.py`：无网络与全局状态的统一自动运营计划
 - `core/executor.py`：单站页面快照、仓库读取与动作顺序执行
 - `core/reporting.py`：通知文本与 MoviePilot VNode 面板数据构造
 - `sites/base.py`：站点 URL、解析默认实现及能力协议
@@ -32,7 +32,7 @@ MoviePilot V2「农场自动化 Pro」多站点插件。
 | 好学 | `haoxue` | 一键收获、临期出售、仓库分页 |
 | 包子 | `baozi` | 一键收获 |
 | 拾刻 | `skit` | 一键收获、临期出售、仓库分页 |
-| 思齐 | `siqi` | 验证码收获/偷菜/点赞/扩地能力层（默认不执行，待 executor 开关接入） |
+| 思齐 | `siqi` | OCR 原生一键收获/逐格降级/一键种空地/偷菜/点赞/扩地 |
 
 ## 阶段状态
 
