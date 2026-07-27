@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from apscheduler.triggers.cron import CronTrigger
 
+from app.core.config import settings
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import NotificationType
@@ -108,7 +109,7 @@ class RousiCheckin(_PluginBase):
             logger.warning("肉丝自动签到定时服务未注册：Cron 为空")
             return []
         try:
-            trigger = CronTrigger.from_crontab(self._cron)
+            trigger = CronTrigger.from_crontab(self._cron, timezone=settings.TZ)
         except Exception as err:
             logger.warning(f"肉丝自动签到 Cron 配置无效：cron={repr(self._cron)}，error={err}")
             return []
@@ -116,9 +117,13 @@ class RousiCheckin(_PluginBase):
             "id": "RousiCheckin",
             "name": "肉丝自动签到服务",
             "trigger": trigger,
-            "func": self.signin,
+            "func": self.scheduled_run,
             "kwargs": {}
         }]
+
+    def scheduled_run(self) -> Dict[str, Any]:
+        """MoviePilot 公共调度入口。"""
+        return self.signin()
 
     def signin(self) -> Dict[str, Any]:
         return self.__signin(manual=False)

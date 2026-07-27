@@ -1654,8 +1654,8 @@ class FarmAuto(_PluginBase):
         }
 
     def stop_service(self):
-        # 停止/卸载时释放残留锁
-        try:
-            type(self)._run_lock.release()
-        except (RuntimeError, AssertionError):
-            pass  # 锁未被持有，无需释放
+        # 运行锁必须由持锁任务的 finally 释放；强制解锁会允许新旧任务并发。
+        if type(self)._run_lock.locked():
+            logger.info("[FarmAuto] 服务停止时任务仍在运行，等待任务自行释放运行锁")
+        else:
+            logger.info("[FarmAuto] 服务停止，当前无运行中任务")

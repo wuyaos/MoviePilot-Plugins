@@ -95,6 +95,8 @@ class AutoPtCheckin(_PluginBase):
     _interval_hours: float = 2.0
     _begin_hour: int = 9
     _end_hour: int = 23
+    _schedule_crons: list = []
+    _schedule_signature: str = ""
 
     def init_plugin(self, config: dict = None):
         self.sites = SitesHelper()
@@ -105,36 +107,45 @@ class AutoPtCheckin(_PluginBase):
         # 停止现有任务
         self.stop_service()
 
-        # 配置
+        # 配置：每次初始化都重建运行态，避免空配置热重载沿用旧字段。
+        config = config or {}
+        self._enabled = bool(config.get("enabled", False))
+        self._cron = str(config.get("cron") or "").strip()
+        self._cron_mode = config.get("cron_mode") or "interval"
+        self._interval_hours = self.__safe_float(config.get("interval_hours"), 2.0, min_value=0.5)
+        self._begin_hour = self.__safe_int(config.get("begin_hour"), 9, min_value=0, max_value=23)
+        self._end_hour = self.__safe_int(config.get("end_hour"), 23, min_value=0, max_value=23)
+        self._start_time = self._begin_hour if self._cron_mode == "interval" else None
+        self._end_time = self._end_hour if self._cron_mode == "interval" else None
+        self._onlyonce = bool(config.get("onlyonce", False))
+        self._notify = bool(config.get("notify", False))
+        self._queue_cnt = self.__safe_int(config.get("queue_cnt"), 5, min_value=1)
+        self._sign_sites = config.get("sign_sites") or []
+        self._login_sites = config.get("login_sites") or []
+        self._retry_keyword = config.get("retry_keyword")
+        self._auto_cf = self.__safe_int(config.get("auto_cf"), 0, min_value=0)
+        self._clean = bool(config.get("clean", False))
+        self._custom_site_urls = config.get("custom_site_urls") or ""
+        self._custom_sites_data = config.get("custom_sites_data") or []
+        self._schedule_crons = [
+            str(value).strip() for value in (config.get("schedule_crons") or [])
+            if len(str(value).strip().split()) == 5
+        ]
+        self._schedule_signature = str(config.get("schedule_signature") or "")
+        expected_signature = self.__schedule_signature()
+        if self._cron_mode != "cron" and (
+            self._schedule_signature != expected_signature or not self._schedule_crons
+        ):
+            self._schedule_crons = self.__generate_schedule_crons()
+            self._schedule_signature = expected_signature
+
         if config:
-            self._enabled = config.get("enabled")
-            self._cron = config.get("cron")
-            self._cron_mode = config.get("cron_mode") or "interval"
-            self._interval_hours = self.__safe_float(config.get("interval_hours"), 2.0, min_value=0.5)
-            self._begin_hour = self.__safe_int(config.get("begin_hour"), 9, min_value=0, max_value=23)
-            self._end_hour = self.__safe_int(config.get("end_hour"), 23, min_value=0, max_value=23)
-            self._onlyonce = config.get("onlyonce")
-            self._notify = config.get("notify")
-            self._queue_cnt = self.__safe_int(config.get("queue_cnt"), 5, min_value=1)
-            self._sign_sites = config.get("sign_sites") or []
-            self._login_sites = config.get("login_sites") or []
-            self._retry_keyword = config.get("retry_keyword")
-            self._auto_cf = self.__safe_int(config.get("auto_cf"), 0, min_value=0)
-            self._clean = config.get("clean")
-
-            self._custom_site_urls = config.get("custom_site_urls") or ""
-            self._custom_sites_data = config.get("custom_sites_data") or []
-
-            # 解析自定义站点 + CookieCloud 同步
             self.__parse_custom_sites()
             self.__sync_cookie_cloud()
-
-            # 过滤掉已删除的站点
             all_sites = [site.id for site in self.siteoper.list_order_by_pri()] + [site.get("id") for site in
                                                                                    self.__custom_sites()]
             self._sign_sites = [site_id for site_id in all_sites if site_id in self._sign_sites]
             self._login_sites = [site_id for site_id in all_sites if site_id in self._login_sites]
-            # 保存配置
             self.__update_config()
 
         # 加载模块
@@ -189,6 +200,41 @@ class AutoPtCheckin(_PluginBase):
             ret = min(max_value, ret)
         return ret
 
+    def __schedule_signature(self) -> str:
+        return (
+            f"{self._cron_mode}:{self._interval_hours}:"
+            f"{self._begin_hour}:{self._end_hour}"
+        )
+
+    def __generate_schedule_crons(self) -> list:
+        if self._cron_mode == "interval":
+            window = self._end_hour - self._begin_hour
+            if window <= 0:
+                logger.error("触发时间范围无效，end_hour 必须大于 begin_hour")
+                return []
+            hours_f = max(0.5, self._interval_hours)
+            triggers = TimerUtils.random_scheduler(
+                num_executions=max(1, int(window / hours_f)),
+                begin_hour=self._begin_hour,
+                end_hour=self._end_hour,
+                max_interval=int(hours_f * 60),
+                min_interval=max(30, int(hours_f * 60 * 0.5)),
+            )
+        else:
+            triggers = TimerUtils.random_scheduler(
+                num_executions=2,
+                begin_hour=9,
+                end_hour=23,
+                max_interval=6 * 60,
+                min_interval=2 * 60,
+            )
+        crons = [f"{trigger.minute} {trigger.hour} * * *" for trigger in triggers]
+        if crons:
+            logger.info(f"站点自动签到已生成并持久化随机时间：{', '.join(crons)}")
+        else:
+            logger.error("站点自动签到未生成有效随机时间")
+        return crons
+
     def __update_config(self):
         # 保存配置
         self.update_config(
@@ -209,6 +255,8 @@ class AutoPtCheckin(_PluginBase):
                 "clean": self._clean,
                 "custom_site_urls": self._custom_site_urls,
                 "custom_sites_data": self._custom_sites_data,
+                "schedule_crons": self._schedule_crons,
+                "schedule_signature": self._schedule_signature,
             }
         )
 
@@ -262,7 +310,7 @@ class AutoPtCheckin(_PluginBase):
                     return [{
                         "id": "AutoSignIn",
                         "name": "站点自动签到服务",
-                        "trigger": CronTrigger.from_crontab(cron_str),
+                        "trigger": CronTrigger.from_crontab(cron_str, timezone=settings.TZ),
                         "func": self.sign_in,
                         "kwargs": {}
                     }]
@@ -273,56 +321,23 @@ class AutoPtCheckin(_PluginBase):
                 logger.error(f"定时任务配置错误：{err}")
                 return []
 
-        if self._cron_mode == "interval":
-            self._start_time = self._begin_hour
-            self._end_time = self._end_hour
-            hours_f = max(0.5, self._interval_hours)
-            window = self._end_time - self._start_time
-            if window <= 0:
-                logger.error("触发时间范围无效，end_hour 必须大于 begin_hour")
-                return []
-            num = max(1, int(window / hours_f))
-            triggers = TimerUtils.random_scheduler(
-                num_executions=num,
-                begin_hour=self._start_time,
-                end_hour=self._end_time,
-                max_interval=int(hours_f * 60),
-                min_interval=max(30, int(hours_f * 60 * 0.5)),
-            )
-            if not triggers:
-                logger.error(f"未生成有效触发时间，请检查间隔配置：interval_hours={hours_f}, "
-                             f"begin_hour={self._start_time}, end_hour={self._end_time}")
-                return []
-            logger.info("站点自动签到随机触发时间：%s" %
-                        ", ".join([f"{trigger.hour:02d}:{trigger.minute:02d}" for trigger in triggers]))
-            ret_jobs = []
-            for i, trigger in enumerate(triggers):
-                ret_jobs.append({
-                    "id": f"AutoSignIn.{i}",
-                    "name": f"站点自动签到服务 {trigger.hour:02d}:{trigger.minute:02d}",
-                    "trigger": CronTrigger.from_crontab(f"{trigger.minute} {trigger.hour} * * *"),
-                    "func": self.sign_in,
-                    "kwargs": {}
-                })
-            return ret_jobs
-
-        # 未配置 cron 且不是 interval 模式 → 随机2次
-        triggers = TimerUtils.random_scheduler(num_executions=2,
-                                               begin_hour=9,
-                                               end_hour=23,
-                                               max_interval=6 * 60,
-                                               min_interval=2 * 60)
-        if not triggers:
-            logger.error("未生成有效触发时间，请检查默认随机调度配置")
+        if not self._schedule_crons:
+            logger.error("站点自动签到没有已持久化的随机触发时间")
             return []
         ret_jobs = []
-        for i, trigger in enumerate(triggers):
+        for index, cron_str in enumerate(self._schedule_crons):
+            try:
+                trigger = CronTrigger.from_crontab(cron_str, timezone=settings.TZ)
+            except Exception as err:
+                logger.error(f"站点自动签到随机 Cron 无效：cron={cron_str!r}，error={err}")
+                continue
+            minute, hour, *_ = cron_str.split()
             ret_jobs.append({
-                "id": f"AutoSignIn.{i}",
-                "name": f"站点自动签到服务 {trigger.hour:02d}:{trigger.minute:02d}",
-                "trigger": CronTrigger.from_crontab(f"{trigger.minute} {trigger.hour} * * *"),
+                "id": f"AutoSignIn.{index}",
+                "name": f"站点自动签到服务 {int(hour):02d}:{int(minute):02d}",
+                "trigger": trigger,
                 "func": self.sign_in,
-                "kwargs": {}
+                "kwargs": {},
             })
         return ret_jobs
 
