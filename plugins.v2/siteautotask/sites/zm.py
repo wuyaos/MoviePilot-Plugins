@@ -35,49 +35,45 @@ class ZmHandler(CapabilityHandler):
         time.sleep(max(0, int(self.feedback_timeout)))
 
     def get_feedback(self, message=None):
-        # 喊话区最新在上：反馈行格式为「zmpt@用户名：皮总响应/没有理...」
-        # 直接搜索含 @用户名 的反馈行，不依赖喊话行定位（喊话行易被挤出当前页）
-        response = self._send_get_request(self.site_url + "/shoutbox.php")
+        """从发送确认所用的同一份快照解析本条喊话的相邻系统反馈。"""
+        response = getattr(self, "_last_shoutbox_snapshot", None) or self.read_shoutbox_snapshot()
         if not response:
             return None
         html = etree.HTML(response.text or "")
-        rows = ["".join(t.strip() for t in row.xpath(".//td//text()"))
-                for row in html.xpath("//tr[td]")]
-        rows = [r for r in rows if r]
+        if html is None:
+            return None
         username = (self.get_username() or "").strip()
         target = (message or "").strip()
-        if not username:
+        if not username or not target:
             return None
-        # 从最新到最旧遍历，找第一条 @username 且与喊话内容匹配的反馈行
-        # 喊话内容含「上传」/「电力」时优先匹配对应奖励类型的反馈
-        prefer = "上传量" if (target and "上传" in target) else ("电力" if (target and "电力" in target) else None)
-        fallback = None
-        for line in rows:
-            if f"@{username}" not in line:
+        rows = html.xpath("//tr[td]")
+        for index, row in enumerate(rows):
+            sent_text = " ".join(part.strip() for part in row.xpath(".//td//text()") if part.strip())
+            if username not in sent_text or target not in sent_text or index == 0:
                 continue
-            fb = line
-            is_negative = any(k in fb for k in ("没有理", "明天再来"))
-            is_reward = any(k in fb for k in ("响应", "扣减", "赠送", "电力", "魔力", "上传", "下载"))
-            # 无奖励也无负面关键词，跳过非反馈行
+            # 喊话区按新到旧排列，当前消息的上一行才是它的即时系统反馈。
+            feedback = " ".join(
+                part.strip() for part in rows[index - 1].xpath(".//td//text()") if part.strip()
+            )
+            if f"@{username}" not in feedback:
+                return None
+            is_negative = any(key in feedback for key in ("没有理", "明天再来"))
+            is_reward = any(key in feedback for key in ("响应", "扣减", "赠送"))
             if not is_negative and not is_reward:
-                continue
-            if "下载" in fb:
+                return None
+            if "下载" in feedback:
                 reward_type = "下载量"
-            elif "魔力" in fb:
-                reward_type = "魔力"
-            elif "上传" in fb:
+            elif "魔力" in feedback:
+                reward_type = "魔力值"
+            elif "上传" in feedback:
                 reward_type = "上传量"
             else:
                 reward_type = "电力"
-            record = {"site": self.site_name, "message": message, "rewards": [{
-                "type": reward_type, "description": fb,
-                "amount": "", "unit": "", "is_negative": is_negative and not is_reward,
+            return {"site": self.site_name, "message": message, "rewards": [{
+                "type": reward_type, "description": feedback,
+                "amount": "", "unit": "", "is_negative": is_negative,
             }]}
-            if prefer and reward_type == prefer:
-                return record
-            if fallback is None:
-                fallback = record
-        return fallback
+        return None
 
     def get_latest_message_time(self):
         def extract(response):

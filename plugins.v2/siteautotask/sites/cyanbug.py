@@ -16,6 +16,8 @@ from ..base.result import TaskResult
 
 
 class CyanbugHandler(CapabilityHandler):
+    # 青虫娘对连续祈愿存在频率限制，给第二条魔力请求保留更长窗口。
+    MESSAGE_INTERVAL = 60
 
     @staticmethod
     def shotbox_messages():

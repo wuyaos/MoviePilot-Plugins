@@ -532,8 +532,10 @@ class TaskEngine:
                     mail_time = tz.localize(mail_time)
                 next_time = mail_time + timedelta(hours=24)
                 if next_time <= now:
-                    logger.info("距上次织梦邮件已超 24 小时，立即执行")
-                    next_time = now + timedelta(seconds=3)
+                    # 当前 run_zm 已在执行；注册 now+3s 会因同一执行锁被跳过，
+                    # 并导致后续没有未来任务。顺延 24h 保持独立调度存活。
+                    next_time = now + timedelta(hours=24)
+                    logger.warning("织梦邮件时间已过期，未发现更新邮件，24 小时后重新检查")
                 else:
                     diff = int((next_time - now).total_seconds())
                     logger.info(f"距下次织梦执行还有 {diff // 3600} 小时 {(diff % 3600) // 60} 分钟")
@@ -541,8 +543,8 @@ class TaskEngine:
                 logger.error(f"解析织梦邮件时间失败：{e}")
                 next_time = now + timedelta(seconds=3)
         else:
-            logger.info("未获取到织梦邮件时间，3 秒后重试")
-            next_time = now + timedelta(seconds=3)
+            logger.warning("未获取到织梦邮件时间，24 小时后重新检查")
+            next_time = now + timedelta(hours=24)
 
         self.plugin.save_config()
         self.plugin.reschedule_zm(next_time)

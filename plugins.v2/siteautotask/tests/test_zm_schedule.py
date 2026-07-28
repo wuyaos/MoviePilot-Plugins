@@ -117,6 +117,68 @@ class ZmConfigTests(unittest.TestCase):
         self.assertEqual(cfg.last_zm_execution_time, "")
 
 
+class ZmRefreshScheduleTests(unittest.TestCase):
+    def _engine(self, mail_time):
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = types.SimpleNamespace(
+            config=types.SimpleNamespace(zm_mail_time=mail_time),
+            save_config=Mock(), reschedule_zm=Mock(),
+        )
+        engine._find_zm_handler = Mock(return_value=(None, None))
+        return engine
+
+    def test_expired_mail_time_reschedules_for_future_check(self):
+        import pytz
+        now = datetime.now(pytz.timezone("UTC"))
+        engine = self._engine((now - timedelta(hours=25)).strftime("%Y-%m-%d %H:%M:%S"))
+        engine._refresh_zm_schedule()
+        scheduled_at = engine.plugin.reschedule_zm.call_args.args[0]
+        self.assertGreater((scheduled_at - now).total_seconds(), 23 * 3600)
+
+    def test_missing_mail_time_reschedules_for_future_check(self):
+        import pytz
+        now = datetime.now(pytz.timezone("UTC"))
+        engine = self._engine("")
+        engine._refresh_zm_schedule()
+        scheduled_at = engine.plugin.reschedule_zm.call_args.args[0]
+        self.assertGreater((scheduled_at - now).total_seconds(), 23 * 3600)
+
+
+class ZmFeedbackPairingTests(unittest.TestCase):
+    def _handler(self, html):
+        handler = ZM.ZmHandler.__new__(ZM.ZmHandler)
+        handler.site_name = "织梦"
+        handler._last_shoutbox_snapshot = FakeResponse(html)
+        handler.get_username = lambda: "wuyaos"
+        handler.read_shoutbox_snapshot = lambda: handler._last_shoutbox_snapshot
+        return handler
+
+    def test_uses_preceding_feedback_for_current_message(self):
+        handler = self._handler("""
+            <table>
+              <tr><td>zmpt @wuyaos：皮总响应了你的请求，赠送 你【538电力】</td></tr>
+              <tr><td>wuyaos 皮总，求电力</td></tr>
+              <tr><td>zmpt @wuyaos：皮总响应了你的请求，赠送 你【5GB上传量】</td></tr>
+              <tr><td>wuyaos 皮总，求上传</td></tr>
+            </table>
+        """)
+        feedback = handler.get_feedback("皮总，求电力")
+        reward = feedback["rewards"][0]
+        self.assertEqual(reward["type"], "电力")
+        self.assertIn("538电力", reward["description"])
+        self.assertFalse(reward["is_negative"])
+
+    def test_marks_negative_preceding_feedback(self):
+        handler = self._handler("""
+            <table>
+              <tr><td>zmpt @wuyaos：皮总没有理你，明天再来吧</td></tr>
+              <tr><td>wuyaos 皮总，求上传</td></tr>
+            </table>
+        """)
+        reward = handler.get_feedback("皮总，求上传")["rewards"][0]
+        self.assertTrue(reward["is_negative"])
+
+
 class ZmNextTimeTests(unittest.TestCase):
     """scheduler._compute_zm_next_time 计算逻辑。"""
 
