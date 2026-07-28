@@ -10,6 +10,8 @@ from ..base.decorator import task_info, TaskType
 
 
 class ZmHandler(CapabilityHandler):
+    # 皮总对连续请求的接受窗口高于全局默认，实测 30 秒后第二条仍可能不入区。
+    MESSAGE_INTERVAL = 60
 
     @staticmethod
     def shotbox_messages():
