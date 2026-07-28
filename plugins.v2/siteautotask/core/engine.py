@@ -94,7 +94,7 @@ class TaskEngine:
             if last_domain_type == current_domain_type and current_domain_type[1] in (
                 TaskType.CHAT, TaskType.CLAIM, TaskType.MEDAL, TaskType.GENERIC,
             ):
-                time.sleep(cfg.interval_cnt)
+                time.sleep(getattr(handler, "message_interval", cfg.interval_cnt))
             last_domain_type = current_domain_type
             record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
             records.append(record)
@@ -403,6 +403,7 @@ class TaskEngine:
             logger.info(f"调试执行：未匹配到站点 {site_filter!r}")
             return []
         records = []
+        last_chat_handler = None
         for site in sites:
             handler = self._build_handler(site)
             if not handler:
@@ -417,19 +418,31 @@ class TaskEngine:
             for task in tasks:
                 task = dict(task)
                 task["config_key"] = site_task_key(site, task)
-                # CLAIM 任务：读配置，空则跳过（与正式运行一致）
+                # CLAIM 与下拉 CHAT 读取选择值；空下拉与正式运行一致，跳过执行。
                 claim_id = None
-                if task.get("task_type") == TaskType.CLAIM:
+                if task.get("task_type") == TaskType.CLAIM or task.get("chat_selection"):
                     task["claim_key"] = claim_task_key(site, task)
                     claim_id = self.plugin.claim_task_id(task["claim_key"]) or None
+                if task.get("task_type") == TaskType.CHAT and task.get("chat_selection"):
+                    if not claim_id:
+                        continue
+                    unit_task = dict(task)
+                    unit_task["unit_id"] = str(claim_id)
+                    record = self._run_task(handler, unit_task, skip_if_no_claim=True)
+                    records.append(record)
+                    last_chat_handler = handler
                 # CHAT 多条喊话拆分为单条执行单元，与正式运行一致。
-                if task.get("task_type") == TaskType.CHAT and hasattr(handler, "shotbox_messages"):
+                elif task.get("task_type") == TaskType.CHAT and hasattr(handler, "shotbox_messages"):
                     for unit_task, _ in self._expand_chat_units(handler, task):
+                        if last_chat_handler is handler:
+                            time.sleep(getattr(handler, "message_interval", cfg.interval_cnt))
                         record = self._run_task(handler, unit_task, skip_if_no_claim=True)
                         records.append(record)
+                        last_chat_handler = handler
                 else:
                     record = self._run_task(handler, task, claim_task_id=claim_id, skip_if_no_claim=True)
                     records.append(record)
+                    last_chat_handler = handler if task.get("task_type") == TaskType.CHAT else None
         self.history.append(records, cfg.history_days)
         return records
 
@@ -478,9 +491,12 @@ class TaskEngine:
             return []
 
         records = []
+        last_chat_handler = None
         for _, handler, task, claim_id in self._collect_configured_tasks(
             "zm", [(zm_site, zm_handler)]
         ):
+            if last_chat_handler is handler:
+                time.sleep(getattr(handler, "message_interval", cfg.interval_cnt))
             record = self._run_task(
                 handler,
                 task,
@@ -488,6 +504,7 @@ class TaskEngine:
                 skip_if_no_claim=True,
             )
             records.append(record)
+            last_chat_handler = handler
 
         # 更新执行时间
         cfg.last_zm_execution_time = now.isoformat()

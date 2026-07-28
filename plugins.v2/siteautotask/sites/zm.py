@@ -35,32 +35,15 @@ class ZmHandler(CapabilityHandler):
         time.sleep(max(0, int(self.feedback_timeout)))
 
     def get_feedback(self, message=None):
-        """从发送确认所用的同一份快照解析本条喊话的相邻系统反馈。"""
-        response = getattr(self, "_last_shoutbox_snapshot", None) or self.read_shoutbox_snapshot()
-        if not response:
-            return None
-        html = etree.HTML(response.text or "")
-        if html is None:
-            return None
-        username = (self.get_username() or "").strip()
-        target = (message or "").strip()
-        if not username or not target:
-            return None
-        rows = html.xpath("//tr[td]")
-        for index, row in enumerate(rows):
-            sent_text = " ".join(part.strip() for part in row.xpath(".//td//text()") if part.strip())
-            if username not in sent_text or target not in sent_text or index == 0:
+        """从发送确认所用快照的附近行解析本条喊话的系统反馈。"""
+        username = self.get_username()
+        for feedback in self.nearby_shoutbox_rows(message):
+            if "皮总" not in feedback or f"@{username}" not in feedback:
                 continue
-            # 喊话区按新到旧排列，当前消息的上一行才是它的即时系统反馈。
-            feedback = " ".join(
-                part.strip() for part in rows[index - 1].xpath(".//td//text()") if part.strip()
-            )
-            if f"@{username}" not in feedback:
-                return None
             is_negative = any(key in feedback for key in ("没有理", "明天再来"))
             is_reward = any(key in feedback for key in ("响应", "扣减", "赠送"))
             if not is_negative and not is_reward:
-                return None
+                continue
             if "下载" in feedback:
                 reward_type = "下载量"
             elif "魔力" in feedback:

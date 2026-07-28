@@ -61,23 +61,52 @@ class ISiteHandler(metaclass=ABCMeta):
         """在发送后的同一份快照中确认当前用户的本条消息已出现。"""
         return len(self._find_sent_message_rows(message, response)) > previous_count
 
-    def _find_sent_message_rows(self, message: str, response):
-        """从常见喊话区 DOM 提取同时含用户名和消息文本的行。"""
+    def _shoutbox_rows(self, response):
+        """将常见喊话区 DOM 归一成按页面顺序排列的文本行。"""
         from lxml import etree
 
-        username = (self.get_username() or "").strip()
-        target = (message or "").strip()
-        if not username or not target or not response:
+        if not response:
             return []
         root = etree.HTML(response.text or "")
         if root is None:
             return []
-        matches = []
+        rows = []
         for row in root.xpath("//tr[td] | //li | //div[contains(@class, 'shout') or contains(@class, 'chat-message')]"):
             text = " ".join(part.strip() for part in row.xpath(".//text()") if part.strip())
-            if username in text and target in text:
-                matches.append(text)
-        return matches
+            if text:
+                rows.append(text)
+        return rows
+
+    def _find_sent_message_rows(self, message: str, response):
+        """从喊话区提取同时含当前用户名和指定消息的行。"""
+        username = (self.get_username() or "").strip()
+        target = (message or "").strip()
+        if not username or not target:
+            return []
+        return [text for text in self._shoutbox_rows(response) if username in text and target in text]
+
+    def nearby_shoutbox_rows(self, message: str, max_rows: int = 5):
+        """返回本条喊话上方的附近行，不跨过另一条自己的喊话。
+
+        页面默认按最新到最旧排列，目标消息上方（较小索引）才可能是其系统反馈。
+        其他用户的普通聊天允许插入；遇到另一条自己的非 ``@用户名`` 喊话即终止。
+        """
+        response = getattr(self, "_last_shoutbox_snapshot", None) or self.read_shoutbox_snapshot()
+        username = (self.get_username() or "").strip()
+        target = (message or "").strip()
+        if not username or not target:
+            return []
+        rows = self._shoutbox_rows(response)
+        for index, text in enumerate(rows):
+            if username not in text or target not in text:
+                continue
+            nearby = []
+            for candidate in reversed(rows[max(0, index - max_rows):index]):
+                if username in candidate and f"@{username}" not in candidate:
+                    break
+                nearby.append(candidate)
+            return nearby
+        return []
 
     def _send_get_request(self, url, params=None, rt_method=None):
         # 发送确认成功后，反馈解析复用同一次喊话区读取，避免确认与反馈错配。

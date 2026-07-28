@@ -5,7 +5,7 @@ import types
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).parents[1]
 
@@ -117,6 +117,41 @@ class ZmConfigTests(unittest.TestCase):
         self.assertEqual(cfg.last_zm_execution_time, "")
 
 
+class ChatIntervalTests(unittest.TestCase):
+    def test_zm_waits_between_expanded_messages(self):
+        config = types.SimpleNamespace(
+            chat_sites=[88], history_days=30, get_feedback=False,
+            zm_cooldown=0, interval_cnt=30, zm_mail_time="",
+            last_zm_execution_time="",
+        )
+        handler = types.SimpleNamespace(site_name="织梦", domain="zmpt.cc", message_interval=60)
+        tasks = [
+            {"id": "zm_daily_shotbox", "task_type": ENGINE.TaskType.CHAT, "unit_id": "皮总，求上传"},
+            {"id": "zm_daily_shotbox", "task_type": ENGINE.TaskType.CHAT, "unit_id": "皮总，求电力"},
+        ]
+        history = Mock()
+        plugin = types.SimpleNamespace(
+            config=config, history=history, retry_records=[],
+            selected_sites=Mock(return_value=[{"id": 88}]), save_config=Mock(),
+            reschedule_zm=Mock(),
+        )
+        engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
+        engine.plugin = plugin
+        engine.history = history
+        engine._find_zm_handler = Mock(return_value=(handler, {"id": 88}))
+        engine._collect_configured_tasks = Mock(return_value=[
+            ({"id": 88}, handler, task, None) for task in tasks
+        ])
+        engine._run_task = Mock(return_value={"success": True})
+        engine._refresh_zm_schedule = Mock()
+        notify_module = types.ModuleType("siteautotask.core.notify")
+        notify_module.send_summary = Mock()
+        sys.modules["siteautotask.core.notify"] = notify_module
+        with patch.object(ENGINE.time, "sleep") as sleep:
+            engine._run_zm_locked()
+        sleep.assert_called_once_with(60)
+
+
 class ZmRefreshScheduleTests(unittest.TestCase):
     def _engine(self, mail_time):
         engine = ENGINE.TaskEngine.__new__(ENGINE.TaskEngine)
@@ -151,6 +186,22 @@ class ZmFeedbackPairingTests(unittest.TestCase):
         handler._last_shoutbox_snapshot = FakeResponse(html)
         handler.get_username = lambda: "wuyaos"
         handler.read_shoutbox_snapshot = lambda: handler._last_shoutbox_snapshot
+        def nearby(message, max_rows=5):
+            from lxml import etree
+            root = etree.HTML(handler._last_shoutbox_snapshot.text)
+            rows = [" ".join(t.strip() for t in row.xpath(".//td//text()") if t.strip())
+                    for row in root.xpath("//tr[td]")]
+            for index, text in enumerate(rows):
+                if "wuyaos" not in text or message not in text:
+                    continue
+                result = []
+                for candidate in reversed(rows[max(0, index - max_rows):index]):
+                    if "wuyaos" in candidate and "@wuyaos" not in candidate:
+                        break
+                    result.append(candidate)
+                return result
+            return []
+        handler.nearby_shoutbox_rows = nearby
         return handler
 
     def test_uses_preceding_feedback_for_current_message(self):
@@ -167,6 +218,17 @@ class ZmFeedbackPairingTests(unittest.TestCase):
         self.assertEqual(reward["type"], "电力")
         self.assertIn("538电力", reward["description"])
         self.assertFalse(reward["is_negative"])
+
+    def test_finds_feedback_with_other_chat_between(self):
+        handler = self._handler("""
+            <table>
+              <tr><td>zmpt @wuyaos：皮总响应了你的请求，赠送 你【5GB上传量】</td></tr>
+              <tr><td>other-user 普通聊天</td></tr>
+              <tr><td>wuyaos 皮总，求上传</td></tr>
+            </table>
+        """)
+        reward = handler.get_feedback("皮总，求上传")["rewards"][0]
+        self.assertEqual(reward["type"], "上传量")
 
     def test_marks_negative_preceding_feedback(self):
         handler = self._handler("""
