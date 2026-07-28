@@ -860,6 +860,7 @@ class FarmExecutor:
 
             success = bool(parsed.get("success"))
             skipped = bool(parsed.get("skipped", False))
+            # 批量种植的接口响应可能只返回单次默认数量，通知数量以执行前确认的空地数为准。
             quantity = max(1, int(action.get("quantity", 1)))
             profit = 0
             message = str(parsed.get("message") or "")

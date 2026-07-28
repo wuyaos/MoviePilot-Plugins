@@ -179,6 +179,34 @@ def test_build_price_sections_uses_crop_names_and_trends():
     assert [item["text"] for item in unknown_content] == ["unknown", "7"]
 
 
+def test_notification_uses_plant_quantity_and_reports_one_successful_like_batch():
+    report = RunReport(
+        started_at=1,
+        finished_at=2,
+        site_reports=[SiteRunReport(
+            site_id="siqi",
+            site_name="思齐",
+            actions=[
+                ActionResult("plant", "玉米", True, profit=-7200, quantity=6),
+                # 一个 like_farm_batch 请求可以点赞多个农场，通知仍应是一次点赞操作。
+                ActionResult("like", "wmqdyjyzx、白貓、hlink", True, quantity=3),
+            ],
+            total_profit=-7200,
+            trades_count=2,
+            status="completed",
+        )],
+        total_profit=-7200,
+        total_trades=2,
+        status="completed",
+    )
+
+    text = format_notification(report)
+
+    assert "🌱 种植：✅1（玉米×6） 魔力 -7200" in text
+    assert "👍 点赞：✅1（wmqdyjyzx、白貓、hlink×1） 魔力 +0" in text
+    assert "达到上限" not in text
+
+
 def test_notification_shows_siqi_daily_already_exhausted_and_sell_soft_stop():
     """思齐点赞重复探测达上限（daily_already_exhausted）和出售库存不足软停止都需显示。"""
     report = RunReport(

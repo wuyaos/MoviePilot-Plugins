@@ -31,7 +31,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场统一自动运营，支持独立收获、补种与出售策略"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
-    plugin_version = "3.2.10"
+    plugin_version = "3.2.11"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "farmauto_"
@@ -376,26 +376,19 @@ class FarmAuto(_PluginBase):
             cookie,
             site_config,
             self._siqi_options,
-            {"steal": bool(daily.get("steal")), "like": False},
+            {"steal": bool(daily.get("steal")), "like": bool(daily.get("like"))},
         )
         for result in results:
-            # 点赞额度按滚动窗口判断；已知达到上限后，后续定时探测仍执行但不重复通知。
-            already_exhausted = result.action == "like" and bool(daily.get("like"))
-            if result.action == "like" and (
+            if result.action in ("steal", "like") and (
                 (result.success and not result.skipped) or result.reason == "daily_exhausted"
             ):
-                daily["like"] = True
-                self.save_data("siqi_daily", daily)
-                if already_exhausted and result.reason == "daily_exhausted":
+                if result.reason == "daily_exhausted" and daily.get(result.action):
                     result.reason = "daily_already_exhausted"
+                daily[result.action] = True
+                self.save_data("siqi_daily", daily)
             report.actions.append(result)
             if result.success and not result.skipped:
                 report.trades_count += 1
-            if result.action == "steal" and (
-                (result.success and not result.skipped) or result.reason == "daily_exhausted"
-            ):
-                daily["steal"] = True
-                self.save_data("siqi_daily", daily)
         if results and original_status not in ("failed", "partial"):
             failures = sum(not result.success for result in report.actions)
             report.status = "partial" if failures else "completed"

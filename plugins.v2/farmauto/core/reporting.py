@@ -83,22 +83,30 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
             action for action in actions if action.success and not action.skipped
         ]
         failed_actions = [action for action in actions if not action.success]
+        # 成功完成本批互动后额度归零仍是一次成功操作，不重复显示为“达到上限”。
+        # 仅真正跳过的额度耗尽/重复探测才显示上限提示。
         limit_actions = [
-            action for action in actions if action.reason in daily_limit_reasons
+            action for action in actions
+            if action.skipped and action.reason in daily_limit_reasons
         ]
         parts = []
         if successful_actions:
             target_counts = {}
             for action in successful_actions:
+                # ✅ 表示成功请求次数；作物/动物的目标数量才使用批量操作 quantity。
+                # 点赞等批量互动本身已在 target 中列出多个用户名，仍按一次操作展示。
                 target = str(action.target) if action.target else "未知"
-                target_counts[target] = target_counts.get(target, 0) + 1
+                quantity = max(1, int(action.quantity or 1))
+                target_quantity = quantity if action.action in {"harvest", "harvest_all", "plant", "breed", "sell"} else 1
+                target_counts[target] = target_counts.get(target, 0) + target_quantity
             targets = [f"{name}×{count}" for name, count in list(target_counts.items())[:5]]
             detail = f"（{'、'.join(targets)}）" if targets else ""
             parts.append(f"✅{len(successful_actions)}{detail}")
         # 仅四类互动动作通知失败，避免改变其他既有通知噪声策略。
         if action_names & interaction_actions and failed_actions:
+            failed_quantity = sum(max(1, int(action.quantity or 1)) for action in failed_actions)
             messages = [str(action.message or action.target or "失败") for action in failed_actions[:3]]
-            parts.append(f"❌{len(failed_actions)}（{'、'.join(messages)}）")
+            parts.append(f"❌{failed_quantity}（{'、'.join(messages)}）")
         if action_names & interaction_actions and limit_actions:
             messages = [str(action.message or "今日额度已用完") for action in limit_actions[:1]]
             parts.append(f"⚠️达到上限（{'、'.join(messages)}）")
