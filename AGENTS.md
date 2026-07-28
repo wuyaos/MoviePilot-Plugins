@@ -24,6 +24,10 @@ MoviePilot V2 自用插件仓库。
 - `package.v2.json` 必须登记插件元数据：name/description/labels/version/icon/author/level/history
 - 插件版本变更时同步更新 `__init__.py` 的 `plugin_version` 和 `package.v2.json` 的 version + history
 - 插件间协作通过 `EventType.PluginAction` 事件，避免硬依赖其他插件模块
+- 插件图标统一放在根目录 `icons/`，使用 PNG + RGBA 透明背景，画布固定为 `200×200`
+- 图标主体应在画布内保持水平、垂直居中，建议有效内容控制在约 `160×160`，四周预留约 `20px` 安全边距，避免宿主按 `48×48` 容器显示时过度放大
+- 图标主体比例可按业务图形保留，不强制裁成正方形；窄图形应通过画布留白保持视觉居中，不得通过拉伸填满画布
+- 修改或新增图标后检查：文件尺寸为 `200×200`、模式为 `RGBA`、存在透明边距
 - 提交前 `python3 -c "import ast; ast.parse(open('<file>').read())"` 校验语法
 - MP 本地调试：`moviepilot` CLI，后端 http://127.0.0.1:7300
 
