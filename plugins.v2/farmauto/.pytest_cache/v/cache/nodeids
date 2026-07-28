@@ -98,6 +98,7 @@
   "tests/test_siqi_staged.py::test_siqi_staged_flow_ocr_failure_falls_back_to_each_plot",
   "tests/test_siqi_staged.py::test_siqi_staged_flow_uses_native_batch_harvest_when_ocr_succeeds",
   "tests/test_siqi_staged.py::test_siqi_staged_flow_without_ready_or_empty_plot_skips_harvest_and_plant",
+  "tests/test_siqi_staged.py::test_siqi_staged_sell_queries_real_stock_before_each_sale",
   "tests/test_siqi_staged.py::test_siqi_staged_sell_stops_on_insufficient_stock_without_partial",
   "tests/test_skit.py::test_skit_empty_html_is_safe",
   "tests/test_skit.py::test_skit_market_status_and_bonus_parsers",

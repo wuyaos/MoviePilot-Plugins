@@ -400,11 +400,12 @@
         "name": "农场自动化Pro",
         "description": "多站点农场统一自动运营，支持独立收获、补种与出售策略",
         "labels": "农场,自动化,站点",
-        "version": "3.2.9",
+        "version": "3.2.10",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v3.2.10": "思齐出售改为每次出售前查询真实背包，库存为 0 即软停止，不再信任快照 quantity，避免“背包中该作物数量不足”误报与多余请求；通知不再显示卖空提示，按实际成功数量展示",
             "v3.2.9": "修复思齐出售数量不足误报站点 partial：sell_inventory 库存不足时软停止并跳过该作物后续出售，不计失败；通知层识别 daily_already_exhausted 与 insufficient_stock 软停止，使思齐点赞达上限与出售卖空能在运行报告中显示",
             "v3.2.8": "执行记录时间列显示完整日期和时间，并保持中国时区解析。",
             "v3.2.7": "停止服务不再强制释放运行锁，避免重载期间新旧任务并发",

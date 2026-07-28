@@ -343,24 +343,43 @@ class FarmExecutor:
             time.sleep(interval)
             farm_html = refresh()
 
-        # 阶段三：重新读取真实背包，只对当前库存生成出售计划。
+        # 阶段三：逐作物查询真实背包再出售，不信任快照 quantity，避免“数量不足”误报。
         warehouse = self._fetch_warehouse(cookies, site_config)
         report.warehouse = warehouse
         sell_plan = plan_warehouse_sales(
             warehouse, report.market_prices, crops, site_config, policy,
         )
+        # 汇总计划涉及的 crop_key → sell_key，逐个查库存后出售。
+        sell_targets: Dict[str, str] = {}
         for action in sell_plan:
-            for _ in range(int(action.get("quantity", 1))):
-                single_action = {**action, "quantity": 1}
+            crop_key = action.get("crop_key") or ""
+            if crop_key and crop_key not in sell_targets:
+                sell_targets[crop_key] = str(action.get("sell_key") or "")
+        remaining_sales = int(policy.get("max_sell_per_run", 50))
+        for crop_key, sell_key in sell_targets.items():
+            while remaining_sales > 0:
+                # 每次出售前查询真实背包，库存为 0 则该作物软停止。
+                farm_html = refresh()
+                inventory = site_config.parse_warehouse_items(farm_html)
+                item = next((it for it in inventory if it.get("crop_key") == crop_key), None)
+                quantity = int(item.get("quantity", 0)) if item else 0
+                if quantity <= 0:
+                    break
+                single_action = {
+                    "op": "sell", "crop_key": crop_key, "source": "warehouse",
+                    "quantity": 1, "sell_key": sell_key,
+                }
                 result, farm_html = self._execute_siqi_action(
                     single_action, cookies, site_config, farm_html,
                     report.market_prices, crops, report.crop_status, siqi_options,
                 )
                 record(result, farm_html)
                 time.sleep(interval)
-                # 库存不足或出售失败时停止该作物后续出售，避免对空库存反复请求。
                 if not result.success:
                     break
+                remaining_sales -= 1
+            if remaining_sales <= 0:
+                break
 
         failures = sum(
             not action.success and not getattr(action, "skipped", False)

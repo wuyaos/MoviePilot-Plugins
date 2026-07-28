@@ -102,11 +102,6 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
         if action_names & interaction_actions and limit_actions:
             messages = [str(action.message or "今日额度已用完") for action in limit_actions[:1]]
             parts.append(f"⚠️达到上限（{'、'.join(messages)}）")
-        # 出售类软停止（库存不足等）提示卖空，避免无明细。
-        if action_names & {"sell"}:
-            soft_stops = [a for a in actions if a.skipped and a.reason in soft_stop_reasons]
-            if soft_stops:
-                parts.append(f"⚠️卖空{len(soft_stops)}")
         if not parts:
             continue
         group_profit = sum(int(action.profit or 0) for action in successful_actions)

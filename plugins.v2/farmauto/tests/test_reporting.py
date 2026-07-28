@@ -212,9 +212,8 @@ def test_notification_shows_siqi_daily_already_exhausted_and_sell_soft_stop():
 
     # 思齐站点详情必须显示，不能因软停止被过滤
     assert "【思齐】✅  魔力 +2760" in text
-    # 出售成功明细 + 卖空提示
+    # 出售成功明细按实际成功数量显示
     assert "💰 出售：✅2（玉米×2）" in text
-    assert "⚠️卖空1" in text
     # 点赞达上限（重复探测标记）也显示
     assert "👍 点赞：⚠️达到上限（今日点赞额度已用完）" in text
     # 软停止不计失败，站点状态为 completed
