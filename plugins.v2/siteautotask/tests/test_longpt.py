@@ -77,6 +77,12 @@ class LongPTTests(unittest.TestCase):
         self.assertEqual(handler.get_feedback("求上传")["rewards"][0]["type"], "raw_feedback")
         session.post.assert_called_once()
 
+    def test_chat_options_are_single_choice_messages(self):
+        self.assertEqual(longpt.LongPTHandler.get_chat_options(), [
+            {"id": "龙宝，求上传", "label": "求上传"},
+            {"id": "龙宝，求魔力", "label": "求魔力"},
+        ])
+
     def test_lottery_already_joined_is_idempotent_success(self):
         handler, _ = self.handler({"code": -1, "msg": "今天已经参加"})
         self.assertEqual(handler.daily_lottery(), (True, "今天已经参加"))

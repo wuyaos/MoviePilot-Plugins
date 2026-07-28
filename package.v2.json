@@ -371,11 +371,12 @@
         "name": "站点自动任务",
         "description": "站点周期任务合集：签到、喊话、领勋章、抽奖、兑换、任务申领，并解析喊话反馈奖励。",
         "labels": "PT,签到,喊话,自动任务",
-        "version": "1.0.18",
+        "version": "1.0.19",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.19": "所有喊话改为发送后在喊话区确认“当前用户+当前消息”才算成功；未确认仅重试该消息最多3次且不阻断后续任务。确认与反馈共用喊话区快照，并在当前消息上方附近窗口匹配反馈，不跨越另一条自己的喊话；织梦、藏宝阁、大青虫多消息间隔调整为60秒，Moment维持120秒；LongPT喊话改为单选（求上传/求魔力）；织梦邮件时间过期或缺失时改为24小时后重新检查，避免3秒触发被锁跳过。",
             "v1.0.18": "主 Cron 与织梦 date 任务改用标准时区触发器和纯服务声明",
             "v1.0.17": "删除独立重试服务 siteautotask_retry，重试并入主 cron：每次主 cron 执行后对失败单元连续重试 retry_count 次（0 则不重试）；Zm 喊话反馈改为读喊话区按用户名配对系统反馈；数据页改为按站点卡片展示含主题自适应边框与每任务独立趋势；修复 shotbox_messages 未挂在 Handler 类导致展开失败；梓喵 WAF 拦截标记 TODO 待后续浏览器渲染实现。",
             "v1.0.16": "删除独立勋章 cron（medal_cron）及其服务/入口/UI 控件，勋章检查改由主 cron 统一执行；主 cron 默认改为 4 0,12 * * *（每日两次），仅将精确旧默认值自动迁移，其他自定义 cron 不变。",

@@ -68,6 +68,14 @@ class NexusPHPTaskClaimMixin:
 class FeedbackMixin:
     """反馈能力默认实现。站点可重写 get_feedback。"""
     def get_feedback(self, message=None):
+        # 统一执行路径只使用发送确认后的附近行，避免沿用发送响应里的旧聊天行。
+        if message and getattr(self, "_reuse_shoutbox_snapshot", False):
+            self._last_message_result = None
+            username = self.get_username()
+            for text in self.nearby_shoutbox_rows(message):
+                if f"@{username}" in text:
+                    self._last_message_result = text
+                    break
         if not self._last_message_result:
             return None
         return {"site": self.site_name, "message": message, "rewards": [{

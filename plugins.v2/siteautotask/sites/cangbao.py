@@ -8,6 +8,8 @@ from ..base.result import TaskResult
 
 
 class CangbaoHandler(CapabilityHandler):
+    # 阁主对连续两次祈愿存在频率限制，第二条需保留较长接受窗口。
+    MESSAGE_INTERVAL = 60
 
     @staticmethod
     def shotbox_messages():

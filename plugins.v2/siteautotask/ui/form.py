@@ -56,7 +56,8 @@ def build_form(plugin) -> Tuple[List[dict], Dict]:
                     "model": claim_task_key(site, task), "label": task.get("label", task["id"]),
                     "hide-details": "auto",
                     "items": task.get("claim_options", []), "itemTitle": "label", "itemValue": "id",
-                    "clearable": True, "placeholder": "不购买" if is_multiple else "不申领",
+                    "clearable": True,
+                    "placeholder": "不喊话" if task.get("chat_selection") else ("不购买" if is_multiple else "不申领"),
                 }
                 if is_multiple:
                     select_props["multiple"] = True
