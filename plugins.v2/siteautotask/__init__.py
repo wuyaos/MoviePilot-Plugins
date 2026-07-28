@@ -210,6 +210,7 @@ class SiteAutoTask(_PluginBase):
             if metadata.get("claim_options"):
                 task["claim_options"] = metadata["claim_options"]
                 task["claim_multiple"] = bool(metadata.get("claim_multiple", False))
+                task["chat_selection"] = bool(metadata.get("chat_selection", False))
         return runtime_tasks
 
     def support_site_options(self):

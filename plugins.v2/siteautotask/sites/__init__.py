@@ -94,19 +94,28 @@ def load_site_classes() -> List[dict]:
             except Exception as e:
                 logger.error(f"解析站点 {site_name} 任务失败：{e}")
 
-        # 为 CLAIM 任务附加可选 task 列表（静态从 Handler 类获取）
+        # 为 CLAIM/MEDAL/可选 CHAT 附加下拉选项（静态从 Handler 类获取）。
         claim_options = []
         if hasattr(handler_cls, "get_claim_options"):
             try:
                 claim_options = handler_cls.get_claim_options()
             except Exception as e:
                 logger.error(f"获取站点 {site_name} claim 选项失败：{e}")
+        chat_options = []
+        if hasattr(handler_cls, "get_chat_options"):
+            try:
+                chat_options = handler_cls.get_chat_options()
+            except Exception as e:
+                logger.error(f"获取站点 {site_name} chat 选项失败：{e}")
         for task in tasks_meta:
-            if task.get("task_type") in ("claim", "medal") and claim_options:
+            task_type = task.get("task_type")
+            if task_type in ("claim", "medal") and claim_options:
                 task["claim_options"] = claim_options
-                # MEDAL 任务可多选（get_claim_options 默认单选，CLAIM_MULTIPLE=True 时多选）
-                if task.get("task_type") == "medal":
+                if task_type == "medal":
                     task["claim_multiple"] = bool(getattr(handler_cls, "CLAIM_MULTIPLE", False))
+            elif task_type == "chat" and chat_options:
+                task["claim_options"] = chat_options
+                task["chat_selection"] = True
 
         sites_info.append({
             "handler_cls": handler_cls,

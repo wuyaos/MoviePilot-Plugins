@@ -15,8 +15,12 @@ from ..utils.request import parse_json_response
 class LongPTHandler(CapabilityHandler):
 
     @staticmethod
-    def shotbox_messages():
-        return ["龙宝，求上传", "龙宝，求魔力"]
+    def get_chat_options():
+        """LongPT 每日仅允许一次有效祈愿，由用户选择一个目标。"""
+        return [
+            {"id": "龙宝，求上传", "label": "求上传"},
+            {"id": "龙宝，求魔力", "label": "求魔力"},
+        ]
 
     @staticmethod
     def get_claim_options():

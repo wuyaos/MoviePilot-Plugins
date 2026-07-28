@@ -139,7 +139,7 @@ class TaskEngine:
 
         task["claim_key"] = claim_task_key(site, task)
         claim_id = self.plugin.claim_task_id(task["claim_key"])
-        if task.get("task_type") == TaskType.CLAIM and claim_id:
+        if claim_id and task.get("task_type") in (TaskType.CLAIM, TaskType.CHAT):
             selected_id = str(claim_id)
             selected_option = next(
                 (option for option in task["claim_options"] if str(option.get("id")) == selected_id),
@@ -193,6 +193,10 @@ class TaskEngine:
                 if task_type == TaskType.MEDAL and isinstance(claim_id, (list, tuple)):
                     for unit_task, unit_claim_id in self._expand_medal_units(site, handler, task, claim_id):
                         yield site, handler, unit_task, unit_claim_id
+                elif task_type == TaskType.CHAT and task.get("chat_selection"):
+                    unit_task = dict(task)
+                    unit_task["unit_id"] = str(claim_id)
+                    yield site, handler, unit_task, None
                 elif task_type == TaskType.CHAT and hasattr(handler, "shotbox_messages"):
                     for unit_task, unit_claim_id in self._expand_chat_units(handler, task):
                         yield site, handler, unit_task, unit_claim_id
@@ -207,6 +211,42 @@ class TaskEngine:
             unit_task["unit_id"] = message
             unit_task["selected_option_label"] = f"“{message}”"
             yield unit_task, None
+
+    CHAT_SEND_MAX_ATTEMPTS = 3
+    CHAT_SEND_RETRY_SECONDS = 1
+
+    def _send_chat_with_confirmation(self, handler, message, send):
+        """发送后用同一喊话区快照确认消息，再供反馈解析复用。"""
+        snapshot = getattr(handler, "message_confirmation_snapshot", None)
+        verify = getattr(handler, "verify_message_sent", None)
+        read_snapshot = getattr(handler, "read_shoutbox_snapshot", None)
+        if not all(callable(item) for item in (snapshot, verify, read_snapshot)):
+            # 仅兼容测试替身；生产 Handler 都继承 ISiteHandler。
+            return send(message)
+        previous_count = snapshot(message)
+        last_detail = "发送失败"
+        for attempt in range(1, self.CHAT_SEND_MAX_ATTEMPTS + 1):
+            logger.info(f"{handler.site_name} - [喊话] “{message}” -> 第 {attempt} 次发送")
+            try:
+                outcome = send(message)
+            except Exception as e:
+                outcome = (False, f"发送异常：{e}")
+            success = bool(outcome and outcome[0]) if isinstance(outcome, tuple) else bool(outcome)
+            detail = str(outcome[1] or "") if isinstance(outcome, tuple) and len(outcome) > 1 else ""
+            if success:
+                handler.wait_feedback()
+                response = read_snapshot()
+                if verify(message, previous_count, response):
+                    handler._reuse_shoutbox_snapshot = True
+                    logger.info(f"{handler.site_name} - [喊话] “{message}” -> 已在喊话区确认")
+                    return True, detail or "消息已发送"
+                last_detail = "喊话区未确认消息"
+            else:
+                last_detail = detail or "发送请求失败"
+            logger.warning(f"{handler.site_name} - [喊话] “{message}” -> 第 {attempt} 次发送后未确认")
+            if attempt < self.CHAT_SEND_MAX_ATTEMPTS:
+                time.sleep(self.CHAT_SEND_RETRY_SECONDS)
+        return False, f"连续 {self.CHAT_SEND_MAX_ATTEMPTS} 次发送后未在喊话区确认：{last_detail}"
 
     def _run_task(self, handler, task, claim_task_id=None, skip_if_no_claim=False):
         """执行单个任务，并统一记录任务进度、喊话内容与反馈。"""
@@ -227,12 +267,12 @@ class TaskEngine:
                 if message:
                     sent_messages.append(message)
                     logger.info(f"{handler.site_name} - {message_name} -> 开始发送")
-                outcome = original_send(message, *args, **kwargs)
+                outcome = self._send_chat_with_confirmation(handler, message, original_send)
                 if message:
                     success = bool(outcome and outcome[0]) if isinstance(outcome, tuple) else bool(outcome)
                     detail = str(outcome[1] or "") if isinstance(outcome, tuple) and len(outcome) > 1 else ""
-                    phase = "发送成功" if success else "发送失败"
-                    if detail in {"发送成功", "消息发送成功", ""}:
+                    phase = "发送确认成功" if success else "发送确认失败"
+                    if detail in {"发送成功", "消息发送成功", "消息已发送", ""}:
                         detail = ""
                     logger.info(f"{handler.site_name} - {message_name} -> {phase}{f' -> {detail}' if detail else ''}")
                 return outcome
@@ -257,10 +297,11 @@ class TaskEngine:
             needs_claim_id = task.get("task_type") == TaskType.CLAIM or task.get("claim_options")
             if chat_unit_message is not None:
                 # 展开后的单条喊话执行单元：直接发送该消息并获取反馈。
-                sent_messages.append(chat_unit_message)
-                ok, text = handler.send_messagebox(chat_unit_message)
-                if callable(original_collect) and ok:
-                    handler.collect_message_feedback(chat_unit_message)
+                ok, text = self._send_chat_with_confirmation(handler, chat_unit_message, original_send)
+                if ok:
+                    sent_messages.append(chat_unit_message)
+                    if callable(original_collect):
+                        handler.collect_message_feedback(chat_unit_message)
                 raw = TaskResult.ok(text if ok else "发送失败") if ok else TaskResult.fail(str(text))
             elif needs_claim_id:
                 if skip_if_no_claim and not claim_task_id:
@@ -278,8 +319,7 @@ class TaskEngine:
                 raw = task["func"]()
             result = self.normalize_result(raw)
             feedback = None
-            if task.get("task_type") == TaskType.CHAT and self.plugin.config.get_feedback:
-                handler.wait_feedback()
+            if task.get("task_type") == TaskType.CHAT and result.success and self.plugin.config.get_feedback:
                 feedback = handler.get_feedback(chat_unit_message) if chat_unit_message else handler.get_feedback()
             status = result.message
             if task.get("task_type") == TaskType.CHAT and result.success and sent_messages:
@@ -323,6 +363,8 @@ class TaskEngine:
                 "retryable": True,
             }
         finally:
+            if task.get("task_type") == TaskType.CHAT:
+                handler._reuse_shoutbox_snapshot = False
             if task.get("task_type") == TaskType.CHAT and callable(original_send):
                 handler.send_messagebox = original_send
             if task.get("task_type") == TaskType.CHAT and callable(original_collect):
