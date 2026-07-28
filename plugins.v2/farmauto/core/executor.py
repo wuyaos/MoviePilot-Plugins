@@ -222,9 +222,15 @@ class FarmExecutor:
                     elif action["op"] == "harvest" and action.get("source") == "field":
                         blocked_crops.add(crop_key)
                         break
+                    elif action["op"] == "sell":
+                        # 库存不足或出售失败时停止该作物后续出售，避免对空库存反复请求。
+                        break
                     time.sleep(max(0.0, float(policy["request_interval"])))
 
-            failures = sum(not action.success for action in report.actions)
+            failures = sum(
+                not action.success and not getattr(action, "skipped", False)
+                for action in report.actions
+            )
             report.status = "partial" if failures else "completed"
             report.message = (
                 f"完成 {report.trades_count} 个操作"
@@ -352,8 +358,14 @@ class FarmExecutor:
                 )
                 record(result, farm_html)
                 time.sleep(interval)
+                # 库存不足或出售失败时停止该作物后续出售，避免对空库存反复请求。
+                if not result.success:
+                    break
 
-        failures = sum(not action.success for action in report.actions)
+        failures = sum(
+            not action.success and not getattr(action, "skipped", False)
+            for action in report.actions
+        )
         report.status = "partial" if failures else "completed"
         report.message = f"完成 {report.trades_count} 个操作" if report.actions else "无可执行操作"
         return report
@@ -853,6 +865,7 @@ class FarmExecutor:
                 profit=profit,
                 message=message,
                 skipped=skipped,
+                reason=str(parsed.get("reason") or ""),
                 crop_name=crop_name,
                 crop_icon=crop_icon,
                 land_name=(

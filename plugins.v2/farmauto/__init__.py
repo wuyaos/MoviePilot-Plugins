@@ -31,7 +31,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场统一自动运营，支持独立收获、补种与出售策略"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
-    plugin_version = "3.2.8"
+    plugin_version = "3.2.9"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "farmauto_"

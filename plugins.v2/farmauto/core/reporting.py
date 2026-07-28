@@ -36,19 +36,21 @@ def _signed(value: int) -> str:
 
 
 def _format_site_detail(site_report: SiteRunReport) -> str:
-    # 普通跳过不通知；互动达到每日上限只在首次探测时保留，调用方随后写入每日状态。
+    # 普通跳过不通知；以下软停止需保留：互动达到每日上限（首次或重复探测）、出售时库存不足。
     meaningful_actions = []
     interaction_actions = {"steal", "like", "buy_slot", "visit"}
+    daily_limit_reasons = {"daily_exhausted", "daily_already_exhausted"}
+    soft_stop_reasons = daily_limit_reasons | {"insufficient_stock"}
     for action in site_report.actions:
         if action.action == "harvest_all" and action.success:
             target_str = str(action.target or "")
             # harvest_all 未拆分明细（target=all）且无魔力收获，视为无收获
             if target_str == "all" and int(action.profit or 0) == 0:
                 continue
-        if action.skipped and action.reason != "daily_exhausted":
+        if action.skipped and action.reason not in soft_stop_reasons:
             continue
         # 非互动失败沿用原通知策略不显示；互动失败需要明确通知。
-        if not action.success and action.action not in interaction_actions:
+        if not action.success and action.action not in interaction_actions and action.reason not in soft_stop_reasons:
             continue
         meaningful_actions.append(action)
     # 站点无有意义操作不显示
@@ -82,7 +84,7 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
         ]
         failed_actions = [action for action in actions if not action.success]
         limit_actions = [
-            action for action in actions if action.reason == "daily_exhausted"
+            action for action in actions if action.reason in daily_limit_reasons
         ]
         parts = []
         if successful_actions:
@@ -100,6 +102,11 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
         if action_names & interaction_actions and limit_actions:
             messages = [str(action.message or "今日额度已用完") for action in limit_actions[:1]]
             parts.append(f"⚠️达到上限（{'、'.join(messages)}）")
+        # 出售类软停止（库存不足等）提示卖空，避免无明细。
+        if action_names & {"sell"}:
+            soft_stops = [a for a in actions if a.skipped and a.reason in soft_stop_reasons]
+            if soft_stops:
+                parts.append(f"⚠️卖空{len(soft_stops)}")
         if not parts:
             continue
         group_profit = sum(int(action.profit or 0) for action in successful_actions)

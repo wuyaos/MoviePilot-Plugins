@@ -193,3 +193,65 @@ def test_siqi_staged_flow_harvests_each_plot_when_ocr_disabled():
     sell_calls = [call for call in client.calls if call[0] == "POST" and call[2].get("action") == "sell_inventory"]
     assert len(sell_calls) == 2
     assert all(call[2]["seed_id"] == 1 for call in sell_calls)
+
+
+class InsufficientStockClient(StagedClient):
+    """模拟快照 quantity 大于实际可售数量：前两次出售成功，第三次报"背包中该作物数量不足"。"""
+
+    def __init__(self):
+        super().__init__()
+        self.sell_count = 0
+
+    def get(self, url, cookies, retryable=True):
+        self.calls.append(("GET", url, None))
+        responses = [
+            self._farm([
+                {"land_id": 1, "plot_index": 0, "seed_id": 1, "is_ready": 0, "harvest_time": 1},
+                {"land_id": 1, "plot_index": 1, "seed_id": 1, "is_ready": 0, "harvest_time": 1},
+                {"land_id": 2, "plot_index": None, "seed_id": None, "is_ready": 0},
+            ]),
+            self._farm([
+                {"land_id": 1, "plot_index": 0, "seed_id": None, "is_ready": 0},
+                {"land_id": 1, "plot_index": 1, "seed_id": None, "is_ready": 0},
+                {"land_id": 2, "plot_index": None, "seed_id": None, "is_ready": 0},
+            ], inventory=[{"seed_id": 3, "name": "玉米", "quantity": 3}]),
+            self._farm([], inventory=[{"seed_id": 3, "name": "玉米", "quantity": 3}]),
+            self._farm([], inventory=[{"seed_id": 3, "name": "玉米", "quantity": 3}]),
+        ]
+        response = responses[min(self.fetch_count, len(responses) - 1)]
+        self.fetch_count += 1
+        return Response(response)
+
+    def post(self, url, cookies, data=None, json=None, allow_redirects=True, retryable=False):
+        self.calls.append(("POST", url, data))
+        if data and data.get("action") == "harvest":
+            return Response('{"success":true,"msg":"收获成功","reward":20}')
+        if data and data.get("action") == "plant_fill_empty":
+            return Response('{"success":true,"msg":"种植成功"}')
+        if data and data.get("action") == "sell_inventory":
+            self.sell_count += 1
+            if self.sell_count <= 2:
+                return Response('{"success":true,"msg":"出售成功"}')
+            return Response('{"success":false,"msg":"背包中该作物数量不足"}')
+        raise AssertionError(f"unexpected POST {data}")
+
+
+def test_siqi_staged_sell_stops_on_insufficient_stock_without_partial():
+    client = InsufficientStockClient()
+    report = FarmExecutor(client, Logger()).run_site(
+        "session=value", SiqiConfig(),
+        {"request_interval": 0, "max_sell_per_run": 50, "auto_sell": True},
+        {"default_seed_id": 3, "captcha_ocr": False},
+    )
+
+    sell_actions = [action for action in report.actions if action.action == "sell"]
+    assert len(sell_actions) == 3
+    assert sell_actions[0].success and sell_actions[1].success
+    # 第三次卖空后的软停止：不计成功，但 skipped=True，不污染站点状态。
+    assert not sell_actions[2].success
+    assert sell_actions[2].skipped is True
+    # 卖空后立即停止，不会继续对空库存发请求。
+    sell_calls = [call for call in client.calls if call[0] == "POST" and call[2].get("action") == "sell_inventory"]
+    assert len(sell_calls) == 3
+    # 软停止不计失败，站点应为 completed。
+    assert report.status == "completed"

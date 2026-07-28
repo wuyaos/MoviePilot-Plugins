@@ -723,7 +723,14 @@ class SiqiConfig(FarmSiteConfig):
         return self._parse_action_result(html, ("访问成功", "参观成功", "的农场"), "访问成功", "访问失败")
 
     def parse_sell_result(self, html: str) -> Dict[str, Any]:
-        return self._parse_action_result(html, ("出售成功", "已出售", "获得"), "出售成功", "出售失败")
+        result = self._parse_action_result(html, ("出售成功", "已出售", "获得"), "出售成功", "出售失败")
+        # 背包实际可售数量可能小于快照 quantity；服务端报"不足/没有"时按软停止处理，
+        # 避免把库存卖空后的正常停止误判为站点失败。
+        message = str(result.get("message") or "")
+        if not result.get("success") and any(token in message for token in ("不足", "没有", "无货", "售罄")):
+            result["skipped"] = True
+            result["reason"] = "insufficient_stock"
+        return result
 
     def parse_buy_slot_result(self, html: str) -> Dict[str, Any]:
         return self._parse_action_result(html, ("购买成功", "扩地成功", "坑位"), "扩地成功", "扩地失败")

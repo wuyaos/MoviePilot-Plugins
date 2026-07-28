@@ -177,3 +177,45 @@ def test_build_price_sections_uses_crop_names_and_trends():
     unknown_content = price_cards[1]["content"][0]["content"]
     assert [item["text"] for item in wheat_content] == ["小麦", "880", "价格: 800→880"]
     assert [item["text"] for item in unknown_content] == ["unknown", "7"]
+
+
+def test_notification_shows_siqi_daily_already_exhausted_and_sell_soft_stop():
+    """思齐点赞重复探测达上限（daily_already_exhausted）和出售库存不足软停止都需显示。"""
+    report = RunReport(
+        started_at=1,
+        finished_at=2,
+        site_reports=[SiteRunReport(
+            site_id="siqi",
+            site_name="思齐",
+            actions=[
+                ActionResult("sell", "玉米", True, profit=1380, message="出售成功 价格1380×1"),
+                ActionResult("sell", "玉米", True, profit=1380, message="出售成功 价格1380×1"),
+                ActionResult(
+                    "sell", "玉米", False, skipped=True,
+                    reason="insufficient_stock", message="背包中该作物数量不足",
+                ),
+                ActionResult(
+                    "like", "随机农场", True, skipped=True,
+                    reason="daily_already_exhausted", message="今日点赞额度已用完",
+                ),
+            ],
+            total_profit=2760,
+            trades_count=2,
+            status="completed",
+        )],
+        total_profit=2760,
+        total_trades=2,
+        status="completed",
+    )
+
+    text = format_notification(report)
+
+    # 思齐站点详情必须显示，不能因软停止被过滤
+    assert "【思齐】✅  魔力 +2760" in text
+    # 出售成功明细 + 卖空提示
+    assert "💰 出售：✅2（玉米×2）" in text
+    assert "⚠️卖空1" in text
+    # 点赞达上限（重复探测标记）也显示
+    assert "👍 点赞：⚠️达到上限（今日点赞额度已用完）" in text
+    # 软停止不计失败，站点状态为 completed
+    assert text.endswith("状态：completed")
