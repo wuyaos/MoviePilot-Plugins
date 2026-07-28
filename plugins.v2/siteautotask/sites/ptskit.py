@@ -51,39 +51,23 @@ class PtskitHandler(CapabilityHandler):
                 params={"shbox_text": message, "shout": "我喊", "sent": "yes", "type": "shoutbox"})
             if not response:
                 return False, "请求失败"
+            # 正式引擎由统一确认快照解析；独立调用维持旧有即时反馈语义。
+            if getattr(self, "_chat_confirmation_in_progress", False):
+                return True, "消息已发送"
             username = self.get_username()
             if not username:
                 return True, "消息已发送，未获取到用户名"
-            # PTS 的 magic-reward-top 反馈可能在发送响应之后异步出现，
-            # 等待配置的反馈时间，再重新读取 iframe 对应 shoutbox 页面。
             self.wait_feedback()
             feedback_response = self._send_get_request(self.shoutbox_url)
             content = feedback_response.text if feedback_response else response.text
-            try:
-                html = etree.HTML(content)
-                if html is None:
-                    return False, "页面解析失败"
-                # 1. 顶部系统奖励信息
-                for node in html.xpath(
-                        "//div[contains(@class, 'magic-reward-top') and contains(@class, 'system-msg')]"):
-                    feedback = self._extract_feedback(node, username, message)
-                    if feedback:
-                        self._last_message_result = feedback
-                        return True, feedback
-                # 2. 群聊行
-                for row in html.xpath("//table//tr/td[contains(@class, 'shoutrow')]"):
-                    feedback = self._extract_feedback(row, username, message)
-                    if feedback:
-                        self._last_message_result = feedback
-                        return True, feedback
-                    # 自己发送的消息也算成功
-                    if username and username in "".join(row.xpath(".//text()")) and message in "".join(row.xpath(".//text()")):
-                        return True, "消息已发送"
-                if 'name="shbox_text"' in content or 'id="shbox_text"' in content:
-                    return True, "消息已发送，未解析到反馈"
-            except Exception as e:
-                logger.error(f"Ptskit：解析HTML失败：{e}")
+            html = etree.HTML(content)
+            if html is None:
                 return True, "消息已发送，反馈解析失败"
+            for node in html.xpath("//div[contains(@class, 'magic-reward-top') and contains(@class, 'system-msg')]"):
+                feedback = self._extract_feedback(node, username, message)
+                if feedback:
+                    self._last_message_result = feedback
+                    return True, feedback
             return True, "消息已发送，未解析到反馈"
         except Exception as e:
             logger.error(f"Ptskit：发送消息失败：{e}")
@@ -100,6 +84,19 @@ class PtskitHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message: str = None):
+        # 统一引擎确认后仅从确认快照解析；独立调用保留 send_messagebox 的即时反馈。
+        response = getattr(self, "_last_shoutbox_snapshot", None)
+        if getattr(self, "_reuse_shoutbox_snapshot", False):
+            self._last_message_result = None
+            username = self.get_username()
+            if username and response:
+                html = etree.HTML(response.text or "")
+                if html is not None:
+                    for node in html.xpath("//div[contains(@class, 'magic-reward-top') and contains(@class, 'system-msg')]"):
+                        feedback = self._extract_feedback(node, username, message)
+                        if feedback:
+                            self._last_message_result = feedback
+                            break
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)

@@ -40,8 +40,8 @@ class MomentHandler(CapabilityHandler):
             return False, "消息内容不能为空"
         try:
             ok, text = super().send_messagebox(message, callback)
-            if not ok:
-                return False, text
+            if not ok or getattr(self, "_chat_confirmation_in_progress", False):
+                return ok, text
             username = self.get_username()
             if not username:
                 return True, text
@@ -57,7 +57,7 @@ class MomentHandler(CapabilityHandler):
 
     def _poll_feedback(self, username: str) -> Optional[str]:
         """查找「【{username}的女友】」格式反馈。"""
-        response = self._send_get_request(self.shoutbox_url)
+        response = getattr(self, "_last_shoutbox_snapshot", None) or self._send_get_request(self.shoutbox_url)
         if not response:
             return None
         html = etree.HTML(response.text)
@@ -70,14 +70,16 @@ class MomentHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message: str = None):
-        # 单条展开时重新查询，避免返回上一条消息的反馈。
+        # 女友反馈不带请求关键词：仅取本条已确认喊话附近的最新女友反馈，
+        # 找不到则明确无反馈，绝不沿用上一条结果。
         if message:
+            self._last_message_result = None
             username = self.get_username()
             if username:
-                self.wait_feedback()
-                fb = self._poll_feedback(username)
-                if fb:
-                    self._last_message_result = fb
+                for text in self.nearby_shoutbox_rows(message):
+                    if f"【{username}的女友】" in text:
+                        self._last_message_result = text
+                        break
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)

@@ -34,9 +34,18 @@ class CyanbugHandler(CapabilityHandler):
         return "大青虫" in self.site_name or "cyanbug" in self.domain
 
     def get_feedback(self, message=None):
-        # 单条展开时按消息重新查询反馈，避免被后续消息覆盖。
+        # 从已确认喊话附近查找青虫娘针对当前用户的对应奖励。
         if message:
-            self._last_message_result = self._poll_shoutbox_feedback(message)
+            self._last_message_result = None
+            username = self.get_username()
+            keyword = "上传" if "上传" in message else "魔力" if "魔力" in message else None
+            for text in self.nearby_shoutbox_rows(message):
+                if "青虫娘" not in text or f"@{username}" not in text:
+                    continue
+                if keyword and keyword not in text and "已经" not in text:
+                    continue
+                self._last_message_result = text
+                break
         if not self._last_message_result:
             return None
         return {"site": self.site_name, "message": message, "rewards": [{

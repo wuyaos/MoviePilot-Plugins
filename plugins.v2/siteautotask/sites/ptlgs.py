@@ -47,6 +47,8 @@ class PtlgsHandler(CapabilityHandler):
             ok, text = super().send_messagebox(message, callback)
             if not ok:
                 return False, text
+            if getattr(self, "_chat_confirmation_in_progress", False):
+                return True, text
             username = self.get_username()
             if not username:
                 self._last_message_result = text
@@ -107,6 +109,17 @@ class PtlgsHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message: str = None) -> Optional[Dict]:
+        username = self.get_username()
+        if message and username:
+            self._last_message_result = None
+            nearby = getattr(self, "nearby_shoutbox_rows", None)
+            if callable(nearby):
+                for text in nearby(message):
+                    if text.startswith("黑丝娘") and f"@{username}" in text:
+                        self._last_message_result = text
+                        break
+            else:
+                self._last_message_result = self._poll_feedback(username, message)
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)

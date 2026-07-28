@@ -46,8 +46,8 @@ class HxptHandler(CapabilityHandler):
             return False, "消息内容不能为空"
         try:
             ok, text = super().send_messagebox(message, callback)
-            if not ok:
-                return False, text
+            if not ok or getattr(self, "_chat_confirmation_in_progress", False):
+                return ok, text
             username = self.get_username()
             if not username:
                 return True, text

@@ -39,11 +39,7 @@ class DubheHandler(CapabilityHandler):
         if not message:
             return False, "消息内容不能为空"
         try:
-            ok, text = super().send_messagebox(message, callback)
-            if ok:
-                self.wait_feedback()
-                self._poll_feedback(message)
-            return ok, text
+            return super().send_messagebox(message, callback)
         except Exception as e:
             logger.error(f"天枢：发送消息失败：{e}")
             return False, str(e)
@@ -54,7 +50,7 @@ class DubheHandler(CapabilityHandler):
         if not username:
             return
         self._last_message_result = None
-        response = self._send_get_request(self.shoutbox_url)
+        response = getattr(self, "_last_shoutbox_snapshot", None) or self._send_get_request(self.shoutbox_url)
         if not response:
             return
         html = etree.HTML(response.text)
@@ -75,9 +71,18 @@ class DubheHandler(CapabilityHandler):
                 return
 
     def get_feedback(self, message: str = None) -> Optional[Dict]:
-        # 单条展开时按消息重新查询反馈，避免被后续消息覆盖。
-        if not self._last_message_result or message:
-            self._poll_feedback(message)
+        # 仅从本条已确认喊话附近的同用户系统反馈解析。
+        if message:
+            self._last_message_result = None
+            username = self.get_username()
+            nearby = getattr(self, "nearby_shoutbox_rows", None)
+            if callable(nearby):
+                for text in nearby(message):
+                    if f"@{username}" in text and "天枢" in text:
+                        self._last_message_result = text
+                        break
+            else:
+                self._poll_feedback(message)
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)

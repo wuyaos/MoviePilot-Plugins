@@ -1,7 +1,6 @@
 """藏宝阁站点适配。"""
 import re
 import time
-from lxml import etree
 from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask
 from ..base.decorator import task_info, TaskType
@@ -41,71 +40,22 @@ class CangbaoHandler(CapabilityHandler):
     def match(self) -> bool:
         return "藏宝阁" in self.site_name or self.domain == "cangbao.ge"
 
-    def collect_message_feedback(self, message):
-        """在消息发送后单独等待并保存该消息的系统反馈。"""
-        username = self.get_username()
-        if not username:
-            return None
-        self.wait_feedback()
-        feedback = self._poll_feedback(username, message)
-        if not feedback:
-            return None
-        self._last_message_result = feedback
-        message_feedbacks = getattr(self, "_message_feedbacks", [])
-        message_feedbacks.append({"message": message, "text": feedback})
-        self._message_feedbacks = message_feedbacks
-        return feedback
-
-    def _poll_feedback(self, username, message=None):
-        keyword = "上传量" if message and "上传" in message else "魔力" if message and "魔力" in message else None
-        response = self._send_get_request(self.site_url + "/shoutbox.php")
-        if not response:
-            return None
-        html = etree.HTML(response.text)
-        if html is None:
-            return None
-        for row in html.xpath("//td[contains(@class, 'shoutrow')][position() <= 20]"):
-            text = re.sub(r"\s+", " ", "".join(row.xpath(".//text()[not(ancestor::span[@class='date'])]")).strip())
-            if not text.startswith("系统:"):
-                continue
-            if f"@{username}" not in text:
-                continue
-            # 成功反馈含“感谢...奖励”，负面反馈含“已经求过/明天再来”。
-            if keyword and keyword not in text and "已经求过" not in text and "明天再来" not in text:
-                continue
-            return text
-        return None
-
     def get_feedback(self, message=None):
-        # 单条展开时重新查询反馈，避免 collect_message_feedback 在发送时未捕获系统反馈。
-        if message:
-            username = self.get_username()
-            if username:
-                self.wait_feedback()
-                fb = self._poll_feedback(username, message)
-                if fb:
-                    return {"site": self.site_name, "message": message, "rewards": [{
-                        "type": "上传量" if "上传" in fb else "魔力值" if "魔力" in fb else "raw_feedback",
-                        "description": fb, "amount": "", "unit": "",
-                        "is_negative": any(k in fb for k in ("已经求过", "明天再来")),
-                    }]}
-            return None
-        message_feedbacks = getattr(self, "_message_feedbacks", [])
-        if not message_feedbacks and self._last_message_result:
-            message_feedbacks = [{"message": message, "text": self._last_message_result}]
-        if not message_feedbacks:
-            return None
-        rewards = []
-        for item in message_feedbacks:
-            text = str(item["text"])
-            kind = "上传量" if "上传" in text else "魔力值" if "魔力" in text else "raw_feedback"
-            sent_message = item.get("message")
-            description = f"“{sent_message}”：{text}" if sent_message else text
-            rewards.append({
-                "type": kind, "description": description,
-                "amount": "", "unit": "", "is_negative": False,
-            })
-        return {"site": self.site_name, "message": message, "rewards": rewards}
+        """仅从本条已确认喊话上方的附近行解析系统反馈。"""
+        username = self.get_username()
+        keyword = "上传" if message and "上传" in message else "魔力" if message and "魔力" in message else None
+        for text in self.nearby_shoutbox_rows(message):
+            text = re.sub(r"\s+", " ", text).strip()
+            if not text.startswith("系统:") or f"@{username}" not in text:
+                continue
+            negative = any(item in text for item in ("已经求过", "明天再来"))
+            if keyword and keyword not in text and not negative:
+                continue
+            return {"site": self.site_name, "message": message, "rewards": [{
+                "type": "上传量" if "上传" in text else "魔力值" if "魔力" in text else "raw_feedback",
+                "description": text, "amount": "", "unit": "", "is_negative": negative,
+            }]}
+        return None
 
 
 class Tasks(BaseTask):

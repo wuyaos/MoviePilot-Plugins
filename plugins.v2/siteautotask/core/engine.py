@@ -15,7 +15,7 @@ from .task_keys import site_task_key, claim_task_key
 from .execution import execution_key, is_retryable_failure, record_execution_key
 from ..sites import get_site_handler
 from ..utils.display import display_record_lines, display_task
-from ..utils.feedback import NotificationIcons, detect_reward_type
+from ..utils.feedback import NotificationIcons
 
 
 class TaskEngine:
@@ -228,9 +228,12 @@ class TaskEngine:
         for attempt in range(1, self.CHAT_SEND_MAX_ATTEMPTS + 1):
             logger.info(f"{handler.site_name} - [喊话] “{message}” -> 第 {attempt} 次发送")
             try:
+                handler._chat_confirmation_in_progress = True
                 outcome = send(message)
             except Exception as e:
                 outcome = (False, f"发送异常：{e}")
+            finally:
+                handler._chat_confirmation_in_progress = False
             success = bool(outcome and outcome[0]) if isinstance(outcome, tuple) else bool(outcome)
             detail = str(outcome[1] or "") if isinstance(outcome, tuple) and len(outcome) > 1 else ""
             if success:
@@ -277,20 +280,6 @@ class TaskEngine:
                     logger.info(f"{handler.site_name} - {message_name} -> {phase}{f' -> {detail}' if detail else ''}")
                 return outcome
             handler.send_messagebox = tracked_send
-            original_collect = getattr(handler, "collect_message_feedback", None)
-            if callable(original_collect):
-                def tracked_collect(message, *args, **kwargs):
-                    feedback = original_collect(message, *args, **kwargs)
-                    message_name = f"[喊话] “{message}”"
-                    if feedback:
-                        icon = NotificationIcons.get(detect_reward_type(str(feedback)))
-                        logger.info(f"{handler.site_name} - {message_name} -> {icon} {feedback}")
-                    else:
-                        logger.info(f"{handler.site_name} - {message_name} -> 无反馈")
-                    return feedback
-                handler.collect_message_feedback = tracked_collect
-        else:
-            original_collect = None
         if task.get("task_type") != TaskType.CHAT:
             logger.info(f"{handler.site_name} - {task_name} - 开始执行")
         try:
@@ -300,8 +289,6 @@ class TaskEngine:
                 ok, text = self._send_chat_with_confirmation(handler, chat_unit_message, original_send)
                 if ok:
                     sent_messages.append(chat_unit_message)
-                    if callable(original_collect):
-                        handler.collect_message_feedback(chat_unit_message)
                 raw = TaskResult.ok(text if ok else "发送失败") if ok else TaskResult.fail(str(text))
             elif needs_claim_id:
                 if skip_if_no_claim and not claim_task_id:
@@ -339,7 +326,7 @@ class TaskEngine:
                 record["feedback"] = feedback
             if result.rewards:
                 record["rewards"] = result.rewards
-            if task.get("task_type") == TaskType.CHAT and not callable(original_collect):
+            if task.get("task_type") == TaskType.CHAT:
                 for line in display_record_lines(record):
                     reward_text = "；".join(
                         f"{NotificationIcons.get(item.get('type', ''))} {item.get('description', '')}".strip()
@@ -367,8 +354,7 @@ class TaskEngine:
                 handler._reuse_shoutbox_snapshot = False
             if task.get("task_type") == TaskType.CHAT and callable(original_send):
                 handler.send_messagebox = original_send
-            if task.get("task_type") == TaskType.CHAT and callable(original_collect):
-                handler.collect_message_feedback = original_collect
+
 
     def _schedule_failed(self, records, is_retry=False):
         """记录仍失败的任务，供主 cron 后续重试。"""

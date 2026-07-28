@@ -36,8 +36,8 @@ class LuckptHandler(CapabilityHandler):
             return False, "消息内容不能为空"
         try:
             ok, text = super().send_messagebox(message, callback)
-            if not ok:
-                return False, text
+            if not ok or getattr(self, "_chat_confirmation_in_progress", False):
+                return ok, text
             username = self.get_username()
             if not username:
                 return True, text
@@ -53,7 +53,7 @@ class LuckptHandler(CapabilityHandler):
 
     def _poll_feedback(self, username: str) -> Optional[str]:
         """优先解析许愿池系统反馈，其次解析聊天区。"""
-        response = self._send_get_request(self.shoutbox_url)
+        response = getattr(self, "_last_shoutbox_snapshot", None) or self._send_get_request(self.shoutbox_url)
         if not response:
             return None
         html = etree.HTML(response.text)
@@ -75,6 +75,11 @@ class LuckptHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message: str = None):
+        username = self.get_username()
+        if username:
+            feedback = self._poll_feedback(username)
+            if feedback:
+                self._last_message_result = feedback
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)

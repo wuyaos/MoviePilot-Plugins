@@ -67,12 +67,12 @@ class City13Handler(CapabilityHandler):
                 self._last_message_result = text
                 return False, text
 
-            # 4. 校验群聊区是否出现自己的消息
+            # 正式引擎统一等待、确认消息并从同一快照解析反馈；直接调用沿用旧行为。
+            if getattr(self, "_chat_confirmation_in_progress", False):
+                return True, "消息已发送"
             if not self._message_exists_in_shoutbox(username, message):
                 logger.warning(f"13City：喊话请求已返回，但群聊区未发现用户消息：{username} {message}")
                 return False, "13City群聊区未显示发送的喊话消息"
-
-            # 5. 等待系统反馈生成后解析（掌管啤酒瓶的神对 @username 的回复）
             self.wait_feedback()
             feedback = self._poll_feedback(username)
             result = (True, feedback) if feedback else (True, "消息已发送")
@@ -135,6 +135,14 @@ class City13Handler(CapabilityHandler):
             kw in content for kw in ("听到了你的愿望", "你今天求过啤酒瓶了", "啤酒瓶"))
 
     def get_feedback(self, message: str = None) -> Optional[dict]:
+        # 统一引擎确认后只从当前喊话附近的神明回复读取，不复用旧任务结果。
+        if message and getattr(self, "_reuse_shoutbox_snapshot", False):
+            self._last_message_result = None
+            username = self.get_username()
+            for text in self.nearby_shoutbox_rows(message):
+                if self._is_feedback_message(text, username):
+                    self._last_message_result = text
+                    break
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)
