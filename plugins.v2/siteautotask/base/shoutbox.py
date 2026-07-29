@@ -130,7 +130,9 @@ def observe(snapshot: ShoutboxSnapshot, profile: ShoutboxProfile, username: str,
         if own_shout:
             break
         # 默认反馈规则：含用户名但不是本人喊话的行即为系统反馈；站点可声明更精确的 is_feedback。
-        if username in row.text:
-            if profile.is_feedback is None or profile.is_feedback(row, username):
+        if profile.is_feedback is not None:
+            if profile.is_feedback(row, username):
                 return ChatObservation(True, True, feedback=row)
+        elif username in row.text:
+            return ChatObservation(True, True, feedback=row)
     return ChatObservation(True, True, reason="未解析到反馈")

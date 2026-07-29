@@ -48,11 +48,11 @@ class HxptHandler(CapabilityHandler):
             path="/shoutbox.php?ajax_chat=1&type=",
             row_xpath="//td[contains(@class, 'shoutrow')]",
             direction=FeedbackDirection.BEFORE,
-            # 好学的有效结果不一定含“火花”，如“明天再继续”也是本条学习反馈。
+            # 好学的系统提示不含 @用户名，需要声明匹配规则。
             is_feedback=lambda row, _username: "系统提示：" in row.text,
             retry_on_unconfirmed=False,
             message_terms=lambda _message: ["好好学习", "天天向上"],
-            confirmation_wait_seconds=2,
+            confirmation_wait_seconds=3,
         )
 
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:
@@ -97,7 +97,7 @@ class HxptHandler(CapabilityHandler):
 
     def get_feedback(self, message: str = None):
         observation = getattr(self, "_chat_observation", None)
-        if message and observation and observation.feedback:
+        if observation and observation.feedback:
             self._last_message_result = observation.feedback.text
         if not self._last_message_result:
             return None
@@ -109,10 +109,11 @@ class HxptHandler(CapabilityHandler):
             if kw in text:
                 reward_type = kind
                 break
-        return {"site": self.site_name, "message": message, "rewards": [{
+        result = {"site": self.site_name, "message": message, "rewards": [{
             "type": reward_type, "description": text,
             "amount": "", "unit": "", "is_negative": is_negative,
         }]}
+        return result
 
 
 class Tasks(BaseTask):
