@@ -30,6 +30,7 @@ AutoPtCheckin 的站点级签到适配层；输入站点 Cookie/UA/代理配置�
 - `pterclub.py`: PterClub 站点签到适配。
 - `pttime.py`: PTTime 站点签到适配。
 - `siqi.py`: 思琪 站点签到适配。
+- `soulvoice.py`: 聆音Club attendance.php 验证码签到适配（复用通用基类）。
 - `tjupt.py`: TJUPT 站点签到适配。
 - `ttg.py`: TTG 站点签到适配。
 - `tu88.py`: TU88 attendance.php 验证码签到适配（复用通用基类）。

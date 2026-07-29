@@ -161,11 +161,12 @@
         "name": "PT站点自动签到",
         "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
         "labels": "签到,PT",
-        "version": "1.5.1",
+        "version": "1.5.2",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.2": "新增聆音Club(pt.soulvoice.club) attendance.php 验证码签到适配，复用 NexusPHP 验证码签到通用基类",
             "v1.5.1": "随机签到时间首次生成后持久化，保证重启重载不漂移",
             "v1.5.0": "修复 DStudio 空 POST 签到误报（补齐浏览器表单请求头并在提交前后检查签到表单与明确状态文案）；新增 yzyy 论坛 Discuz zqlj_sign 动态签到码专用适配器，纳入统一自动签到调度。",
             "v1.4.9": "移除详情页未使用的表格行构建函数，并补充拆分后的配置页与详情页辅助模块结构说明。",
