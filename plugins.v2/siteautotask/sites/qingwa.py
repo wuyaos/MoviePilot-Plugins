@@ -8,7 +8,6 @@ groupchatzone 的 QingwaHandler（含 get_feedback + buy_daily_bonus）。
 """
 from typing import Dict, Optional, Tuple
 
-from lxml import etree
 
 from app.log import logger
 
@@ -38,43 +37,46 @@ class QingwaHandler(CapabilityHandler):
     def match(self) -> bool:
         return "青蛙" in self.site_name
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//li",
+            direction=FeedbackDirection.BEFORE,
+            message_terms=lambda message: ["蛙总"] if "蛙总" in message else [message],
+            confirmation_wait_seconds=2,
+        )
+
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:
-        """发送群聊区消息（青蛙特化解析）。"""
+        """发送群聊区消息。"""
         try:
             if not message:
                 return False, "消息内容不能为空"
-            cb = callback or (lambda response: " ".join(
-                etree.HTML(response.text).xpath("//ul[1]/li/text()")))
-            result = super().send_messagebox(message, cb)
-            if result[0]:
-                self._last_message_result = result[1]
-                logger.info(f"青蛙：消息发送成功：{result[1]}")
-            else:
-                self._last_message_result = None
-            return result
+            # 发送后的确认与反馈完全由引擎读取的 Profile 快照负责。
+            return super().send_messagebox(message, callback)
         except Exception as e:
             logger.error(f"青蛙：发送消息异常：{e}")
-            self._last_message_result = None
             return False, str(e)
 
     def get_feedback(self, message: str = None) -> Optional[Dict]:
         """青蛙喊话反馈解析（"发了！"通常为 10G 上传）。"""
-        if self._last_message_result:
-            text = self._last_message_result
-            if text == "发了！":
-                text = f"{text}一般为10G！"
-            return {
-                "site": self.site_name,
-                "message": message,
-                "rewards": [{
-                    "type": "青蛙",
-                    "description": text,
-                    "amount": "",
-                    "unit": "",
-                    "is_negative": False,
-                }],
-            }
-        return None
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
+            return None
+        if text == "发了！":
+            text = f"{text}一般为10G！"
+        return {
+            "site": self.site_name,
+            "message": message,
+            "rewards": [{
+                "type": "青蛙",
+                "description": text,
+                "amount": "",
+                "unit": "",
+                "is_negative": False,
+            }],
+        }
 
     def buy_daily_bonus(self) -> Tuple[bool, str]:
         """每日福利购买：消耗 1 蝌蚪兑换 1000 蝌蚪。

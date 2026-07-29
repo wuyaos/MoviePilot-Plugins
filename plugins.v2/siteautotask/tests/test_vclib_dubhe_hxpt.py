@@ -175,8 +175,10 @@ class DubheTests(unittest.TestCase):
         self.assertTrue(h.match())
 
     def test_feedback_parse_upload(self):
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
         h, _ = self.handler({})
         h.send_messagebox("求上传")
+        h._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "神明听到了wuyaos的呼唤，送出了10GB上传量"))
         feedback = h.get_feedback("求上传")
         self.assertEqual(feedback["rewards"][0]["type"], "上传量")
 

@@ -114,21 +114,22 @@ class City13Tests(unittest.TestCase):
         return city13.City13Handler(info), session
 
     def test_match_and_feedback_parse(self):
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
         handler, _ = self.handler({})
         self.assertTrue(handler.match())
         ok, msg = handler.send_messagebox("求啤酒瓶")
         self.assertTrue(ok)
-        self.assertIn("啤酒瓶", msg)
+        handler._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "掌管啤酒瓶的神 @wuyaos 听到了你的愿望，增加了100啤酒瓶"))
         feedback = handler.get_feedback("求啤酒瓶")
         self.assertEqual(feedback["rewards"][0]["type"], "啤酒瓶")
 
     def test_message_not_in_shoutbox_fails(self):
-        # 群聊区没有用户消息 → 失败
+        # 群聊区没有用户消息 → send_messagebox 仍返回成功但引擎确认会失败
         html = '<html><body><table><tr><td class="shoutrow"><span class="date">12:00</span> other 求啤酒瓶</td></tr></table></body></html>'
         handler, _ = self.handler({"shoutbox_html": html})
         ok, msg = handler.send_messagebox("求啤酒瓶")
-        self.assertFalse(ok)
-        self.assertIn("未显示", msg)
+        # send_messagebox 只负责发送，确认由引擎负责
+        self.assertTrue(ok)
 
     def test_buy_blessing_already_owned(self):
         handler, _ = self.handler({"shoutbox_html": CITY13_MEDAL_OWNED})

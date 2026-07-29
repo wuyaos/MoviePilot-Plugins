@@ -35,6 +35,16 @@ class DubheHandler(CapabilityHandler):
     def match(self) -> bool:
         return "天枢" in self.site_name or "dubhe" in self.domain
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BEFORE,
+            message_terms=lambda message: ["天枢", message.split("，")[-1]],
+            confirmation_wait_seconds=2,
+        )
+
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:
         if not message:
             return False, "消息内容不能为空"
@@ -71,21 +81,10 @@ class DubheHandler(CapabilityHandler):
                 return
 
     def get_feedback(self, message: str = None) -> Optional[Dict]:
-        # 仅从本条已确认喊话附近的同用户系统反馈解析。
-        if message:
-            self._last_message_result = None
-            username = self.get_username()
-            nearby = getattr(self, "nearby_shoutbox_rows", None)
-            if callable(nearby):
-                for text in nearby(message):
-                    if f"@{username}" in text and "天枢" in text:
-                        self._last_message_result = text
-                        break
-            else:
-                self._poll_feedback(message)
-        if not self._last_message_result:
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
             return None
-        text = str(self._last_message_result)
         reward_type = "raw_feedback"
         for kw, kind in (("上传", "上传量"), ("下载", "下载量"), ("魔力", "魔力值"),
                           ("工分", "工分"), ("vip", "VIP")):

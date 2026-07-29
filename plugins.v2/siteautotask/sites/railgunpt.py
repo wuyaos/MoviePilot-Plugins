@@ -22,6 +22,16 @@ class RailgunptHandler(CapabilityHandler):
     def match(self) -> bool:
         return "railgun" in self.site_name.lower() or "bilibili.download" in self.domain
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BEFORE,
+            message_terms=lambda message: ["炮姐", message.split("，")[-1]],
+            confirmation_wait_seconds=2,
+        )
+
 
 class Tasks(BaseTask):
     def __init__(self, cookie=None):

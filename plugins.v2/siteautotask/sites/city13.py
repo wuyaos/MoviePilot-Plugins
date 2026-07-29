@@ -46,38 +46,26 @@ class City13Handler(CapabilityHandler):
     def match(self) -> bool:
         return "13city" in self.site_name.lower() or "13city.org" in self.domain
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BEFORE,
+            message_terms=lambda message: [message],
+            confirmation_wait_seconds=2,
+        )
+
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:
         if not message:
             return False, "消息内容不能为空"
         try:
-            # 1. 勋章校验/自动购买
+            # 1. 勋章校验/自动购买（喊话前联动）
             blessing_ok, blessing_msg = self._ensure_blessing_medal()
             if not blessing_ok:
-                self._last_message_result = blessing_msg
                 return False, blessing_msg
-
-            # 2. 获取用户名
-            username = self.get_username()
-            if not username:
-                return False, "获取13City用户名失败"
-
-            # 3. 发送喊话
-            ok, text = self._send_shout_message(message)
-            if not ok:
-                self._last_message_result = text
-                return False, text
-
-            # 正式引擎统一等待、确认消息并从同一快照解析反馈；直接调用沿用旧行为。
-            if getattr(self, "_chat_confirmation_in_progress", False):
-                return True, "消息已发送"
-            if not self._message_exists_in_shoutbox(username, message):
-                logger.warning(f"13City：喊话请求已返回，但群聊区未发现用户消息：{username} {message}")
-                return False, "13City群聊区未显示发送的喊话消息"
-            self.wait_feedback()
-            feedback = self._poll_feedback(username)
-            result = (True, feedback) if feedback else (True, "消息已发送")
-            self._last_message_result = result[1] if result[0] else None
-            return result
+            # 2. 发送喊话；确认与反馈由引擎读取 Profile 快照负责。
+            return self._send_shout_message(message)
         except Exception as e:
             logger.error(f"13City：发送消息失败：{e}")
             return False, str(e)
@@ -135,21 +123,14 @@ class City13Handler(CapabilityHandler):
             kw in content for kw in ("听到了你的愿望", "你今天求过啤酒瓶了", "啤酒瓶"))
 
     def get_feedback(self, message: str = None) -> Optional[dict]:
-        # 统一引擎确认后只从当前喊话附近的神明回复读取，不复用旧任务结果。
-        if message and getattr(self, "_reuse_shoutbox_snapshot", False):
-            self._last_message_result = None
-            username = self.get_username()
-            for text in self.nearby_shoutbox_rows(message):
-                if self._is_feedback_message(text, username):
-                    self._last_message_result = text
-                    break
-        if not self._last_message_result:
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
             return None
-        text = str(self._last_message_result)
         reward_type = "啤酒瓶" if "啤酒瓶" in text else "raw_feedback"
         return {
             "site": self.site_name, "message": message,
-            "blessing_status": self._blessing_status,
+            "blessing_status": getattr(self, "_blessing_status", {}),
             "rewards": [{
                 "type": reward_type, "description": text,
                 "amount": "", "unit": "", "is_negative": False,
