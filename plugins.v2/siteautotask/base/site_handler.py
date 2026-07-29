@@ -42,24 +42,53 @@ class ISiteHandler(metaclass=ABCMeta):
     def get_feedback(self, message: str = None) -> Optional[Dict]:
         return None
 
+    def shoutbox_profile(self):
+        """返回站点喊话区 Profile；子类仅覆写此声明，不覆写确认流程。"""
+        from .shoutbox import ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+        )
+
     def read_shoutbox_snapshot(self):
-        """读取并缓存一份喊话区快照，供发送确认和反馈解析共用。"""
-        url = getattr(self, "shoutbox_url", None) or f"{self.site_url}/shoutbox.php?type=shoutbox"
-        response = send_get(self, url)
+        """按 Profile 读取并缓存一份喊话区原始快照。"""
+        profile = self.shoutbox_profile()
+        response = send_get(self, f"{self.site_url}{profile.path}")
         self._last_shoutbox_snapshot = response
         return response
+
+    def _structured_shoutbox_snapshot(self, response=None):
+        from .shoutbox import ShoutboxSnapshot
+        response = response or getattr(self, "_last_shoutbox_snapshot", None)
+        return ShoutboxSnapshot.parse(getattr(response, "text", ""), self.shoutbox_profile())
+
+    def message_confirmation_snapshot(self, message: str):
+        """发送前记录有效快照中的本人同文消息数量。"""
+        response = self.read_shoutbox_snapshot()
+        snapshot = self._structured_shoutbox_snapshot(response)
+        username = (self.get_username() or "").strip()
+        count = sum(username in row.text and message in row.text for row in snapshot.rows)
+        return {"valid": snapshot.valid, "count": count, "reason": snapshot.reason}
+
+    def observe_chat_message(self, message: str, baseline):
+        """从发送后同一快照确认消息并给出结构化有效性结果。"""
+        from .shoutbox import observe
+        snapshot = self._structured_shoutbox_snapshot()
+        username = (self.get_username() or "").strip()
+        configured = [message]
+        messages_getter = getattr(self, "shotbox_messages", None)
+        if callable(messages_getter):
+            configured.extend(str(item) for item in messages_getter() if item)
+        result = observe(snapshot, self.shoutbox_profile(), username, message, configured)
+        current_count = sum(username in row.text and message in row.text for row in snapshot.rows)
+        if result.snapshot_valid and current_count <= int((baseline or {}).get("count", 0)):
+            from .shoutbox import ChatObservation
+            return ChatObservation(True, False, reason="喊话区未出现新增当前用户消息")
+        return result
 
     @staticmethod
     def _is_shoutbox_url(url: str) -> bool:
         return str(url or "").split("?", 1)[0].rstrip("/").endswith("/shoutbox.php")
-
-    def message_confirmation_snapshot(self, message: str) -> int:
-        """发送前记录当前用户同文喊话的数量。"""
-        return len(self._find_sent_message_rows(message, self.read_shoutbox_snapshot()))
-
-    def verify_message_sent(self, message: str, previous_count: int, response) -> bool:
-        """在发送后的同一份快照中确认当前用户的本条消息已出现。"""
-        return len(self._find_sent_message_rows(message, response)) > previous_count
 
     def _shoutbox_rows(self, response):
         """将常见喊话区 DOM 归一成按页面顺序排列的文本行。"""
@@ -88,8 +117,9 @@ class ISiteHandler(metaclass=ABCMeta):
     def nearby_shoutbox_rows(self, message: str, max_rows: int = 5):
         """返回本条喊话上方的附近行，不跨过另一条自己的喊话。
 
-        页面默认按最新到最旧排列，目标消息上方（较小索引）才可能是其系统反馈。
-        其他用户的普通聊天允许插入；遇到另一条自己的非 ``@用户名`` 喊话即终止。
+        默认页面按最新到最旧排列，因此查目标消息上方；个别站点可通过
+        ``FEEDBACK_ROWS_BOTH=True`` 同时检查上下两侧（Moment 的反馈位置不稳定）。
+        其他用户的普通聊天允许插入；遇到另一条自己的已配置喊话即终止。
         """
         response = getattr(self, "_last_shoutbox_snapshot", None) or self.read_shoutbox_snapshot()
         username = (self.get_username() or "").strip()
@@ -97,12 +127,24 @@ class ISiteHandler(metaclass=ABCMeta):
         if not username or not target:
             return []
         rows = self._shoutbox_rows(response)
+        configured_messages = [target]
+        messages_getter = getattr(self, "shotbox_messages", None)
+        if callable(messages_getter):
+            configured_messages.extend(str(item) for item in messages_getter() if item)
         for index, text in enumerate(rows):
             if username not in text or target not in text:
                 continue
+            candidates = list(reversed(rows[max(0, index - max_rows):index]))
+            if getattr(type(self), "FEEDBACK_ROWS_BOTH", False):
+                candidates.extend(rows[index + 1:index + 1 + max_rows])
             nearby = []
-            for candidate in reversed(rows[max(0, index - max_rows):index]):
-                if username in candidate and f"@{username}" not in candidate:
+            for candidate in candidates:
+                # 不能仅凭用户名判断：如「【用户名的女友】」这类系统反馈也会带用户名。
+                # 只有包含本站实际喊话文本的行，才是另一条自己的喊话并构成边界。
+                is_own_shout = username in candidate and any(
+                    sent_message in candidate for sent_message in configured_messages
+                )
+                if is_own_shout:
                     break
                 nearby.append(candidate)
             return nearby

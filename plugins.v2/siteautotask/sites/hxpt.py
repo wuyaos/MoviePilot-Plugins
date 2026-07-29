@@ -41,6 +41,16 @@ class HxptHandler(CapabilityHandler):
     def match(self) -> bool:
         return "好学" in self.site_name or "haoxue" in self.domain
 
+    def shoutbox_profile(self):
+        """好学仅 AJAX 流返回真实喊话记录，不能使用通用 shoutbox URL。"""
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?ajax_chat=1&type=",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BEFORE,
+            is_feedback=lambda row, _username: "系统提示：" in row.text and "火花" in row.text,
+        )
+
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:
         if not message:
             return False, "消息内容不能为空"
@@ -92,6 +102,9 @@ class HxptHandler(CapabilityHandler):
         return parse_json_response(response, "任务领取失败").get("msg", "未知错误")
 
     def get_feedback(self, message: str = None):
+        observation = getattr(self, "_chat_observation", None)
+        if message and observation and observation.feedback:
+            self._last_message_result = observation.feedback.text
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)

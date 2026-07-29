@@ -218,12 +218,14 @@ class TaskEngine:
     def _send_chat_with_confirmation(self, handler, message, send):
         """发送后用同一喊话区快照确认消息，再供反馈解析复用。"""
         snapshot = getattr(handler, "message_confirmation_snapshot", None)
-        verify = getattr(handler, "verify_message_sent", None)
-        read_snapshot = getattr(handler, "read_shoutbox_snapshot", None)
-        if not all(callable(item) for item in (snapshot, verify, read_snapshot)):
+        observe = getattr(handler, "observe_chat_message", None)
+        if not all(callable(item) for item in (snapshot, observe)):
             # 仅兼容测试替身；生产 Handler 都继承 ISiteHandler。
             return send(message)
-        previous_count = snapshot(message)
+        baseline = snapshot(message)
+        if not baseline.get("valid", False):
+            # 无效快照不能证明消息未出现；绝不因此重发，避免好学式连发。
+            return False, f"喊话区确认不可用：{baseline.get('reason') or '快照无效'}"
         last_detail = "发送失败"
         for attempt in range(1, self.CHAT_SEND_MAX_ATTEMPTS + 1):
             logger.info(f"{handler.site_name} - [喊话] “{message}” -> 第 {attempt} 次发送")
@@ -238,12 +240,15 @@ class TaskEngine:
             detail = str(outcome[1] or "") if isinstance(outcome, tuple) and len(outcome) > 1 else ""
             if success:
                 handler.wait_feedback()
-                response = read_snapshot()
-                if verify(message, previous_count, response):
+                observation = observe(message, baseline)
+                if not observation.snapshot_valid:
+                    return False, f"喊话区确认不可用：{observation.reason or '快照无效'}"
+                if observation.sent:
                     handler._reuse_shoutbox_snapshot = True
+                    handler._chat_observation = observation
                     logger.info(f"{handler.site_name} - [喊话] “{message}” -> 已在喊话区确认")
                     return True, detail or "消息已发送"
-                last_detail = "喊话区未确认消息"
+                last_detail = observation.reason or "喊话区未确认消息"
             else:
                 last_detail = detail or "发送请求失败"
             logger.warning(f"{handler.site_name} - [喊话] “{message}” -> 第 {attempt} 次发送后未确认")
@@ -352,6 +357,7 @@ class TaskEngine:
         finally:
             if task.get("task_type") == TaskType.CHAT:
                 handler._reuse_shoutbox_snapshot = False
+                handler._chat_observation = None
             if task.get("task_type") == TaskType.CHAT and callable(original_send):
                 handler.send_messagebox = original_send
 
