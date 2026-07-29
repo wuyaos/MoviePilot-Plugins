@@ -116,8 +116,13 @@ class MomentTests(unittest.TestCase):
     def test_feedback_parse(self):
         h, _ = self.handler({})
         ok, msg = h.send_messagebox("求上传")
+        # send_messagebox 现在只负责发送；反馈由引擎通过 Profile 快照关联。
         self.assertTrue(ok)
-        self.assertIn("女友", msg)
+        # 模拟引擎设置观测结果后，get_feedback 返回女友反馈。
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
+        h._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "【wuyaos的女友】获得上传量10G"))
+        feedback = h.get_feedback("求上传")
+        self.assertIn("女友", feedback["rewards"][0]["description"])
 
     def test_task_metadata(self):
         h, _ = self.handler({})

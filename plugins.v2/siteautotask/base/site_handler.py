@@ -84,7 +84,8 @@ class ISiteHandler(metaclass=ABCMeta):
     def observe_chat_message(self, message: str, baseline):
         """从发送后同一快照确认消息并给出结构化有效性结果。"""
         from .shoutbox import observe
-        snapshot = self._structured_shoutbox_snapshot()
+        # 发送后必须重新读取快照，不能复用发送前 message_confirmation_snapshot 的缓存。
+        snapshot = self._structured_shoutbox_snapshot(self.read_shoutbox_snapshot())
         username = (self.get_username() or "").strip()
         configured = [message]
         messages_getter = getattr(self, "shotbox_messages", None)

@@ -53,18 +53,8 @@ class MomentHandler(CapabilityHandler):
         if not message:
             return False, "消息内容不能为空"
         try:
-            ok, text = super().send_messagebox(message, callback)
-            if not ok or getattr(self, "_chat_confirmation_in_progress", False):
-                return ok, text
-            username = self.get_username()
-            if not username:
-                return True, text
-            self.wait_feedback()
-            feedback = self._poll_feedback(username)
-            if feedback:
-                self._last_message_result = feedback
-                return True, feedback
-            return True, text
+            # 发送后的确认与反馈完全由引擎读取的 Profile 快照负责。
+            return super().send_messagebox(message, callback)
         except Exception as e:
             logger.error(f"Moment：发送消息失败：{e}")
             return False, str(e)
@@ -90,13 +80,6 @@ class MomentHandler(CapabilityHandler):
             observation = getattr(self, "_chat_observation", None)
             if observation and observation.feedback:
                 self._last_message_result = observation.feedback.text
-            elif not observation:
-                # 仅供独立调用/旧测试兼容；引擎路径统一使用 Profile 观测结果。
-                username = self.get_username()
-                for text in self.nearby_shoutbox_rows(message):
-                    if f"【{username}的女友】" in text:
-                        self._last_message_result = text
-                        break
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)

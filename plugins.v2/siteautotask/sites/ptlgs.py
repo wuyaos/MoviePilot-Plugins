@@ -56,21 +56,8 @@ class PtlgsHandler(CapabilityHandler):
         if not message:
             return False, "消息内容不能为空"
         try:
-            ok, text = super().send_messagebox(message, callback)
-            if not ok:
-                return False, text
-            if getattr(self, "_chat_confirmation_in_progress", False):
-                return True, text
-            username = self.get_username()
-            if not username:
-                self._last_message_result = text
-                return True, text
-            feedback = self._poll_feedback(username, message)
-            if feedback:
-                self._last_message_result = feedback
-                return True, feedback
-            self._last_message_result = text
-            return True, text
+            # 发送后的确认与反馈完全由引擎读取的 Profile 快照负责。
+            return super().send_messagebox(message, callback)
         except Exception as e:
             logger.error(f"PTLGS：发送消息失败：{e}")
             return False, str(e)

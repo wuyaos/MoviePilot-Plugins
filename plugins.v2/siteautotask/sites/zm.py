@@ -52,12 +52,6 @@ class ZmHandler(CapabilityHandler):
         """从确认快照关联的皮总反馈解析实际奖励类型。"""
         observation = getattr(self, "_chat_observation", None)
         feedback = observation.feedback.text if observation and observation.feedback else ""
-        if not feedback and not observation:
-            username = self.get_username()
-            for candidate in self.nearby_shoutbox_rows(message):
-                if "皮总" in candidate and f"@{username}" in candidate:
-                    feedback = candidate
-                    break
         if not feedback:
             return None
         is_negative = any(key in feedback for key in ("没有理", "明天再来"))
