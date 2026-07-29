@@ -91,15 +91,19 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
         ]
         parts = []
         if successful_actions:
+            # harvest_all 的 target 已包含收获明细和数量（如「收获了小麦×2」），
+            # 不再追加 ×N；其他动作按目标名聚合后追加数量。
+            raw_targets = []
             target_counts = {}
             for action in successful_actions:
-                # ✅ 表示成功请求次数；作物/动物的目标数量才使用批量操作 quantity。
-                # 点赞等批量互动本身已在 target 中列出多个用户名，仍按一次操作展示。
                 target = str(action.target) if action.target else "未知"
+                if action.action == "harvest_all":
+                    raw_targets.append(target)
+                    continue
                 quantity = max(1, int(action.quantity or 1))
-                target_quantity = quantity if action.action in {"harvest", "harvest_all", "plant", "breed", "sell"} else 1
+                target_quantity = quantity if action.action in {"harvest", "plant", "breed", "sell"} else 1
                 target_counts[target] = target_counts.get(target, 0) + target_quantity
-            targets = [f"{name}×{count}" for name, count in list(target_counts.items())[:5]]
+            targets = raw_targets + [f"{name}×{count}" for name, count in list(target_counts.items())[:5]]
             detail = f"（{'、'.join(targets)}）" if targets else ""
             parts.append(f"✅{len(successful_actions)}{detail}")
         # 仅四类互动动作通知失败，避免改变其他既有通知噪声策略。

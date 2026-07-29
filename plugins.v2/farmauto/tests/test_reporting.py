@@ -179,6 +179,58 @@ def test_build_price_sections_uses_crop_names_and_trends():
     assert [item["text"] for item in unknown_content] == ["unknown", "7"]
 
 
+def test_harvest_all_target_not_duplicated_with_quantity_suffix():
+    report = RunReport(
+        started_at=1,
+        finished_at=2,
+        site_reports=[SiteRunReport(
+            site_id="novahd",
+            site_name="NovaHD",
+            actions=[
+                ActionResult("harvest_all", "收获了小麦×1", True, profit=0, quantity=1),
+                ActionResult("plant", "小麦", True, profit=-500, quantity=1),
+            ],
+            total_profit=-500,
+            trades_count=2,
+            status="completed",
+        )],
+        total_profit=-500,
+        total_trades=2,
+        status="completed",
+    )
+
+    text = format_notification(report)
+
+    assert "收获了小麦×1×1" not in text
+    assert "🌾 收获：✅1（收获了小麦×1） 魔力 +0" in text
+
+
+def test_harvest_all_with_multiple_crops_keeps_detail():
+    report = RunReport(
+        started_at=1,
+        finished_at=2,
+        site_reports=[SiteRunReport(
+            site_id="skit",
+            site_name="拾刻",
+            actions=[
+                ActionResult("harvest_all", "收获了花生×1、小麦×1", True, profit=0, quantity=1),
+                ActionResult("plant", "小麦", True, profit=-1000, quantity=1),
+                ActionResult("plant", "花生", True, profit=-1000, quantity=1),
+            ],
+            total_profit=-2000,
+            trades_count=3,
+            status="completed",
+        )],
+        total_profit=-2000,
+        total_trades=3,
+        status="completed",
+    )
+
+    text = format_notification(report)
+
+    assert "🌾 收获：✅1（收获了花生×1、小麦×1） 魔力 +0" in text
+
+
 def test_notification_uses_plant_quantity_and_reports_one_successful_like_batch():
     report = RunReport(
         started_at=1,
