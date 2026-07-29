@@ -20,6 +20,20 @@ class MomentHandler(CapabilityHandler):
     def shotbox_messages():
         return ["茄子", "保一条"]
     MESSAGE_INTERVAL = 120  # Moment多消息间隔秒数
+    # 兼容旧 Handler 独立调用；生产确认路径使用 shoutbox_profile().direction。
+    FEEDBACK_ROWS_BOTH = True
+
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BOTH,
+            is_feedback=lambda row, username: f"【{username}的女友】" in row.text,
+            message_terms=lambda message: [message],
+            confirmation_wait_seconds=2,
+        )
+
     def __init__(self, site_info: dict):
         super().__init__(site_info)
         self.shoutbox_url = self.site_url + "/shoutbox.php"
@@ -70,12 +84,15 @@ class MomentHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message: str = None):
-        # 女友反馈不带请求关键词：仅取本条已确认喊话附近的最新女友反馈，
-        # 找不到则明确无反馈，绝不沿用上一条结果。
+        # 反馈已由 Profile 在确认快照中关联，避免复用上一条女友结果。
         if message:
             self._last_message_result = None
-            username = self.get_username()
-            if username:
+            observation = getattr(self, "_chat_observation", None)
+            if observation and observation.feedback:
+                self._last_message_result = observation.feedback.text
+            elif not observation:
+                # 仅供独立调用/旧测试兼容；引擎路径统一使用 Profile 观测结果。
+                username = self.get_username()
                 for text in self.nearby_shoutbox_rows(message):
                     if f"【{username}的女友】" in text:
                         self._last_message_result = text

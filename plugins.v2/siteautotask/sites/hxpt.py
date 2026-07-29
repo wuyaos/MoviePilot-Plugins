@@ -48,7 +48,11 @@ class HxptHandler(CapabilityHandler):
             path="/shoutbox.php?ajax_chat=1&type=",
             row_xpath="//td[contains(@class, 'shoutrow')]",
             direction=FeedbackDirection.BEFORE,
-            is_feedback=lambda row, _username: "系统提示：" in row.text and "火花" in row.text,
+            # 好学的有效结果不一定含“火花”，如“明天再继续”也是本条学习反馈。
+            is_feedback=lambda row, _username: "系统提示：" in row.text,
+            retry_on_unconfirmed=False,
+            message_terms=lambda _message: ["好好学习", "天天向上"],
+            confirmation_wait_seconds=2,
         )
 
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:

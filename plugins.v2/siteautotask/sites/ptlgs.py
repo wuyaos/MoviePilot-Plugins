@@ -40,6 +40,18 @@ class PtlgsHandler(CapabilityHandler):
     def match(self) -> bool:
         return "ptlgs" in self.site_name.lower() or "ptlgs.org" in self.domain
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BEFORE,
+            is_feedback=lambda row, username: "黑丝娘" in row.text and f"@{username}" in row.text
+            and any(key in row.text for key in ("奖赏", "获得", "损失", "明天再来")),
+            message_terms=lambda message: ["黑丝娘", message.split("，")[-1]],
+            confirmation_wait_seconds=2,
+        )
+
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:
         if not message:
             return False, "消息内容不能为空"
@@ -109,17 +121,14 @@ class PtlgsHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message: str = None) -> Optional[Dict]:
-        username = self.get_username()
-        if message and username:
+        if message:
             self._last_message_result = None
-            nearby = getattr(self, "nearby_shoutbox_rows", None)
-            if callable(nearby):
-                for text in nearby(message):
-                    if text.startswith("黑丝娘") and f"@{username}" in text:
-                        self._last_message_result = text
-                        break
-            else:
-                self._last_message_result = self._poll_feedback(username, message)
+            observation = getattr(self, "_chat_observation", None)
+            if observation and observation.feedback:
+                self._last_message_result = observation.feedback.text
+            elif not observation:
+                username = self.get_username()
+                self._last_message_result = self._poll_feedback(username, message) if username else None
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)

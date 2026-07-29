@@ -67,7 +67,18 @@ class ISiteHandler(metaclass=ABCMeta):
         response = self.read_shoutbox_snapshot()
         snapshot = self._structured_shoutbox_snapshot(response)
         username = (self.get_username() or "").strip()
-        count = sum(username in row.text and message in row.text for row in snapshot.rows)
+        if not username:
+            # 没有身份基线不能可靠确认本条消息，绝不能因此触发重复发送。
+            return {"valid": False, "count": 0, "reason": "未获取到站点用户名"}
+        from .shoutbox import _is_recent, _normalize_match_text
+        profile = self.shoutbox_profile()
+        terms = profile.message_terms(message) if profile.message_terms else [message]
+        normalized_terms = [_normalize_match_text(term) for term in terms if term]
+        count = sum(
+            username in row.text and _is_recent(row, profile)
+            and all(term in _normalize_match_text(row.text) for term in normalized_terms)
+            for row in snapshot.rows
+        )
         return {"valid": snapshot.valid, "count": count, "reason": snapshot.reason}
 
     def observe_chat_message(self, message: str, baseline):
@@ -79,12 +90,11 @@ class ISiteHandler(metaclass=ABCMeta):
         messages_getter = getattr(self, "shotbox_messages", None)
         if callable(messages_getter):
             configured.extend(str(item) for item in messages_getter() if item)
-        result = observe(snapshot, self.shoutbox_profile(), username, message, configured)
-        current_count = sum(username in row.text and message in row.text for row in snapshot.rows)
-        if result.snapshot_valid and current_count <= int((baseline or {}).get("count", 0)):
-            from .shoutbox import ChatObservation
-            return ChatObservation(True, False, reason="喊话区未出现新增当前用户消息")
-        return result
+        profile = self.shoutbox_profile()
+        # 多数站点的喊话流会缓存/合并行，计数未变化不代表本条未送达。
+        # 以发送后 2 秒读取到的“10 分钟内、本人、声明关键词”消息为确认依据。
+        # 旧日记录已由 Profile 的 max_row_age_seconds 排除。
+        return observe(snapshot, profile, username, message, configured)
 
     @staticmethod
     def _is_shoutbox_url(url: str) -> bool:
@@ -170,8 +180,12 @@ class ISiteHandler(metaclass=ABCMeta):
     def _get_user_field(self, field):
         try:
             for item in SiteOper().get_userdata_latest():
-                if item.domain == self.domain:
-                    return getattr(item, field, None)
+                if item.domain != self.domain:
+                    continue
+                # 站点刷新失败会写入同域的空身份记录；不能让它遮蔽较早的有效身份。
+                value = getattr(item, field, None)
+                if value:
+                    return value
         except Exception as e:
             logger.error(f"获取站点 {self.site_name} 用户信息失败：{e}")
         return None

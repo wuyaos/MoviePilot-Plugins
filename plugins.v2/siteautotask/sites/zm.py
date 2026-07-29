@@ -36,29 +36,43 @@ class ZmHandler(CapabilityHandler):
         import time
         time.sleep(max(0, int(self.feedback_timeout)))
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BEFORE,
+            is_feedback=lambda row, username: "皮总" in row.text and f"@{username}" in row.text
+            and any(key in row.text for key in ("响应", "扣减", "赠送", "没有理", "明天再来")),
+            message_terms=lambda message: ["皮总", message.split("，")[-1]],
+            confirmation_wait_seconds=2,
+        )
+
     def get_feedback(self, message=None):
-        """从发送确认所用快照的附近行解析本条喊话的系统反馈。"""
-        username = self.get_username()
-        for feedback in self.nearby_shoutbox_rows(message):
-            if "皮总" not in feedback or f"@{username}" not in feedback:
-                continue
-            is_negative = any(key in feedback for key in ("没有理", "明天再来"))
-            is_reward = any(key in feedback for key in ("响应", "扣减", "赠送"))
-            if not is_negative and not is_reward:
-                continue
-            if "下载" in feedback:
-                reward_type = "下载量"
-            elif "魔力" in feedback:
-                reward_type = "魔力值"
-            elif "上传" in feedback:
-                reward_type = "上传量"
-            else:
-                reward_type = "电力"
-            return {"site": self.site_name, "message": message, "rewards": [{
-                "type": reward_type, "description": feedback,
-                "amount": "", "unit": "", "is_negative": is_negative,
-            }]}
-        return None
+        """从确认快照关联的皮总反馈解析实际奖励类型。"""
+        observation = getattr(self, "_chat_observation", None)
+        feedback = observation.feedback.text if observation and observation.feedback else ""
+        if not feedback and not observation:
+            username = self.get_username()
+            for candidate in self.nearby_shoutbox_rows(message):
+                if "皮总" in candidate and f"@{username}" in candidate:
+                    feedback = candidate
+                    break
+        if not feedback:
+            return None
+        is_negative = any(key in feedback for key in ("没有理", "明天再来"))
+        if "下载" in feedback:
+            reward_type = "下载量"
+        elif "魔力" in feedback:
+            reward_type = "魔力值"
+        elif "上传" in feedback:
+            reward_type = "上传量"
+        else:
+            reward_type = "电力"
+        return {"site": self.site_name, "message": message, "rewards": [{
+            "type": reward_type, "description": feedback,
+            "amount": "", "unit": "", "is_negative": is_negative,
+        }]}
 
     def get_latest_message_time(self):
         def extract(response):

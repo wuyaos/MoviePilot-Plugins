@@ -42,22 +42,28 @@ class CangbaoHandler(CapabilityHandler):
     def match(self) -> bool:
         return "藏宝阁" in self.site_name or self.domain == "cangbao.ge"
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BEFORE,
+            is_feedback=lambda row, username: "系统:" in row.text and f"@{username}" in row.text,
+            message_terms=lambda message: ["阁主", message.split("，")[-1]],
+            confirmation_wait_seconds=2,
+        )
+
     def get_feedback(self, message=None):
-        """仅从本条已确认喊话上方的附近行解析系统反馈。"""
-        username = self.get_username()
-        keyword = "上传" if message and "上传" in message else "魔力" if message and "魔力" in message else None
-        for text in self.nearby_shoutbox_rows(message):
-            text = re.sub(r"\s+", " ", text).strip()
-            if not text.startswith("系统:") or f"@{username}" not in text:
-                continue
-            negative = any(item in text for item in ("已经求过", "明天再来"))
-            if keyword and keyword not in text and not negative:
-                continue
-            return {"site": self.site_name, "message": message, "rewards": [{
-                "type": "上传量" if "上传" in text else "魔力值" if "魔力" in text else "raw_feedback",
-                "description": text, "amount": "", "unit": "", "is_negative": negative,
-            }]}
-        return None
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
+            return None
+        text = re.sub(r"\s+", " ", text).strip()
+        negative = any(item in text for item in ("已经求过", "明天再来"))
+        return {"site": self.site_name, "message": message, "rewards": [{
+            "type": "上传量" if "上传" in text else "魔力值" if "魔力" in text else "raw_feedback",
+            "description": text, "amount": "", "unit": "", "is_negative": negative,
+        }]}
 
 
 class Tasks(BaseTask):

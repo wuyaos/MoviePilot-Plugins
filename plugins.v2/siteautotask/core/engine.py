@@ -240,6 +240,11 @@ class TaskEngine:
             detail = str(outcome[1] or "") if isinstance(outcome, tuple) and len(outcome) > 1 else ""
             if success:
                 handler.wait_feedback()
+                # Profile 等待仅用于页面最终一致性，硬限制10秒以避免单消息阻塞后续任务。
+                confirmation_wait = min(10, max(0, int(getattr(handler.shoutbox_profile(), "confirmation_wait_seconds", 0))))
+                if confirmation_wait:
+                    logger.info(f"{handler.site_name} - [喊话] “{message}” -> 等待 {confirmation_wait} 秒读取确认快照")
+                    time.sleep(confirmation_wait)
                 observation = observe(message, baseline)
                 if not observation.snapshot_valid:
                     return False, f"喊话区确认不可用：{observation.reason or '快照无效'}"
@@ -249,6 +254,8 @@ class TaskEngine:
                     logger.info(f"{handler.site_name} - [喊话] “{message}” -> 已在喊话区确认")
                     return True, detail or "消息已发送"
                 last_detail = observation.reason or "喊话区未确认消息"
+                if not observation.retry_allowed:
+                    return False, f"发送后未确认，已按站点安全策略停止重发：{last_detail}"
             else:
                 last_detail = detail or "发送请求失败"
             logger.warning(f"{handler.site_name} - [喊话] “{message}” -> 第 {attempt} 次发送后未确认")

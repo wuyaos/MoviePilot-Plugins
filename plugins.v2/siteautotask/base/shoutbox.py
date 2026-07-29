@@ -3,6 +3,7 @@
 本模块不发送消息；它只在一次已读取的页面快照中判断消息是否出现并寻找反馈，
 避免不同站点把 DOM 过早压平为无方向的字符串。
 """
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, List, Optional
@@ -20,6 +21,7 @@ class ChatRow:
     index: int
     text: str
     selector: str = ""
+    age_seconds: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,15 @@ class ShoutboxProfile:
     window_size: int = 5
     is_feedback: Optional[Callable[[ChatRow, str], bool]] = None
     external_feedback_xpath: str = ""
+    # 某些站点的确认入口与发送入口最终一致性较慢或需特殊认证；
+    # 此时宁可单次失败，也不能因误判连续重复喊话。
+    retry_on_unconfirmed: bool = True
+    max_row_age_seconds: int = 600
+    # None 表示使用当前完整消息；否则每个关键词都必须出现在本人喊话行中。
+    # 用于兼容头衔、空格和标点变化，而不使用危险的任意模糊匹配。
+    message_terms: Optional[Callable[[str], List[str]]] = None
+    # 发送成功到喊话流可见的最短等待；只影响读快照，不增加发送次数。
+    confirmation_wait_seconds: int = 0
 
 
 @dataclass
@@ -49,8 +60,12 @@ class ShoutboxSnapshot:
         if not nodes:
             return cls(reason="未找到 Profile 指定的喊话行")
         def convert(items, selector):
-            return [ChatRow(i, " ".join(t.strip() for t in node.xpath(".//text()") if t.strip()), selector)
-                    for i, node in enumerate(items)]
+            return [ChatRow(
+                i,
+                " ".join(t.strip() for t in node.xpath(".//text()") if t.strip()),
+                selector,
+                _relative_age_seconds(" ".join(t.strip() for t in node.xpath(".//text()") if t.strip())),
+            ) for i, node in enumerate(items)]
         rows = convert(nodes, profile.row_xpath)
         external = convert(root.xpath(profile.external_feedback_xpath), profile.external_feedback_xpath) \
             if profile.external_feedback_xpath else []
@@ -63,13 +78,38 @@ class ChatObservation:
     sent: bool
     feedback: Optional[ChatRow] = None
     reason: str = ""
+    retry_allowed: bool = True
+
+
+def _relative_age_seconds(text: str) -> Optional[int]:
+    """解析喊话区常见相对时间；无法确认时间的行不得用于近时反馈关联。"""
+    minute = re.search(r"(?:<\s*)?(\d+)\s*分钟前", text)
+    hour = re.search(r"(\d+)\s*时", text)
+    if minute or hour:
+        return (int(hour.group(1)) * 3600 if hour else 0) + (int(minute.group(1)) * 60 if minute else 0)
+    if "刚刚" in text or "现在" in text:
+        return 0
+    return None
+
+
+def _normalize_match_text(text: str) -> str:
+    """放宽同文匹配的格式差异，但不使用危险的模糊相似度。"""
+    return re.sub(r"[\s，,。.!！?？、\[\]【】（）()]", "", text or "")
+
+
+def _is_recent(row: ChatRow, profile: ShoutboxProfile) -> bool:
+    return row.age_seconds is not None and row.age_seconds <= profile.max_row_age_seconds
 
 
 def observe(snapshot: ShoutboxSnapshot, profile: ShoutboxProfile, username: str,
             message: str, configured_messages: List[str]) -> ChatObservation:
     if not snapshot.valid:
         return ChatObservation(False, False, reason=snapshot.reason)
-    target = next((row for row in snapshot.rows if username in row.text and message in row.text), None)
+    terms = profile.message_terms(message) if profile.message_terms else [message]
+    normalized_terms = [_normalize_match_text(term) for term in terms if term]
+    target = next((row for row in snapshot.rows
+                   if _is_recent(row, profile) and username in row.text
+                   and all(term in _normalize_match_text(row.text) for term in normalized_terms)), None)
     if not target:
         return ChatObservation(True, False, reason="喊话区未出现当前用户消息")
     if profile.direction == FeedbackDirection.EXTERNAL:
@@ -80,8 +120,12 @@ def observe(snapshot: ShoutboxSnapshot, profile: ShoutboxProfile, username: str,
         candidates = before if profile.direction == FeedbackDirection.BEFORE else after
         if profile.direction == FeedbackDirection.BOTH:
             candidates = before + after
+    normalized_messages = [_normalize_match_text(item) for item in configured_messages if item]
     for row in candidates:
-        own_shout = username in row.text and any(item and item in row.text for item in configured_messages)
+        if not _is_recent(row, profile):
+            continue
+        normalized_row = _normalize_match_text(row.text)
+        own_shout = username in row.text and any(item in normalized_row for item in normalized_messages)
         if own_shout:
             break
         if profile.is_feedback and profile.is_feedback(row, username):
