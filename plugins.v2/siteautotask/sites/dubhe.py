@@ -6,7 +6,6 @@ groupchatzone 独有站点，喊话反馈解析型。
 """
 from typing import Dict, Optional, Tuple
 import time
-from lxml import etree
 from app.log import logger
 
 from .capabilities import CapabilityHandler
@@ -54,31 +53,6 @@ class DubheHandler(CapabilityHandler):
             logger.error(f"天枢：发送消息失败：{e}")
             return False, str(e)
 
-    def _poll_feedback(self, message: str = None):
-        """发送后从 shoutbox 解析反馈，匹配用户名在回复内容中。"""
-        username = self.get_username()
-        if not username:
-            return
-        self._last_message_result = None
-        response = getattr(self, "_last_shoutbox_snapshot", None) or self._send_get_request(self.shoutbox_url)
-        if not response:
-            return
-        html = etree.HTML(response.text)
-        if html is None:
-            return
-        for row in html.xpath("//tr[td[@class='shoutrow']][position() <= 10]"):
-            sender_nodes = row.xpath(".//span[@class='nowrap']")
-            sender_text = "".join(sender_nodes[0].xpath(".//text()")) if sender_nodes else ""
-            content = "".join(row.xpath(
-                ".//text()[not(ancestor::span[@class='date']) and not(ancestor::span[@class='nowrap'])]")).strip()
-            if username not in sender_text and username in content:
-                if message:
-                    if "求魔力" in message and "魔力值" not in content:
-                        continue
-                    if "求上传" in message and "上传量" not in content:
-                        continue
-                self._last_message_result = content
-                return
 
     def get_feedback(self, message: str = None) -> Optional[Dict]:
         observation = getattr(self, "_chat_observation", None)

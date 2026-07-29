@@ -3,9 +3,8 @@
 groupchatzone 独有站点，喊话反馈解析型。
 - 发送后从 shoutbox 解析，匹配「【{username}的女友】」格式反馈
 """
-from typing import Optional, Tuple
+from typing import Tuple
 import time
-from lxml import etree
 from app.log import logger
 
 from .capabilities import CapabilityHandler
@@ -59,30 +58,13 @@ class MomentHandler(CapabilityHandler):
             logger.error(f"Moment：发送消息失败：{e}")
             return False, str(e)
 
-    def _poll_feedback(self, username: str) -> Optional[str]:
-        """查找「【{username}的女友】」格式反馈。"""
-        response = getattr(self, "_last_shoutbox_snapshot", None) or self._send_get_request(self.shoutbox_url)
-        if not response:
-            return None
-        html = etree.HTML(response.text)
-        if html is None:
-            return None
-        for row in html.xpath("//tr[td[@class='shoutrow']][position() <= 10]"):
-            content = "".join(row.xpath(".//text()[not(ancestor::span[@class='date'])]")).strip()
-            if f"【{username}的女友】" in content:
-                return content
-        return None
 
     def get_feedback(self, message: str = None):
-        # 反馈已由 Profile 在确认快照中关联，避免复用上一条女友结果。
-        if message:
-            self._last_message_result = None
-            observation = getattr(self, "_chat_observation", None)
-            if observation and observation.feedback:
-                self._last_message_result = observation.feedback.text
-        if not self._last_message_result:
+        # 反馈已由 Profile 在确认快照中关联（女友反馈可能在本条上方或下方）。
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
             return None
-        text = str(self._last_message_result)
         return {"site": self.site_name, "message": message, "rewards": [{
             "type": "raw_feedback", "description": text,
             "amount": "", "unit": "", "is_negative": False,

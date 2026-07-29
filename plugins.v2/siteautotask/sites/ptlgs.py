@@ -7,10 +7,8 @@
 
 任务合并 ptautotask 的 Lgs：签到、喊话（黑丝娘 求上传/求工分）。
 """
-import re
 import time
 from typing import Dict, Optional, Tuple
-from lxml import etree
 
 from app.log import logger
 
@@ -62,63 +60,15 @@ class PtlgsHandler(CapabilityHandler):
             logger.error(f"PTLGS：发送消息失败：{e}")
             return False, str(e)
 
-    def _poll_feedback(self, username: str, message: str = None) -> Optional[str]:
-        """参考 groupchatzone：最多轮询 5 次，间隔受 feedback_timeout 影响。"""
-        reward_keyword = self._get_reward_keyword(message)
-        # feedback_timeout 控制总等待预算，平均分配到 5 次轮询
-        interval = max(1, self.feedback_timeout) / 5
-        for attempt in range(5):
-            if attempt > 0:
-                time.sleep(interval)
-            response = self._send_get_request(self.shoutbox_url)
-            if not response:
-                continue
-            html = etree.HTML(response.text)
-            if html is None:
-                continue
-            for row in html.xpath("//td[contains(@class, 'shoutrow')][position() <= 20]"):
-                content = self._extract_row_text(row)
-                feedback = self._match_feedback(content, username, reward_keyword)
-                if feedback:
-                    return feedback
-        return None
 
-    def _get_reward_keyword(self, message: str = None) -> Optional[str]:
-        if not message:
-            return None
-        if "上传" in message:
-            return "上传"
-        if "工分" in message:
-            return "工分"
-        return None
 
-    def _extract_row_text(self, row) -> str:
-        text = "".join(row.xpath(".//text()[not(ancestor::span[@class='date'])]")).strip()
-        return re.sub(r"\s+", " ", text)
 
-    def _match_feedback(self, row_content: str, username: str, reward_keyword: Optional[str]) -> Optional[str]:
-        if not row_content.startswith("黑丝娘"):
-            return None
-        if f"@{username}" not in row_content:
-            return None
-        if reward_keyword and reward_keyword not in row_content and "明天再来吧" not in row_content:
-            return None
-        if any(kw in row_content for kw in ("奖赏你", "你获得了", "你损失了", "明天再来吧")):
-            return row_content
-        return None
 
     def get_feedback(self, message: str = None) -> Optional[Dict]:
-        if message:
-            self._last_message_result = None
-            observation = getattr(self, "_chat_observation", None)
-            if observation and observation.feedback:
-                self._last_message_result = observation.feedback.text
-            elif not observation:
-                username = self.get_username()
-                self._last_message_result = self._poll_feedback(username, message) if username else None
-        if not self._last_message_result:
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
             return None
-        text = str(self._last_message_result)
         reward_type = "raw_feedback"
         for kw, kind in (("上传", "上传量"), ("下载", "下载量"), ("魔力", "魔力值"),
                           ("工分", "工分"), ("vip", "VIP")):

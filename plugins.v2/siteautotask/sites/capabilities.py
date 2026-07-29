@@ -28,8 +28,10 @@ class NexusPHPChatMixin:
 class NexusPHPAccountMixin:
     """签到、邮件和用户信息相关能力。"""
     def attendance(self):
-        callback = lambda response: "".join(etree.HTML(response.text).xpath("//td/table//tr/td/p//text()"))
-        return self._send_get_request(self.site_url + "/attendance.php", rt_method=callback) or "签到失败"
+        # 兼容旧站点任务方法；实际请求/解析已下沉到可替换的签到动作策略。
+        from ..base.checkin import NexusPHPAttendanceAction
+        result = getattr(self, "CHECKIN_ACTION", NexusPHPAttendanceAction()).execute(self)
+        return result.message
 
     def get_message_list(self, rt_method=None):
         if rt_method is None:
@@ -68,18 +70,13 @@ class NexusPHPTaskClaimMixin:
 class FeedbackMixin:
     """反馈能力默认实现。站点可重写 get_feedback。"""
     def get_feedback(self, message=None):
-        # 统一执行路径只使用发送确认后的附近行，避免沿用发送响应里的旧聊天行。
-        if message and getattr(self, "_reuse_shoutbox_snapshot", False):
-            self._last_message_result = None
-            username = self.get_username()
-            for text in self.nearby_shoutbox_rows(message):
-                if f"@{username}" in text:
-                    self._last_message_result = text
-                    break
-        if not self._last_message_result:
+        # 统一从引擎确认快照关联的观测结果读取，不再自行读取喊话区。
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
             return None
         return {"site": self.site_name, "message": message, "rewards": [{
-            "type": "raw_feedback", "description": self._last_message_result,
+            "type": "raw_feedback", "description": text,
             "amount": "", "unit": "", "is_negative": False,
         }]}
 

@@ -5,9 +5,7 @@ groupchatzone 独有站点，喊话反馈解析型。
 - 查找 @用户名 的消息，检查上一行是否为"系统提示："
 - 解析火花奖励类型
 """
-import time
-from typing import Optional, Tuple
-from lxml import etree
+from typing import Tuple
 from app.log import logger
 
 from .capabilities import CapabilityHandler
@@ -65,26 +63,6 @@ class HxptHandler(CapabilityHandler):
             logger.error(f"好学：发送消息失败：{e}")
             return False, str(e)
 
-    def _poll_feedback(self, username: str) -> Optional[str]:
-        """带 ajax_chat 参数轮询，查找 @用户名 消息的上一行系统提示。"""
-        response = self._send_get_request(self.shoutbox_url, params={
-            "ajax_chat": "1", "type": "", "t": str(int(time.time() * 1000))})
-        if not response:
-            return None
-        html = etree.HTML(response.text)
-        if html is None:
-            return None
-        rows = html.xpath("//tr[td[@class='shoutrow']][position() <= 10]")
-        for i, row in enumerate(rows):
-            content = " ".join(" ".join(row.xpath(
-                ".//text()[not(ancestor::span[@class='date'])]")).split())
-            if f"@{username}" in content or username in content:
-                if i > 0:
-                    prev = " ".join(" ".join(rows[i - 1].xpath(
-                        ".//text()[not(ancestor::span[@class='date'])]")).split())
-                    if "系统提示：" in prev:
-                        return prev
-        return None
 
     def claim_task(self, task_id: str):
         response = self._send_post_request(

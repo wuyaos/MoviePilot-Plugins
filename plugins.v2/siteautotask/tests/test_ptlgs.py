@@ -113,19 +113,22 @@ class PtlgsTests(unittest.TestCase):
         return ptlgs.PtlgsHandler(info), session
 
     def test_match_and_upload_reward(self):
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
         handler, _ = self.handler({})
         self.assertTrue(handler.match())
         ok, msg = handler.send_messagebox("黑丝娘 求上传")
         self.assertTrue(ok)
-        self.assertIn("上传", msg)
+        handler._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "黑丝娘 @wuyaos 奖赏你 9GB 上传"))
         feedback = handler.get_feedback("黑丝娘 求上传")
         self.assertEqual(feedback["rewards"][0]["type"], "上传量")
         self.assertFalse(feedback["rewards"][0]["is_negative"])
 
     def test_loss_is_marked_negative(self):
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
         handler, _ = self.handler({"html": PTLGS_SHOUTBOX_LOSS})
         ok, _ = handler.send_messagebox("黑丝娘 求工分")
         self.assertTrue(ok)
+        handler._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "黑丝娘 @wuyaos 你损失了 528 工分"))
         feedback = handler.get_feedback("黑丝娘 求工分")
         self.assertTrue(feedback["rewards"][0]["is_negative"])
 

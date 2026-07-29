@@ -84,43 +84,9 @@ class City13Handler(CapabilityHandler):
             logger.error(f"13City：发送喊话失败：{e}")
             return False, "发送13City喊话失败"
 
-    def _message_exists_in_shoutbox(self, username: str, message: str) -> bool:
-        response = self._send_get_request(self.shoutbox_url)
-        if not response:
-            return False
-        html = etree.HTML(response.text)
-        if html is None:
-            return False
-        rows = html.xpath("//tr[td[contains(@class, 'shoutrow')]][position() <= 20]")
-        expected = f"{username} {message}"
-        for row in rows:
-            content = self._extract_row_text(row)
-            if expected in " ".join(content.split()):
-                return True
-        return False
 
-    def _poll_feedback(self, username: str) -> Optional[str]:
-        response = self._send_get_request(self.shoutbox_url)
-        if not response:
-            return None
-        html = etree.HTML(response.text)
-        if html is None:
-            return None
-        rows = html.xpath("//tr[td[contains(@class, 'shoutrow')]][position() <= 20]")
-        for row in rows:
-            content = self._extract_row_text(row)
-            if self._is_feedback_message(content, username):
-                return content
-        return None
 
-    def _extract_row_text(self, row) -> str:
-        return "".join(row.xpath(".//text()[not(ancestor::span[@class='date'])]")).strip()
 
-    def _is_feedback_message(self, content: str, username: str) -> bool:
-        if not content or f"@{username}" not in content:
-            return False
-        return self.BLESSING_BOT_NAME in content and any(
-            kw in content for kw in ("听到了你的愿望", "你今天求过啤酒瓶了", "啤酒瓶"))
 
     def get_feedback(self, message: str = None) -> Optional[dict]:
         observation = getattr(self, "_chat_observation", None)

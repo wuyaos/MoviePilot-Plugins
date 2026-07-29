@@ -5,8 +5,7 @@ groupchatzone 独有站点，喊话反馈解析型。
 - 优先解析许愿池系统反馈：@username 幸运池听到了你的愿望...
 - 其次解析聊天区 @username 的回复
 """
-from typing import Optional, Tuple
-from lxml import etree
+from typing import Tuple
 from app.log import logger
 
 from .capabilities import CapabilityHandler
@@ -52,28 +51,6 @@ class LuckptHandler(CapabilityHandler):
             logger.error(f"LuckPT：发送消息失败：{e}")
             return False, str(e)
 
-    def _poll_feedback(self, username: str) -> Optional[str]:
-        """优先解析许愿池系统反馈，其次解析聊天区。"""
-        response = getattr(self, "_last_shoutbox_snapshot", None) or self._send_get_request(self.shoutbox_url)
-        if not response:
-            return None
-        html = etree.HTML(response.text)
-        if html is None:
-            return None
-        # 1. 许愿池系统反馈
-        for node in html.xpath("//div[contains(@class, 'wish-bubble-system')]//div[contains(@class, 'wish-content')]"):
-            text = "".join(node.xpath(".//text()")).strip()
-            if f"@{username}" in text:
-                return text
-        # 2. 聊天区 @username 回复
-        for container in html.xpath("//div[contains(@class, 'chat-message-container')][position() <= 10]"):
-            content_nodes = container.xpath(".//div[contains(@class, 'chat-content')]")
-            if not content_nodes:
-                continue
-            content = "".join(content_nodes[0].xpath(".//text()")).strip()
-            if f"@{username}" in content:
-                return content
-        return None
 
     def get_feedback(self, message: str = None):
         observation = getattr(self, "_chat_observation", None)
