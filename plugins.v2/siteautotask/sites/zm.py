@@ -55,14 +55,18 @@ class ZmHandler(CapabilityHandler):
         if not feedback:
             return None
         is_negative = any(key in feedback for key in ("没有理", "明天再来"))
-        if "下载" in feedback:
+        if is_negative:
+            reward_type = "raw_feedback"
+        elif "下载" in feedback:
             reward_type = "下载量"
         elif "魔力" in feedback:
             reward_type = "魔力值"
         elif "上传" in feedback:
             reward_type = "上传量"
-        else:
+        elif "电力" in feedback:
             reward_type = "电力"
+        else:
+            reward_type = "raw_feedback"
         return {"site": self.site_name, "message": message, "rewards": [{
             "type": reward_type, "description": feedback,
             "amount": "", "unit": "", "is_negative": is_negative,

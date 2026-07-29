@@ -33,24 +33,33 @@ class CyanbugHandler(CapabilityHandler):
     def match(self) -> bool:
         return "大青虫" in self.site_name or "cyanbug" in self.domain
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BEFORE,
+            message_terms=lambda message: ["青虫娘", message.split("，")[-1]],
+            confirmation_wait_seconds=2,
+        )
+
     def get_feedback(self, message=None):
-        # 从已确认喊话附近查找青虫娘针对当前用户的对应奖励。
-        if message:
-            self._last_message_result = None
-            username = self.get_username()
-            keyword = "上传" if "上传" in message else "魔力" if "魔力" in message else None
-            for text in self.nearby_shoutbox_rows(message):
-                if "青虫娘" not in text or f"@{username}" not in text:
-                    continue
-                if keyword and keyword not in text and "已经" not in text:
-                    continue
-                self._last_message_result = text
-                break
-        if not self._last_message_result:
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
             return None
+        is_negative = any(key in text for key in ("没有理", "明天再来", "不要继续刷屏"))
+        if "上传" in text:
+            reward_type = "上传量"
+        elif "魔力" in text:
+            reward_type = "魔力值"
+        elif "下载" in text:
+            reward_type = "下载量"
+        else:
+            reward_type = "raw_feedback"
         return {"site": self.site_name, "message": message, "rewards": [{
-            "type": "raw_feedback", "description": self._last_message_result,
-            "amount": "", "unit": "", "is_negative": False,
+            "type": reward_type, "description": text,
+            "amount": "", "unit": "", "is_negative": is_negative,
         }]}
 
     def _poll_shoutbox_feedback(self, message):
