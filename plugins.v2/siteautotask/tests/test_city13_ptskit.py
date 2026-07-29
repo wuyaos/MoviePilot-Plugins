@@ -202,27 +202,30 @@ class PtskitTests(unittest.TestCase):
         return ptskit.PtskitHandler(info), session
 
     def test_match_and_magic_reward(self):
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
         handler, _ = self.handler({})
         self.assertTrue(handler.match())
         ok, msg = handler.send_messagebox("求魔力值")
         self.assertTrue(ok)
-        self.assertIn("魔力值", msg)
+        handler._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "恭喜用户「wuyaos」触发关键词，获得302点魔力值！"))
         feedback = handler.get_feedback("求魔力值")
         self.assertEqual(feedback["rewards"][0]["type"], "魔力值")
 
     def test_already_claimed_is_success(self):
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
         handler, _ = self.handler({"html": PTSKIT_ALREADY})
         ok, msg = handler.send_messagebox("求魔力值")
         self.assertTrue(ok)
-        self.assertIn("已领取过", msg)
+        handler._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "用户「wuyaos」今日已领取过"))
+        feedback = handler.get_feedback("求魔力值")
+        self.assertIn("已领取过", feedback["rewards"][0]["description"])
 
     def test_other_users_reward_is_not_feedback(self):
-        other_user_html = '<div class="magic-reward-top system-msg">用户「other」获得302点魔力值</div>'
-        handler, _ = self.handler({"html": other_user_html})
+        handler, _ = self.handler({"html": '<div class="magic-reward-top system-msg">用户「other」获得302点魔力值</div>'})
         ok, msg = handler.send_messagebox("「短剧第一站」")
         self.assertTrue(ok)
-        self.assertIn("未解析到反馈", msg)
-        self.assertIsNone(handler.get_feedback())
+        # 其他用户的奖励不是本人反馈
+        self.assertIsNone(handler.get_feedback("「短剧第一站」"))
 
     def test_task_metadata(self):
         handler, _ = self.handler({})

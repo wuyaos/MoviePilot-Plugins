@@ -31,22 +31,23 @@ class LuckptHandler(CapabilityHandler):
     def match(self) -> bool:
         return "luckpt" in self.site_name.lower() or "幸运" in self.site_name or "luckpt" in self.domain
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//div[contains(@class, 'chat-message-container')]",
+            direction=FeedbackDirection.EXTERNAL,
+            external_feedback_xpath="//div[contains(@class, 'wish-bubble-system')]//div[contains(@class, 'wish-content')]",
+            is_feedback=lambda row, username: f"@{username}" in row.text,
+            message_terms=lambda message: [message],
+            confirmation_wait_seconds=2,
+        )
+
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:
         if not message:
             return False, "消息内容不能为空"
         try:
-            ok, text = super().send_messagebox(message, callback)
-            if not ok or getattr(self, "_chat_confirmation_in_progress", False):
-                return ok, text
-            username = self.get_username()
-            if not username:
-                return True, text
-            self.wait_feedback()
-            feedback = self._poll_feedback(username)
-            if feedback:
-                self._last_message_result = feedback
-                return True, feedback
-            return True, text
+            return super().send_messagebox(message, callback)
         except Exception as e:
             logger.error(f"LuckPT：发送消息失败：{e}")
             return False, str(e)
@@ -75,17 +76,11 @@ class LuckptHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message: str = None):
-        username = self.get_username()
-        if username:
-            feedback = self._poll_feedback(username)
-            if feedback:
-                self._last_message_result = feedback
-        if not self._last_message_result:
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
             return None
-        text = str(self._last_message_result)
-        reward_type = "raw_feedback"
-        if "幸运星" in text:
-            reward_type = "幸运星"
+        reward_type = "幸运星" if "幸运星" in text else "raw_feedback"
         for kw, kind in (("上传", "上传量"), ("下载", "下载量"), ("魔力", "魔力值")):
             if kw in text:
                 reward_type = kind

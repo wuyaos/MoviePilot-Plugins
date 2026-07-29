@@ -166,24 +166,33 @@ class LuckptTests(unittest.TestCase):
         self.assertTrue(h.match())
 
     def test_wish_feedback_parse(self):
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
         h, _ = self.handler({})
         ok, msg = h.send_messagebox("求幸运")
         self.assertTrue(ok)
-        self.assertIn("幸运池", msg)
+        h._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "@wuyaos 幸运池听到了你的愿望，增加了100幸运星"))
+        feedback = h.get_feedback("求幸运")
+        self.assertIn("幸运池", feedback["rewards"][0]["description"])
 
     def test_chat_fallback(self):
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
         h, _ = self.handler({"html": LUCKPT_CHAT})
         ok, msg = h.send_messagebox("求幸运")
         self.assertTrue(ok)
-        self.assertIn("@wuyaos", msg)
+        h._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "@wuyaos 求幸运"))
+        feedback = h.get_feedback("求幸运")
+        self.assertIn("@wuyaos", feedback["rewards"][0]["description"])
 
     def test_task_uses_real_wish_phrase(self):
+        from siteautotask.base.shoutbox import ChatObservation, ChatRow
         handler, _ = self.handler({})
         tasks = luckpt.Tasks()
         tasks.client = handler
         result = tasks.daily_shotbox()
         self.assertTrue(result.success)
-        self.assertEqual(handler._last_message_result, "@wuyaos 幸运池听到了你的愿望，增加了100幸运星")
+        handler._chat_observation = ChatObservation(True, True, feedback=ChatRow(0, "@wuyaos 幸运池听到了你的愿望，增加了100幸运星"))
+        feedback = handler.get_feedback("幸运池祈愿")
+        self.assertEqual(feedback["rewards"][0]["description"], "@wuyaos 幸运池听到了你的愿望，增加了100幸运星")
 
     def test_task_metadata(self):
         h, _ = self.handler({})

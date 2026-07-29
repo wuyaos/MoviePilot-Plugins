@@ -6,7 +6,6 @@
 任务合并 ptautotask 的 Ptskit：魔力值任务2 申领。
 """
 from typing import Tuple
-from lxml import etree
 from app.log import logger
 
 from .capabilities import CapabilityHandler
@@ -42,6 +41,18 @@ class PtskitHandler(CapabilityHandler):
     def match(self) -> bool:
         return "pts" in self.site_name.lower() or "ptskit" in self.domain
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.EXTERNAL,
+            external_feedback_xpath="//div[contains(@class, 'magic-reward-top') and contains(@class, 'system-msg')]",
+            is_feedback=lambda row, username: f"用户「{username}」" in row.text,
+            message_terms=lambda message: [message],
+            confirmation_wait_seconds=2,
+        )
+
     def send_messagebox(self, message: str = None, callback=None) -> Tuple[bool, str]:
         if not message:
             return False, "消息内容不能为空"
@@ -51,24 +62,7 @@ class PtskitHandler(CapabilityHandler):
                 params={"shbox_text": message, "shout": "我喊", "sent": "yes", "type": "shoutbox"})
             if not response:
                 return False, "请求失败"
-            # 正式引擎由统一确认快照解析；独立调用维持旧有即时反馈语义。
-            if getattr(self, "_chat_confirmation_in_progress", False):
-                return True, "消息已发送"
-            username = self.get_username()
-            if not username:
-                return True, "消息已发送，未获取到用户名"
-            self.wait_feedback()
-            feedback_response = self._send_get_request(self.shoutbox_url)
-            content = feedback_response.text if feedback_response else response.text
-            html = etree.HTML(content)
-            if html is None:
-                return True, "消息已发送，反馈解析失败"
-            for node in html.xpath("//div[contains(@class, 'magic-reward-top') and contains(@class, 'system-msg')]"):
-                feedback = self._extract_feedback(node, username, message)
-                if feedback:
-                    self._last_message_result = feedback
-                    return True, feedback
-            return True, "消息已发送，未解析到反馈"
+            return True, "消息已发送"
         except Exception as e:
             logger.error(f"Ptskit：发送消息失败：{e}")
             return False, str(e)
@@ -84,22 +78,11 @@ class PtskitHandler(CapabilityHandler):
         return None
 
     def get_feedback(self, message: str = None):
-        # 统一引擎确认后仅从确认快照解析；独立调用保留 send_messagebox 的即时反馈。
-        response = getattr(self, "_last_shoutbox_snapshot", None)
-        if getattr(self, "_reuse_shoutbox_snapshot", False):
-            self._last_message_result = None
-            username = self.get_username()
-            if username and response:
-                html = etree.HTML(response.text or "")
-                if html is not None:
-                    for node in html.xpath("//div[contains(@class, 'magic-reward-top') and contains(@class, 'system-msg')]"):
-                        feedback = self._extract_feedback(node, username, message)
-                        if feedback:
-                            self._last_message_result = feedback
-                            break
-        if not self._last_message_result:
+        observation = getattr(self, "_chat_observation", None)
+        text = observation.feedback.text if observation and observation.feedback else ""
+        if not text:
             return None
-        text = str(self._last_message_result)
+        text = text.replace("[系统]", "").strip()
         reward_type = "魔力值" if "魔力值" in text else "raw_feedback"
         return {"site": self.site_name, "message": message, "rewards": [{
             "type": reward_type, "description": text,

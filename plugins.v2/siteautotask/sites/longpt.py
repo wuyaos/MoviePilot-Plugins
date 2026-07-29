@@ -47,6 +47,16 @@ class LongPTHandler(CapabilityHandler):
     def match(self) -> bool:
         return "longpt" in self.site_name.lower() or self.domain == "longpt.org"
 
+    def shoutbox_profile(self):
+        from ..base.shoutbox import FeedbackDirection, ShoutboxProfile
+        return ShoutboxProfile(
+            path="/shoutbox.php?type=shoutbox",
+            row_xpath="//td[contains(@class, 'shoutrow')]",
+            direction=FeedbackDirection.BEFORE,
+            message_terms=lambda message: ["龙宝", message.split("，")[-1]] if "龙宝" in message else [message],
+            confirmation_wait_seconds=2,
+        )
+
     def send_messagebox(self, message=None, callback=None):
         if not message:
             return False, "消息内容不能为空"
