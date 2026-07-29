@@ -59,18 +59,8 @@ class HxptHandler(CapabilityHandler):
         if not message:
             return False, "消息内容不能为空"
         try:
-            ok, text = super().send_messagebox(message, callback)
-            if not ok or getattr(self, "_chat_confirmation_in_progress", False):
-                return ok, text
-            username = self.get_username()
-            if not username:
-                return True, text
-            self.wait_feedback()
-            feedback = self._poll_feedback(username)
-            if feedback:
-                self._last_message_result = feedback
-                return True, feedback
-            return True, text
+            # 发送后的确认与反馈完全由引擎读取的 Profile 快照负责，避免重复轮询。
+            return super().send_messagebox(message, callback)
         except Exception as e:
             logger.error(f"好学：发送消息失败：{e}")
             return False, str(e)
@@ -112,14 +102,16 @@ class HxptHandler(CapabilityHandler):
         if not self._last_message_result:
             return None
         text = str(self._last_message_result)
-        reward_type = "火花" if "火花" in text else "raw_feedback"
+        # 好学的系统提示含获得/丢失火花、明天再继续等多种结果，均为本条喊话的有效反馈。
+        is_negative = any(key in text for key in ("丢失", "消费", "疲劳", "明天再", "继续吧"))
+        reward_type = "火花"
         for kw, kind in (("上传", "上传量"), ("下载", "下载量"), ("魔力", "魔力值")):
             if kw in text:
                 reward_type = kind
                 break
         return {"site": self.site_name, "message": message, "rewards": [{
             "type": reward_type, "description": text,
-            "amount": "", "unit": "", "is_negative": False,
+            "amount": "", "unit": "", "is_negative": is_negative,
         }]}
 
 

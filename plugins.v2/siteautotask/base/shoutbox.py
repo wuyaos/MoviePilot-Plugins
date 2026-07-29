@@ -111,7 +111,8 @@ def observe(snapshot: ShoutboxSnapshot, profile: ShoutboxProfile, username: str,
                    if _is_recent(row, profile) and username in row.text
                    and all(term in _normalize_match_text(row.text) for term in normalized_terms)), None)
     if not target:
-        return ChatObservation(True, False, reason="喊话区未出现当前用户消息")
+        return ChatObservation(True, False, reason="喊话区未出现当前用户消息",
+                              retry_allowed=profile.retry_on_unconfirmed)
     if profile.direction == FeedbackDirection.EXTERNAL:
         candidates = snapshot.external_rows
     else:
