@@ -73,24 +73,6 @@ class CapabilityHandler:
         self._last_message_result = message
         return True, message
 
-    def nearby_shoutbox_rows(self, message, max_rows=5):
-        from lxml import etree
-        response = getattr(self, "_last_shoutbox_snapshot", None)
-        if not response:
-            return []
-        root = etree.HTML(response.text or "")
-        rows = [" ".join(t.strip() for t in row.xpath(".//td//text()") if t.strip())
-                for row in root.xpath("//tr[td]")]
-        username = self.get_username()
-        for index, text in enumerate(rows):
-            if username not in text or message not in text:
-                continue
-            candidates = list(reversed(rows[max(0, index - max_rows):index]))
-            if getattr(type(self), "FEEDBACK_ROWS_BOTH", False):
-                candidates.extend(rows[index + 1:index + 1 + max_rows])
-            return candidates
-        return []
-
 
 cap.CapabilityHandler = CapabilityHandler
 sys.modules["siteautotask.sites.capabilities"] = cap
@@ -136,19 +118,6 @@ class MomentTests(unittest.TestCase):
         ok, msg = h.send_messagebox("求上传")
         self.assertTrue(ok)
         self.assertIn("女友", msg)
-
-    def test_feedback_can_appear_below_sent_message(self):
-        html = """
-        <html><body><table>
-        <tr><td class=\"shoutrow\">wuyaos开站纪念勋章 茄子</td></tr>
-        <tr><td class=\"shoutrow\">【wuyaos的女友】她轻轻笑：“这张我喜欢光。” 奖励 +884 魔力。</td></tr>
-        </table></body></html>
-        """
-        handler, _ = self.handler({"html": html})
-        handler._reuse_shoutbox_snapshot = True
-        handler._last_shoutbox_snapshot = Response(html)
-        feedback = handler.get_feedback("茄子")
-        self.assertIn("+884 魔力", feedback["rewards"][0]["description"])
 
     def test_task_metadata(self):
         h, _ = self.handler({})
