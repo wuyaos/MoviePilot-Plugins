@@ -31,6 +31,37 @@ class Azusa(Site):
         self.session.headers.update({"X-Requested-With": "XMLHttpRequest"})
 
     def claim_task(self, task_id):
+        # 梓喵 WAF 按 TLS 指纹拦截；GET 和 POST 必须用同一个 curl_cffi Session。
+        try:
+            from curl_cffi import requests as cffi_requests
+        except ImportError:
+            cffi_requests = None
+        if cffi_requests is not None:
+            return self._claim_via_cffi(cffi_requests, task_id)
+        return self._claim_via_requests(task_id)
+
+    def _claim_via_cffi(self, cffi_requests, task_id):
+        try:
+            session = cffi_requests.Session(impersonate="chrome131")
+            response = session.get(f"{self.url}/task.php", headers=self._cffi_headers(),
+                                   cookies=self._cookies(), timeout=20)
+            if response.status_code >= 400:
+                return TaskResult.fail(f"读取任务页面失败：HTTP {response.status_code}")
+            match = re.search(r"csrf_token=([a-f0-9]{40})", response.text or "", re.I)
+            if not match:
+                return TaskResult.fail("未获取到 CSRF Token")
+            csrf = match.group(1)
+            response = session.post(
+                f"{self.url}/ajax.php?csrf_token={csrf}",
+                data={"action": "claimTask", "params[exam_id]": task_id},
+                headers=self._cffi_headers(), cookies=self._cookies(), timeout=20)
+            if response.status_code >= 400:
+                return TaskResult.fail(f"任务领取请求失败：HTTP {response.status_code}")
+            return self._classify(response.json())
+        except Exception as error:
+            return TaskResult.fail(f"梓喵 curl_cffi 请求异常：{error}")
+
+    def _claim_via_requests(self, task_id):
         response = self.get("/task.php")
         if not response:
             return TaskResult.fail(self.request_error or "读取任务页面失败")
@@ -38,40 +69,14 @@ class Azusa(Site):
         if not match:
             return TaskResult.fail("未获取到 CSRF Token")
         csrf = match.group(1)
-        payload = self._post_claim(csrf, task_id)
-        if payload is None:
-            return TaskResult.fail(self.request_error or "任务领取请求失败（WAF 拦截或网络异常）")
-        return self._classify(payload)
-
-    def _post_claim(self, csrf, task_id):
-        """优先用 curl_cffi 模拟 Chrome TLS 指纹；不可用时回退 requests。"""
-        url = f"{self.url}/ajax.php?csrf_token={csrf}"
-        data = {"action": "claimTask", "params[exam_id]": task_id}
-        try:
-            from curl_cffi import requests as cffi_requests
-        except ImportError:
-            cffi_requests = None
-        if cffi_requests is not None:
-            try:
-                response = cffi_requests.post(
-                    url, data=data, headers=self._cffi_headers(), cookies=self._cookies(),
-                    impersonate="chrome131", timeout=20,
-                )
-                if response.status_code >= 400:
-                    self.request_error = f"HTTP {response.status_code}"
-                    return None
-                return response.json()
-            except Exception as error:
-                self.request_error = f"curl_cffi 请求异常：{error}"
-                return None
-        response = self.post(f"/ajax.php?csrf_token={csrf}", data)
+        response = self.post(f"/ajax.php?csrf_token={csrf}",
+                            {"action": "claimTask", "params[exam_id]": task_id})
         if not response:
-            return None
+            return TaskResult.fail(self.request_error or "任务领取请求失败（WAF 拦截或网络异常）")
         try:
-            return response.json()
+            return self._classify(response.json())
         except Exception:
-            self.request_error = "任务领取响应解析失败"
-            return None
+            return TaskResult.fail("任务领取响应解析失败")
 
     def _cffi_headers(self):
         return {
