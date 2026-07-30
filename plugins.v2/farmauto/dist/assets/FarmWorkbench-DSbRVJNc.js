@@ -344,13 +344,14 @@ function logMeta(item) {
   // 失败消息
   if (item?.success === false && item?.message) parts.push(item.message);
 
-  const unit = '魔力值';
-  // 兼容 user_logs.value / recent_actions.profit
+  const unit = item?.value_unit || '魔力值';
+  // 收获值必须显示动作实际值；只有魔力值为 0 时才回退账户余额。
   const value = Number(item?.value ?? item?.profit ?? 0);
-  // 魔力列：有变动显示±value，无变动回退余额 balance_after；保证每行都有值
   const balance = Number(item?.balance_after ?? '');
   const hasChange = value !== 0;
-  const displayValue = hasChange ? value : (Number.isFinite(balance) ? balance : 0);
+  const displayValue = unit === '收获值'
+    ? value
+    : (hasChange ? value : (Number.isFinite(balance) ? balance : 0));
   const magicText = `${displayValue > 0 ? '+' : ''}${displayValue} ${unit}`;
   return {
     actionText: mapped[0],
@@ -436,7 +437,7 @@ return (_ctx, _cache) => {
                   _createElementVNode$5("tr", null, [
                     _createElementVNode$5("th", null, "时间"),
                     _createElementVNode$5("th", null, "操作"),
-                    _createElementVNode$5("th", { class: "text-end" }, "魔力")
+                    _createElementVNode$5("th", { class: "text-end" }, "数值")
                   ])
                 ], -1)),
                 _createElementVNode$5("tbody", null, [
@@ -488,7 +489,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-d0ba15f1"]]);
+const HistoryTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-ff5fb283"]]);
 
 const {resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,createElementVNode:_createElementVNode$4,openBlock:_openBlock$4,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$4,withCtx:_withCtx$3,renderList:_renderList$3,Fragment:_Fragment$3,createElementBlock:_createElementBlock$4,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$3,createTextVNode:_createTextVNode$3} = await importShared('vue');
 
@@ -81211,9 +81212,9 @@ return (_ctx, _cache) => {
                                       class: "crop-name",
                                       title: seed.name
                                     }, _toDisplayString$2(seed.name), 9, _hoisted_14$1),
-                                    _createElementVNode$2("div", _hoisted_15, "成本 " + _toDisplayString$2(seed.cost) + " → 收益 " + _toDisplayString$2(seed.base_reward) + " · 成长 " + _toDisplayString$2(seed.grow_time), 1),
+                                    _createElementVNode$2("div", _hoisted_15, "成本 " + _toDisplayString$2(seed.cost) + " 魔力 → 收获值 " + _toDisplayString$2(seed.base_reward) + " · 成长 " + _toDisplayString$2(seed.grow_time), 1),
                                     (isSeedLocked(seed))
-                                      ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_16, "🔒 解锁需总收获 " + _toDisplayString$2(seed.unlock_harvest), 1))
+                                      ? (_openBlock$2(), _createElementBlock$2("div", _hoisted_16, "🔒 解锁需累计收获值 " + _toDisplayString$2(seed.unlock_harvest), 1))
                                       : (_openBlock$2(), _createElementBlock$2("div", _hoisted_17, "可购买种植"))
                                   ]),
                                   _createElementVNode$2("div", _hoisted_18, [
@@ -81433,7 +81434,7 @@ return (_ctx, _cache) => {
                           _createTextVNode$2(_toDisplayString$2(land.name || `地块 ${land.land_id}`) + " ", 1),
                           _createElementVNode$2("span", _hoisted_33, "（坑位：" + _toDisplayString$2(landPlotCountLabel(land)) + "）", 1),
                           (plotsForLand(land).every(plot => plot.state === 'locked'))
-                            ? (_openBlock$2(), _createElementBlock$2("span", _hoisted_34, "🔒 解锁需总收获 " + _toDisplayString$2(land.unlock_harvest), 1))
+                            ? (_openBlock$2(), _createElementBlock$2("span", _hoisted_34, "🔒 解锁需累计收获值 " + _toDisplayString$2(land.unlock_harvest), 1))
                             : _createCommentVNode$2("", true)
                         ]),
                         (plotsForLand(land).every(plot => plot.state === 'locked'))
@@ -81941,7 +81942,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-c85ecf31"]]);
+const SiqiWorkbench = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-4c974987"]]);
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createTextVNode:_createTextVNode$1,withCtx:_withCtx$1,renderList:_renderList$1,Fragment:_Fragment$1,createBlock:_createBlock$1,normalizeClass:_normalizeClass$1} = await importShared('vue');
 

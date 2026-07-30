@@ -70,6 +70,8 @@ class ActionResult:
     land_name: str = ""
     plot_index: Optional[int] = None
     quantity: int = 0
+    # 操作实际产生的展示数值；与计入魔力净收益的 profit 分离。
+    value: Optional[int] = None
     value_unit: str = ""
     # 执行时刻的时间戳(浮点秒)，前端直接解析展示
     time: float = field(default_factory=time.time)

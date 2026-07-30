@@ -51,13 +51,14 @@ function logMeta(item) {
   // 失败消息
   if (item?.success === false && item?.message) parts.push(item.message)
 
-  const unit = '魔力值'
-  // 兼容 user_logs.value / recent_actions.profit
+  const unit = item?.value_unit || '魔力值'
+  // 收获值必须显示动作实际值；只有魔力值为 0 时才回退账户余额。
   const value = Number(item?.value ?? item?.profit ?? 0)
-  // 魔力列：有变动显示±value，无变动回退余额 balance_after；保证每行都有值
   const balance = Number(item?.balance_after ?? '')
   const hasChange = value !== 0
-  const displayValue = hasChange ? value : (Number.isFinite(balance) ? balance : 0)
+  const displayValue = unit === '收获值'
+    ? value
+    : (hasChange ? value : (Number.isFinite(balance) ? balance : 0))
   const magicText = `${displayValue > 0 ? '+' : ''}${displayValue} ${unit}`
   return {
     actionText: mapped[0],
@@ -125,7 +126,7 @@ function formatTime(value) {
         <tr>
           <th>时间</th>
           <th>操作</th>
-          <th class="text-end">魔力</th>
+          <th class="text-end">数值</th>
         </tr>
       </thead>
       <tbody>

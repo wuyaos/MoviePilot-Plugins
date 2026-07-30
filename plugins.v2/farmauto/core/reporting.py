@@ -116,8 +116,17 @@ def _format_site_detail(site_report: SiteRunReport) -> str:
             parts.append(f"⚠️达到上限（{'、'.join(messages)}）")
         if not parts:
             continue
-        group_profit = sum(int(action.profit or 0) for action in successful_actions)
-        lines.append(f"  {icon} {label}：{' '.join(parts)} 魔力 {_signed(group_profit)}")
+        harvest_value_actions = [
+            action for action in successful_actions
+            if action.value_unit == "收获值"
+        ]
+        if action_names & {"harvest", "harvest_all"} and harvest_value_actions:
+            harvest_value = sum(int(action.value or 0) for action in harvest_value_actions)
+            value_text = f"收获值 {_signed(harvest_value)}"
+        else:
+            group_profit = sum(int(action.profit or 0) for action in successful_actions)
+            value_text = f"魔力 {_signed(group_profit)}"
+        lines.append(f"  {icon} {label}：{' '.join(parts)} {value_text}")
     return "\n".join(lines) if len(lines) > 1 else ""
 
 

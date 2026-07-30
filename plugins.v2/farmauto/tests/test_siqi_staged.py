@@ -144,7 +144,10 @@ def test_siqi_staged_flow_uses_native_batch_harvest_when_ocr_succeeds():
 
     assert [action.action for action in report.actions] == ["harvest_all", "plant", "sell", "sell"]
     assert report.actions[0].target == "萝卜×2"
-    assert report.actions[0].profit == 40
+    # 收获值用于解锁进度但不计入魔力净收益。
+    assert report.actions[0].profit == 0
+    assert report.actions[0].value == 40
+    assert report.actions[0].value_unit == "收获值"
     harvest_calls = [call for call in client.calls if call[0] == "POST" and call[2].get("action") in ("harvest_all", "harvest")]
     assert harvest_calls == [("POST", "https://si-qi.xyz/plant_game.php", {
         "action": "harvest_all", "imagehash": "hash-1", "imagestring": "AB12",
@@ -178,6 +181,9 @@ def test_siqi_staged_flow_harvests_each_plot_when_ocr_disabled():
 
     assert [action.action for action in report.actions] == ["harvest", "harvest", "plant", "sell", "sell"]
     assert [action.plot_index for action in report.actions[:2]] == [0, 1]
+    assert [action.profit for action in report.actions[:2]] == [0, 0]
+    assert [action.value for action in report.actions[:2]] == [20, 20]
+    assert [action.value_unit for action in report.actions[:2]] == ["收获值", "收获值"]
     harvest_calls = [call for call in client.calls if call[0] == "POST" and call[2].get("action") == "harvest"]
     assert harvest_calls == [
         ("POST", "https://si-qi.xyz/plant_game.php", {"action": "harvest", "land_id": 1, "plot_index": 0}),

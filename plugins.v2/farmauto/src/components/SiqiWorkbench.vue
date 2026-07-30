@@ -551,8 +551,8 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="crop-info">
                     <div class="crop-name" :title="seed.name">{{ seed.name }}</div>
-                    <div class="crop-meta">成本 {{ seed.cost }} → 收益 {{ seed.base_reward }} · 成长 {{ seed.grow_time }}</div>
-                    <div v-if="isSeedLocked(seed)" class="crop-meta locked-meta">🔒 解锁需总收获 {{ seed.unlock_harvest }}</div>
+                    <div class="crop-meta">成本 {{ seed.cost }} 魔力 → 收获值 {{ seed.base_reward }} · 成长 {{ seed.grow_time }}</div>
+                    <div v-if="isSeedLocked(seed)" class="crop-meta locked-meta">🔒 解锁需累计收获值 {{ seed.unlock_harvest }}</div>
                     <div v-else class="crop-meta">可购买种植</div>
                   </div>
                   <div class="crop-action">
@@ -643,7 +643,7 @@ onBeforeUnmount(() => {
               <span
                 v-if="plotsForLand(land).every(plot => plot.state === 'locked')"
                 class="unlock-hint"
-              >🔒 解锁需总收获 {{ land.unlock_harvest }}</span>
+              >🔒 解锁需累计收获值 {{ land.unlock_harvest }}</span>
             </div>
             <div
               v-if="plotsForLand(land).every(plot => plot.state === 'locked')"

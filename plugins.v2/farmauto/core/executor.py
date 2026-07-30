@@ -503,10 +503,12 @@ class FarmExecutor:
                     "harvest_all",
                     target,
                     True,
-                    profit=reward,
+                    # 收获值用于种子/土地解锁，不计入魔力净收益。
+                    profit=0,
+                    value=reward,
                     message=str(parsed.get("message") or "一键收获成功"),
                     quantity=len(harvest_plan),
-                    value_unit="魔力值",
+                    value_unit="收获值",
                 )
             except Exception as error:
                 self._log(
@@ -864,9 +866,7 @@ class FarmExecutor:
             quantity = max(1, int(action.get("quantity", 1)))
             profit = 0
             message = str(parsed.get("message") or "")
-            if success and not skipped and operation == "harvest":
-                profit = int(crop.get("base_reward", 0) or 0) * quantity
-            elif success and not skipped and operation == "plant":
+            if success and not skipped and operation == "plant":
                 profit = -int(crop.get("cost", 0) or 0) * quantity
                 if profit:
                     message = f"{message} 成本{-profit}".strip()
@@ -880,9 +880,15 @@ class FarmExecutor:
                 crop_icon = site_config.crop_image(crop_name)
             except Exception:
                 crop_icon = ""
+            value = profit
+            value_unit = "魔力值"
+            if operation == "harvest":
+                value = int(parsed.get("reward") or 0) if success and not skipped else 0
+                value_unit = "收获值"
             result = ActionResult(
                 operation, target, success,
                 profit=profit,
+                value=value,
                 message=message,
                 skipped=skipped,
                 reason=str(parsed.get("reason") or ""),
@@ -894,7 +900,7 @@ class FarmExecutor:
                 ),
                 plot_index=status.get("plot_index") if isinstance(status, dict) else None,
                 quantity=quantity,
-                value_unit="魔力值",
+                value_unit=value_unit,
             )
             return result, farm_html
         except Exception as error:
@@ -1049,6 +1055,7 @@ class FarmExecutor:
                 land_name=f"地块{land_id}" if land_id is not None else "",
                 plot_index=plot_index,
                 quantity=action_quantity,
+                value=profit,
                 value_unit=value_unit,
             )
             return result, farm_html

@@ -5,7 +5,9 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from app.core.config import settings
 from app.core.event import Event, eventmanager
 from app.db.site_oper import SiteOper
 from app.log import logger
@@ -31,7 +33,7 @@ class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
     plugin_desc = "多站点农场统一自动运营，支持独立收获、补种与出售策略"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
-    plugin_version = "3.2.12"
+    plugin_version = "3.2.16"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "farmauto_"
@@ -548,7 +550,7 @@ class FarmAuto(_PluginBase):
                     "land_name": action.land_name,
                     "plot_index": action.plot_index,
                     "quantity": action.quantity,
-                    "value": action.profit,
+                    "value": action.value if action.value is not None else action.profit,
                     "value_unit": action.value_unit,
                     "balance_after": action.balance_after,
                     "success": action.success,
@@ -580,32 +582,43 @@ class FarmAuto(_PluginBase):
         self._raw_config = persisted_config
 
     def get_service(self) -> List[Dict[str, Any]]:
-        if not self._enabled or not self._site_ids:
+        if not self._enabled:
+            logger.info("[FarmAuto] 定时服务未注册：插件未启用")
             return []
-        if self._cron_mode == "cron" and self._cron:
-            try:
-                from apscheduler.triggers.cron import CronTrigger
+        if not self._site_ids:
+            logger.warning("[FarmAuto] 定时服务未注册：未选择站点")
+            return []
+
+        try:
+            if self._cron_mode == "cron":
                 cron_str = self._cron.strip()
-                if cron_str.count(" ") != 4:
-                    logger.error("[FarmAuto] cron 格式错误，需 5 位 cron 表达式")
+                if not cron_str:
+                    logger.warning("[FarmAuto] 定时服务未注册：Cron 为空")
                     return []
-                return [{
-                    "id": "FarmAuto",
-                    "name": "农场自动化定时任务",
-                    "trigger": CronTrigger.from_crontab(cron_str),
-                    "func": self.run_farm_task,
-                    "kwargs": {},
-                }]
-            except Exception as err:
-                logger.error(f"[FarmAuto] cron 定时任务配置错误：{err}")
-                return []
+                trigger = CronTrigger.from_crontab(cron_str, timezone=settings.TZ)
+            else:
+                trigger = IntervalTrigger(
+                    minutes=self._interval_minutes,
+                    timezone=settings.TZ,
+                )
+        except Exception as err:
+            logger.warning(
+                f"[FarmAuto] 定时服务未注册：调度配置无效，error={err}"
+            )
+            return []
+
+        logger.info(f"[FarmAuto] 已提供定时服务配置：{trigger}")
         return [{
             "id": "FarmAuto",
             "name": "农场自动化定时任务",
-            "trigger": IntervalTrigger(minutes=self._interval_minutes),
-            "func": self.run_farm_task,
+            "trigger": trigger,
+            "func": self.scheduled_run,
             "kwargs": {},
         }]
+
+    def scheduled_run(self) -> Optional[RunReport]:
+        """MoviePilot 公共调度入口。"""
+        return self.run_farm_task()
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:

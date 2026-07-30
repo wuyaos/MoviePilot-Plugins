@@ -205,6 +205,41 @@ def test_harvest_all_target_not_duplicated_with_quantity_suffix():
     assert "🌾 收获：✅1（收获了小麦×1） 魔力 +0" in text
 
 
+def test_siqi_harvest_reports_harvest_value_without_affecting_magic_profit():
+    report = RunReport(
+        started_at=1000,
+        finished_at=1001,
+        site_reports=[SiteRunReport(
+            site_id="siqi",
+            site_name="思齐",
+            actions=[
+                ActionResult(
+                    "harvest_all", "萝卜×6", True,
+                    profit=0, value=1320, value_unit="收获值", quantity=6,
+                ),
+                ActionResult("plant", "玉米", True, profit=-7200, value=-7200, value_unit="魔力值", quantity=6),
+                *[
+                    ActionResult("sell", "萝卜", True, profit=220, value=220, value_unit="魔力值", quantity=1)
+                    for _ in range(6)
+                ],
+            ],
+            total_profit=-5880,
+            trades_count=8,
+            status="completed",
+        )],
+        total_profit=-5880,
+        total_trades=8,
+        status="completed",
+    )
+
+    text = format_notification(report)
+
+    assert "【思齐】✅  魔力 -5880" in text
+    assert "🌾 收获：✅1（萝卜×6） 收获值 +1320" in text
+    assert "🌱 种植：✅1（玉米×6） 魔力 -7200" in text
+    assert "💰 出售：✅6（萝卜×6） 魔力 +1320" in text
+
+
 def test_harvest_all_with_multiple_crops_keeps_detail():
     report = RunReport(
         started_at=1,
