@@ -71,6 +71,11 @@ class SiteContractTests(unittest.TestCase):
                 self.assertTrue(task.name, f"{filename} task name")
                 self.assertTrue(task.task_type, f"{filename} task type")
 
+    def test_ptskit_does_not_match_ptsbao(self):
+        module = load(f"{PACKAGE}.sites.ptskit_match", ROOT / "sites/ptskit.py")
+        self.assertFalse(module.PTSKit.matches({"name": "烧包乐园", "domain": "ptsbao.club"}))
+        self.assertTrue(module.PTSKit.matches({"name": "PTS", "domain": "ptskit.org"}))
+
     def test_task_keys_do_not_include_site_name(self):
         for index, filename in enumerate(SITE_FILES, start=1):
             module = load(f"{PACKAGE}.sites.key_{filename}", ROOT / "sites" / f"{filename}.py")

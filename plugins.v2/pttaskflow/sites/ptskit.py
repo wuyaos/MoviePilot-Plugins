@@ -7,7 +7,12 @@ from ..core.task import Chat, Checkin, Claim
 class PTSKit(Site):
     site_name = "Ptskit"
     domain = "ptskit.org"
-    match_keywords = ("pts", "ptskit")
+    @classmethod
+    def matches(cls, site_info):
+        """PTS 仅按精确域名或明确名称匹配，避免把 ptsbao 误识别为 PTS。"""
+        domain = (site_info.get("domain") or "").lower().strip()
+        name = (site_info.get("name") or "").lower().strip()
+        return domain == cls.domain or "ptskit" in domain or name in {"pts", "ptskit"}
     shoutbox = ShoutboxProfile(
         direction=Direction.EXTERNAL,
         external_feedback_xpath="//div[contains(@class, 'magic-reward-top') and contains(@class, 'system-msg')]",
