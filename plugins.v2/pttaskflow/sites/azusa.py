@@ -31,7 +31,7 @@ class Azusa(Site):
         response = self.post(f"/ajax.php?csrf_token={match.group(1)}",
                              {"action": "claimTask", "params[exam_id]": task_id})
         if not response:
-            return self._technical("任务领取请求失败（可能被站点 WAF 拦截）")
+            return self._technical(self.request_error or "任务领取请求失败（可能被站点 WAF 拦截）")
         try:
             payload = response.json()
             message = payload.get("msg") or payload.get("message") or "未知结果"

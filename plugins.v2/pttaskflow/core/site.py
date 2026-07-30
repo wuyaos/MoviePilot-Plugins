@@ -71,8 +71,12 @@ class Site:
 
     @staticmethod
     def _cookie_expired(response):
-        if response.status_code in (401, 403):
+        if response.status_code == 401:
             return True
+        if response.status_code == 403:
+            # 403 可能是 WAF 拦截或 Cookie 失效；仅当响应含登录表单时视为 Cookie 失效。
+            text = (getattr(response, "text", "") or "")[:10000].lower()
+            return "type=\"password\"" in text or "type='password'" in text
         final_url = str(getattr(response, "url", "") or "").lower()
         if any(term in final_url for term in ("login.php", "takelogin")):
             return True

@@ -98,27 +98,33 @@ class CookieRefreshTests(unittest.TestCase):
         return instance
 
     def test_mp_cookie_expired_returns_error_without_refresh(self):
-        site = self.make_site([Response(403)])
+        site = self.make_site([Response(401)])
         self.assertIsNone(site.get("/index.php"))
         self.assertEqual(site.request_error, "MP Cookie 已失效")
         self.assertEqual(site.session.calls, 1)
 
+    def test_waf_403_is_not_cookie_expired(self):
+        site = self.make_site([Response(403, text="<h2>出于安全原因，本次请求已被拦截</h2>")])
+        self.assertIsNone(site.get("/index.php"))
+        self.assertEqual(site.request_error, "HTTP 403")
+        self.assertEqual(site.session.calls, 1)
+
     def test_cookiecloud_refreshes_once_and_succeeds(self):
         refreshes = []
-        site = self.make_site([Response(403), Response()], lambda: refreshes.append(1) or "new")
+        site = self.make_site([Response(401), Response()], lambda: refreshes.append(1) or "new")
         self.assertIsNotNone(site.get("/index.php"))
         self.assertEqual(site.session.headers["Cookie"], "new")
         self.assertEqual(refreshes, [1])
         self.assertEqual(site.session.calls, 2)
 
     def test_cookiecloud_refresh_failure_returns_error(self):
-        site = self.make_site([Response(403)], lambda: "")
+        site = self.make_site([Response(401)], lambda: "")
         self.assertIsNone(site.get("/index.php"))
         self.assertEqual(site.request_error, "CookieCloud Cookie 获取失败")
         self.assertEqual(site.session.calls, 1)
 
     def test_refreshed_cookie_still_expired_returns_error(self):
-        site = self.make_site([Response(403), Response(403)], lambda: "new")
+        site = self.make_site([Response(401), Response(401)], lambda: "new")
         self.assertIsNone(site.get("/index.php"))
         self.assertEqual(site.request_error, "CookieCloud Cookie 已失效")
         self.assertEqual(site.session.calls, 2)
