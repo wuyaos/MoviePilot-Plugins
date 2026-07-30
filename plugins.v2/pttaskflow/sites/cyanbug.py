@@ -16,5 +16,5 @@ class Cyanbug(Site):
     tasks = [
         Checkin(),
         Chat(messages=["青虫娘，求上传", "青虫娘，求魔力"],
-             negatives=("没有理", "明天再来", "不要继续刷屏")),
+             negatives=("扣减", "扣除", "失去")),
     ]

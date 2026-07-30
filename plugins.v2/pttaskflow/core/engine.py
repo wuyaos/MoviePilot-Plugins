@@ -95,7 +95,8 @@ class TaskEngine:
     def _execute(unit, scene):
         try:
             result = unit.task.run(unit.site, unit)
-            if not isinstance(result, TaskResult):
+            # 用鸭子类型而非 isinstance，避免插件热重载后 TaskResult 跨模块实例不一致。
+            if not hasattr(result, "success") or not hasattr(result, "rewards"):
                 return TaskResult.fail("任务未返回 TaskResult")
             return result
         except Exception as error:

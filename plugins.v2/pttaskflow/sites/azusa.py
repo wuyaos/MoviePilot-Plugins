@@ -16,6 +16,11 @@ class Azusa(Site):
         {"id": "5", "label": "七日任务1（保种）"},
     ])]
 
+    def __init__(self, site_info, **kwargs):
+        super().__init__(site_info, **kwargs)
+        # 梓喵 ajax.php 要求 X-Requested-With 头，否则可能返回登录页。
+        self.session.headers.update({"X-Requested-With": "XMLHttpRequest"})
+
     def claim_task(self, task_id):
         response = self.get("/task.php")
         if not response:

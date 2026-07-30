@@ -19,7 +19,7 @@ class HxPT(Site):
     tasks = [
         Checkin(),
         Chat(messages=["好好学习天天向上"],
-             negatives=("丢失", "消费", "疲劳", "明天再", "继续吧")),
+             negatives=("扣减", "扣除", "失去")),
         Claim(options=[
             {"id": "2", "label": "精进研习社"},
             {"id": "4", "label": "测（管理组任务）"},
