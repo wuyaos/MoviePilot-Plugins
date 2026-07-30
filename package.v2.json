@@ -450,5 +450,20 @@
             "v3.0.2": "本地修正版：Cron 安全规范化并增强服务未注册原因日志；Cookie 固定从站点管理读取；限制目标次数上限为1000",
             "v1.0.1": "按每日目标次数自动拆解并执行不可躺抽奖"
         }
+    },
+    "PtTaskFlow": {
+        "name": "PT任务流",
+        "description": "声明式 PT 站点任务框架：Task 自声明 Control、展开 Unit，并通过结构化 Result 执行。",
+        "labels": "PT,任务流,签到,喊话",
+        "version": "0.4.0",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png",
+        "author": "wuyaos",
+        "level": 2,
+        "history": {
+            "v0.1.0": "初始可运行骨架：建立 Task/Control/Unit/Site 分层，提供签到、喊话、任务申领、勋章和抽奖任务类型；UI 由 Control 驱动，引擎按 Unit 执行并记录结构化结果；首个接入 RailgunPT。",
+            "v0.2.0": "完成 24 个站点声明式迁移基础：补齐标准签到/申领/喊话、LongPT 单选与抽奖、好学 AJAX Profile、PTS/LuckPT 外部反馈、GGPT/myPT 勋章、青蛙兑换、Vc-Lib 复合任务、织梦独立 date 调度；配置页/数据页与 SiteAutoTask 对齐，增加通知、重试、配置兼容和统一日志。",
+            "v0.3.0": "新增 Cookie 生命周期管理：MP 站点使用本地 Cookie，内置站点通过 CookieCloud 进程内缓存；统一识别登录失效并只刷新一次，修复 Vc-Lib 复合任务错误传播与登录页假成功。",
+            "v0.4.0": "重构喊话模板钩子并修复青蛙、LuckPT、织梦、13City、藏宝阁、LongPT 反馈；新增按域名/别名与 ControlKind 的 SiteAutoTask 配置迁移，完善任务申领幂等状态。"
+        }
     }
 }
