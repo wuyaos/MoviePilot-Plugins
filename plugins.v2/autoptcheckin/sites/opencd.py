@@ -112,12 +112,18 @@ class Opencd(_ISiteSigninHandler):
         )
         if sign_res and sign_res.status_code == 200:
             logger.debug(f"sign_res返回 {sign_res.text}")
-            sign_dict = json.loads(sign_res.text)
-            if sign_dict['state']:
+            try:
+                sign_dict = sign_res.json()
+            except (TypeError, ValueError):
+                logger.error(f"{site} 签到失败，签到接口返回非 JSON 内容")
+                return False, '签到失败，接口响应异常'
+
+            # state 是字符串；"failed"、"error" 等非空字符串也会被 bool 判为 True。
+            state = str(sign_dict.get('state', '')).strip().lower()
+            if state == 'success':
                 logger.info(f"{site} 签到成功")
                 return True, '签到成功'
             logger.error(f"{site} 签到失败，签到接口返回 {sign_dict}")
             return False, '签到失败'
-
         logger.error(f'{site} 签到失败：签到接口请求失败')
         return False, '签到失败'
