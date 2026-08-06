@@ -243,11 +243,12 @@
         "name": "H&R助手Pro",
         "description": "PT站H&R种子自动标签管理，支持多条件OR判定（做种时间/分享率/上传倍数）、按种子大小分级、自动发现下载器种子",
         "labels": "H&R,PT,做种",
-        "version": "1.2.6",
+        "version": "1.2.7",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hitandrun.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.2.7": "修复同一种子在每轮扫描中重复加入通知队列，导致 H&R 汇总数量虚高和内容重复的问题；汇总时兼容去重历史队列",
             "v1.2.6": "检查、发现和通知汇总迁移为标准公共调度服务",
             "v1.2.5": "同步上游 InfinityPacer/hitandrun #259：适配 Transmission SDK 字段名变更，date_done/date_added/date_active 用 getattr 兼容 done_date/added_date/activity_date 新旧两套字段，tracker 兼容 trackers[0].announce 的 dict 与对象两种形态",
             "v1.2.4": "详情页新增批量操作按钮：有已满足记录时显示「清除已满足」，有缺失种子记录时显示「清除缺失种子」；新增对应 API 端点 /clear_compliant 和 /clear_missing",

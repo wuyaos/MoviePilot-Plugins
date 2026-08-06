@@ -341,7 +341,8 @@ class HNRChecker:
         required_h = (task.hr_duration or 0) + additional
         remain = task.remain_time(additional)
         events = self._load_notify_events()
-        events.append({
+        event = {
+            "torrent_hash": task.hash,
             "title": title,
             "warn": warn,
             "site_name": task.site_name or "-",
@@ -356,7 +357,11 @@ class HNRChecker:
             "status": task.hr_status.value if task.hr_status else "",
             "status_text": task.hr_status.to_chinese() if task.hr_status else "-",
             "time": time.time(),
-        })
+        }
+        # 扫描频率通常高于汇总频率，同一种子的状态应更新而不是反复入队。
+        if task.hash:
+            events = [item for item in events if item.get("torrent_hash") != task.hash]
+        events.append(event)
         self._save_notify_events(events)
 
     def send_notify_summary(self):
@@ -365,6 +370,16 @@ class HNRChecker:
         events = self._load_notify_events()
         if not events:
             return
+        # 兼容升级前未保存 torrent_hash 的队列，避免历史重复项继续污染汇总。
+        unique_events = {}
+        for event in events:
+            event_key = event.get("torrent_hash") or (
+                event.get("site_name"),
+                event.get("identifier"),
+                event.get("downloader"),
+            )
+            unique_events[event_key] = event
+        events = list(unique_events.values())
         groups = [
             ("【已完成】", HNRStatus.COMPLIANT.value),
             ("【已过期】", HNRStatus.OVERDUE.value),
