@@ -45,7 +45,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.5.6"
+    plugin_version = "1.5.7"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1195,10 +1195,15 @@ class AutoPtCheckin(_PluginBase):
                     failed_msg.append((site_name, message))
             logger.debug(f"下次{type_str}重试站点 {retry_sites}")
 
-            # 存入历史：do 记录本轮成功站点，失败站下轮自动进入重试
+            # 存入历史：合并今日已成功站点，避免部分重试轮次覆盖丢失已签到站点
+            # （else 分支只重试失败站点，直接覆盖会丢掉上一轮已成功的 do）
+            prior_do = []
+            if isinstance(today_history, dict):
+                prior_do = list(today_history.get("do") or [])
+            saved_do = list(dict.fromkeys(prior_do + success_site_ids))
             self.save_data(key=type_str + "-" + today_str,
                            value={
-                               "do": success_site_ids,
+                               "do": saved_do,
                                "retry": retry_sites
                            })
 
