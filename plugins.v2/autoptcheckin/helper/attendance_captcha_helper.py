@@ -59,6 +59,7 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
         site_cookie = site_info.get("cookie")
         ua = site_info.get("ua")
         proxy = site_info.get("proxy")
+        timeout = site_info.get("timeout") or 60
 
         try:
             from app.plugins.autoptcheckin.helper.http_helper import CffiClient
@@ -76,7 +77,7 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
             return False, f"签到失败：依赖缺失 {e}"
 
         # 1. 打开签到页，判断登录态与是否已签到
-        status, html_text = client.get(self._signin_url)
+        status, html_text = client.get(self._signin_url, timeout=timeout)
         if status != 200:
             logger.error(f"{site} 签到失败，状态码：{status}")
             return False, f"签到失败，状态码：{status}"
@@ -98,7 +99,7 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
         resp_text = ""
         for attempt in range(1, self._captcha_attempts + 1):
             if attempt > 1:
-                status, html_text = client.get(self._signin_url)
+                status, html_text = client.get(self._signin_url, timeout=timeout)
                 if status != 200 or not html_text:
                     logger.error(f"{site} 第 {attempt} 次获取验证码页失败，状态码：{status}")
                     return False, f"签到失败，状态码：{status}"
@@ -117,7 +118,7 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
 
             base = self._signin_url.rsplit("/", 1)[0] + "/"
             image_url = urljoin(base, image_src.replace("&amp;", "&"))
-            image_bytes = client.get_bytes(image_url)
+            image_bytes = client.get_bytes(image_url, timeout=timeout)
             if not image_bytes:
                 logger.error(f"{site} 签到失败，获取验证码图片失败")
                 return False, "签到失败，获取验证码图片失败"
@@ -126,13 +127,14 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
             code = recognize_captcha(
                 image_bytes=image_bytes, image_url=image_url, cookie=site_cookie, ua=ua,
                 referer=self._signin_url, min_len=4, max_len=6, retry_times=1,
-                engine="ddddocr", charset="alnum", proxy=proxy,
+                engine="ddddocr", charset="alnum", proxy=proxy, timeout=timeout,
             )
             if not code:
                 logger.info(f"{site} 第 {attempt} 次 ddddocr 识别失败，切换 OcrHelper")
                 code = recognize_captcha(
                     image_url=image_url, cookie=site_cookie, ua=ua, referer=self._signin_url,
                     min_len=4, max_len=6, engine="ocrhelper", charset="alnum", proxy=proxy,
+                    timeout=timeout,
                 )
             if not code:
                 logger.warning(f"{site} 第 {attempt} 次验证码识别失败")
@@ -142,6 +144,7 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
             status, resp_text = client.post(
                 self._signin_url,
                 data={"imagehash": image_hash, "imagestring": code},
+                timeout=timeout,
             )
             if status != 200:
                 logger.error(f"{site} 签到失败，状态码：{status}")
@@ -168,7 +171,7 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
 
         # 3. POST 响应可能混入导航栏、奖励说明等文本，不能只靠响应全文判定
         # 成功。重新读取签到页，确认验证码表单已消失且存在精确成功状态。
-        verify_status, verify_html = client.get(self._signin_url)
+        verify_status, verify_html = client.get(self._signin_url, timeout=timeout)
         if verify_status != 200 or not verify_html:
             logger.error(f"{site} 签到结果未确认，复查状态码：{verify_status}")
             return False, f"签到结果未确认，复查状态码：{verify_status}"

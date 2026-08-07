@@ -28,6 +28,7 @@ class LaJiDui(_ISiteSigninHandler):
         site_cookie = site_info.get("cookie")
         ua = site_info.get("ua")
         proxy = site_info.get("proxy")
+        timeout = site_info.get("timeout") or 60
 
         try:
             from app.plugins.autoptcheckin.helper.http_helper import CffiClient
@@ -44,7 +45,7 @@ class LaJiDui(_ISiteSigninHandler):
         except ImportError as e:
             return False, f"签到失败：依赖缺失 {e}"
 
-        status, html_text = client.get("https://pt.lajidui.top/attendance.php")
+        status, html_text = client.get("https://pt.lajidui.top/attendance.php", timeout=timeout)
         if status != 200:
             logger.error(f"{site} 签到失败，状态码：{status}")
             return False, f"签到失败，状态码：{status}"
@@ -75,7 +76,7 @@ class LaJiDui(_ISiteSigninHandler):
             return False, "签到失败，获取验证码参数失败"
 
         image_url = urljoin("https://pt.lajidui.top/", image_src.replace("&amp;", "&"))
-        image_bytes = client.get_bytes(image_url)
+        image_bytes = client.get_bytes(image_url, timeout=timeout)
         if not image_bytes:
             logger.error(f"{site} 签到失败，获取验证码图片失败")
             return False, "签到失败，获取验证码图片失败"
@@ -92,6 +93,7 @@ class LaJiDui(_ISiteSigninHandler):
             engine="ddddocr",
             charset="alnum",
             proxy=proxy,
+            timeout=timeout,
         )
         if not code:
             logger.info(f"{site} ddddocr 识别失败，切换 OcrHelper")
@@ -105,6 +107,7 @@ class LaJiDui(_ISiteSigninHandler):
                 engine="ocrhelper",
                 charset="alnum",
                 proxy=proxy,
+                timeout=timeout,
             )
         if not code:
             logger.error(f"{site} 签到失败，验证码识别失败")
@@ -114,6 +117,7 @@ class LaJiDui(_ISiteSigninHandler):
         status, resp_text = client.post(
             "https://pt.lajidui.top/attendance.php",
             data={"imagehash": image_hash, "imagestring": code},
+            timeout=timeout,
         )
         if status != 200:
             logger.error(f"{site} 签到失败，状态码：{status}")

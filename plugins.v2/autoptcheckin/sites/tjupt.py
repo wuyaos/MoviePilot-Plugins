@@ -48,6 +48,7 @@ class Tjupt(_ISiteSigninHandler):
         ua = site_info.get("ua")
         proxy = site_info.get("proxy")
         render = site_info.get("render")
+        timeout = site_info.get("timeout")
 
         # 创建正确答案存储目录
         if not os.path.exists(os.path.dirname(self._answer_file)):
@@ -58,7 +59,8 @@ class Tjupt(_ISiteSigninHandler):
                                          cookie=site_cookie,
                                          ua=ua,
                                          proxy=proxy,
-                                         render=render)
+                                         render=render,
+                                         timeout=timeout)
 
         # 获取签到后返回html，判断是否签到成功
         if not html_text:
@@ -91,7 +93,8 @@ class Tjupt(_ISiteSigninHandler):
         # 获取签到图片hash
         captcha_img_res = RequestUtils(cookies=site_cookie,
                                        ua=ua,
-                                       proxies=settings.PROXY if proxy else None
+                                       proxies=settings.PROXY if proxy else None,
+                                       timeout=timeout
                                        ).get_res(url=img_url)
         if not captcha_img_res or captcha_img_res.status_code != 200:
             logger.error(f"{site} 签到图片 {img_url} 请求失败")
@@ -138,7 +141,9 @@ class Tjupt(_ISiteSigninHandler):
         for value, answer in answers:
             if answer:
                 # 豆瓣检索
-                db_res = RequestUtils().get_res(url=f'https://movie.douban.com/j/subject_suggest?q={answer}')
+                db_res = RequestUtils(timeout=timeout).get_res(
+                    url=f'https://movie.douban.com/j/subject_suggest?q={answer}'
+                )
                 if not db_res or db_res.status_code != 200:
                     logger.debug(f"签到选项 {answer} 未查询到豆瓣数据")
                     continue
@@ -155,7 +160,9 @@ class Tjupt(_ISiteSigninHandler):
                     answer_img_url = db_answer['img']
 
                     # 获取答案hash
-                    answer_img_res = RequestUtils(referer="https://movie.douban.com").get_res(url=answer_img_url)
+                    answer_img_res = RequestUtils(
+                        referer="https://movie.douban.com", timeout=timeout
+                    ).get_res(url=answer_img_url)
                     if not answer_img_res or answer_img_res.status_code != 200:
                         logger.debug(f"签到答案 {answer} {answer_img_url} 请求失败")
                         continue
@@ -195,7 +202,8 @@ class Tjupt(_ISiteSigninHandler):
         logger.debug(f"提交data {data}")
         sign_in_res = RequestUtils(cookies=site_cookie,
                                    ua=ua,
-                                   proxies=settings.PROXY if proxy else None
+                                   proxies=settings.PROXY if proxy else None,
+                                   timeout=timeout
                                    ).post_res(url=self._sign_in_url, data=data)
         if not sign_in_res or sign_in_res.status_code != 200:
             logger.error(f"{site} 签到失败，签到接口请求失败")

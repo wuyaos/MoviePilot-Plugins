@@ -161,11 +161,12 @@
         "name": "PT站点自动签到",
         "description": "自动签到/登录站点，支持自定义站点、CookieCloud同步和验证码识别",
         "labels": "签到,PT",
-        "version": "1.5.4",
+        "version": "1.5.5",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.5": "签到/登录结果改用结构化状态枚举分类并支持简繁文案；历史 do 字段改存成功站点，失败站下轮自动重试；CookieCloud init 同步加跨实例冷却；签到状态未确认提示页面可能改版；同步上游站点 timeout 配置到通用处理器、站点适配器和 attendance helper；新增 rousi.pro JWT Bearer token API 签到适配",
             "v1.5.4": "新增慕雪阁(pt.muxuege.org) attendance.php POST 签到适配；通用签到处理器加强签到状态判断，GET 后不再见登录即报成功，改为检测签到表单/验证码并报告需专属适配器的原因",
             "v1.5.3": "修复 OpenCD 签到接口 state 为 failed/error 等非空字符串时被误判成功的问题，仅接受明确的 success 状态",
             "v1.5.2": "新增聆音Club(pt.soulvoice.club) attendance.php 验证码签到适配，复用 NexusPHP 验证码签到通用基类",

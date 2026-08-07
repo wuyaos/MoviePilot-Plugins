@@ -82,11 +82,13 @@ class _AttendancePostHandler(_ISiteSigninHandler):
         site_cookie = site_info.get("cookie")
         ua = site_info.get("ua")
         proxies = settings.PROXY if site_info.get("proxy") else None
+        timeout = site_info.get("timeout")
 
         request = self._build_request(
             site_cookie=site_cookie,
             ua=ua,
             proxies=proxies,
+            timeout=timeout,
         )
 
         if self._verify_page_state:
@@ -125,7 +127,7 @@ class _AttendancePostHandler(_ISiteSigninHandler):
         logger.error(f"{site} 签到失败，签到接口返回 {html_text[:200]}")
         return False, "签到失败"
 
-    def _build_request(self, site_cookie, ua, proxies) -> RequestUtils:
+    def _build_request(self, site_cookie, ua, proxies, timeout=None) -> RequestUtils:
         """构造请求客户端；严格确认站点补齐浏览器表单提交所需请求头。"""
         if not self._verify_page_state:
             return RequestUtils(
@@ -133,6 +135,7 @@ class _AttendancePostHandler(_ISiteSigninHandler):
                 ua=ua,
                 referer=self._signin_url,
                 proxies=proxies,
+                timeout=timeout,
             )
 
         origin = f"{urlsplit(self._signin_url).scheme}://{urlsplit(self._signin_url).netloc}"
@@ -143,7 +146,8 @@ class _AttendancePostHandler(_ISiteSigninHandler):
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         }
-        return RequestUtils(cookies=site_cookie, headers=headers, proxies=proxies)
+        return RequestUtils(cookies=site_cookie, headers=headers, proxies=proxies,
+                            timeout=timeout)
 
     def _verify_attendance_page(self, site, response, before_post: bool):
         """确认签到表单与明确状态文案；返回 None 表示首次签到表单仍可提交。"""

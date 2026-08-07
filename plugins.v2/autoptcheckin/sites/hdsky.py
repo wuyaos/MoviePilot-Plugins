@@ -25,6 +25,7 @@ class HDSky(_ISiteSigninHandler):
         ua = site_info.get("ua")
         proxy = site_info.get("proxy")
         render = site_info.get("render")
+        timeout = site_info.get("timeout")
         referer = site_info.get("url")
 
         # 判断今日是否已签到
@@ -32,7 +33,8 @@ class HDSky(_ISiteSigninHandler):
                                          cookie=site_cookie,
                                          ua=ua,
                                          proxy=proxy,
-                                         render=render)
+                                         render=render,
+                                         timeout=timeout)
         if not html_text:
             logger.error(f"{site} 签到失败，请检查站点连通性")
             return False, '签到失败，请检查站点连通性'
@@ -47,7 +49,7 @@ class HDSky(_ISiteSigninHandler):
 
         # 按顺序尝试引擎：ddddocr → OcrHelper
         for engine in ('ddddocr', 'ocrhelper'):
-            outcome = self._try_engine(engine, site, site_cookie, ua, proxy, referer)
+            outcome = self._try_engine(engine, site, site_cookie, ua, proxy, referer, timeout)
             if outcome == 'success':
                 logger.info(f"{site} 签到成功（引擎: {engine}）")
                 return True, '签到成功'
@@ -67,12 +69,12 @@ class HDSky(_ISiteSigninHandler):
 
     # ------------------------------------------------------------------
     def _try_engine(self, engine: str, site: str, cookie: str,
-                    ua: str, proxy: bool, referer: str) -> str:
+                    ua: str, proxy: bool, referer: str, timeout: int = None) -> str:
         """
         使用指定引擎尝试一次签到。
         返回值: 'success' | 'already' | 'wrong_captcha' | 'no_result' | 'error'
         """
-        img_hash = self._fetch_captcha_hash(site, cookie, ua, proxy)
+        img_hash = self._fetch_captcha_hash(site, cookie, ua, proxy, timeout)
         if not img_hash:
             return 'error'
 
@@ -90,15 +92,16 @@ class HDSky(_ISiteSigninHandler):
             engine=engine,
             charset='alnum',
             proxy=proxy,
+            timeout=timeout,
         )
         if not code:
             return 'no_result'
 
         logger.info(f"{site} [{engine}] 识别结果: {code}")
-        return self._submit(img_hash, code, cookie, ua, proxy, referer)
+        return self._submit(img_hash, code, cookie, ua, proxy, referer, timeout)
 
     def _fetch_captcha_hash(self, site: str, cookie: str,
-                             ua: str, proxy: bool) -> Optional[str]:
+                             ua: str, proxy: bool, timeout: int = None) -> Optional[str]:
         """获取验证码 hash，最多重试 3 次"""
         for attempt in range(1, 4):
             res = RequestUtils(
@@ -108,6 +111,7 @@ class HDSky(_ISiteSigninHandler):
                 referer="https://hdsky.me/index.php",
                 accept_type="*/*",
                 proxies=settings.PROXY if proxy else None,
+                timeout=timeout,
             ).post_res(url='https://hdsky.me/image_code_ajax.php', data={'action': 'new'})
 
             if res and res.status_code == 200:
@@ -119,13 +123,14 @@ class HDSky(_ISiteSigninHandler):
         return None
 
     def _submit(self, img_hash: str, code: str, cookie: str,
-                ua: str, proxy: bool, referer: str) -> str:
+                ua: str, proxy: bool, referer: str, timeout: int = None) -> str:
         """提交签到，返回语义结果字符串"""
         res = RequestUtils(
             cookies=cookie,
             ua=ua,
             referer=referer,
             proxies=settings.PROXY if proxy else None,
+            timeout=timeout,
         ).post_res(
             url='https://hdsky.me/showup.php',
             data={'action': 'showup', 'imagehash': img_hash, 'imagestring': code},

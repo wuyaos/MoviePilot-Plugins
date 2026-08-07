@@ -35,13 +35,15 @@ class TTG(_ISiteSigninHandler):
         ua = site_info.get("ua")
         proxy = site_info.get("proxy")
         render = site_info.get("render")
+        timeout = site_info.get("timeout")
 
         # 获取页面html
         html_text = self.get_page_source(url="https://totheglory.im",
                                          cookie=site_cookie,
                                          ua=ua,
                                          proxy=proxy,
-                                         render=render)
+                                         render=render,
+                                         timeout=timeout)
         if not html_text:
             logger.error(f"{site} 签到失败，请检查站点连通性")
             return False, '签到失败，请检查站点连通性'
@@ -69,7 +71,8 @@ class TTG(_ISiteSigninHandler):
         # 签到
         sign_res = RequestUtils(cookies=site_cookie,
                                 ua=ua,
-                                proxies=settings.PROXY if proxy else None
+                                proxies=settings.PROXY if proxy else None,
+                                timeout=timeout
                                 ).post_res(url="https://totheglory.im/signed.php",
                                            data=data)
         if not sign_res or sign_res.status_code != 200:

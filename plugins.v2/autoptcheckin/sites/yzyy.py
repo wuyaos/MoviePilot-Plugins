@@ -31,6 +31,7 @@ class Yzyy(_ISiteSigninHandler):
         site_cookie = site_info.get("cookie")
         ua = site_info.get("ua") or settings.USER_AGENT
         proxy = settings.PROXY if site_info.get("proxy") else None
+        timeout = site_info.get("timeout") or self._request_timeout
         site_url = self._normalize_site_url(site_info.get("url"))
 
         session = _requests.Session()
@@ -40,7 +41,7 @@ class Yzyy(_ISiteSigninHandler):
         # 1. 获取签到页
         page_html = self._fetch_page(
             url=sign_page_url, cookie=site_cookie, headers=headers,
-            session=session, proxy=proxy,
+            session=session, proxy=proxy, timeout=timeout,
         )
         if page_html is None:
             logger.error(f"{site} 签到失败，获取签到页面失败")
@@ -68,7 +69,7 @@ class Yzyy(_ISiteSigninHandler):
         result_html = self._fetch_page(
             url=sign_url, cookie=site_cookie,
             headers={**headers, "referer": sign_page_url},
-            session=session, proxy=proxy,
+            session=session, proxy=proxy, timeout=timeout,
         )
         if result_html is None:
             logger.error(f"{site} 签到失败，签到请求失败")
@@ -118,12 +119,13 @@ class Yzyy(_ISiteSigninHandler):
         }
 
     @staticmethod
-    def _fetch_page(url: str, cookie: str, headers: dict, session, proxy) -> Optional[str]:
+    def _fetch_page(url: str, cookie: str, headers: dict, session, proxy,
+                    timeout: int = 30) -> Optional[str]:
         try:
             res = RequestUtils(
                 headers=headers,
                 cookies=cookie,
-                timeout=30,
+                timeout=timeout,
                 session=session,
                 proxies=proxy,
             ).get_res(url=url)

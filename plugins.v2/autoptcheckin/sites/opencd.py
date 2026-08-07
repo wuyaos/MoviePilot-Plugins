@@ -25,13 +25,15 @@ class Opencd(_ISiteSigninHandler):
         ua = site_info.get("ua")
         proxy = site_info.get("proxy")
         render = site_info.get("render")
+        timeout = site_info.get("timeout")
 
         # 判断今日是否已签到
         html_text = self.get_page_source(url='https://www.open.cd',
                                          cookie=site_cookie,
                                          ua=ua,
                                          proxy=proxy,
-                                         render=render)
+                                         render=render,
+                                         timeout=timeout)
         if not html_text:
             logger.error(f"{site} 签到失败，请检查站点连通性")
             return False, '签到失败，请检查站点连通性'
@@ -49,7 +51,8 @@ class Opencd(_ISiteSigninHandler):
                                          cookie=site_cookie,
                                          ua=ua,
                                          proxy=proxy,
-                                         render=render)
+                                         render=render,
+                                         timeout=timeout)
         if not html_text:
             logger.error(f"{site} 签到失败，请检查站点连通性")
             return False, '签到失败，请检查站点连通性'
@@ -80,6 +83,7 @@ class Opencd(_ISiteSigninHandler):
             engine='ddddocr',
             charset='alnum',
             proxy=proxy,
+            timeout=timeout,
         )
         if not ocr_result or len(ocr_result) != 6:
             logger.info(f"{site} ddddocr 识别失败，切换 OcrHelper")
@@ -93,6 +97,7 @@ class Opencd(_ISiteSigninHandler):
                 engine='ocrhelper',
                 charset='alnum',
                 proxy=proxy,
+                timeout=timeout,
             )
             if ocr_result and len(ocr_result) != 6:
                 ocr_result = None
@@ -106,6 +111,7 @@ class Opencd(_ISiteSigninHandler):
             cookies=site_cookie,
             ua=ua,
             proxies=settings.PROXY if proxy else None,
+            timeout=timeout,
         ).post_res(
             url='https://www.open.cd/plugin_sign-in.php?cmd=signin',
             data={'imagehash': img_hash, 'imagestring': ocr_result},

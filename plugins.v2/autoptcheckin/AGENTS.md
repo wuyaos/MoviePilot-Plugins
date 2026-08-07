@@ -19,6 +19,7 @@
 - `helper/attendance_captcha_helper.py`: NexusPHP attendance.php 验证码签到通用流程。
 - `helper/http_helper.py`: curl-cffi HTTP 客户端与 SSL 回退处理。
 - `helper/ocr_helper.py`: OCRHelper / ddddocr 识别封装。
+- `helper/signin_status.py`: 语言无关的结构化签到状态及简繁文案推断。
 - `helper/__init__.py`: helper 包标记。
 - `sites/`: 各 PT 站点的 match/signin/login 特化适配。
 - `sites/AGENTS.md`: 站点适配子目录约束说明。

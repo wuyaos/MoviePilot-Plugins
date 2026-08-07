@@ -36,6 +36,7 @@ class Pt52(_ISiteSigninHandler):
         site_cookie = site_info.get("cookie")
         ua = site_info.get("ua")
         render = site_info.get("render")
+        timeout = site_info.get("timeout")
         proxy = site_info.get("proxy")
 
         # 判断今日是否已签到
@@ -43,7 +44,8 @@ class Pt52(_ISiteSigninHandler):
                                          cookie=site_cookie,
                                          ua=ua,
                                          proxy=proxy,
-                                         render=render)
+                                         render=render,
+                                         timeout=timeout)
         
         if not html_text:
             logger.error(f"{site} 签到失败，请检查站点连通性")
@@ -115,7 +117,8 @@ class Pt52(_ISiteSigninHandler):
 
         sign_res = RequestUtils(cookies=site_cookie,
                                 ua=ua,
-                                proxies=settings.PROXY if proxy else None
+                                proxies=settings.PROXY if proxy else None,
+                                timeout=timeout
                                 ).post_res(url='https://52pt.site/bakatest.php', data=data)
         if not sign_res or sign_res.status_code != 200:
             logger.error(f"{site} 签到失败，签到接口请求失败")

@@ -25,6 +25,7 @@ class SiQi(_ISiteSigninHandler):
         site = site_info.get("name")
         site_cookie = site_info.get("cookie")
         ua = site_info.get("ua")
+        timeout = site_info.get("timeout") or 60
 
         try:
             from app.plugins.autoptcheckin.helper.http_helper import CffiClient
@@ -35,7 +36,7 @@ class SiQi(_ISiteSigninHandler):
         client = CffiClient(cookie=site_cookie, ua=ua)
 
         # 1. GET 签到页
-        status, html = client.get("https://si-qi.xyz/attendance.php")
+        status, html = client.get("https://si-qi.xyz/attendance.php", timeout=timeout)
         if not html:
             return False, '签到失败，请检查站点连通性'
         if "login.php" in html:
@@ -55,7 +56,7 @@ class SiQi(_ISiteSigninHandler):
         img_url = urljoin("https://si-qi.xyz/", img_m.group(1).replace("&amp;", "&"))
 
         # 3. 下载图片（ddddocr 用 bytes；OcrHelper 用 URL）
-        img_bytes = client.get_bytes(img_url)
+        img_bytes = client.get_bytes(img_url, timeout=timeout)
         if not img_bytes:
             return False, '签到失败，获取验证码图片失败'
 
@@ -70,6 +71,7 @@ class SiQi(_ISiteSigninHandler):
             retry_times=1,
             engine='ddddocr',
             charset='alnum',
+            timeout=timeout,
         )
         if not code:
             logger.info(f"{site} ddddocr 识别失败，切换 OcrHelper")
@@ -81,6 +83,7 @@ class SiQi(_ISiteSigninHandler):
                 min_len=4,
                 engine='ocrhelper',
                 charset='alnum',
+                timeout=timeout,
             )
 
         if not code:
@@ -91,6 +94,7 @@ class SiQi(_ISiteSigninHandler):
         status, resp_text = client.post(
             "https://si-qi.xyz/attendance.php",
             data={"imagehash": image_hash, "imagestring": code},
+            timeout=timeout,
         )
         if not resp_text:
             return False, '签到失败，提交签到请求失败'

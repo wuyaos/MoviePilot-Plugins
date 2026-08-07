@@ -18,6 +18,7 @@ class BTSchool(_ISiteSigninHandler):
         site = site_info.get("name")
         site_cookie = site_info.get("cookie")
         ua = site_info.get("ua")
+        timeout = site_info.get("timeout") or 60
 
         try:
             from app.plugins.autoptcheckin.helper.http_helper import CffiClient
@@ -29,7 +30,7 @@ class BTSchool(_ISiteSigninHandler):
 
         logger.info(f"{site} 开始签到 (curl-cffi)")
         # 判断今日是否已签到
-        status, html_text = client.get('https://pt.btschool.club')
+        status, html_text = client.get('https://pt.btschool.club', timeout=timeout)
         if not html_text:
             return False, '签到失败，请检查站点连通性'
         if "login.php" in html_text:
@@ -41,7 +42,9 @@ class BTSchool(_ISiteSigninHandler):
             return True, '今日已签到'
 
         # 执行签到
-        status, html_text = client.get('https://pt.btschool.club/index.php?action=addbonus')
+        status, html_text = client.get(
+            'https://pt.btschool.club/index.php?action=addbonus', timeout=timeout
+        )
         if not html_text:
             return False, '签到失败，签到接口请求失败'
 
@@ -58,11 +61,13 @@ class BTSchool(_ISiteSigninHandler):
         ua = site_info.get("ua")
         proxy = site_info.get("proxy")
         render = site_info.get("render")
+        timeout = site_info.get("timeout")
 
         logger.info(f"{site} 开始签到 (fallback)")
         html_text = self.get_page_source(
             url='https://pt.btschool.club',
-            cookie=site_cookie, ua=ua, proxy=proxy, render=render)
+            cookie=site_cookie, ua=ua, proxy=proxy, render=render,
+            timeout=timeout)
         if not html_text:
             return False, '签到失败，请检查站点连通性'
         if "login.php" in html_text:
@@ -72,7 +77,8 @@ class BTSchool(_ISiteSigninHandler):
 
         html_text = self.get_page_source(
             url='https://pt.btschool.club/index.php?action=addbonus',
-            cookie=site_cookie, ua=ua, proxy=proxy, render=render)
+            cookie=site_cookie, ua=ua, proxy=proxy, render=render,
+            timeout=timeout)
         if not html_text:
             return False, '签到失败，签到接口请求失败'
         if self._sign_text not in html_text:

@@ -40,7 +40,7 @@ class MTorrent(_ISiteSigninHandler):
         domain = StringUtils.get_url_domain(url)
         # 更新最后访问时间
         res = RequestUtils(headers=headers,
-                           timeout=60,
+                           timeout=site_info.get("timeout") or 60,
                            proxies=settings.PROXY if site_info.get("proxy") else None,
                            referer=f"{url}index"
                            ).post_res(url=f"https://api.{domain}/api/member/updateLastBrowse")

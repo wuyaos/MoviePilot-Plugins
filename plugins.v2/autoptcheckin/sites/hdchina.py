@@ -50,7 +50,8 @@ class HDChina(_ISiteSigninHandler):
         # 获取页面html
         html_res = RequestUtils(cookies=site_cookie,
                                 ua=ua,
-                                proxies=proxies
+                                proxies=proxies,
+                                timeout=timeout
                                 ).get_res(url="https://hdchina.org/index.php")
         if not html_res or html_res.status_code != 200:
             logger.error(f"{site} 签到失败，请检查站点连通性")
@@ -90,7 +91,8 @@ class HDChina(_ISiteSigninHandler):
         }
         sign_res = RequestUtils(cookies=site_cookie,
                                 ua=ua,
-                                proxies=proxies
+                                proxies=proxies,
+                                timeout=timeout
                                 ).post_res(url="https://hdchina.org/plugin_sign-in.php?cmd=signin", data=data)
         if not sign_res or sign_res.status_code != 200:
             logger.error(f"{site} 签到失败，签到接口请求失败")

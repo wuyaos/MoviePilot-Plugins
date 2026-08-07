@@ -35,6 +35,7 @@ def recognize_captcha(
     retry_times: int = 1,
     engine: str = 'auto',
     charset: str = 'auto',
+    timeout: int = None,
 ) -> str | None:
     """识别验证码
 
@@ -60,7 +61,7 @@ def recognize_captcha(
     # 获取图片数据（ocrhelper 直接传 URL，不需要预下载）
     if engine != 'ocrhelper':
         if image_bytes is None and image_url:
-            image_bytes = _download_image(image_url, cookie, ua, referer, proxy)
+            image_bytes = _download_image(image_url, cookie, ua, referer, proxy, timeout)
         if image_bytes and not _is_valid_image(image_bytes):
             logger.warning("验证码响应不是有效图片，跳过 ddddocr")
             image_bytes = None
@@ -164,7 +165,8 @@ def _is_valid_image(image_bytes: bytes) -> bool:
 
 
 def _download_image(
-    url: str, cookie: str = None, ua: str = None, referer: str = None, proxy: bool = False
+    url: str, cookie: str = None, ua: str = None, referer: str = None, proxy: bool = False,
+    timeout: int = None,
 ) -> bytes | None:
     """下载验证码图片"""
     try:
@@ -176,7 +178,7 @@ def _download_image(
             proxy=settings.PROXY_SERVER if proxy else None,
             referer=referer,
         )
-        return client.get_bytes(url)
+        return client.get_bytes(url, timeout=timeout or 60)
     except Exception as e:
         logger.debug(f"CffiClient 下载验证码失败，回退到 RequestUtils: {e}")
 
@@ -188,7 +190,8 @@ def _download_image(
         if referer:
             headers["Referer"] = referer
         proxies = settings.PROXY if proxy else None
-        res = RequestUtils(headers=headers, proxies=proxies).get_res(url=url)
+        res = RequestUtils(headers=headers, proxies=proxies,
+                           timeout=timeout or 20).get_res(url=url)
         if res and res.status_code == 200:
             return res.content
     except Exception as e:
