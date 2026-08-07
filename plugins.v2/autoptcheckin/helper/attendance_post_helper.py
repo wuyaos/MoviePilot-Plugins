@@ -15,6 +15,13 @@ from app.utils.site import SiteUtils
 from app.utils.string import StringUtils
 
 
+# NexusPHP attendance.php 页面签到状态，供通用签到处理器判断页面形态。
+ATTENDANCE_SIGNED = "signed"        # 已签到：无签到表单且有成功/已签到文案
+ATTENDANCE_FORM = "form"            # 未签到：存在 attendance 提交表单（可空 POST）
+ATTENDANCE_CAPTCHA = "captcha"      # 需验证码：表单含 imagehash/验证码图片
+ATTENDANCE_UNKNOWN = "unknown"      # 无法判断签到状态
+
+
 class _AttendancePostHandler(_ISiteSigninHandler):
     """无验证码 attendance.php 空 POST 签到通用基类。
 
@@ -29,10 +36,46 @@ class _AttendancePostHandler(_ISiteSigninHandler):
     # 默认保持旧站点行为；仅经真实页面验证的站点按需开启严格状态确认。
     _verify_page_state = False
     _verified_success_texts = []
+    # 通用 NexusPHP 签到状态文案，供 detect_attendance_state 与 post_signin_once 兜底使用。
+    _NEXUSPHP_SUCCESS_TEXTS = [
+        "签到成功", "簽到成功", "签到已得", "簽到已得",
+    ]
+    _NEXUSPHP_REPEAT_TEXTS = [
+        "今天已经签到过", "今天已經簽到過", "请勿重复刷新", "請勿重複刷新",
+        "已经签到", "已經簽到", "今天已经签到", "今天已經簽到",
+        "今天已簽到", "今日已簽到", "今日已签到",
+    ]
 
     @classmethod
     def match(cls, url: str) -> bool:
         return StringUtils.url_equal(url, cls.site_url)
+
+    @classmethod
+    def detect_attendance_state(cls, html_text: str) -> str:
+        """识别 NexusPHP attendance.php 页面签到状态。
+
+        通用签到处理器在 GET 后调用本方法，避免"登录即成功"式误报：
+        - CAPTCHA：表单含验证码，通用 GET/POST 无法完成，需专属适配器。
+        - FORM：存在提交按钮的签到表单，未签到，可尝试空 POST。
+        - SIGNED：无签到表单且命中成功/已签到文案。
+        - UNKNOWN：无法判断，交由调用方保守处理。
+        """
+        if not html_text:
+            return ATTENDANCE_UNKNOWN
+        html = etree.HTML(html_text)
+        if html is None:
+            return ATTENDANCE_UNKNOWN
+        if html.xpath('//form[contains(@action,"attendance")]//input[@name="imagehash"]'):
+            return ATTENDANCE_CAPTCHA
+        has_form = bool(html.xpath(
+            '//form[contains(@action,"attendance.php")]//input[@type="submit"]'
+        ))
+        if has_form:
+            return ATTENDANCE_FORM
+        if any(t in html_text for t in cls._NEXUSPHP_SUCCESS_TEXTS) \
+                or any(t in html_text for t in cls._NEXUSPHP_REPEAT_TEXTS):
+            return ATTENDANCE_SIGNED
+        return ATTENDANCE_UNKNOWN
 
     def signin(self, site_info: CommentedMap) -> Tuple[bool, str]:
         site = site_info.get("name")

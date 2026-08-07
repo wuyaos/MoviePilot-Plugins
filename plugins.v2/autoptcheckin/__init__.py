@@ -43,7 +43,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.5.3"
+    plugin_version = "1.5.4"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1378,6 +1378,10 @@ class AutoPtCheckin(_PluginBase):
         """
         if not site_info:
             return False, ""
+        from app.plugins.autoptcheckin.helper.attendance_post_helper import (
+            _AttendancePostHandler, ATTENDANCE_SIGNED, ATTENDANCE_FORM,
+            ATTENDANCE_CAPTCHA,
+        )
         site = site_info.get("name")
         site_url = site_info.get("url")
         site_cookie = site_info.get("cookie")
@@ -1408,11 +1412,19 @@ class AutoPtCheckin(_PluginBase):
                         return False, f"仿真签到失败，站点服务器异常，稍后重试！"
                     return False, f"仿真签到失败，Cookie已失效！"
                 else:
-                    # 判断是否已签到
-                    if re.search(r'已签|签到已得', page_source, re.IGNORECASE) \
-                            or SiteUtils.is_checkin(page_source):
+                    # 仿真模式下也必须确认签到状态，避免"登录即成功"误报
+                    state = _AttendancePostHandler.detect_attendance_state(page_source)
+                    if state == ATTENDANCE_SIGNED:
+                        logger.info(f"{site} 仿真签到成功")
                         return True, f"签到成功"
-                    return True, "仿真签到成功"
+                    if state == ATTENDANCE_FORM:
+                        logger.warning(f"{site} 仿真签到失败，站点需要 POST 签到适配器")
+                        return False, "仿真签到失败：站点需要 POST 签到适配器"
+                    if state == ATTENDANCE_CAPTCHA:
+                        logger.warning(f"{site} 仿真签到失败，站点需要验证码签到适配器")
+                        return False, "仿真签到失败：站点需要验证码签到适配器"
+                    logger.info(f"{site} 仿真登录成功")
+                    return True, "仿真登录成功"
             else:
                 res = RequestUtils(cookies=site_cookie,
                                    ua=ua,
@@ -1438,8 +1450,22 @@ class AutoPtCheckin(_PluginBase):
                         logger.warning(f"{site} 签到失败，{msg}")
                         return False, f"签到失败，{msg}！"
                     else:
-                        logger.info(f"{site} 签到成功")
-                        return True, f"签到成功"
+                        # 已登录：必须确认签到状态，避免"GET 见登录即成功"误报
+                        state = _AttendancePostHandler.detect_attendance_state(res.text)
+                        if state == ATTENDANCE_SIGNED:
+                            logger.info(f"{site} 今日已签到")
+                            return True, "今日已签到"
+                        if state == ATTENDANCE_FORM:
+                            logger.warning(f"{site} 签到失败，站点需要 POST 签到适配器")
+                            return False, "签到失败：站点需要 POST 签到适配器"
+                        if state == ATTENDANCE_CAPTCHA:
+                            logger.warning(f"{site} 签到失败，站点需要验证码签到适配器")
+                            return False, "签到失败：站点需要验证码签到适配器"
+                        if "attendance.php" not in checkin_url:
+                            logger.info(f"{site} 模拟登录成功")
+                            return True, "模拟登录成功"
+                        logger.warning(f"{site} 签到结果未确认")
+                        return False, "签到失败：签到结果未确认"
                 elif res is not None:
                     logger.warning(f"{site} 签到失败，状态码：{res.status_code}")
                     return False, f"签到失败，状态码：{res.status_code}！"
