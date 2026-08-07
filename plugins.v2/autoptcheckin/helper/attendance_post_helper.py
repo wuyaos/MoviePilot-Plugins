@@ -20,6 +20,7 @@ ATTENDANCE_SIGNED = "signed"        # 已签到：无签到表单且有成功/�
 ATTENDANCE_FORM = "form"            # 未签到：存在 attendance 提交表单（可空 POST）
 ATTENDANCE_CAPTCHA = "captcha"      # 需验证码：表单含 imagehash/验证码图片
 ATTENDANCE_UNKNOWN = "unknown"      # 无法判断签到状态
+ATTENDANCE_NOT_FOUND = "not_found"  # 签到页不存在：404/空响应/无签到入口，站点已改版或下线签到
 
 
 class _AttendancePostHandler(_ISiteSigninHandler):
@@ -55,6 +56,7 @@ class _AttendancePostHandler(_ISiteSigninHandler):
         """识别 NexusPHP attendance.php 页面签到状态。
 
         通用签到处理器在 GET 后调用本方法，避免"登录即成功"式误报：
+        - NOT_FOUND：响应为 404 错误页或空内容，签到页已改版/下线。
         - CAPTCHA：表单含验证码，通用 GET/POST 无法完成，需专属适配器。
         - FORM：存在提交按钮的签到表单，未签到，可尝试空 POST。
         - SIGNED：无签到表单且命中成功/已签到文案。
@@ -62,6 +64,13 @@ class _AttendancePostHandler(_ISiteSigninHandler):
         """
         if not html_text:
             return ATTENDANCE_UNKNOWN
+        # 404 错误页特征：服务器默认 404 页或 PHP 空响应，说明签到入口已失效。
+        # 命中时不再继续解析表单/文案，避免误报为"未确认"。
+        lower = html_text.lower()
+        if ("<title>404 not found</title>" in lower
+                or "no input file specified" in lower
+                or "<center><h1>404 not found</h1></center>" in lower):
+            return ATTENDANCE_NOT_FOUND
         html = etree.HTML(html_text)
         if html is None:
             return ATTENDANCE_UNKNOWN

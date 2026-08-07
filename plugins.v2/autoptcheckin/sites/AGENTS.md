@@ -23,7 +23,7 @@ AutoPtCheckin 的站点级签到适配层；输入站点 Cookie/UA/代理配置�
 - `lajidui.py`: 垃圾堆验证码签到适配。
 - `luckpt.py`: LuckPT attendance.php 纯 POST 签到适配（无验证码）。
 - `mteam.py`: M-Team 站点签到适配。
-- `muxuege.py`: 慕雪阁 attendance.php POST 签到适配（复用通用基类）。
+- `hhanclub.py`: 憨憨 attendance.php GET 签到适配，站点 Tailwind 前端需带 Referer 才返回完整页。
 - `nexushd.py`: NexusHD 站点 POST 签到适配。
 - `opencd.py`: OpenCD 站点签到适配。
 - `oshen.py`: OshenPT attendance.php 验证码签到适配（复用通用基类）。

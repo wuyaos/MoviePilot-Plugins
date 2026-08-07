@@ -45,7 +45,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.5.7"
+    plugin_version = "1.5.8"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1407,7 +1407,7 @@ class AutoPtCheckin(_PluginBase):
             return False, "", SigninStatus.FAILED
         from app.plugins.autoptcheckin.helper.attendance_post_helper import (
             _AttendancePostHandler, ATTENDANCE_SIGNED, ATTENDANCE_FORM,
-            ATTENDANCE_CAPTCHA,
+            ATTENDANCE_CAPTCHA, ATTENDANCE_NOT_FOUND,
         )
         site = site_info.get("name")
         site_url = site_info.get("url")
@@ -1451,6 +1451,9 @@ class AutoPtCheckin(_PluginBase):
                     if state == ATTENDANCE_CAPTCHA:
                         logger.warning(f"{site} 仿真签到失败，站点需要验证码签到适配器")
                         return False, "仿真签到失败：站点需要验证码签到适配器", SigninStatus.NEEDS_ADAPTER
+                    if state == ATTENDANCE_NOT_FOUND:
+                        logger.warning(f"{site} 签到页不存在，站点可能已改版或下线签到")
+                        return False, "签到失败：签到页不存在，站点可能已改版", SigninStatus.FAILED
                     logger.info(f"{site} 仿真登录成功")
                     return True, "仿真登录成功", SigninStatus.LOGIN
             else:
@@ -1491,6 +1494,9 @@ class AutoPtCheckin(_PluginBase):
                         if state == ATTENDANCE_CAPTCHA:
                             logger.warning(f"{site} 签到失败，站点需要验证码签到适配器")
                             return False, "签到失败：站点需要验证码签到适配器", SigninStatus.NEEDS_ADAPTER
+                        if state == ATTENDANCE_NOT_FOUND:
+                            logger.warning(f"{site} 签到页不存在，站点可能已改版或下线签到")
+                            return False, "签到失败：签到页不存在，站点可能已改版", SigninStatus.FAILED
                         if "attendance.php" not in checkin_url:
                             logger.info(f"{site} 模拟登录成功")
                             return True, "模拟登录成功", SigninStatus.LOGIN
