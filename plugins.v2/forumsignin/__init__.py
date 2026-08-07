@@ -22,7 +22,7 @@ class ForumSignin(_PluginBase):
     # 插件名称
     plugin_name = "论坛签到"
     # 插件描述
-    plugin_desc = "论坛站点签到（蜂巢 pting.club + 药丸 invites.fun），单插件双站调度，支持 Cookie/账号登录、失败重试与历史记录。"
+    plugin_desc = "蜂巢与药丸论坛自动签到"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
     # 插件版本

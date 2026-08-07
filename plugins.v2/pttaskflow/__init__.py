@@ -23,7 +23,7 @@ from .ui.page import build_page
 
 class PtTaskFlow(_PluginBase):
     plugin_name = "PT任务流"
-    plugin_desc = "声明式 PT 站点任务框架：任务自声明配置控件、执行单元与结果语义。"
+    plugin_desc = "自动执行 PT 站点签到、喊话、申领和抽奖任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png"
     plugin_version = "0.4.0"
     plugin_author = "wuyaos"

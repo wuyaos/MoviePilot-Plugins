@@ -41,7 +41,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件名称
     plugin_name = "PT站点自动签到"
     # 插件描述
-    plugin_desc = "自动签到/登录站点，支持自定义站点和CookieCloud同步"
+    plugin_desc = "PT 站点自动签到与模拟登录，支持验证码"
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本

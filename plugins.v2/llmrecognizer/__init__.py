@@ -56,7 +56,7 @@ class IdentifierSuggestionBundle(BaseModel):
 
 class LLMRecognizer(_PluginBase):
     plugin_name = "AI识别增强"
-    plugin_desc = "直接复用 MoviePilot 当前 LLM 配置，在原生识别失败后做本地结构化识别兜底，并交回原生链路继续二次识别。"
+    plugin_desc = "原生识别失败时使用当前 LLM 配置兜底"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/llmrecognizer.png"
     plugin_version = "1.2.14"
     plugin_author = "wuyaos"

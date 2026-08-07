@@ -31,7 +31,7 @@ from .sites import SITE_CONFIGS, SITE_OPTIONS, get_site_config
 
 class FarmAuto(_PluginBase):
     plugin_name = "农场自动化Pro"
-    plugin_desc = "多站点农场统一自动运营，支持独立收获、补种与出售策略"
+    plugin_desc = "多站点农场自动收获、补种与出售"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png"
     plugin_version = "3.2.16"
     plugin_author = "wuyaos"

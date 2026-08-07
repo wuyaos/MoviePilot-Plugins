@@ -20,7 +20,7 @@ from app.schemas.types import EventType
 
 class StrmManage(_PluginBase):
     plugin_name = "云盘Strm助手（CD2增强）"
-    plugin_desc = "联动生成 strm，并支持通过 CloudDrive2 下载非视频文件。"
+    plugin_desc = "生成 strm，并通过 CloudDrive2 下载非视频文件"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png"
     plugin_version = "0.1.1"
     plugin_author = "wuyaos"

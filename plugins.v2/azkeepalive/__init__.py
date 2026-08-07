@@ -21,7 +21,7 @@ from .core.page import build_page
 
 class AzKeepAlive(_PluginBase):
     plugin_name = "AnimeZ保活"
-    plugin_desc = "定时访问AnimeZ站点并从种子页选种提交下载器，满足保活要求"
+    plugin_desc = "定时登录 AnimeZ 并提交种子下载，维持账号活跃"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
     plugin_version = "2.6.1"
     plugin_author = "wuyaos"

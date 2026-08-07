@@ -35,7 +35,7 @@ from .ui.page import build_page
 class CoverGen(_PluginBase):
     """媒体库封面自动生成。"""
     plugin_name = "媒体库封面生成"
-    plugin_desc = "自动生成媒体库封面，支持库白名单、合集黑名单过滤、5种动画风格、Emby和Jellyfin"
+    plugin_desc = "自动生成 Emby 和 Jellyfin 媒体库封面"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/emby.png"
     plugin_version = "1.4.8"
     plugin_author = "wuyaos"

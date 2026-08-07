@@ -25,7 +25,7 @@ from app.schemas.types import EventType
 
 class TangLottery(_PluginBase):
     plugin_name = "不可躺自动抽奖助手"
-    plugin_desc = "按每日目标次数自动拆解并执行不可躺抽奖。"
+    plugin_desc = "自动完成不可躺每日抽奖目标"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tanglottery.png"
     plugin_version = "3.0.3"
     plugin_author = "jiangbkvir,bfjy,wuyaos"

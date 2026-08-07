@@ -20,7 +20,7 @@ from app.utils.http import RequestUtils
 class YzyySignin(_PluginBase):
     # 插件基本信息
     plugin_name = "yzyy论坛签到"
-    plugin_desc = "yzyy论坛每日签到，自动获取签到码完成签到"
+    plugin_desc = "yzyy 论坛每日自动签到"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
     plugin_version = "1.2.12"
     plugin_author = "bfjy, wuyaos"

@@ -24,7 +24,7 @@ from .credentials import resolve_credential
 
 class SiteRefresh(_PluginBase):
     plugin_name = "站点自动更新（自用版）"
-    plugin_desc = "接收 Cookie 失效事件，使用当前 MoviePilot V2 浏览器登录流程刷新站点 Cookie 和 UA。"
+    plugin_desc = "Cookie 失效时自动刷新站点 Cookie 和 UA"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/refresh.png"
     plugin_version = "1.3.1"
     plugin_author = "wuyaos, thsrite"

@@ -81,7 +81,7 @@ class CloudDrive2Disk(_PluginBase):
     # 插件名称
     plugin_name = "CloudDrive2 存储"
     # 插件描述
-    plugin_desc = "基于 baranwang/cd2disk，通过 CloudDrive2 gRPC 直连与 API 令牌接入，提供 MoviePilot 存储模块能力。"
+    plugin_desc = "通过 CloudDrive2 gRPC 和 API 提供存储模块"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/cloudcompanion.png"
     # 插件版本

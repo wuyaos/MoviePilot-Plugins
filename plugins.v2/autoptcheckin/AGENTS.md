@@ -1,6 +1,6 @@
 # PT站点自动签到
 
-自动签到/登录站点，支持自定义站点、CookieCloud 同步、Cookie 失效补取重试和部分站点验证码签到适配。
+PT 站点自动签到与模拟登录，支持验证码。
 
 ## Input / Output / Pos
 - Input: MoviePilot 站点配置、自定义站点文本、CookieCloud 数据、`EventType.PluginAction` 命令与调度器触发。

@@ -24,7 +24,7 @@ class TorrentTransfer(_PluginBase):
     # 插件名称
     plugin_name = "自动转移做种(自用)"
     # 插件描述
-    plugin_desc = "定期转移下载器中的做种任务到另一个下载器。"
+    plugin_desc = "在下载器间安全迁移已完成的做种任务"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/seedtransfer.png"
     # 插件版本

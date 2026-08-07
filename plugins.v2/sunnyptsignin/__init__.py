@@ -21,7 +21,7 @@ from app.schemas.types import EventType
 
 class SunnyPTSignin(_PluginBase):
     plugin_name = "SunnyPT 自动签到"
-    plugin_desc = "通过用户名密码登录 SunnyPT 获取 token 自动签到，无需 Cookie。"
+    plugin_desc = "登录 SunnyPT 并自动签到，无需 Cookie"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
     plugin_version = "1.1.1"
     plugin_author = "wuyaos"

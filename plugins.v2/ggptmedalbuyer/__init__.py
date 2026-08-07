@@ -23,7 +23,7 @@ urllib3.disable_warnings(InsecureRequestWarning)
 
 class GGPTMedalBuyer(_PluginBase):
     plugin_name = "GGPT勋章购买"
-    plugin_desc = "自动续购 7 天有效的 GGPT 疯狂星期四勋章，避免到期后忘记手动购买。"
+    plugin_desc = "自动续购 GGPT 疯狂星期四勋章"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/medal.png"
     plugin_version = "1.0.3"
     plugin_author = "jiangbkvir,wuyaos"
