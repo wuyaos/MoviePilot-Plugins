@@ -89,10 +89,12 @@ class Site:
 
     def _request(self, method, path, **kwargs):
         self.request_error = ""
+        # path 为完整 URL（如站点 API）时直接使用，否则拼接站点根地址。
+        url = path if path.startswith(("http://", "https://")) else f"{self.url}{path}"
         for attempt in range(2):
             try:
                 response = self.session.request(
-                    method, f"{self.url}{path}", timeout=15, **kwargs)
+                    method, url, timeout=15, **kwargs)
             except Exception as error:
                 self.request_error = f"请求异常：{error}"
                 logger.error(f"{self.site_name} - {method} {path} 失败：{error}")
@@ -121,8 +123,8 @@ class Site:
     def get(self, path: str, params=None):
         return self._request("GET", path, params=params)
 
-    def post(self, path: str, data=None):
-        return self._request("POST", path, data=data)
+    def post(self, path: str, data=None, json=None):
+        return self._request("POST", path, data=data, json=json)
 
     def get_username(self):
         try:

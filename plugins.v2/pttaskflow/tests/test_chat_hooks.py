@@ -95,7 +95,7 @@ class ChatHookTests(unittest.TestCase):
 
     def test_longpt_api_message_is_direct_feedback(self):
         site=LongPT(site_info(LongPT))
-        site.session=types.SimpleNamespace(post=lambda *a,**k:Response(payload={"code":0,"msg":"获得 10 魔力,[em1]"}))
+        site.post=lambda *a,**k:Response(payload={"code":0,"msg":"获得 10 魔力,[em1]"})
         result=site.send_message("龙宝，求魔力")
         self.assertTrue(result.success); self.assertEqual(result.rewards[0]["type"],"魔力值")
         self.assertNotIn("[em",result.rewards[0]["description"])

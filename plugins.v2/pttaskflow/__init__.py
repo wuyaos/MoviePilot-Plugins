@@ -25,7 +25,7 @@ class PtTaskFlow(_PluginBase):
     plugin_name = "PT任务流"
     plugin_desc = "自动执行 PT 站点签到、喊话、申领和抽奖任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png"
-    plugin_version = "0.4.0"
+    plugin_version = "0.4.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pttaskflow_"
@@ -38,6 +38,7 @@ class PtTaskFlow(_PluginBase):
         self.raw_config = {}
         self.siteoper = None
         self._cookiecloud_cache = CookieCache()
+        self._stop_event = threading.Event()
         self.history = HistoryStore(self)
         self.engine = TaskEngine(self)
 
@@ -49,6 +50,7 @@ class PtTaskFlow(_PluginBase):
         self.config = PluginConfig.from_dict(self.raw_config)
         self.raw_config = self._clean_config(self.raw_config)
         self.config = PluginConfig.from_dict(self.raw_config)
+        self._stop_event = threading.Event()
         self.engine = TaskEngine(self)
         if config is not None and self.raw_config != config:
             self.update_config(self.raw_config)
@@ -221,6 +223,26 @@ class PtTaskFlow(_PluginBase):
         return self.engine.run(scene="调试", debug=True,
                                site_filter=site_filter, task_filter=task_filter)
 
+    def _next_run_text(self) -> Optional[str]:
+        """读取主定时服务下次触发时间；未注册或异常时回退到 cron 文本。"""
+        if not self.config.enabled:
+            return None
+        fallback = f"按配置执行: {self.config.cron}" if self.config.cron else None
+        try:
+            from app.scheduler import Scheduler
+            for task in Scheduler().list() or []:
+                tid = getattr(task, "id", "")
+                if tid == "pttaskflow_main" or getattr(task, "provider", "") == self.plugin_name:
+                    next_run = getattr(task, "next_run", None)
+                    if next_run:
+                        return str(next_run)
+                    if getattr(task, "status", "") == "正在运行":
+                        return "正在运行中"
+                    return fallback
+        except Exception:
+            pass
+        return fallback
+
     def get_state(self) -> bool:
         return self.config.enabled
 
@@ -234,6 +256,10 @@ class PtTaskFlow(_PluginBase):
         return TaskScheduler(self).services()
 
     def stop_service(self):
+        """通知运行中任务尽快退出；引擎在当前单元完成后响应停止信号。"""
+        if not self._stop_event.is_set():
+            self._stop_event.set()
+            logger.info("[PtTaskFlow] 服务停止，已通知运行中任务退出")
         return
 
     @staticmethod

@@ -19,8 +19,9 @@ class LongPTShoutAction:
 class LongPTLotteryAction:
     def execute(self, site):
         try:
-            response = site.session.get(
-                f"{site.api_base}/lucky/pluginsPrizeReceiptRecord/join", timeout=30)
+            response = site.get(f"{site.api_base}/lucky/pluginsPrizeReceiptRecord/join")
+            if not response:
+                return TaskResult.fail(site.request_error or "LongPT 抽奖请求失败")
             payload = response.json()
             if payload.get("code") in (0, -1):
                 return TaskResult.idempotent(payload.get("msg") or "抽奖完成")

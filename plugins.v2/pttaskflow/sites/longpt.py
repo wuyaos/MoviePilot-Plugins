@@ -31,10 +31,12 @@ class LongPT(Site):
     ]
 
     def send_message(self, message):
+        response = self.post(
+            f"{self.api_base}/nexus/shoutbox/shout",
+            json={"text": message})
+        if not response:
+            return TaskResult.fail(self.request_error or "LongPT 喊话请求失败")
         try:
-            response = self.session.post(
-                f"{self.api_base}/nexus/shoutbox/shout",
-                json={"text": message}, timeout=30)
             payload = response.json()
             if payload.get("code") == 0:
                 feedback = re.sub(r",?\[em\d+\]", "", payload.get("msg") or "").strip()
@@ -43,5 +45,5 @@ class LongPT(Site):
                     "amount": "", "unit": "", "is_negative": False,
                 }] if feedback else [])
             return TaskResult.business(payload.get("msg") or "喊话失败")
-        except Exception as error:
-            return TaskResult.fail(f"LongPT 喊话请求失败：{error}")
+        except (ValueError, TypeError) as error:
+            return TaskResult.fail(f"LongPT 喊话响应解析失败：{error}")

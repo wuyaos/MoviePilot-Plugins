@@ -4,10 +4,10 @@
 """
 from datetime import datetime
 import threading
-import time
 
 import pytz
 from app.core.config import settings
+from app.log import logger
 
 from .models import TaskResult
 from .task_log import TaskLogger
@@ -64,6 +64,9 @@ class TaskEngine:
 
     def _run_locked(self, scene, debug, site_filter, task_filter, execution_keys,
                     exclude_domains):
+        # 进入持锁执行后清除历史 stop 信号；未持锁的 run 拿不到锁会直接返回，
+        # 因此不会在新一轮运行开始前误清信号。
+        self.plugin._stop_event.clear()
         units = self.collect_units(debug=debug, site_filter=site_filter,
                                    task_filter=task_filter, execution_keys=execution_keys,
                                    exclude_domains=exclude_domains)
@@ -73,12 +76,18 @@ class TaskEngine:
         success = failed = skipped = 0
         previous = None
         for unit in units:
+            if self.plugin._stop_event.is_set():
+                logger.info(f"[PtTaskFlow] [{scene}] 收到停止信号，剩余 {len(units) - len(records)} 个单元不再执行")
+                break
             if unit.execution_key in terminal_keys:
                 skipped += 1
                 TaskLogger.unit_skip(scene, unit, "当天已终态成功")
                 continue
             if previous and previous.site is unit.site and previous.task is unit.task:
-                time.sleep(unit.site.message_interval)
+                # 用 Event.wait 替代 time.sleep，收到停止信号时立即唤醒退出。
+                if self.plugin._stop_event.wait(unit.site.message_interval):
+                    logger.info(f"[PtTaskFlow] [{scene}] 消息间隔等待中被停止信号中断")
+                    break
             previous = unit
             TaskLogger.unit_start(scene, unit)
             result = self._execute(unit, scene)
