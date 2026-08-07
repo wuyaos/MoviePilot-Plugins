@@ -5,6 +5,15 @@ ICONS = {
     "VIP": "👑", "raw_feedback": "📝",
 }
 
+TASK_TYPE_LABELS = {
+    "checkin": "签到", "chat": "喊话", "claim": "申领",
+    "medal": "勋章", "lottery": "抽奖", "exchange": "兑换", "generic": "任务",
+}
+TASK_TYPE_COLORS = {
+    "checkin": "success", "chat": "info", "claim": "primary",
+    "medal": "warning", "lottery": "purple", "exchange": "teal", "generic": "grey",
+}
+
 
 def _result_text(record):
     rewards = "；".join(
@@ -42,15 +51,23 @@ def _status_color(record):
 
 
 def _trend_label(runs):
-    """runs 为 [(date_text, success), ...]，渲染为带时间的紧凑趋势。"""
+    """runs 为 [(date_text, success), ...]，按时间升序取最近 5 次渲染。
+
+    存储顺序可能因并发或重试而不稳定，这里按 date_text 字符串排序后再取最近 5 次，
+    保证时间单调递增（左旧右新）；显示 MM-DD HH:MM，跨天也可区分。
+    """
     if not runs:
         return ""
+    sorted_runs = sorted(runs, key=lambda item: str(item[0] or ""))
     items = []
-    for date_text, ok in runs[:5]:
-        time_part = str(date_text or "")
-        if " " in time_part:
-            time_part = time_part.split(" ", 1)[1]
-        items.append(f"{time_part} {'✅' if ok else '❌'}")
+    for date_text, ok in sorted_runs[-5:]:
+        text = str(date_text or "")
+        if " " in text:
+            date_part, time_part = text.split(" ", 1)
+            label = f"{date_part[5:]} {time_part[:5]}"
+        else:
+            label = text
+        items.append(f"{label} {'✅' if ok else '❌'}")
     return " · ".join(items)
 
 
@@ -191,9 +208,15 @@ def _site_card(site_name, data):
         icon = _status_icon(record)
         line = f"{record.get('unit_label') or record.get('task_name')} -> {_result_text(record)}"
         trend = _trend_label(entry.get("runs", []))
+        type_label = TASK_TYPE_LABELS.get(record.get("task_type"), "任务")
+        type_color = TASK_TYPE_COLORS.get(record.get("task_type"), "grey")
         content = [
             {"component": "span", "props": {"class": f"me-2 {_status_color(record)}"},
              "text": icon},
+            {"component": "VChip", "props": {
+                "size": "x-small", "variant": "tonal", "color": type_color,
+                "class": "me-2",
+            }, "text": type_label},
             {"component": "div", "props": {"class": "text-body-2 flex-grow-1"},
              "text": line},
         ]
