@@ -32,6 +32,14 @@ MoviePilot V2 自用插件仓库。
 - 提交前 `python3 -c "import ast; ast.parse(open('<file>').read())"` 校验语法
 - MP 本地调试：`moviepilot` CLI，后端 http://127.0.0.1:7300
 
+### `package.v2.json` 编辑规范
+- 向 history 插入新版本条目时，禁止用 `edit` 的 `oldText`/`newText` 做相邻行替换（如把 `"history": {\n  "v1.5.6":` 整体作为 oldText 替换），会吞掉旧行键名导致两个字符串相邻、JSON 破坏。
+- 必须二选一：
+  - 优先用 `replace`：先 `read` 拿到目标行 3 字 HASH 锚点，对该单行整行替换，旧行完整保留为新行下方一行；
+  - 或用 `write` 全量重写整个 `package.v2.json`（适合多处改动）。
+- 每次 `package.v2.json` 改动后立即 `python3 -m json.tool package.v2.json >/dev/null` 校验，失败则当场修复并补提交，不得带病继续。
+- 版本字段三处同步：`__init__.py` 的 `plugin_version`、`package.v2.json` 的 `version`、`history` 顶部新版本条目。
+
 ### Todo 管理
 Todo 必须与实际进度同步，避免滞后或遗漏：
 - 开始有产出的任务前：`create` + 立即 `update(in_progress)`，`activeForm` 用进行时描述（如“迁移站点适配”）
