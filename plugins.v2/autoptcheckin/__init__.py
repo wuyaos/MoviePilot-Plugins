@@ -45,7 +45,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.5.5"
+    plugin_version = "1.5.6"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -99,8 +99,7 @@ class AutoPtCheckin(_PluginBase):
     _end_hour: int = 23
     _schedule_crons: list = []
     _schedule_signature: str = ""
-    # CookieCloud init 同步冷却时间戳与冷却秒数，避免热重载频繁全量下载
-    _cookie_cloud_synced_at: float = 0.0
+    # CookieCloud init 同步冷却秒数；时间戳持久化，避免模块重载后冷却失效
     _cookie_cloud_sync_cooldown: int = 600
 
     def init_plugin(self, config: dict = None):
@@ -424,7 +423,11 @@ class AutoPtCheckin(_PluginBase):
         if not self._custom_sites_data:
             return
         now = time.time()
-        if now - AutoPtCheckin._cookie_cloud_synced_at < self._cookie_cloud_sync_cooldown:
+        try:
+            synced_at = float(self.get_data("cookie_cloud_synced_at") or 0)
+        except (TypeError, ValueError):
+            synced_at = 0
+        if now - synced_at < self._cookie_cloud_sync_cooldown:
             logger.debug("CookieCloud 同步冷却中，跳过本次 init 同步")
             return
         try:
@@ -443,7 +446,7 @@ class AutoPtCheckin(_PluginBase):
                         count += 1
             if count:
                 logger.info(f"CookieCloud 同步了 {count} 个自定义站点的 Cookie")
-            AutoPtCheckin._cookie_cloud_synced_at = now
+            self.save_data("cookie_cloud_synced_at", now)
         except Exception as e:
             logger.debug(f"CookieCloud 同步失败: {e}")
 
