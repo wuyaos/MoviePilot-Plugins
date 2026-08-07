@@ -178,6 +178,7 @@ plugins.v2/.DS_Store
 .ralph/
 .pi-loop.json
 .pi-loop.json.lock
+.mindfs/
 
 # Python 编译/测试缓存
 **/__pycache__/
