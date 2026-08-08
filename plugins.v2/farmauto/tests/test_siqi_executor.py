@@ -95,7 +95,10 @@ def test_core_harvest_submits_native_ocr_batch_api():
     assert result.action == "harvest_all"
     assert result.success is True
     assert result.target == "萝卜×1"
-    assert result.profit == 20
+    # 思齐收获值进入背包，不是立即获得魔力；出售时才计入 profit。
+    assert result.profit == 0
+    assert result.value == 20
+    assert result.value_unit == "收获值"
     assert ocr.calls == ["https://si-qi.xyz/captcha.php?id=1"]
     assert client.calls == [
         ("POST", "https://si-qi.xyz/plant_game.php", {"action": "get_harvest_all_captcha"}),

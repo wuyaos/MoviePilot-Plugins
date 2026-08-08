@@ -26,6 +26,13 @@ HTML = """
 """
 
 
+BONUS_HTML = """
+<div>
+  <a href="mybonus.php"><span>魔力值 ：</span></a> 3,424.6
+</div>
+"""
+
+
 IMAGE_MARKET_HTML = """
 <table>
   <tr><td><img src="wheat.png"></td><td>小麦</td><td>920</td></tr>
@@ -37,6 +44,7 @@ IMAGE_MARKET_HTML = """
 def test_baozi_parsers():
     config = BaoziConfig()
 
+    assert config.parse_bonus(BONUS_HTML) == "3424.6"
     assert config.parse_market_prices(HTML) == {
         "crop_1": 880,
         "animal_1": 1680,
@@ -69,5 +77,6 @@ def test_baozi_image_market_and_adapter_contract():
 def test_baozi_empty_html_is_safe():
     config = BaoziConfig()
 
+    assert config.parse_bonus("") is None
     assert config.parse_market_prices("") == {}
     assert config.parse_warehouse_items("") == []

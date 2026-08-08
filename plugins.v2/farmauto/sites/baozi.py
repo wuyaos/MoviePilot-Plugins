@@ -12,6 +12,12 @@ class BaoziConfig(FarmSiteConfig):
     currency = "魔力"
     capabilities = {"harvest_all"}
 
+    def parse_bonus(self, html: str) -> Optional[str]:
+        """解析包子农场页顶部的魔力值。"""
+        text = re.sub(r"<[^>]+>", " ", html or "")
+        match = re.search(r"魔力值\s*[:：]?\s*([\d,]+(?:\.\d+)?)", text)
+        return match.group(1).replace(",", "") if match else None
+
     def parse_market_prices(self, html: str) -> Dict[str, int]:
         result: Dict[str, int] = {}
         name_to_key = self.get_name_to_key_map()
