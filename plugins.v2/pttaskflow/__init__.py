@@ -10,7 +10,11 @@ from app.db.site_oper import SiteOper
 from app.log import logger
 from app.plugins import _PluginBase
 
-from .core.config import PluginConfig, filter_stale_site_ids, migrate_legacy_config
+from .core.config import (
+    PluginConfig,
+    filter_stale_site_ids,
+    migrate_legacy_config,
+)
 from .core.cookie_cache import CookieCache
 from .core.engine import TaskEngine
 from .core.history import HistoryStore
@@ -62,20 +66,20 @@ class PtTaskFlow(_PluginBase):
         site_ids = list(raw.get("site_ids") or [])
         try:
             valid_site_ids = {
-                str(self._site_dict(site).get("id"))
+                self._site_dict(site).get("id")
                 for site in self.siteoper.list_order_by_pri()
                 if not getattr(site, "public", False)
             }
-            valid_site_ids.add("builtin_vclib")
         except Exception as error:
-            valid_site_ids = None
             logger.warning(f"[PtTaskFlow] [配置] 站点表读取失败，保留现有站点 id：{error}")
-        if valid_site_ids is not None:
-            cleaned_ids = filter_stale_site_ids(site_ids, valid_site_ids)
-            if len(cleaned_ids) != len(site_ids):
-                logger.info(f"[PtTaskFlow] [配置] 清理 {len(site_ids) - len(cleaned_ids)} 个失效站点 id")
-                raw["site_ids"] = cleaned_ids
-                site_ids = cleaned_ids
+        else:
+            valid_site_ids.add("builtin_vclib")
+            cleaned_site_ids = filter_stale_site_ids(site_ids, valid_site_ids)
+            removed_site_count = len(site_ids) - len(cleaned_site_ids)
+            if removed_site_count:
+                logger.info(f"[PtTaskFlow] [配置] 清理 {removed_site_count} 个失效站点 id")
+                site_ids = cleaned_site_ids
+                raw["site_ids"] = site_ids
 
         valid = set(PluginConfig.__dataclass_fields__)
         valid.update({"task_" + str(site_id) + "_" + str(name)

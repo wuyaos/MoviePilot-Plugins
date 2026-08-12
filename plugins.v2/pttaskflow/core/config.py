@@ -10,8 +10,8 @@ LEGACY_CONFIG_MAP = {
 
 def filter_stale_site_ids(site_ids, valid_ids):
     """剔除不在有效站点集合中的残留 id，并保留有效 id 的原始类型。"""
-    valid_str = {str(value) for value in valid_ids}
-    return [site_id for site_id in site_ids if str(site_id) in valid_str]
+    valid_id_strings = {str(site_id) for site_id in valid_ids}
+    return [site_id for site_id in site_ids if str(site_id) in valid_id_strings]
 
 
 def migrate_legacy_config(raw):
