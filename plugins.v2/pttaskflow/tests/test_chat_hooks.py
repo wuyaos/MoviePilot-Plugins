@@ -78,6 +78,18 @@ class ChatHookTests(unittest.TestCase):
         names=[task.name for task in City13.tasks]
         self.assertLess(names.index("buy_blessing"),names.index("daily_shotbox"))
 
+    def test_city13_blessing_owned_class_split_match(self):
+        # 真实页面用 medal-card purchased / unpurchased 区分；子串匹配会把 unpurchased 误判为已拥有。
+        from lxml import etree
+        site=City13(site_info(City13))
+        purchased_html='<div class="medal-card purchased visible"><button data-id="11" disabled></button></div>'
+        unpurchased_html='<div class="medal-card unpurchased"><button data-id="11" disabled></button></div>'
+        for html,expected in ((purchased_html,True),(unpurchased_html,False)):
+            root=etree.HTML(html)
+            cards=root.xpath('//div[contains(@class,"medal-card")][.//button[@data-id="11"]]')
+            owned=any("purchased" in (card.get("class") or "").split() for card in cards)
+            self.assertEqual(owned,expected)
+
     def test_cangbao_matches_feedback_on_either_side(self):
         site=Cangbao(site_info(Cangbao))
         for rows in (("系统: @wuyaos 感谢支持，奖励上传量","wuyaos 阁主，求上传"),

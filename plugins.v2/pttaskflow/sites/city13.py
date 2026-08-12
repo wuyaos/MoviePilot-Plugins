@@ -46,7 +46,7 @@ class City13(Site):
             return (True, "无法确认勋章状态，继续执行喊话") if not auto_buy else (False, "获取勋章页面失败")
         html = etree.HTML(response.text or "")
         cards = html.xpath(f"//div[contains(@class, 'medal-card')][.//button[@data-id='{self.medal_id}']]")
-        owned = any("purchased" in (card.get("class") or "") for card in cards)
+        owned = any("purchased" in (card.get("class") or "").split() for card in cards)
         if owned:
             self._blessing_status.update(medal_status="已拥有", purchase_status="无需购买")
             return True, f"已拥有{self.medal_name}勋章"
