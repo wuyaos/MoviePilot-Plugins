@@ -10,7 +10,7 @@ from app.db.site_oper import SiteOper
 from app.log import logger
 from app.plugins import _PluginBase
 
-from .core.config import PluginConfig, migrate_legacy_config
+from .core.config import PluginConfig, filter_stale_site_ids, migrate_legacy_config
 from .core.cookie_cache import CookieCache
 from .core.engine import TaskEngine
 from .core.history import HistoryStore
@@ -25,7 +25,7 @@ class PtTaskFlow(_PluginBase):
     plugin_name = "PT任务流"
     plugin_desc = "自动执行 PT 站点签到、喊话、申领和抽奖任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png"
-    plugin_version = "0.4.3"
+    plugin_version = "0.4.4"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pttaskflow_"
@@ -59,9 +59,27 @@ class PtTaskFlow(_PluginBase):
                              name="pttaskflow_manual").start()
 
     def _clean_config(self, raw):
+        site_ids = list(raw.get("site_ids") or [])
+        try:
+            valid_site_ids = {
+                str(self._site_dict(site).get("id"))
+                for site in self.siteoper.list_order_by_pri()
+                if not getattr(site, "public", False)
+            }
+            valid_site_ids.add("builtin_vclib")
+        except Exception as error:
+            valid_site_ids = None
+            logger.warning(f"[PtTaskFlow] [配置] 站点表读取失败，保留现有站点 id：{error}")
+        if valid_site_ids is not None:
+            cleaned_ids = filter_stale_site_ids(site_ids, valid_site_ids)
+            if len(cleaned_ids) != len(site_ids):
+                logger.info(f"[PtTaskFlow] [配置] 清理 {len(site_ids) - len(cleaned_ids)} 个失效站点 id")
+                raw["site_ids"] = cleaned_ids
+                site_ids = cleaned_ids
+
         valid = set(PluginConfig.__dataclass_fields__)
         valid.update({"task_" + str(site_id) + "_" + str(name)
-                      for site_id in self.config.site_ids for name in (
+                      for site_id in site_ids for name in (
                           "daily_checkin", "daily_shotbox", "claim", "buy_medal",
                           "daily_lottery", "daily_exchange",
                       )})

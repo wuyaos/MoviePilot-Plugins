@@ -467,11 +467,12 @@
         "name": "PT任务流",
         "description": "自动执行 PT 站点签到、喊话、申领和抽奖任务",
         "labels": "PT,任务流,签到,喊话",
-        "version": "0.4.3",
+        "version": "0.4.4",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v0.4.4": "保存配置、重载或启动时自动清理 MP 站点表中已不存在的 site_ids，并在站点表读取失败时保留原配置避免误删。",
             "v0.4.3": "修复 13City 诸神赐福勋章 owned 判断用 purchased 子串匹配导致未拥有时误判为已拥有，改为 class 列表精确匹配。",
             "v0.4.2": "数据页趋势按时间升序排序并显示 MM-DD HH:MM，避免乱序；每行增加任务类型标签。",
             "v0.4.1": "stop_service 不再空实现，引擎循环和消息间隔等待响应停止信号；LongPT 抽奖/喊话与青蛙兑换改走 site 请求原语，复用 Cookie 失效检测和 CookieCloud 刷新；数据页增加今日完成度、下次运行、结构化状态图标、带时间趋势、今日奖励汇总和失败站点优先排序。",

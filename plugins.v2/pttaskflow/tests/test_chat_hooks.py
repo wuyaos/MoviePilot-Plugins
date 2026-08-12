@@ -81,7 +81,6 @@ class ChatHookTests(unittest.TestCase):
     def test_city13_blessing_owned_class_split_match(self):
         # 真实页面用 medal-card purchased / unpurchased 区分；子串匹配会把 unpurchased 误判为已拥有。
         from lxml import etree
-        site=City13(site_info(City13))
         purchased_html='<div class="medal-card purchased visible"><button data-id="11" disabled></button></div>'
         unpurchased_html='<div class="medal-card unpurchased"><button data-id="11" disabled></button></div>'
         for html,expected in ((purchased_html,True),(unpurchased_html,False)):

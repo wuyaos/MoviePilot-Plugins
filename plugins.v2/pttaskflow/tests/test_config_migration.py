@@ -8,6 +8,7 @@ def load(n,p):
  s=importlib.util.spec_from_file_location(n,p); m=importlib.util.module_from_spec(s); sys.modules[n]=m; s.loader.exec_module(m); return m
 package(PACKAGE,ROOT); package(f"{PACKAGE}.core",ROOT/"core"); package(f"{PACKAGE}.actions",ROOT/"actions"); package(f"{PACKAGE}.sites",ROOT/"sites")
 load(f"{PACKAGE}.core.models",ROOT/"core/models.py"); load(f"{PACKAGE}.core.task_keys",ROOT/"core/task_keys.py")
+filter_stale_site_ids=load(f"{PACKAGE}.core.config",ROOT/"core/config.py").filter_stale_site_ids
 load(f"{PACKAGE}.actions.checkin",ROOT/"actions/checkin.py"); load(f"{PACKAGE}.actions.longpt",ROOT/"actions/longpt.py"); load(f"{PACKAGE}.actions.medal_site",ROOT/"actions/medal_site.py"); load(f"{PACKAGE}.actions.site_actions",ROOT/"actions/site_actions.py")
 load(f"{PACKAGE}.core.task",ROOT/"core/task.py"); load(f"{PACKAGE}.core.shoutbox",ROOT/"core/shoutbox.py")
 app=types.ModuleType('app');app.__path__=[];sys.modules['app']=app;db=types.ModuleType('app.db');db.__path__=[];sys.modules['app.db']=db
@@ -38,5 +39,9 @@ class MigrationTests(unittest.TestCase):
  def test_uncertain_select_remains_disabled(self):
   out,summary=migrate({'chat_sites':['10'],'task_10_daily_shotbox':True},self.remote,self.local,[LongPT])
   self.assertNotIn('task_65_daily_shotbox',out); self.assertIn('task_10_daily_shotbox',summary['skipped_controls'])
+
+ def test_filter_stale_site_ids_preserves_valid_and_drops_stale(self):
+  self.assertEqual(filter_stale_site_ids([104,109,'157'],{'104','157'}),[104,'157'])
+  self.assertEqual(filter_stale_site_ids([],{'104'}),[])
 
 if __name__=='__main__':unittest.main()
