@@ -37,12 +37,23 @@ class TaskScheduler:
         now = datetime.now()
         if self.plugin.config.zm_mail_time:
             try:
-                value = datetime.strptime(
+                mail_due = datetime.strptime(
                     self.plugin.config.zm_mail_time, "%Y-%m-%d %H:%M:%S") + timedelta(hours=24)
-                # 与 GroupChatZone 一致：已过期时尽快执行，而不是再延后 24 小时。
-                return value if value > now else now + timedelta(seconds=3)
+                if mail_due > now:
+                    return mail_due
             except ValueError:
-                logger.warning("[PtTaskFlow] [调度] 织梦邮件时间格式无效，稍后执行获取新时间")
-                return now + timedelta(seconds=3)
-        # 首次没有邮件时间时尽快执行，任务结束后读取邮件时间并续排。
+                logger.warning("[PtTaskFlow] [调度] 织梦邮件时间格式无效，改用最近执行时间续排")
+
+        # 邮件时间过期或未解析到新邮件时，用最近执行时间续排；否则 date 任务会立即
+        # 触发并被冷却跳过，随后因一次性任务已消费而永久丢失。
+        if self.plugin.config.last_zm_execution_time:
+            try:
+                execution_due = datetime.fromisoformat(
+                    self.plugin.config.last_zm_execution_time) + timedelta(hours=24)
+                if execution_due > now:
+                    return execution_due
+            except (TypeError, ValueError):
+                logger.warning("[PtTaskFlow] [调度] 织梦最近执行时间格式无效，稍后重新执行")
+
+        # 首次、超过 24 小时或无有效时间时尽快执行，任务结束后读取邮件时间并续排。
         return now + timedelta(seconds=3)

@@ -22,8 +22,9 @@ sys.modules['apscheduler.triggers.date']=date
 scheduler=load(P+'.core.scheduler',ROOT/'core/scheduler.py')
 
 class Plugin:
- def __init__(self,mail=''):
-  self.config=types.SimpleNamespace(enabled=True,cron='4 0 * * *',zm_mail_time=mail)
+ def __init__(self,mail='',last=''):
+  self.config=types.SimpleNamespace(
+   enabled=True,cron='4 0 * * *',zm_mail_time=mail,last_zm_execution_time=last)
  def runtime_sites(self): return [types.SimpleNamespace(domain='zmpt.cc')]
  def run_scheduled(self): pass
  def run_zm(self): pass
@@ -39,6 +40,11 @@ class SchedulerTests(unittest.TestCase):
   old=(datetime.now()-timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')
   run=scheduler.TaskScheduler(Plugin(old))._next_zm_time()
   self.assertLessEqual((run-datetime.now()).total_seconds(),5)
+ def test_expired_mail_time_uses_recent_execution_fallback(self):
+  old=(datetime.now()-timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')
+  last=datetime.now().replace(microsecond=0)-timedelta(minutes=5)
+  run=scheduler.TaskScheduler(Plugin(old,last.isoformat()))._next_zm_time()
+  self.assertAlmostEqual((run-last).total_seconds(),24*3600,delta=1)
  def test_future_mail_time_uses_24_hours(self):
   value=datetime.now().replace(microsecond=0)-timedelta(hours=23)
   run=scheduler.TaskScheduler(Plugin(value.strftime('%Y-%m-%d %H:%M:%S')))._next_zm_time()

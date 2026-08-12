@@ -25,7 +25,7 @@ class PtTaskFlow(_PluginBase):
     plugin_name = "PT任务流"
     plugin_desc = "自动执行 PT 站点签到、喊话、申领和抽奖任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png"
-    plugin_version = "0.4.4"
+    plugin_version = "0.4.5"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pttaskflow_"
@@ -209,7 +209,8 @@ class PtTaskFlow(_PluginBase):
             try:
                 last = datetime.fromisoformat(self.config.last_zm_execution_time)
                 if (now - last).total_seconds() < self.config.zm_cooldown:
-                    logger.info("[PtTaskFlow] [织梦24h调度] 冷却中，跳过重复执行")
+                    logger.info("[PtTaskFlow] [织梦24h调度] 冷却中，跳过重复执行并续排")
+                    self._refresh_plugin_schedule()
                     return []
             except ValueError:
                 pass
@@ -224,12 +225,15 @@ class PtTaskFlow(_PluginBase):
                     self.config.zm_mail_time = str(mail_time)
                 break
         self.save_config()
+        self._refresh_plugin_schedule()
+        return records
+
+    def _refresh_plugin_schedule(self):
         try:
             from app.scheduler import Scheduler
             Scheduler().update_plugin_job(self.__class__.__name__)
         except Exception as error:
             logger.warning(f"[PtTaskFlow] [织梦24h调度] 重注册服务失败：{error}")
-        return records
 
     def save_config(self):
         merged = dict(self.raw_config)
