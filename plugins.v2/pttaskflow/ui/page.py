@@ -1,4 +1,8 @@
 """数据页：运行统计概览 + 按站点任务状态卡片 + 最近趋势。"""
+from datetime import datetime
+
+import pytz
+from app.core.config import settings
 
 ICONS = {
     "上传量": "⬆️", "下载量": "⬇️", "魔力值": "✨",
@@ -92,14 +96,10 @@ def _today_rewards(history):
     """今日奖励按类型计数；amount 多为空，计数比数值更可靠。"""
     counts = {}
     order = []
-    today = ""
+    today = datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d")
     for run in history:
-        date_text = str(run.get("date", ""))
-        day = date_text.split(" ", 1)[0]
-        if not today:
-            today = day
-        if day != today:
-            break
+        if not str(run.get("date", "")).startswith(today):
+            continue
         for record in run.get("records") or []:
             for reward in record.get("rewards") or []:
                 if not reward.get("description"):

@@ -53,9 +53,16 @@ class TaskEngine:
 
     def run(self, scene="主定时", debug=False, site_filter="", task_filter="", execution_keys=None,
             exclude_domains=None):
+        records = self.run_if_idle(
+            scene, debug, site_filter, task_filter, execution_keys, exclude_domains)
+        return records if records is not None else []
+
+    def run_if_idle(self, scene="主定时", debug=False, site_filter="", task_filter="",
+                    execution_keys=None, exclude_domains=None):
+        """执行任务；已有批次持锁时返回 ``None``，与正常空结果区分。"""
         if not self._lock.acquire(blocking=False):
             TaskLogger.run_end(scene, 0, 0, 0, 0)
-            return []
+            return None
         try:
             return self._run_locked(scene, debug, site_filter, task_filter, execution_keys,
                                     exclude_domains)

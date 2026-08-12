@@ -45,6 +45,11 @@ class SchedulerTests(unittest.TestCase):
   last=datetime.now().replace(microsecond=0)-timedelta(minutes=5)
   run=scheduler.TaskScheduler(Plugin(old,last.isoformat()))._next_zm_time()
   self.assertAlmostEqual((run-last).total_seconds(),24*3600,delta=1)
+ def test_busy_retry_time_takes_priority(self):
+  plugin=Plugin()
+  plugin._zm_retry_at=datetime.now()+timedelta(minutes=10)
+  run=scheduler.TaskScheduler(plugin)._next_zm_time()
+  self.assertEqual(run,plugin._zm_retry_at)
  def test_future_mail_time_uses_24_hours(self):
   value=datetime.now().replace(microsecond=0)-timedelta(hours=23)
   run=scheduler.TaskScheduler(Plugin(value.strftime('%Y-%m-%d %H:%M:%S')))._next_zm_time()

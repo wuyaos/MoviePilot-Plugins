@@ -1,7 +1,6 @@
 """PtTaskFlow：Task / Control / Unit / Site 声明式 PT 站点任务流。"""
 import threading
-import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.event import Event, eventmanager
@@ -29,7 +28,7 @@ class PtTaskFlow(_PluginBase):
     plugin_name = "PT任务流"
     plugin_desc = "自动执行 PT 站点签到、喊话、申领和抽奖任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png"
-    plugin_version = "0.4.5"
+    plugin_version = "0.4.6"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pttaskflow_"
@@ -43,6 +42,7 @@ class PtTaskFlow(_PluginBase):
         self.siteoper = None
         self._cookiecloud_cache = CookieCache()
         self._stop_event = threading.Event()
+        self._zm_retry_at = None
         self.history = HistoryStore(self)
         self.engine = TaskEngine(self)
 
@@ -181,25 +181,37 @@ class PtTaskFlow(_PluginBase):
         # 织梦喊话由邮件时间 +24h 的独立 date 服务负责，主 cron 不重复执行。
         records = self.engine.run(scene="主定时", exclude_domains={"zmpt.cc"})
         send_summary(self, records)
-        failed_keys = {
+        self._retry_failures(records)
+        return records
+
+    @staticmethod
+    def _retryable_keys(records):
+        return {
             record["execution_key"] for record in records
             if record.get("retryable") and not record.get("success")
         }
+
+    def _retry_failures(self, records, scene_prefix="失败重试", site_filter="", task_filter=""):
+        failed_keys = self._retryable_keys(records)
         for attempt in range(1, self.config.retry_count + 1):
             if not failed_keys:
                 break
-            if self.config.retry_interval:
-                time.sleep(self.config.retry_interval * 60)
-            retry_records = self.engine.run(
-                scene=f"失败重试 {attempt}/{self.config.retry_count}",
+            wait_seconds = self.config.retry_interval * 60
+            if self._stop_event.wait(wait_seconds):
+                logger.info(f"[PtTaskFlow] [{scene_prefix}] 收到停止信号，取消剩余重试")
+                break
+            retry_records = self.engine.run_if_idle(
+                scene=f"{scene_prefix} {attempt}/{self.config.retry_count}",
+                site_filter=site_filter,
+                task_filter=task_filter,
                 execution_keys=failed_keys,
             )
+            if retry_records is None:
+                logger.info(f"[PtTaskFlow] [{scene_prefix}] 引擎忙碌，本轮重试未执行")
+                continue
             send_summary(self, retry_records, retry=True)
-            failed_keys = {
-                record["execution_key"] for record in retry_records
-                if record.get("retryable") and not record.get("success")
-            }
-        return records
+            failed_keys = self._retryable_keys(retry_records)
+        return failed_keys
 
     def run_manual(self):
         records = self.engine.run(scene="手动补跑")
@@ -209,6 +221,7 @@ class PtTaskFlow(_PluginBase):
     def run_zm(self):
         """织梦独立 date 调度；只执行织梦，并按最新赠送邮件时间续排。"""
         now = datetime.now()
+        self._zm_retry_at = None
         if self.config.last_zm_execution_time:
             try:
                 last = datetime.fromisoformat(self.config.last_zm_execution_time)
@@ -218,9 +231,16 @@ class PtTaskFlow(_PluginBase):
                     return []
             except ValueError:
                 pass
-        records = self.engine.run(
+        records = self.engine.run_if_idle(
             scene="织梦24h调度", site_filter="zmpt.cc", task_filter="daily_shotbox")
+        if records is None:
+            self._schedule_zm_retry(now)
+            return []
         send_summary(self, records)
+        self._retry_failures(
+            records, scene_prefix="织梦失败重试",
+            site_filter="zmpt.cc", task_filter="daily_shotbox",
+        )
         self.config.last_zm_execution_time = now.isoformat()
         for site in self.runtime_sites():
             if site.domain == "zmpt.cc":
@@ -231,6 +251,12 @@ class PtTaskFlow(_PluginBase):
         self.save_config()
         self._refresh_plugin_schedule()
         return records
+
+    def _schedule_zm_retry(self, now):
+        delay_minutes = max(1, self.config.retry_interval)
+        self._zm_retry_at = now + timedelta(minutes=delay_minutes)
+        logger.info(f"[PtTaskFlow] [织梦24h调度] 引擎忙碌，{delay_minutes} 分钟后重试")
+        self._refresh_plugin_schedule()
 
     def _refresh_plugin_schedule(self):
         try:

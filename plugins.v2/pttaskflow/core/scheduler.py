@@ -35,6 +35,9 @@ class TaskScheduler:
 
     def _next_zm_time(self):
         now = datetime.now()
+        retry_at = getattr(self.plugin, "_zm_retry_at", None)
+        if retry_at and retry_at > now:
+            return retry_at
         if self.plugin.config.zm_mail_time:
             try:
                 mail_due = datetime.strptime(

@@ -467,11 +467,12 @@
         "name": "PT任务流",
         "description": "自动执行 PT 站点签到、喊话、申领和抽奖任务",
         "labels": "PT,任务流,签到,喊话",
-        "version": "0.4.5",
+        "version": "0.4.6",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v0.4.6": "修复织梦引擎锁竞争时误记执行并按重试间隔重排；织梦可重试失败复用统一重试；主任务重试等待支持停止中断；今日奖励严格按当天统计。",
             "v0.4.5": "修复织梦邮件时间过期且刚执行过时 date 任务立即触发、因冷却跳过后丢失续排：改用最近执行时间加 24 小时回退，冷却分支也主动重注册服务。",
             "v0.4.4": "保存配置、重载或启动时自动清理 MP 站点表中已不存在的 site_ids，并在站点表读取失败时保留原配置避免误删。",
             "v0.4.3": "修复 13City 诸神赐福勋章 owned 判断用 purchased 子串匹配导致未拥有时误判为已拥有，改为 class 列表精确匹配。",
