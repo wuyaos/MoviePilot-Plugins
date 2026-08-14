@@ -410,11 +410,12 @@
         "name": "农场自动化Pro",
         "description": "多站点农场自动收获、补种与出售",
         "labels": "农场,自动化,站点",
-        "version": "3.2.17",
+        "version": "3.2.18",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v3.2.18": "同步 __init__.py 与 package.v2.json 版本号，修复 release zip 内运行版本不匹配的问题。",
             "v3.2.17": "修复包子农场数据页未解析魔力值：新增包子页面魔力值解析并补充回归测试。",
             "v3.2.16": "区分思齐收获值与魔力：收获动作按接口 reward 显示收获值并用于解锁进度，出售才计魔力；执行记录改为数值列，种子和土地解锁文案明确为累计收获值。",
             "v3.2.15": "修复思齐收获与出售重复统计收益：收获仅记录进入背包，魔力在实际出售时计入；调度日志改为“已提供定时服务配置”。",

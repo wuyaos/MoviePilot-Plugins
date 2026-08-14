@@ -1,7 +1,7 @@
 {
   "name": "moviepilot-farmauto-plugin",
   "private": true,
-  "version": "3.2.12",
+  "version": "3.2.18",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch",
