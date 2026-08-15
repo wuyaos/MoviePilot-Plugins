@@ -1,0 +1,105 @@
+/**
+ * FarmAuto 共享主题样式
+ * 解决 Vuetify 联邦构建下 scoped :deep 失效与多组件重复定义问题
+ */
+
+/* 区块标题背景：深浅色自适应，替代 bg-*-lighten-5 */
+.section-title-bg {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
+}
+
+/* 顶栏渐变背景（主题色感知） */
+.bg-gradient-farm {
+  background: rgba(var(--v-theme-on-surface), 0.06) !important;
+  backdrop-filter: blur(16px) saturate(0.9);
+  -webkit-backdrop-filter: blur(16px) saturate(0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+/* 顶栏状态 chip：磨砂半透明 */
+.farm-status-chip {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.farm-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 2px;
+}
+.farm-status-dot.dot-success { background: #4ade80; box-shadow: 0 0 4px rgba(74, 222, 128, 0.6); }
+.farm-status-dot.dot-info { background: #60a5fa; box-shadow: 0 0 4px rgba(96, 165, 250, 0.6); }
+.farm-status-dot.dot-teal { background: #2dd4bf; box-shadow: 0 0 4px rgba(45, 212, 191, 0.6); }
+.farm-status-dot.dot-warning { background: #fbbf24; box-shadow: 0 0 4px rgba(251, 191, 36, 0.6); }
+.farm-status-dot.dot-grey { background: #9ca3af; }
+
+/* 统计卡（KoWming 风格） */
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 0.5px solid rgba(var(--v-theme-on-surface), 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 2px 12px rgba(var(--v-theme-on-surface), 0.08);
+  transition: all 0.3s ease;
+}
+.stat-card.refreshing {
+  animation: stat-pulse 0.6s ease;
+}
+@keyframes stat-pulse {
+  0% { background: rgba(var(--v-theme-on-surface), 0.03); }
+  50% {
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.2);
+  }
+  100% { background: rgba(var(--v-theme-on-surface), 0.03); }
+}
+.stat-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+}
+.stat-icon.orange { background: rgba(245, 158, 11, 0.14); color: rgb(var(--v-theme-warning)); }
+.stat-icon.green { background: rgba(34, 197, 94, 0.14); color: rgb(var(--v-theme-success)); }
+.stat-icon.red { background: rgba(239, 68, 68, 0.14); color: rgb(var(--v-theme-error)); }
+.stat-icon.blue { background: rgba(59, 130, 246, 0.14); color: rgb(var(--v-theme-info)); }
+.stat-icon.amber { background: rgba(217, 119, 6, 0.14); color: rgb(var(--v-theme-warning)); }
+.stat-content { min-width: 0; flex: 1; }
+.stat-title {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  font-weight: 600;
+}
+.stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+.stat-value small { font-size: 11px; opacity: 0.5; font-weight: 400; }
+.stat-value.refreshing { opacity: 0.3; }
+
+/* tab 启用状态圆点 */
+.tab-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.tab-status-dot.on { background: #4ade80; box-shadow: 0 0 4px rgba(74, 222, 128, 0.6); }
+.tab-status-dot.off { background: rgba(var(--v-theme-on-surface), 0.25); }
+
+/* 表格顶满容器，去除 v-table 默认内边距 */

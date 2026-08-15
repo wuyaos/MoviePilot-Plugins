@@ -20,6 +20,9 @@ state/
 build/
 develop-eggs/
 dist/
+# FarmAuto 等 Vue 渲染插件需要提交构建产物到 GitHub，
+# 否则远程 MP 通过插件市场安装后没有 dist 前端无法加载。
+!plugins.v2/farmauto/dist/
 downloads/
 eggs/
 .eggs/
