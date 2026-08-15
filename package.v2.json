@@ -411,6 +411,7 @@
         "description": "多站点农场自动收获、补种与出售",
         "labels": "农场,自动化,站点",
         "version": "3.2.18",
+        "release": true,
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/farm.png",
         "author": "wuyaos",
         "level": 2,
@@ -447,8 +448,7 @@
             "v2.2": "新增市场价格趋势滚动记录与展示，支持通过 JSON 配置单站策略、模式、代理和启用状态覆盖",
             "v2.1": "新增拾刻农场(skit)适配；增强 PlayLet/NovaHD/好学 解析（仓库分页、剩余时间、货币余额、多策略兜底）",
             "v2.0": "重构为多站点架构：统一HTTP客户端、能力协议、纯策略执行器、统计仅编排层更新一次、dry-run、最低利润率、临期阈值"
-        },
-        "release": true
+        }
     },
     "TangLottery": {
         "name": "不可躺自动抽奖助手",
