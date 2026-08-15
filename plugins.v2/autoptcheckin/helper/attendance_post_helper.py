@@ -40,11 +40,13 @@ class _AttendancePostHandler(_ISiteSigninHandler):
     # 通用 NexusPHP 签到状态文案，供 detect_attendance_state 与 post_signin_once 兜底使用。
     _NEXUSPHP_SUCCESS_TEXTS = [
         "签到成功", "簽到成功", "签到已得", "簽到已得",
+        "attendance success", "attended successfully",
     ]
     _NEXUSPHP_REPEAT_TEXTS = [
         "今天已经签到过", "今天已經簽到過", "请勿重复刷新", "請勿重複刷新",
         "已经签到", "已經簽到", "今天已经签到", "今天已經簽到",
         "今天已簽到", "今日已簽到", "今日已签到",
+        "already attended", "have attended",
     ]
 
     @classmethod
