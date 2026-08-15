@@ -692,14 +692,13 @@ class FarmAuto(_PluginBase):
 
     def _api_stats(self) -> Dict[str, Any]:
         return {
-            "success": True,
             "stats": self._stats,
             "market_prices": self._market_prices,
             "trends": self._trend_store.to_dict(),
         }
 
     def _api_prices(self) -> Dict[str, Any]:
-        return {"success": True, "market_prices": self._market_prices}
+        return {"market_prices": self._market_prices}
 
     @staticmethod
     def _timestamp_text(value: Any) -> Optional[str]:
@@ -807,17 +806,14 @@ class FarmAuto(_PluginBase):
                 "recent_action": recent_action,
             })
         return {
-            "success": True,
-            "data": {
-                "enabled": bool(self._enabled),
-                "dry_run": bool(self._dry_run),
-                "selected_site_ids": list(self._site_ids),
-                "next_run": self._next_run_text(),
-                "total_profit": self._to_int(self._stats.get("total_profit"), 0, min_value=-10**12),
-                "total_trades": self._to_int(self._stats.get("total_trades"), 0),
-                "last_run": self._timestamp_text(self._stats.get("last_run")),
-                "sites": sites,
-            },
+            "enabled": bool(self._enabled),
+            "dry_run": bool(self._dry_run),
+            "selected_site_ids": list(self._site_ids),
+            "next_run": self._next_run_text(),
+            "total_profit": self._to_int(self._stats.get("total_profit"), 0, min_value=-10**12),
+            "total_trades": self._to_int(self._stats.get("total_trades"), 0),
+            "last_run": self._timestamp_text(self._stats.get("last_run")),
+            "sites": sites,
         }
 
     def _api_site_detail(self, site_id: str) -> Dict[str, Any]:
@@ -1019,10 +1015,7 @@ class FarmAuto(_PluginBase):
                 ),
                 "buy_slot_available": siqi_farm.get("plot_slot", {}).get("available", False),
             }
-        response = {"success": True, "data": data}
-        if detail_message:
-            response["message"] = detail_message
-        return response
+        return data
 
     def _api_siqi_seeds(self) -> Dict[str, Any]:
         """实时拉取思齐当前种子列表，供配置页默认种子选择器使用。"""
@@ -1072,7 +1065,7 @@ class FarmAuto(_PluginBase):
                         if isinstance(raw_stage, dict) and raw_stage.get(phase)
                     } if isinstance(raw_stage, dict) else {},
                 })
-            return {"success": True, "data": {"seeds": seeds, "total_harvest": total_harvest}}
+            return {"seeds": seeds, "total_harvest": total_harvest}
         except Exception as error:
             logger.warning(f"[FarmAuto] 思齐种子列表拉取失败: {error}")
             return {"success": False, "message": str(error)}
