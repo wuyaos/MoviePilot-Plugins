@@ -450,20 +450,6 @@
             "v2.0": "重构为多站点架构：统一HTTP客户端、能力协议、纯策略执行器、统计仅编排层更新一次、dry-run、最低利润率、临期阈值"
         }
     },
-    "TangLottery": {
-        "name": "不可躺自动抽奖助手",
-        "description": "自动完成不可躺每日抽奖目标",
-        "labels": "站点,抽奖",
-        "version": "3.0.3",
-        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tanglottery.png",
-        "author": "jiangbkvir,bfjy,wuyaos",
-        "level": 1,
-        "history": {
-            "v3.0.3": "修复 Cron 触发器字段错位，改用标准时区触发器与公开调度入口",
-            "v3.0.2": "本地修正版：Cron 安全规范化并增强服务未注册原因日志；Cookie 固定从站点管理读取；限制目标次数上限为1000",
-            "v1.0.1": "按每日目标次数自动拆解并执行不可躺抽奖"
-        }
-    },
     "PtTaskFlow": {
         "name": "PT任务流",
         "description": "自动执行 PT 站点签到、喊话、申领和抽奖任务",
