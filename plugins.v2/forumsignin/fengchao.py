@@ -346,29 +346,34 @@ class FengchaoService:
 
     def _normalize_user_info(self, checkin_result: dict, identity: dict = None,
                              reward=None, status: dict = None) -> dict:
-        """将新版 API 返回 normalize 为旧 {data:{attributes:{}}} 格式供 UI 使用。"""
+        """将新版 API 返回 normalize 为旧 {data:{attributes:{}}} 格式供 UI 使用。
+
+        identity 是 /api/integrations/moviepilot/v1/me 的返回，
+        用户信息在 identity.account 和 identity.userId。
+        """
         identity = identity or {}
-        user = identity.get("user") or {}
-        status = status or {}
-        points = checkin_result.get("points") or user.get("points") or status.get("points", 0)
-        streak = checkin_result.get("currentStreak") or status.get("currentStreak", 0)
+        account = identity.get("account") or {}
+        status = status or identity.get("status") or {}
+        checkin = status.get("checkIn") or checkin_result or {}
+        points = account.get("points") or checkin_result.get("points") or 0
+        streak = checkin.get("currentStreak") or checkin_result.get("currentStreak", 0)
         attrs = {
-            "displayName": user.get("displayName") or user.get("username", ""),
-            "username": user.get("username", ""),
-            "nickname": user.get("nickname") or user.get("username", ""),
-            "avatarUrl": user.get("avatarPath") or "",
+            "displayName": account.get("displayName") or account.get("username", ""),
+            "username": account.get("username", ""),
+            "nickname": account.get("username", ""),
+            "avatarUrl": account.get("avatarPath") or "",
             "money": points,
             "totalContinuousCheckIn": streak,
-            "maxCheckInStreak": status.get("maxCheckInStreak", 0),
+            "maxCheckInStreak": checkin.get("maxStreak") or checkin_result.get("maxStreak", 0),
             "lastCheckinMoney": reward,
-            "unreadNotificationCount": user.get("unreadNotificationCount", 0),
-            "discussionCount": user.get("postCount", 0),
-            "followerCount": user.get("followerCount", 0),
-            "canCheckin": not bool(checkin_result or status.get("checkedInToday", False)),
-            "level": user.get("level", 0),
-            "levelName": user.get("levelName", ""),
+            "unreadNotificationCount": account.get("unreadNotificationCount", 0),
+            "discussionCount": account.get("postCount", 0),
+            "followerCount": account.get("followerCount", 0),
+            "canCheckin": not bool(checkin.get("checkedInToday", checkin_result.get("alreadyCheckedIn", False))),
+            "level": account.get("level", 0),
+            "levelName": account.get("levelName", ""),
         }
-        return {"data": {"id": str(user.get("id") or ""), "attributes": attrs}}
+        return {"data": {"id": str(identity.get("userId") or account.get("uid") or ""), "attributes": attrs}}
 
     @staticmethod
     def _format_pollen(value: Any) -> str:
