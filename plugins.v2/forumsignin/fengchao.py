@@ -100,13 +100,7 @@ class FengchaoService:
                     logger.info(f"蜂巢签到第 {attempt - retry_count}/{max_retries - retry_count} 次重试，退避 {backoff} 秒")
                     time.sleep(backoff)
                 try:
-                    # 获取用户身份（可选，用于刷新缓存）
-                    try:
-                        identity = self._api_request("GET", "/api/integrations/moviepilot/v1/me")
-                    except Exception as identity_error:
-                        logger.warning(f"蜂巢获取用户身份失败（不影响签到）：{identity_error}")
-
-                    # 签到
+                    # 签到（不调用 /me，避免实例已绑定时的 409 冲突）
                     result = self._api_request("POST", "/api/integrations/moviepilot/v1/check-in", {})
 
                     already = bool(result.get("alreadyCheckedIn"))
@@ -115,8 +109,9 @@ class FengchaoService:
                     streak = result.get("currentStreak", 0)
                     points = result.get("points", 0)
 
-                    # 保存用户信息（normalize 为旧格式供 UI 使用）
-                    user_info = self._normalize_user_info(result, identity if "identity" in dir() else None, reward)
+                    # 保存用户信息：合并之前 /me 缓存的身份 + 本次签到结果
+                    cached_identity = self.callbacks.get_data("_fengchao_identity") or {}
+                    user_info = self._normalize_user_info(result, cached_identity, reward)
                     self.callbacks.save_data("fengchao_user_info", user_info)
                     self.callbacks.save_data("fengchao_user_info_updated_at", started.strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -186,7 +181,14 @@ class FengchaoService:
         """仅更新蜂巢用户信息，不执行签到。"""
         logger.info("开始执行蜂巢用户信息更新任务...")
         try:
-            identity = self._api_request("GET", "/api/integrations/moviepilot/v1/me")
+            identity = {}
+            try:
+                identity = self._api_request("GET", "/api/integrations/moviepilot/v1/me")
+                # 缓存 identity 供签到使用（/me 首次成功绑定实例后再次调用会 409）
+                self.callbacks.save_data("_fengchao_identity", identity)
+            except Exception as me_error:
+                logger.warning(f"蜂巢 /me 请求失败（可能实例已绑定）：{me_error}")
+                identity = self.callbacks.get_data("_fengchao_identity") or {}
             try:
                 status = self._api_request("GET", "/api/integrations/moviepilot/v1/status")
             except Exception as status_error:
