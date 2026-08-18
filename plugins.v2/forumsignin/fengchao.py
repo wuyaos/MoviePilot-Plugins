@@ -360,8 +360,9 @@ class FengchaoService:
         用户信息在 identity.account 和 identity.userId。
         """
         identity = identity or {}
-        account = identity.get("account") or {}
+        # account 在 identity.status.account（上游 /me 响应结构）
         status = status or identity.get("status") or {}
+        account = status.get("account") or {}
         checkin = status.get("checkIn") or checkin_result or {}
         points = account.get("points") or checkin_result.get("points") or 0
         streak = checkin.get("currentStreak") or checkin_result.get("currentStreak", 0)
