@@ -84,9 +84,7 @@ def build_form() -> Tuple[List[dict], Dict[str, Any]]:
                     {'component': 'VDivider'},
                     {'component': 'VCardText', 'content': [
                         {'component': 'VRow', 'content': [
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VTextField', 'props': {'model': 'fengchao_username', 'label': '蜂巢用户名', 'placeholder': 'pting.club 用户名', 'autocomplete': 'new-username', 'clearable': True}}]},
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VTextField', 'props': {'model': 'fengchao_password', 'label': '蜂巢密码', 'type': 'password', 'autocomplete': 'new-password', 'clearable': True}}]},
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VTextField', 'props': {'model': 'fengchao_cookie', 'label': '蜂巢Cookie(可选)', 'type': 'password', 'clearable': True}}]}
+                            {'component': 'VCol', 'props': {'cols': 12, 'md': 8}, 'content': [{'component': 'VTextField', 'props': {'model': 'fengchao_api_key', 'label': '蜂巢 Bearer Key', 'placeholder': 'pting.club 个人设置页生成', 'hint': '在 pting.club 个人设置页生成 API Key 并粘贴到此处', 'persistent-hint': True, 'type': 'password', 'clearable': True}}]},
                         ]}
                     ]}
                 ]},
@@ -180,9 +178,7 @@ def build_form() -> Tuple[List[dict], Dict[str, Any]]:
         "_update_info_now": False,
         "fengchao_enabled": True,
         "invites_enabled": True,
-        "fengchao_username": "",
-        "fengchao_password": "",
-        "fengchao_cookie": "",
+        "fengchao_api_key": "",
         "invites_username": "",
         "invites_password": "",
         "invites_cookie": "",

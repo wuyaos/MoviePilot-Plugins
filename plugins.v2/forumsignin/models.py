@@ -15,9 +15,7 @@ class ForumSigninConfig:
     use_proxy: bool = True
     fengchao_enabled: bool = True
     invites_enabled: bool = True
-    fengchao_username: str = ""
-    fengchao_password: str = ""
-    fengchao_cookie: str = ""
+    fengchao_api_key: str = ""
     invites_username: str = ""
     invites_password: str = ""
     invites_cookie: str = ""
@@ -47,9 +45,7 @@ class ForumSigninConfig:
             use_proxy=config.get("use_proxy", True),
             fengchao_enabled=config.get("fengchao_enabled", True),
             invites_enabled=config.get("invites_enabled", True),
-            fengchao_username=config.get("fengchao_username", ""),
-            fengchao_password=config.get("fengchao_password", ""),
-            fengchao_cookie=config.get("fengchao_cookie", ""),
+            fengchao_api_key=config.get("fengchao_api_key", ""),
             invites_username=config.get("invites_username", ""),
             invites_password=config.get("invites_password", ""),
             invites_cookie=config.get("invites_cookie", ""),
@@ -75,9 +71,7 @@ class ForumSigninConfig:
             "use_proxy": self.use_proxy,
             "fengchao_enabled": self.fengchao_enabled,
             "invites_enabled": self.invites_enabled,
-            "fengchao_username": self.fengchao_username,
-            "fengchao_password": self.fengchao_password,
-            "fengchao_cookie": self.fengchao_cookie,
+            "fengchao_api_key": self.fengchao_api_key,
             "invites_username": self.invites_username,
             "invites_password": self.invites_password,
             "invites_cookie": self.invites_cookie,

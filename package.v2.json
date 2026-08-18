@@ -271,11 +271,12 @@
         "name": "论坛签到",
         "description": "蜂巢与药丸论坛自动签到",
         "labels": "签到,论坛,蜂巢,药丸",
-        "version": "1.0.12",
+        "version": "1.0.13",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.13": "适配蜂巢新版 pting.club：改用 Bearer Key 认证和 /api/integrations/moviepilot/v1/ 专用集成 API；移除旧账号密码和 Cookie 登录逻辑；PT 人生改用 snapshot API。",
             "v1.0.12": "移除公共与内部 Cron 重复注册，统一长期任务由 MoviePilot 调度",
             "v1.0.11": "签到日历单元格去掉奖励数字行，仅保留日期与站点签到状态图标；单元格高度 40px→32px 更紧凑；顶部统计区与历史记录表奖励展示不变",
             "v1.0.10": "奖励兜底：lastCheckinMoney 未取到(None/0/空)时，用本次money与同站点上一条成功记录money的差值作为本轮奖励，差值>0 才写入；解决接口未返回 lastCheckinMoney 导致历史奖励全显示0/已领取的问题",
