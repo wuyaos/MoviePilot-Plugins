@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from app.log import logger
+from app.core.config import settings
 
 from .http_client import ForumSigninHttpClient
 from .models import ForumSigninConfig, PluginCallbacks
@@ -24,6 +25,11 @@ class FengchaoService:
     def __init__(self, config: ForumSigninConfig, callbacks: PluginCallbacks):
         self.config = config
         self.callbacks = callbacks
+        self._instance_id = str(callbacks.get_data("fengchao_instance_id") or "")
+        if not self._instance_id:
+            import uuid
+            self._instance_id = str(uuid.uuid4())
+            callbacks.save_data("fengchao_instance_id", self._instance_id)
 
     def signin(self, retry_count=0, max_retries=3):
         return self.__signin(retry_count=retry_count, max_retries=max_retries)
@@ -50,6 +56,9 @@ class FengchaoService:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "User-Agent": "MoviePilot-ForumSignin/1.0",
+            "X-MoviePilot-Instance-Id": self._instance_id,
+            "X-MoviePilot-Plugin-Version": "1.0.13",
+            "X-MoviePilot-Version": str(getattr(settings, "VERSION_FLAG", "")),
         }
 
     def _api_request(self, method: str, path: str, payload=None) -> dict:
@@ -264,27 +273,41 @@ class FengchaoService:
 
     def __push_pt_life_snapshot(self) -> dict:
         """上传 PT 站点统计快照到蜂巢论坛。"""
-        sites = (self._get_site_statistics() or {}).get("sites", [])
+        import uuid
+        from datetime import timezone
+        raw = self._get_site_statistics() or {}
+        managed = {}
+        try:
+            from app.helper.sites import SitesHelper
+            managed = {str(item.get("name")): item for item in SitesHelper().get_indexers() if item.get("name")}
+        except Exception:
+            managed = {}
         normalized = []
-        for site in sites:
-            if not site.get("name") or site.get("error"):
+        for site in (raw.get("sites", []) if isinstance(raw, dict) else [])[:200]:
+            if not isinstance(site, dict) or not site.get("name") or site.get("error"):
                 continue
-            upload = float(site.get("upload", 0) or 0)
-            download = float(site.get("download", 0) or 0)
+            config = managed.get(str(site.get("name"))) or {}
             normalized.append({
-                "name": site.get("name"),
-                "username": site.get("username", ""),
-                "userLevel": site.get("user_level", ""),
-                "upload": upload,
-                "download": download,
-                "ratio": round(upload / download, 2) if download > 0 else 0,
+                "name": str(site.get("name")),
+                "domain": str(config.get("url") or ""),
+                "mpSiteId": str(config.get("id") or ""),
+                "username": str(site.get("username") or ""),
+                "userLevel": str(site.get("user_level") or ""),
+                "upload": int(site.get("upload", 0) or 0),
+                "download": int(site.get("download", 0) or 0),
                 "bonus": float(site.get("bonus", 0) or 0),
                 "seeding": int(site.get("seeding", 0) or 0),
-                "seedingSize": float(site.get("seeding_size", 0) or 0),
+                "seedingSize": int(site.get("seeding_size", 0) or 0),
             })
+        now = datetime.now(timezone.utc).isoformat()
+        batch_id = f"{self._instance_id}-{now[:19]}-{uuid.uuid4().hex[:12]}"
         payload = {
             "schemaVersion": 1,
-            "collectedAt": datetime.now().isoformat(),
+            "instanceId": self._instance_id,
+            "pluginVersion": "1.0.13",
+            "moviePilotVersion": str(getattr(settings, "VERSION_FLAG", "")),
+            "clientBatchId": batch_id,
+            "collectedAt": now,
             "sites": normalized,
         }
         return self._api_request("PUT", "/api/integrations/moviepilot/v1/pt-life/snapshot", payload)
