@@ -11,7 +11,6 @@ from typing import Any
 from app.log import logger
 from app.core.config import settings
 
-from .http_client import ForumSigninHttpClient
 from .models import ForumSigninConfig, PluginCallbacks
 
 MOVIEPILOT_API_BASE = "https://pting.club"
@@ -62,20 +61,15 @@ class FengchaoService:
         }
 
     def _api_request(self, method: str, path: str, payload=None) -> dict:
-        proxies = self.callbacks.get_proxy_url() if self.config.use_proxy else None
-        client = ForumSigninHttpClient(
-            headers=self._api_headers(),
-            proxy_url=proxies,
-            proxy_enabled=self.config.use_proxy,
-            timeout=30,
-        )
+        import requests as _requests
+        proxies = None
+        if self.config.use_proxy:
+            proxy_url = self.callbacks.get_proxy_url()
+            if proxy_url:
+                proxies = {"http": proxy_url, "https": proxy_url}
         url = f"{self._api_base()}{path}"
-        if method == "GET":
-            response = client.get_res(url, raise_exception=True)
-        else:
-            response = client.post_res(url, json=payload, raise_exception=True)
-        if not response:
-            raise RuntimeError("蜂巢 API 请求无响应")
+        response = _requests.request(method, url, headers=self._api_headers(), json=payload,
+                                     timeout=(5, 30), proxies=proxies, allow_redirects=False)
         if response.status_code >= 400:
             detail = (response.text or "")[:200]
             raise RuntimeError(f"蜂巢 API 请求失败（HTTP {response.status_code}）：{detail}")
