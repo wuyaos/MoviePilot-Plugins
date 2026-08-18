@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import NotificationType
+from app import schemas
 
 from .fengchao import FengchaoService
 from .invites import InvitesService
@@ -374,7 +375,32 @@ class ForumSignin(_PluginBase):
         pass
 
     def get_api(self) -> List[Dict[str, Any]]:
-        pass
+        return [
+            {
+                "path": "/signin",
+                "endpoint": self.api_signin,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "立即执行蜂巢+药丸双站签到",
+            },
+            {
+                "path": "/update_info",
+                "endpoint": self.api_update_info,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "立即更新蜂巢个人信息",
+            },
+        ]
+
+    def api_signin(self) -> schemas.Response:
+        """API 触发双站签到。"""
+        ok = self.__signin()
+        return schemas.Response(success=ok)
+
+    def api_update_info(self) -> schemas.Response:
+        """API 触发蜂巢信息更新。"""
+        ok = self._fengchao_service.update_user_info(is_scheduled_run=False)
+        return schemas.Response(success=ok)
 
     def get_service(self) -> List[Dict[str, Any]]:
         """注册由 MoviePilot 管理的长期公共服务。"""

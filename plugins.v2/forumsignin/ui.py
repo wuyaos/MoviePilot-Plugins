@@ -85,6 +85,11 @@ def build_form() -> Tuple[List[dict], Dict[str, Any]]:
                     {'component': 'VCardText', 'content': [
                         {'component': 'VRow', 'content': [
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 8}, 'content': [{'component': 'VTextField', 'props': {'model': 'fengchao_api_key', 'label': '蜂巢 Bearer Key', 'placeholder': 'pting.club 个人设置页生成', 'hint': '在 pting.club 个人设置页生成 API Key 并粘贴到此处', 'persistent-hint': True, 'type': 'password', 'clearable': True}}]},
+                        ]},
+                        {'component': 'VRow', 'content': [
+                            {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VSwitch', 'props': {'model': 'mp_push_enabled', 'label': '启用PT人生同步', 'color': 'primary'}}]},
+                            {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VSwitch', 'props': {'model': 'timed_update_enabled', 'label': '定时更新个人信息', 'color': 'primary'}}]},
+                            {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': cron_field_component, 'props': {'model': 'timed_update_cron', 'label': '信息更新周期', 'placeholder': '0 */2 * * *'}}]}
                         ]}
                     ]}
                 ]},
@@ -101,25 +106,6 @@ def build_form() -> Tuple[List[dict], Dict[str, Any]]:
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VTextField', 'props': {'model': 'invites_username', 'label': '药丸用户名', 'autocomplete': 'new-username', 'clearable': True}}]},
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VTextField', 'props': {'model': 'invites_password', 'label': '药丸密码', 'type': 'password', 'autocomplete': 'new-password', 'clearable': True}}]},
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VTextField', 'props': {'model': 'invites_cookie', 'label': '药丸Cookie', 'placeholder': '需要包含 flarum_remember，可自动刷新 flarum_session', 'type': 'password', 'autocomplete': 'new-cookie', 'clearable': True}}]}
-                        ]}
-                    ]}
-                ]},
-                {'component': 'VCard', 'props': {'variant': 'outlined', 'class': 'mt-3'}, 'content': [
-                    {'component': 'VCardTitle', 'props': {'class': 'd-flex align-center'}, 'content': [
-                        {'component': 'VIcon', 'props': {'style': 'color: #1976D2;', 'class': 'mr-2'}, 'text': 'mdi-chart-box'},
-                        {'component': 'span', 'text': '蜂巢高级功能'}
-                    ]},
-                    {'component': 'VDivider'},
-                    {'component': 'VCardText', 'content': [
-                        {'component': 'VRow', 'content': [
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VSwitch', 'props': {'model': 'mp_push_enabled', 'label': '启用PT人生数据更新', 'color': 'primary'}}]},
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VTextField', 'props': {'model': 'mp_push_interval', 'label': 'PT人生推送间隔(天)', 'type': 'number', 'placeholder': '1'}}]},
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VSwitch', 'props': {'model': 'timed_update_enabled', 'label': '启用定时更新个人信息', 'color': 'primary'}}]},
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': cron_field_component, 'props': {'model': 'timed_update_cron', 'label': '蜂巢信息更新周期', 'placeholder': '0 */2 * * *'}}]}
-                        ]},
-                        {'component': 'VRow', 'content': [
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'timed_update_retry_count', 'label': '信息更新失败重试次数', 'type': 'number', 'placeholder': '0'}}]},
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'timed_update_retry_interval', 'label': '信息更新重试间隔(小时)', 'type': 'number', 'placeholder': '0'}}]}
                         ]}
                     ]}
                 ]},
@@ -144,7 +130,7 @@ def build_form() -> Tuple[List[dict], Dict[str, Any]]:
                             {'component': 'VListItem', 'content': [
                                 {'component': 'template', 'props': {'v-slot:prepend': ''}, 'content': [{'component': 'VIcon', 'props': {'color': 'warning'}, 'text': 'mdi-flower'}]},
                                 {'component': 'VListItemTitle', 'text': '蜂巢账号'},
-                                {'component': 'VListItemSubtitle', 'text': '填写 pting.club 用户名和密码，登录后自动获取Cookie；可选填Cookie优先复用。'}
+                                {'component': 'VListItemSubtitle', 'text': '在 pting.club 个人设置页生成 API Key（Bearer Key）并粘贴到配置项；不再需要用户名密码或 Cookie。'}
                             ]},
                             {'component': 'VListItem', 'content': [
                                 {'component': 'template', 'props': {'v-slot:prepend': ''}, 'content': [{'component': 'VIcon', 'props': {'style': 'color: #9C27B0;'}, 'text': 'mdi-pill'}]},

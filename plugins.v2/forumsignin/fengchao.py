@@ -3,10 +3,8 @@
 使用 pting.club 专用集成 API（/api/integrations/moviepilot/v1/*），
 认证方式为 Bearer api_key，不再依赖账号密码登录或 Cookie。
 """
-import random
 import time
 from datetime import datetime
-from typing import Any
 
 from app.log import logger
 from app.core.config import settings
@@ -18,8 +16,6 @@ MOVIEPILOT_API_BASE = "https://pting.club"
 
 class FengchaoService:
     """蜂巢签到、用户信息与 PT 人生快照业务。"""
-
-    congestion_status_codes = {429, 502, 503, 504}
 
     def __init__(self, config: ForumSigninConfig, callbacks: PluginCallbacks):
         self.config = config
@@ -384,30 +380,3 @@ class FengchaoService:
         }
         return {"data": {"id": str(identity.get("userId") or account.get("uid") or ""), "attributes": attrs}}
 
-    @staticmethod
-    def _format_pollen(value: Any) -> str:
-        """格式化花粉/积分值。"""
-        if value is None:
-            return "—"
-        try:
-            num = float(value)
-            return str(int(num)) if num == int(num) else f"{round(num, 3):g}"
-        except (ValueError, TypeError):
-            return str(value)
-
-    def __backoff_sleep(self, attempt: int, response=None, base_seconds: int = 3, max_seconds: int = 90):
-        """对拥塞/限流响应进行指数退避。"""
-        retry_after = None
-        try:
-            if response is not None:
-                retry_after_header = response.headers.get("Retry-After")
-                if retry_after_header and str(retry_after_header).isdigit():
-                    retry_after = int(retry_after_header)
-        except Exception:
-            retry_after = None
-        if retry_after is None:
-            retry_after = min(max_seconds, base_seconds * (2 ** attempt))
-        jitter = random.uniform(0.5, 3.0)
-        sleep_seconds = retry_after + jitter
-        logger.info(f"蜂巢站点拥塞或限流，退避 {sleep_seconds:.1f} 秒后重试")
-        time.sleep(sleep_seconds)
