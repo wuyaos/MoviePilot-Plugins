@@ -184,8 +184,16 @@ class FengchaoService:
             identity = {}
             try:
                 identity = self._api_request("GET", "/api/integrations/moviepilot/v1/me")
-                # 缓存 identity 供签到使用（/me 首次成功绑定实例后再次调用会 409）
-                self.callbacks.save_data("_fengchao_identity", identity)
+                # 只在 /me 成功返回完整数据时缓存（含 account 字段）
+                if isinstance(identity, dict) and identity.get("account"):
+                    self.callbacks.save_data("_fengchao_identity", identity)
+                    logger.info("蜂巢用户身份已缓存")
+                else:
+                    # /me 返回但不完整，不覆盖已有缓存
+                    cached = self.callbacks.get_data("_fengchao_identity") or {}
+                    if cached.get("account"):
+                        identity = cached
+                        logger.info("使用缓存的蜂巢用户身份")
             except Exception as me_error:
                 logger.warning(f"蜂巢 /me 请求失败（可能实例已绑定）：{me_error}")
                 identity = self.callbacks.get_data("_fengchao_identity") or {}
