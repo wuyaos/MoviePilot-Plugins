@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Any
 
 from app.log import logger
-from app.core.config import settings
 
 from .http_client import ForumSigninHttpClient
 from .models import ForumSigninConfig, PluginCallbacks
@@ -265,7 +264,7 @@ class FengchaoService:
 
     def __push_pt_life_snapshot(self) -> dict:
         """上传 PT 站点统计快照到蜂巢论坛。"""
-        sites = self._get_site_statistics() or []
+        sites = (self._get_site_statistics() or {}).get("sites", [])
         normalized = []
         for site in sites:
             if not site.get("name") or site.get("error"):
@@ -294,26 +293,33 @@ class FengchaoService:
     # 站点统计（复用 MoviePilot 站点数据）
     # ------------------------------------------------------------------
 
-    def _get_site_statistics(self) -> list:
-        """通过 MP API 获取站点统计数据。"""
+    def _get_site_statistics(self) -> dict:
+        """通过 MoviePilot 本地数据库获取站点统计数据（不走 HTTP）。"""
         try:
+            from app.db.site_oper import SiteOper
             from app.helper.sites import SitesHelper
-            sites_helper = SitesHelper()
+            site_oper, sites_helper = SiteOper(), SitesHelper()
             managed_sites = sites_helper.get_indexers()
             managed_site_names = [s.get("name") for s in managed_sites if s.get("name")]
-            api_url = f"{settings.HOST}/api/v1/site/statistics"
-            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {settings.API_TOKEN}"}
-            client = ForumSigninHttpClient(headers=headers, proxy_enabled=False, timeout=30)
-            res = client.get_res(url=api_url)
-            if res and res.status_code == 200:
-                data = res.json()
-                all_sites = data.get("sites", [])
-                return [s for s in all_sites if s.get("name") in managed_site_names]
-            logger.error(f"获取站点统计数据失败：{res.status_code if res else '连接失败'}")
-            return []
+            raw_data_list = site_oper.get_userdata()
+            if not raw_data_list:
+                logger.error("未获取到站点数据")
+                return {}
+            data_dict = {f"{d.updated_day}_{d.name}": d for d in raw_data_list}
+            data_list = sorted(list(data_dict.values()), key=lambda x: x.updated_day, reverse=True)
+            site_names = set()
+            sites = []
+            for data in data_list:
+                if data.name not in site_names and data.name in managed_site_names:
+                    site_names.add(data.name)
+                    site_dict = data.to_dict() if hasattr(data, "to_dict") else data.__dict__
+                    if "_sa_instance_state" in site_dict:
+                        site_dict.pop("_sa_instance_state")
+                    sites.append(site_dict)
+            return {"sites": sites}
         except Exception as e:
             logger.error(f"获取站点统计数据出错: {e}")
-            return []
+            return {}
 
     # ------------------------------------------------------------------
     # 工具方法
