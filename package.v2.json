@@ -486,5 +486,17 @@
             "v0.1.1": "新增一次性试运行开关，优化配置分区、长种子名称展示与运行提示。",
             "v0.1.0": "初始版本：支持 MoviePilot qB 下载器、CookieCloud、Freeleech 时间/体积筛选与运行概览。"
         }
+    },
+    "PTNewsWatch": {
+        "name": "PT 资讯动态监控",
+        "description": "汇总 PT 论坛主题、RSS 与 Atom 新消息，仅推送未见动态。",
+        "labels": "PT,论坛,RSS,Atom,资讯",
+        "version": "0.1.0",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
+        "author": "wuyaos",
+        "level": 2,
+        "history": {
+            "v0.1.0": "初始模块化版本：来源注册、平铺配置与领域模型骨架。"
+        }
     }
 }
