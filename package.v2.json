@@ -472,5 +472,17 @@
             "v0.3.0": "新增 Cookie 生命周期管理：MP 站点使用本地 Cookie，内置站点通过 CookieCloud 进程内缓存；统一识别登录失效并只刷新一次，修复 Vc-Lib 复合任务错误传播与登录页假成功。",
             "v0.4.0": "重构喊话模板钩子并修复青蛙、LuckPT、织梦、13City、藏宝阁、LongPT 反馈；新增按域名/别名与 ControlKind 的 SiteAutoTask 配置迁移，完善任务申领幂等状态。"
         }
+    },
+    "BakaBTBrush": {
+        "name": "BakaBT 刷流",
+        "description": "定时筛选 BakaBT Freeleech 种子并提交到 qBittorrent",
+        "labels": "BakaBT,刷流,Freeleech",
+        "version": "0.1.0",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/bakabtbrush.png",
+        "author": "wuyaos",
+        "level": 2,
+        "history": {
+            "v0.1.0": "初始版本：支持 MoviePilot qB 下载器、CookieCloud、Freeleech 时间/体积筛选与运行概览。"
+        }
     }
 }
