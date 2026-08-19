@@ -17,6 +17,7 @@ MoviePilot V2 专用插件目录；每个子目录是独立插件实现，元数
 - `siterefresh/`: 站点 Cookie/UA 自动刷新插件。
 - `tanglottery/`: 不可躺自动抽奖助手，本地修正版增强定时服务注册稳定性。
 - `strmmanage/`: 云盘 STRM 管理插件。
+- `ptnewswatch/`: PT 论坛主题、RSS 与 Atom 新消息汇总监控插件。
 
 ## 图标规范
 - 图标资源统一使用根目录 `icons/` 下的 PNG 文件，并通过 `plugin_icon` 与 `package.v2.json` 的 `icon` 引用。

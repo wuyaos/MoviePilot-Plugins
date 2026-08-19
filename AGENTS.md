@@ -19,6 +19,7 @@ MoviePilot V2 自用插件仓库。
 - `PtHitAndRun`: H&R 助手 Pro，管理 PT 站 H&R 种子标签、状态和清理。
 - `ForumSignin`: 论坛签到，支持蜂巢 pting.club 与药丸 invites.fun 双站签到。
 - `PtTaskFlow`: 声明式 PT 站点任务流，使用 Task/Control/Unit/Site 分层组合签到、喊话、申领、勋章和抽奖。
+- `PTNewsWatch`: PT 资讯动态监控，汇总 PTerClub/TJUPT 主题页与蜂巢 RSS、药丸 Atom 新消息。
 
 ## 开发规范
 - 每个插件目录必须有 `__init__.py`（插件入口）和 `AGENTS.md`（结构说明）
