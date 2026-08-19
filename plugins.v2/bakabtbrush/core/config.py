@@ -14,6 +14,7 @@ class ConfigError(ValueError):
 class BrushConfig:
     enabled: bool
     notify: bool
+    dry_run: bool
     cron: str
     cookie: str
     timeout: int
@@ -34,6 +35,7 @@ class BrushConfig:
         config = cls(
             enabled=bool(raw.get("enabled", False)),
             notify=bool(raw.get("notify", True)),
+            dry_run=bool(raw.get("dry_run", False)),
             cron=str(raw.get("cron") or "*/10 * * * *").strip(),
             cookie=str(raw.get("cookie") or "").strip(),
             timeout=_positive_int(raw.get("timeout"), 20),
@@ -71,6 +73,7 @@ class BrushConfig:
             "enabled": self.enabled,
             "notify": self.notify,
             "onlyonce": onlyonce,
+            "dry_run": self.dry_run,
             "cron": self.cron,
             "cookie": self.cookie,
             "timeout": self.timeout,

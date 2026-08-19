@@ -48,6 +48,7 @@ class FakeClient:
     def __init__(self, item):
         self.item = item
         self.browse_calls = 0
+        self.torrent_calls = 0
 
     def fetch_browse(self):
         self.browse_calls += 1
@@ -60,6 +61,7 @@ class FakeClient:
         return DetailPage(True, self.item.published_at, "https://bakabt.me/download/x.torrent", INFOHASH)
 
     def fetch_torrent(self, _):
+        self.torrent_calls += 1
         return b"d4:infodummy"
 
 
@@ -145,6 +147,30 @@ def test_detail_failure_does_not_block_later_candidate():
     assert result.status == "success"
     assert [item.title for item in result.added] == ["Second"]
     assert result.failed_titles == ("First",)
+
+
+def test_dry_run_records_candidate_without_downloading_or_adding_to_qb():
+    state = default_state()
+    instance = FakeQBInstance()
+    client = FakeClient(_item())
+
+    result = run_once(
+        _config(),
+        "cookie",
+        state,
+        instance,
+        dry_run=True,
+        now=NOW,
+        client=client,
+    )
+
+    assert result.status == "dry_run"
+    assert [item.torrent_id for item in result.previewed] == ["360859"]
+    assert result.added == ()
+    assert instance.add_calls == []
+    assert client.torrent_calls == 0
+    assert state["added"] == {}
+    assert state["history"][-1]["push"] == "试运行，未推送 1 个"
 
 
 def test_successful_round_adds_only_eligible_torrent_and_records_state():

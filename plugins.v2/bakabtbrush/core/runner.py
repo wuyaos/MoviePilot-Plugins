@@ -37,6 +37,7 @@ class RunResult:
     detail: str
     downloading_count: int
     max_downloading: int
+    previewed: tuple[BakaBTTorrent, ...] = ()
 
     @property
     def should_notify_success(self) -> bool:
@@ -46,6 +47,10 @@ class RunResult:
     def should_notify_failure(self) -> bool:
         return self.status == "failed"
 
+    @property
+    def should_notify_dry_run(self) -> bool:
+        return self.status == "dry_run"
+
 
 def run_once(
     config: BrushConfig,
@@ -53,10 +58,11 @@ def run_once(
     state: dict[str, Any],
     qb_instance: Any,
     *,
+    dry_run: bool = False,
     now: datetime | None = None,
     client: BakaBTClient | None = None,
 ) -> RunResult:
-    """执行一次刷流检查，始终把结果写入 state，调用方只需统一 save_data 一次。"""
+    """执行一次刷流检查；dry_run 只筛选与记录，不请求 .torrent 或添加 qB。"""
     now = _utc(now)
     try:
         qb_torrents = _sync_qb_state(config, state, qb_instance)
@@ -133,12 +139,14 @@ def run_once(
 
     existing_hashes = {item.infohash for item in qb_torrents}
     added: list[BakaBTTorrent] = []
+    previewed: list[BakaBTTorrent] = []
     failures: list[str] = []
     processed_titles: list[str] = []
     candidate_limit = slots if slots is not None else len(candidates)
 
     for item in candidates:
-        if len(added) >= candidate_limit:
+        selected_count = len(previewed) if dry_run else len(added)
+        if selected_count >= candidate_limit:
             break
         processed_titles.append(item.title)
         try:
@@ -153,6 +161,11 @@ def run_once(
                 failures.append(item.title)
                 continue
             if item.infohash.lower() in existing_hashes:
+                continue
+            if dry_run:
+                # 试运行仍复核详情页，但不请求 .torrent，也绝不调用 qB 添加接口。
+                previewed.append(item)
+                existing_hashes.add(item.infohash.lower())
                 continue
             content = client.fetch_torrent(item.download_url)
             infohash = add_and_verify(
@@ -170,6 +183,30 @@ def run_once(
             failures.append(item.title)
             # 单个候选失败时继续尝试后续候选，不中断整轮。
             continue
+
+    if dry_run:
+        slot_text = (
+            "qB 下载流程不限制" if config.max_bakabt_downloading == 0
+            else f"qB 下载槽位：{current_downloading}/{config.max_bakabt_downloading}"
+        )
+        if previewed:
+            detail = _append_note(f"试运行完成，候选未推送 qB；{slot_text}", account_note)
+        elif failures:
+            detail = _append_note(f"试运行完成，{len(failures)} 个候选详情复核失败", account_note)
+        else:
+            detail = _append_note("试运行完成，未找到可推送候选", account_note)
+        return _finish(
+            state,
+            "dry_run",
+            (),
+            tuple(failures),
+            detail,
+            current_downloading,
+            config.max_bakabt_downloading,
+            now,
+            torrent_titles=processed_titles,
+            previewed=tuple(previewed),
+        )
 
     # 刷新 qB 快照，让数据页和通知反映本轮提交后的实际状态。
     try:
@@ -270,13 +307,24 @@ def _finish(
     max_downloading: int,
     now: datetime,
     torrent_titles: list[str] | None = None,
+    previewed: tuple[BakaBTTorrent, ...] = (),
 ) -> RunResult:
-    titles = [item.title for item in added] or (torrent_titles or list(failures))
+    titles = (
+        [item.title for item in added]
+        or [item.title for item in previewed]
+        or (torrent_titles or list(failures))
+    )
+    push = (
+        f"已推送 {len(added)} 个" if added
+        else f"试运行，未推送 {len(previewed)} 个" if status == "dry_run"
+        else "推送失败" if failures
+        else "未推送"
+    )
     record_run(state, {
         "time": now.isoformat().replace("+00:00", "Z"),
         "status": status,
         "torrent": "、".join(titles) if titles else "-",
-        "push": f"已推送 {len(added)} 个" if added else ("推送失败" if failures else "未推送"),
+        "push": push,
         "detail": detail,
     })
     return RunResult(
@@ -286,6 +334,7 @@ def _finish(
         detail=detail,
         downloading_count=downloading_count,
         max_downloading=max_downloading,
+        previewed=previewed,
     )
 
 

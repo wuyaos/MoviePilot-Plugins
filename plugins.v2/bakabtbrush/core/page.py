@@ -8,6 +8,7 @@ from typing import Any
 
 _STATUS_TEXT = {
     "success": "成功",
+    "dry_run": "试运行",
     "no_candidate": "无候选",
     "no_qb_slot": "槽位已满",
     "failed": "失败",
@@ -15,6 +16,7 @@ _STATUS_TEXT = {
 }
 _STATUS_COLOR = {
     "success": "success",
+    "dry_run": "secondary",
     "no_candidate": "warning",
     "no_qb_slot": "info",
     "failed": "error",
@@ -143,7 +145,7 @@ def _history_table(state: dict[str, Any]) -> dict:
                         "text": _STATUS_TEXT.get(status, status),
                     }],
                 },
-                _cell(_truncate(str(event.get("torrent") or "-"), 64)),
+                _torrent_cell(str(event.get("torrent") or "-")),
                 _cell(_truncate(str(event.get("push") or "未推送"), 24)),
                 _cell(_truncate(str(event.get("detail") or ""), 100)),
             ],
@@ -205,6 +207,22 @@ def _history_title() -> dict:
 
 def _cell(text: str, class_name: str = "") -> dict:
     return {"component": "td", "props": {"class": f"text-caption {class_name}".strip()}, "text": text}
+
+
+def _torrent_cell(title: str) -> dict:
+    """日志保留完整种子名，以换行替代截断；窄屏由 VTable 横向滚动承载。"""
+    return {
+        "component": "td",
+        "props": {"class": "text-caption"},
+        "content": [{
+            "component": "div",
+            "props": {
+                "class": "text-wrap",
+                "style": "min-width: 260px; max-width: 520px; white-space: normal; word-break: break-word;",
+            },
+            "text": title,
+        }],
+    }
 
 
 def _slot_text(current: Any, maximum: Any) -> str:

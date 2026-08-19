@@ -477,11 +477,12 @@
         "name": "BakaBT 刷流",
         "description": "定时筛选 BakaBT Freeleech 种子并提交到 qBittorrent",
         "labels": "BakaBT,刷流,Freeleech",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/bakabtbrush.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v0.1.1": "新增一次性试运行开关，优化配置分区、长种子名称展示与运行提示。",
             "v0.1.0": "初始版本：支持 MoviePilot qB 下载器、CookieCloud、Freeleech 时间/体积筛选与运行概览。"
         }
     }

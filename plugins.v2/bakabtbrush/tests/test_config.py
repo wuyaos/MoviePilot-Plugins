@@ -14,6 +14,13 @@ def test_defaults_use_ten_minute_cron_and_expected_qb_tags():
     assert config.max_bakabt_downloading == 2
 
 
+def test_dry_run_is_persisted_as_a_one_shot_config_flag():
+    config = BrushConfig.from_mapping({"dry_run": True})
+
+    assert config.dry_run is True
+    assert config.to_mapping()["dry_run"] is True
+
+
 def test_zero_means_no_filter_constraint():
     config = BrushConfig.from_mapping({
         "min_publish_age_minutes": 0,
