@@ -14,7 +14,9 @@ from app.schemas import NotificationType
 
 from .core.config import PluginConfig
 from .core.engine import DigestEngine
-from .core.source_registry import SOURCE_BY_ID, SOURCES
+from .core.source_registry import SOURCE_BY_ID
+from .ui.form import build_form
+from .ui.page import build_page
 
 
 class PTNewsWatch(_PluginBase):
@@ -162,24 +164,10 @@ class PTNewsWatch(_PluginBase):
         self.post_message(mtype=NotificationType.Plugin, title=title, text=text)
 
     def get_form(self) -> tuple[list[dict], dict[str, Any]]:
-        return ([{
-            "component": "VAlert",
-            "props": {
-                "type": "info",
-                "variant": "tonal",
-                "text": "PTNewsWatch 引擎已接入；完整配置页面将在下一阶段启用。",
-            },
-        }], self.config.to_dict())
+        return build_form(self.config)
 
     def get_page(self) -> list[dict]:
-        return [{
-            "component": "VAlert",
-            "props": {
-                "type": "info",
-                "variant": "tonal",
-                "text": f"已配置 {len(SOURCES)} 个资讯来源。",
-            },
-        }]
+        return build_page(self.get_data("state") or {}, settings.TZ)
 
     def stop_service(self):
         return None
