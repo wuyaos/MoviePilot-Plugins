@@ -74,7 +74,8 @@ class DigestEngine:
             except Exception as error:
                 result = SourceFetchResult(
                     source.source_id, source.title, False,
-                    error=str(error), fetched_at=datetime.now(timezone.utc),
+                    error=str(error)[:300], auth_status="exception",
+                fetched_at=datetime.now(timezone.utc),
                 )
             results.append(result)
             source_new = apply_source_result(

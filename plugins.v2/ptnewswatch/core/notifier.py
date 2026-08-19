@@ -10,7 +10,7 @@ from .source_registry import SOURCE_BY_ID
 
 def build_digest_text(
     entries: list[ForumEntry], *, timezone_name: str,
-    failures: list[str] | None = None, maximum_chars: int = 8000,
+    failures: list[str] | None = None, maximum_chars: int = 2000,
 ) -> str:
     grouped = defaultdict(list)
     for entry in entries:

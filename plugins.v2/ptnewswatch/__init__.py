@@ -43,12 +43,7 @@ class PTNewsWatch(_PluginBase):
         if manual_requested:
             self.config.onlyonce = False
             self.update_config(self.config.to_dict())
-            threading.Thread(
-                target=self.run_once,
-                kwargs={"source_filter": ""},
-                daemon=True,
-                name="ptnewswatch_manual",
-            ).start()
+            self._start_run("")
 
     def get_state(self) -> bool:
         return self.config.enabled

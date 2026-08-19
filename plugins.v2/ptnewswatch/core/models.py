@@ -28,6 +28,7 @@ class SourceSpec:
     auth_mode: SourceAuthMode
     site_domain: str = ""
     parser_profile: str = ""
+    timezone_name: str = "Asia/Shanghai"
     enabled_by_default: bool = True
 
 

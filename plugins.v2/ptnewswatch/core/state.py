@@ -27,6 +27,11 @@ def normalize_state(raw: Any) -> dict[str, Any]:
         return state
     if isinstance(raw.get("sources"), dict):
         state["sources"] = deepcopy(raw["sources"])
+        for source_state in state["sources"].values():
+            if isinstance(source_state, dict) and isinstance(source_state.get("seen_entry_ids"), list):
+                source_state["seen_entry_ids"] = list(dict.fromkeys(
+                    str(value) for value in source_state["seen_entry_ids"] if value
+                ))[-MAX_SEEN_PER_SOURCE:]
     if isinstance(raw.get("recent_entries"), list):
         state["recent_entries"] = [item for item in raw["recent_entries"] if isinstance(item, dict)][-MAX_RECENT_ENTRIES:]
     if isinstance(raw.get("history"), list):

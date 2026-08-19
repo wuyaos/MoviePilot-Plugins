@@ -25,7 +25,7 @@ def parse_nexus_topic(html_text: str, source: SourceSpec) -> list[ForumEntry]:
             continue
         post_id = match.group(1)
         author = _text(header.xpath('.//a[contains(@href,"userdetails.php")][1]'))
-        published = _parse_header_time(header)
+        published = _parse_header_time(header, source.timezone_name)
         body = _find_body_table(header)
         content = _extract_body_text(body)
         title = _entry_title(content, post_id)
@@ -59,7 +59,7 @@ def is_login_page(final_url: str, html_text: str) -> bool:
     )
 
 
-def _parse_header_time(header) -> datetime:
+def _parse_header_time(header, timezone_name: str) -> datetime:
     titles = header.xpath('.//span[@title]/@title')
     raw = next((value for value in titles if _ABSOLUTE_TIME.search(value)), "")
     if not raw:
@@ -69,7 +69,7 @@ def _parse_header_time(header) -> datetime:
         # 缺少绝对时间时仍保留消息；按抓取时刻排序并在状态中可见。
         return datetime.now(timezone.utc)
     parsed = datetime.strptime(_ABSOLUTE_TIME.search(raw).group(1), "%Y-%m-%d %H:%M:%S")
-    return parsed.replace(tzinfo=ZoneInfo("Asia/Shanghai")).astimezone(timezone.utc)
+    return parsed.replace(tzinfo=ZoneInfo(timezone_name)).astimezone(timezone.utc)
 
 
 def _find_body_table(header):

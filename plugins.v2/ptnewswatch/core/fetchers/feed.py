@@ -47,7 +47,7 @@ class FeedFetcher:
                 source_title=source.title,
                 success=False,
                 error=str(error),
-                auth_status="cookie" if cookie else "public",
+                auth_status="request_failed",
                 fetched_at=fetched_at,
             )
 

@@ -56,9 +56,9 @@ class PluginConfig:
             "first_run_push_recent": self.first_run_push_recent,
             "invites_cookie": self.invites_cookie,
             **{
-                f"source_{source.source_id}_enabled": getattr(
-                    self, f"source_{source.source_id}_enabled"
-                )
+                f"source_{source.source_id}_enabled": bool(getattr(
+                    self, f"source_{source.source_id}_enabled", source.enabled_by_default
+                ))
                 for source in SOURCES
             },
         }

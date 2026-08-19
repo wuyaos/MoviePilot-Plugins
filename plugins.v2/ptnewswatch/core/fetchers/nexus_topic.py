@@ -48,7 +48,10 @@ class NexusTopicFetcher:
                     raise PermissionError("论坛 Cookie 已失效")
                 entries = parse_nexus_topic(response.text, source)
                 if not entries:
-                    raise ValueError("论坛最后一页未解析到帖子")
+                    if not entries_by_id:
+                        raise ValueError("论坛最后一页未解析到帖子")
+                    # 已取得最后一页时，前一页结构异常不丢弃已获取结果。
+                    break
                 for entry in entries:
                     entries_by_id[entry.entry_id] = entry
                 url = extract_previous_page_url(response.text, response.url)
