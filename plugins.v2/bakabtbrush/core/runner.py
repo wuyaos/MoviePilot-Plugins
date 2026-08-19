@@ -22,7 +22,10 @@ from .scraper import BakaBTClient, BakaBTError
 from .state import (
     remember_added,
     remember_completed,
+    remember_detail,
     record_run,
+    reset_detail_cache_for_day,
+    restore_detail,
     update_account,
     update_qb,
     was_added,
@@ -64,9 +67,10 @@ def run_once(
 ) -> RunResult:
     """执行一次刷流检查；dry_run 只筛选与记录，不请求 .torrent 或添加 qB。"""
     now = _utc(now)
+    reset_detail_cache_for_day(state, now)
     try:
         qb_torrents = _sync_qb_state(config, state, qb_instance)
-    except DownloaderError as err:
+    except DownloaderError:
         return _finish(
             state, "failed", (), (), "qBittorrent 查询失败", 0, config.max_bakabt_downloading, now,
         )
@@ -142,19 +146,25 @@ def run_once(
     previewed: list[BakaBTTorrent] = []
     failures: list[str] = []
     processed_titles: list[str] = []
-    candidate_limit = slots if slots is not None else len(candidates)
 
+    # 浏览页的 Today 只是粗筛；必须先读取全部详情页取得精确发布时间，
+    # 再按发布间隔过滤并排序，确保下载槽位优先分配给最新发布的种子。
+    detail_candidates: list[BakaBTTorrent] = []
+    cached_detail_ids: set[str] = set()
     for item in candidates:
-        selected_count = len(previewed) if dry_run else len(added)
-        if selected_count >= candidate_limit:
-            break
         processed_titles.append(item.title)
         try:
-            detail = client.fetch_detail(item.detail_url)
-            item.is_freeleech = detail.is_freeleech
-            item.published_at = detail.published_at
-            item.download_url = detail.download_url
-            item.infohash = detail.infohash
+            if restore_detail(state, item):
+                cached_detail_ids.add(str(item.torrent_id))
+            else:
+                detail = client.fetch_detail(item.detail_url)
+                item.is_freeleech = detail.is_freeleech
+                item.published_at = detail.published_at
+                item.download_url = detail.download_url
+                item.infohash = detail.infohash
+                # 只缓存可用于后续下载的完整详情；不完整详情下轮重新请求。
+                if item.published_at is not None and item.download_url and item.infohash:
+                    remember_detail(state, item)
             if not matches_final_filters(item, config, now):
                 continue
             if not item.download_url or not item.infohash:
@@ -162,12 +172,41 @@ def run_once(
                 continue
             if item.infohash.lower() in existing_hashes:
                 continue
+            detail_candidates.append(item)
+        except BakaBTError:
+            failures.append(item.title)
+            # 单个详情页失败不阻断后续 Today 候选。
+            continue
+
+    # 详情页时间是筛选和排序的唯一来源：发布时间最新（发布间隔最短）优先。
+    detail_candidates.sort(key=lambda item: _sort_key(item, now), reverse=True)
+    candidate_limit = slots if slots is not None else len(detail_candidates)
+    for item in detail_candidates:
+        selected_count = len(previewed) if dry_run else len(added)
+        if selected_count >= candidate_limit:
+            break
+        try:
             if dry_run:
                 # 试运行仍复核详情页，但不请求 .torrent，也绝不调用 qB 添加接口。
                 previewed.append(item)
                 existing_hashes.add(item.infohash.lower())
                 continue
-            content = client.fetch_torrent(item.download_url)
+            try:
+                content = client.fetch_torrent(item.download_url)
+            except BakaBTError:
+                # 下载链接可能带短期 token；仅缓存链接失效时补一次详情刷新。
+                if str(item.torrent_id) not in cached_detail_ids:
+                    raise
+                detail = client.fetch_detail(item.detail_url)
+                item.is_freeleech = detail.is_freeleech
+                item.published_at = detail.published_at
+                item.download_url = detail.download_url
+                item.infohash = detail.infohash
+                if item.published_at is not None and item.download_url and item.infohash:
+                    remember_detail(state, item)
+                if not matches_final_filters(item, config, now) or not item.download_url or not item.infohash:
+                    raise BakaBTError("缓存详情刷新后未通过最终过滤")
+                content = client.fetch_torrent(item.download_url)
             infohash = add_and_verify(
                 qb_instance,
                 content,
@@ -181,7 +220,7 @@ def run_once(
             added.append(item)
         except (BakaBTError, DownloaderError):
             failures.append(item.title)
-            # 单个候选失败时继续尝试后续候选，不中断整轮。
+            # 单个候选添加失败时继续尝试下一个发布时间较早的候选。
             continue
 
     if dry_run:
@@ -257,15 +296,20 @@ def run_once(
 def prefilter_candidates(
     torrents: list[BakaBTTorrent], config: BrushConfig, now: datetime | None = None,
 ) -> list[BakaBTTorrent]:
-    """先用浏览页可知字段过滤，发布时间未知的近期条目留给详情页二次确认。"""
-    now = _utc(now)
-    candidates = [
+    """只保留浏览页标记为 Today 的 Freeleech，发布时间由详情页最终确认。"""
+    _utc(now)  # 保留参数契约；精确时间筛选在详情页后执行。
+    return [
         item for item in torrents
         if item.is_freeleech
         and _matches_size(item, config)
-        and (item.published_at is None or _matches_time(item, config, now))
+        and _is_today_listing(item)
     ]
-    return sorted(candidates, key=lambda item: _sort_key(item, now), reverse=True)
+
+
+def _is_today_listing(item: BakaBTTorrent) -> bool:
+    """BakaBT 浏览页的 Today 标签是详情页请求前唯一可靠的近期筛选条件。"""
+    added = " ".join((item.added_text or "").lower().split())
+    return added == "today" or added.startswith("today ")
 
 
 def matches_final_filters(
@@ -364,7 +408,7 @@ def _sort_key(item: BakaBTTorrent, now: datetime) -> tuple[float, float]:
     """发布时间新优先；同一时间使用较大体积打破平局。"""
     if item.published_at is not None:
         published_at = _utc(item.published_at).timestamp()
-    elif item.added_text.lower() == "today":
+    elif _is_today_listing(item):
         published_at = now.timestamp()
     elif item.added_text.lower() == "yesterday":
         published_at = now.timestamp() - 24 * 60 * 60

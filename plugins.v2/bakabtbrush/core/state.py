@@ -6,10 +6,18 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
+try:
+    from app.core.config import settings as _mp_settings
+    from zoneinfo import ZoneInfo
+    _TZ = ZoneInfo(getattr(_mp_settings, "TZ", "Asia/Shanghai"))
+except Exception:
+    _TZ = None
+
 from .models import AccountSnapshot, BakaBTTorrent
 
 
 MAX_HISTORY = 20
+MAX_DETAIL_HISTORY = 500
 
 
 def default_state() -> dict[str, Any]:
@@ -28,6 +36,9 @@ def default_state() -> dict[str, Any]:
             "updated_at": "",
         },
         "added": {},
+        # 已解析详情页元数据，仅当天复用；跨日自动重新解析 Today 种子。
+        "detail_cache_date": "",
+        "detail_history": {},
         "completed_hashes": [],
         "last_run": {},
         "history": [],
@@ -43,6 +54,16 @@ def normalize_state(raw: Any) -> dict[str, Any]:
     for key in ("account", "qb", "added", "last_run"):
         if isinstance(raw.get(key), dict):
             state[key].update(deepcopy(raw[key]))
+    state["detail_cache_date"] = str(raw.get("detail_cache_date") or "")
+    if isinstance(raw.get("detail_history"), dict):
+        entries = [
+            (str(torrent_id), deepcopy(detail))
+            for torrent_id, detail in raw["detail_history"].items()
+            if torrent_id and isinstance(detail, dict)
+        ]
+        # 保留最近解析的详情，控制 PluginData 体积。
+        entries.sort(key=lambda item: str(item[1].get("parsed_at") or ""), reverse=True)
+        state["detail_history"] = dict(entries[:MAX_DETAIL_HISTORY])
 
     if isinstance(raw.get("completed_hashes"), list):
         state["completed_hashes"] = list(dict.fromkeys(
@@ -63,6 +84,52 @@ def remember_added(state: dict[str, Any], item: BakaBTTorrent, infohash: str) ->
         "infohash": infohash.lower(),
         "added_at": utc_now(),
     }
+
+
+def reset_detail_cache_for_day(state: dict[str, Any], now: datetime) -> None:
+    """按当前本地日期隔离详情缓存，跨日重新解析 Today 种子。"""
+    cache_date = now.astimezone(_TZ).date().isoformat() if _TZ else now.astimezone().date().isoformat()
+    if state.get("detail_cache_date") != cache_date:
+        state["detail_cache_date"] = cache_date
+        state["detail_history"] = {}
+
+
+def restore_detail(state: dict[str, Any], item: BakaBTTorrent) -> bool:
+    """将历史详情页元数据恢复到浏览页种子；返回是否命中有效缓存。"""
+    detail = (state.get("detail_history") or {}).get(str(item.torrent_id))
+    if not isinstance(detail, dict):
+        return False
+    published_text = detail.get("published_at")
+    if not published_text:
+        return False
+    try:
+        published_at = datetime.fromisoformat(str(published_text).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    item.published_at = published_at
+    item.is_freeleech = bool(detail.get("is_freeleech", item.is_freeleech))
+    item.download_url = str(detail.get("download_url") or "") or None
+    item.infohash = str(detail.get("infohash") or "") or None
+    return True
+
+
+def remember_detail(state: dict[str, Any], item: BakaBTTorrent) -> None:
+    """持久化详情页精确发布时间及下载元数据。"""
+    if item.published_at is None:
+        return
+    history = state.setdefault("detail_history", {})
+    history[str(item.torrent_id)] = {
+        "title": item.title,
+        "published_at": item.published_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "is_freeleech": bool(item.is_freeleech),
+        "download_url": item.download_url or "",
+        "infohash": item.infohash or "",
+        "parsed_at": utc_now(),
+    }
+    if len(history) > MAX_DETAIL_HISTORY:
+        oldest = sorted(history, key=lambda key: str(history[key].get("parsed_at") or ""))
+        for torrent_id in oldest[:len(history) - MAX_DETAIL_HISTORY]:
+            history.pop(torrent_id, None)
 
 
 def completed_hashes(state: dict[str, Any]) -> set[str]:

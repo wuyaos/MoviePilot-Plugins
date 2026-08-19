@@ -5,6 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+try:
+    from app.core.config import settings as _mp_settings
+    from zoneinfo import ZoneInfo
+    _TZ = ZoneInfo(getattr(_mp_settings, "TZ", "Asia/Shanghai"))
+except Exception:
+    _TZ = None
+
 
 _STATUS_TEXT = {
     "success": "成功",
@@ -247,7 +254,11 @@ def _format_time(value: Any) -> str:
     if not value:
         return "未运行"
     try:
-        timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone()
+        timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if _TZ:
+            timestamp = timestamp.astimezone(_TZ)
+        else:
+            timestamp = timestamp.astimezone()
         return f"{timestamp.month}月{timestamp.day}日 {timestamp:%H:%M}"
     except (TypeError, ValueError, OSError):
         return str(value)[:16]

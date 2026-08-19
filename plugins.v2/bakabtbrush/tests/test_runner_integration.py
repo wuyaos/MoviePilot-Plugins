@@ -84,6 +84,7 @@ def _item():
         detail_url="https://bakabt.me/torrent/360859/example",
         size_mb=1024,
         published_at=NOW - timedelta(minutes=30),
+        added_text="today",
         is_freeleech=True,
     )
 
@@ -173,7 +174,44 @@ def test_dry_run_records_candidate_without_downloading_or_adding_to_qb():
     assert state["history"][-1]["push"] == "试运行，未推送 1 个"
 
 
-def test_successful_round_adds_only_eligible_torrent_and_records_state():
+
+
+def test_today_candidates_use_detail_time_then_download_slot_order():
+    older = _item()
+    older.torrent_id, older.title = "older", "Older"
+    older.detail_url = "https://bakabt.me/torrent/older/example"
+    older.added_text = "today"
+    older.published_at = NOW - timedelta(minutes=50)
+    newer = _item()
+    newer.torrent_id, newer.title = "newer", "Newer"
+    newer.detail_url = "https://bakabt.me/torrent/newer/example"
+    newer.added_text = "today"
+    newer.published_at = NOW - timedelta(minutes=15)
+
+    class DetailOrderingClient(FakeClient):
+        def __init__(self):
+            super().__init__(older)
+
+        def fetch_browse(self):
+            return BrowsePage([older, newer], "https://bakabt.me/user/1/example")
+
+        def fetch_detail(self, detail_url):
+            item = newer if "/newer/" in detail_url else older
+            return DetailPage(True, item.published_at, "https://bakabt.me/download/x.torrent", INFOHASH)
+
+    result = run_once(
+        _config(max_bakabt_downloading=1),
+        "cookie",
+        default_state(),
+        FakeQBInstance(),
+        dry_run=True,
+        now=NOW,
+        client=DetailOrderingClient(),
+    )
+
+    assert result.status == "dry_run"
+    assert [item.torrent_id for item in result.previewed] == ["newer"]
+
     state = default_state()
     instance = FakeQBInstance()
     item = _item()

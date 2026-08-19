@@ -26,7 +26,7 @@ def _item(
     )
 
 
-def test_prefilter_only_uses_freeleech_size_and_known_time():
+def test_prefilter_keeps_only_today_freeleech_and_size_candidates():
     config = BrushConfig.from_mapping({
         "min_publish_age_minutes": 10,
         "max_publish_age_minutes": 60,
@@ -34,14 +34,16 @@ def test_prefilter_only_uses_freeleech_size_and_known_time():
         "max_size_mb": 1000,
     })
     result = prefilter_candidates([
-        _item("fresh", age_minutes=5, size_mb=600),
-        _item("good", age_minutes=30, size_mb=600),
-        _item("small", age_minutes=30, size_mb=100),
-        _item("paid", age_minutes=30, size_mb=600, free=False),
+        _item("fresh", age_minutes=5, size_mb=600, added_text="today"),
+        _item("good", age_minutes=30, size_mb=600, added_text="today"),
+        _item("old", age_minutes=30, size_mb=600, added_text="yesterday"),
+        _item("small", age_minutes=30, size_mb=100, added_text="today"),
+        _item("paid", age_minutes=30, size_mb=600, free=False, added_text="today"),
         _item("unknown", age_minutes=None, size_mb=600, added_text="today"),
     ], config, NOW)
 
-    assert [item.torrent_id for item in result] == ["unknown", "good"]
+    # 发布时间窗口只在详情页精确时间取得后过滤。
+    assert [item.torrent_id for item in result] == ["fresh", "good", "unknown"]
 
 
 def test_final_filter_requires_detail_time_only_when_time_constraint_is_enabled():
@@ -53,12 +55,12 @@ def test_final_filter_requires_detail_time_only_when_time_constraint_is_enabled(
     assert matches_final_filters(item, time_limited, NOW) is False
 
 
-def test_sort_prefers_newer_then_larger_candidates():
+def test_prefilter_preserves_browse_order_until_detail_time_is_available():
     config = BrushConfig.from_mapping({})
     result = prefilter_candidates([
-        _item("old-large", age_minutes=20, size_mb=1000),
-        _item("new-small", age_minutes=10, size_mb=500),
-        _item("new-large", age_minutes=10, size_mb=900),
+        _item("old-large", age_minutes=20, size_mb=1000, added_text="today"),
+        _item("new-small", age_minutes=10, size_mb=500, added_text="today"),
+        _item("new-large", age_minutes=10, size_mb=900, added_text="today"),
     ], config, NOW)
 
-    assert [item.torrent_id for item in result] == ["new-large", "new-small", "old-large"]
+    assert [item.torrent_id for item in result] == ["old-large", "new-small", "new-large"]
