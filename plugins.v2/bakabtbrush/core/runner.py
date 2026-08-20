@@ -221,7 +221,6 @@ def run_once(
     detail_candidates: list[BakaBTTorrent] = []
     cached_detail_ids: set[str] = set()
     for item in candidates:
-        processed_titles.append(item.title)
         try:
             if restore_detail(state, item):
                 cached_detail_ids.add(str(item.torrent_id))
@@ -242,6 +241,7 @@ def run_once(
             if item.infohash.lower() in existing_hashes:
                 continue
             detail_candidates.append(item)
+            processed_titles.append(item.title)
         except BakaBTError:
             failures.append(item.title)
             # 单个详情页失败不阻断后续 Today 候选。

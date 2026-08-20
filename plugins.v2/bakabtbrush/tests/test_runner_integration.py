@@ -158,6 +158,26 @@ def test_auto_cleanup_runs_before_slot_check_and_records_deletion():
     assert result.status == "no_candidate"
 
 
+def test_finally_rejected_today_item_is_not_shown_as_selected_torrent():
+    state = default_state()
+    client = FakeClient(_item())
+
+    result = run_once(
+        _config(publish_age_range_minutes="10"),
+        "cookie",
+        state,
+        FakeQBInstance(),
+        dry_run=True,
+        now=NOW,
+        client=client,
+    )
+
+    assert result.status == "dry_run"
+    assert result.previewed == ()
+    assert state["last_run"]["torrent"] == "-"
+    assert state["last_run"]["torrent_links"] == []
+
+
 def test_empty_cookie_after_slot_check_fails_without_bakabt_request():
     client = FakeClient(_item())
     result = run_once(_config(), lambda: "", default_state(), FakeQBInstance(), now=NOW, client=client)
