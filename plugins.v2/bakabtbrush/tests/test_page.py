@@ -79,6 +79,13 @@ def test_page_has_overview_current_tasks_linked_history_and_deletions():
         "push": "已推送 1 个",
         "detail": "ok",
     })
+    record_run(state, {
+        "time": "2026-08-20T00:15:00Z",
+        "status": "no_candidate",
+        "torrent": "Rejected Coarse Candidate",
+        "push": "未推送",
+        "detail": "未通过详情复核",
+    })
     record_deletions(state, [{
         "time": "2026-08-20T00:20:00Z",
         "title": "Deleted Example",
@@ -103,6 +110,7 @@ def test_page_has_overview_current_tasks_linked_history_and_deletions():
     assert "Current Example" in texts
     assert "History Example" in texts
     assert "Deleted Example" in texts
+    assert "Rejected Coarse Candidate" not in texts
     assert "自动删除" in texts
     assert "https://bakabt.me/torrent/1/example" in hrefs
     assert "https://bakabt.me/torrent/2/example" in hrefs

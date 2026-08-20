@@ -237,6 +237,10 @@ def _torrent_cell(event: dict[str, Any], added_by_title: dict[str, dict[str, Any
                     "size_mb": record.get("size_mb"),
                 })
     if not links:
+        status = str(event.get("status") or "")
+        push = str(event.get("push") or "")
+        if status == "no_candidate" or (status == "dry_run" and "0 个" in push):
+            return _cell("-")
         return _cell(str(event.get("torrent") or "-"))
     content = []
     run_time = event.get("time")
