@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import html as html_lib
-import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from urllib.parse import urljoin
 
 from ..models import ForumEntry, SourceSpec
+from ..url_utils import safe_content_link
+from .content import html_to_text
 
 
 def parse_feed(payload: str | bytes, source: SourceSpec) -> list[ForumEntry]:
@@ -32,7 +32,7 @@ def _parse_rss(root: ET.Element, source: SourceSpec) -> list[ForumEntry]:
         title = _child_text(item, "title")
         link = _child_text(item, "link")
         guid = _child_text(item, "guid")
-        content = _child_text(item, "encoded") or _child_text(item, "description")
+        content = _child_markup(item, "encoded") or _child_markup(item, "description")
         author = _child_text(item, "creator") or _child_text(item, "author")
         published = _parse_time(_child_text(item, "pubDate"))
         entries.append(_entry(source, guid or link, title, author, content, link, published))
@@ -52,7 +52,7 @@ def _parse_atom(root: ET.Element, source: SourceSpec) -> list[ForumEntry]:
                 if child.attrib.get("rel", "alternate") in ("alternate", ""):
                     link = child.attrib["href"]
                     break
-        content = _child_text(item, "content") or _child_text(item, "summary")
+        content = _child_markup(item, "content") or _child_markup(item, "summary")
         author = ""
         author_node = next((child for child in item if _local(child.tag) == "author"), None)
         if author_node is not None:
@@ -63,8 +63,8 @@ def _parse_atom(root: ET.Element, source: SourceSpec) -> list[ForumEntry]:
 
 
 def _entry(source, raw_id, title, author, content, link, published):
-    link = urljoin(source.url, link or "")
-    clean_content = _clean_content(content)
+    clean_content = html_to_text(content)
+    clean_link = safe_content_link(link, source.url)
     entry_id = raw_id.strip() if raw_id else ""
     if not entry_id:
         raw = f"{source.source_id}\0{title}\0{published.isoformat()}\0{clean_content}"
@@ -75,8 +75,10 @@ def _entry(source, raw_id, title, author, content, link, published):
         title=html_lib.unescape(title or "").strip(),
         author=html_lib.unescape(author or "").strip(),
         content=clean_content,
-        link=link,
+        link=clean_link,
         published_at=published,
+        source_title=source.title,
+        base_source_id=source.base_id,
     )
 
 
@@ -98,11 +100,15 @@ def _child_text(node: ET.Element, local_name: str) -> str:
     return "" if child is None else " ".join("".join(child.itertext()).split())
 
 
+def _child_markup(node: ET.Element, local_name: str) -> str:
+    child = next((item for item in node if _local(item.tag) == local_name), None)
+    if child is None:
+        return ""
+    parts = [child.text or ""]
+    for nested in child:
+        parts.append(ET.tostring(nested, encoding="unicode", method="html"))
+    return "".join(parts)
+
+
 def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1].split(":")[-1]
-
-
-def _clean_content(value: str) -> str:
-    value = re.sub(r"<(script|style)\b[^>]*>[\s\S]*?</\1>", " ", value or "", flags=re.I)
-    value = re.sub(r"<[^>]+>", " ", value)
-    return " ".join(html_lib.unescape(value).split())

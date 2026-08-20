@@ -27,9 +27,12 @@ class SourceSpec:
     url: str
     auth_mode: SourceAuthMode
     site_domain: str = ""
-    parser_profile: str = ""
     timezone_name: str = "Asia/Shanghai"
-    enabled_by_default: bool = True
+    base_source_id: str = ""
+
+    @property
+    def base_id(self) -> str:
+        return self.base_source_id or self.source_id
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,8 @@ class ForumEntry:
     content: str
     link: str
     published_at: datetime
+    source_title: str = ""
+    base_source_id: str = ""
 
 
 @dataclass
@@ -50,14 +55,4 @@ class SourceFetchResult:
     success: bool
     entries: list[ForumEntry] = field(default_factory=list)
     error: str = ""
-    auth_status: str = ""
     fetched_at: datetime | None = None
-
-
-@dataclass
-class DigestRunResult:
-    started_at: datetime
-    finished_at: datetime
-    source_results: list[SourceFetchResult]
-    new_entries: list[ForumEntry]
-    notification_sent: bool = False

@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import requests
-
 from ..auth.mp_site_cookie import SiteAuth
-from ..models import SourceFetchResult, SourceSpec
+from ..models import SourceSpec
 from ..parsers.nexus_topic import extract_previous_page_url, is_login_page, parse_nexus_topic
+from ..url_utils import same_origin
+from .common import fetch_result, get_same_origin
 
 
 class NexusTopicFetcher:
@@ -16,18 +16,16 @@ class NexusTopicFetcher:
         self.pages = min(5, max(1, pages))
         self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
 
-    def fetch(self, source: SourceSpec, auth: SiteAuth) -> SourceFetchResult:
+    def fetch(self, source: SourceSpec, auth: SiteAuth):
         fetched_at = datetime.now(timezone.utc)
         if not auth.cookie:
-            return SourceFetchResult(
-                source.source_id, source.title, False,
-                error="未找到 MoviePilot 站点 Cookie",
-                auth_status=auth.status,
+            return fetch_result(
+                source, False, error="未找到 MoviePilot 站点 Cookie",
                 fetched_at=fetched_at,
             )
         headers = {
             "Cookie": auth.cookie,
-            "User-Agent": auth.ua or "Mozilla/5.0 PTNewsWatch/0.1",
+            "User-Agent": auth.ua or "Mozilla/5.0 PTNewsWatch/0.2",
             "Referer": source.url.split("#", 1)[0],
         }
         entries_by_id = {}
@@ -36,12 +34,9 @@ class NexusTopicFetcher:
             for _ in range(self.pages):
                 if not url:
                     break
-                response = requests.get(
-                    url,
-                    headers=headers,
-                    proxies=self.proxies,
-                    timeout=(5, self.timeout),
-                    allow_redirects=True,
+                response = get_same_origin(
+                    url, origin_url=source.url, headers=headers,
+                    proxies=self.proxies, timeout=self.timeout, context="论坛",
                 )
                 response.raise_for_status()
                 if is_login_page(response.url, response.text):
@@ -50,25 +45,16 @@ class NexusTopicFetcher:
                 if not entries:
                     if not entries_by_id:
                         raise ValueError("论坛最后一页未解析到帖子")
-                    # 已取得最后一页时，前一页结构异常不丢弃已获取结果。
                     break
                 for entry in entries:
                     entries_by_id[entry.entry_id] = entry
-                url = extract_previous_page_url(response.text, response.url)
-            return SourceFetchResult(
-                source.source_id,
-                source.title,
-                True,
-                entries=list(entries_by_id.values()),
-                auth_status="mp_site_cookie",
+                previous = extract_previous_page_url(response.text, response.url)
+                if previous and not same_origin(source.url, previous):
+                    raise PermissionError("论坛上一页链接指向非同源地址")
+                url = previous
+            return fetch_result(
+                source, True, entries=list(entries_by_id.values()),
                 fetched_at=fetched_at,
             )
         except Exception as error:
-            return SourceFetchResult(
-                source.source_id,
-                source.title,
-                False,
-                error=str(error),
-                auth_status="cookie_invalid" if isinstance(error, PermissionError) else auth.status,
-                fetched_at=fetched_at,
-            )
+            return fetch_result(source, False, error=str(error), fetched_at=fetched_at)

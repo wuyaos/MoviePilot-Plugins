@@ -14,6 +14,7 @@ from app.schemas import NotificationType
 
 from .core.config import PluginConfig
 from .core.engine import DigestEngine
+from .core.source_instances import validate_source_config
 from .core.source_registry import SOURCE_BY_ID
 from .ui.form import build_form
 from .ui.page import build_page
@@ -23,7 +24,7 @@ class PTNewsWatch(_PluginBase):
     plugin_name = "PT 资讯动态监控"
     plugin_desc = "汇总 PT 论坛主题、RSS 与 Atom 新消息"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "0.1.0"
+    plugin_version = "0.2.0"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "ptnewswatch_"
@@ -36,14 +37,25 @@ class PTNewsWatch(_PluginBase):
         super().__init__()
         self.config = PluginConfig()
         self._pending_config: dict | None = None
+        self._config_error = ""
 
     def init_plugin(self, config: dict | None = None):
-        self.config = PluginConfig.from_dict(config)
+        raw_config = config or {}
+        self.config = PluginConfig.from_dict(raw_config)
+        try:
+            validate_source_config(self.config)
+            self._config_error = ""
+        except ValueError as error:
+            self._config_error = str(error)
+            logger.error("PTNewsWatch 配置错误：%s", self._config_error)
         manual_requested = self.config.onlyonce
-        if manual_requested:
+        remove_legacy_first_run = "first_run_push_recent" in raw_config
+        if manual_requested or remove_legacy_first_run:
             self.config.onlyonce = False
+            # 完整回写已知字段，移除不再使用的首次运行开关且不覆盖其它配置。
             self.update_config(self.config.to_dict())
-            self._start_run("")
+            if manual_requested and not self._config_error:
+                self._start_run("")
 
     def get_state(self) -> bool:
         return self.config.enabled
@@ -98,7 +110,7 @@ class PTNewsWatch(_PluginBase):
         })
 
     def get_service(self) -> list[dict]:
-        if not self.config.enabled or not self.config.cron:
+        if not self.config.enabled or not self.config.cron or self._config_error:
             return []
         try:
             trigger = CronTrigger.from_crontab(self.config.cron, timezone=settings.TZ)
@@ -117,7 +129,7 @@ class PTNewsWatch(_PluginBase):
         return self.run_once("")
 
     def _start_run(self, source_filter: str) -> bool:
-        if type(self)._run_lock.locked():
+        if self._config_error or type(self)._run_lock.locked():
             return False
         threading.Thread(
             target=self.run_once,
@@ -159,10 +171,17 @@ class PTNewsWatch(_PluginBase):
         self.post_message(mtype=NotificationType.Plugin, title=title, text=text)
 
     def get_form(self) -> tuple[list[dict], dict[str, Any]]:
-        return build_form(self.config)
+        return build_form(self.config, self._config_error)
 
     def get_page(self) -> list[dict]:
-        return build_page(self.get_data("state") or {}, settings.TZ)
+        try:
+            return build_page(self.get_data("state") or {}, settings.TZ, config=self.config)
+        except Exception as error:
+            logger.error("PTNewsWatch 数据页构建失败：%s", error)
+            return [{"component": "VAlert", "props": {
+                "type": "error", "variant": "tonal",
+                "text": f"数据页构建失败：{error}",
+            }}]
 
     def stop_service(self):
         return None

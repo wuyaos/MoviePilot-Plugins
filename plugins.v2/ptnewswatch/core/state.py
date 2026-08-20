@@ -9,14 +9,12 @@ from .models import ForumEntry, SourceFetchResult
 
 MAX_SEEN_PER_SOURCE = 500
 MAX_RECENT_ENTRIES = 500
-MAX_RUN_HISTORY = 100
 
 
 def default_state() -> dict[str, Any]:
     return {
         "sources": {},
         "recent_entries": [],
-        "history": [],
         "last_run": {},
     }
 
@@ -28,14 +26,20 @@ def normalize_state(raw: Any) -> dict[str, Any]:
     if isinstance(raw.get("sources"), dict):
         state["sources"] = deepcopy(raw["sources"])
         for source_state in state["sources"].values():
-            if isinstance(source_state, dict) and isinstance(source_state.get("seen_entry_ids"), list):
+            if not isinstance(source_state, dict):
+                continue
+            if isinstance(source_state.get("seen_entry_ids"), list):
                 source_state["seen_entry_ids"] = list(dict.fromkeys(
                     str(value) for value in source_state["seen_entry_ids"] if value
                 ))[-MAX_SEEN_PER_SOURCE:]
+            if "initialized" not in source_state:
+                source_state["initialized"] = bool(
+                    source_state.get("seen_entry_ids") or source_state.get("last_success_at")
+                )
+            for legacy_key in ("base_source_id", "source_title", "source_url", "last_auth_status"):
+                source_state.pop(legacy_key, None)
     if isinstance(raw.get("recent_entries"), list):
         state["recent_entries"] = [item for item in raw["recent_entries"] if isinstance(item, dict)][-MAX_RECENT_ENTRIES:]
-    if isinstance(raw.get("history"), list):
-        state["history"] = [item for item in raw["history"] if isinstance(item, dict)][-MAX_RUN_HISTORY:]
     if isinstance(raw.get("last_run"), dict):
         state["last_run"] = deepcopy(raw["last_run"])
     return state
@@ -44,8 +48,6 @@ def normalize_state(raw: Any) -> dict[str, Any]:
 def apply_source_result(
     state: dict[str, Any],
     result: SourceFetchResult,
-    *,
-    first_run_push_recent: bool,
 ) -> list[ForumEntry]:
     """成功时更新来源 seen；失败时严格不推进水位。"""
     source_state = state.setdefault("sources", {}).setdefault(result.source_id, {
@@ -53,10 +55,8 @@ def apply_source_result(
         "seen_entry_ids": [],
         "last_success_at": "",
         "last_error": "",
-        "last_auth_status": "",
         "last_new_count": 0,
     })
-    source_state["last_auth_status"] = result.auth_status
     if not result.success:
         source_state["last_error"] = result.error
         source_state["last_new_count"] = 0
@@ -66,7 +66,7 @@ def apply_source_result(
     seen_set = set(seen)
     ordered = sorted(result.entries, key=lambda item: item.published_at)
     if not source_state.get("initialized"):
-        new_entries = ordered if first_run_push_recent else []
+        new_entries = ordered
         source_state["initialized"] = True
     else:
         new_entries = [entry for entry in ordered if entry.entry_id not in seen_set]
@@ -103,27 +103,17 @@ def add_recent_entries(state: dict[str, Any], entries: list[ForumEntry], history
     state["recent_entries"] = records[-MAX_RECENT_ENTRIES:]
 
 
-def record_run(state: dict[str, Any], record: dict[str, Any], history_days: int) -> None:
+def record_run(state: dict[str, Any], record: dict[str, Any]) -> None:
     normalized = dict(record)
     normalized.setdefault("time", _iso(datetime.now(timezone.utc)))
     state["last_run"] = normalized
-    history = [item for item in state.get("history", []) if isinstance(item, dict)]
-    history.append(normalized)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, history_days))
-    retained = []
-    for item in history:
-        try:
-            timestamp = datetime.fromisoformat(str(item.get("time", "")).replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if timestamp >= cutoff:
-            retained.append(item)
-    state["history"] = retained[-MAX_RUN_HISTORY:]
 
 
 def entry_to_dict(entry: ForumEntry) -> dict[str, Any]:
     return {
         "source_id": entry.source_id,
+        "base_source_id": entry.base_source_id or entry.source_id.split("#", 1)[0],
+        "source_title": entry.source_title,
         "entry_id": entry.entry_id,
         "title": entry.title,
         "author": entry.author,

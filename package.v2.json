@@ -493,11 +493,12 @@
         "name": "PT 资讯动态监控",
         "description": "汇总 PT 论坛主题、RSS 与 Atom 新消息，仅推送未见动态。",
         "labels": "PT,论坛,RSS,Atom,资讯",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v0.2.0": "来源默认关闭并支持多 URL 独立水位；首次固定推送最近消息；修复 PTerClub 正文定位和 Feed 段落格式；优化可滚动资讯、紧凑概览/来源状态、标题链接通知与安全 URL 边界。",
             "v0.1.0": "初始模块化版本：来源注册、平铺配置与领域模型骨架。"
         }
     }

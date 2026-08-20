@@ -3,10 +3,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import requests
-
-from ..models import SourceFetchResult, SourceSpec
+from ..models import SourceSpec
 from ..parsers.feed import parse_feed
+from .common import fetch_result, get_same_origin
 
 
 class FeedFetcher:
@@ -14,42 +13,27 @@ class FeedFetcher:
         self.timeout = timeout
         self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
 
-    def fetch(self, source: SourceSpec, *, cookie: str = "", ua: str = "") -> SourceFetchResult:
+    def fetch(self, source: SourceSpec, *, cookie: str = "", ua: str = ""):
         headers = {
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
-            "User-Agent": ua or "Mozilla/5.0 PTNewsWatch/0.1",
+            "User-Agent": ua or "Mozilla/5.0 PTNewsWatch/0.2",
             "Referer": _origin(source.url),
         }
         if cookie:
             headers["Cookie"] = cookie
         fetched_at = datetime.now(timezone.utc)
         try:
-            response = requests.get(
-                source.url,
-                headers=headers,
-                proxies=self.proxies,
-                timeout=(5, self.timeout),
-                allow_redirects=True,
+            response = get_same_origin(
+                source.url, origin_url=source.url, headers=headers,
+                proxies=self.proxies, timeout=self.timeout, context="来源",
             )
             response.raise_for_status()
-            entries = parse_feed(response.content, source)
-            return SourceFetchResult(
-                source_id=source.source_id,
-                source_title=source.title,
-                success=True,
-                entries=entries,
-                auth_status="cookie" if cookie else "public",
+            return fetch_result(
+                source, True, entries=parse_feed(response.content, source),
                 fetched_at=fetched_at,
             )
         except Exception as error:
-            return SourceFetchResult(
-                source_id=source.source_id,
-                source_title=source.title,
-                success=False,
-                error=str(error),
-                auth_status="request_failed",
-                fetched_at=fetched_at,
-            )
+            return fetch_result(source, False, error=str(error), fetched_at=fetched_at)
 
 
 def _origin(url: str) -> str:

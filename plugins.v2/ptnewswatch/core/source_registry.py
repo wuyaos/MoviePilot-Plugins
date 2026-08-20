@@ -11,7 +11,6 @@ SOURCES: tuple[SourceSpec, ...] = (
         url="https://pterclub.net/forums.php?action=viewtopic&topicid=2327&page=last#last",
         auth_mode=SourceAuthMode.MP_SITE_COOKIE,
         site_domain="pterclub.net",
-        parser_profile="nexus_pter",
     ),
     SourceSpec(
         source_id="tjupt_digest",
@@ -21,7 +20,6 @@ SOURCES: tuple[SourceSpec, ...] = (
         url="https://www.tjupt.org/forums.php?action=viewtopic&topicid=15461&page=last#last",
         auth_mode=SourceAuthMode.MP_SITE_COOKIE,
         site_domain="tjupt.org",
-        parser_profile="nexus_tjupt",
     ),
     SourceSpec(
         source_id="fengchao_pt",
@@ -30,7 +28,7 @@ SOURCES: tuple[SourceSpec, ...] = (
         kind=SourceKind.RSS,
         url="https://pting.club/boards/pt/rss.xml",
         auth_mode=SourceAuthMode.PUBLIC,
-        parser_profile="rss",
+        site_domain="pting.club",
     ),
     SourceSpec(
         source_id="fengchao_invites",
@@ -39,7 +37,7 @@ SOURCES: tuple[SourceSpec, ...] = (
         kind=SourceKind.RSS,
         url="https://pting.club/boards/pt-invites/rss.xml",
         auth_mode=SourceAuthMode.PUBLIC,
-        parser_profile="rss",
+        site_domain="pting.club",
     ),
     SourceSpec(
         source_id="invites_pt_fy",
@@ -49,7 +47,6 @@ SOURCES: tuple[SourceSpec, ...] = (
         url="https://invites.fun/atom/t/PT_FY",
         auth_mode=SourceAuthMode.INVITES_COOKIE,
         site_domain="invites.fun",
-        parser_profile="atom",
     ),
 )
 
