@@ -269,7 +269,12 @@ class BakaBTBrush(_PluginBase):
 
     def get_page(self) -> List[dict]:
         try:
-            return build_page(normalize_state(self.get_data("state")))
+            config = self._runtime_config or BrushConfig.from_mapping({})
+            return build_page(
+                normalize_state(self.get_data("state")),
+                max_height=config.page_max_height,
+                visible_items=config.page_visible_items,
+            )
         except Exception as err:
             logger.error(f"BakaBT 刷流数据页加载失败：{type(err).__name__}")
             return [{

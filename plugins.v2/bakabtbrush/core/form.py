@@ -113,6 +113,14 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
                 "自动删种默认关闭；仅处理分类匹配、包含 bakabt 标签且由本插件登记的任务。删除文件默认关闭，排除标签优先级最高。",
             ))],
         },
+        _section("数据页", "超出可见条目数或窗口高度后在卡片内部滚动"),
+        {
+            "component": "VRow",
+            "content": [
+                _col(6, _number("page_max_height", "窗口最大高度（px）")),
+                _col(6, _number("page_visible_items", "最多可见条目数")),
+            ],
+        },
     ]
     model = {
         "enabled": False,
@@ -141,6 +149,8 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
         "delete_protection_minutes": 60,
         "delete_exclude_tags": "H&R,保留",
         "delete_expired_freeleech_incomplete": False,
+        "page_max_height": 520,
+        "page_visible_items": 8,
     }
     return [{"component": "VForm", "content": content}], model
 

@@ -17,6 +17,17 @@ def _find_text(node):
             yield from _find_text(child)
 
 
+def _find_components(node, component):
+    if isinstance(node, dict):
+        if node.get("component") == component:
+            yield node
+        for child in node.get("content", []) or []:
+            yield from _find_components(child, component)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _find_components(child, component)
+
+
 def _find_href(node):
     if isinstance(node, dict):
         href = (node.get("props") or {}).get("href")
@@ -78,7 +89,7 @@ def test_page_has_overview_current_tasks_linked_history_and_deletions():
         "ratio": 3,
     }])
 
-    page = build_page(state)
+    page = build_page(state, max_height=320, visible_items=2)
     cards = page[0]["content"]
     texts = list(_find_text(page))
     hrefs = list(_find_href(page))
@@ -94,3 +105,7 @@ def test_page_has_overview_current_tasks_linked_history_and_deletions():
     assert "https://bakabt.me/torrent/1/example" in hrefs
     assert "https://bakabt.me/torrent/2/example" in hrefs
     assert "https://bakabt.me/torrent/3/example" in hrefs
+    tables = list(_find_components(page, "VTable"))
+    assert tables
+    assert all(table["props"]["fixed-header"] is True for table in tables)
+    assert all(table["props"]["height"] <= 320 for table in tables)

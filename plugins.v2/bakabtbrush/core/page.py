@@ -25,12 +25,16 @@ _STATUS_COLOR = {
 }
 
 
-def build_page(state: dict[str, Any]) -> list[dict]:
+def build_page(
+    state: dict[str, Any], *, max_height: int = 520, visible_items: int = 8,
+) -> list[dict]:
+    max_height = min(1600, max(240, int(max_height)))
+    visible_items = min(30, max(1, int(visible_items)))
     return [
         _overview_cards(state),
-        _current_downloads(state),
-        _history_table(state),
-        _deletion_table(state),
+        _current_downloads(state, max_height, visible_items),
+        _history_table(state, max_height, visible_items),
+        _deletion_table(state, max_height, visible_items),
     ]
 
 
@@ -107,7 +111,7 @@ def _card(title: str, icon: str, color: str, lines: list[str]) -> dict:
     }
 
 
-def _current_downloads(state: dict[str, Any]) -> dict:
+def _current_downloads(state: dict[str, Any], max_height: int, visible_items: int) -> dict:
     qb = state.get("qb") or {}
     torrents = [
         item for item in qb.get("torrents") or []
@@ -145,11 +149,24 @@ def _current_downloads(state: dict[str, Any]) -> dict:
     return {
         "component": "VCard",
         "props": {"variant": "flat", "class": "rounded-lg mb-3", "border": True},
-        "content": [title, {"component": "VDivider"}, {"component": "VRow", "props": {"class": "pa-2"}, "content": rows}],
+        "content": [
+            title,
+            {"component": "VDivider"},
+            {
+                "component": "div",
+                "props": {
+                    "style": (
+                        f"max-height: {_window_height(max_height, visible_items, 132)}px; "
+                        "overflow-y: auto; overflow-x: hidden;"
+                    ),
+                },
+                "content": [{"component": "VRow", "props": {"class": "pa-2"}, "content": rows}],
+            },
+        ],
     }
 
 
-def _history_table(state: dict[str, Any]) -> dict:
+def _history_table(state: dict[str, Any], max_height: int, visible_items: int) -> dict:
     history = list(reversed((state.get("history") or [])[-20:]))
     title = _section_title("mdi-history", "运行历史")
     if not history:
@@ -172,10 +189,13 @@ def _history_table(state: dict[str, Any]) -> dict:
                 _cell(_truncate(str(event.get("detail") or ""), 100)),
             ],
         })
-    return _table_card(title, ("时间", "状态", "本轮候选 / 推送", "推送", "详情"), rows)
+    return _table_card(
+        title, ("时间", "状态", "本轮候选 / 推送", "推送", "详情"), rows,
+        _window_height(max_height, visible_items, 62),
+    )
 
 
-def _deletion_table(state: dict[str, Any]) -> dict:
+def _deletion_table(state: dict[str, Any], max_height: int, visible_items: int) -> dict:
     deletions = list(reversed((state.get("deletions") or [])[-20:]))
     title = _section_title("mdi-delete-clock-outline", "自动删除历史")
     if not deletions:
@@ -199,7 +219,10 @@ def _deletion_table(state: dict[str, Any]) -> dict:
                 _cell(str(record.get("ratio") or 0)),
             ],
         })
-    return _table_card(title, ("时间", "种子", "删除原因", "文件", "上传量", "分享率"), rows)
+    return _table_card(
+        title, ("时间", "种子", "删除原因", "文件", "上传量", "分享率"), rows,
+        _window_height(max_height, visible_items, 56),
+    )
 
 
 def _torrent_cell(event: dict[str, Any], added_by_title: dict[str, dict[str, Any]]) -> dict:
@@ -266,7 +289,9 @@ def _status_cell(status: str) -> dict:
     }
 
 
-def _table_card(title: dict, headers: tuple[str, ...], rows: list[dict]) -> dict:
+def _table_card(
+    title: dict, headers: tuple[str, ...], rows: list[dict], height: int,
+) -> dict:
     return {
         "component": "VCard",
         "props": {"variant": "flat", "class": "rounded-lg mb-3", "border": True},
@@ -275,7 +300,7 @@ def _table_card(title: dict, headers: tuple[str, ...], rows: list[dict]) -> dict
             {"component": "VDivider"},
             {
                 "component": "VTable",
-                "props": {"density": "compact"},
+                "props": {"density": "compact", "fixed-header": True, "height": height},
                 "content": [
                     {"component": "thead", "content": [{
                         "component": "tr",
@@ -344,6 +369,10 @@ def _format_time(value: Any) -> str:
 def _parse_run_time(value: Any):
     from .presentation import parse_datetime
     return parse_datetime(value)
+
+
+def _window_height(maximum: int, visible_items: int, row_height: int) -> int:
+    return min(maximum, 48 + visible_items * row_height)
 
 
 def _truncate(text: str, maximum: int) -> str:
