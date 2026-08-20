@@ -13,6 +13,7 @@ _STATUS_TEXT = {
     "no_candidate": "无候选",
     "no_qb_slot": "槽位已满",
     "failed": "失败",
+    "deleted": "自动删除",
     "unknown": "未运行",
 }
 _STATUS_COLOR = {
@@ -21,6 +22,7 @@ _STATUS_COLOR = {
     "no_candidate": "warning",
     "no_qb_slot": "info",
     "failed": "error",
+    "deleted": "error",
     "unknown": "grey",
 }
 
@@ -33,8 +35,7 @@ def build_page(
     return [
         _overview_cards(state),
         _current_downloads(state, max_height, visible_items),
-        _history_table(state, max_height, visible_items),
-        _deletion_table(state, max_height, visible_items),
+        _activity_history(state, max_height, visible_items),
     ]
 
 
@@ -166,62 +167,60 @@ def _current_downloads(state: dict[str, Any], max_height: int, visible_items: in
     }
 
 
-def _history_table(state: dict[str, Any], max_height: int, visible_items: int) -> dict:
-    history = list(reversed((state.get("history") or [])[-20:]))
-    title = _section_title("mdi-history", "运行历史")
-    if not history:
-        return _empty_card(title, "暂无运行记录")
+def _activity_history(state: dict[str, Any], max_height: int, visible_items: int) -> dict:
+    activities = [
+        {**event, "_kind": "run"}
+        for event in (state.get("history") or [])[-20:]
+        if isinstance(event, dict)
+    ]
+    activities.extend(
+        {**record, "_kind": "deleted", "status": "deleted"}
+        for record in (state.get("deletions") or [])[-20:]
+        if isinstance(record, dict)
+    )
+    activities.sort(key=lambda item: str(item.get("time") or ""), reverse=True)
+    title = _section_title("mdi-history", "运行与自动删除历史")
+    if not activities:
+        return _empty_card(title, "暂无运行或自动删除记录")
     added_by_title = {
         str(record.get("title") or ""): record
         for record in (state.get("added") or {}).values()
         if isinstance(record, dict) and record.get("title")
     }
     rows = []
-    for event in history:
+    for event in activities:
         status = str(event.get("status") or "unknown")
+        if event.get("_kind") == "deleted":
+            detail_cell = {
+                "component": "td",
+                "content": [_link_or_text(
+                    str(event.get("title") or "未知种子"),
+                    str(event.get("detail_url") or ""),
+                )],
+            }
+            note = (
+                f"{event.get('reason') or '命中删除条件'}；"
+                f"文件{'已删除' if event.get('delete_files') else '保留'}；"
+                f"上传 {float(event.get('uploaded_gb') or 0):.3f} GB；"
+                f"分享率 {event.get('ratio') or 0}"
+            )
+        else:
+            detail_cell = _torrent_cell(event, added_by_title)
+            note = "；".join(filter(None, [
+                str(event.get("push") or ""), str(event.get("detail") or ""),
+            ])) or "-"
         rows.append({
             "component": "tr",
             "content": [
                 _cell(_format_time(event.get("time", "")), "text-no-wrap"),
                 _status_cell(status),
-                _torrent_cell(event, added_by_title),
-                _cell(_truncate(str(event.get("push") or "未推送"), 24)),
-                _cell(_truncate(str(event.get("detail") or ""), 100)),
+                detail_cell,
+                _cell(_truncate(note, 140)),
             ],
         })
     return _table_card(
-        title, ("时间", "状态", "本轮候选 / 推送", "推送", "详情"), rows,
+        title, ("时间", "状态", "详情", "备注"), rows,
         _window_height(max_height, visible_items, 62),
-    )
-
-
-def _deletion_table(state: dict[str, Any], max_height: int, visible_items: int) -> dict:
-    deletions = list(reversed((state.get("deletions") or [])[-20:]))
-    title = _section_title("mdi-delete-clock-outline", "自动删除历史")
-    if not deletions:
-        return _empty_card(title, "暂无自动删除记录")
-    rows = []
-    for record in deletions:
-        rows.append({
-            "component": "tr",
-            "content": [
-                _cell(_format_time(record.get("time", "")), "text-no-wrap"),
-                {
-                    "component": "td",
-                    "content": [_link_or_text(
-                        str(record.get("title") or "未知种子"),
-                        str(record.get("detail_url") or ""),
-                    )],
-                },
-                _cell(str(record.get("reason") or "-")),
-                _cell("已删除" if record.get("delete_files") else "保留"),
-                _cell(f"{float(record.get('uploaded_gb') or 0):.3f} GB"),
-                _cell(str(record.get("ratio") or 0)),
-            ],
-        })
-    return _table_card(
-        title, ("时间", "种子", "删除原因", "文件", "上传量", "分享率"), rows,
-        _window_height(max_height, visible_items, 56),
     )
 
 

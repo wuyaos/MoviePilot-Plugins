@@ -96,12 +96,14 @@ def test_page_has_overview_current_tasks_linked_history_and_deletions():
 
     assert len(cards) == 4
     assert {"BakaBT 流量", "qB 刷流流量", "历史下载种子", "上次运行"}.issubset(texts)
-    assert {"当前 BakaBT 下载流程", "运行历史", "自动删除历史"}.issubset(texts)
-    assert {"时间", "状态", "本轮候选 / 推送", "推送", "详情"}.issubset(texts)
+    assert {"当前 BakaBT 下载流程", "运行与自动删除历史"}.issubset(texts)
+    assert {"时间", "状态", "详情", "备注"}.issubset(texts)
+    assert "自动删除历史" not in texts
     assert any("下载槽位：1/2" in text for text in texts)
     assert "Current Example" in texts
     assert "History Example" in texts
     assert "Deleted Example" in texts
+    assert "自动删除" in texts
     assert "https://bakabt.me/torrent/1/example" in hrefs
     assert "https://bakabt.me/torrent/2/example" in hrefs
     assert "https://bakabt.me/torrent/3/example" in hrefs

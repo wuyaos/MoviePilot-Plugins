@@ -24,7 +24,7 @@ MoviePilot V2 的 BakaBT Freeleech 刷流插件。
 - `core/runner.py`：单轮执行流程，支持不增删 qB 的一次性试运行。
 - `core/notification.py`：本地时区通知和详情链接。
 - `core/presentation.py`：通知与数据页共用时间格式。
-- `core/page.py`：总览、当前下载流程、链接化运行历史和删除历史。
+- `core/page.py`：总览、当前下载流程，以及运行/自动删除统一时间线。
 - `tests/`：脱离真实 Cookie、qB 和 MoviePilot 宿主的离线测试。
 
 ## 业务边界
@@ -42,7 +42,7 @@ MoviePilot V2 的 BakaBT Freeleech 刷流插件。
 
 - 使用 `_PluginBase.get_data/save_data` 保存状态，不引入 SQLite。
 - 顶部四卡：BakaBT 流量、qB 刷流流量、历史下载种子数、上次运行。
-- 数据页区分当前未完成下载、最近 20 条运行历史和最近 100 条自动删除历史；新记录种子名链接至详情页；窗口高度与可见条目数可配置，超出后内部滚动。
+- 数据页区分当前未完成下载和统一历史时间线；运行与自动删除记录按时间混排为“时间/状态/详情/备注”四列；种子名链接至详情页；窗口高度与可见条目数可配置，超出后内部滚动。
 - 所有时间以 UTC 存储，通知和页面按 MoviePilot `settings.TZ` 显示。
 
 ## 校验
