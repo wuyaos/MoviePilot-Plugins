@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from collections.abc import Callable
 from typing import Any
 
+from .cleanup import execute_cleanup
 from .config import BrushConfig
 from .downloader import (
     DownloaderError,
@@ -17,6 +18,7 @@ from .downloader import (
     list_bakabt_torrents,
     transfer_totals_mb,
 )
+from .filtering import matches_final_filters, prefilter_candidates, sort_key
 from .models import BakaBTTorrent
 from .scraper import BakaBTClient, BakaBTError
 from .state import (
@@ -27,6 +29,7 @@ from .state import (
     reset_detail_cache_for_day,
     restore_detail,
     update_account,
+    update_added_metadata,
     update_qb,
     was_added,
 )
@@ -41,6 +44,7 @@ class RunResult:
     downloading_count: int
     max_downloading: int
     previewed: tuple[BakaBTTorrent, ...] = ()
+    deleted: tuple[dict[str, Any], ...] = ()
 
     @property
     def should_notify_success(self) -> bool:
@@ -53,6 +57,10 @@ class RunResult:
     @property
     def should_notify_dry_run(self) -> bool:
         return self.status == "dry_run"
+
+    @property
+    def should_notify_deletion(self) -> bool:
+        return bool(self.deleted)
 
 
 def run_once(
@@ -75,6 +83,43 @@ def run_once(
             state, "failed", (), (), "qBittorrent 查询失败", 0, config.max_bakabt_downloading, now,
         )
 
+    deleted_records: list[dict[str, Any]] = []
+    cleanup_notes: list[str] = []
+    resolved_cookie = ""
+    runtime_client = client
+
+    # 自动删种先于槽位判断执行，否则 2/2 时永远无法清理超时任务。
+    if config.auto_delete and not dry_run:
+        records, notes = execute_cleanup(
+            config, state, qb_instance, qb_torrents, now, client=None,
+        )
+        deleted_records.extend(records)
+        cleanup_notes.extend(notes)
+
+        if config.delete_expired_freeleech_incomplete:
+            resolved_cookie = (cookie() if callable(cookie) else cookie).strip()
+            if resolved_cookie:
+                runtime_client = runtime_client or BakaBTClient(
+                    resolved_cookie,
+                    timeout=config.timeout,
+                    detail_retries=config.detail_request_retries,
+                )
+                records, notes = execute_cleanup(
+                    config, state, qb_instance, qb_torrents, now, client=runtime_client,
+                    freeleech_only=True,
+                    excluded_hashes={item["infohash"] for item in deleted_records},
+                )
+                deleted_records.extend(records)
+                cleanup_notes.extend(notes)
+            else:
+                cleanup_notes.append("促销过期检查跳过：未取得 BakaBT Cookie")
+
+        if deleted_records:
+            try:
+                qb_torrents = _sync_qb_state(config, state, qb_instance)
+            except DownloaderError:
+                cleanup_notes.append("自动删除后刷新 qB 状态失败")
+
     current_downloading = downloading_count(qb_torrents)
     slots = available_slots(config.max_bakabt_downloading, current_downloading)
     if slots == 0:
@@ -83,34 +128,54 @@ def run_once(
             "no_qb_slot",
             (),
             (),
-            f"当前 BakaBT 下载流程：{current_downloading}/{config.max_bakabt_downloading}",
+            _append_cleanup_note(
+                f"当前 BakaBT 下载流程：{current_downloading}/{config.max_bakabt_downloading}",
+                deleted_records,
+                cleanup_notes,
+            ),
             current_downloading,
             config.max_bakabt_downloading,
             now,
+            deleted=tuple(deleted_records),
         )
 
-    resolved_cookie = (cookie() if callable(cookie) else cookie).strip()
+    if not resolved_cookie:
+        resolved_cookie = (cookie() if callable(cookie) else cookie).strip()
     if not resolved_cookie:
         return _finish(
             state,
             "failed",
             (),
             (),
-            "未配置 BakaBT Cookie，且 CookieCloud 未匹配到 bakabt.me",
+            _append_cleanup_note(
+                "未配置 BakaBT Cookie，且 CookieCloud 未匹配到 bakabt.me",
+                deleted_records,
+                cleanup_notes,
+            ),
             current_downloading,
             config.max_bakabt_downloading,
             now,
+            deleted=tuple(deleted_records),
         )
-    client = client or BakaBTClient(
+    runtime_client = runtime_client or BakaBTClient(
         resolved_cookie,
         timeout=config.timeout,
         detail_retries=config.detail_request_retries,
     )
+    client = runtime_client
     try:
         page = client.fetch_browse()
     except BakaBTError as err:
         return _finish(
-            state, "failed", (), (), str(err), current_downloading, config.max_bakabt_downloading, now,
+            state,
+            "failed",
+            (),
+            (),
+            _append_cleanup_note(str(err), deleted_records, cleanup_notes),
+            current_downloading,
+            config.max_bakabt_downloading,
+            now,
+            deleted=tuple(deleted_records),
         )
 
     account_note = ""
@@ -124,9 +189,12 @@ def run_once(
         except BakaBTError:
             # 账户卡保留上一次成功快照，账户页失败不阻断本轮种子处理。
             account_note = "账户页读取失败"
+    account_note = _append_cleanup_note(account_note, deleted_records, cleanup_notes)
+    for item in page.torrents:
+        update_added_metadata(state, item)
 
     candidates = [
-        item for item in prefilter_candidates(page.torrents, config, now)
+        item for item in prefilter_candidates(page.torrents, config)
         if not was_added(state, item.torrent_id)
     ]
     if not candidates:
@@ -139,6 +207,7 @@ def run_once(
             current_downloading,
             config.max_bakabt_downloading,
             now,
+            deleted=tuple(deleted_records),
         )
 
     existing_hashes = {item.infohash for item in qb_torrents}
@@ -179,7 +248,7 @@ def run_once(
             continue
 
     # 详情页时间是筛选和排序的唯一来源：发布时间最新（发布间隔最短）优先。
-    detail_candidates.sort(key=lambda item: _sort_key(item, now), reverse=True)
+    detail_candidates.sort(key=lambda item: sort_key(item, now), reverse=True)
     candidate_limit = slots if slots is not None else len(detail_candidates)
     for item in detail_candidates:
         selected_count = len(previewed) if dry_run else len(added)
@@ -245,6 +314,7 @@ def run_once(
             now,
             torrent_titles=processed_titles,
             previewed=tuple(previewed),
+            deleted=tuple(deleted_records),
         )
 
     # 刷新 qB 快照，让数据页和通知反映本轮提交后的实际状态。
@@ -267,6 +337,7 @@ def run_once(
             current_downloading,
             config.max_bakabt_downloading,
             now,
+            deleted=tuple(deleted_records),
         )
     if failures:
         return _finish(
@@ -279,6 +350,7 @@ def run_once(
             config.max_bakabt_downloading,
             now,
             torrent_titles=processed_titles,
+            deleted=tuple(deleted_records),
         )
     return _finish(
         state,
@@ -290,40 +362,8 @@ def run_once(
         config.max_bakabt_downloading,
         now,
         torrent_titles=processed_titles,
+        deleted=tuple(deleted_records),
     )
-
-
-def prefilter_candidates(
-    torrents: list[BakaBTTorrent], config: BrushConfig, now: datetime | None = None,
-) -> list[BakaBTTorrent]:
-    """只保留浏览页标记为 Today 的 Freeleech，发布时间由详情页最终确认。"""
-    _utc(now)  # 保留参数契约；精确时间筛选在详情页后执行。
-    return [
-        item for item in torrents
-        if item.is_freeleech
-        and _matches_size(item, config)
-        and _is_today_listing(item)
-    ]
-
-
-def _is_today_listing(item: BakaBTTorrent) -> bool:
-    """BakaBT 浏览页的 Today 标签是详情页请求前唯一可靠的近期筛选条件。"""
-    added = " ".join((item.added_text or "").lower().split())
-    return added == "today" or added.startswith("today ")
-
-
-def matches_final_filters(
-    item: BakaBTTorrent, config: BrushConfig, now: datetime | None = None,
-) -> bool:
-    """详情页复核后的最终判断；启用了时间限制却无法得到时间时安全跳过。"""
-    now = _utc(now)
-    if not item.is_freeleech or not _matches_size(item, config):
-        return False
-    if config.min_publish_age_minutes == 0 and config.max_publish_age_minutes == 0:
-        return True
-    if item.published_at is None:
-        return False
-    return _matches_time(item, config, now)
 
 
 def _sync_qb_state(config: BrushConfig, state: dict[str, Any], qb_instance: Any):
@@ -336,9 +376,25 @@ def _sync_qb_state(config: BrushConfig, state: dict[str, Any], qb_instance: Any)
         downloaded_mb=downloaded_mb,
         downloading_count=current_downloading,
         max_downloading=config.max_bakabt_downloading,
+        torrents=torrents,
     )
     remember_completed(state, completed_infohashes(torrents))
     return torrents
+
+
+def _append_cleanup_note(
+    primary: str,
+    deleted: list[dict[str, Any]],
+    notes: list[str],
+) -> str:
+    extras = []
+    if deleted:
+        extras.append(f"自动删除 {len(deleted)} 个 qB 任务")
+    extras.extend(notes)
+    result = primary
+    for note in extras:
+        result = _append_note(result, note)
+    return result
 
 
 def _finish(
@@ -352,6 +408,7 @@ def _finish(
     now: datetime,
     torrent_titles: list[str] | None = None,
     previewed: tuple[BakaBTTorrent, ...] = (),
+    deleted: tuple[dict[str, Any], ...] = (),
 ) -> RunResult:
     titles = (
         [item.title for item in added]
@@ -364,10 +421,23 @@ def _finish(
         else "推送失败" if failures
         else "未推送"
     )
+    linked_items = added or previewed
     record_run(state, {
         "time": now.isoformat().replace("+00:00", "Z"),
         "status": status,
         "torrent": "、".join(titles) if titles else "-",
+        "torrent_links": [
+            {
+                "title": item.title,
+                "url": item.detail_url,
+                "published_at": (
+                    item.published_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+                    if item.published_at else ""
+                ),
+                "size_mb": round(max(0.0, item.size_mb), 2),
+            }
+            for item in linked_items
+        ],
         "push": push,
         "detail": detail,
     })
@@ -379,42 +449,8 @@ def _finish(
         downloading_count=downloading_count,
         max_downloading=max_downloading,
         previewed=previewed,
+        deleted=deleted,
     )
-
-
-def _matches_size(item: BakaBTTorrent, config: BrushConfig) -> bool:
-    if item.size_mb < 0:
-        return False
-    if config.min_size_mb > 0 and item.size_mb < config.min_size_mb:
-        return False
-    if config.max_size_mb > 0 and item.size_mb > config.max_size_mb:
-        return False
-    return True
-
-
-def _matches_time(item: BakaBTTorrent, config: BrushConfig, now: datetime) -> bool:
-    if item.published_at is None:
-        return config.min_publish_age_minutes == 0 and config.max_publish_age_minutes == 0
-    published_at = _utc(item.published_at)
-    age_minutes = max(0, (now - published_at).total_seconds() / 60)
-    if config.min_publish_age_minutes > 0 and age_minutes < config.min_publish_age_minutes:
-        return False
-    if config.max_publish_age_minutes > 0 and age_minutes > config.max_publish_age_minutes:
-        return False
-    return True
-
-
-def _sort_key(item: BakaBTTorrent, now: datetime) -> tuple[float, float]:
-    """发布时间新优先；同一时间使用较大体积打破平局。"""
-    if item.published_at is not None:
-        published_at = _utc(item.published_at).timestamp()
-    elif _is_today_listing(item):
-        published_at = now.timestamp()
-    elif item.added_text.lower() == "yesterday":
-        published_at = now.timestamp() - 24 * 60 * 60
-    else:
-        published_at = 0
-    return published_at, item.size_mb
 
 
 def _append_note(primary: str, note: str) -> str:

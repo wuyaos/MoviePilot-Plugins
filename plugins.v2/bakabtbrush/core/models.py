@@ -50,7 +50,7 @@ class DetailPage:
 
 @dataclass(frozen=True)
 class QBTorrentSnapshot:
-    """qB 中与 BakaBT 刷流任务有关的最小字段集合。"""
+    """qB 中与 BakaBT 刷流、展示和自动删除有关的字段集合。"""
 
     infohash: str
     name: str
@@ -60,3 +60,10 @@ class QBTorrentSnapshot:
     progress: float
     uploaded: int
     downloaded: int
+    added_on: int = 0
+    completion_on: int = 0
+    last_activity: int = 0
+    seeding_time: int = 0
+    ratio: float = 0.0
+    up_speed: int = 0
+    total_size: int = 0

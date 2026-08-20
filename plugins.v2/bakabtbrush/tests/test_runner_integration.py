@@ -28,6 +28,7 @@ class FakeQBInstance:
     def __init__(self, torrents=None):
         self.qbc = FakeQBC(torrents)
         self.add_calls = []
+        self.delete_calls = []
 
     def add_torrent(self, **kwargs):
         self.add_calls.append(kwargs)
@@ -42,6 +43,11 @@ class FakeQBInstance:
             downloaded=0,
         ))
         return True, [INFOHASH]
+
+    def delete_torrents(self, **kwargs):
+        self.delete_calls.append(kwargs)
+        deleted = set(kwargs.get("ids") or [])
+        self.qbc.torrents = [item for item in self.qbc.torrents if item.hash not in deleted]
 
 
 class FakeClient:
@@ -67,9 +73,8 @@ class FakeClient:
 
 def _config(**overrides):
     values = {
-        "min_publish_age_minutes": 10,
-        "max_publish_age_minutes": 60,
-        "min_size_mb": 500,
+        "publish_age_range_minutes": "10-60",
+        "size_range_mb": "500-2000",
         "max_bakabt_downloading": 2,
         "save_path": "/downloads/bakabt",
     }
@@ -108,6 +113,49 @@ def test_no_qb_slot_stops_before_any_bakabt_request():
     assert result.status == "no_qb_slot"
     assert client.browse_calls == 0
     assert cookie_lookups == []
+
+
+def test_auto_cleanup_runs_before_slot_check_and_records_deletion():
+    existing = SimpleNamespace(
+        hash="b" * 40,
+        name="existing",
+        category="刷流",
+        tags="bakabt,刷流",
+        state="uploading",
+        progress=1,
+        uploaded=3 * 1024**3,
+        downloaded=1024**3,
+        ratio=3,
+        added_on=int((NOW - timedelta(hours=30)).timestamp()),
+        seeding_time=25 * 3600,
+        last_activity=int(NOW.timestamp()),
+    )
+    state = default_state()
+    state["added"]["360859"] = {
+        "infohash": "b" * 40,
+        "title": "existing",
+        "detail_url": "https://bakabt.me/torrent/existing/example",
+        "added_at": (NOW - timedelta(hours=30)).isoformat(),
+    }
+    instance = FakeQBInstance([existing])
+    client = FakeClient(_item())
+    result = run_once(
+        _config(
+            max_bakabt_downloading=1,
+            auto_delete=True,
+            delete_ratio=2,
+            delete_protection_minutes=0,
+        ),
+        "cookie",
+        state,
+        instance,
+        now=NOW,
+        client=client,
+    )
+
+    assert instance.delete_calls == [{"delete_file": False, "ids": ["b" * 40]}]
+    assert result.deleted[0]["title"] == "existing"
+    assert result.status == "no_candidate"
 
 
 def test_empty_cookie_after_slot_check_fails_without_bakabt_request():

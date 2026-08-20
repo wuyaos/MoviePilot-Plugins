@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
@@ -18,6 +19,8 @@ from app.schemas import NotificationType
 from .core.config import BrushConfig, ConfigError
 from .core.cookie import resolve_cookie
 from .core.downloader import DownloaderError, get_qb_instance
+from .core.form import build_form
+from .core.notification import build_notification
 from .core.page import build_page
 from .core.runner import RunResult, run_once
 from .core.scraper import BROWSE_URL
@@ -30,7 +33,7 @@ class BakaBTBrush(_PluginBase):
     plugin_name = "BakaBT 刷流"
     plugin_desc = "定时筛选 BakaBT Freeleech 种子并提交到 qBittorrent"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/bakabtbrush.png"
-    plugin_version = "0.1.2"
+    plugin_version = "0.1.3"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "bakabtbrush_"
@@ -45,15 +48,6 @@ class BakaBTBrush(_PluginBase):
     _cookie = ""
     _timeout = 20
     _detail_request_retries = 3
-    _min_publish_age_minutes = 0
-    _max_publish_age_minutes = 0
-    _min_size_mb = 0
-    _max_size_mb = 0
-    _downloader = ""
-    _qb_category = "刷流"
-    _qb_tags = "bakabt,刷流"
-    _save_path = ""
-    _max_bakabt_downloading = 2
 
     _scheduler: BackgroundScheduler | None = None
     _run_lock = threading.Lock()
@@ -99,15 +93,6 @@ class BakaBTBrush(_PluginBase):
         self._cookie = config.cookie
         self._timeout = config.timeout
         self._detail_request_retries = config.detail_request_retries
-        self._min_publish_age_minutes = config.min_publish_age_minutes
-        self._max_publish_age_minutes = config.max_publish_age_minutes
-        self._min_size_mb = config.min_size_mb
-        self._max_size_mb = config.max_size_mb
-        self._downloader = config.downloader
-        self._qb_category = config.qb_category
-        self._qb_tags = ",".join(config.qb_tags)
-        self._save_path = config.save_path
-        self._max_bakabt_downloading = config.max_bakabt_downloading
 
     def _consume_dry_run(self) -> bool:
         """取走一次性试运行标记；任务创建前即关闭，reload 不会重复执行。"""
@@ -118,7 +103,10 @@ class BakaBTBrush(_PluginBase):
 
     def _save_config(self) -> None:
         """完整回写配置，供 CookieCloud 补取 Cookie 等场景复用。"""
-        config = BrushConfig(
+        if not self._runtime_config:
+            return
+        config = replace(
+            self._runtime_config,
             enabled=self._enabled,
             notify=self._notify,
             dry_run=self._dry_run,
@@ -126,15 +114,6 @@ class BakaBTBrush(_PluginBase):
             cookie=self._cookie,
             timeout=self._timeout,
             detail_request_retries=self._detail_request_retries,
-            min_publish_age_minutes=self._min_publish_age_minutes,
-            max_publish_age_minutes=self._max_publish_age_minutes,
-            min_size_mb=self._min_size_mb,
-            max_size_mb=self._max_size_mb,
-            downloader=self._downloader,
-            qb_category=self._qb_category,
-            qb_tags=tuple(tag.strip() for tag in self._qb_tags.split(",") if tag.strip()),
-            save_path=self._save_path,
-            max_bakabt_downloading=self._max_bakabt_downloading,
         )
         self._runtime_config = config
         self.update_config(config.to_mapping(onlyonce=False))
@@ -187,7 +166,7 @@ class BakaBTBrush(_PluginBase):
                 return
             try:
                 qb_instance = get_qb_instance(config.downloader)
-                # run_once 在确认 qB 有空槽位后才会按需获取 Cookie、请求 BakaBT。
+                # 普通抓取仅在有空槽位后访问站点；启用促销过期清理时会先读取详情确认。
                 result = run_once(
                     config,
                     self._resolve_cookie,
@@ -232,73 +211,18 @@ class BakaBTBrush(_PluginBase):
     def _log_result(result: RunResult) -> None:
         logger.info(
             f"BakaBT 刷流完成：status={result.status}，"
-            f"added={len(result.added)}，detail={result.detail}"
+            f"added={len(result.added)}，deleted={len(result.deleted)}，detail={result.detail}"
         )
 
     def _notify_result(self, config: BrushConfig, result: RunResult) -> None:
         if not config.notify:
             return
         try:
-            if result.should_notify_success:
-                lines = [
-                    "✅ **BakaBT 刷流任务完成**",
-                    "",
-                    f"**已推送**：{len(result.added)} 个",
-                    "**种子**：",
-                ]
-                for item in result.added:
-                    published = item.published_at.isoformat().replace("+00:00", "Z") if item.published_at else "未知"
-                    lines.extend([
-                        f"- {item.title}（{item.size_mb:.2f} MB）",
-                        f"  发种时间：{published}",
-                        f"  详情：{item.detail_url}",
-                    ])
-                slot_text = (
-                    "不限制" if result.max_downloading == 0
-                    else f"{result.downloading_count}/{result.max_downloading}"
-                )
-                lines.extend([
-                    "",
-                    f"**qB 下载槽位**：{slot_text}",
-                    f"**分类**：{config.qb_category}",
-                    f"**标签**：{', '.join(config.qb_tags)}",
-                ])
-                self.post_message(
-                    title="【BakaBT 刷流已加入 qB】",
-                    mtype=NotificationType.SiteMessage,
-                    text="\n".join(lines),
-                )
-            elif result.should_notify_dry_run and result.previewed:
-                lines = [
-                    "🧪 **BakaBT 刷流试运行完成**",
-                    "",
-                    f"**候选**：{len(result.previewed)} 个（未推送 qB）",
-                    "**种子**：",
-                ]
-                for item in result.previewed:
-                    published = item.published_at.isoformat().replace("+00:00", "Z") if item.published_at else "未知"
-                    lines.extend([
-                        f"- {item.title}（{item.size_mb:.2f} MB）",
-                        f"  发种时间：{published}",
-                    ])
-                lines.append(f"\n**详情**：{result.detail}")
-                self.post_message(
-                    title="【BakaBT 刷流试运行】",
-                    mtype=NotificationType.SiteMessage,
-                    text="\n".join(lines),
-                )
-            elif result.should_notify_failure:
-                titles = "、".join(result.failed_titles) or "-"
-                self.post_message(
-                    title="【BakaBT 刷流任务异常】",
-                    mtype=NotificationType.SiteMessage,
-                    text="\n".join([
-                        "❌ **BakaBT 刷流添加失败**",
-                        "",
-                        f"**失败种子**：{titles}",
-                        f"**原因**：{result.detail}",
-                    ]),
-                )
+            message = build_notification(config, result)
+            if not message:
+                return
+            title, text = message
+            self.post_message(title=title, mtype=NotificationType.SiteMessage, text=text)
         except Exception as err:
             logger.warning(f"BakaBT 刷流通知发送失败：{type(err).__name__}")
 
@@ -341,176 +265,7 @@ class BakaBTBrush(_PluginBase):
         except Exception as err:
             logger.debug(f"BakaBT 刷流：读取 qB 下载器列表失败：{type(err).__name__}")
             downloader_options = []
-
-        return [{
-            "component": "VForm",
-            "content": [
-                {
-                    "component": "VRow",
-                    "content": [
-                        self._col(3, self._switch("enabled", "启用插件")),
-                        self._col(3, self._switch("notify", "发送通知")),
-                        self._col(3, self._switch("onlyonce", "立即运行一次")),
-                        self._col(3, self._switch("dry_run", "试运行一次")),
-                    ],
-                },
-                {
-                    "component": "VRow",
-                    "content": [
-                        self._col(4, self._cron_field()),
-                        self._col(8, self._alert(
-                            "info",
-                            "“立即运行一次”会直接推送；“试运行一次”仅扫描、复核与记录候选，绝不下载 .torrent 或添加 qB。两者同时开启时试运行优先，执行后自动关闭。",
-                        )),
-                    ],
-                },
-                self._section("BakaBT 访问"),
-                {
-                    "component": "VRow",
-                    "content": [
-                        self._col(12, {
-                            "component": "VTextField",
-                            "props": {
-                                "model": "cookie",
-                                "label": "BakaBT Cookie",
-                                "type": "password",
-                                "autocomplete": "off",
-                                "hint": "留空时从 CookieCloud 获取，并写回插件配置。",
-                                "persistent-hint": True,
-                            },
-                        }),
-                        self._col(3, self._number("timeout", "请求超时（秒）")),
-                        self._col(3, self._number("detail_request_retries", "详情页重试次数")),
-                        self._col(6, self._alert(
-                            "info",
-                            "Cookie 优先使用手填值；留空时从 CookieCloud 获取并回写插件配置。Cookie 不会显示在数据页、日志或通知中。",
-                        )),
-                    ],
-                },
-                self._section("筛选条件"),
-                {
-                    "component": "VRow",
-                    "content": [
-                        self._col(3, self._number("min_publish_age_minutes", "最小发种时间（分钟）")),
-                        self._col(3, self._number("max_publish_age_minutes", "最大发种时间（分钟）")),
-                        self._col(3, self._number("min_size_mb", "最小体积（MB）")),
-                        self._col(3, self._number("max_size_mb", "最大体积（MB）")),
-                    ],
-                },
-                {
-                    "component": "VRow",
-                    "content": [
-                        self._col(12, self._alert(
-                            "info",
-                            "仅处理页面明确标记为 Freeleech 的种子；仅按发种时间和 MB 体积筛选。所有阈值填 0 表示不限制。",
-                        )),
-                    ],
-                },
-                self._section("qBittorrent"),
-                {
-                    "component": "VRow",
-                    "content": [
-                        self._col(4, {
-                            "component": "VSelect",
-                            "props": {
-                                "model": "downloader",
-                                "label": "下载器",
-                                "items": downloader_options,
-                                "hint": "仅显示 MoviePilot 已配置的 qBittorrent 下载器。",
-                                "persistent-hint": True,
-                            },
-                        }),
-                        self._col(8, self._text("save_path", "保存路径（留空使用下载器默认路径）")),
-                    ],
-                },
-                {
-                    "component": "VRow",
-                    "content": [
-                        self._col(3, self._text("qb_category", "分类")),
-                        self._col(4, self._text("qb_tags", "标签（逗号分隔）")),
-                        self._col(3, self._number("max_bakabt_downloading", "最大下载流程数")),
-                        self._col(2, self._alert(
-                            "info",
-                            "0 = 不限制；仅统计“刷流 + bakabt”任务。",
-                        )),
-                    ],
-                },
-            ],
-        }], {
-            "enabled": False,
-            "notify": True,
-            "onlyonce": False,
-            "dry_run": False,
-            "cron": "*/10 * * * *",
-            "cookie": "",
-            "timeout": 20,
-            "detail_request_retries": 3,
-            "min_publish_age_minutes": 0,
-            "max_publish_age_minutes": 0,
-            "min_size_mb": 0,
-            "max_size_mb": 0,
-            "downloader": "",
-            "qb_category": "刷流",
-            "qb_tags": "bakabt,刷流",
-            "save_path": "",
-            "max_bakabt_downloading": 2,
-        }
-
-    @staticmethod
-    def _section(title: str) -> dict:
-        return {
-            "component": "VRow",
-            "content": [{
-                "component": "VCol",
-                "props": {"cols": 12},
-                "content": [{
-                    "component": "div",
-                    "props": {
-                        "class": "text-subtitle-2 font-weight-medium text-medium-emphasis pt-2 pb-1",
-                    },
-                    "text": title,
-                }],
-            }],
-        }
-
-    @staticmethod
-    def _col(md: int, content: dict) -> dict:
-        return {"component": "VCol", "props": {"cols": 12, "md": md}, "content": [content]}
-
-    @staticmethod
-    def _switch(model: str, label: str) -> dict:
-        return {"component": "VSwitch", "props": {"model": model, "label": label}}
-
-    @staticmethod
-    def _alert(alert_type: str, text: str) -> dict:
-        return {
-            "component": "VAlert",
-            "props": {
-                "type": alert_type,
-                "variant": "tonal",
-                "density": "compact",
-                "class": "text-caption h-100",
-                "text": text,
-            },
-        }
-
-    @staticmethod
-    def _text(model: str, label: str) -> dict:
-        return {"component": "VTextField", "props": {"model": model, "label": label}}
-
-    @staticmethod
-    def _number(model: str, label: str) -> dict:
-        return {
-            "component": "VTextField",
-            "props": {"model": model, "label": label, "type": "number", "min": 0},
-        }
-
-    @staticmethod
-    def _cron_field() -> dict:
-        return {
-            "component": "VCronField",
-            "props": {"model": "cron", "label": "执行周期", "placeholder": "*/10 * * * *"},
-        }
+        return build_form(downloader_options)
 
     def get_page(self) -> List[dict]:
         try:

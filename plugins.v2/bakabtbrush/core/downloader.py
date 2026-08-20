@@ -67,6 +67,13 @@ def list_bakabt_torrents(instance: Any, category: str, required_tag: str = "baka
             progress=_number(_value(raw, "progress", 0)),
             uploaded=_integer(_value(raw, "uploaded", 0)),
             downloaded=_integer(_value(raw, "downloaded", 0)),
+            added_on=_integer(_value(raw, "added_on", 0)),
+            completion_on=_integer(_value(raw, "completion_on", 0)),
+            last_activity=_integer(_value(raw, "last_activity", 0)),
+            seeding_time=_integer(_value(raw, "seeding_time", 0)),
+            ratio=_number(_value(raw, "ratio", 0)),
+            up_speed=_integer(_value(raw, "upspeed", _value(raw, "up_speed", 0))),
+            total_size=_integer(_value(raw, "total_size", 0)),
         ))
     return torrents
 
@@ -101,6 +108,16 @@ def has_infohash(instance: Any, infohash: str) -> bool:
         return bool(qbc.torrents_info(torrent_hashes=infohash))
     except Exception as err:
         raise DownloaderError("查询 qBittorrent 重复任务失败") from err
+
+
+def delete_torrent(instance: Any, infohash: str, *, delete_files: bool) -> None:
+    """通过 MoviePilot 下载器封装删除一个已严格限定范围的 qB 任务。"""
+    if not infohash:
+        raise DownloaderError("自动删种缺少 infohash")
+    try:
+        instance.delete_torrents(delete_file=delete_files, ids=[infohash])
+    except Exception as err:
+        raise DownloaderError("删除 qBittorrent 任务失败") from err
 
 
 def add_and_verify(

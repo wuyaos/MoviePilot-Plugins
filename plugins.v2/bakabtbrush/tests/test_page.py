@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from core.models import QBTorrentSnapshot
 from core.page import build_page
-from core.state import default_state, record_run, update_qb
+from core.state import default_state, record_deletions, record_run, update_qb
 
 
 def _find_text(node):
@@ -16,21 +17,80 @@ def _find_text(node):
             yield from _find_text(child)
 
 
-def test_page_has_four_overview_cards_and_five_log_columns():
+def _find_href(node):
+    if isinstance(node, dict):
+        href = (node.get("props") or {}).get("href")
+        if href:
+            yield href
+        for child in node.get("content", []) or []:
+            yield from _find_href(child)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _find_href(child)
+
+
+def test_page_has_overview_current_tasks_linked_history_and_deletions():
     state = default_state()
     state["account"].update({"uploaded_mb": 100, "downloaded_mb": 50, "ratio": "2.00"})
     state["completed_hashes"] = ["a" * 40]
-    update_qb(state, uploaded_mb=25, downloaded_mb=10, downloading_count=1, max_downloading=2)
-    long_title = "Example Anime " + "Very Long Title " * 12
-    record_run(state, {"status": "dry_run", "torrent": long_title, "push": "试运行，未推送 1 个", "detail": "ok"})
+    state["added"]["1"] = {
+        "infohash": "b" * 40,
+        "detail_url": "https://bakabt.me/torrent/1/example",
+        "published_at": "2026-08-20T00:00:00Z",
+    }
+    update_qb(
+        state,
+        uploaded_mb=25,
+        downloaded_mb=10,
+        downloading_count=1,
+        max_downloading=2,
+        torrents=[QBTorrentSnapshot(
+            infohash="b" * 40,
+            name="Current Example",
+            category="刷流",
+            tags=("bakabt", "刷流"),
+            state="downloading",
+            progress=0.5,
+            uploaded=5 * 1024**2,
+            downloaded=10 * 1024**2,
+        )],
+    )
+    record_run(state, {
+        "time": "2026-08-20T00:10:00Z",
+        "status": "success",
+        "torrent": "History Example",
+        "torrent_links": [{
+            "title": "History Example",
+            "url": "https://bakabt.me/torrent/2/example",
+            "published_at": "2026-08-20T00:00:00Z",
+            "size_mb": 500,
+        }],
+        "push": "已推送 1 个",
+        "detail": "ok",
+    })
+    record_deletions(state, [{
+        "time": "2026-08-20T00:20:00Z",
+        "title": "Deleted Example",
+        "detail_url": "https://bakabt.me/torrent/3/example",
+        "reason": "做种达到 24 小时",
+        "delete_files": False,
+        "uploaded_gb": 2,
+        "ratio": 3,
+    }])
 
     page = build_page(state)
     cards = page[0]["content"]
     texts = list(_find_text(page))
+    hrefs = list(_find_href(page))
 
     assert len(cards) == 4
     assert {"BakaBT 流量", "qB 刷流流量", "历史下载种子", "上次运行"}.issubset(texts)
-    assert {"时间", "状态", "种子", "推送", "详情"}.issubset(texts)
+    assert {"当前 BakaBT 下载流程", "运行历史", "自动删除历史"}.issubset(texts)
+    assert {"时间", "状态", "本轮候选 / 推送", "推送", "详情"}.issubset(texts)
     assert any("下载槽位：1/2" in text for text in texts)
-    assert long_title in texts
-    assert "试运行" in texts
+    assert "Current Example" in texts
+    assert "History Example" in texts
+    assert "Deleted Example" in texts
+    assert "https://bakabt.me/torrent/1/example" in hrefs
+    assert "https://bakabt.me/torrent/2/example" in hrefs
+    assert "https://bakabt.me/torrent/3/example" in hrefs

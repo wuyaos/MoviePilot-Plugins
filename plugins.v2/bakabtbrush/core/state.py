@@ -13,11 +13,12 @@ try:
 except Exception:
     _TZ = None
 
-from .models import AccountSnapshot, BakaBTTorrent
+from .models import AccountSnapshot, BakaBTTorrent, QBTorrentSnapshot
 
 
 MAX_HISTORY = 20
 MAX_DETAIL_HISTORY = 500
+MAX_DELETION_HISTORY = 100
 
 
 def default_state() -> dict[str, Any]:
@@ -33,6 +34,7 @@ def default_state() -> dict[str, Any]:
             "downloaded_mb": 0.0,
             "downloading_count": 0,
             "max_downloading": 0,
+            "torrents": [],
             "updated_at": "",
         },
         "added": {},
@@ -42,6 +44,7 @@ def default_state() -> dict[str, Any]:
         "completed_hashes": [],
         "last_run": {},
         "history": [],
+        "deletions": [],
     }
 
 
@@ -64,6 +67,13 @@ def normalize_state(raw: Any) -> dict[str, Any]:
         # 保留最近解析的详情，控制 PluginData 体积。
         entries.sort(key=lambda item: str(item[1].get("parsed_at") or ""), reverse=True)
         state["detail_history"] = dict(entries[:MAX_DETAIL_HISTORY])
+        for torrent_id, record in state["added"].items():
+            detail = state["detail_history"].get(str(torrent_id))
+            if not isinstance(record, dict) or not isinstance(detail, dict):
+                continue
+            for key in ("detail_url", "published_at", "size_mb"):
+                if not record.get(key) and detail.get(key):
+                    record[key] = detail[key]
 
     if isinstance(raw.get("completed_hashes"), list):
         state["completed_hashes"] = list(dict.fromkeys(
@@ -71,6 +81,10 @@ def normalize_state(raw: Any) -> dict[str, Any]:
         ))
     if isinstance(raw.get("history"), list):
         state["history"] = [entry for entry in raw["history"] if isinstance(entry, dict)][-MAX_HISTORY:]
+    if isinstance(raw.get("deletions"), list):
+        state["deletions"] = [
+            entry for entry in raw["deletions"] if isinstance(entry, dict)
+        ][-MAX_DELETION_HISTORY:]
     return state
 
 
@@ -82,8 +96,24 @@ def remember_added(state: dict[str, Any], item: BakaBTTorrent, infohash: str) ->
     state.setdefault("added", {})[str(item.torrent_id)] = {
         "title": item.title,
         "infohash": infohash.lower(),
+        "detail_url": item.detail_url,
+        "published_at": (
+            item.published_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            if item.published_at else ""
+        ),
+        "size_mb": round(max(0.0, item.size_mb), 2),
         "added_at": utc_now(),
     }
+
+
+def update_added_metadata(state: dict[str, Any], item: BakaBTTorrent) -> None:
+    """浏览页再次出现已添加种子时补齐旧状态缺少的链接和体积。"""
+    record = (state.get("added") or {}).get(str(item.torrent_id))
+    if not isinstance(record, dict):
+        return
+    record["title"] = item.title or record.get("title") or ""
+    record["detail_url"] = item.detail_url or record.get("detail_url") or ""
+    record["size_mb"] = round(max(0.0, item.size_mb), 2)
 
 
 def reset_detail_cache_for_day(state: dict[str, Any], now: datetime) -> None:
@@ -120,6 +150,8 @@ def remember_detail(state: dict[str, Any], item: BakaBTTorrent) -> None:
     history = state.setdefault("detail_history", {})
     history[str(item.torrent_id)] = {
         "title": item.title,
+        "detail_url": item.detail_url,
+        "size_mb": round(max(0.0, item.size_mb), 2),
         "published_at": item.published_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
         "is_freeleech": bool(item.is_freeleech),
         "download_url": item.download_url or "",
@@ -154,22 +186,55 @@ def update_account(state: dict[str, Any], snapshot: AccountSnapshot) -> None:
 def update_qb(
     state: dict[str, Any], *, uploaded_mb: float, downloaded_mb: float,
     downloading_count: int, max_downloading: int,
+    torrents: list[QBTorrentSnapshot] | None = None,
 ) -> None:
+    managed = {
+        str(record.get("infohash") or "").lower(): record
+        for record in (state.get("added") or {}).values()
+        if isinstance(record, dict) and record.get("infohash")
+    }
+    torrent_rows = []
+    for torrent in torrents or []:
+        record = managed.get(torrent.infohash.lower()) or {}
+        torrent_rows.append({
+            "infohash": torrent.infohash,
+            "name": torrent.name,
+            "state": torrent.state,
+            "progress": round(max(0.0, min(1.0, torrent.progress)), 6),
+            "uploaded_mb": round(torrent.uploaded / (1024 * 1024), 2),
+            "downloaded_mb": round(torrent.downloaded / (1024 * 1024), 2),
+            "ratio": round(max(0.0, torrent.ratio), 3),
+            "up_speed_kbps": round(torrent.up_speed / 1024, 2),
+            "detail_url": str(record.get("detail_url") or ""),
+            "published_at": str(record.get("published_at") or ""),
+        })
     state["qb"] = {
         "uploaded_mb": round(max(0.0, uploaded_mb), 2),
         "downloaded_mb": round(max(0.0, downloaded_mb), 2),
         "downloading_count": max(0, int(downloading_count)),
         "max_downloading": max(0, int(max_downloading)),
+        "torrents": torrent_rows,
         "updated_at": utc_now(),
     }
 
 
 def record_run(state: dict[str, Any], event: dict[str, Any]) -> None:
     """写入最近一轮与日志表，最多保留 MAX_HISTORY 条。"""
+    torrent_links = [
+        {
+            "title": str(item.get("title") or ""),
+            "url": str(item.get("url") or ""),
+            "published_at": str(item.get("published_at") or ""),
+            "size_mb": item.get("size_mb"),
+        }
+        for item in event.get("torrent_links") or []
+        if isinstance(item, dict) and item.get("title")
+    ]
     normalized = {
         "time": event.get("time") or utc_now(),
         "status": str(event.get("status") or "unknown"),
         "torrent": str(event.get("torrent") or "-"),
+        "torrent_links": torrent_links,
         "push": str(event.get("push") or "未推送"),
         "detail": str(event.get("detail") or ""),
     }
@@ -177,6 +242,14 @@ def record_run(state: dict[str, Any], event: dict[str, Any]) -> None:
     history = list(state.get("history") or [])
     history.append(normalized)
     state["history"] = history[-MAX_HISTORY:]
+
+
+def record_deletions(state: dict[str, Any], records: list[dict[str, Any]]) -> None:
+    if not records:
+        return
+    history = list(state.get("deletions") or [])
+    history.extend(records)
+    state["deletions"] = history[-MAX_DELETION_HISTORY:]
 
 
 def utc_now() -> str:
