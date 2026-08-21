@@ -77,6 +77,10 @@ def test_invalid_cookie_uses_password_login_and_returns_new_cookie():
         "password": "secret",
         "remember_me": True,
     }
+    assert kwargs["headers"] == {
+        "Origin": "https://rousi.pro",
+        "Referer": "https://rousi.pro/login",
+    }
     assert "Cookie" not in fake.headers
 
 
@@ -105,6 +109,8 @@ def test_attendance_post_has_csrf_and_idempotency_key():
     method, url, kwargs = fake.calls[0]
     assert method == "POST" and url.endswith("/api/v1/me/attendance")
     assert kwargs["json"] == {"mode": "fixed"}
+    assert kwargs["headers"]["Origin"] == "https://rousi.pro"
+    assert kwargs["headers"]["Referer"] == "https://rousi.pro/account/economy"
     assert kwargs["headers"]["X-CSRF-Token"] == "csrf-token"
     assert kwargs["headers"]["Idempotency-Key"]
 

@@ -297,11 +297,12 @@
         "name": "肉丝自动签到",
         "description": "rousi.pro（PeerGo）账号登录、Session Cookie 自动续期、签到与站内消息推送",
         "labels": "肉丝,签到,Cookie,账号密码,站内消息",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.1.1": "修复 PeerGo 登录和签到写请求被403同源校验拦截：补充 https://rousi.pro Origin 与对应 Referer，并增加请求头回归测试。",
             "v1.1.0": "适配 rousi.pro PeerGo 改版：使用账号密码登录与30天 Session Cookie；Cookie 优先、失效后自动登录并回写；改用 /api/v1/session、/api/v1/me/attendance、traffic、economy、notifications 接口；移除旧 JWT Token 和过期提醒。",
             "v1.0.4": "规范定时服务时区与公开调度入口",
             "v1.0.3": "修复定时签到因认证失败被永久停掉：__handle_auth_failed 不再自动停用插件(删除 _enabled=False + update_config)，保留启用态让 cron 下一周期自动重试，避免 Token 一旦过期就注销定时任务且需手动重开；__is_auth_failed 收窄为仅 HTTP 401（移除 code==100 单独判定），避免限流/维护等临时故障被误判为 Token 失效；同步配置页失效处理说明文案",

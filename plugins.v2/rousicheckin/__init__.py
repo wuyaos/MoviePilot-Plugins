@@ -21,7 +21,7 @@ class RousiCheckin(_PluginBase):
     plugin_name = "肉丝自动签到"
     plugin_desc = "rousi.pro（PeerGo）账号登录、Session Cookie 自动续期、签到与站内消息推送"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png"
-    plugin_version = "1.1.0"
+    plugin_version = "1.1.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "rousicheckin_"

@@ -74,6 +74,7 @@ class PeerGoClient:
         response = self._request(
             "POST",
             self.SESSION_PATH,
+            headers={"Origin": self.BASE_URL, "Referer": f"{self.BASE_URL}/login"},
             json={"identifier": username, "password": password, "remember_me": True},
             allow_unauthorized=True,
         )
@@ -96,6 +97,8 @@ class PeerGoClient:
             "POST",
             self.ATTENDANCE_PATH,
             headers={
+                "Origin": self.BASE_URL,
+                "Referer": f"{self.BASE_URL}/account/economy",
                 "X-CSRF-Token": csrf_token,
                 "Idempotency-Key": str(uuid4()),
             },
