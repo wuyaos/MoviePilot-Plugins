@@ -13,6 +13,7 @@ MoviePilot V2 自用插件仓库。
 - `StrmManage`: 云盘 Strm 助手，生成 strm 并通过 CloudDrive2 处理非视频文件。
 - `AzKeepAlive`: AnimeZ 保活，定时访问站点并提交候选种子到下载器。
 - `AutoPtCheckin`: PT 站点自动签到，支持自定义站点、CookieCloud 同步和验证码签到适配。
+- `RousiCheckin`: 肉丝 PeerGo 独立签到，优先复用 Session Cookie，失效后使用账号密码登录并自动回写新 Cookie。
 - `SiteRefresh`: 站点自动更新，接收 Cookie 失效事件并刷新站点 Cookie/UA。
 - `TangLottery`: 不可躺自动抽奖助手，按每日目标次数自动拆解并执行抽奖。
 - `CloudDrive2Disk`: CloudDrive2 存储模块，通过 gRPC/API 接入 CloudDrive2。
