@@ -2,7 +2,7 @@
 # output: yzyy Discuz zqlj_sign 动态签到码签到结果
 # pos: AutoPtCheckin 站点适配层，独立专用适配器，不复用 NexusPHP attendance 通用基类
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 from urllib.parse import urlparse
 
 import requests as _requests
@@ -12,7 +12,7 @@ from ruamel.yaml import CommentedMap
 from app.core.config import settings
 from app.log import logger
 from app.plugins.autoptcheckin.sites import _ISiteSigninHandler
-from app.utils.http import RequestUtils
+from app.utils.http import RequestUtils, cookie_parse
 
 
 class Yzyy(_ISiteSigninHandler):
@@ -35,12 +35,13 @@ class Yzyy(_ISiteSigninHandler):
         site_url = self._normalize_site_url(site_info.get("url"))
 
         session = _requests.Session()
+        request_cookies = cookie_parse(site_cookie)
         sign_page_url = self._sign_page_url(site_url)
         headers = self._build_headers(ua, sign_page_url)
 
         # 1. 获取签到页
         page_html = self._fetch_page(
-            url=sign_page_url, cookie=site_cookie, headers=headers,
+            url=sign_page_url, cookie=request_cookies, headers=headers,
             session=session, proxy=proxy, timeout=timeout,
         )
         if page_html is None:
@@ -51,7 +52,7 @@ class Yzyy(_ISiteSigninHandler):
         if self._is_not_logged_in(page_html):
             logger.info(f"{site} 签到页登录态未确认，重新读取一次")
             page_html = self._fetch_page(
-                url=sign_page_url, cookie=site_cookie, headers=headers,
+                url=sign_page_url, cookie=request_cookies, headers=headers,
                 session=session, proxy=proxy, timeout=timeout,
             )
             if page_html is None:
@@ -76,7 +77,7 @@ class Yzyy(_ISiteSigninHandler):
 
         # 5. 执行签到请求（沿用同一 Session，保证 sign token 有效）
         result_html = self._fetch_page(
-            url=sign_url, cookie=site_cookie,
+            url=sign_url, cookie=request_cookies,
             headers={**headers, "referer": sign_page_url},
             session=session, proxy=proxy, timeout=timeout,
         )
@@ -105,10 +106,11 @@ class Yzyy(_ISiteSigninHandler):
         site_url = self._normalize_site_url(site_info.get("url"))
         sign_page_url = self._sign_page_url(site_url)
         session = _requests.Session()
+        request_cookies = cookie_parse(site_cookie)
 
         page_html = self._fetch_page(
             url=sign_page_url,
-            cookie=site_cookie,
+            cookie=request_cookies,
             headers=self._build_headers(ua, sign_page_url),
             session=session,
             proxy=proxy,
@@ -121,7 +123,7 @@ class Yzyy(_ISiteSigninHandler):
             logger.info(f"{site} 模拟登录状态未确认，重新读取签到页面")
             page_html = self._fetch_page(
                 url=sign_page_url,
-                cookie=site_cookie,
+                cookie=request_cookies,
                 headers=self._build_headers(ua, sign_page_url),
                 session=session,
                 proxy=proxy,
@@ -170,7 +172,7 @@ class Yzyy(_ISiteSigninHandler):
         }
 
     @staticmethod
-    def _fetch_page(url: str, cookie: str, headers: dict, session, proxy,
+    def _fetch_page(url: str, cookie: Union[str, dict], headers: dict, session, proxy,
                     timeout: int = 30) -> Optional[str]:
         try:
             res = RequestUtils(
@@ -180,8 +182,12 @@ class Yzyy(_ISiteSigninHandler):
                 session=session,
                 proxies=proxy,
             ).get_res(url=url)
-            if not res or res.status_code != 200:
+            if res is None or res.status_code != 200:
                 return None
+            # Discuz 会在签到页刷新 sid/lastact；同步回显式 Cookie，避免下一请求
+            # 继续发送旧 sid 覆盖 Session CookieJar，导致动态 sign token 静默失效。
+            if isinstance(cookie, dict):
+                cookie.update(session.cookies.get_dict())
             return res.text
         except Exception as e:
             logger.error(f"请求页面异常：{e}")
