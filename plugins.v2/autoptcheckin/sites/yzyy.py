@@ -86,6 +86,34 @@ class Yzyy(_ISiteSigninHandler):
         logger.error(f"{site} 签到失败：{info}")
         return False, f"签到失败：{info}"
 
+    def login(self, site_info: CommentedMap) -> Tuple[bool, str]:
+        """通过签到插件页确认登录态，避免站点根地址跳转登录页造成误判。"""
+        site = site_info.get("name")
+        site_cookie = site_info.get("cookie")
+        ua = site_info.get("ua") or settings.USER_AGENT
+        proxy = settings.PROXY if site_info.get("proxy") else None
+        timeout = site_info.get("timeout") or self._request_timeout
+        site_url = self._normalize_site_url(site_info.get("url"))
+        sign_page_url = self._sign_page_url(site_url)
+
+        page_html = self._fetch_page(
+            url=sign_page_url,
+            cookie=site_cookie,
+            headers=self._build_headers(ua, sign_page_url),
+            session=_requests.Session(),
+            proxy=proxy,
+            timeout=timeout,
+        )
+        if page_html is None:
+            logger.warning(f"{site} 模拟登录失败，无法打开签到页面")
+            return False, "模拟登录失败，无法打开签到页面"
+        if self._is_not_logged_in(page_html) or not self._has_logged_in_marker(page_html):
+            logger.warning(f"{site} 模拟登录失败，Cookie已失效")
+            return False, "模拟登录失败，Cookie已失效"
+
+        logger.info(f"{site} 模拟登录成功")
+        return True, "模拟登录成功"
+
     @staticmethod
     def _normalize_site_url(site_url: str) -> str:
         """规范化站点地址，仅保留 scheme 与 netloc，避免配置带 path 干扰。"""
@@ -138,8 +166,28 @@ class Yzyy(_ISiteSigninHandler):
 
     @staticmethod
     def _is_not_logged_in(html: str) -> bool:
+        html = html or ""
         keywords = ["请登录", "需要先登录", "请先登录", "未登录", "您还没有登录"]
-        return any(keyword in (html or "") for keyword in keywords)
+        if any(keyword in html for keyword in keywords):
+            return True
+        try:
+            tree = etree.HTML(html)
+            return bool(tree is not None and tree.xpath(
+                '//input[@type="password"] | //form[contains(@action,"logging")]'
+            ))
+        except Exception:
+            return False
+
+    @staticmethod
+    def _has_logged_in_marker(html: str) -> bool:
+        try:
+            tree = etree.HTML(html or "")
+            return bool(tree is not None and tree.xpath(
+                '//a[contains(@href,"logout")] | //form[contains(@action,"logout")] | '
+                '//div[contains(concat(" ", normalize-space(@class), " "), " signbtn ")]'
+            ))
+        except Exception:
+            return False
 
     @staticmethod
     def _extract_sign_button_area(html: str) -> str:

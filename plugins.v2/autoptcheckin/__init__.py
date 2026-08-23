@@ -45,7 +45,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.5.10"
+    plugin_version = "1.5.11"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1366,6 +1366,15 @@ class AutoPtCheckin(_PluginBase):
         ok, msg = result[0], result[1]
         return ok, msg, infer_signin_status(ok, msg)
 
+    @staticmethod
+    def _describe_http_failure(status_code: int) -> str:
+        """把传输层哨兵值和明确限流状态转换为可操作的失败原因。"""
+        if status_code == 0:
+            return "网络请求失败或超时"
+        if status_code == 429:
+            return "站点请求过于频繁（HTTP 429），请稍后重试"
+        return f"状态码：{status_code}"
+
     def signin_site(self, site_info: CommentedMap, cookie_cache: dict = None) -> Tuple[str, str, SigninStatus]:
         """
         签到一个站点
@@ -1457,20 +1466,24 @@ class AutoPtCheckin(_PluginBase):
                     logger.info(f"{site} 仿真登录成功")
                     return True, "仿真登录成功", SigninStatus.LOGIN
             else:
+                request_timeout = timeout or 20
                 res = RequestUtils(cookies=site_cookie,
                                    ua=ua,
                                    proxies=proxies,
-                                   timeout=timeout or 20
+                                   timeout=request_timeout
                                    ).get_res(url=checkin_url)
-                if not res and site_url != checkin_url:
-                    logger.info(f"开始站点模拟登录：{site}，地址：{site_url}...")
+                if res is None or not (res.text or "").strip():
+                    verify_timeout = max(request_timeout + 15, 30)
+                    logger.info(f"{site} 签到请求无响应，重新读取签到页确认结果...")
                     res = RequestUtils(cookies=site_cookie,
                                        ua=ua,
                                        proxies=proxies,
-                                       timeout=timeout or 20
-                                       ).get_res(url=site_url)
-                # 判断登录状态
-                if res and res.status_code in [200, 500, 403]:
+                                       timeout=verify_timeout
+                                       ).get_res(url=checkin_url)
+                if res is not None and res.status_code == 200 and not (res.text or "").strip():
+                    logger.warning(f"{site} 签到失败，站点返回空响应，无法确认签到结果")
+                    return False, "签到失败，站点返回空响应，无法确认签到结果！", SigninStatus.FAILED
+                if res is not None and res.status_code in [200, 500, 403]:
                     if not SiteUtils.is_logged_in(res.text):
                         if under_challenge(res.text):
                             msg = "站点被Cloudflare防护，请打开站点浏览器仿真"
@@ -1479,35 +1492,33 @@ class AutoPtCheckin(_PluginBase):
                         elif res.status_code == 200:
                             msg = "Cookie已失效"
                         else:
-                            msg = f"状态码：{res.status_code}"
+                            msg = AutoPtCheckin._describe_http_failure(res.status_code)
                         logger.warning(f"{site} 签到失败，{msg}")
                         return False, f"签到失败，{msg}！", SigninStatus.FAILED
-                    else:
-                        # 已登录：必须确认签到状态，避免"GET 见登录即成功"误报
-                        state = _AttendancePostHandler.detect_attendance_state(res.text)
-                        if state == ATTENDANCE_SIGNED:
-                            logger.info(f"{site} 今日已签到")
-                            return True, "今日已签到", SigninStatus.ALREADY
-                        if state == ATTENDANCE_FORM:
-                            logger.warning(f"{site} 签到失败，站点需要 POST 签到适配器")
-                            return False, "签到失败：站点需要 POST 签到适配器", SigninStatus.NEEDS_ADAPTER
-                        if state == ATTENDANCE_CAPTCHA:
-                            logger.warning(f"{site} 签到失败，站点需要验证码签到适配器")
-                            return False, "签到失败：站点需要验证码签到适配器", SigninStatus.NEEDS_ADAPTER
-                        if state == ATTENDANCE_NOT_FOUND:
-                            logger.warning(f"{site} 签到页不存在，站点可能已改版或下线签到")
-                            return False, "签到失败：签到页不存在，站点可能已改版", SigninStatus.FAILED
-                        if "attendance.php" not in checkin_url:
-                            logger.info(f"{site} 模拟登录成功")
-                            return True, "模拟登录成功", SigninStatus.LOGIN
-                        logger.warning(f"{site} 签到结果未确认，签到页可能改版")
-                        return False, "签到失败：签到结果未确认，签到页可能改版", SigninStatus.FAILED
-                elif res is not None:
-                    logger.warning(f"{site} 签到失败，状态码：{res.status_code}")
-                    return False, f"签到失败，状态码：{res.status_code}！", SigninStatus.FAILED
-                else:
-                    logger.warning(f"{site} 签到失败，无法打开网站")
-                    return False, f"签到失败，无法打开网站！", SigninStatus.FAILED
+
+                    # 已登录：必须确认签到状态，避免"GET 见登录即成功"误报
+                    state = _AttendancePostHandler.detect_attendance_state(res.text)
+                    if state == ATTENDANCE_SIGNED:
+                        logger.info(f"{site} 今日已签到")
+                        return True, "今日已签到", SigninStatus.ALREADY
+                    if state == ATTENDANCE_FORM:
+                        logger.warning(f"{site} 签到失败，站点需要 POST 签到适配器")
+                        return False, "签到失败：站点需要 POST 签到适配器", SigninStatus.NEEDS_ADAPTER
+                    if state == ATTENDANCE_CAPTCHA:
+                        logger.warning(f"{site} 签到失败，站点需要验证码签到适配器")
+                        return False, "签到失败：站点需要验证码签到适配器", SigninStatus.NEEDS_ADAPTER
+                    if state == ATTENDANCE_NOT_FOUND:
+                        logger.warning(f"{site} 签到页不存在，站点可能已改版或下线签到")
+                        return False, "签到失败：签到页不存在，站点可能已改版", SigninStatus.FAILED
+                    logger.warning(f"{site} 签到结果未确认，签到页可能改版")
+                    return False, "签到失败：签到结果未确认，签到页可能改版", SigninStatus.FAILED
+                if res is not None:
+                    msg = AutoPtCheckin._describe_http_failure(res.status_code)
+                    logger.warning(f"{site} 签到失败，{msg}")
+                    return False, f"签到失败，{msg}！", SigninStatus.FAILED
+
+                logger.warning(f"{site} 签到失败，网络请求失败或超时，无法确认签到结果")
+                return False, "签到失败，网络请求失败或超时，无法确认签到结果！", SigninStatus.FAILED
         except Exception as e:
             logger.exception("%s 签到失败：%s" % (site, str(e)))
             return False, f"签到失败：{str(e)}！", SigninStatus.FAILED
@@ -1588,11 +1599,12 @@ class AutoPtCheckin(_PluginBase):
                                        proxies=proxies,
                                        timeout=timeout or 20
                                        ).get_res(url=site_url)
-                    if res and res.status_code == 200:
-                        page_text = res.text
+                    if res is not None and res.status_code == 200:
+                        page_text = res.text or None
                     elif res is not None and res.status_code not in [200, 500, 403]:
-                        logger.warning(f"{site} 模拟登录失败，状态码：{res.status_code}")
-                        return False, f"模拟登录失败，状态码：{res.status_code}！", SigninStatus.FAILED
+                        msg = AutoPtCheckin._describe_http_failure(res.status_code)
+                        logger.warning(f"{site} 模拟登录失败，{msg}")
+                        return False, f"模拟登录失败，{msg}！", SigninStatus.FAILED
                 except Exception as req_err:
                     logger.warning(f"{site} RequestUtils 请求失败，尝试 CffiClient 回退：{req_err}")
 
@@ -1606,8 +1618,9 @@ class AutoPtCheckin(_PluginBase):
                             proxy=proxy_server,
                         ).get(site_url, timeout=timeout or 60)
                         if status not in [200, 500, 403]:
-                            logger.warning(f"{site} 模拟登录失败，状态码：{status}")
-                            return False, f"模拟登录失败，状态码：{status}！", SigninStatus.FAILED
+                            msg = AutoPtCheckin._describe_http_failure(status)
+                            logger.warning(f"{site} 模拟登录失败，{msg}")
+                            return False, f"模拟登录失败，{msg}！", SigninStatus.FAILED
                     except Exception as cffi_err:
                         logger.warning(f"{site} 模拟登录失败，无法打开网站：{cffi_err}")
                         return False, f"模拟登录失败，无法打开网站！", SigninStatus.FAILED

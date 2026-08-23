@@ -12,6 +12,8 @@ AutoPtCheckin 的站点级签到适配层；输入站点 Cookie/UA/代理配置�
 - `52pt.py`: 52PT 站点签到适配。
 - `btschool.py`: BTSchool 站点签到适配。
 - `chdbits.py`: CHDBits 站点签到适配。
+- `darkland.py`: DarkLand 浏览器指纹模拟登录适配（仅登录，无独立签到）。
+- `digitalcore.py`: DigitalCore 状态 API 模拟登录适配（首页为 SPA）。
 - `haidan.py`: 海胆 站点签到适配。
 - `hares.py`: Hares 站点签到适配。
 - `hdarea.py`: HDArea 站点签到适配。
