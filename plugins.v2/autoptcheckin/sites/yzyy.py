@@ -35,7 +35,7 @@ class Yzyy(_ISiteSigninHandler):
         site_url = self._normalize_site_url(site_info.get("url"))
 
         session = _requests.Session()
-        request_cookies = cookie_parse(site_cookie)
+        request_cookies = self._parse_site_cookies(site_cookie)
         sign_page_url = self._sign_page_url(site_url)
         headers = self._build_headers(ua, sign_page_url)
 
@@ -106,7 +106,7 @@ class Yzyy(_ISiteSigninHandler):
         site_url = self._normalize_site_url(site_info.get("url"))
         sign_page_url = self._sign_page_url(site_url)
         session = _requests.Session()
-        request_cookies = cookie_parse(site_cookie)
+        request_cookies = self._parse_site_cookies(site_cookie)
 
         page_html = self._fetch_page(
             url=sign_page_url,
@@ -155,6 +155,15 @@ class Yzyy(_ISiteSigninHandler):
     @staticmethod
     def _sign_page_url(site_url: str) -> str:
         return f"{site_url}/plugin.php?id=zqlj_sign"
+
+    @staticmethod
+    def _parse_site_cookies(cookie: str) -> dict:
+        """保留同名 Cookie 的首个值，避免 www 子域 Cookie 覆盖主域登录态。"""
+        cookies = {}
+        for segment in str(cookie or "").split(";"):
+            for name, value in cookie_parse(segment).items():
+                cookies.setdefault(name, value)
+        return cookies
 
     @staticmethod
     def _build_headers(ua: str, sign_page_url: str) -> dict:
