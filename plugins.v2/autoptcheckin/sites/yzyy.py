@@ -47,10 +47,19 @@ class Yzyy(_ISiteSigninHandler):
             logger.error(f"{site} 签到失败，获取签到页面失败")
             return False, "签到失败，获取签到页面失败"
 
-        # 2. 检查登录状态
+        # 2. 检查登录状态；站点偶发返回临时登录页，使用同一 Session 复查一次。
         if self._is_not_logged_in(page_html):
-            logger.error(f"{site} 签到失败，Cookie已失效")
-            return False, "签到失败，Cookie已失效"
+            logger.info(f"{site} 签到页登录态未确认，重新读取一次")
+            page_html = self._fetch_page(
+                url=sign_page_url, cookie=site_cookie, headers=headers,
+                session=session, proxy=proxy, timeout=timeout,
+            )
+            if page_html is None:
+                logger.error(f"{site} 签到失败，复查签到页面失败")
+                return False, "签到失败，复查签到页面失败"
+            if self._is_not_logged_in(page_html):
+                logger.error(f"{site} 签到失败，Cookie已失效")
+                return False, "签到失败，Cookie已失效"
 
         # 3. 检查当前用户签到按钮状态
         button_status = self._check_sign_button_status(page_html)
@@ -95,18 +104,32 @@ class Yzyy(_ISiteSigninHandler):
         timeout = site_info.get("timeout") or self._request_timeout
         site_url = self._normalize_site_url(site_info.get("url"))
         sign_page_url = self._sign_page_url(site_url)
+        session = _requests.Session()
 
         page_html = self._fetch_page(
             url=sign_page_url,
             cookie=site_cookie,
             headers=self._build_headers(ua, sign_page_url),
-            session=_requests.Session(),
+            session=session,
             proxy=proxy,
             timeout=timeout,
         )
         if page_html is None:
             logger.warning(f"{site} 模拟登录失败，无法打开签到页面")
             return False, "模拟登录失败，无法打开签到页面"
+        if self._is_not_logged_in(page_html) or not self._has_logged_in_marker(page_html):
+            logger.info(f"{site} 模拟登录状态未确认，重新读取签到页面")
+            page_html = self._fetch_page(
+                url=sign_page_url,
+                cookie=site_cookie,
+                headers=self._build_headers(ua, sign_page_url),
+                session=session,
+                proxy=proxy,
+                timeout=timeout,
+            )
+        if page_html is None:
+            logger.warning(f"{site} 模拟登录失败，复查签到页面失败")
+            return False, "模拟登录失败，复查签到页面失败"
         if self._is_not_logged_in(page_html) or not self._has_logged_in_marker(page_html):
             logger.warning(f"{site} 模拟登录失败，Cookie已失效")
             return False, "模拟登录失败，Cookie已失效"
@@ -167,16 +190,25 @@ class Yzyy(_ISiteSigninHandler):
     @staticmethod
     def _is_not_logged_in(html: str) -> bool:
         html = html or ""
-        keywords = ["请登录", "需要先登录", "请先登录", "未登录", "您还没有登录"]
-        if any(keyword in html for keyword in keywords):
-            return True
         try:
             tree = etree.HTML(html)
-            return bool(tree is not None and tree.xpath(
-                '//input[@type="password"] | //form[contains(@action,"logging")]'
-            ))
+            if tree is not None and tree.xpath(
+                '//a[contains(@href,"logout")] | //form[contains(@action,"logout")]'
+            ):
+                return False
+            if tree is not None and tree.xpath(
+                '//input[@type="password"] | '
+                '//form[contains(@action,"mod=logging") and contains(@action,"action=login")]'
+            ):
+                return True
+            if tree is not None and tree.xpath(
+                '//div[contains(concat(" ", normalize-space(@class), " "), " signbtn ")]'
+            ):
+                return False
         except Exception:
-            return False
+            pass
+        keywords = ["请登录", "需要先登录", "请先登录", "未登录", "您还没有登录"]
+        return any(keyword in html for keyword in keywords)
 
     @staticmethod
     def _has_logged_in_marker(html: str) -> bool:

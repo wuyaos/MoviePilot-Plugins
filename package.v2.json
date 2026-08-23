@@ -161,11 +161,12 @@
         "name": "PT站点自动签到",
         "description": "PT 站点自动签到与模拟登录，支持验证码",
         "labels": "签到,PT",
-        "version": "1.5.11",
+        "version": "1.5.12",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.12": "修复 yzyy 签到页同时出现登录提示文本时误判 Cookie 失效：优先采用退出入口/签到按钮等正向登录证据，并在登录态未确认时使用同一 Session 复查一次。",
             "v1.5.11": "新增 yzyy 专属模拟登录、DigitalCore 状态 API 与 DarkLand 浏览器指纹登录适配；429 明确标记站点限流、状态码 0 改为网络失败；通用签到超时后复查签到页，避免用首页误判页面改版。",
             "v1.5.10": "rousi.pro 改版后移除旧 JWT Bearer Token 签到适配，改由独立 RousiCheckin 插件使用账号密码与 Session Cookie 适配。",
             "v1.5.9": "签到成功/已签到文案补充英文识别（already attended / attendance success），修复 lp-bits 等英文站点签到结果未确认误报。",
