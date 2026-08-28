@@ -73,6 +73,10 @@ class FakeEngine:
         self.responses = list(responses)
         self.calls = []
 
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.responses.pop(0)
+
     def run_if_idle(self, **kwargs):
         self.calls.append(kwargs)
         return self.responses.pop(0)
@@ -148,6 +152,15 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(plugin.config.last_zm_execution_time)
         self.assertEqual(saved, [True])
         self.assertEqual(refreshed, [True])
+
+    def test_manual_run_excludes_zm_domain(self):
+        records = [self._record(True, False)]
+        plugin = self._plugin([records])
+        plugin_module.send_summary = lambda *args, **kwargs: None
+
+        self.assertEqual(plugin.run_manual(), records)
+        self.assertEqual(len(plugin.engine.calls), 1)
+        self.assertEqual(plugin.engine.calls[0]["exclude_domains"], {"zmpt.cc"})
 
 
 if __name__ == "__main__":

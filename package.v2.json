@@ -466,11 +466,12 @@
         "name": "PT任务流",
         "description": "自动执行 PT 站点签到、喊话、申领和抽奖任务",
         "labels": "PT,任务流,签到,喊话",
-        "version": "0.4.7",
+        "version": "0.4.8",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v0.4.8": "修复手动补跑重复执行织梦喊话：run_manual 与主 cron 一致排除 zmpt.cc，织梦喊话仅由邮件时间+24h 的独立调度执行，避免24小时窗口内重复祈愿触发上传量扣减。",
             "v0.4.7": "新增 LuckPT 勋章中心分类奖励领取任务：解析 medal_collection.php 可领取按钮并经 ajax.php claimMedalCategoryReward 提交（bonus_daily 每日幸运星），无可领取/已领取视为终态幂等，站点拒绝为业务失败、页面请求失败可重试。",
             "v0.4.6": "修复织梦引擎锁竞争时误记执行并按重试间隔重排；织梦可重试失败复用统一重试；主任务重试等待支持停止中断；今日奖励严格按当天统计。",
             "v0.4.5": "修复织梦邮件时间过期且刚执行过时 date 任务立即触发、因冷却跳过后丢失续排：改用最近执行时间加 24 小时回退，冷却分支也主动重注册服务。",

@@ -28,7 +28,7 @@ class PtTaskFlow(_PluginBase):
     plugin_name = "PT任务流"
     plugin_desc = "自动执行 PT 站点签到、喊话、申领和抽奖任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png"
-    plugin_version = "0.4.7"
+    plugin_version = "0.4.8"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pttaskflow_"
@@ -214,7 +214,8 @@ class PtTaskFlow(_PluginBase):
         return failed_keys
 
     def run_manual(self):
-        records = self.engine.run(scene="手动补跑")
+        # 织梦喊话由邮件时间 +24h 的独立 date 服务负责，手动补跑不重复执行。
+        records = self.engine.run(scene="手动补跑", exclude_domains={"zmpt.cc"})
         send_summary(self, records)
         return records
 
