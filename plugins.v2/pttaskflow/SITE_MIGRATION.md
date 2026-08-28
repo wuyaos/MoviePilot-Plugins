@@ -19,7 +19,7 @@
 | 好学 | haoxue.net | CHECKIN/CHAT/CLAIM | AJAX 快照、no-retry | 已迁移，发送接口需真实站点验证 |
 | 垃圾堆 | lajidui.top | CHECKIN/CLAIM | 标准 JSON claim | 已迁移 |
 | LongPT | longpt.org | CHECKIN/CLAIM/CHAT/LOTTERY | 单选 API 喊话、抽奖 | 已迁移，API 需 mock 验证 |
-| LuckPT | luckpt.de | CHECKIN/CHAT | wish-bubble 外部反馈 | 已迁移 |
+| LuckPT | luckpt.de | CHECKIN/CHAT/MEDAL(奖励领取) | wish-bubble 外部反馈、勋章分类奖励 | 已迁移 |
 | Moment | m-team.io | CHECKIN/CHAT | 双向反馈、120s | 已迁移 |
 | myPT | mypt.cc | CHECKIN/MEDAL | 多选勋章 | 已迁移，购买需授权验证 |
 | NovaHD | novahd.top | CHECKIN/CLAIM | 标准 JSON claim | 已迁移 |
