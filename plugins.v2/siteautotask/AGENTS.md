@@ -55,7 +55,7 @@
 | 天枢 | dubhe.py | 签到/喊话（请求类型验证反馈） |
 | 好学 | hxpt.py | 签到/喊话（火花反馈）/精进研习社等任务申领 |
 | Moment | moment.py | 签到/喊话（女友反馈） |
-| LuckPT | luckpt.py | 签到/喊话（许愿池反馈） |
+| LuckPT | luckpt.py | 签到/喊话（许愿池反馈）/勋章中心分类奖励领取 |
 | RailgunPT | railgunpt.py | 签到/喊话（通用 NexusPHP，无特殊反馈） |
 
 ### 勋章续购站点（2，独立 cron）

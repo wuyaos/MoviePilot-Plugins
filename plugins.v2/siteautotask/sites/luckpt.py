@@ -4,6 +4,8 @@ groupchatzone 独有站点，喊话反馈解析型。
 - 采用非标准 DIV+Flex 布局（wish-bubble-system / chat-message-container）
 - 优先解析许愿池系统反馈：@username 幸运池听到了你的愿望...
 - 其次解析聊天区 @username 的回复
+- 勋章中心分类奖励：medal_collection.php 的 claim-reward 按钮经
+  POST ajax.php action=claimMedalCategoryReward 领取（bonus_daily 每日可领）
 """
 from typing import Tuple
 from app.log import logger
@@ -12,6 +14,7 @@ from .capabilities import CapabilityHandler
 from ..base.base_task import BaseTask
 from ..base.decorator import task_info, TaskType
 from ..base.result import TaskResult
+from ..utils.request import parse_json_response
 
 
 class LuckptHandler(CapabilityHandler):
@@ -67,6 +70,64 @@ class LuckptHandler(CapabilityHandler):
             "amount": "", "unit": "", "is_negative": False,
         }]}
 
+    def _find_claimable_medal_rewards(self):
+        """读取勋章中心可领取奖励按钮，返回 [(category, type, label)]。"""
+        from lxml import etree
+
+        response = self._send_get_request(self.site_url + "/medal_collection.php")
+        if not response:
+            return None
+        html = etree.HTML(response.text or "")
+        if html is None:
+            return []
+        buttons = html.xpath(
+            '//button[contains(concat(" ", normalize-space(@class), " "), " claim-reward ")'
+            ' and not(@disabled)]'
+        )
+        rewards = []
+        for btn in buttons:
+            category = (btn.get("data-category") or "").strip()
+            reward_type = (btn.get("data-type") or "").strip()
+            label = (btn.get("data-reward-label") or "").strip()
+            if category and reward_type:
+                rewards.append((category, reward_type, label or reward_type))
+        return rewards
+
+    def claim_medal_rewards(self):
+        """领取勋章中心全部可领取的分类奖励。
+
+        页面按钮由 JS 经 ``POST ajax.php`` 发送
+        ``action=claimMedalCategoryReward`` + ``params[category_id]`` +
+        ``params[reward_type]``，响应 ``ret == 0`` 表示成功。
+        """
+        rewards = self._find_claimable_medal_rewards()
+        if rewards is None:
+            return False, "读取勋章中心失败"
+        if not rewards:
+            return True, "无可领取的勋章奖励"
+
+        claimed, failed = [], []
+        for category, reward_type, label in rewards:
+            response = self._send_post_request(
+                self.site_url + "/ajax.php",
+                data={
+                    "action": "claimMedalCategoryReward",
+                    "params[category_id]": category,
+                    "params[reward_type]": reward_type,
+                },
+            )
+            payload = parse_json_response(response, "领取响应解析失败") if response else {"success": False, "msg": "领取请求失败"}
+            msg = str(payload.get("msg") or payload.get("message") or "无返回信息")
+            if payload.get("ret") in (0, "0"):
+                claimed.append(f"{label}(分类{category})")
+            elif any(kw in msg for kw in ("已经领取", "已领取", "已经购买", "已拥有")):
+                claimed.append(f"{label}(分类{category}·已领取)")
+            else:
+                failed.append(f"{label}: {msg}")
+        if failed:
+            return False, "；".join(failed)
+        return True, "领取成功：" + "、".join(claimed)
+
 
 class Tasks(BaseTask):
     def __init__(self, cookie=None):
@@ -82,3 +143,8 @@ class Tasks(BaseTask):
         if not ok:
             return TaskResult.fail(msg)
         return TaskResult.ok(msg or "消息已发送，未解析到反馈")
+
+    @task_info("{client_name}勋章奖励领取", "领取LuckPT勋章中心可领取的分类奖励", TaskType.MEDAL)
+    def claim_medal_reward(self):
+        ok, msg = self.client.claim_medal_rewards()
+        return TaskResult.ok(msg) if ok else TaskResult.fail(msg)

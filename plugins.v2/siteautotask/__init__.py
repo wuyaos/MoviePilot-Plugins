@@ -27,7 +27,7 @@ class SiteAutoTask(_PluginBase):
     plugin_name = "站点自动任务"
     plugin_desc = "自动执行站点签到、喊话、勋章和抽奖等任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png"
-    plugin_version = "1.0.20"
+    plugin_version = "1.0.21"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "siteautotask_"

@@ -389,11 +389,12 @@
         "name": "站点自动任务",
         "description": "自动执行站点签到、喊话、勋章和抽奖等任务",
         "labels": "PT,签到,喊话,自动任务",
-        "version": "1.0.20",
+        "version": "1.0.21",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/siteautotask.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.21": "新增 LuckPT 勋章中心分类奖励领取任务：解析 medal_collection.php 可领取按钮并经 ajax.php claimMedalCategoryReward 提交，支持 bonus_daily 每日幸运星奖励，无可领取或已领取同样视为成功。",
             "v1.0.20": "喊话确认与反馈重构为声明式 ShoutboxProfile 观测器：13个喊话站点统一使用发送后单次快照确认本人消息并关联反馈，删除各站遗留的发送后轮询死代码；好学使用 AJAX 快照入口且未确认时不重发；反馈只匹配10分钟内、当前用户、声明关键词的行，不再误取旧记录；奖励按实际文本分类为上传/下载/魔力/电力/火花等；新增任务声明类（TaskSpec）与签到策略类（CheckinAction）。",
             "v1.0.19": "所有喊话改为发送后在喊话区确认“当前用户+当前消息”才算成功；未确认仅重试该消息最多3次且不阻断后续任务。确认与反馈共用喊话区快照，并在当前消息上方附近窗口匹配反馈，不跨越另一条自己的喊话；织梦、藏宝阁、大青虫多消息间隔调整为60秒，Moment维持120秒；LongPT喊话改为单选（求上传/求魔力）；织梦邮件时间过期或缺失时改为24小时后重新检查，避免3秒触发被锁跳过。",
             "v1.0.18": "主 Cron 与织梦 date 任务改用标准时区触发器和纯服务声明",

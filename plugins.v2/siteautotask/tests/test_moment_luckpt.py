@@ -144,6 +144,36 @@ LUCKPT_CHAT = """
 </body></html>
 """
 
+LUCKPT_MEDAL_PAGE = """
+<html><body><div class="collection-category" data-category-id="8">
+<div class="claim-bar">
+<button class="btn primary claim-reward" data-category="8" data-type="bonus_daily" data-reward-label="幸运星 ×1000">领取 幸运星 ×1000</button>
+<button class="btn claim-reward" data-category="9" data-type="bonus_daily" data-reward-label="幸运星 ×500" disabled>已经领取</button>
+</div>
+</div></body></html>
+"""
+
+LUCKPT_MEDAL_EMPTY = """
+<html><body><div class="collection-category" data-category-id="8">
+<div class="claim-bar"><button class="btn claim-reward" data-category="8" data-type="bonus_daily" disabled>已经领取</button></div>
+</div></body></html>
+"""
+
+
+class JsonResponse:
+    def __init__(self, payload, status=200):
+        import json as _json
+        self.text = _json.dumps(payload)
+        self.status_code = status
+
+    def json(self):
+        import json as _json
+        return _json.loads(self.text)
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise Exception(f"HTTP {self.status_code}")
+
 
 class LuckptTests(unittest.TestCase):
     def handler(self, info):
@@ -200,6 +230,62 @@ class LuckptTests(unittest.TestCase):
         tasks.client = h
         meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
         self.assertEqual(meta["daily_shotbox"], "chat")
+
+
+class LuckptMedalClaimTests(unittest.TestCase):
+    def handler(self, medal_html, post_payloads):
+        session = Mock()
+        session.get.return_value = Response(text=medal_html)
+        session.post.side_effect = [JsonResponse(p) for p in post_payloads]
+        info = {
+            "session": session,
+            "url": "https://pt.luckpt.de",
+            "name": "LuckPT",
+            "domain": "luckpt.de",
+            "username": "wuyaos",
+        }
+        return luckpt.LuckptHandler(info), session
+
+    def test_claim_success(self):
+        h, session = self.handler(LUCKPT_MEDAL_PAGE, [{"ret": 0, "msg": "领取成功"}])
+        ok, msg = h.claim_medal_rewards()
+        self.assertTrue(ok)
+        self.assertIn("幸运星 ×1000", msg)
+        self.assertEqual(session.post.call_count, 1)
+        url, kwargs = session.post.call_args
+        self.assertEqual(url[0], "https://pt.luckpt.de/ajax.php")
+        self.assertEqual(kwargs["data"]["action"], "claimMedalCategoryReward")
+        self.assertEqual(kwargs["data"]["params[category_id]"], "8")
+        self.assertEqual(kwargs["data"]["params[reward_type]"], "bonus_daily")
+
+    def test_claim_nothing_available(self):
+        h, session = self.handler(LUCKPT_MEDAL_EMPTY, [])
+        ok, msg = h.claim_medal_rewards()
+        self.assertTrue(ok)
+        self.assertIn("无可领取", msg)
+        session.post.assert_not_called()
+
+    def test_claim_failure_reported(self):
+        h, session = self.handler(LUCKPT_MEDAL_PAGE, [{"ret": 1, "msg": "条件不满足"}])
+        ok, msg = h.claim_medal_rewards()
+        self.assertFalse(ok)
+        self.assertIn("条件不满足", msg)
+
+    def test_claim_already_claimed_treated_as_success(self):
+        h, _ = self.handler(LUCKPT_MEDAL_PAGE, [{"ret": 1, "msg": "您已经领取过该奖励"}])
+        ok, msg = h.claim_medal_rewards()
+        self.assertTrue(ok)
+        self.assertIn("已领取", msg)
+
+    def test_task_metadata_medal(self):
+        h, session = self.handler(LUCKPT_MEDAL_PAGE, [{"ret": 0, "msg": "领取成功"}])
+        tasks = luckpt.Tasks()
+        tasks.client = h
+        meta = {i["name"]: i["task_type"] for i in tasks.get_registered_tasks()}
+        self.assertEqual(meta["claim_medal_reward"], "medal")
+        result = tasks.claim_medal_reward()
+        self.assertTrue(result.success)
+        self.assertIn("领取成功", result.message)
 
 
 if __name__ == "__main__":
