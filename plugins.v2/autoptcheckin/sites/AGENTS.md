@@ -11,6 +11,7 @@ AutoPtCheckin 的站点级签到适配层；输入站点 Cookie/UA/代理配置�
 - `__init__.py`: 定义 `_ISiteSigninHandler` 基类、页面获取与签到结果匹配工具。
 - `52pt.py`: 52PT 站点签到适配。
 - `btschool.py`: BTSchool 站点签到适配。
+- `baozi.py`: 包子 attendance.php 验证码签到适配（复用通用基类）。
 - `chdbits.py`: CHDBits 站点签到适配。
 - `darkland.py`: DarkLand 浏览器指纹模拟登录适配（仅登录，无独立签到）。
 - `digitalcore.py`: DigitalCore 状态 API 模拟登录适配（首页为 SPA）。

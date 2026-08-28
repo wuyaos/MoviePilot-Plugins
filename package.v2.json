@@ -161,11 +161,12 @@
         "name": "PT站点自动签到",
         "description": "PT 站点自动签到与模拟登录，支持验证码",
         "labels": "签到,PT",
-        "version": "1.5.15",
+        "version": "1.5.16",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.16": "新增包子(p.t-baozi.cc) attendance.php 验证码签到适配：复用 NexusPHP 验证码签到通用基类，自动识别 imagehash/imagestring 并提交。",
             "v1.5.15": "新增 RetroToon（retrotoon.world）每日奖励适配：读取 attendance.php CSRF 表单并 POST claim，兼容带 claimed=1 的地址，提交后复查页面确认签到结果。",
             "v1.5.14": "修复 CookieCloud 同时包含 yzyy.org 与 www.yzyy.org 的同名 host-only Cookie 时，子域旧 saltkey/sid 覆盖主域登录态导致动态签到请求被拒；yzyy 改为同名 Cookie 首值优先。",
             "v1.5.13": "修复 yzyy 动态签到码请求失败：签到页返回的新 sid/lastact 会合并回显式 Cookie 后再提交签到，避免旧 Cookie 覆盖 Session CookieJar 导致 sign token 失效。",
