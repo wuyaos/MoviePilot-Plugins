@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from core.config import BrushConfig
 from core.filtering import matches_final_filters, prefilter_candidates
 from core.models import BakaBTTorrent
+from core.runner import _rss_age_state
 
 
 NOW = datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc)
@@ -51,6 +52,20 @@ def test_final_filter_requires_detail_time_only_when_time_constraint_is_enabled(
 
     assert matches_final_filters(item, no_time_limit, NOW) is True
     assert matches_final_filters(item, time_limited, NOW) is False
+
+
+def test_rss_age_state_respects_minimum_maximum_and_unlimited_boundaries():
+    limited = BrushConfig.from_mapping({"publish_age_range_minutes": "10-60"})
+
+    assert _rss_age_state(_item("too-new", age_minutes=9, size_mb=500), limited, NOW) == "waiting"
+    assert _rss_age_state(_item("minimum", age_minutes=10, size_mb=500), limited, NOW) == "ready"
+    assert _rss_age_state(_item("maximum", age_minutes=60, size_mb=500), limited, NOW) == "ready"
+    assert _rss_age_state(_item("expired", age_minutes=61, size_mb=500), limited, NOW) == "expired"
+    assert _rss_age_state(
+        _item("unlimited", age_minutes=2000, size_mb=500),
+        BrushConfig.from_mapping({"publish_age_range_minutes": "0"}),
+        NOW,
+    ) == "ready"
 
 
 def test_prefilter_preserves_browse_order_until_detail_time_is_available():

@@ -17,6 +17,7 @@ class BrushConfig:
     dry_run: bool
     cron: str
     cookie: str
+    rss_url: str
     timeout: int
     detail_request_retries: int
     publish_age_range_minutes: str
@@ -59,6 +60,7 @@ class BrushConfig:
             dry_run=bool(raw.get("dry_run", False)),
             cron=str(raw.get("cron") or "*/10 * * * *").strip(),
             cookie=str(raw.get("cookie") or "").strip(),
+            rss_url=str(raw.get("rss_url") or "").strip(),
             timeout=_positive_int(raw.get("timeout"), 20),
             detail_request_retries=_nonnegative_int(raw.get("detail_request_retries"), 3),
             publish_age_range_minutes=publish_text,
@@ -108,6 +110,7 @@ class BrushConfig:
             "dry_run": self.dry_run,
             "cron": self.cron,
             "cookie": self.cookie,
+            "rss_url": self.rss_url,
             "timeout": self.timeout,
             "detail_request_retries": self.detail_request_retries,
             "publish_age_range_minutes": self.publish_age_range_minutes,

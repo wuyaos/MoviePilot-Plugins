@@ -9,6 +9,7 @@ def test_defaults_use_ten_minute_cron_and_expected_qb_tags():
     config = BrushConfig.from_mapping({})
 
     assert config.cron == "*/10 * * * *"
+    assert config.rss_url == ""
     assert config.qb_category == "刷流"
     assert config.qb_tags == ("bakabt", "刷流")
     assert config.max_bakabt_downloading == 2
@@ -72,6 +73,7 @@ def test_bakabt_tag_is_required_for_qb_scope_accounting():
 def test_cookie_and_cleanup_settings_are_preserved_in_complete_mapping():
     config = BrushConfig.from_mapping({
         "cookie": "bbtid=example",
+        "rss_url": "https://bakabt.me/rss.php?uid=1&v=2&key=private",
         "qb_tags": "bakabt,刷流,bakabt",
         "auto_delete": True,
         "delete_seed_hours": 24,
@@ -80,6 +82,7 @@ def test_cookie_and_cleanup_settings_are_preserved_in_complete_mapping():
 
     mapping = config.to_mapping()
     assert mapping["cookie"] == "bbtid=example"
+    assert mapping["rss_url"] == "https://bakabt.me/rss.php?uid=1&v=2&key=private"
     assert mapping["qb_tags"] == "bakabt,刷流"
     assert mapping["auto_delete"] is True
     assert mapping["delete_seed_hours"] == 24

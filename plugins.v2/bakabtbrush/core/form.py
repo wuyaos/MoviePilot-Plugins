@@ -33,8 +33,17 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
                 _col(12, {
                     "component": "VTextField",
                     "props": {
+                        "model": "rss_url", "label": "BakaBT RSS 地址", "type": "password",
+                        "autocomplete": "off",
+                        "hint": "用于发现新种；地址中的 uid/key 不会写入日志、状态、通知或数据页。留空时沿用浏览页扫描。",
+                        "persistent-hint": True,
+                    },
+                }),
+                _col(12, {
+                    "component": "VTextField",
+                    "props": {
                         "model": "cookie", "label": "BakaBT Cookie", "type": "password",
-                        "autocomplete": "off", "hint": "留空时从 CookieCloud 获取，并写回插件配置。",
+                        "autocomplete": "off", "hint": "仅在 RSS 新种通过时间和体积预筛后访问网页；留空时从 CookieCloud 获取。",
                         "persistent-hint": True,
                     },
                 }),
@@ -42,7 +51,7 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
                 _col(3, _number("detail_request_retries", "详情页重试次数")),
                 _col(6, _alert(
                     "info",
-                    "Cookie 优先使用手填值；留空时从 CookieCloud 获取并回写。Cookie 不会显示在数据页、日志或通知中。",
+                    "RSS 首次启用只建立当前 Feed 基线，之后仅对通过时间/体积筛选的新种访问网页；Cookie 仅用于优惠确认和下载。两类凭据均不会显示在数据页、日志或通知中。",
                 )),
             ],
         },
@@ -58,7 +67,7 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
             "component": "VRow",
             "content": [_col(12, _alert(
                 "info",
-                "单个非零值表示最大上限；“最小值-最大值”表示完整区间；0 或留空表示不限制。不支持省略端点。仅处理 Today + Freeleech。",
+                "单个非零值表示最大上限；“最小值-最大值”表示完整区间；0 或留空表示不限制。不支持省略端点。RSS 模式仅对新种做一次优惠判定。",
             ))],
         },
         _section("qBittorrent"),
@@ -129,6 +138,7 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
         "dry_run": False,
         "cron": "*/10 * * * *",
         "cookie": "",
+        "rss_url": "",
         "timeout": 20,
         "detail_request_retries": 3,
         "publish_age_range_minutes": "0",

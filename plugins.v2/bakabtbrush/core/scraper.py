@@ -5,12 +5,14 @@ from __future__ import annotations
 import html as html_lib
 import re
 import time
+import xml.etree.ElementTree as ElementTree
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
-from .models import AccountSnapshot, BakaBTTorrent, BrowsePage, DetailPage
+from .models import AccountSnapshot, BakaBTTorrent, BrowsePage, DetailPage, RssFeed
 
 
 BASE_URL = "https://bakabt.me"
@@ -107,6 +109,79 @@ def parse_account_html(source: str) -> AccountSnapshot:
     return AccountSnapshot(uploaded_mb=uploaded, downloaded_mb=downloaded, ratio=ratio)
 
 
+def parse_rss_xml(source: str, base_url: str = BASE_URL) -> RssFeed:
+    """解析 BakaBT RSS v2；RSS 只用于新种发现，不信任其中的优惠图标。"""
+    try:
+        root = ElementTree.fromstring(source or "")
+    except ElementTree.ParseError as err:
+        raise BakaBTError("BakaBT RSS XML 解析失败") from err
+
+    channel = root.find("channel")
+    if channel is None:
+        raise BakaBTError("未识别到 BakaBT RSS 频道")
+
+    torrents: list[BakaBTTorrent] = []
+    for element in channel.findall("item"):
+        fields = {
+            _xml_local_name(child.tag).casefold(): (child.text or "").strip()
+            for child in element
+        }
+        title = html_lib.unescape(fields.get("title", "")).strip()
+        description = html_lib.unescape(fields.get("description", ""))
+        if title.casefold() == "error":
+            raise BakaBTAuthError("BakaBT RSS 认证失败，RSS 凭据可能已失效")
+
+        detail_path = fields.get("link", "")
+        torrent_match = re.search(r"/torrent/(\d+)(?:/|$)", detail_path)
+        size_text = fields.get("size") or _extract_rss_size(description)
+        published_at = _parse_rss_datetime(fields.get("pubdate"), fields.get("added"))
+        size_mb = parse_size_mb(size_text)
+        if not title or not detail_path or not torrent_match or size_mb is None or published_at is None:
+            continue
+
+        torrents.append(BakaBTTorrent(
+            torrent_id=torrent_match.group(1),
+            title=title,
+            detail_url=_to_bakabt_url(base_url, detail_path),
+            size_mb=size_mb,
+            added_text="rss",
+            published_at=published_at,
+            # RSS 中的 bonus/hd 等内容图标不代表 Freeleech，必须由网页确认。
+            is_freeleech=False,
+        ))
+
+    return RssFeed(torrents=torrents)
+
+
+def _xml_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _extract_rss_size(description: str) -> str:
+    match = re.search(r"\bSize:\s*([\d,.]+\s*[KMGT]?i?B)\b", description or "", re.IGNORECASE)
+    return match.group(1) if match else ""
+
+
+def _parse_rss_datetime(pub_date: str | None, added: str | None) -> datetime | None:
+    if pub_date:
+        try:
+            value = parsedate_to_datetime(pub_date)
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
+        except (TypeError, ValueError, OverflowError):
+            pass
+    if added:
+        try:
+            value = datetime.fromisoformat(added)
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
+        except (TypeError, ValueError, OverflowError):
+            pass
+    return None
+
+
 def _extract_labeled_size_mb(text: str, label: str) -> float | None:
     match = re.search(
         rf"\b{re.escape(label)}\s+([\d,.]+\s*(?:[KMGT]?i?B|[KMGT]))\b",
@@ -154,6 +229,28 @@ def _validate_bakabt_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_HOSTS:
         raise BakaBTError("BakaBT 请求地址无效")
+
+
+def validate_rss_url(url: str) -> None:
+    """RSS 地址携带私密 key，只允许 BakaBT 官方 HTTPS v2 端点。"""
+    parsed = urlparse(url or "")
+    try:
+        port = parsed.port
+    except ValueError as err:
+        raise BakaBTError("BakaBT RSS 地址无效") from err
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in _ALLOWED_HOSTS
+        or port not in {None, 443}
+        or parsed.username
+        or parsed.password
+        or parsed.path != "/rss.php"
+        or not query.get("uid", [""])[0]
+        or not query.get("key", [""])[0]
+        or query.get("v", [""])[0] != "2"
+    ):
+        raise BakaBTError("BakaBT RSS 地址无效")
 
 
 def _is_login_page(source: str) -> bool:
@@ -283,6 +380,39 @@ class _DetailParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._in_download_link:
             self.download_text_parts.append(data)
+
+
+class BakaBTRssClient:
+    """不使用 Cookie 的 BakaBT RSS v2 客户端；错误信息不回显私密 URL。"""
+
+    def __init__(self, timeout: int = 20) -> None:
+        self._timeout = max(1, int(timeout))
+
+    def fetch_rss(self, rss_url: str) -> RssFeed:
+        validate_rss_url(rss_url)
+        try:
+            from app.utils.http import RequestUtils
+
+            response = RequestUtils(
+                headers={
+                    "User-Agent": _USER_AGENT,
+                    "Accept": "application/rss+xml,application/xml,text/xml,*/*;q=0.8",
+                },
+                timeout=self._timeout,
+            ).get_res(url=rss_url)
+            if not response:
+                raise BakaBTError("BakaBT RSS 无响应")
+            status_code = getattr(response, "status_code", 0)
+            if status_code in {401, 403}:
+                raise BakaBTAuthError("BakaBT RSS 认证失败，RSS 凭据可能已失效")
+            if status_code != 200:
+                raise BakaBTError(f"BakaBT RSS 请求失败：HTTP {status_code}")
+            validate_rss_url(getattr(response, "url", rss_url))
+            return parse_rss_xml(response.text)
+        except BakaBTError:
+            raise
+        except Exception as err:
+            raise BakaBTError("BakaBT RSS 请求失败") from err
 
 
 class BakaBTClient:

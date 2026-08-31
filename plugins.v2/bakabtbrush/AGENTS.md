@@ -16,7 +16,7 @@ MoviePilot V2 的 BakaBT Freeleech 刷流插件。
 - `core/form.py`：分区式 Vuetify 配置页。
 - `core/cookie.py`：手动 Cookie 与 CookieCloud 获取、配置回写。
 - `core/models.py`：BakaBT 种子、账户和 qB 快照模型。
-- `core/scraper.py`：BakaBT 浏览页、详情页、账户页和 `.torrent` 解析。
+- `core/scraper.py`：BakaBT RSS、浏览页、详情页、账户页和 `.torrent` 解析。
 - `core/filtering.py`：Today、Freeleech、体积与发布时间筛选。
 - `core/downloader.py`：MoviePilot qB 下载器查询、槽位、添加、确认与删除。
 - `core/cleanup.py`：自动删种条件评估及安全执行。
@@ -30,6 +30,8 @@ MoviePilot V2 的 BakaBT Freeleech 刷流插件。
 ## 业务边界
 
 - 只处理 BakaBT 页面明确标记为 `.icon.freeleech` 的种子。
+- 配置 RSS v2 后以新 torrent ID 触发：先使用 RSS 的发布时间和体积筛选，只有合格新种或其未完成首次判定缓存才访问一次浏览页；已判定非 Freeleech 的种子不做周期性复查。
+- RSS 首次启用只建立当前 Feed 基线；去重、待判定和优惠结果使用 PluginData 持久化缓存，RSS URL/uid/key 不进入状态、日志、通知或数据页。
 - 仅按发种时间与体积（MB）筛选；单值表示最大值、完整双值表示区间、`0`/空表示不限制，不接受省略范围端点。
 - qB 连接只使用 MoviePilot 已配置下载器，分类固定默认 `刷流`，标签默认 `bakabt,刷流`。
 - BakaBT 下载流程默认最多两个；自动删种默认关闭，且只处理分类匹配、含 `bakabt` 标签并存在插件添加记录的任务。
@@ -40,7 +42,7 @@ MoviePilot V2 的 BakaBT Freeleech 刷流插件。
 
 ## 状态与页面
 
-- 使用 `_PluginBase.get_data/save_data` 保存状态，不引入 SQLite。
+- 使用 `_PluginBase.get_data/save_data` 保存状态，不引入 SQLite；RSS 缓存只保存公开种子元数据和不可逆来源指纹。
 - 顶部四卡：BakaBT 流量、qB 刷流流量、历史下载种子数、上次运行。
 - 数据页区分当前未完成下载和统一历史时间线；运行与自动删除记录按时间混排为“时间/状态/详情/备注”四列；种子名链接至详情页；窗口高度与可见条目数可配置，超出后内部滚动。
 - 所有时间以 UTC 存储，通知和页面按 MoviePilot `settings.TZ` 显示。

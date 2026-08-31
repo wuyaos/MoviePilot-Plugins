@@ -39,6 +39,13 @@ class BrowsePage:
 
 
 @dataclass(frozen=True)
+class RssFeed:
+    """RSS 中可用于新种发现、时间与体积预筛的种子集合。"""
+
+    torrents: list[BakaBTTorrent]
+
+
+@dataclass(frozen=True)
 class DetailPage:
     """详情页中用于二次校验和下载的字段。"""
 
