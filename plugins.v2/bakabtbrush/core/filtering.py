@@ -1,4 +1,4 @@
-"""BakaBT Today、Freeleech、体积和发布时间筛选。"""
+"""BakaBT Freeleech、体积和发布时间筛选。"""
 
 from __future__ import annotations
 
@@ -6,16 +6,6 @@ from datetime import datetime, timezone
 
 from .config import BrushConfig
 from .models import BakaBTTorrent
-
-
-def prefilter_candidates(
-    torrents: list[BakaBTTorrent], config: BrushConfig,
-) -> list[BakaBTTorrent]:
-    """详情请求前仅使用浏览页可靠字段粗筛。"""
-    return [
-        item for item in torrents
-        if item.is_freeleech and matches_size(item, config) and is_today_listing(item)
-    ]
 
 
 def matches_final_filters(
@@ -39,18 +29,10 @@ def matches_final_filters(
 
 def sort_key(item: BakaBTTorrent, now: datetime) -> tuple[float, float]:
     """发布时间新优先；同一时间使用较大体积打破平局。"""
-    if item.published_at is not None:
-        published_at = _utc(item.published_at).timestamp()
-    elif is_today_listing(item):
-        published_at = _utc(now).timestamp()
-    else:
-        published_at = 0
+    published_at = (
+        _utc(item.published_at).timestamp() if item.published_at is not None else 0
+    )
     return published_at, item.size_mb
-
-
-def is_today_listing(item: BakaBTTorrent) -> bool:
-    added = " ".join((item.added_text or "").lower().split())
-    return added == "today" or added.startswith("today ")
 
 
 def matches_size(item: BakaBTTorrent, config: BrushConfig) -> bool:

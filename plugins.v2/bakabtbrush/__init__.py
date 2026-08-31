@@ -23,7 +23,6 @@ from .core.form import build_form
 from .core.notification import build_notification
 from .core.page import build_page
 from .core.runner import RunResult, run_once
-from .core.scraper import BROWSE_URL
 from .core.state import normalize_state, record_run
 
 
@@ -33,7 +32,7 @@ class BakaBTBrush(_PluginBase):
     plugin_name = "BakaBT 刷流"
     plugin_desc = "定时筛选 BakaBT Freeleech 种子并提交到 qBittorrent"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/bakabtbrush.png"
-    plugin_version = "0.1.5"
+    plugin_version = "0.1.6"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "bakabtbrush_"
@@ -120,7 +119,7 @@ class BakaBTBrush(_PluginBase):
 
     def _resolve_cookie(self) -> str:
         """Cookie 为空时从 CookieCloud 获取；回写延后到运行锁释放后执行。"""
-        cookie, should_save = resolve_cookie(self._cookie, BROWSE_URL)
+        cookie, should_save = resolve_cookie(self._cookie, "https://bakabt.me")
         if should_save:
             self._cookie = cookie
             self._pending_cookie_write = cookie
@@ -166,7 +165,7 @@ class BakaBTBrush(_PluginBase):
                 return
             try:
                 qb_instance = get_qb_instance(config.downloader)
-                # 普通抓取仅在有空槽位后访问站点；启用促销过期清理时会先读取详情确认。
+                # 新种确认仅在有空槽位后访问站点；启用促销过期清理时会先读取详情确认。
                 result = run_once(
                     config,
                     self._resolve_cookie,
@@ -269,12 +268,7 @@ class BakaBTBrush(_PluginBase):
 
     def get_page(self) -> List[dict]:
         try:
-            config = self._runtime_config or BrushConfig.from_mapping({})
-            return build_page(
-                normalize_state(self.get_data("state")),
-                max_height=config.page_max_height,
-                visible_items=config.page_visible_items,
-            )
+            return build_page(normalize_state(self.get_data("state")))
         except Exception as err:
             logger.error(f"BakaBT 刷流数据页加载失败：{type(err).__name__}")
             return [{

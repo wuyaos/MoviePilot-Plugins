@@ -96,7 +96,7 @@ def test_page_has_overview_current_tasks_linked_history_and_deletions():
         "ratio": 3,
     }])
 
-    page = build_page(state, max_height=320, visible_items=2)
+    page = build_page(state)
     cards = page[0]["content"]
     texts = list(_find_text(page))
     hrefs = list(_find_href(page))
@@ -118,4 +118,4 @@ def test_page_has_overview_current_tasks_linked_history_and_deletions():
     tables = list(_find_components(page, "VTable"))
     assert tables
     assert all(table["props"]["fixed-header"] is True for table in tables)
-    assert all(table["props"]["height"] <= 320 for table in tables)
+    assert all(table["props"]["height"] <= 520 for table in tables)

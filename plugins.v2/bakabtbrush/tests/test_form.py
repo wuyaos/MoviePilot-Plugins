@@ -50,10 +50,10 @@ def test_form_uses_new_range_and_cleanup_fields_without_legacy_min_max():
 
     assert {"rss_url", "cookie", "size_range_mb", "publish_age_range_minutes"}.issubset(models)
     assert {"auto_delete", "delete_files", "delete_seed_hours", "delete_exclude_tags"}.issubset(models)
-    assert {"page_max_height", "page_visible_items"}.issubset(models)
+    assert {"page_max_height", "page_visible_items"}.isdisjoint(models)
     assert "候选过滤" in texts
     assert "自动删种" in texts
-    assert "数据页" in texts
+    assert "数据页" not in texts
     assert model["rss_url"] == ""
     assert _props_for_model(form, "rss_url")["type"] == "password"
     assert model["auto_delete"] is False

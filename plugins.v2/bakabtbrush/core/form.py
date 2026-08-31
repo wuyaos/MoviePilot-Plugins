@@ -35,7 +35,7 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
                     "props": {
                         "model": "rss_url", "label": "BakaBT RSS 地址", "type": "password",
                         "autocomplete": "off",
-                        "hint": "用于发现新种；地址中的 uid/key 不会写入日志、状态、通知或数据页。留空时沿用浏览页扫描。",
+                        "hint": "新种发现的唯一来源；未配置时任务将直接失败。地址中的 uid/key 不会写入日志、状态、通知或数据页。",
                         "persistent-hint": True,
                     },
                 }),
@@ -67,7 +67,7 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
             "component": "VRow",
             "content": [_col(12, _alert(
                 "info",
-                "单个非零值表示最大上限；“最小值-最大值”表示完整区间；0 或留空表示不限制。不支持省略端点。RSS 模式仅对新种做一次优惠判定。",
+                "单个非零值表示最大上限；“最小值-最大值”表示完整区间；0 或留空表示不限制。不支持省略端点。每个新种只做一次优惠判定。",
             ))],
         },
         _section("qBittorrent"),
@@ -122,14 +122,6 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
                 "自动删种默认关闭；仅处理分类匹配、包含 bakabt 标签且由本插件登记的任务。删除文件默认关闭，排除标签优先级最高。",
             ))],
         },
-        _section("数据页", "超出可见条目数或窗口高度后在卡片内部滚动"),
-        {
-            "component": "VRow",
-            "content": [
-                _col(6, _number("page_max_height", "窗口最大高度（px）")),
-                _col(6, _number("page_visible_items", "最多可见条目数")),
-            ],
-        },
     ]
     model = {
         "enabled": False,
@@ -159,8 +151,6 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
         "delete_protection_minutes": 60,
         "delete_exclude_tags": "H&R,保留",
         "delete_expired_freeleech_incomplete": False,
-        "page_max_height": 520,
-        "page_visible_items": 8,
     }
     return [{"component": "VForm", "content": content}], model
 

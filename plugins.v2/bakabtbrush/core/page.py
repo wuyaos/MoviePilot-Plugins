@@ -27,11 +27,9 @@ _STATUS_COLOR = {
 }
 
 
-def build_page(
-    state: dict[str, Any], *, max_height: int = 520, visible_items: int = 8,
-) -> list[dict]:
-    max_height = min(1600, max(240, int(max_height)))
-    visible_items = min(30, max(1, int(visible_items)))
+def build_page(state: dict[str, Any]) -> list[dict]:
+    # 窗口高度与可见条目数使用固定默认，不再由配置控制。
+    max_height, visible_items = 520, 8
     return [
         _overview_cards(state),
         _current_downloads(state, max_height, visible_items),

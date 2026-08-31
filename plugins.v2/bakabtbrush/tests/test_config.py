@@ -17,8 +17,6 @@ def test_defaults_use_ten_minute_cron_and_expected_qb_tags():
     assert config.size_range_mb == "0"
     assert config.auto_delete is False
     assert config.delete_files is False
-    assert config.page_max_height == 520
-    assert config.page_visible_items == 8
 
 
 def test_dry_run_is_persisted_as_a_one_shot_config_flag():
@@ -55,14 +53,6 @@ def test_invalid_or_open_range_is_rejected(value):
 def test_minimum_greater_than_maximum_is_rejected():
     with pytest.raises(ConfigError, match="最小值"):
         BrushConfig.from_mapping({"publish_age_range_minutes": "120-60"})
-
-
-def test_page_window_settings_are_bounded():
-    low = BrushConfig.from_mapping({"page_max_height": 1, "page_visible_items": 0})
-    high = BrushConfig.from_mapping({"page_max_height": 9999, "page_visible_items": 999})
-
-    assert (low.page_max_height, low.page_visible_items) == (240, 1)
-    assert (high.page_max_height, high.page_visible_items) == (1600, 30)
 
 
 def test_bakabt_tag_is_required_for_qb_scope_accounting():

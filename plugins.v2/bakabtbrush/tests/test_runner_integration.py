@@ -7,7 +7,6 @@ import core.runner as runner_module
 from core.config import BrushConfig
 from core.models import AccountSnapshot, BakaBTTorrent, BrowsePage, DetailPage, RssFeed
 from core.runner import run_once
-from core.scraper import BakaBTError
 from core.state import default_state
 
 
@@ -18,11 +17,15 @@ INFOHASH = "a" * 40
 class FakeQBC:
     def __init__(self, torrents=None):
         self.torrents = list(torrents or [])
+        self.blind_hashes = set()
 
     def torrents_info(self, category=None, torrent_hashes=None):
         if torrent_hashes:
             return [item for item in self.torrents if item.hash == torrent_hashes]
-        return [item for item in self.torrents if item.category == category]
+        return [
+            item for item in self.torrents
+            if item.category == category and item.hash not in self.blind_hashes
+        ]
 
 
 class FakeQBInstance:
@@ -126,7 +129,7 @@ def _install_rss_client(monkeypatch, items_holder):
     return calls
 
 
-def test_no_qb_slot_stops_before_any_bakabt_request():
+def test_without_rss_url_fails_before_any_bakabt_request():
     existing = SimpleNamespace(
         hash="b" * 40, name="existing", category="刷流", tags="bakabt,刷流",
         state="downloading", progress=0, uploaded=0, downloaded=0,
@@ -134,7 +137,7 @@ def test_no_qb_slot_stops_before_any_bakabt_request():
     client = FakeClient(_item())
     cookie_lookups = []
     result = run_once(
-        _config(max_bakabt_downloading=1),
+        _config(),
         lambda: cookie_lookups.append(True) or "cookie",
         default_state(),
         FakeQBInstance([existing]),
@@ -142,12 +145,13 @@ def test_no_qb_slot_stops_before_any_bakabt_request():
         client=client,
     )
 
-    assert result.status == "no_qb_slot"
+    assert result.status == "failed"
+    assert "未配置 BakaBT RSS" in result.detail
     assert client.browse_calls == 0
     assert cookie_lookups == []
 
 
-def test_auto_cleanup_runs_before_slot_check_and_records_deletion():
+def test_auto_cleanup_still_runs_without_rss_url():
     existing = SimpleNamespace(
         hash="b" * 40,
         name="existing",
@@ -173,7 +177,6 @@ def test_auto_cleanup_runs_before_slot_check_and_records_deletion():
     client = FakeClient(_item())
     result = run_once(
         _config(
-            max_bakabt_downloading=1,
             auto_delete=True,
             delete_ratio=2,
             delete_protection_minutes=0,
@@ -187,143 +190,9 @@ def test_auto_cleanup_runs_before_slot_check_and_records_deletion():
 
     assert instance.delete_calls == [{"delete_file": False, "ids": ["b" * 40]}]
     assert result.deleted[0]["title"] == "existing"
-    assert result.status == "no_candidate"
-
-
-def test_finally_rejected_today_item_is_not_shown_as_selected_torrent():
-    state = default_state()
-    client = FakeClient(_item())
-
-    result = run_once(
-        _config(publish_age_range_minutes="10"),
-        "cookie",
-        state,
-        FakeQBInstance(),
-        dry_run=True,
-        now=NOW,
-        client=client,
-    )
-
-    assert result.status == "dry_run"
-    assert result.previewed == ()
-    assert state["last_run"]["torrent"] == "-"
-    assert state["last_run"]["torrent_links"] == []
-
-
-def test_empty_cookie_after_slot_check_fails_without_bakabt_request():
-    client = FakeClient(_item())
-    result = run_once(_config(), lambda: "", default_state(), FakeQBInstance(), now=NOW, client=client)
-
     assert result.status == "failed"
+    assert "未配置 BakaBT RSS" in result.detail
     assert client.browse_calls == 0
-    assert "Cookie" in result.detail
-
-
-def test_detail_failure_does_not_block_later_candidate():
-    first = _item()
-    first.torrent_id = "first"
-    first.title = "First"
-    second = _item()
-    second.torrent_id = "second"
-    second.title = "Second"
-    second.published_at = NOW - timedelta(minutes=31)
-
-    class FlakyClient(FakeClient):
-        def __init__(self):
-            super().__init__(first)
-            self.detail_calls = 0
-
-        def fetch_browse(self):
-            self.browse_calls += 1
-            return BrowsePage([first, second], "https://bakabt.me/user/1/example")
-
-        def fetch_detail(self, _):
-            self.detail_calls += 1
-            if self.detail_calls == 1:
-                raise BakaBTError("detail unavailable")
-            return DetailPage(True, second.published_at, "https://bakabt.me/download/x.torrent", INFOHASH)
-
-    result = run_once(_config(), "cookie", default_state(), FakeQBInstance(), now=NOW, client=FlakyClient())
-
-    assert result.status == "success"
-    assert [item.title for item in result.added] == ["Second"]
-    assert result.failed_titles == ("First",)
-
-
-def test_dry_run_records_candidate_without_downloading_or_adding_to_qb():
-    state = default_state()
-    instance = FakeQBInstance()
-    client = FakeClient(_item())
-
-    result = run_once(
-        _config(),
-        "cookie",
-        state,
-        instance,
-        dry_run=True,
-        now=NOW,
-        client=client,
-    )
-
-    assert result.status == "dry_run"
-    assert [item.torrent_id for item in result.previewed] == ["360859"]
-    assert result.added == ()
-    assert instance.add_calls == []
-    assert client.torrent_calls == 0
-    assert state["added"] == {}
-    assert state["history"][-1]["push"] == "试运行，未推送 1 个"
-
-
-
-
-def test_today_candidates_use_detail_time_then_download_slot_order():
-    older = _item()
-    older.torrent_id, older.title = "older", "Older"
-    older.detail_url = "https://bakabt.me/torrent/older/example"
-    older.added_text = "today"
-    older.published_at = NOW - timedelta(minutes=50)
-    newer = _item()
-    newer.torrent_id, newer.title = "newer", "Newer"
-    newer.detail_url = "https://bakabt.me/torrent/newer/example"
-    newer.added_text = "today"
-    newer.published_at = NOW - timedelta(minutes=15)
-
-    class DetailOrderingClient(FakeClient):
-        def __init__(self):
-            super().__init__(older)
-
-        def fetch_browse(self):
-            return BrowsePage([older, newer], "https://bakabt.me/user/1/example")
-
-        def fetch_detail(self, detail_url):
-            item = newer if "/newer/" in detail_url else older
-            return DetailPage(True, item.published_at, "https://bakabt.me/download/x.torrent", INFOHASH)
-
-    result = run_once(
-        _config(max_bakabt_downloading=1),
-        "cookie",
-        default_state(),
-        FakeQBInstance(),
-        dry_run=True,
-        now=NOW,
-        client=DetailOrderingClient(),
-    )
-
-    assert result.status == "dry_run"
-    assert [item.torrent_id for item in result.previewed] == ["newer"]
-
-    state = default_state()
-    instance = FakeQBInstance()
-    item = _item()
-    result = run_once(_config(), "cookie", state, instance, now=NOW, client=FakeClient(item))
-
-    assert result.status == "success"
-    assert [torrent.torrent_id for torrent in result.added] == ["360859"]
-    assert "360859" in state["added"]
-    assert state["account"]["ratio"] == "2.00"
-    assert state["history"][-1]["push"] == "已推送 1 个"
-    assert instance.add_calls[0]["category"] == "刷流"
-    assert instance.add_calls[0]["tag"] == ["bakabt", "刷流"]
 
 
 def test_rss_mode_keeps_automatic_cleanup_before_discovery(monkeypatch):
@@ -587,6 +456,37 @@ def test_rss_candidate_waits_in_cache_while_qb_is_full(monkeypatch):
     )
     assert resumed.status == "success"
     assert client.browse_calls == 1
+
+
+def test_rss_slot_count_falls_back_when_qb_category_refresh_is_blind(monkeypatch):
+    baseline = _rss_item("360858")
+    candidate = _rss_item("360860")
+    holder = {"items": [baseline]}
+    _install_rss_client(monkeypatch, holder)
+    state = default_state()
+    config = _config(rss_url="https://bakabt.me/rss.php?uid=1&v=2&key=private")
+    browser_item = _rss_item("360860")
+    browser_item.is_freeleech = True
+    client = FakeClient(browser_item)
+
+    class BlindQBInstance(FakeQBInstance):
+        # 模拟 qB 添加后未立即可见：hash 确认仍可见，但分类查询暂时漏掉新任务。
+        def add_torrent(self, **kwargs):
+            accepted, ids = super().add_torrent(**kwargs)
+            self.qbc.blind_hashes.update(ids)
+            return accepted, ids
+
+    instance = BlindQBInstance()
+    run_once(config, "cookie", state, instance, now=NOW, client=client)
+
+    holder["items"] = [candidate, baseline]
+    result = run_once(config, "cookie", state, instance, now=NOW, client=client)
+
+    assert result.status == "success"
+    assert len(instance.add_calls) == 1
+    assert result.downloading_count == 1
+    assert result.max_downloading == 2
+    assert result.detail == "qB 下载槽位：1/2"
 
 
 def test_rss_unlimited_publish_age_does_not_apply_hidden_24h_limit(monkeypatch):

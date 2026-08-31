@@ -42,8 +42,6 @@ class BrushConfig:
     delete_protection_minutes: int
     delete_exclude_tags: tuple[str, ...]
     delete_expired_freeleech_incomplete: bool
-    page_max_height: int
-    page_visible_items: int
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any] | None) -> "BrushConfig":
@@ -91,8 +89,6 @@ class BrushConfig:
             delete_expired_freeleech_incomplete=bool(
                 raw.get("delete_expired_freeleech_incomplete", False)
             ),
-            page_max_height=_bounded_int(raw.get("page_max_height"), 520, 240, 1600),
-            page_visible_items=_bounded_int(raw.get("page_visible_items"), 8, 1, 30),
         )
         config.validate()
         return config
@@ -131,8 +127,6 @@ class BrushConfig:
             "delete_protection_minutes": self.delete_protection_minutes,
             "delete_exclude_tags": ",".join(self.delete_exclude_tags),
             "delete_expired_freeleech_incomplete": self.delete_expired_freeleech_incomplete,
-            "page_max_height": self.page_max_height,
-            "page_visible_items": self.page_visible_items,
         }
 
 
@@ -177,13 +171,6 @@ def _nonnegative_int(value: Any, default: int) -> int:
 def _positive_int(value: Any, default: int) -> int:
     try:
         return max(1, int(value))
-    except (TypeError, ValueError):
-        return default
-
-
-def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
-    try:
-        return min(maximum, max(minimum, int(value)))
     except (TypeError, ValueError):
         return default
 
