@@ -489,11 +489,12 @@
         "name": "BakaBT 刷流",
         "description": "定时筛选 BakaBT Freeleech 种子并提交到 qBittorrent",
         "labels": "BakaBT,刷流,Freeleech",
-        "version": "0.1.6",
+        "version": "0.1.7",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/bakabtbrush.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v0.1.7": "配置页 qB 下载流程提示拆分为两行显示。",
             "v0.1.6": "RSS 成为唯一新种来源：移除无 RSS 时的浏览页扫描流程，未配置 RSS 地址时任务直接失败；删除数据页窗口高度/可见条目数配置项，使用固定默认布局；推送后槽位统计按理论占用兜底。",
             "v0.1.5": "新增 RSS v2 新种触发与持久化缓存：先按发布时间和体积预筛，仅合格新种访问一次浏览页确认 Freeleech，非优惠结果不重复复查；候选可跨重载等待时间或 qB 槽位，账户页随候选限频刷新。",
             "v0.1.4": "运行历史仅显示最终通过详情复核的候选或实际推送结果，不再把被淘汰的 Today 粗候选显示为未推送种子；运行与自动删除记录合并为按时间排序的“时间/状态/详情/备注”统一时间线。",

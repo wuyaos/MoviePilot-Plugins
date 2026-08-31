@@ -32,7 +32,7 @@ class BakaBTBrush(_PluginBase):
     plugin_name = "BakaBT 刷流"
     plugin_desc = "定时筛选 BakaBT Freeleech 种子并提交到 qBittorrent"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/bakabtbrush.png"
-    plugin_version = "0.1.6"
+    plugin_version = "0.1.7"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "bakabtbrush_"

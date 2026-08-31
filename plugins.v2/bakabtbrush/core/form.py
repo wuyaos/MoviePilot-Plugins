@@ -90,7 +90,17 @@ def build_form(downloader_options: list[dict[str, str]]) -> tuple[list[dict], di
                 _col(3, _text("qb_category", "分类")),
                 _col(4, _text("qb_tags", "标签（逗号分隔）")),
                 _col(3, _number("max_bakabt_downloading", "最大下载流程数")),
-                _col(2, _alert("info", "0 = 不限制；仅统计“刷流 + bakabt”任务。")),
+                _col(2, {
+                    "component": "VAlert",
+                    "props": {
+                        "type": "info", "variant": "tonal", "density": "compact",
+                        "class": "text-caption h-100",
+                    },
+                    "content": [
+                        {"component": "div", "text": "0 = 不限制；"},
+                        {"component": "div", "text": "仅统计“刷流 + bakabt”任务。"},
+                    ],
+                }),
             ],
         },
         _section("自动删种", "普通模式满足任一启用条件即删除"),
