@@ -80,6 +80,9 @@ class U2(_ISiteSigninHandler):
             return False, '签到失败'
 
         # 获取签到参数
+        # U2 为“看图选作品”验证码：4 个 submit 是作品选项，题目为 image.php 图片；
+        # 站点已启用 CSRF 校验，POST 必须携带签到表单内的 _csrf，否则 403 Invalid or expired link。
+        csrf = html.xpath("//form//td/input[@name='_csrf']/@value")
         req = html.xpath("//form//td/input[@name='req']/@value")[0]
         hash_str = html.xpath("//form//td/input[@name='hash']/@value")[0]
         form = html.xpath("//form//td/input[@name='form']/@value")[0]
@@ -89,9 +92,10 @@ class U2(_ISiteSigninHandler):
             logger.error("{site} 签到失败，未获取到相关签到参数")
             return False, '签到失败'
 
-        # 随机一个答案
-        answer_num = random.randint(0, 3)
+        # 随机一个答案（看图选择题无法自动识别，选项数自适应）
+        answer_num = random.randint(0, len(submit_name) - 1)
         data = {
+            '_csrf': csrf[0] if csrf else '',
             'req': req,
             'hash': hash_str,
             'form': form,
@@ -115,6 +119,9 @@ class U2(_ISiteSigninHandler):
         if self._success_text in sign_res.text:
             logger.info(f"{site} 签到成功")
             return True, '签到成功'
+        elif "Invalid or expired link" in sign_res.text:
+            logger.error(f"{site} 签到失败，CSRF 校验未通过或链接已过期")
+            return False, '签到失败，CSRF 校验未通过或链接已过期'
         else:
-            logger.error(f"{site} 签到失败，未知原因")
+            logger.error(f"{site} 签到失败，未知原因，响应片段：{(sign_res.text or '')[:100]}")
             return False, '签到失败，未知原因'
