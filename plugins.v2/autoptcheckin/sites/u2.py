@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.log import logger
 from app.plugins.autoptcheckin.sites import _ISiteSigninHandler
 from app.utils.http import RequestUtils
+from app.utils.site import SiteUtils
 
 
 class U2(_ISiteSigninHandler):
@@ -59,7 +60,9 @@ class U2(_ISiteSigninHandler):
             logger.error(f"{site} 签到失败，请检查站点连通性")
             return False, '签到失败，请检查站点连通性'
 
-        if "login.php" in html_text:
+        # showup.php 内嵌权限 JSON 含 "maxlogin.php" 等子串，
+        # 不能用 "login.php" in html_text 判定登录失效，改用通用登录态检测。
+        if not SiteUtils.is_logged_in(html_text):
             logger.error(f"{site} 签到失败，Cookie已失效")
             return False, '签到失败，Cookie已失效'
         

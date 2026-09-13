@@ -161,11 +161,12 @@
         "name": "PT站点自动签到",
         "description": "PT 站点自动签到与模拟登录，支持验证码",
         "labels": "签到,PT",
-        "version": "1.5.17",
+        "version": "1.5.18",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.18": "修复幼儿园(U2)签到误报 Cookie 已失效：showup.php 内嵌权限 JSON 含 \"maxlogin.php\" 子串，旧版用 \"login.php\" in 页面全文判断会误中；改为 SiteUtils.is_logged_in 通用登录态检测。",
             "v1.5.17": "新增 NovaHD 验证码签到适配器：复用 NexusPHP attendance.php 验证码通用基类，自动获取 imagehash 并经 ddddocr/OcrHelper 识别提交，签到结果以复查签到页确认。",
             "v1.5.16": "新增包子(p.t-baozi.cc) attendance.php 验证码签到适配：复用 NexusPHP 验证码签到通用基类，自动识别 imagehash/imagestring 并提交。",
             "v1.5.15": "新增 RetroToon（retrotoon.world）每日奖励适配：读取 attendance.php CSRF 表单并 POST claim，兼容带 claimed=1 的地址，提交后复查页面确认签到结果。",
