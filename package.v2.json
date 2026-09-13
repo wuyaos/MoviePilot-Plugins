@@ -161,11 +161,12 @@
         "name": "PT站点自动签到",
         "description": "PT 站点自动签到与模拟登录，支持验证码",
         "labels": "签到,PT",
-        "version": "1.5.21",
+        "version": "1.5.22",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.22": "幼儿园(U2) CSRF 取值锚定签到表单 action=showup.php?action=show，避免匹配到页头或日期查询表单。",
             "v1.5.21": "修复幼儿园(U2) CSRF 取值路径：_csrf 不在 td 内且页面含两个同名 input，改为定位 showup 签到表单内取值。",
             "v1.5.20": "修复幼儿园(U2)签到 403：站点签到表单已启用 CSRF 校验，POST 需携带表单内 _csrf 参数；答案选项数自适应并区分 CSRF 失败与未知错误。",
             "v1.5.19": "修复幼儿园(U2)签到提交请求失败：站点超时配置为 0（不限时）时被原样传给 POST 请求，requests 视为 0 秒立即超时；与 GET 链路一致改为兑底默认 20 秒。",

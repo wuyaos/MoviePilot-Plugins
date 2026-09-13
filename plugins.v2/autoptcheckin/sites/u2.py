@@ -82,8 +82,8 @@ class U2(_ISiteSigninHandler):
         # 获取签到参数
         # U2 为“看图选作品”验证码：4 个 submit 是作品选项，题目为 image.php 图片；
         # 站点已启用 CSRF 校验，POST 必须携带签到表单内的 _csrf，否则 403 Invalid or expired link。
-        # _csrf 不在 td 内且页面有两个（页头/签到表单各一），必须定位到签到表单内取值。
-        csrf = html.xpath("//form[contains(@action,'showup')]//input[@name='_csrf']/@value")
+        # _csrf 不在 td 直接父级且页面有两个同名 input，必须锚定签到表单（action=show）取值。
+        csrf = html.xpath("//form[contains(@action,'showup.php?action=show')]//input[@name='_csrf']/@value")
         req = html.xpath("//form//td/input[@name='req']/@value")[0]
         hash_str = html.xpath("//form//td/input[@name='hash']/@value")[0]
         form = html.xpath("//form//td/input[@name='form']/@value")[0]
