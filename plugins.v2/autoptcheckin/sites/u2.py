@@ -99,10 +99,11 @@ class U2(_ISiteSigninHandler):
             submit_name[answer_num]: submit_value[answer_num]
         }
         # 签到
+        # 站点 timeout=0 表示不限时；requests 的 0 秒超时会立即失败，必须兑底。
         sign_res = RequestUtils(cookies=site_cookie,
                                 ua=ua,
                                 proxies=settings.PROXY if proxy else None,
-                                timeout=timeout
+                                timeout=timeout or 20
                                 ).post_res(url="https://u2.dmhy.org/showup.php?action=show",
                                            data=data)
         if not sign_res or sign_res.status_code != 200:
