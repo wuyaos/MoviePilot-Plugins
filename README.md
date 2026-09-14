@@ -168,3 +168,13 @@ yzyy 论坛每日签到，自动获取签到码完成签到。
 > 版本 1.0.11 · 作者 wuyaos
 
 自动发现并串行领取不可躺红包，支持限流感知和历史统计。
+
+## Overview
+
+TODO: Add project description.
+
+## Project Structure
+
+```
+MoviePilot-Plugins/
+```
