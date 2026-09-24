@@ -176,5 +176,6 @@ TODO: Add project description.
 ## Project Structure
 
 ```
+├── plugins.v2/autoptcheckin/sites/naturept.py
 MoviePilot-Plugins/
 ```
