@@ -45,7 +45,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.5.23"
+    plugin_version = "1.5.24"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -1375,6 +1375,15 @@ class AutoPtCheckin(_PluginBase):
             return "站点请求过于频繁（HTTP 429），请稍后重试"
         return f"状态码：{status_code}"
 
+    @staticmethod
+    def _parse_retry_after(value, default: int = 10, cap: int = 20) -> int:
+        """解析 Retry-After 头（秒），缺省 10s、上限 20s，避免异常值拖死批量任务。"""
+        try:
+            seconds = int(float(str(value or "").strip()))
+        except (TypeError, ValueError):
+            return default
+        return max(1, min(seconds, cap))
+
     def signin_site(self, site_info: CommentedMap, cookie_cache: dict = None) -> Tuple[str, str, SigninStatus]:
         """
         签到一个站点
@@ -1599,6 +1608,18 @@ class AutoPtCheckin(_PluginBase):
                                        proxies=proxies,
                                        timeout=timeout or 20
                                        ).get_res(url=site_url)
+                    # 429 限流：按 Retry-After 短暂等待后重试一次。
+                    # 实测 AsianCinema 等站点更新后为 30 次/短窗口限流（Retry-After 秒级），
+                    # 定时请求撞上配额耗尽时等待重试即可恢复。
+                    if res is not None and res.status_code == 429:
+                        retry_after = AutoPtCheckin._parse_retry_after(res.headers.get("Retry-After"))
+                        logger.warning(f"{site} 模拟登录触发站点限流（429），{retry_after}s 后重试一次")
+                        time.sleep(retry_after)
+                        res = RequestUtils(cookies=site_cookie,
+                                           ua=ua,
+                                           proxies=proxies,
+                                           timeout=timeout or 20
+                                           ).get_res(url=site_url)
                     if res is not None and res.status_code == 200:
                         page_text = res.text or None
                     elif res is not None and res.status_code not in [200, 500, 403]:
