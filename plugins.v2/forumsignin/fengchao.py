@@ -1,6 +1,6 @@
-"""蜂巢签到业务（适配新版 pting.club Next.js）。
+"""蜂巢签到业务（适配新版 fengchao.chat Next.js）。
 
-使用 pting.club 专用集成 API（/api/integrations/moviepilot/v1/*），
+使用 fengchao.chat 专用集成 API（/api/integrations/moviepilot/v1/*），
 认证方式为 Bearer api_key，不再依赖账号密码登录或 Cookie。
 """
 import time
@@ -11,7 +11,7 @@ from app.core.config import settings
 
 from .models import ForumSigninConfig, PluginCallbacks
 
-MOVIEPILOT_API_BASE = "https://pting.club"
+MOVIEPILOT_API_BASE = "https://fengchao.chat"
 
 
 class FengchaoService:
@@ -45,7 +45,7 @@ class FengchaoService:
     def _api_headers(self) -> dict:
         api_key = (self.config.fengchao_api_key or "").strip()
         if not api_key:
-            raise RuntimeError("未配置蜂巢 Bearer Key，请在 pting.club 个人设置页生成并粘贴")
+            raise RuntimeError("未配置蜂巢 Bearer Key，请在 fengchao.chat 个人设置页生成并粘贴")
         return {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",

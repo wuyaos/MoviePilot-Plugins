@@ -84,7 +84,7 @@ def build_form() -> Tuple[List[dict], Dict[str, Any]]:
                     {'component': 'VDivider'},
                     {'component': 'VCardText', 'content': [
                         {'component': 'VRow', 'content': [
-                            {'component': 'VCol', 'props': {'cols': 12, 'md': 8}, 'content': [{'component': 'VTextField', 'props': {'model': 'fengchao_api_key', 'label': '蜂巢 Bearer Key', 'placeholder': 'pting.club 个人设置页生成', 'hint': '在 pting.club 个人设置页生成 API Key 并粘贴到此处', 'persistent-hint': True, 'type': 'password', 'clearable': True}}]},
+                            {'component': 'VCol', 'props': {'cols': 12, 'md': 8}, 'content': [{'component': 'VTextField', 'props': {'model': 'fengchao_api_key', 'label': '蜂巢 Bearer Key', 'placeholder': 'fengchao.chat 个人设置页生成', 'hint': '在 fengchao.chat 个人设置页生成 API Key 并粘贴到此处', 'persistent-hint': True, 'type': 'password', 'clearable': True}}]},
                         ]},
                         {'component': 'VRow', 'content': [
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VSwitch', 'props': {'model': 'mp_push_enabled', 'label': '启用PT人生同步', 'color': 'primary'}}]},
@@ -130,7 +130,7 @@ def build_form() -> Tuple[List[dict], Dict[str, Any]]:
                             {'component': 'VListItem', 'content': [
                                 {'component': 'template', 'props': {'v-slot:prepend': ''}, 'content': [{'component': 'VIcon', 'props': {'color': 'warning'}, 'text': 'mdi-flower'}]},
                                 {'component': 'VListItemTitle', 'text': '蜂巢账号'},
-                                {'component': 'VListItemSubtitle', 'text': '在 pting.club 个人设置页生成 API Key（Bearer Key）并粘贴到配置项；不再需要用户名密码或 Cookie。'}
+                                {'component': 'VListItemSubtitle', 'text': '在 fengchao.chat 个人设置页生成 API Key（Bearer Key）并粘贴到配置项；不再需要用户名密码或 Cookie。'}
                             ]},
                             {'component': 'VListItem', 'content': [
                                 {'component': 'template', 'props': {'v-slot:prepend': ''}, 'content': [{'component': 'VIcon', 'props': {'style': 'color: #9C27B0;'}, 'text': 'mdi-pill'}]},
