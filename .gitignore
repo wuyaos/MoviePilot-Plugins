@@ -225,3 +225,7 @@ plugins.v2/**/*.log
 # MP 同步产物
 config/
 .cache/
+
+# Pi 本地配置
+.pi/
+TODO.md
