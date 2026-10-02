@@ -217,13 +217,26 @@ class CoverEngine:
             inc = "MusicAlbum,Audio"
         else:
             inc = "Movie,Series"
-        items_raw = srv.get_items_batch(service, lid, limit=self.cfg.required_items * 3,
+        # 未刮削的新入库项目可能集中占据排序头部（无图被过滤），
+        # 首批扩大窗口并分页向后补拉，直到凑足所需有效项目、拉尽库或达到页数上限。
+        batch = max(self.cfg.required_items * 3, 100)
+        items_raw = srv.get_items_batch(service, lid, limit=batch,
                                         include_types=inc, sort_by=sort_by)
         if not items_raw:
             logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 拉取项目为空 (type={coll_type or lib_type})")
 
         seen: Set[str] = set()
         valid = self._filter_items(items_raw, seen)
+        fetched = len(items_raw)
+        for _ in range(19):
+            if len(valid) >= self.cfg.required_items or not items_raw:
+                break
+            items_raw = srv.get_items_batch(service, lid, limit=batch, offset=fetched,
+                                            include_types=inc, sort_by=sort_by)
+            if not items_raw:
+                break
+            fetched += len(items_raw)
+            valid.extend(self._filter_items(items_raw, seen))
         if not valid:
             logger.warning(f"{LOG_PREFIX} {sname}：{lib.get('Name')} 筛选后无有效项目")
             return False
