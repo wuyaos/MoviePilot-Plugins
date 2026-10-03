@@ -55,7 +55,7 @@ class TangRedPacketClaim(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动领取不可躺红包，支持限流保护和历史统计"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacketclaim.png"
-    plugin_version = "1.0.13"
+    plugin_version = "1.0.14"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacketclaim_"
@@ -89,8 +89,7 @@ class TangRedPacketClaim(_PluginBase):
     _fast_mode = False
     _claim_interval = 1.0
     _poll_interval = 60.0
-    _claim_start_hour = 0
-    _claim_end_hour = 0
+    _claim_window = "8-24"
     _run_once = False
     _dry_run = False
     _lock = threading.Lock()
@@ -104,15 +103,14 @@ class TangRedPacketClaim(_PluginBase):
         self._fast_mode = bool(config.get("fast_mode", False))
         self._claim_interval = self.__safe_float(config.get("claim_interval"), 1.0, min_value=0.0)
         self._poll_interval = self.__safe_float(config.get("poll_interval"), 60.0, min_value=1.0)
-        self._claim_start_hour = self.__safe_int(config.get("claim_start_hour"), 0)
-        self._claim_end_hour = self.__safe_int(config.get("claim_end_hour"), 0)
+        self._claim_window = self.__safe_str(config.get("claim_window"), "8-24")
         self._dry_run = bool(config.get("dry_run", False))
         self._run_once = bool(config.get("run_once", False))
         logger.info(
             f"不可躺自动领红包初始化完成：enabled={self._enabled}, notify={self._notify}, "
             f"cron={repr(self._cron)}, site_domain={self._site_domain}, fast_mode={self._fast_mode}, "
             f"dry_run={self._dry_run}, claim_interval={self._claim_interval}, poll_interval={self._poll_interval}, "
-            f"claim_window={self._claim_start_hour}-{self._claim_end_hour}"
+            f"claim_window={self._claim_window or '全天允许'}"
         )
         if self._run_once:
             self._run_once = False
@@ -124,8 +122,7 @@ class TangRedPacketClaim(_PluginBase):
                 "fast_mode": self._fast_mode,
                 "claim_interval": self._claim_interval,
                 "poll_interval": self._poll_interval,
-                "claim_start_hour": self._claim_start_hour,
-                "claim_end_hour": self._claim_end_hour,
+                "claim_window": self._claim_window,
                 "dry_run": self._dry_run,
                 "run_once": False
             })
@@ -192,9 +189,12 @@ class TangRedPacketClaim(_PluginBase):
         ]
 
     def _claim_window_active(self) -> bool:
-        """领取时段窗口；start==end 表示未配置（全天允许），支持跨零点区间。"""
-        start, end = self._claim_start_hour, self._claim_end_hour
-        if start == end:
+        """领取时段窗口；未配置或格式无效时全天允许，支持跨零点区间。"""
+        m = re.search(r"(\d{1,2})\s*[-—~至到]\s*(\d{1,2})", self._claim_window or "")
+        if not m:
+            return True
+        start, end = int(m.group(1)), int(m.group(2))
+        if start > 23 or end > 24 or start == end:
             return True
         hour = datetime.now().hour
         if start < end:
@@ -205,11 +205,10 @@ class TangRedPacketClaim(_PluginBase):
         """MoviePilot 公共调度入口。"""
         if not self._claim_window_active():
             logger.info(
-                f"当前 {datetime.now().hour} 点不在领取时段窗口内"
-                f"（{self._claim_start_hour}-{self._claim_end_hour} 点），跳过本轮"
+                f"当前 {datetime.now().hour} 点不在领取时段窗口（{self._claim_window}）内，跳过本轮"
             )
             return {"status": "outside_window",
-                    "message": f"当前不在领取时段（{self._claim_start_hour}-{self._claim_end_hour} 点）内，本轮跳过"}
+                    "message": f"当前不在领取时段窗口（{self._claim_window}）内，本轮跳过"}
         return self.run_claim_task()
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
@@ -256,7 +255,7 @@ class TangRedPacketClaim(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
                                         "component": "VCronField",
@@ -271,7 +270,23 @@ class TangRedPacketClaim(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 4},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "claim_window",
+                                            "label": "领取时段(可选)",
+                                            "placeholder": "例如 9-23、20-6；留空默认 8-24",
+                                            "hint": "允许领取的小时区间，支持跨零点；留空默认 8-24（8:00~23:59），结束填 24 表示到 23:59",
+                                            "persistent-hint": True
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
                                         "component": "VTextField",
@@ -331,40 +346,6 @@ class TangRedPacketClaim(_PluginBase):
                                         }
                                     }
                                 ]
-                            },
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
-                                "content": [
-                                    {
-                                        "component": "VTextField",
-                                        "props": {
-                                            "model": "claim_start_hour",
-                                            "label": "领取开始小时(0-23)",
-                                            "type": "number",
-                                            "min": 0,
-                                            "hint": "与结束小时组成允许领取的时段；两者相等表示全天允许",
-                                            "persistent-hint": True
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
-                                "content": [
-                                    {
-                                        "component": "VTextField",
-                                        "props": {
-                                            "model": "claim_end_hour",
-                                            "label": "领取结束小时(0-23)",
-                                            "type": "number",
-                                            "min": 0,
-                                            "hint": "跨零点示例：开始 20、结束 6 表示 20:00~次日 06:00",
-                                            "persistent-hint": True
-                                        }
-                                    }
-                                ]
                             }
                         ]
                     }
@@ -380,8 +361,7 @@ class TangRedPacketClaim(_PluginBase):
             "fast_mode": self._fast_mode,
             "claim_interval": self._claim_interval,
             "poll_interval": self._poll_interval,
-            "claim_start_hour": self._claim_start_hour,
-            "claim_end_hour": self._claim_end_hour
+            "claim_window": self._claim_window
         }
 
     def get_page(self) -> List[dict]:
@@ -680,8 +660,7 @@ class TangRedPacketClaim(_PluginBase):
             "dry_run": self._dry_run,
             "claim_interval": self._claim_interval,
             "poll_interval": self._poll_interval,
-            "claim_start_hour": self._claim_start_hour,
-            "claim_end_hour": self._claim_end_hour
+            "claim_window": self._claim_window
         })
         return result
 

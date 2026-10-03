@@ -347,11 +347,12 @@
         "name": "不可躺自动领红包",
         "description": "自动领取不可躺红包，支持限流保护和历史统计",
         "labels": "不可躺,红包,自动领取",
-        "version": "1.0.13",
+        "version": "1.0.14",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacketclaim.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.0.14": "领取时段改为单输入框（如 9-23、20-6，支持跨零点）并与执行周期同行展示；留空默认 8-24（8:00~23:59），结束填 24 表示到 23:59。",
             "v1.0.13": "新增领取时段窗口：配置允许领取的开始/结束小时（支持跨零点），定时触发在窗口外直接跳过本轮、不打站点接口；API/TG/立即运行等手动触发不受限；默认 0-0 全天允许，保持原有行为。",
             "v1.0.12": "规范定时服务：统一时区与公开调度入口，修复重载时启用状态初始化",
             "v1.0.11": "插件改名 TangRedPacket→TangRedPacketClaim：区分 bfjy2024 仓库同名「不可躺发红包」插件，避免双仓库订阅冲突；同步改类名/目录/配置前缀/API 路径/图标/命令；数据库配置需从旧 key 迁移",
