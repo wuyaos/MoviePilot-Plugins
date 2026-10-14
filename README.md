@@ -176,6 +176,8 @@ TODO: Add project description.
 ## Project Structure
 
 ```
+├── plugins.v2/autoptcheckin/sites/ptzone.py
+├── plugins.v2/autoptcheckin/sites/playlet.py
 ├── plugins.v2/autoptcheckin/sites/shaobaoyuan.py
 ├── plugins.v2/autoptcheckin/sites/naturept.py
 MoviePilot-Plugins/
