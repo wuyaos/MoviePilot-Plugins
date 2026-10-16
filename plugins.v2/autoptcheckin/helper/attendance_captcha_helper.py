@@ -107,11 +107,24 @@ class _AttendanceCaptchaHandler(_ISiteSigninHandler):
                     logger.error(f"{site} 签到失败，Cookie已失效")
                     return False, "签到失败，Cookie已失效"
 
+            # 维护页/站点异常页识别：优先于表单缺失判定，避免维护期报"获取验证码参数失败"
+            lower_text = (html_text or "").lower()
+            maintenance_keywords = (
+                "站点关闭维护", "关闭维护", "系统维护", "网站维护", "暂停服务",
+                "服务器繁忙", "server is busy", "under maintenance",
+                "temporarily unavailable", "service unavailable",
+            )
+            matched_maintenance = next(
+                (kw for kw in maintenance_keywords if kw in lower_text or kw in (html_text or "")), ""
+            )
             html = etree.HTML(html_text)
             hash_values = html.xpath('//input[@name="imagehash"]/@value') if html is not None else []
             image_values = html.xpath('//form//img[contains(@src, "image.php")]/@src') if html is not None else []
             image_hash = hash_values[0] if hash_values else ""
             image_src = image_values[0] if image_values else ""
+            if (not image_hash or not image_src) and matched_maintenance:
+                logger.warning(f"{site} 签到失败，站点关闭维护中，请稍后再试")
+                return False, "签到失败，站点关闭维护中，请稍后再试"
             if not image_hash or not image_src:
                 logger.error(f"{site} 签到失败，获取验证码参数失败")
                 return False, "签到失败，获取验证码参数失败"

@@ -114,6 +114,19 @@ class _AttendancePostHandler(_ISiteSigninHandler):
             return False, "签到失败，请检查站点连通性"
 
         html_text = res.text or ""
+        # 维护/站点异常页优先于登录判定，避免维护期误报 Cookie 失效
+        maintenance_keywords = (
+            "站点关闭维护", "关闭维护", "系统维护", "网站维护", "暂停服务",
+            "服务器繁忙", "server is busy", "under maintenance",
+            "temporarily unavailable", "service unavailable",
+        )
+        matched_maintenance = next(
+            (kw for kw in maintenance_keywords
+             if kw in html_text or kw in html_text.lower()), ""
+        )
+        if matched_maintenance:
+            logger.warning(f"{site} 签到失败，站点关闭维护中，请稍后再试")
+            return False, "签到失败，站点关闭维护中，请稍后再试"
         if not SiteUtils.is_logged_in(html_text) or "login.php" in html_text:
             logger.error(f"{site} 签到失败，Cookie已失效")
             return False, "签到失败，Cookie已失效"
