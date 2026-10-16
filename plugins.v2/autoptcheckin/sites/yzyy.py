@@ -105,8 +105,9 @@ class Yzyy(_ISiteSigninHandler):
             return False, "签到失败，Cookie已失效"
 
         # 5.5 响应页无明确文案且无按钮结构（站点瞬时降级）时，回读签到页确认
-        if ("打卡成功" not in result_html and "已经打卡" not in result_html
-                and not self._extract_sign_button_area(result_html)):
+        already_keywords = ("打卡成功", "已经打卡", "已经打过卡", "请勿重复操作")
+        if not any(kw in result_html for kw in already_keywords) \
+                and not self._extract_sign_button_area(result_html):
             logger.info(f"{site} 签到响应结构异常，回读签到页确认结果")
             time.sleep(3)
             confirm_html = self._fetch_page(
@@ -327,7 +328,8 @@ class Yzyy(_ISiteSigninHandler):
                 return True, info
             if html and "恭喜" in html and "打卡" in html:
                 return True, "打卡成功"
-            if html and ("请勿重复" in html or "已经打卡" in html):
+            if html and ("请勿重复" in html or "已经打过卡" in html or "已经打卡" in html
+                         or "请勿重复操作" in html):
                 info = self._extract_reward_info(html)
                 return True, info or "今日已打卡"
             if html and ("签到失败" in html or "打卡失败" in html):

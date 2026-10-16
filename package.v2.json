@@ -162,11 +162,12 @@
         "name": "PT站点自动签到",
         "description": "PT 站点自动签到与模拟登录，支持验证码",
         "labels": "签到,PT",
-        "version": "1.5.30",
+        "version": "1.5.31",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.31": "yzyy：补齐\"已经打过卡/请勿重复操作\"文案识别，修复已签到状态下重复签到响应被报\"无法识别签到结果\"。",
             "v1.5.30": "yzyy：签到响应页无明确文案且无按钮结构时回读签到页确认结果，修复已签到但响应降级时报\"无法识别签到结果\"。",
             "v1.5.29": "维护页识别：通用关键词补\"站点关闭维护/关闭维护\"，yzyy 独立适配器优先识别维护页，避免维护期误报 Cookie 失效或无法识别。",
             "v1.5.28": "yzyy：签到页 200 但结构缺失（站点瞬时降级）时等待 3 秒复查一次，减少误报。",
