@@ -80,6 +80,12 @@ class Yzyy(_ISiteSigninHandler):
             )
             if page_html:
                 button_status = self._check_sign_button_status(page_html)
+        if button_status == "unknown":
+            signed_today = self._my_record_signed_today(page_html)
+            if signed_today is True:
+                info = self._extract_reward_info(page_html)
+                logger.info(f"{site} 今日已签到")
+                return True, "今日已签到" + (f" | {info}" if info else "")
         if button_status == "already_signed":
             info = self._extract_reward_info(page_html)
             logger.info(f"{site} 今日已签到")
@@ -124,10 +130,15 @@ class Yzyy(_ISiteSigninHandler):
                     f"{site} [回读页面] len={len(confirm_html)} signbtn={confirm_html.count('signbtn')} "
                     f"点击打卡={'点击打卡' in confirm_html} 今日已打卡={'今日已打卡' in confirm_html}"
                 )
-            if confirm_html and self._check_sign_button_status(confirm_html) == "already_signed":
-                info = self._extract_reward_info(confirm_html)
-                logger.info(f"{site} 签到成功：{info}")
-                return True, f"今日已签到{(' | ' + info) if info else ''}"
+            if confirm_html:
+                signed_today = self._my_record_signed_today(confirm_html)
+                if signed_today is True:
+                    info = self._extract_reward_info(confirm_html)
+                    logger.info(f"{site} 签到成功：{info}")
+                    return True, f"今日已签到{(' | ' + info) if info else ''}"
+                if signed_today is False:
+                    logger.error(f"{site} 签到未生效，记录表显示今日未打卡")
+                    return False, "签到失败，签到未生效"
 
         # 6. 判断签到结果
         success, info = self._parse_sign_result(result_html)
@@ -347,6 +358,12 @@ class Yzyy(_ISiteSigninHandler):
             maintenance = self._maintenance_message(html)
             if maintenance:
                 return False, maintenance
+            signed_today = self._my_record_signed_today(html)
+            if signed_today is True:
+                info = self._extract_reward_info(html)
+                return True, info or "今日已打卡"
+            if signed_today is False:
+                return False, "签到未生效，记录表显示今日未打卡"
             button_status = self._check_sign_button_status(html)
             if button_status == "already_signed":
                 info = self._extract_reward_info(html)
@@ -356,6 +373,39 @@ class Yzyy(_ISiteSigninHandler):
             return False, "无法识别签到结果"
         except Exception as e:
             return False, f"解析签到结果异常：{str(e)}"
+
+    _MY_RECORD_ROW_RE = re.compile(
+        r'space-uid-(\d+)\.html[^>]*>([^<]+)</a>.*?'
+        r'<td>(\d{4}-\d{2}-\d{2}) \d{2}:\d{2}:\d{2}</td>.*?'
+        r'(今日已打卡|未打卡)',
+        re.I | re.S,
+    )
+
+    def _my_record_signed_today(self, html: str, now=None) -> Optional[bool]:
+        """从打卡记录表解析本人（页面登录用户）最近记录行，判断今天是否已打卡。
+
+        返回 True/False；找不到本人记录行时返回 None（无法判定）。
+        记录表第一行即最新记录，仅当行内用户与页面登录用户（space-uid 首次出现者）一致时才采信。
+        """
+        html = html or ""
+        uid_match = re.search(r'space-uid-(\d+)\.html', html)
+        if not uid_match:
+            return None
+        my_uid = uid_match.group(1)
+        row = self._MY_RECORD_ROW_RE.search(html)
+        if not row or row.group(1) != my_uid:
+            return None
+        record_date = row.group(3)
+        from datetime import date as _date
+        from datetime import datetime as _datetime
+        now = now or _datetime.now()
+        try:
+            record_day = _datetime.strptime(record_date, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+        if record_day != now.date():
+            return False
+        return row.group(4) == "今日已打卡"
 
     def _extract_reward_info(self, html: str) -> str:
         """提取当前用户签到奖励信息，优先限定在我的记录区域。"""
