@@ -110,37 +110,29 @@ class Yzyy(_ISiteSigninHandler):
             logger.error(f"{site} 签到失败，Cookie已失效")
             return False, "签到失败，Cookie已失效"
 
-        # 5.5 响应页无明确文案且无按钮结构（站点瞬时降级）时，回读签到页确认
-        already_keywords = ("打卡成功", "已经打卡", "已经打过卡", "请勿重复操作")
-        if not any(kw in result_html for kw in already_keywords) \
-                and not self._extract_sign_button_area(result_html):
-            logger.info(f"{site} 签到响应结构异常，回读签到页确认结果")
+        # 5.5 点击签到后无条件回读签到页，以 ① 按钮文本 + ② 本人记录行（UID+日期+状态）判定
+        # （zqlj_sign 的签到响应是签到页重渲染，内容不可靠，必须以回读页面为准）
+        time.sleep(3)
+        confirm_html = self._fetch_page(
+            url=sign_page_url, cookie=request_cookies, headers=headers,
+            session=session, proxy=proxy, timeout=timeout,
+        )
+        if confirm_html:
             logger.info(
-                f"{site} [签到响应] len={len(result_html)} signbtn={result_html.count('signbtn')} "
-                f"点击打卡={'点击打卡' in result_html} 今日已打卡={'今日已打卡' in result_html} "
-                f"已经打过卡={'已经打过卡' in result_html} 请勿重复={'请勿重复' in result_html}"
+                f"{site} [回读页面] len={len(confirm_html)} signbtn={confirm_html.count('signbtn')} "
+                f"点击打卡={'点击打卡' in confirm_html} 今日已打卡={'今日已打卡' in confirm_html}"
             )
-            time.sleep(3)
-            confirm_html = self._fetch_page(
-                url=sign_page_url, cookie=request_cookies, headers=headers,
-                session=session, proxy=proxy, timeout=timeout,
-            )
-            if confirm_html:
-                logger.info(
-                    f"{site} [回读页面] len={len(confirm_html)} signbtn={confirm_html.count('signbtn')} "
-                    f"点击打卡={'点击打卡' in confirm_html} 今日已打卡={'今日已打卡' in confirm_html}"
-                )
-            if confirm_html:
-                signed_today = self._my_record_signed_today(confirm_html)
-                if signed_today is True:
-                    info = self._extract_reward_info(confirm_html)
-                    logger.info(f"{site} 签到成功：{info}")
-                    return True, f"今日已签到{(' | ' + info) if info else ''}"
-                if signed_today is False:
-                    logger.error(f"{site} 签到未生效，记录表显示今日未打卡")
-                    return False, "签到失败，签到未生效"
+            signed_today = self._my_record_signed_today(confirm_html)
+            button_status = self._check_sign_button_status(confirm_html)
+            if signed_today is True or button_status == "already_signed":
+                info = self._extract_reward_info(confirm_html)
+                logger.info(f"{site} 签到成功：{info}")
+                return True, f"今日已签到{(' | ' + info) if info else ''}"
+            if signed_today is False:
+                logger.error(f"{site} 签到未生效，记录表显示今日未打卡")
+                return False, "签到失败，签到未生效"
 
-        # 6. 判断签到结果
+        # 6. 回读失败时才用签到响应页文案兜底判断
         success, info = self._parse_sign_result(result_html)
         if success:
             logger.info(f"{site} 签到成功：{info}")
