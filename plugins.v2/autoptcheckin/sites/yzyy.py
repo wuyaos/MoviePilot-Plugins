@@ -109,11 +109,21 @@ class Yzyy(_ISiteSigninHandler):
         if not any(kw in result_html for kw in already_keywords) \
                 and not self._extract_sign_button_area(result_html):
             logger.info(f"{site} 签到响应结构异常，回读签到页确认结果")
+            logger.info(
+                f"{site} [签到响应] len={len(result_html)} signbtn={result_html.count('signbtn')} "
+                f"点击打卡={'点击打卡' in result_html} 今日已打卡={'今日已打卡' in result_html} "
+                f"已经打过卡={'已经打过卡' in result_html} 请勿重复={'请勿重复' in result_html}"
+            )
             time.sleep(3)
             confirm_html = self._fetch_page(
                 url=sign_page_url, cookie=request_cookies, headers=headers,
                 session=session, proxy=proxy, timeout=timeout,
             )
+            if confirm_html:
+                logger.info(
+                    f"{site} [回读页面] len={len(confirm_html)} signbtn={confirm_html.count('signbtn')} "
+                    f"点击打卡={'点击打卡' in confirm_html} 今日已打卡={'今日已打卡' in confirm_html}"
+                )
             if confirm_html and self._check_sign_button_status(confirm_html) == "already_signed":
                 info = self._extract_reward_info(confirm_html)
                 logger.info(f"{site} 签到成功：{info}")
