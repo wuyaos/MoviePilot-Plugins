@@ -2,6 +2,7 @@
 # output: yzyy Discuz zqlj_sign 动态签到码签到结果
 # pos: AutoPtCheckin 站点适配层，独立专用适配器，不复用 NexusPHP attendance 通用基类
 import re
+import time
 from typing import Optional, Tuple, Union
 from urllib.parse import urlparse
 
@@ -62,8 +63,17 @@ class Yzyy(_ISiteSigninHandler):
                 logger.error(f"{site} 签到失败，Cookie已失效")
                 return False, "签到失败，Cookie已失效"
 
-        # 3. 检查当前用户签到按钮状态
+        # 3. 检查当前用户签到按钮状态；页面 200 但结构缺失（站点瞬时降级）时复查一次
         button_status = self._check_sign_button_status(page_html)
+        if button_status == "unknown" and not self._is_not_logged_in(page_html):
+            logger.info(f"{site} 签到页结构异常，等待后复查一次")
+            time.sleep(3)
+            page_html = self._fetch_page(
+                url=sign_page_url, cookie=request_cookies, headers=headers,
+                session=session, proxy=proxy, timeout=timeout,
+            )
+            if page_html:
+                button_status = self._check_sign_button_status(page_html)
         if button_status == "already_signed":
             info = self._extract_reward_info(page_html)
             logger.info(f"{site} 今日已签到")

@@ -162,11 +162,12 @@
         "name": "PT站点自动签到",
         "description": "PT 站点自动签到与模拟登录，支持验证码",
         "labels": "签到,PT",
-        "version": "1.5.27",
+        "version": "1.5.28",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.28": "yzyy：签到页 200 但结构缺失（站点瞬时降级）时等待 3 秒复查一次，减少误报。",
             "v1.5.27": "新增 Kelu 验证码签到与 AGSVPT POST 签到适配器。",
             "v1.5.26": "新增 PTzone 与 PlayLet 签到适配器：PTzone 为无验证码空 POST 表单，复用 POST 通用基类（繁体成功/已签到文案）；PlayLet 为标准验证码表单，复用验证码通用基类自动识别提交。",
             "v1.5.25": "新增烧包乐园验证码签到适配器：attendance.php 为 NexusPHP 标准验证码表单，复用通用基类自动获取 imagehash 并经 ddddocr/OcrHelper 识别提交，结果以复查签到页确认。",
