@@ -104,6 +104,20 @@ class Yzyy(_ISiteSigninHandler):
             logger.error(f"{site} 签到失败，Cookie已失效")
             return False, "签到失败，Cookie已失效"
 
+        # 5.5 响应页无明确文案且无按钮结构（站点瞬时降级）时，回读签到页确认
+        if ("打卡成功" not in result_html and "已经打卡" not in result_html
+                and not self._extract_sign_button_area(result_html)):
+            logger.info(f"{site} 签到响应结构异常，回读签到页确认结果")
+            time.sleep(3)
+            confirm_html = self._fetch_page(
+                url=sign_page_url, cookie=request_cookies, headers=headers,
+                session=session, proxy=proxy, timeout=timeout,
+            )
+            if confirm_html and self._check_sign_button_status(confirm_html) == "already_signed":
+                info = self._extract_reward_info(confirm_html)
+                logger.info(f"{site} 签到成功：{info}")
+                return True, f"今日已签到{(' | ' + info) if info else ''}"
+
         # 6. 判断签到结果
         success, info = self._parse_sign_result(result_html)
         if success:
