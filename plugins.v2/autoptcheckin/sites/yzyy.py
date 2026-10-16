@@ -49,6 +49,12 @@ class Yzyy(_ISiteSigninHandler):
             logger.error(f"{site} 签到失败，获取签到页面失败")
             return False, "签到失败，获取签到页面失败"
 
+        # 2. 维护页识别优先于登录判定，避免维护期误报 Cookie 失效
+        maintenance = self._maintenance_message(page_html)
+        if maintenance:
+            logger.warning(f"{site} {maintenance}")
+            return False, maintenance
+
         # 2. 检查登录状态；站点偶发返回临时登录页，使用同一 Session 复查一次。
         if self._is_not_logged_in(page_html):
             logger.info(f"{site} 签到页登录态未确认，重新读取一次")
@@ -212,6 +218,17 @@ class Yzyy(_ISiteSigninHandler):
             logger.error(f"请求页面异常：{e}")
             return None
 
+    _MAINTENANCE_KEYWORDS = ["站点关闭维护", "关闭维护", "系统维护", "网站维护", "暂停服务"]
+
+    @classmethod
+    def _maintenance_message(cls, html: str) -> str:
+        """站点维护页识别；命中返回提示文案，未命中返回空串。"""
+        html = html or ""
+        for kw in cls._MAINTENANCE_KEYWORDS:
+            if kw in html:
+                return "站点关闭维护中，请稍后再试"
+        return ""
+
     @staticmethod
     def _is_not_logged_in(html: str) -> bool:
         html = html or ""
@@ -301,6 +318,9 @@ class Yzyy(_ISiteSigninHandler):
                 return True, info or "今日已打卡"
             if html and ("签到失败" in html or "打卡失败" in html):
                 return False, "签到失败"
+            maintenance = self._maintenance_message(html)
+            if maintenance:
+                return False, maintenance
             button_status = self._check_sign_button_status(html)
             if button_status == "already_signed":
                 info = self._extract_reward_info(html)

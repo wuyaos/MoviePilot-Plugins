@@ -45,7 +45,7 @@ class AutoPtCheckin(_PluginBase):
     # 插件图标
     plugin_icon = "signin.png"
     # 插件版本
-    plugin_version = "1.5.28"
+    plugin_version = "1.5.29"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -59,7 +59,7 @@ class AutoPtCheckin(_PluginBase):
     # 站点异常关键词（服务器繁忙/维护/403/网关错误等，命中时不报 Cookie 失效）
     _SITE_ERROR_KEYWORDS = [
         "服务器负载过高", "正在重试，请稍后", "服务器繁忙", "系统维护", "网站维护",
-        "暂停服务", "访问被拒绝", "访问受限", "forbidden", "access denied",
+        "站点关闭维护", "关闭维护", "暂停服务", "访问被拒绝", "访问受限", "forbidden", "access denied",
         "server is busy", "overloaded", "temporarily unavailable",
         "under maintenance", "Bad Gateway", "Service Unavailable", "Gateway Timeout",
     ]
