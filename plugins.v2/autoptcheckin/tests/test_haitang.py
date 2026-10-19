@@ -76,9 +76,10 @@ UNSIGNED_HTML = """
 <table><tr><td class="att-cell att-today">19<div>今天</div></td></tr></table>
 </body></html>
 """
+POST_RESPONSE_HTML = "<html><body>签到操作完成</body></html>"
 SIGNED_HTML = """
-<html><body>member-page
-<table><tr><td class="att-cell att-today att-signed">19<div>✓ +50点</div></td></tr></table>
+<html><body>member-page 今日已签到
+<table><tr><td class="att-cell att-signed">19<div>✓ +350点</div></td></tr></table>
 </body></html>
 """
 
@@ -99,7 +100,7 @@ class FakeRequest:
 
     def post_res(self, url, data):
         self.posts.append((url, data))
-        return Response(SIGNED_HTML)
+        return Response(POST_RESPONSE_HTML)
 
 
 class HaitangTests(unittest.TestCase):
@@ -109,7 +110,7 @@ class HaitangTests(unittest.TestCase):
             post_helper.ATTENDANCE_FORM,
         )
 
-    def test_signin_posts_action_and_confirms_today_cell(self):
+    def test_signin_posts_action_and_confirms_refetched_page(self):
         request = FakeRequest([UNSIGNED_HTML, SIGNED_HTML])
         handler = Haitang()
         handler._build_request = lambda **kwargs: request

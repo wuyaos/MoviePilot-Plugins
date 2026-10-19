@@ -129,7 +129,9 @@ class _AttendancePostHandler(_ISiteSigninHandler):
         if matched_maintenance:
             logger.warning(f"{site} 签到失败，站点关闭维护中，请稍后再试")
             return False, "签到失败，站点关闭维护中，请稍后再试"
-        if not SiteUtils.is_logged_in(html_text) or "login.php" in html_text:
+        # 严格确认站点不信任 POST 响应页，必须重新 GET 后再判断登录与签到状态。
+        if (not self._verify_page_state
+                and (not SiteUtils.is_logged_in(html_text) or "login.php" in html_text)):
             logger.error(f"{site} 签到失败，Cookie已失效")
             return False, "签到失败，Cookie已失效"
 

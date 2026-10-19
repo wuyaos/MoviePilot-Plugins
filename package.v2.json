@@ -162,11 +162,12 @@
         "name": "PT站点自动签到",
         "description": "PT 站点自动签到与模拟登录，支持验证码",
         "labels": "签到,PT",
-        "version": "1.5.36",
+        "version": "1.5.37",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 2,
         "history": {
+            "v1.5.37": "海棠签到 POST 后无条件重新获取签到页，以页面“今日已签到”状态确认结果，避免 POST 响应结构被误判为 Cookie 失效。",
             "v1.5.36": "新增海棠 htpt.cc 新版签到适配：识别 button 提交表单，POST action=sign 后回读当日 att-signed 状态确认结果。",
             "v1.5.35": "yzyy：点击签到后无条件回读签到页，统一以按钮文本和本人记录行判定结果（zqlj_sign 签到响应不可靠）。",
             "v1.5.34": "yzyy：以打卡记录表本人记录行（UID+日期+状态）精确判定签到结果，替代易受降级页与排行榜干扰的文案匹配。",
