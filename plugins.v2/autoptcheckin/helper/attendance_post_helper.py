@@ -34,6 +34,7 @@ class _AttendancePostHandler(_ISiteSigninHandler):
     _signin_url = ""
     _success_texts = []
     _repeat_texts = []
+    _post_data = {}  # 默认空 POST；特殊站点可覆盖提交字段。
     # 默认保持旧站点行为；仅经真实页面验证的站点按需开启严格状态确认。
     _verify_page_state = False
     _verified_success_texts = []
@@ -79,7 +80,8 @@ class _AttendancePostHandler(_ISiteSigninHandler):
         if html.xpath('//form[contains(@action,"attendance")]//input[@name="imagehash"]'):
             return ATTENDANCE_CAPTCHA
         has_form = bool(html.xpath(
-            '//form[contains(@action,"attendance.php")]//input[@type="submit"]'
+            '//form[contains(@action,"attendance.php")]'
+            '//*[self::input or self::button][@type="submit"]'
         ))
         if has_form:
             return ATTENDANCE_FORM
@@ -108,7 +110,7 @@ class _AttendancePostHandler(_ISiteSigninHandler):
             if state is not None:
                 return state, message
 
-        res = request.post_res(url=self._signin_url, data={})
+        res = request.post_res(url=self._signin_url, data=dict(self._post_data))
         if not res or res.status_code != 200:
             logger.error(f"{site} 签到失败，请检查站点连通性")
             return False, "签到失败，请检查站点连通性"
@@ -188,7 +190,8 @@ class _AttendancePostHandler(_ISiteSigninHandler):
         html = etree.HTML(html_text)
         form_present = bool(html is not None and html.xpath(
             '//form[contains(@action,"attendance.php") and '
-            '(contains(@class,"attendance-checkin-form") or .//input[@type="submit"])]'
+            '(contains(@class,"attendance-checkin-form") or '
+            './/*[self::input or self::button][@type="submit"])]'
         ))
         success_texts = self._verified_success_texts or self._success_texts
 

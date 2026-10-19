@@ -16,6 +16,7 @@ AutoPtCheckin 的站点级签到适配层；输入站点 Cookie/UA/代理配置�
 - `darkland.py`: DarkLand 浏览器指纹模拟登录适配（仅登录，无独立签到）。
 - `digitalcore.py`: DigitalCore 状态 API 模拟登录适配（首页为 SPA）。
 - `haidan.py`: 海胆 站点签到适配。
+- `haitang.py`: 海棠 attendance.php POST `action=sign` 签到适配。
 - `hares.py`: Hares 站点签到适配。
 - `hdarea.py`: HDArea 站点签到适配。
 - `hdbao.py`: HDBao 站点 POST attendance.php 签到适配。
