@@ -1,0 +1,15 @@
+{
+  "RuntimePatchGuard": {
+    "name": "运行时补丁守卫",
+    "description": "为站点解析网络请求增加总时长守卫，防止慢站挂起工作线程。内存补丁，升级免重打。",
+    "labels": "运维,补丁",
+    "version": "1.0.0",
+    "icon": "Moviepilot_A.png",
+    "author": "wuyaos",
+    "level": 1,
+    "system_version": ">=3.0.0",
+    "history": {
+      "v1.0.0": "初始版本：SiteParserBase._get_page_content 总时长守卫"
+    }
+  }
+}
