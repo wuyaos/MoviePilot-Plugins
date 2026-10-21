@@ -1,0 +1,12 @@
+{
+  "enabled": false,
+  "notify": false,
+  "enabled_sites": [],
+  "fengchao_api_key": "",
+  "timed_update_enabled": false,
+  "timed_update_cron": "0 */6 * * *",
+  "yaowan_cookie": "",
+  "ssdforum_cookie": "",
+  "yaowan_managed_site_id": null,
+  "ssdforum_managed_site_id": null
+}

@@ -1,15 +1,73 @@
 {
-  "RuntimePatchGuard": {
-    "name": "运行时补丁守卫",
-    "description": "为站点解析网络请求增加总时长守卫，防止慢站挂起工作线程。内存补丁，升级免重打。",
-    "labels": "运维,补丁",
-    "version": "1.0.0",
-    "icon": "Moviepilot_A.png",
-    "author": "wuyaos",
-    "level": 1,
-    "system_version": ">=3.0.0",
-    "history": {
-      "v1.0.0": "初始版本：SiteParserBase._get_page_content 总时长守卫"
+    "AutoPtCheckin": {
+        "name": "PT 签到中心",
+        "description": "PT 站点自动签到与模拟登录",
+        "labels": "签到,PT,V3",
+        "version": "3.8.5",
+        "icon": "Moviepilot_A.png",
+        "author": "wuyaos",
+        "level": 1,
+        "system_version": ">=3.0.0",
+        "history": {
+            "v3.8.5": "批次2查漏：补齐52PT/CHDBits随机问答与yzyy同Session动态签到，更新钩子审计和校准缺口",
+            "v3.8.4": "Implement TJUPT image quiz and login-only signin gates",
+            "v3.8.3": "Implement C3/C4 single-action POST/API hooks and strict boolean evidence; keep production gates closed",
+            "v3.8.2": "C2-side-effect-GET-and-independent-OCR-hooks",
+            "v3.8.1": "实现12站 attendance CAPTCHA 原生钩子，保留未校准门控与单次提交回读",
+            "v3.7.0": "完成 B1-7 剩余14站原生声明与离线证据测试，汇总批次2特殊钩子输入，保持未验证门控",
+            "v3.6.6": "B1-6-declarations-and-full-evidence-audit-unverified",
+            "v3.6.5": "B1-5-native-declarations-and-offline-fixtures-unverified",
+            "v3.6.4": "B1-4-native-declarations-and-offline-fixtures-unverified",
+            "v3.6.3": "B1-3 native declarations and offline fixtures; gate pending hooks",
+            "v3.6.2": "batch1-2：迁移冬樱、DStudio、海胆、白兔、好大原生声明与离线三态夹具",
+            "v3.6.1": "batch1：迁移 52PT、AGSVPT、包子、BTSchool、CHDBits 原生声明与离线夹具",
+            "v3.6.0": "原生 SiteModule 框架+hdsky/海棠原生迁移",
+            "v3.5.3": "简化两件回读证据并新增模拟登录执行链",
+            "v3.5.2": "数据页一次性操作、玻璃统计卡与证据分支文案测试",
+            "v3.5.1": "修正站点卡折叠对齐、批量启用和数据页网格",
+            "v3.5.0": "Scheduler registration with persistent intervals and opt-in activation",
+            "v3.4.0": "V2 configuration migration preview and confirmed execution",
+            "v3.3.1": "收紧试点前读与批量跳过记录，修复玻璃嵌入背景",
+            "v3.3.0": "Pilot runner for HDSky and Haitang with unconditional readback and history",
+            "v3.2.0": "阶段2：动态发现与真实数据",
+            "v3.1.2": "深浅色主题自适应",
+            "v3.1.1": "运行数据页展示配置的调度模式与时段",
+            "v3.1.0": "Vue federation config and data views; site config, stats and history APIs",
+            "v3.0.6": "按宿主实际渲染重写配置站点卡布局",
+            "v3.0.5": "两 Tab 重构与收起式站点卡",
+            "v3.0.2": "UI 补全",
+            "v3.0.3": "配置页 Tab 化与凭证字段",
+            "v3.0.4": "站点每行签到/模拟登录勾选、凭证动态显示、Browserless 配置",
+            "v3.0.0": "V3 骨架"
+        }
+    },
+    "RuntimePatchGuard": {
+        "name": "运行时补丁守卫",
+        "description": "为站点解析网络请求增加总时长守卫，防止慢站挂起工作线程。内存补丁，升级免重打。",
+        "labels": "运维,补丁",
+        "version": "1.0.0",
+        "icon": "Moviepilot_A.png",
+        "author": "wuyaos",
+        "level": 1,
+        "system_version": ">=3.0.0",
+        "history": {
+            "v3.6.2": "batch1-2：迁移冬樱、DStudio、海胆、白兔、好大原生声明与离线三态夹具",
+            "v1.0.0": "初始版本：SiteParserBase._get_page_content 总时长守卫"
+        }
+    },
+    "ForumSignin": {
+        "name": "论坛签到",
+        "description": "蜂巢、药丸与 SSDForum 论坛签到",
+        "labels": "签到,论坛,V3",
+        "version": "3.0.1",
+        "icon": "Moviepilot_A.png",
+        "author": "wuyaos",
+        "level": 1,
+        "system_version": ">=3.0.0",
+        "history": {
+            "v3.6.2": "batch1-2：迁移冬樱、DStudio、海胆、白兔、好大原生声明与离线三态夹具",
+            "v3.0.1": "审查修复",
+            "v3.0.0": "F1/F2：后端骨架、三站协议与保守回读验证"
+        }
     }
-  }
 }

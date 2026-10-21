@@ -1,0 +1,12 @@
+{
+  "AutoPtCheckin": {
+    "enabled": true, "notify": false, "cron": "0 9 * * *", "cron_mode": "cron",
+    "interval_hours": 4, "begin_hour": 8, "end_hour": 22, "queue_cnt": 3,
+    "retry_keyword": "timeout|error", "sign_sites": ["hdsky", "unknown.invalid", 1001],
+    "login_sites": ["haitang", "hdsky"],
+    "custom_sites_data": [{"id": 1001, "name": "Offline example", "url": "https://custom.invalid/", "render": true}],
+    "custom_site_urls": "Offline example|https://custom.invalid/|Y\nSecond example|https://second.invalid/|N"
+  },
+  "RousiCheckin": {"username": "fixture-rousi", "password": "not-a-real-password"},
+  "SunnyPTSignin": {"username": "fixture-sunny", "password": "not-a-real-password", "token": "not-a-real-token"}
+}
