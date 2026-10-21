@@ -38,7 +38,7 @@ def page(site, message, *, form=False):
         f'<form action="{site.attendance_path}" method="post">'
         '<input name="imagehash" value="fixture"><img src="image.php?imagehash=fixture"><input name="imagestring"><button type="submit">签到</button></form>' if form else ""
     )
-    return f'<p id="batch2-message-pending-calibration">{message}</p>{markup}'
+    return f'<div class="alert">{message}</div>{markup}'
 
 
 @pytest.mark.parametrize("site_cls", [Dongying, DStudio, HDArea])

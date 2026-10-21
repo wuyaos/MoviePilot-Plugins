@@ -1,7 +1,7 @@
 # PT 签到中心 V3
 
 ## 边界
-- 仅 HDSky（hdsky）和海棠（haitang）开放手动试点；不接管 `plugins.v2` 入口，默认不激活自动调度。
+- 默认仅 HDSky（hdsky）和海棠（haitang）开放手动试点；显式 unlock_all_sites 的执行边界见原生站点契约；不接管 `plugins.v2` 入口，默认不激活自动调度。
 - 站点采用双轨：`sites/` 是 V2 适配器的旧桥参照，`sites/native/` 是原生实现；逐站迁移前必须单独验证。
 - 任何提交结果都必须尝试新页面回读；按钮文本和 UID 只能来自页面证据。
 - `unconfirmed` 独立于 `failed`，回读不可达、解析失败或身份冲突不得猜测成功/失败。
@@ -36,7 +36,7 @@
 - 宿主 Config 传入 `initial-config / api / plugin-id`；`save(model)` 事件由宿主 PUT `plugin/{id}` 保存。`close / switch / layout({maxWidth})` 事件由宿主处理。Page 接收 `api / plugin-id / show_switch`。
 - API 相对插件 ID：GET/PUT `/config`、GET/PUT `/site_config`；GET `/stats`、`/history`、`/status`；POST `/run_once`、`/clean_today`、`/signin_by_domain?domain=...` 单站执行、`/verify_site?domain=...` 只读回读、`/login_by_domain?domain=...` 模拟登录、`/manual_signin` 按 sign_sites/login_sites 分流已启用站点。所有端点显式设置 `auth: bear`（默认 apikey 不适用于宿主前端）；配置与凭据只在宿主鉴权边界内读写，不进入统计/日志。
 - `/site_config` 使用既有 flat keys（enabled_sites/sign_sites/login_sites/custom_sites_data 及专属凭据）；与完整 config 同源，get_data/save_data 保存站点子集。
-- 非试点站禁用执行按钮；批量执行为非试点站记录 skipped（pilot_not_enabled），不发送请求。
+- UI 执行按钮仍按 registry.pilot_enabled 门控；后端 unlock_all_sites 是独立校准开关，不会自动修改 UI 门控或 verified。
 - Browserless 为独立 `enabled / url / token` 三字段；只有 enabled 为真才参与执行，不能由地址或令牌推断启用。
 - 在 `frontend/` 执行 `npm ci --ignore-scripts && npm run build`；同步提交 dist，node_modules 不入库。
 - 用宿主页面核验 Tab、条件字段、选移站点、卡片折叠、凭据显隐、证据展开；离线测试不能代替渲染验收。
@@ -78,10 +78,10 @@
 
 ## 原生站点契约
 - 原生站点实现 `SiteModule`，通过类属性声明 `id/name/url/credential/login_capable/cf/record_spec`，仅实现 `signin(ctx)`；`sites/native/` 逐模块发现，导入失败隔离为 `skipped`，不阻断其他站点。
-- `RecordSpec` 默认 page_message，以 XPath 选取唯一消息元素，`status_map` 按声明顺序映射为 signed/unsigned；response_json 按 response_field 取字段并精确类型和值匹配。凭证与证据来源独立；安全前读可声明确证已签标记。UID/日期仅展示，不得用整页关键词或缺失字段补造结论；原生迁移边界见 sites/native/AGENTS.md。
+- `RecordSpec` 默认 page_message，每个 XPath 必须选中唯一消息元素；多选择器遇空值、歧义或无效表达式继续扫描，首个非空文本停止，再按 status_map 声明顺序映射 signed/unsigned（无匹配仍 unconfirmed，不继续找成功词）。NexusSignin 的合成占位声明默认回退消息链，站点可关闭 use_default_message；response_json 仍按 response_field 的精确类型和值匹配。signed_marker 可确认安全前读 already 和提交后新页 success；UID/日期仅展示，不以缺失字段或整页文本补造结论。校准记录见 sites/native/AGENTS.md。
 - `NexusSignin` 提供 attendance 页面 GET、唯一 POST 表单发现、验证码钩子和提交后的无条件新页面 GET 回读；提交响应不能替代回读，超时或异常不得自动重试。
 - `SignContext` 由执行边界注入已认证的 HTTP client、站点锁、取消事件及可选 `page/ocr`；`SiteModule` 不查凭据、不创建或关闭资源，资源生命周期由 `core.native`/runner 管理。
-- 执行双轨分流：签到及只读核验在 `native=true, verified=true` 时走原生模块；`native=true, verified=false` 仅登记为 `native_unverified` 并跳过；其余走 `sites/` 旧桥。`native` 表示实现轨道，`verified` 表示已完成迁移验证，二者不可互相推断；模拟登录暂留旧桥及旧试点门控。
+- 执行双轨分流：native 站点签到/只读核验走原生模块，其他站点及模拟登录保留旧桥。unlock_all_sites 默认 false，此时 verified、hook_implemented 和旧试点门控生效；显式 true 会绕过这三门，但不改变 verified，也不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到仍不适用；M-Team 模块仍仅返回 skipped。signin_applicable 是 registry 展示的适用性，不等于 verified 或生产授权：排除登录专用站、M-Team，并检查原生 hook/verified；后端不以该展示字段替代执行检查。
 
 ## 阶段2数据契约
 - `core/registry.py` 使用 `pkgutil` 遍历 `sites/`，逐模块导入并收集 `_ISiteSigninHandler` 子类；导入异常只进入 `skipped` 日志，不阻断其他站点。注册项包含 `id/name/login_capable/credential/cf`，并追加 `rousi/sunnypt` 两个 integrations 注册项；`/sites` 返回 `sources.adapters` 与 `sources.integrations` 计数。
@@ -91,11 +91,11 @@
 - 配置页以 `/sites` 为主数据源；仅在 registry 整包导入失败时使用 `frontend/src/sites.json` 作为静态兜底，不把静态清单当生产主数据源。
 
 ## S5 试点执行边界
-- 同站账号锁忙时立即 skipped；试点在身份尚未解析前使用站点级锁，避免首次绑定与后续执行交错。凭证来自宿主站点管理（包括 CookieCloud 已同步的 Cookie），不主动拉取 CookieCloud、不登录续期。
-- 无 Cookie 返回 auth_failed，不实例化适配器或请求页面。第一次前读从账号导航识别 UID 后建立 identity.bindings；后续 UID 冲突立即停止，不切号。换号须先人工确认旧绑定。
-- 前读已签标记或本人今日成功记录 → already；明确可提交按钮/表单 → 提交；其余 → unconfirmed 且不提交。原生轨道 UID 未解析但表单明确时允许提交，成功仅由声明消息确认，不要求定位本人当日行；旧桥仍保留身份绑定及本人行验证。
+- 同站账号锁忙时立即 skipped；试点在身份尚未解析前使用站点级锁，避免首次绑定与后续执行交错。原生 Cookie 优先取宿主站点管理（包括已同步的 CookieCloud Cookie），缺失时可取 custom_sites_data 中域名匹配的 local_cookie 候选；不主动拉取 CookieCloud、不登录续期。
+- 无 Cookie 返回 auth_failed，不实例化适配器或请求页面。旧桥第一次前读从账号导航识别 UID 后建立 identity.bindings，后续显式冲突停止；原生消息制已移除 UID 作为成功判定门槛，UID/日期仅展示，站点专属身份核验仍保留。换号须先人工确认旧绑定。
+- 前读已签标记或本人今日成功记录 → already；明确可提交按钮/表单 → 提交；其余 → unconfirmed 且不提交。原生轨道 UID 未解析但表单明确时允许提交，成功由声明消息或 signed_marker 确认，不要求定位本人当日行；旧桥仍保留身份绑定及本人行验证。
 - 桥仅使用既有适配器的提交方法；HDSky 只有未识别验证码（没有提交）才换 OCR 引擎，提交后不重试。无论二元组真假或提交异常，finally 都重新 GET 回读。
-- 原生提交后的 success/failed 只要求读取声明的唯一消息元素并得到明确记录状态；消息制取代此前“按钮文本 + UID + 日期 + 状态”四件套判定，原生 UID/日期仅作展示证据；旧桥仍对显式身份冲突立即停止。按钮文本保留展示，缺失不阻断；页面不可达、消息或状态缺失 → unconfirmed。每次尝试（含只读核验、忙、缺凭证）独立写 history。
+- 原生判定依次经历“四件套 → 消息制（移除 UID/日期门槛）→ 默认消息链 + signed_marker”；提交后仍无条件回读，消息链得到明确记录状态或 marker 确认后才下结论。原生 UID/日期仅作展示证据；旧桥仍对显式身份冲突立即停止。按钮文本保留展示，缺失不阻断；页面不可达、消息或状态缺失 → unconfirmed。每次尝试（含只读核验、忙、缺凭证）独立写 history。
 - 当前 HTML 夹具是**合成回归夹具**，不是生产页面证据；保守选择器未匹配时不补造 UID/日期/状态，不把全页成功词当提交后证据。
 - 生产切换：先在 QNAP 备份旧配置并停用旧插件对应两站调度 → 安装 3.3.0 → 确认站点管理 Cookie/UA 与选择 → 单站只读 verify_site 核验真实结构/UID → 未确认时脱敏采样补齐解析 → 用户确认后手动签到。本地调试实例可能也有真实 Cookie，执行前必须核实；真实试点需用户单独授权，未核验页面结构前不得宣称真实签到成功。
 
@@ -131,4 +131,10 @@
 - GET 站点页面后无条件再次 GET 回读，无签到提交、无业务日期；页面可达即 login_ok，UID 尽力解析，缺失不阻断，显式冲突为 unconfirmed。重定向到登录页为 auth_failed，不可达为 unconfirmed。
 - 批量执行勾签到的站点走签到链，仅勾模拟登录的站点走登录链；两项都未勾保留 skipped 记录。单站登录 API 为 POST /login_by_domain（auth: bear），复用站点锁和身份绑定。
 - history 保存 action=sign/login；旧记录无 action 视为 sign。登录结果仅入历史，不覆盖签到小卡或四态统计；历史 login_ok 显示「登录成功」。
-- 仍仅 HDSky/海棠可执行，其他站点保持 pilot_not_enabled。肉丝/SunnyPT 只提供可注入认证检查协议；未接检查器返回 unconfirmed/login_check_not_available，不以非空凭据冒充认证检查通过。真实协议接入须后续逐站授权。
+- 默认仅 HDSky/海棠可执行；显式 unlock_all_sites 可绕过模拟登录试点门控，但仍检查启用与登录动作选择。肉丝/SunnyPT 只提供可注入认证检查协议；未接检查器返回 unconfirmed/login_check_not_available，不以非空凭据冒充认证检查通过。真实协议接入须后续逐站授权。
+
+## 批次 3 计划（3.9.0 收尾，尚未实施）
+- 删旧桥的前置条件：全量重审口径的27站完成生产校准并逐站 verified 解锁；默认链命中、只读 already 或 unlock_all_sites 都不替代该条件，模拟登录依赖需一并核对后再删除。
+- 统一凭证枚举 api → api_key，连同配置、registry、UI 与测试同步迁移；当前版本不改名。
+- 补齐 custom 站点签到流程；现有 custom verify 只证明只读可达/认证边界，不等于签到实现。
+- 接入 cookiecloud 候选来源；现有 managed_site/local_cookie 不代表已主动接入 CookieCloud。后续变更另行授权，不在本轮触发站点请求。

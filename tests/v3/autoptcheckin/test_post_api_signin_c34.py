@@ -22,7 +22,7 @@ RECEIPTS = dict(hares={'code': 0}, hdchina={'state': 'success'}, opencd={'state'
 
 
 def message(text):
-    return f'<p id="batch2-message-pending-calibration">{text}</p>'
+    return f'<div class="alert">{text}</div>'
 
 
 def initial(sid):

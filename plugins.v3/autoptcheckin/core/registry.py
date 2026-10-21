@@ -86,12 +86,15 @@ def discover_sites(package_name: str | None = None) -> dict:
                     sites = [item for item in sites if item['id'] != cls.id]
                     sites.append({'id': cls.id, 'name': cls.name, 'native': True,
                                   'verified': bool(getattr(cls, 'verified', False)),
-                                  'login_capable': cls.login_capable, 'credential': credential(cls.credential),
+                                  'login_capable': cls.login_capable, 'url': cls.url or '', 'credential': credential(cls.credential),
                                   'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'hook_implemented': bool(getattr(cls, 'hook_implemented', True))})
             except Exception as exc:
                 skipped.append({'module': module_name, 'error': type(exc).__name__})
     for item in sites:
         item['signin_capable'] = item['id'] not in ('darkland', 'digitalcore')
+        # 签到不适用：登录专用站、mteam（保活语义，hook 未实现且无签到流程）
+        item['signin_applicable'] = item['signin_capable'] and item['id'] != 'mteam' and (
+            not item.get('native') or item.get('hook_implemented', True) or item.get('verified', False))
         item['pilot_enabled'] = (item['verified'] and item.get('hook_implemented', True)) if item['native'] else item['id'] in ('hdsky', 'haitang')
     for item in skipped:
         logging.getLogger(__name__).warning("跳过站点适配器 %s (%s)", item["module"], item["error"])

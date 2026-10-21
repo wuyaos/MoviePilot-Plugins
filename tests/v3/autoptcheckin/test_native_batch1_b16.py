@@ -54,7 +54,7 @@ def context(site, http):
 
 
 def message(text):
-    return f'<p id="batch2-message-pending-calibration">{text}</p>'
+    return f'<div class="alert">{text}</div>'
 
 
 @pytest.mark.parametrize("cls,field,value", JSON_SITES)
@@ -99,7 +99,7 @@ def test_new_message_three_states(cls):
     signed = next(k for k, v in site.record_spec.status_map.items() if v == "signed")
     for text, state in [(signed, "signed"), ("未签到", "unsigned"), ("unknown", "unconfirmed")]:
         ctx = context(site, Http([]))
-        assert ctx.read_record(LoginPage(message(text), site.url), site.record_spec).status == state
+        assert ctx.read_record(LoginPage(message(text), site.url), site.message_spec()).status == state
     http = Http([message(signed)])
     assert site.signin(context(site, http)).status == "already"
     assert len(http.calls) == 1

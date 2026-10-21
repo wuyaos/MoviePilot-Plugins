@@ -42,7 +42,7 @@ def page(site, message, *, form=False):
     )
     if form and site.id in ('52pt', 'chdbits'):
         form_markup = '<form><table><tr><td class="text">请问：测试？</td></tr></table><input name="questionid" value="1"><input name="choice[]" value="2"></form>'
-    return f'<p id="batch2-message-pending-calibration">{message}</p>{form_markup}'
+    return f'<div class="alert">{message}</div>{form_markup}'
 
 
 @pytest.mark.parametrize("site_cls", [Pt52, Agsvpt, Baozi, CHDBits])

@@ -44,7 +44,7 @@ def context(site, http):
 
 
 def page(message, *, form=False):
-    node = f'<p id="batch2-message-pending-calibration">{message}</p>'
+    node = f'<div class="alert">{message}</div>'
     if form:
         node += '<form action="/attendance.php" method="post"><input name="imagehash" value="fixture"><img src="image.php?imagehash=fixture"><input name="imagestring"><button>签到</button></form>'
     return node

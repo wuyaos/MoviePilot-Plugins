@@ -14,6 +14,7 @@ from .core.history import HistoryStore
 from .core.migration import Migration, MigrationError
 from .core.registry import get_registry, get_native_module
 from .core.native import run_native
+from .core.custom import run_custom
 from typing import Any
 
 try:
@@ -27,7 +28,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.8.5"
+    plugin_version = "3.9.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -214,17 +215,25 @@ class AutoPtCheckin(_PluginBase):
 
     def _execute_site(self, site_id, read_only=False, trigger="manual", action="sign"):
         registry = {site['id']: site for site in get_registry(self._config.get('custom_sites_data', []))['sites']}
+        custom = next((item for item in self._config.get('custom_sites_data', [])
+                       if isinstance(item, dict) and str(item.get('id')) == str(site_id)), None)
+        if custom is not None or str(site_id).isdigit() or str(site_id).startswith(('600', 'custom-')):
+            result = run_custom(self._runner, str(site_id), custom or registry.get(site_id, {}),
+                                enabled=str(site_id) in {str(value) for value in self._config.get('enabled_sites', [])},
+                                read_only=read_only, trigger=trigger, action=action)
+            return asdict(result)
         reason = None
+        unlock = bool(self._config.get('unlock_all_sites', False))
         site = registry.get(site_id, {})
         if action == 'sign' and site_id in ('darkland', 'digitalcore'):
             reason = 'signin_not_applicable'
-        elif site.get('native') and not site.get('verified'):
+        elif not unlock and site.get('native') and not site.get('verified'):
             reason = 'native_unverified'
-        elif site.get('native') and not site.get('hook_implemented', True):
+        elif not unlock and site.get('native') and not site.get('hook_implemented', True):
             reason = 'hook_not_implemented'
-        elif not site.get('native') and site_id not in PILOTS:
+        elif not unlock and not site.get('native') and site_id not in PILOTS:
             reason = 'pilot_not_enabled'
-        elif action == 'login' and site_id not in PILOTS:
+        elif not unlock and action == 'login' and site_id not in PILOTS:
             reason = 'pilot_not_enabled'
         elif site_id not in self._config.get('enabled_sites', []):
             reason = 'site_disabled'
@@ -254,9 +263,18 @@ class AutoPtCheckin(_PluginBase):
             return asdict(result)
         info["uid"] = self._bound_uids.get(site_id, "")
         if site.get('native') and action == 'sign':
+            custom_cookie = ''
+            customs = self._config.get('custom_sites_data') or []
+            site_dom = (site.get('url') or '').split('//')[-1].split('/')[0].lower().removeprefix('www.')
+            for c in customs:
+                cdom = (c.get('url') or '').split('//')[-1].split('/')[0].lower().removeprefix('www.')
+                if cdom == site_dom and c.get('cookie'):
+                    custom_cookie = c['cookie']
+                    break
             result = run_native(self._runner, get_native_module(site_id), info,
                                 read_only=read_only, trigger=trigger,
-                                get_data=getattr(self, "get_data", None), save_data=getattr(self, "save_data", None))
+                                get_data=getattr(self, "get_data", None), save_data=getattr(self, "save_data", None),
+                                custom_cookie=custom_cookie)
             return asdict(result)
         bridge = PilotBridge(site_id, info)
         if action == 'login':
@@ -270,6 +288,10 @@ class AutoPtCheckin(_PluginBase):
 
     async def api_signin_by_domain(self, domain: str = '') -> dict:
         site_id = site_id_for_domain(domain)
+        if not site_id and self._config.get('unlock_all_sites', False) and domain:
+            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
+            if domain in registry_ids:
+                site_id = domain
         if not site_id:
             return {'success': False, 'message': 'pilot_not_enabled：仅开放 HDSky、海棠', 'data': None}
         result = await asyncio.to_thread(self._execute_site, site_id)
@@ -277,6 +299,10 @@ class AutoPtCheckin(_PluginBase):
 
     async def api_login_by_domain(self, domain: str = '') -> dict:
         site_id = site_id_for_domain(domain)
+        if not site_id and self._config.get('unlock_all_sites', False) and domain:
+            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
+            if domain in registry_ids:
+                site_id = domain
         if not site_id:
             return {'success': False, 'message': 'pilot_not_enabled：仅开放 HDSky、海棠', 'data': None}
         result = await asyncio.to_thread(self._execute_site, site_id, action='login')
@@ -284,6 +310,10 @@ class AutoPtCheckin(_PluginBase):
 
     async def api_verify_site(self, domain: str = '') -> dict:
         site_id = site_id_for_domain(domain)
+        if not site_id and self._config.get('unlock_all_sites', False) and domain:
+            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
+            if domain in registry_ids:
+                site_id = domain
         if not site_id:
             return {'success': False, 'message': 'pilot_not_enabled：仅开放 HDSky、海棠', 'data': None}
         result = await asyncio.to_thread(self._execute_site, site_id, True)

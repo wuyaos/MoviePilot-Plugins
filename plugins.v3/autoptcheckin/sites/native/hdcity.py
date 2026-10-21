@@ -12,6 +12,7 @@ class HDCity(GetSignin):
     hook_implemented = True
     action_path = '/sign'
     # Safe-page message selector remains pending production calibration.
+    signed_marker = '//a[@href="sign" and contains(., "已签到")]'  # calibrated from real homepage sample
     record_spec = RecordSpec(
         '//*[@id="batch2-message-pending-calibration"]',
         {"本次签到获得魅力": "signed", "Got extra": "signed", "已签到": "signed",

@@ -43,7 +43,7 @@ def context(site, http):
 
 
 def page(site, message, *, form=False):
-    node = f'<p id="batch2-message-pending-calibration">{message}</p>'
+    node = f'<div class="alert">{message}</div>'
     # Inherited flow only: this form is not evidence of any real special-site protocol.
     if form:
         node += f'<form action="{site.attendance_path}" method="post"><input name="imagehash" value="fixture"><img src="image.php?imagehash=fixture"><input name="imagestring"><button>签到</button></form>'
@@ -56,7 +56,7 @@ def test_b15_native_fixture_three_states(site_cls):
     signed = next(iter(site.record_spec.status_map))
     for message, expected in [(signed, "signed"), ("未签到", "unsigned"), ("未知状态", "unconfirmed")]:
         ctx = context(site, Http([]))
-        assert ctx.read_record(LoginPage(page(site, message), site.url), site.record_spec).status == expected
+        assert ctx.read_record(LoginPage(page(site, message), site.url), site.message_spec()).status == expected
     http = Http([page(site, signed)])
     assert site.signin(context(site, http)).status == "already"
     assert len(http.calls) == 1

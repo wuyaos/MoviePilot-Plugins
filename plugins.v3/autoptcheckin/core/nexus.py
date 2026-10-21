@@ -25,7 +25,7 @@ class NexusSignin(SiteModule):
         if page_available(page) and self.parse_login(page).status != LoginStatus.AUTH_FAILED:
             if self.signed_marker:
                 nodes = html.fromstring(page.text).xpath(self.signed_marker)
-                if len(nodes) == 1:
+                if nodes:
                     return ctx.result(status=SignStatus.ALREADY,
                                       evidence=Evidence(status="signed"))
         spec = self.pre_read_spec or self.message_spec()
@@ -42,12 +42,43 @@ class NexusSignin(SiteModule):
                 return result
         return ctx.record_result(page, self.message_spec())
 
+    # NexusPHP 标准结构默认消息选择器（占位站自动回退，命中即用；全部未命中仍 unconfirmed）
+    DEFAULT_MESSAGE_XPATHS = (
+        '//h1[contains(.,"签到") or contains(.,"打卡")]',
+        '//h2[contains(.,"签到") or contains(.,"打卡")]',
+        '//h3[contains(.,"签到") or contains(.,"打卡")]',
+        '//div[contains(@class,"alert") or contains(@class,"layui-layer")]',
+        '//div[contains(@id,"msg") or contains(@class,"message")]',
+        '//td[contains(@class,"text") and contains(text(),"签到")]',
+        '//table[contains(@class,"t1")]//tr[1]',
+        '//div[@id="main"]//font[contains(text(),"签到")]',
+    )
+    DEFAULT_STATUS_MAP = {
+        '签到成功': 'signed', '已签到': 'signed', '今天已经签到': 'signed', '已经签到': 'signed',
+        '今天已签到': 'signed', '連續簽到': 'signed', '连续签到': 'signed', '签到已得': 'signed',
+        '請勿重複刷新': 'signed', '请勿重复刷新': 'signed', '您今天已经签到过了': 'signed',
+        '打卡成功': 'signed', '已打卡': 'signed', '簽到成功': 'signed', '已簽到': 'signed',
+        '今天已打卡': 'signed', '已經簽到': 'signed', '請勿重複': 'signed',
+        '未签到': 'unsigned', '未簽到': 'unsigned',
+    }
+
     def message_spec(self) -> RecordSpec:
+        spec = self.record_spec
+        # batch2 占位 → 回退 NexusPHP 默认选择器链（保留站点已有确证关键词并合并默认集）
+        placeholder = isinstance(spec.message, str) and 'batch2-message-pending-calibration' in spec.message
+        if getattr(self, "use_default_message", True) and (
+                placeholder or (isinstance(spec.message, tuple) and not spec.message)):
+            states = dict(self.DEFAULT_STATUS_MAP)
+            states.update({k: v for k, v in spec.status_map.items() if v != 'signed' or k not in states})
+            for text in self.success_texts:
+                states.setdefault(text, "signed")
+            return RecordSpec(message=self.DEFAULT_MESSAGE_XPATHS, status_map=states,
+                              uid=spec.uid, date=spec.date, source="page_message")
         # Explicit mappings keep priority, including overlapping unsigned keywords.
-        states = dict(self.record_spec.status_map)
+        states = dict(spec.status_map)
         for text in self.success_texts:
             states.setdefault(text, "signed")
-        return replace(self.record_spec, status_map=states)
+        return replace(spec, status_map=states)
 
     def discover_form(self, ctx: SignContext, page: LoginPage) -> SigninForm | None:
         """Only an unambiguous POST form on the attendance page is eligible.

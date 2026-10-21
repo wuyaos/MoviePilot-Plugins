@@ -18,7 +18,7 @@ QUIZ = '<form><table><tr><td class="text">请问：测试？</td></tr></table><i
 
 
 def message(text):
-    return f'<p id="batch2-message-pending-calibration">{text}</p>'
+    return f'<div class="alert">{text}</div>'
 
 
 def discuz(button='点击打卡', row='未打卡', uid='42'):
@@ -161,7 +161,7 @@ def test_yzyy_session_cookie_refresh(monkeypatch):
         def __init__(self, **kwargs):
             seen.append(kwargs)
         def get_res(self, **kwargs):
-            return SimpleNamespace(text='page', url=kwargs['url'], status_code=200, cookies=jar)
+            return SimpleNamespace(content=b'page', headers={}, url=kwargs['url'], status_code=200, cookies=jar)
     monkeypatch.setitem(sys.modules, 'app.sdk.network', SimpleNamespace(RequestUtils=Request))
     monkeypatch.setitem(sys.modules, 'app.sdk.config', SimpleNamespace(settings=SimpleNamespace(PROXY=None)))
     http = NativeHttpClient(Credential('test', 'sid=old'), {}, session=session)

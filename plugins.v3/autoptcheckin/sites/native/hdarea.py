@@ -9,6 +9,8 @@ class HDArea(NexusSignin):
     url = "https://hdarea.club/"
     attendance_path = "/"
     hook_implemented = True
+    signed_marker = '//span[@id="sign_in_done"]'
+    # calibrated from real homepage sample
     record_spec = RecordSpec(
         '//*[@id="batch2-message-pending-calibration"]',
         {"此次签到您获得": "signed", "请不要重复签到哦": "signed", "未签到": "unsigned"},

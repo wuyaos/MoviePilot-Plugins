@@ -21,7 +21,7 @@ class RecordSpec:
     page_message uses a unique XPath element and ordered substring matching.
     response_json uses a top-level field and exact scalar type/value matching.
     """
-    message: str = ""
+    message: str | tuple[str, ...] = ""
     status_map: Mapping[str | int | bool, Literal["signed", "unsigned"]] = field(default_factory=dict)
     uid: str | None = None
     date: str | None = None
@@ -34,7 +34,9 @@ class RecordSpec:
             raise ValueError("unknown record source")
         if self.source == "response_json" and not self.response_field:
             raise ValueError("response_field is required")
-        if self.source == "page_message" and not self.message.strip():
+        if self.source == "page_message" and isinstance(self.message, str) and not self.message.strip():
+            raise ValueError("message selector is required")
+        if self.source == "page_message" and isinstance(self.message, tuple) and not self.message:
             raise ValueError("message selector is required")
         if any((not isinstance(key, str) or not key) if self.source == "page_message"
                else type(key) not in {str, int, bool} or key == "" for key in self.status_map):
@@ -120,7 +122,15 @@ class SignContext:
                 return Evidence(status="unconfirmed")
         try:
             tree = html.fromstring(page.text)
-            message = select_text(tree, spec.message)
+            selectors = spec.message if isinstance(spec.message, tuple) else (spec.message,)
+            message = ""
+            for sel in selectors:
+                try:
+                    message = select_text(tree, sel)
+                except (ValueError, TypeError, html.etree.XPathError, html.etree.ParserError):
+                    message = ""
+                if message:
+                    break
             status: RecordStatus = "unconfirmed"
             if message:
                 status = next((state for keyword, state in spec.status_map.items()

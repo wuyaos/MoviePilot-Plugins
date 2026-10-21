@@ -15,6 +15,8 @@ class HDSky(NexusSignin):
     url = "https://hdsky.me/"
     attendance_path = "/index.php"
     verified = True  # Pilot authorization only, not a claim of verified production HTML.
+    signed_marker = '//td[contains(., "[已签到]")]'
+    # pilot-calibrated 2026-10-21 real page
     record_spec = RecordSpec(
         '//*[@id="showup" or @id="sign_in" or @id="showupbutton"][self::a or self::button or self::input]',
         {"未签到": "unsigned", "已签到": "signed"})

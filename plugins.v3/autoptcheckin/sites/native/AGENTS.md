@@ -1,11 +1,11 @@
 # Native declarations and evidence audit
 
 ## 边界
-- 旧 `sites/` 副本是迁移依据；B1 声明一律 `native=True, verified=False`；C7 后 hook 状态见下表，verified 仍为 False。hook_implemented 与 verified 双门控；不得因消息校准放行未实现的提交协议。
+- 旧 `sites/` 副本是迁移依据；B1 声明一律 `native=True, verified=False`；下表保留各历史批次的 hook/verified 状态，不代表当前生产授权；当前默认门控及显式 unlock_all_sites 例外见插件主 AGENTS.md。
 - 凭证与证据来源是两个维度：凭证术语为 cookie/password/api_key，证据来源为 page_message/response_json。OpenCD 使用 cookie + response_json；蜂巢对照为 api_key + response_json，不在本插件添加论坛站。旧凭证枚举 api 的统一改名不在本批范围。
 - `RecordSpec.source=page_message` 只匹配唯一消息元素；`response_json` 按 `response_field` 取顶层标量并以类型和值精确匹配 `status_map`，不把任意非空值当成功。
 - `pre_read_spec` 用于安全页面前读及只读核验；`signed_marker` 同时用于安全新页回读；页面 JSON 不冒充动作回执。response_json 声明不继承通用 POST；六站真实动作、回执接线与无条件安全回读已在 C4 实现。
-- `batch2-message-pending-calibration` 为显式合成消息节点，不是生产选择器；`未签到` 为合成回归输入。没有证据保持 unconfirmed，不从整个页面、表单消失或未知 JSON 值推断成功。
+- `batch2-message-pending-calibration` 是历史合成占位，当前 NexusSignin 默认回退消息链（可由 use_default_message 关闭），不是生产选择器；`未签到` 为合成回归输入。没有证据保持 unconfirmed，不从整个页面、表单消失或未知 JSON 值推断成功。
 - 本表的 standard-declared 说明证据声明可表达，不表示提交协议已实现；special-hook 说明提交动作需站点钩子。两者与 verified 是独立维度。
 
 ## B1-6 六站对照（3.6.6）
@@ -180,3 +180,21 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 - 本批已实现但 record_spec 仍含合成节点的24站：baozi、dongying、kelu、naturept、novahd、oshen、phoenixpt、playlet、shaobaoyuan、soulvoice、tu88、vclib、btschool、hdcity、hdupt、hhanclub、pttime、lajidui、siqi、hdarea、nexushd、ttg、52pt、chdbits。其中 hdupt/siqi/ttg 另有已签 marker；BTSchool 空映射不能确认成功。其余消息节点、表单及 CAPTCHA 仍待真实采样校准。
 - 非占位的 haidan、u2、tjupt、yzyy 仍需生产页面/本人行/时段/图片问答核验；hares、hdchina、opencd、pterclub、zhuque、yema 仍需真实 JSON 类型/值、CSRF/OCR/Cookie 与安全页核验。无合成节点不代表生产 verified。
 - 非本批普通声明站 agsvpt、dstudio、hdbao、luckpt、muxuege、ptzone 也仍有合成 record_spec；不适用站 darkland/digitalcore/mteam 的空占位不属于签到校准任务。全部非试点 verified 保持 False；未发送真实请求，未改 dist，版本收尾不开放执行。
+
+## 批次 2 校准实测（2026-10-21，本地 MP + qnap Cookie）
+
+以下为本轮收尾接收的既有实测汇总；收尾仅归档，不重发真实站点请求，不以汇总代替逐站提交验收。历史 C1–C7 的“未发送真实请求”仅描述当时离线实现阶段。
+
+| 结果 | 数量 | 语义 |
+| --- | --- | --- |
+| already | 22 | 只读页面已有确证已签消息/标记；不是本轮新提交成功，也不自动提升 verified |
+| unconfirmed | 13 | 证据不足，不能解释为签到失败或确实未签；需后续授权采样/校准 |
+| auth_failed | 4 | 凭据/认证未通过，不证明签到动作失败 |
+| 合计 | 39 | 本次回读样本口径，不等于37个特殊站ID或27站全量重审清单 |
+
+- 规则放宽：默认链标题选择器采用 contains(.) 而非仅直接 text()，覆盖内嵌标签；纳入打卡及简繁变体。多选择器空、歧义或无效时续扫，仍要求唯一非空消息；首个非空消息无状态匹配时保持 unconfirmed，不遍历整页寻找成功词。具体判定契约以插件主 AGENTS.md 为准。
+- 四站 signed_marker 校准：hdsky 的 td 含“[已签到]”；haitang 的 span/b“今日已签到”或 faqlink“签到已得”；hdarea 的 span#sign_in_done；hdcity 的 href="sign" anchor 含“已签到”。安全前读及提交后的新页均可使用；不把动作响应当新页。
+- 52pt/chdbits/tjupt/pttime 本阶段运维决策为仅模拟登录，不执行签到；已实现 hook 不因此删除，也不宣称它们已完成生产提交验证。该选择是操作范围，不是源码强制禁签能力。
+- ptzone/vclib 当时维护中，保留待恢复后校准；不以维护页或未确认结果判定签到失败。
+- unlock_all_sites 与 signin_applicable 的当前契约统一见插件主 AGENTS.md；unlock 仅供显式校准放行，既有回读结果不等于批量真实签到授权。
+- local_cookie 候选：插件适配站无宿主 Cookie 时，可按规范化域名（小写、去 www.）从 custom_sites_data 的 cookie 取值；managed_site 优先。不得将 Cookie 写入本表或测试，cookiecloud 独立候选接线留批次3。

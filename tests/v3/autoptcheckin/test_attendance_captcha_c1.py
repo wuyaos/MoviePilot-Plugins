@@ -16,7 +16,7 @@ IDS = 'baozi dongying kelu naturept novahd oshen phoenixpt playlet shaobaoyuan s
 
 
 def message(text):
-    return f'<p id="batch2-message-pending-calibration">{text}</p>'
+    return f'<div class="alert">{text}</div>'
 
 
 def form_page():

@@ -52,7 +52,7 @@ def context(site, http):
 def page(site, message, *, form=False):
     node = (f'<a class="label label-default" href="#">{message}</a>'
             if isinstance(site, HDChina) else
-            f'<p id="batch2-message-pending-calibration">{message}</p>')
+            f'<div class="alert">{message}</div>')
     # Synthetic form exercises inherited flow only, not a claim about special-site protocols.
     if form:
         node += f'<form action="{site.attendance_path}" method="post"><button>签到</button></form>'

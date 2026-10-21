@@ -8,6 +8,7 @@ class BTSchool(GetSignin):
     name = 'BTSchool'
     url = 'https://pt.btschool.club/'
     attendance_path = '/'
+    use_default_message = False  # No audited positive message evidence for this site.
     hook_implemented = True
     action_path = '/index.php?action=addbonus'
     record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]', {})

@@ -40,7 +40,7 @@ def context(site, http):
 
 
 def message(text):
-    return f'<p id="batch2-message-pending-calibration">{text}</p>'
+    return f'<div class="alert">{text}</div>'
 
 
 @pytest.mark.parametrize('site_id', CAPTCHA + ['ptzone', 'ttg'])
@@ -48,9 +48,9 @@ def test_declared_message_three_states(site_id):
     site = get_native_module(site_id)
     ctx = context(site, Http())
     for word, state in site.record_spec.status_map.items():
-        assert ctx.read_record(LoginPage(message(word), site.url), site.record_spec).status == state
+        assert ctx.read_record(LoginPage(message(word), site.url), site.message_spec()).status == state
     for text in [message('unknown'), '<main>签到成功</main>', message('签到成功') * 2]:
-        assert ctx.read_record(LoginPage(text, site.url), site.record_spec).status == 'unconfirmed'
+        assert ctx.read_record(LoginPage(text, site.url), site.message_spec()).status == 'unconfirmed'
 
 
 @pytest.mark.parametrize('site_id,path,signed,unsigned', [

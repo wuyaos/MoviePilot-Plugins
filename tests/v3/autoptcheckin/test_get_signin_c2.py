@@ -18,7 +18,7 @@ OCR_IDS = {'lajidui', 'siqi'}
 
 
 def message(text):
-    return f'<p id="batch2-message-pending-calibration">{text}</p>'
+    return f'<div class="alert">{text}</div>'
 
 
 def signed(sid):
@@ -77,7 +77,7 @@ def test_c2_three_state_readback(sid, state):
     fresh = signed(sid) if state == 'signed' else message('未签到') if state == 'unsigned' else '<main>签到成功</main>'
     http = Http(site, fresh)
     result = site.signin(context(site, http))
-    expected = 'success' if state == 'signed' and sid != 'btschool' else 'failed' if state == 'unsigned' and sid not in {'btschool', 'haidan', 'hdupt'} else 'unconfirmed'
+    expected = 'success' if state == 'signed' and sid != 'btschool' else 'failed' if state == 'unsigned' and sid not in {'btschool', 'haidan'} else 'unconfirmed'
     assert result.status == expected
     assert len(actions(http)) == 1 and http.reads == 2
     assert http.calls[0][1] == http.calls[-1][1] == urljoin(site.url, site.attendance_path)

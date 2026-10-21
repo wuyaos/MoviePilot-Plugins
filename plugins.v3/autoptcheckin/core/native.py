@@ -1,11 +1,37 @@
 """Native execution boundary: credentials and resources stay outside site declarations."""
 from urllib.parse import urljoin
+from email.message import Message
 from http.cookies import SimpleCookie
 from uuid import uuid4
 
 from .credentials import Credential, CredentialResolver
 from .models import LoginPage, SignResult, SignStatus
 from .sitemodel import SignContext
+
+
+def decode_response(response):
+    """Ignore requests' implicit latin-1 default when HTTP declares no charset."""
+    content = response.content
+    header = Message()
+    header['content-type'] = response.headers.get('Content-Type', '')
+    charset = header.get_content_charset()
+    if charset:
+        try:
+            return content.decode(charset, errors='replace')
+        except LookupError:
+            pass
+    try:
+        return content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        # GBK is considered only after strict UTF-8 fails, never via a guess
+        # that can reinterpret valid UTF-8 Chinese as another encoding.
+        try:
+            text = content.decode('gbk')
+            if any('\u4e00' <= char <= '\u9fff' for char in text):
+                return text
+        except UnicodeDecodeError:
+            pass
+        return content.decode('utf-8', errors='replace')
 
 
 class NativeHttpClient:
@@ -35,7 +61,7 @@ class NativeHttpClient:
         self.cookies.update(response.cookies.get_dict())
         if self.session is not None:
             self.cookies.update(self.session.cookies.get_dict())
-        return LoginPage(response.text, response.url, response.status_code)
+        return LoginPage(decode_response(response), response.url, response.status_code)
 
     def get(self, url, *, referer=None):
         kwargs = {'referer': referer} if referer is not None else {}
@@ -76,7 +102,7 @@ def native_context(site, credential, info, lock, cancel):
                        page=None, ocr=ocr, site_lock=lock, cancel=cancel, public_get=public_get)
 
 
-def run_native(runner, site, info, *, read_only=False, trigger='manual', context_factory=native_context, get_data=None, save_data=None):
+def run_native(runner, site, info, *, read_only=False, trigger='manual', context_factory=native_context, get_data=None, save_data=None, custom_cookie=''):
     """Same site-level lock as legacy/login; every outcome gets one history entry."""
     def finish(result):
         result.site_id, result.run_id = site.id, str(uuid4())
@@ -98,7 +124,8 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
         auth = CredentialResolver().select_cookie({'managed_site': Credential(
-            'managed_site', info.get('cookie') or '', str(info.get('uid') or ''))})
+            'managed_site', info.get('cookie') or '', ''),
+            'local_cookie': Credential('local_cookie', custom_cookie, '')})
         if auth.credential is None:
             return finish(SignResult(SignStatus.AUTH_FAILED, auth.reason))
         session = None

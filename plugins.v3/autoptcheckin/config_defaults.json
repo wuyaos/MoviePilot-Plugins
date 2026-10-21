@@ -29,5 +29,6 @@
   "sunnypt_username": "",
   "sunnypt_password": "",
   "sunnypt_token": "",
-  "scheduler_enabled": false
+  "scheduler_enabled": false,
+  "unlock_all_sites": false
 }
