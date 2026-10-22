@@ -102,7 +102,7 @@ def test_once_consumed_before_execution_and_reload():
 def test_scheduler_and_manual_history_sources():
     p = plugin({**BASE, 'enabled_sites': ['nonpilot']})
     p.get_service()[0]['func']()
-    asyncio.run(p.api_manual_signin())
+    p._execute_all()  # 批次已在后台线程（API 只返回 started）；trigger 语义直接验证
     records = asyncio.run(p.api_history())['data']['items']
     assert {row['trigger'] for row in records} == {'scheduler', 'manual'}
     assert all(row['status'] == 'skipped' for row in records)

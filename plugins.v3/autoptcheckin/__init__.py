@@ -29,7 +29,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.30.0"
+    plugin_version = "3.31.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -179,10 +179,10 @@ class AutoPtCheckin(_PluginBase):
                              "begin_hour": self._config.get("begin_hour", 9),
                              "end_hour": self._config.get("end_hour", 23)})
         # 按动作分组：签到/模拟登录各取每站最新记录统计
-        def _counts(action):
+        def _counts(track):
             counts = {"success": 0, "failed": 0, "unconfirmed": 0}
-            for row in self._site_results(action=action):
-                st = row.get('status')
+            for row in self._site_tracks():
+                st = row[f'{track}_status']
                 if st in ('success', 'signed', 'already', 'login_ok'):
                     counts['success'] += 1
                 elif st in ('failed', 'auth_failed'):
@@ -193,7 +193,7 @@ class AutoPtCheckin(_PluginBase):
         latest_counts = {'sign': _counts('sign'), 'login': _counts('login')}
         return {"success": True, "data": {"today": self._history.today_counts(),
                 "latest": latest_counts,
-                "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": self._site_results()}}
+                "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": self._site_tracks()}}
 
     async def api_history(self, page: int = 1, size: int = 20) -> dict:
         return {"success": True, "data": self._history.list(page, size)}
@@ -219,7 +219,6 @@ class AutoPtCheckin(_PluginBase):
             sid = site['id']
             if sid not in enabled and sid not in latest:
                 continue
-            record = latest.get(sid) or latest.get((sid, action))
             record = (latest.get((sid, action)) if action is not None else latest.get(sid)) or {}
             active = sid in enabled
             rows.append({**site, **record, 'id': sid,
@@ -230,6 +229,53 @@ class AutoPtCheckin(_PluginBase):
                 'can_login': active and sid in self._config.get('login_sites', []) and site.get('pilot_enabled', False) and site.get('login_capable', False),
                 'can_signin': active and sid in self._config.get('sign_sites', []) and site.get('pilot_enabled', False),
                 'can_verify': active and site.get('pilot_enabled', False)})
+        return rows
+
+    @staticmethod
+    def _bucket(status):
+        if status in ('success', 'signed', 'already', 'login_ok'):
+            return 'success'
+        if status in ('failed', 'auth_failed'):
+            return 'failed'
+        if status == 'unconfirmed':
+            return 'unconfirmed'
+        if status in ('network_error',):
+            return 'network_error'
+        if status in ('maintenance',):
+            return 'maintenance'
+        if status in ('protocol_pending',):
+            return 'protocol_pending'
+        if status in ('skipped', 'disabled', 'off'):
+            return 'off'
+        return 'off'
+
+    def _site_tracks(self):
+        """每站双轨道：sign/login 各自的最新状态（展示层归一：成功/失败/未确认/off/站点侧状况）。"""
+        latest = {}
+        for item in self._history.list(1, 100)['items']:
+            latest.setdefault((item['site'], item.get('action', 'sign')), item)
+        enabled = self._config.get('enabled_sites', [])
+        rows = []
+        for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']:
+            sid = site['id']
+            if sid not in enabled and not any(k[0] == sid for k in latest):
+                continue
+            sign = latest.get((sid, 'sign'), {})
+            login = latest.get((sid, 'login'), {})
+            newest = max((sign, login), key=lambda x: x.get('time', ''))
+            rows.append({'id': sid, 'name': site.get('name', sid), 'url': site.get('url', ''),
+                'icon': site.get('icon', ''),
+                'sign_status': self._bucket(sign.get('status')) if sign else 'off',
+                'login_status': self._bucket(login.get('status')) if login else 'off',
+                'sign_message': sign.get('message', ''), 'login_message': login.get('message', ''),
+                'detail': newest.get('message', ''), 'time': newest.get('time', ''),
+                'enabled': sid in enabled,
+                'can_signin': sid in enabled and site.get('signin_applicable', False) and sid in self._config.get('sign_sites', []),
+                'can_login': sid in self._config.get('login_sites', []),
+                'can_verify': sid in enabled,
+                'signin_selected': sid in self._config.get('sign_sites', []),
+                'login_selected': sid in self._config.get('login_sites', []),
+                'pilot_enabled': site.get('pilot_enabled', False)})
         return rows
 
     def _signed_today(self, site_id):

@@ -179,16 +179,20 @@ def test_page_filters_collapse_and_day_groups():
 const assert = require('node:assert/strict');
 const ref = value => ({value});
 const computed = getter => ({get value() {return getter()}});
-const stats=ref({sites:Array.from({length:12},(_,i)=>({id:i,status:i===10?'failed':i===11?'unconfirmed':'success'}))});
+const stats=ref({sites:Array.from({length:12},(_,i)=>({id:i,
+  status:i===10?'failed':i===11?'unconfirmed':'success',
+  sign_status:i===10?'failed':i===11?'unconfirmed':'success',
+  login_status:'off',
+  name:'站点'+i}))});
 const history=ref({items:[{time:new Date().toISOString()},{time:'2020-01-02T03:04:05'},{time:'2020-01-02T04:04:05'}]});
 const showAllSites""" + functions + """
 assert.equal(visibleSites.value.length,8);
 assert.deepEqual(visibleSites.value.slice(0,2).map(s=>s.id),[10,11]);
 showAllSites.value=true; assert.equal(visibleSites.value.length,12);
-toggleSiteFilter('failed'); assert.equal(showAllSites.value,false); assert.deepEqual(visibleSites.value.map(s=>s.id),[10]);
-toggleSiteFilter('failed'); assert.equal(visibleSites.value.length,8);
-toggleSiteFilter('signed'); assert.equal(visibleSites.value.length,0);
-toggleSiteFilter('signed');
+toggleSiteFilter('sign_failed'); assert.equal(showAllSites.value,false); assert.deepEqual(visibleSites.value.map(s=>s.id),[10]);
+toggleSiteFilter('sign_failed'); assert.equal(visibleSites.value.length,8);
+toggleSiteFilter('off'); assert.equal(visibleSites.value.length,0);
+toggleSiteFilter('off');
 const today=historyDay(new Date()); assert.equal(dayIsOpen(today),true);
 assert.equal(dayIsOpen('2020-01-02'),false);
 toggleDay('2020-01-02'); assert.equal(dayIsOpen('2020-01-02'),true);
