@@ -28,7 +28,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.24.0"
+    plugin_version = "3.26.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -177,7 +177,19 @@ class AutoPtCheckin(_PluginBase):
             schedule.update({"interval_hours": self._config.get("interval_hours", 2),
                              "begin_hour": self._config.get("begin_hour", 9),
                              "end_hour": self._config.get("end_hour", 23)})
+        latest_counts = {"success": 0, "signed": 0, "failed": 0, "unconfirmed": 0}
+        for row in self._site_results():
+            st = row.get('status')
+            if st in ('success',):
+                latest_counts['success'] += 1
+            elif st in ('signed', 'already'):
+                latest_counts['signed'] += 1
+            elif st in ('failed', 'auth_failed'):
+                latest_counts['failed'] += 1
+            elif st == 'unconfirmed':
+                latest_counts['unconfirmed'] += 1
         return {"success": True, "data": {"today": self._history.today_counts(),
+                "latest": latest_counts,
                 "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": self._site_results()}}
 
     async def api_history(self, page: int = 1, size: int = 20) -> dict:
