@@ -29,7 +29,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.31.0"
+    plugin_version = "3.32.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -180,8 +180,14 @@ class AutoPtCheckin(_PluginBase):
                              "end_hour": self._config.get("end_hour", 23)})
         # 按动作分组：签到/模拟登录各取每站最新记录统计
         def _counts(track):
+            """当日口径：只统计今天有执行的站点（含已签跳过）。"""
             counts = {"success": 0, "failed": 0, "unconfirmed": 0}
+            today = datetime.now().strftime('%Y-%m-%d')
             for row in self._site_tracks():
+                sign, login = row['_sign_record'], row['_login_record']
+                rec = (sign or {}) if track == 'sign' else (login or {})
+                if not rec or not str(rec.get('time') or '').startswith(today):
+                    continue
                 st = row[f'{track}_status']
                 if st in ('success', 'signed', 'already', 'login_ok'):
                     counts['success'] += 1
@@ -275,7 +281,8 @@ class AutoPtCheckin(_PluginBase):
                 'can_verify': sid in enabled,
                 'signin_selected': sid in self._config.get('sign_sites', []),
                 'login_selected': sid in self._config.get('login_sites', []),
-                'pilot_enabled': site.get('pilot_enabled', False)})
+                'pilot_enabled': site.get('pilot_enabled', False),
+                '_sign_record': sign, '_login_record': login})
         return rows
 
     def _signed_today(self, site_id):
