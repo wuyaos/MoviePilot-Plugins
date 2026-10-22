@@ -56,7 +56,6 @@ def test_real_api_contract(monkeypatch):
     assert any(route['path'] == '/sites' and route['auth'] == 'bear' for route in plugin.get_api())
     assert asyncio.run(plugin.api_history())['data'] == {'total':0,'items':[]}
     plugin._history.append(SignResult(SignStatus.UNCONFIRMED, site_id='fixture'))
-    assert asyncio.run(plugin.api_stats())['data']['today']['unconfirmed'] == 1
     assert asyncio.run(plugin.api_history(size=1))['data']['total'] == 1
     assert asyncio.run(plugin.api_status())['data']['today']['unconfirmed'] == 1
 

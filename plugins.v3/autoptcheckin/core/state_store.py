@@ -23,6 +23,8 @@ GATE_SKIPS = frozenset({
 })
 # 纯空转结果：只写历史，不改状态表（锁忙/取消不得降级已有结论）。
 TRANSIENT_SKIPS = frozenset({"skipped", "cancelled"})
+NON_FAILURE = frozenset({"maintenance", "network_error", "protocol_pending"})
+KNOWN_FAILURES = frozenset({"failed", "auth_failed", "unconfirmed"})
 
 
 def normalize(track: str, status: str, reason: str | None = None) -> str:
@@ -34,9 +36,9 @@ def normalize(track: str, status: str, reason: str | None = None) -> str:
         return SUCCESS
     if track == "login" and status in LOGIN_SUCCESS:
         return SUCCESS
-    if status in TRANSIENT_SKIPS or not status:
+    if status in TRANSIENT_SKIPS or status in NON_FAILURE or not status:
         return PENDING
-    return FAILED
+    return FAILED if status in KNOWN_FAILURES else PENDING
 
 
 class TrackStateStore:
@@ -74,7 +76,7 @@ class TrackStateStore:
         return self._data["sites"].setdefault(str(site), {}).setdefault(track, {})
 
     def rollover(self) -> None:
-        """日切：跨天后 success 失效为 pending（签到/登录均为每日任务），retries 清零。"""
+        """日切：跨天后 success 失效为 pending（签到/登录均为每日任务）。"""
         self.ensure()
         today = self._clock().date().isoformat()
         with self._lock:
@@ -85,7 +87,6 @@ class TrackStateStore:
                     if entry.get("state") == SUCCESS:
                         entry.clear()
                         entry["state"] = PENDING
-                    entry["retries"] = 0
             self._data["day"] = today
             self._flush()
 
@@ -99,10 +100,6 @@ class TrackStateStore:
         state = normalize(track, status, reason)
         with self._lock:
             entry = self._entry(site, track)
-            if state == FAILED:
-                entry["retries"] = int(entry.get("retries") or 0) + 1
-            else:
-                entry["retries"] = 0
             entry["state"] = state
             entry["status"] = status or ""
             entry["message"] = message or ""
@@ -121,7 +118,6 @@ class TrackStateStore:
             if entry.get("state") == state and entry.get("reason") == reason:
                 return
             entry["state"] = state
-            entry["retries"] = 0
             if reason:
                 entry["reason"] = reason
             else:
@@ -141,19 +137,8 @@ class TrackStateStore:
                         continue
                     entry.clear()
                     entry["state"] = state
-                    entry["retries"] = 0
                     if reason:
                         entry["reason"] = reason
-            self._flush()
-
-    def reset_retry_budget(self) -> None:
-        """轮次开始：进队列站点的当场重试计数清零。"""
-        self.ensure()
-        with self._lock:
-            for tracks in self._data["sites"].values():
-                for entry in tracks.values():
-                    if entry.get("state") in (FAILED, PENDING):
-                        entry["retries"] = 0
             self._flush()
 
     def clear_transient(self) -> None:
@@ -166,34 +151,40 @@ class TrackStateStore:
                         continue
                     entry.clear()
                     entry["state"] = PENDING
-                    entry["retries"] = 0
             self._flush()
 
     # -- 读取 ---------------------------------------------------------------
     def state_of(self, site: str, track: str) -> str:
         self.ensure()
-        entry = self._data["sites"].get(str(site), {}).get(track, {})
+        with self._lock:
+            entry = deepcopy(self._data["sites"].get(str(site), {}).get(track, {}))
         return entry.get("state", PENDING)
 
     def entry_of(self, site: str, track: str) -> dict:
         self.ensure()
-        return deepcopy(self._data["sites"].get(str(site), {}).get(track, {}))
+        with self._lock:
+            return deepcopy(self._data["sites"].get(str(site), {}).get(track, {}))
 
     def due_sites(self, track: str) -> list[str]:
         self.ensure()
-        return [site for site, tracks in self._data["sites"].items()
+        with self._lock:
+            sites = deepcopy(self._data["sites"])
+        return [site for site, tracks in sites.items()
                 if tracks.get(track, {}).get("state") in (FAILED, PENDING)]
 
     def snapshot(self) -> dict:
         self.ensure()
-        return deepcopy(self._data)
+        with self._lock:
+            return deepcopy(self._data)
 
     def counts(self) -> dict:
         """今日三卡口径：success/failed（原始值非 unconfirmed）/unconfirmed。"""
         self.ensure()
         today = self._clock().date().isoformat()
         out = {track: {"success": 0, "failed": 0, "unconfirmed": 0} for track in TRACKS}
-        for tracks in self._data["sites"].values():
+        with self._lock:
+            sites = deepcopy(self._data["sites"])
+        for tracks in sites.values():
             for track, entry in tracks.items():
                 if track not in out or entry.get("time", "")[:10] != today:
                     continue
@@ -220,7 +211,6 @@ class TrackStateStore:
                 entry["status"] = item.get("status", "")
                 entry["message"] = item.get("message", "")
                 entry["time"] = item.get("time", "")
-                entry["retries"] = 0
             self._flush()
 
 

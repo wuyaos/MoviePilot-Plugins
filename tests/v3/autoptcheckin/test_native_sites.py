@@ -202,3 +202,45 @@ def test_run_native_preconditions_do_not_create_resources(mode, status):
     else:
         result = run_native(runner, HDSky(), {}, context_factory=forbidden)
     assert result.status == status
+
+
+def test_custom_site_enters_sign_queue_and_gate_skip_writes_disabled():
+    """回归：自定义站必须进签到队列（recompute sign 分支豁免 PILOTS 门控）；
+    门控类 skip 必须写 disabled 状态表且不被当场重试（避免重复执行噪音）。"""
+    module = importlib.import_module('autoptcheckin')
+    plugin = module.AutoPtCheckin()
+    plugin.get_data = lambda key: {}
+    plugin.save_data = lambda key, value: None
+    plugin.update_config = lambda value: None
+    plugin._config = {'enabled_sites': ['custom-60005'], 'sign_sites': ['custom-60005']}
+    monkey_source = module.get_registry
+    module.get_registry = lambda *args, **kwargs: {'sites': [dict(
+        id='custom-60005', name='自定义站', url='https://c.invalid/', source='自定义站点',
+        native=False, signin_capable=True, signin_applicable=True, login_capable=True)]}
+    try:
+        plugin._recompute_track_states()
+        assert plugin._track_store().state_of('custom-60005', 'sign') == 'pending'
+        assert plugin._due_for('sign') == ['custom-60005']
+    finally:
+        module.get_registry = monkey_source
+
+    plugin2 = module.AutoPtCheckin()
+    plugin2.get_data = lambda key: {}
+    plugin2.save_data = lambda key, value: None
+    plugin2._config = {'enabled_sites': ['60009'], 'sign_sites': ['60009'], 'retry_count': 3}
+    from autoptcheckin.core.models import SignResult, SignStatus
+    calls = []
+
+    def fake_execute(site_id, read_only=False, trigger='manual', action='sign'):
+        calls.append(1)
+        result = SignResult.skipped('signin_not_supported')
+        result.site_id = str(site_id)
+        result.metadata.update({'reason': 'signin_not_supported', 'action': action})
+        plugin2._record_result(result)
+        return {'status': 'skipped', 'site_id': str(site_id)}
+
+    plugin2._execute_site = fake_execute
+    plugin2._track_store().apply_result('60009', 'sign', 'failed', message='x', time='2026-10-23T01:00:00')
+    plugin2._run_with_retry('60009', 'sign', 'manual')
+    assert len(calls) == 1, calls
+    assert plugin2._track_store().state_of('60009', 'sign') == 'disabled'

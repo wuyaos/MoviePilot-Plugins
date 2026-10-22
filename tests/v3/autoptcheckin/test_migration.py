@@ -52,7 +52,7 @@ def test_credentials_mapping(sources, prefix, source, key):
 @pytest.mark.parametrize('key,old,new', [
     ('enabled', False, True), ('notify', True, False), ('queue_cnt', 0, 3),
     ('cron', 'old', 'new'), ('sign_sites', ['haitang'], ['hdsky']),
-    ('login_sites', ['haitang'], ['hdsky']), ('retry_keyword', 'old', 'new')])
+    ('login_sites', ['haitang'], ['hdsky'])])
 def test_conflicts_preserve_false_and_zero(sources, key, old, new):
     sources['AutoPtCheckin']['config'][key] = new
     assert m.build_preview(sources, {key: old}, REGISTRY)['changes'][key]['conflict']

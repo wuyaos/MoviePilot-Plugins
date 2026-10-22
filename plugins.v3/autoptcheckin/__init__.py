@@ -16,7 +16,8 @@ from .core.migration import Migration, MigrationError
 from .core.registry import get_registry, get_native_module
 from .core.native import run_native, run_native_login
 from .core.custom import run_custom, CustomNexusSignin
-from .core.state_store import DISABLED, FAILED, PENDING, SUCCESS, TrackStateStore
+from .core.state_store import DISABLED, FAILED, GATE_SKIPS, PENDING, SUCCESS, TrackStateStore
+from .core.notify import PARSE_MODES, format_round_summary
 from typing import Any
 
 try:
@@ -58,6 +59,11 @@ class AutoPtCheckin(_PluginBase):
         self.stop_service()
         self._runner.stop.clear()
         self._config = deepcopy(config or {})
+        # 迁移/前端多次确认可能累积重复站点 ID：保序去重，避免队列重复执行。
+        for key in ("enabled_sites", "sign_sites", "login_sites"):
+            values = self._config.get(key)
+            if isinstance(values, list):
+                self._config[key] = list(dict.fromkeys(str(v) for v in values))
         self._running = bool(self._config.get("enabled", False))
         if hasattr(self, "get_data"):
             self._site_config = self.get_data("site_config") or {}
@@ -75,10 +81,10 @@ class AutoPtCheckin(_PluginBase):
         self._scheduler = Scheduler(getattr(self, "get_data", None), getattr(self, "save_data", None), timezone)
 
         store = self._track_store()
-        store.rollover()
         if not store.snapshot()["sites"]:
             # 首次/损坏重建：从最近历史派生初始结论（历史层已把 already 归一为 signed）。
             store.rebuild_from_history(self._recent_records())
+        store.rollover()
         self._recompute_track_states()
     def get_state(self) -> bool:
         return self._running or (not self._runner.stop.is_set() and bool(self._config.get("scheduler_enabled", False)) and bool(self._config.get("onlyonce", False)))
@@ -108,6 +114,7 @@ class AutoPtCheckin(_PluginBase):
             {"path": "/manual_signin", "endpoint": self.api_manual_signin, "methods": ["POST"]},
             {"path": "/run_once", "endpoint": self.api_run_once, "methods": ["POST"]},
             {"path": "/clean_today", "endpoint": self.api_clean_today, "methods": ["POST"]},
+            {"path": "/notify_preview", "endpoint": self.api_notify_preview, "methods": ["GET"]},
             {"path": "/verify_site", "endpoint": self.api_verify_site, "methods": ["POST"]},
             {"path": "/status", "endpoint": self.api_status, "methods": ["GET"]},
             {"path": "/sites", "endpoint": self.api_sites, "methods": ["GET"]},
@@ -190,8 +197,7 @@ class AutoPtCheckin(_PluginBase):
         self._track_store().rollover()
         rows = self._site_rows()
         latest = self._track_store().counts()
-        return {"success": True, "data": {"today": self._history.today_counts(),
-                "latest": latest,
+        return {"success": True, "data": {"latest": latest,
                 "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": rows}}
 
     def _site_rows(self) -> list[dict]:
@@ -231,8 +237,11 @@ class AutoPtCheckin(_PluginBase):
         # already 在入口统一归一为 signed：状态表与任何下游都不再出现 already。
         if status == "already":
             status = "signed"
-        if not metadata.get("read_only") and status not in ("skipped", "cancelled"):
-            reason = metadata.get("reason")
+        # read_only 核验不改表；纯空转（锁忙/取消）只写历史；门控类 skip（带 reason）写 disabled，
+        # 否则门控站停留 FAILED 会被当场重试并在每轮重复执行。
+        reason = metadata.get("reason")
+        gate_skip = status in ("skipped", "cancelled") and (reason or "") in GATE_SKIPS
+        if not metadata.get("read_only") and (status not in ("skipped", "cancelled") or gate_skip):
             self._track_store().apply_result(
                 str(result.site_id), metadata.get("action", "sign"), status,
                 message=getattr(result, "message", "") or "", reason=reason)
@@ -263,10 +272,21 @@ class AutoPtCheckin(_PluginBase):
                 decisions[sid]["sign"] = (DISABLED, "site_disabled")
                 decisions[sid]["login"] = (DISABLED, "site_disabled")
                 continue
-            if sid not in sign_sel or site.get("signin_capable") is False or not site.get("signin_applicable", False):
-                decisions[sid]["sign"] = (DISABLED, "not_capable" if site.get("signin_capable") is False or not site.get("signin_applicable", False) else "signin_not_selected")
-            elif not unlock and site.get("native") and not (site.get("verified") and site.get("hook_implemented", True)):
+            if sid not in sign_sel:
+                decisions[sid]["sign"] = (DISABLED, "signin_not_selected")
+            elif site.get("signin_capable") is False:
+                decisions[sid]["sign"] = (DISABLED, "signin_not_supported")
+            elif not site.get("signin_applicable", False):
+                decisions[sid]["sign"] = (DISABLED, "signin_not_applicable")
+            elif not unlock and site.get("native") and not site.get("verified"):
                 decisions[sid]["sign"] = (DISABLED, "native_unverified")
+            elif not unlock and site.get("native") and not site.get("hook_implemented", True):
+                decisions[sid]["sign"] = (DISABLED, "hook_not_implemented")
+            elif site.get("source") == "自定义站点":
+                # 自定义站在 _execute_site 的 custom 分支执行，不经 PILOTS 门控。
+                decisions[sid]["sign"] = (PENDING, None)
+            elif not unlock and not site.get("native") and sid not in PILOTS:
+                decisions[sid]["sign"] = (DISABLED, "pilot_not_enabled")
             else:
                 decisions[sid]["sign"] = (PENDING, None)
             if sid not in login_sel or site.get("login_capable") is False:
@@ -274,7 +294,7 @@ class AutoPtCheckin(_PluginBase):
             elif site.get("source") == "自定义站点":
                 # 自定义站在 _execute_site 的 custom 分支执行，不经 PILOTS 门控。
                 decisions[sid]["login"] = (PENDING, None)
-            elif not unlock and not site.get("native") and sid not in PILOTS:
+            elif not unlock and sid not in PILOTS:
                 decisions[sid]["login"] = (DISABLED, "pilot_not_enabled")
             else:
                 decisions[sid]["login"] = (PENDING, None)
@@ -423,19 +443,11 @@ class AutoPtCheckin(_PluginBase):
         """双队列串行：先签到后登录；队列=状态表 failed/pending；单站失败当场重试 ≤ retry_count。"""
         self._recompute_track_states()
         self._track_store().rollover()
-        self._track_store().reset_retry_budget()
         results = []
         for action in ("sign", "login"):
             for site_id in self._due_for(action):
                 results.append(self._run_with_retry(site_id, action, trigger))
-        leftover = {action: self._track_store().due_sites(action) for action in ("sign", "login")}
-        if any(leftover.values()):
-            try:
-                from app.runtime.log import logger
-                logger.info(f'【PT 签到中心】本轮收尾待办（下一轮继续）：'
-                            f'签到 {leftover["sign"] or "无"}；登录 {leftover["login"] or "无"}')
-            except ImportError:
-                pass
+        self._notify_round(trigger)
         return results
 
     def _due_for(self, action: str) -> list[str]:
@@ -447,12 +459,58 @@ class AutoPtCheckin(_PluginBase):
 
     def _run_with_retry(self, site_id, action, trigger):
         result = self._execute_site(site_id, trigger=trigger, action=action)
+        if (result or {}).get("status") in ("skipped", "cancelled"):
+            return result
         attempts = max(0, int(self._config.get("retry_count", 3) or 0))
         for _ in range(attempts):
             if self._track_store().state_of(str(site_id), action) != FAILED:
                 break
             result = self._execute_site(site_id, trigger=trigger, action=action)
         return result
+
+    def _round_summary(self) -> dict:
+        """从状态表当日结论构建推送摘要（与 /notify_preview 同一渲染路径）。"""
+        today = datetime.now().date().isoformat()
+        summary = {"sign": {}, "login": {}, "failures": []}
+        labels = {"sign": "签到", "login": "登录"}
+        for site, tracks in self._track_store().snapshot()["sites"].items():
+            for track, entry in tracks.items():
+                if track not in summary or not str(entry.get("time", "")).startswith(today):
+                    continue
+                bucket = summary[track]
+                state, status = entry.get("state"), entry.get("status", "")
+                if state == SUCCESS:
+                    bucket["success"] = bucket.get("success", 0) + 1
+                elif state == FAILED and status == "unconfirmed":
+                    bucket["unconfirmed"] = bucket.get("unconfirmed", 0) + 1
+                    summary["failures"].append(f'{site}（{labels[track]}：未确认）')
+                elif state == FAILED:
+                    bucket["failed"] = bucket.get("failed", 0) + 1
+                    summary["failures"].append(f'{site}（{labels[track]}：{entry.get("message") or status}）')
+        for track in ("sign", "login"):
+            due = len(self._track_store().due_sites(track))
+            if due:
+                summary[track]["other"] = due
+        return summary
+
+    def _notify_round(self, trigger: str) -> None:
+        """轮次结束按开关推送摘要；未启用 notify 时静默跳过。"""
+        try:
+            if not self._config.get("notify"):
+                return
+            fmt = self._config.get("notify_format", "plain")
+            text = format_round_summary(self._round_summary(), fmt)
+            self.post_message(title=f'PT 签到中心（{trigger}）', text=text,
+                              parse_mode=PARSE_MODES.get(fmt))
+        except Exception:
+            pass
+
+    async def api_notify_preview(self) -> dict:
+        """渲染推送预览：与真实推送同一格式，但不发送。"""
+        self._track_store().rollover()
+        fmt = self._config.get("notify_format", "plain")
+        return {"success": True, "data": {"text": format_round_summary(self._round_summary(), fmt),
+                "enabled": bool(self._config.get("notify")), "format": fmt}}
 
     async def api_run_once(self) -> dict:
         """从数据页注册一次性 DateTrigger；不受常规调度门控影响。"""

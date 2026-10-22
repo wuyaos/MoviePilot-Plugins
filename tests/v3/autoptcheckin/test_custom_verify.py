@@ -47,7 +47,7 @@ def test_custom_verify_bypasses_native_gate_without_claiming_attendance(probe):
 @pytest.mark.parametrize('page,status', [
     (LoginPage('<form>Login</form>', 'https://custom.invalid/login.php'), 'auth_failed'),
     (LoginPage('<input type="password">', 'https://custom.invalid/'), 'auth_failed'),
-    (LoginPage('denied', 'https://custom.invalid/', 403), 'auth_failed'),
+    (LoginPage('denied', 'https://custom.invalid/', 403), 'unconfirmed'),
     (LoginPage('error', 'https://custom.invalid/', 500), 'unconfirmed'),
     (None, 'unconfirmed'), (TimeoutError(), 'unconfirmed'),
 ])

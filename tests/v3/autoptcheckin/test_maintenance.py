@@ -22,10 +22,13 @@ from test_sign_status import URL, site
 from test_get_signin_c2 import context
 
 
-PAGES = [LoginPage('denied', URL, code) for code in (403, 502, 503)] + [
+PAGES = [
     LoginPage(text, URL) for text in ('维护中', '站点维护', '正在维护', '站点已关闭',
                                     'Temporarily Unavailable', 'SITE IS DOWN', 'Under Maintenance')
 ]
+
+# 2026-10-23 用户裁决：维护只认响应体文案；HTTP 403/502/503/404 一律归站点不可达。
+HTTP_ERROR_PAGES = [LoginPage('denied', URL, code) for code in (403, 502, 503, 404)]
 
 
 @pytest.mark.parametrize('kind', [NexusSignin, GetSignin, ApiSignin, CustomNexusSignin])
@@ -37,6 +40,15 @@ def test_maintenance_pre_read_never_submits(kind, page):
     assert result.status == SignStatus.MAINTENANCE
     assert result.message == '维护中/已关闭'
     assert http.get.call_count == 1
+    http.post.assert_not_called()
+
+
+@pytest.mark.parametrize('page', HTTP_ERROR_PAGES)
+def test_http_errors_are_network_error_not_maintenance(page):
+    obj, http = site(NexusSignin), Mock()
+    http.get.return_value = page
+    result = obj.signin(context(obj, http))
+    assert result.status == SignStatus.NETWORK_ERROR
     http.post.assert_not_called()
 
 

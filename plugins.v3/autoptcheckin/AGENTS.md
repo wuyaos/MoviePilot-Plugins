@@ -71,7 +71,7 @@
 | failed | 失败 | 明确未签证据 | failed |
 | auth_failed | 认证失败 | 缺凭据或认证页 | failed（仅 sign） |
 | unconfirmed | 未确认 | 提交后证据不足或身份冲突；旧轨道/登录未知结果保留兼容 | unconfirmed（仅 sign） |
-| maintenance | 维护中/已关闭 | 签到前读及 native 核验 HTTP 403/502/503，或响应体前 2 KiB（UTF-8）含维护/关闭文案（英文不区分大小写）；提交后回读与模拟登录语义不变 | 不计入 |
+| maintenance | 维护中/已关闭 | 签到前读及 native 核验 仅响应体前 2 KiB（UTF-8）含维护/关闭文案（英文不区分大小写）；HTTP 状态码一律归站点不可达（2026-10-23 用户裁决）；提交后回读与模拟登录语义不变 | 不计入 |
 | network_error | 站点不可达 | 签到前读空响应、排除维护状态后的非认证 HTTP 错误或请求异常（含 native 核验） | 不计入 |
 | protocol_pending | 协议待适配 | 签到无唯一表单、参数/验证码未解决或提交前解析异常 | 不计入 |
 | skipped | 已跳过 | 门控、未选动作或锁忙 | 不计入 |
@@ -112,9 +112,9 @@
 - `core/registry.py` 使用 `pkgutil` 遍历 `sites/`，逐模块导入并收集 `_ISiteSigninHandler` 子类；导入异常只进入 `skipped` 日志，不阻断其他站点。注册项包含 `id/name/login_capable/credential/cf`，并追加 `rousi/sunnypt` 两个 integrations 注册项；`/sites` 返回 `sources.adapters` 与 `sources.integrations` 计数。
 - 适配器凭证默认 `kind=cookie`、来源 `cookiecloud/managed_site/local_cookie`；集成凭证从 integrations 的 `CredentialSpec` 获取。注册表只缓存元数据，不实例化适配器或请求站点。模拟登录表示访问页面，不要求专属登录动作；适配器默认 login_capable=true（含 HDSky），仅显式 false 的特殊站关闭。
 - `core/history.py` 使用 `get_data/save_data` 的 key `history.records` 保存 `{time,site,action,status,message,reward,evidence}`；`list(page,size)` 按时间倒序分页，默认每页 20、上限 100；追加和读取均清理超过 90 天的记录。历史只保存回读证据，不保存凭据。
-- 轨道状态表（3.35.0）：`save_data("track.state")` 持久化每站×轨道（sign/login）的规范化状态，`core/state_store.py` 唯一实现。四值：success/failed/pending/disabled；映射唯一入口 `normalize(track,status,reason)`——sign 成功族={success,signed}（already 已在 `_record_result` 入口归一为 signed，状态表不出现）、login 成功={login_ok}；门控类 skip（reason ∈ 登记清单）→ disabled(reason)；其余失败族与无记录 → failed/pending；锁忙 skipped 与 cancelled 只写历史不改表。写入点：`_record_result`（read_only 结果跳过）；`init_plugin`/每轮 `_execute_all` 前全量重算 pending/disabled（`_recompute_track_states`，success/failed 结论保留）；日切（state.time 非今日的 success → pending）；清理缓存联动 `clear_transient`（非禁用→pending）。
-- 双队列执行（3.35.0）：`_execute_all` 先签到后登录串行；队列=启用∧勾选∧状态∈{failed,pending}；单站结果 failed 当场重试 ≤ `retry_count`（retries 每轮清零）；收尾把 failed/pending 清单写日志留给下一轮。`skip_signed_today`/`_signed_today`/`_site_tracks`/`_counts`/`_bucket`/`_site_results` 退役：`/stats` 的站点行与三卡统计直接读状态表（字段 sign_state/sign_status/sign_time/sign_message、login_*；latest 按 success/failed/unconfirmed 当日计数）。
-- `/stats` 返回 `today`、`latest:{sign:{success,failed,unconfirmed}, login:{...}}` 与 `next_schedule`；`/history` 返回 `{total,items}`。签到 action 的 auth_failed 计入失败卡；maintenance/network_error/protocol_pending 仅保留历史及站点卡，不计入四张统计卡，也不增统计键，避免把未执行当签到失败；保留原始历史状态；空态仅表示实际存储为空。轨道最新记录聚合覆盖最近 400 条（_recent_records 分页聚合），skipped/cancelled 存在更早结论时不作为轨道最新状态（避免锁忙/门控跳过掩盖已有结果）。
+- 轨道状态表（3.35.0）：`save_data("track.state")` 持久化每站×轨道（sign/login）的规范化状态，`core/state_store.py` 唯一实现。四值：success/failed/pending/disabled；映射唯一入口 `normalize(track,status,reason)`——sign 成功族={success,signed}（already 已在 `_record_result` 入口归一为 signed，状态表不出现）、login 成功={login_ok}；门控类 skip（reason ∈ 登记清单）→ disabled(reason)；其余失败族与无记录 → failed/pending；maintenance/network_error/protocol_pending 与未知/空状态 → pending；锁忙 skipped 与 cancelled 只写历史不改表。写入点：`_record_result`（read_only 结果跳过）；`init_plugin`/每轮 `_execute_all` 前全量重算 pending/disabled（`_recompute_track_states`，success/failed 结论保留）；日切（state.time 非今日的 success → pending）；清理缓存联动 `clear_transient`（非禁用→pending）。
+- 双队列执行（3.35.0）：`_execute_all` 先签到后登录串行；队列=启用∧勾选∧状态∈{failed,pending}；单站结果 failed 当场重试 ≤ `retry_count`；收尾把 failed/pending 清单写日志留给下一轮。`skip_signed_today`/`_signed_today`/`_site_tracks`/`_counts`/`_bucket`/`_site_results` 退役：`/stats` 的站点行与三卡统计直接读状态表（字段 sign_state/sign_status/sign_time/sign_message、login_*；latest 按 success/failed/unconfirmed 当日计数）。
+- `/stats` 返回 `latest:{sign:{success,failed,unconfirmed}, login:{...}}` 与 `next_schedule`；`/history` 返回 `{total,items}`。签到 action 的 auth_failed 计入失败卡；maintenance/network_error/protocol_pending 仅保留历史及站点卡，不计入四张统计卡，也不增统计键，避免把未执行当签到失败；保留原始历史状态；空态仅表示实际存储为空。
 - 配置页以 `/sites` 为主数据源；仅在 registry 整包导入失败时使用 `frontend/src/sites.json` 作为静态兜底，不把静态清单当生产主数据源。
 
 ## S5 试点执行边界
@@ -138,7 +138,7 @@
 ## S6 迁移契约
 - 迁移仅走运维 API：先 GET `/migrate/preview`，审核后 POST `/migrate/execute`，JSON body 必须含 `confirm: true`，`overwrite_conflicts` 默认 false；均为 `auth: bear`，不加 UI、不启动调度或站点请求。
 - 来源配置走同宿主 GET `/api/v1/plugin/{id}`（内部 loopback + 宿主 API key），先查已安装清单和版本；AutoPtCheckin 的本地版本 >=3 标 `source_missing(reason=self_v3)`，不得迁移自己。未安装标 source_missing；鉴权/网络/版本异常标 source_error，不伪装成缺失。
-- 映射：AutoPtCheckin 的 enabled/cron/cron_mode/interval_hours/begin_hour/end_hour/notify/queue_cnt/retry_keyword 同名写入；sign_sites/login_sites 按 registry ID 或域名匹配，合并生成 enabled_sites，未识别项列 unmapped。custom_site_urls（名称|URL|Y/N）与 custom_sites_data 合并到自定义站点源，旧数字 ID 转稳定 custom ID，render 转 emulate；不复制 Cookie 或一次性动作。
+- 映射：AutoPtCheckin 的 enabled/cron/cron_mode/interval_hours/begin_hour/end_hour/notify/queue_cnt 同名写入；sign_sites/login_sites 按 registry ID 或域名匹配，合并生成 enabled_sites，未识别项列 unmapped。custom_site_urls（名称|URL|Y/N）与 custom_sites_data 合并到自定义站点源，旧数字 ID 转稳定 custom ID，render 转 emulate；不复制 Cookie 或一次性动作。
 - RousiCheckin 的 username/password → rousi_username/rousi_password；SunnyPTSignin 的 username/password/token → sunnypt_username/sunnypt_password/sunnypt_token，空 token 不填。预览不回显专属凭据值。
 - 配置端点不含 V2 get_data：Rousi history、Sunny records/token_cache 在就绪来源预览中标 data_unavailable；本轮不写 history.records 或站点附属数据。生产切换阶段由运维另行从宿主数据文件读取迁移，不假装已完成。
 - 已有非空目标值不同即 conflict（false、0 也算已有值）；默认跳过，只有 overwrite_conflicts=true 才覆盖。自定义源冲突跳过时，同时跳过引用未导入 custom ID 的动作集合，返回 skipped_dependencies。

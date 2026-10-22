@@ -98,7 +98,7 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
     if not enabled:
         return finish(SignResult.skipped('site_disabled'))
     if not read_only and not selected:
-        return finish(SignResult.skipped('login_not_selected' if action == 'login' else 'sign_not_selected'))
+        return finish(SignResult.skipped('login_not_selected' if action == 'login' else 'signin_not_selected'))
     if info.get('emulate'):
         if not config.get('browserless_enabled'):
             return finish(SignResult.skipped('browserless_disabled'))

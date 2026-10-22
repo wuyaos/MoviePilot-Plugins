@@ -73,11 +73,13 @@ def select_text(tree, selector: str | None) -> str:
 
 
 def page_maintenance(page: LoginPage | None) -> bool:
-    """Only inspect the response body's first 2 KiB; never classify post-action reads."""
+    """Only inspect the response body's first 2 KiB; never classify post-action reads.
+
+    2026-10-23 用户裁决：维护只认页面文案（如「站点关闭维护中」），HTTP 状态码
+    （403/502/503/404 等）一律归站点不可达，不再按状态码判维护。
+    """
     if page is None:
         return False
-    if page.status_code in {403, 502, 503}:
-        return True
     prefix = page.text.encode("utf-8")[:2048].decode("utf-8", errors="ignore").casefold()
     return any(marker in prefix for marker in (
         "维护中", "站点维护", "正在维护", "站点已关闭", "网站已关闭",
@@ -91,7 +93,8 @@ def page_available(page: LoginPage | None) -> bool:
 
 def login_redirect(page: LoginPage) -> bool:
     path = urlsplit(page.url).path.lower().rstrip("/").rsplit("/", 1)[-1]
-    return path in {"login", "login.php", "signin", "signin.php"} or page.status_code in {401, 403}
+    return path in {"login", "login.php", "signin", "signin.php"} or page.status_code == 401
+
 
 
 @dataclass

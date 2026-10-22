@@ -62,7 +62,6 @@ def test_site_config_persistence_and_reload():
 def test_empty_results_do_not_fabricate_evidence():
     plugin = Plugin()
     stats = run(plugin.api_stats())['data']
-    assert stats['today'] == dict(success=0, signed=0, failed=0, unconfirmed=0)
     assert stats['next_schedule'] is None and stats['sites'] == []
     assert stats['schedule'] == {'mode': 'interval', 'interval_hours': 2, 'begin_hour': 9, 'end_hour': 23}
     plugin._config = {'cron_mode': 'cron', 'cron': '5 8 * * *'}

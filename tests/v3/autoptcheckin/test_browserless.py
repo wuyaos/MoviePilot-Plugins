@@ -106,7 +106,7 @@ def test_http_routing_without_opt_in(monkeypatch, flag, enabled):
     assert 'transport' not in result.metadata
 
 
-@pytest.mark.parametrize('status,expected', [(403, 'maintenance'), (500, 'network_error')])
+@pytest.mark.parametrize('status,expected', [(403, 'network_error'), (500, 'network_error')])
 
 
 def test_initial_connection_failure_preserves_http_classification(monkeypatch, status, expected):

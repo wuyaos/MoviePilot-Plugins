@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 SOURCES = ("AutoPtCheckin", "RousiCheckin", "SunnyPTSignin")
 CONFIG_KEYS = ("enabled", "cron", "cron_mode", "interval_hours", "begin_hour", "end_hour",
-               "notify", "queue_cnt", "retry_keyword")
+               "notify", "queue_cnt")
 DATA_UNAVAILABLE = {"RousiCheckin": ["history"], "SunnyPTSignin": ["records", "token_cache"]}
 
 

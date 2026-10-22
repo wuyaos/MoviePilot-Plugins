@@ -6,7 +6,7 @@ ROOT = Path(__file__).parents[3] / 'plugins.v3' / 'autoptcheckin'
 
 def test_schedule_and_credentials_use_adaptive_grid():
     source = (ROOT / 'frontend/src/Config.vue').read_text(encoding='utf-8')
-    assert source.count('class="grid fields-grid"') == 4
+    assert source.count('class="grid fields-grid"') == 5
     assert ':class="{three:(site.fields || []).length === 3}"' not in source
     css = (ROOT / 'frontend/src/preview.css').read_text(encoding='utf-8')
     assert '.grid.fields-grid {grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr))}' in css
