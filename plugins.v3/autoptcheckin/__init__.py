@@ -28,7 +28,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.26.0"
+    plugin_version = "3.27.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -177,17 +177,19 @@ class AutoPtCheckin(_PluginBase):
             schedule.update({"interval_hours": self._config.get("interval_hours", 2),
                              "begin_hour": self._config.get("begin_hour", 9),
                              "end_hour": self._config.get("end_hour", 23)})
-        latest_counts = {"success": 0, "signed": 0, "failed": 0, "unconfirmed": 0}
-        for row in self._site_results():
-            st = row.get('status')
-            if st in ('success',):
-                latest_counts['success'] += 1
-            elif st in ('signed', 'already'):
-                latest_counts['signed'] += 1
-            elif st in ('failed', 'auth_failed'):
-                latest_counts['failed'] += 1
-            elif st == 'unconfirmed':
-                latest_counts['unconfirmed'] += 1
+        # 按动作分组：签到/模拟登录各取每站最新记录统计
+        def _counts(action):
+            counts = {"success": 0, "failed": 0, "unconfirmed": 0}
+            for row in self._site_results(action=action):
+                st = row.get('status')
+                if st in ('success', 'signed', 'already', 'login_ok'):
+                    counts['success'] += 1
+                elif st in ('failed', 'auth_failed'):
+                    counts['failed'] += 1
+                elif st == 'unconfirmed':
+                    counts['unconfirmed'] += 1
+            return counts
+        latest_counts = {'sign': _counts('sign'), 'login': _counts('login')}
         return {"success": True, "data": {"today": self._history.today_counts(),
                 "latest": latest_counts,
                 "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": self._site_results()}}
@@ -202,18 +204,22 @@ class AutoPtCheckin(_PluginBase):
             if hasattr(self, "save_data"):
                 self.save_data("identity.bindings", dict(self._bound_uids))
 
-    def _site_results(self):
+    def _site_results(self, action=None):
+        # 每站每动作取最新记录（列表按时间倒序）；action=None 保留旧行为（全局最新）
         latest = {}
         for item in self._history.list(1, 100)['items']:
-            # 签到与模拟登录都进入站点最新状态（列表按时间倒序，首个即最新）
-            latest.setdefault(item['site'], item)
+            if action is not None and item.get('action', 'sign') != action:
+                continue
+            key = (item['site'], action) if action is not None else item['site']
+            latest.setdefault(key, item)
         enabled = self._config.get('enabled_sites', [])
         rows = []
         for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']:
             sid = site['id']
             if sid not in enabled and sid not in latest:
                 continue
-            record = latest.get(sid, {})
+            record = latest.get(sid) or latest.get((sid, action))
+            record = (latest.get(sid) or latest.get((sid, action)) or {})
             active = sid in enabled
             rows.append({**site, **record, 'id': sid,
                 'status': record.get('status', 'off') if active else 'disabled',
