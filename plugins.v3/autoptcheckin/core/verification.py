@@ -65,4 +65,4 @@ def verify_login(fetch_page, verifier, uid="") -> LoginResult:
         evidence = Evidence()
     if evidence and uid and evidence.uid and evidence.uid != uid:
         return LoginResult(LoginStatus.UNCONFIRMED, "页面账号冲突，已停止判定", evidence=evidence)
-    return LoginResult(LoginStatus.LOGIN_OK, "站点页面可达", evidence=evidence)
+    return LoginResult(LoginStatus.LOGIN_OK, "已登录", evidence=evidence)

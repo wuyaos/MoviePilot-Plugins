@@ -102,7 +102,12 @@ def discover_sites(package_name: str | None = None) -> dict:
             item['signin_note'] = '答题类签到不建议使用（误答有账号风险），仅保留模拟登录'
         item['pilot_enabled'] = (item['verified'] and item.get('hook_implemented', True)) if item['native'] else item['id'] in ('hdsky', 'haitang')
     for item in skipped:
-        logging.getLogger(__name__).warning("跳过站点适配器 %s (%s)", item["module"], item["error"])
+        # sites/ 顶层是 DEPRECATED 副本（仅 MP 运行时可导入），离线失败属预期，降为 debug。
+        logger = logging.getLogger(__name__)
+        if item["module"].startswith("autoptcheckin.sites.") and not item["module"].startswith("autoptcheckin.sites.native."):
+            logger.debug("跳过 deprecated 站点副本 %s (%s)", item["module"], item["error"])
+        else:
+            logger.warning("跳过站点适配器 %s (%s)", item["module"], item["error"])
     return {"sites": sorted(sites, key=lambda item: item["id"]), "skipped": skipped,
             "sources": {"adapters": adapter_count, "integrations": 2}}
 

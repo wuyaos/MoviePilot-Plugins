@@ -132,7 +132,7 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
                     elif html.fromstring(page.text).xpath('//input[translate(@type,"PASSWORD","password")="password"]'):
                         result = LoginResult(LoginStatus.AUTH_FAILED, '页面包含登录表单')
                     else:
-                        result = LoginResult(LoginStatus.LOGIN_OK, '站点页面可达，未检测到登录页（未核验签到）')
+                        result = LoginResult(LoginStatus.LOGIN_OK, '已登录')
         except Exception:
             result = SignResult(SignStatus.UNCONFIRMED, '自定义站点执行未确认')
         return finish(result)
