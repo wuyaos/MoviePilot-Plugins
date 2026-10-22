@@ -114,6 +114,9 @@ def test_registry_native_overrides_legacy_without_duplicate_ids():
         assert len(rows) == 1 and rows[0]['native'] and rows[0]['verified'] and rows[0]['pilot_enabled']
     batch1 = {'52pt', 'agsvpt', 'baozi', 'btschool', 'chdbits'}
     expected_native = {path.stem for path in (Path(__file__).parents[3] / 'plugins.v3' / 'autoptcheckin' / 'sites' / 'native').glob('*.py') if path.stem != '__init__'}
+    from autoptcheckin.sites.native.generic import build_generic_sites
+    expected_native.discard('generic')
+    expected_native.update(cls.id for cls in build_generic_sites())
     assert expected_native >= batch1
     assert all(row['native'] and not row['verified'] for row in result['sites'] if row['id'] in expected_native - {'hdsky', 'haitang'})
     assert all(row['native'] and not row['verified'] for row in result['sites'] if row['id'] in batch1)

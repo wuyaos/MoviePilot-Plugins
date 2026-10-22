@@ -1,0 +1,362 @@
+[
+  {
+    "id": "13city",
+    "name": "13City",
+    "url": "https://13city.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "1ptba",
+    "name": "1PTBA",
+    "url": "https://1ptba.com/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "52movie",
+    "name": "52Movie",
+    "url": "https://www.52movie.top/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "audiences",
+    "name": "观众",
+    "url": "https://audiences.me/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "bilibili",
+    "name": "RailgunPT",
+    "url": "https://bilibili.download/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "cangbao",
+    "name": "藏宝阁",
+    "url": "https://cangbao.ge/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "carpt",
+    "name": "CARPT",
+    "url": "https://carpt.net/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "cc_mypt",
+    "name": "我的PT",
+    "url": "https://cc.mypt.cc/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "crabpt",
+    "name": "蟹黄堡",
+    "url": "https://crabpt.vip/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "cspt",
+    "name": "财神",
+    "url": "https://cspt.top/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "cyanbug",
+    "name": "大青虫",
+    "url": "https://cyanbug.net/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "discfan",
+    "name": "蝶粉",
+    "url": "https://discfan.net/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "dragonhd",
+    "name": "龙之家",
+    "url": "https://www.dragonhd.xyz/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "dubhe",
+    "name": "天枢",
+    "url": "https://dubhe.site/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "duckboobee",
+    "name": "March",
+    "url": "https://duckboobee.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "et8",
+    "name": "他吹吹风",
+    "url": "https://et8.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "gamegamept",
+    "name": "GGPT",
+    "url": "https://www.gamegamept.com/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "hddolby",
+    "name": "高清杜比",
+    "url": "https://www.hddolby.com/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "hdfans",
+    "name": "红豆饭",
+    "url": "https://hdfans.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "hdhome",
+    "name": "家园",
+    "url": "https://hdhome.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "hdkyl",
+    "name": "麒麟",
+    "url": "https://www.hdkyl.in/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "hdtime",
+    "name": "高清时间",
+    "url": "https://hdtime.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "hdvideo",
+    "name": "HDVIDEO",
+    "url": "https://hdvideo.top/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "hitpt",
+    "name": "百川",
+    "url": "https://www.hitpt.com/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "hxpt",
+    "name": "好学",
+    "url": "https://www.hxpt.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "kufei",
+    "name": "库非",
+    "url": "https://kufei.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "lemonhd",
+    "name": "柠檬",
+    "url": "https://lemonhd.net/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "longpt",
+    "name": "LongPT",
+    "url": "https://longpt.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "momentpt",
+    "name": "Moment",
+    "url": "https://www.momentpt.top/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "mua_xloli",
+    "name": "萝莉",
+    "url": "https://mua.xloli.cc/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "musopia",
+    "name": "音乐乌托邦",
+    "url": "https://www.musopia.vip/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "nanyangpt",
+    "name": "南洋",
+    "url": "https://nanyangpt.com/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "nicept",
+    "name": "老师",
+    "url": "https://www.nicept.net/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "njtupt",
+    "name": "浦园PT",
+    "url": "https://njtupt.top/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "okpt",
+    "name": "OKPT",
+    "url": "https://www.okpt.net/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pandapt",
+    "name": "熊猫高清",
+    "url": "https://pandapt.net/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_0ff",
+    "name": "自由农场",
+    "url": "https://pt.0ff.cc/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_aling",
+    "name": "AlingPT",
+    "url": "https://pt.aling.de/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_daxiangjiao",
+    "name": "大香蕉",
+    "url": "https://pt.daxiangjiao.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_eastgame",
+    "name": "吐鲁番",
+    "url": "https://pt.eastgame.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_hdclone",
+    "name": "HDClone",
+    "url": "https://pt.hdclone.top/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_itzmx",
+    "name": "ITZMX",
+    "url": "https://pt.itzmx.com/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_keepfrds",
+    "name": "朋友",
+    "url": "https://pt.keepfrds.com/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_sjtu_edu",
+    "name": "葡萄",
+    "url": "https://pt.sjtu.edu.cn/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_tey",
+    "name": "太乙",
+    "url": "https://pt.tey.cc/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_xingyungept",
+    "name": "星陨阁",
+    "url": "https://pt.xingyungept.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pt_ying_us",
+    "name": "樱花",
+    "url": "https://pt.ying.us.kg/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "ptcafe",
+    "name": "咖啡",
+    "url": "https://ptcafe.club/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "ptfans",
+    "name": "PTFans",
+    "url": "https://ptfans.cc/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "pthome",
+    "name": "铂金家",
+    "url": "https://pthome.net/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "ptlgs",
+    "name": "PTLGS",
+    "url": "https://ptlgs.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "ptskit",
+    "name": "PTS",
+    "url": "https://www.ptskit.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "sbpt",
+    "name": "SBPT",
+    "url": "https://sbpt.link/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "sewerpt",
+    "name": "下水道",
+    "url": "https://sewerpt.com/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "tangpt",
+    "name": "躺平",
+    "url": "https://www.tangpt.top/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "ubits",
+    "name": "UBits",
+    "url": "https://ubits.club/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "xdypt",
+    "name": "修道院",
+    "url": "https://xdypt.vip/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "xingtan",
+    "name": "杏坛",
+    "url": "https://xingtan.one/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "xingwan",
+    "name": "星湾",
+    "url": "https://xingwan.cc/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "zmpt",
+    "name": "织梦",
+    "url": "https://zmpt.cc/",
+    "attendance_path": "/attendance.php"
+  }
+]

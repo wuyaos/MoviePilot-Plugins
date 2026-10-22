@@ -198,3 +198,12 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 - ptzone/vclib 当时维护中，保留待恢复后校准；不以维护页或未确认结果判定签到失败。
 - unlock_all_sites 与 signin_applicable 的当前契约统一见插件主 AGENTS.md；unlock 仅供显式校准放行，既有回读结果不等于批量真实签到授权。
 - local_cookie 候选：插件适配站无宿主 Cookie 时，可按规范化域名（小写、去 www.）从 custom_sites_data 的 cookie 取值；managed_site 优先。不得将 Cookie 写入本表或测试，cookiecloud 独立候选接线留批次3。
+
+## 通用声明站（3.10.0）
+
+- generic.py 从 generic_sites.json 生成模块级 NexusSignin 子类，复用现有 registry 发现；60站均未生产校准，verified=False，沿用标准 attendance 与默认消息链。
+- 输入导出实际 sign_sites=88、login_sites=133，并集133；Vc-Lib 管理站与 custom 为同域，去重后132域。按浏览器 Cookie dump 中 c_secure_pass 域名证据筛选；无该证据不等于已证明非 NexusPHP，保守排除。
+- 生成器 scripts/build_generic_sites.py 只输出 id/name/url/attendance_path；域名去 www、去最后一段 TLD、点和连字符转下划线；ID冲突加 _g。
+- 明确别名 pterclub.net→pterclub、kp.m-team.cc→mteam，禁止生成重复通用类；darkland/digitalcore/mteam 排除。custom 数字 ID 的 name/url/id 已由 registry 原样输出。
+- 排除清单（27域，缺 c_secure_pass 证据，批次3+另行处理登录）：FileList (`https://filelist.io/`)、海豚 (`https://dicmusic.com/`)、Anthelion (`https://anthelion.me/`)、JPopsuki (`https://jpopsuki.eu/`)、Nebulance (`https://nebulance.io/`)、青蛙 (`https://www.qingwapt.com/`)、星空 (`https://star-space.net/`)、Aither (`https://aither.cc/`)、猪猪 (`https://piggo.me/`)、我堡 (`https://ourbits.club/`)、春天 (`https://springsunday.net/`)、BeyondHD (`https://beyond-hd.me/`)、龟站 (`https://kamept.com/`)、海豹 (`https://greatposterwall.com/`)、天雪 (`https://skyeysnow.com/`)、AnimeZ (`https://animez.to/`)、梓喵 (`https://azusa.wiki/`)、莫妮卡 (`https://monikadesign.uk/`)、IPT (`https://iptorrents.com/`)、HD-Space (`https://hd-space.org`)、AsianCinema (`https://eiga.moi`)、bitporn (`https://bitporn.eu`)、NordicQuality (`https://nordicq.org`)、bakabt (`https://bakabt.me`)、seedpool (`https://seedpool.org`)、clearjav (`https://clearjav.com`)、dreadvault (`https://dreadvault.org`)。
+- 遗留：通用站逐站核验实际表单/消息与验证码差异；不以 Cookie 名存在替代生产签到验证，不自动开启 verified。
