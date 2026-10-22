@@ -1,5 +1,5 @@
 """声明宿主服务；随机计划独立持久化，不创建第二个调度线程。"""
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 import random
 from zoneinfo import ZoneInfo
@@ -24,7 +24,7 @@ class Scheduler:
         self.clear()
         if config.get("onlyonce", False):
             self.services = [{"id": "AutoSignIn.once", "name": "PT 签到中心（一次）",
-                              "trigger": DateTrigger(run_date=datetime.now(self.timezone)),
+                              "trigger": DateTrigger(run_date=datetime.now(self.timezone) + timedelta(seconds=120)),
                               "func": callback, "kwargs": {}}]
             return list(self.services)
         if not config.get("scheduler_enabled", False):
@@ -65,6 +65,12 @@ class Scheduler:
                 services.append({"id": "AutoSignIn" if mode == "cron" else f"AutoSignIn.{index}",
                                  "name": name, "trigger": trigger, "func": callback, "kwargs": {}})
             self.services = services
+            # interval 随机表可能整体过期（如跨天后所有小时已过）：无未来触发点则强制重排一次
+            now = datetime.now(self.timezone)
+            future = [svc for svc in services if svc['trigger'].get_next_fire_time(None, now)]
+            if mode == 'interval' and crons and not future:
+                self.save_data('schedule_signature', '')
+                return self.build(config, callback)
         except (ValueError, TypeError, OverflowError):
             self.error = "invalid_schedule"
         return list(self.services)

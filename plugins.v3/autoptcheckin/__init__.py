@@ -29,7 +29,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.28.0"
+    plugin_version = "3.30.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -220,7 +220,7 @@ class AutoPtCheckin(_PluginBase):
             if sid not in enabled and sid not in latest:
                 continue
             record = latest.get(sid) or latest.get((sid, action))
-            record = (latest.get(sid) or latest.get((sid, action)) or {})
+            record = (latest.get((sid, action)) if action is not None else latest.get(sid)) or {}
             active = sid in enabled
             rows.append({**site, **record, 'id': sid,
                 'status': record.get('status', 'off') if active else 'disabled',
@@ -398,14 +398,8 @@ class AutoPtCheckin(_PluginBase):
         return {"success": True, "data": {"removed": removed}}
 
     async def api_manual_signin(self) -> dict:
-        """批次转后台线程：客户端断开不再取消整批（uvicorn 会取消 async 任务）。"""
-        thread = getattr(self, '_batch_thread', None)
-        if thread is not None and thread.is_alive():
-            return {'success': False, 'message': '批次仍在执行中'}
-        self._batch_thread = threading.Thread(target=self._execute_all, daemon=True,
-                                              name='ptc-manual-signin')
-        self._batch_thread.start()
-        return {'success': True, 'data': {'started': True}}
+        """手动全量签到：走 onlyonce DateTrigger（APScheduler 线程，写库路径已被验证）。"""
+        return await self.api_run_once()
 
     def _scheduled_once(self):
         with self._migration.lock:
