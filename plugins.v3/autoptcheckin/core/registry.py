@@ -91,7 +91,8 @@ def discover_sites(package_name: str | None = None) -> dict:
             except Exception as exc:
                 skipped.append({'module': module_name, 'error': type(exc).__name__})
     for item in sites:
-        item['signin_capable'] = item['id'] not in ('darkland', 'digitalcore')
+        item['signin_capable'] = (getattr(_NATIVE_MODULES[item['id']], 'signin_capable', True)
+                                  if item.get('native') else item['id'] not in ('darkland', 'digitalcore'))
         # 签到不适用：登录专用站、mteam（保活语义）、答题/滑块类（chdbits/tjupt 答题误答风险；
         # 52pt 已改滑块签到，HTTP 无法完成，须 Browserless 实现，均仅保留模拟登录）
         quiz = {'52pt', 'chdbits', 'tjupt'}
@@ -132,7 +133,7 @@ def get_native_module(site_id):
     return _NATIVE_MODULES[site_id]()
 
 
-def get_registry(custom_sites_data=None) -> dict:
+def get_registry(custom_sites_data=None, browserless_enabled=False) -> dict:
     registry = deepcopy(_discovery())
     try:
         managed = managed_sites()
@@ -159,7 +160,8 @@ def get_registry(custom_sites_data=None) -> dict:
         registry['sites'].append({'id': item['id'], 'name': item.get('name', ''),
             'url': item.get('url', ''), 'emulate': bool(item.get('emulate', False)),
             'source': '自定义站点', 'icon': '', 'native': False, 'verified': False,
-            'pilot_enabled': False, 'login_capable': True, 'signin_capable': True,
+            'pilot_enabled': True, 'login_capable': True, 'signin_capable': True,
+            'signin_applicable': not item.get('emulate') or browserless_enabled,
             'credential': credential(CredentialSpec()), 'cf': 'unknown'})
         known.add(item['id'])
     return registry

@@ -10,9 +10,13 @@ Status: implemented
 
 登录历史增加 action=login，旧记录按 sign 处理；登录失败也不进入签到四态统计。批量同时勾选两动作时签到优先。
 
-肉丝/SunnyPT 没有已实现的认证检查器。经范围裁决仅提供检查器注入点，缺失返回 login_check_not_available；非试点继续跳过，后续逐站接入认证协议需要授权。
+M-Team/肉丝/SunnyPT 没有已实现的认证检查器。经范围裁决仅提供检查器注入点，缺失返回 login_check_not_available；非试点继续跳过，后续逐站接入认证协议需要授权。
+
+登录执行与旧签到桥解耦：native 直接 parse_login；非 native 使用相同 GET 首页两次的通用可达性判断；custom 复用本条目客户端及 Browserless 显式门。verified/hook 仅约束签到，登录仍受启用、动作选择与试点/unlock 门控制。未登记域名须来自已配置的启用/登录集合，并匹配宿主或 custom 地址，不能把 API 参数当请求地址。
+
 
 ## Alternatives considered
+- 保留非 native 登录旧桥看似能复用 V2，但实际 PilotBridge 只支持两个试点，不能承接27域；因此选择通用首页读取，不扩写旧签到适配器。
 - 继续要求按钮和导航 UID 能保留旧四件证据约束，但与本轮两件证据裁决不符。
 - 从 V2 提取真实肉丝/SunnyPT 认证能立即开放登录，但会扩大网络和认证协议范围，因此保留试点门控。
 
@@ -24,3 +28,5 @@ Status: implemented
 
 ## Related notes audit
 [S5 试点桥](2026-10-20-pilot-readback.md) 部分重叠，保留其提交次数和回读边界；本篇补充证据简化与登录语义。论坛笔记为独立插件，不适用本次变更。
+
+D5 离线证据：test_native_login_d5.py 断言旧桥构造为零、两次回读、身份冲突、三类凭据、M-Team 无检查器、custom 与非 native 域名授权边界。注册表仍会发现旧适配器元数据，不宣称整个插件不再 import sites/。Custom attendance 笔记与本篇仅在客户端生命周期上重叠，保持其签到边界不变。

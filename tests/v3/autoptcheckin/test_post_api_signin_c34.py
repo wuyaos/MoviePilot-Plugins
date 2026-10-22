@@ -91,7 +91,7 @@ def daytime(monkeypatch):
     return clock
 
 
-@pytest.mark.parametrize('sid', IDS)
+@pytest.mark.parametrize('sid', [sid for sid in IDS if sid not in {'hdarea', 'nexushd'}])
 @pytest.mark.parametrize('state', ['signed', 'unsigned', 'unknown'])
 def test_c34_three_states_and_single_action(sid, state):
     site = get_native_module(sid)

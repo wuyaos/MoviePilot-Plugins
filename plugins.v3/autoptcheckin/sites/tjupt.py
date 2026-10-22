@@ -1,3 +1,4 @@
+# DEPRECATED: 原生实现见 sites/native/；此副本仅用于 registry 元数据发现与未迁移域名兜底，签到/登录执行路径已不使用（除 pilot 试点回退）。
 import json
 import os
 import time

@@ -1,0 +1,136 @@
+"""D1 generated declarations exercise the same offline consumer paths as C1-C4."""
+import json
+import sys
+from pathlib import Path
+from unittest.mock import Mock
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parents[3] / 'plugins.v3'))
+from autoptcheckin.core.api_signin import ApiSignin
+from autoptcheckin.core.get_signin import GetSignin
+from autoptcheckin.core.registry import get_native_module, discover_sites
+from autoptcheckin.sites.native import generic
+import test_attendance_captcha_c1 as c1
+import test_get_signin_c2 as c2
+import test_post_api_signin_c34 as c34
+
+CAPTCHA = c1.IDS
+GET = 'btschool haidan hdcity hdupt hhanclub pttime'.split()
+POST = ['hdarea', 'nexushd']
+
+
+@pytest.mark.parametrize('sid', CAPTCHA)
+@pytest.mark.parametrize('state', ['success', 'already', 'unconfirmed'])
+def test_generic_captcha_three_states(sid, state):
+    site = get_native_module(sid)
+    pages = [c1.message('今日已簽到')] if state == 'already' else [c1.form_page(), c1.message('簽到已得') if state == 'success' else '<main>签到成功</main>']
+    http, ocr = c1.Http(pages), Mock(return_value='Ab1234')
+    assert site.signin(c1.context(site, http, ocr)).status == state
+    assert site.solve_captcha.__func__ is generic._solve_captcha
+    assert [c[0] for c in http.calls] == (['get'] if state == 'already' else ['get', 'post', 'get'])
+    if state == 'already':
+        ocr.assert_not_called()
+    else:
+        assert http.calls[1][3] == site.url + 'attendance.php'
+        assert dict(http.calls[1][2]) == dict(csrf='synthetic', imagehash='fixture-hash', imagestring='Ab1234')
+        assert sum(key == 'imagestring' for key, _ in http.calls[1][2]) == 1
+
+
+@pytest.mark.parametrize('sid', GET)
+@pytest.mark.parametrize('state', ['signed', 'unsigned', 'unknown'])
+def test_generic_get_three_states(sid, state):
+    site = get_native_module(sid)
+    assert isinstance(site, GetSignin)
+    fresh = c2.signed(sid) if state == 'signed' else c2.message('未签到') if state == 'unsigned' else '<main>签到成功</main>'
+    http = c2.Http(site, fresh)
+    expected = 'success' if state == 'signed' and sid != 'btschool' else 'failed' if state == 'unsigned' and sid not in {'btschool', 'haidan'} else 'unconfirmed'
+    assert site.signin(c2.context(site, http)).status == expected
+    assert len(c2.actions(http)) == 1 and http.reads == 2
+    assert http.calls[0][1] == http.calls[-1][1]
+    if sid == 'hhanclub':
+        assert c2.actions(http)[0][2] == site.url
+
+
+@pytest.mark.parametrize('sid', POST)
+@pytest.mark.parametrize('state', ['signed', 'unsigned', 'unknown'])
+def test_generic_static_post_three_states(sid, state):
+    site = get_native_module(sid)
+    fresh = c34.signed(sid) if state == 'signed' else c34.message('未签到') if state == 'unsigned' else '<main>签到成功</main>'
+    http = c34.Http(site, fresh=fresh)
+    assert site.signin(c34.context(site, http)).status == {'signed': 'success', 'unsigned': 'failed', 'unknown': 'unconfirmed'}[state]
+    assert len(http.actions) == 1 and http.reads == 2
+    assert http.actions[0][0] == 'post'
+    assert dict(http.actions[0][2]['data']) == ({'action': 'sign_in'} if sid == 'hdarea' else {'action': 'post', 'content': ''})
+    form = site.discover_form(None, None)
+    form.data.append(('extra', 'value'))
+    assert ('extra', 'value') not in site.discover_form(None, None).data
+
+
+def generate(monkeypatch, tmp_path, **fields):
+    path = tmp_path / 'declarations.json'
+    path.write_text(json.dumps([dict(id='d1_fixture', name='Fixture', url='https://fixture.invalid/', **fields)]), encoding='utf-8')
+    monkeypatch.setattr(generic, '_DECLARATIONS', path)
+    # Factory publishes classes for registry discovery; restore its namespace after test.
+    monkeypatch.setattr(generic, 'GenericD1_Fixture', None, raising=False)
+    return generic.build_generic_sites()[0]()
+
+
+@pytest.mark.parametrize('mapping,value,expected', [
+    ({'1': 'signed'}, '1', 'success'), ({'1': 'signed'}, 1, 'unconfirmed'),
+    ([[0, 'signed']], 0, 'success'), ([[0, 'signed']], False, 'unconfirmed'),
+    ([[True, 'signed'], [False, 'unsigned']], True, 'success'),
+    ([[True, 'signed'], [False, 'unsigned']], False, 'failed'),
+    ([[True, 'signed']], 1, 'unconfirmed'),
+])
+@pytest.mark.parametrize('action_error', [False, True])
+def test_generic_response_json_exact_types_and_safe_readback(monkeypatch, tmp_path, mapping, value, expected, action_error):
+    site = generate(monkeypatch, tmp_path, safe_read_path='/', action_path='/action',
+                    response_json={'field': 'status', 'status_map': mapping})
+    assert isinstance(site, ApiSignin)
+    http = c34.Http(site, receipt=TimeoutError() if action_error else json.dumps({'status': value}))
+    assert site.signin(c34.context(site, http)).status == ('unconfirmed' if action_error else expected)
+    assert len(http.actions) == 1 and http.reads == 2
+    assert http.actions[0][1] == 'https://fixture.invalid/action'
+    assert http.calls[0][1] == http.calls[-1][1] == site.url
+
+
+def test_generic_login_only_is_skipped_and_registry_honors_capability(monkeypatch, tmp_path):
+    site = generate(monkeypatch, tmp_path, signin_capable=False)
+    http = Mock()
+    result = site.signin(c1.context(site, http, None))
+    assert result.status == 'skipped' and result.metadata['reason'] == 'signin_not_applicable'
+    assert not http.mock_calls
+    row = next(row for row in discover_sites()['sites'] if row['id'] == site.id)
+    assert not row['signin_capable'] and not row['signin_applicable']
+
+
+def test_generic_kelu_variants_and_btschool_opt_out():
+    kelu = get_native_module('kelu')
+    for text in ['签到成功', '簽到成功', '签到已得', '簽到已得', '今天已經簽到過', '今日已簽到']:
+        assert kelu.record_spec.status_map[text] == 'signed'
+    site = get_native_module('btschool')
+    assert site.use_default_message is False and not site.message_spec().status_map
+
+
+@pytest.mark.parametrize('sid', CAPTCHA + GET + POST)
+def test_generic_migrated_module_removed(sid):
+    assert not generic._DECLARATIONS.with_name(sid + '.py').exists()
+    assert get_native_module(sid).__module__ == generic.__name__
+
+
+@pytest.mark.parametrize('fields', [{'action_get': '/attendance.php'}, {'action_path': '/action', 'response_json': {'field': 'status', 'status_map': {'ok': 'signed'}}}])
+def test_generic_action_requires_explicit_safe_read_path(monkeypatch, tmp_path, fields):
+    with pytest.raises(KeyError, match='safe_read_path'):
+        generate(monkeypatch, tmp_path, **fields)
+
+
+def test_generic_response_json_rejects_colliding_keys(monkeypatch, tmp_path):
+    with pytest.raises(ValueError, match='colliding'):
+        generate(monkeypatch, tmp_path, safe_read_path='/', action_path='/action',
+                 response_json={'field': 'status', 'status_map': [[0, 'signed'], [False, 'unsigned']]})
+
+
+def test_generic_success_text_override(monkeypatch, tmp_path):
+    site = generate(monkeypatch, tmp_path, success_texts=['fixture success'])
+    assert site.message_spec().status_map['fixture success'] == 'signed'

@@ -26,7 +26,7 @@ def test_registry_discovery_and_isolation(tmp_path, monkeypatch):
     assert good['credential']['sources'] == ['cookiecloud', 'managed_site', 'local_cookie']
     assert all({'id','name','login_capable','credential','cf'} <= site.keys() for site in result['sites'])
     assert result['skipped'] == [{'module': 'fixture_sites.broken', 'error': 'RuntimeError'}]
-    assert next(site for site in result['sites'] if site['id'] == 'sunnypt')['credential']['kind'] == 'api'
+    assert next(site for site in result['sites'] if site['id'] == 'sunnypt')['credential']['kind'] == 'api_key'
 
 
 def test_history_persistence_pagination_retention():

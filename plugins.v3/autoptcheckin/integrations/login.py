@@ -13,7 +13,7 @@ class CredentialLoginProtocol:
             check = self.credential_check(context)
         except Exception:
             return LoginResult(LoginStatus.UNCONFIRMED, "认证检查不可达")
-        evidence = Evidence(uid=check.uid or None, source="api")
+        evidence = Evidence(uid=check.uid or None, source="api_key")
         if uid and check.uid and uid != check.uid:
             return LoginResult(LoginStatus.UNCONFIRMED, "认证身份冲突", evidence=evidence)
         status = (LoginStatus.LOGIN_OK if check.status == "valid" else

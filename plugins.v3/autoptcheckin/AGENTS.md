@@ -2,7 +2,7 @@
 
 ## 边界
 - 默认仅 HDSky（hdsky）和海棠（haitang）开放手动试点；显式 unlock_all_sites 的执行边界见原生站点契约；不接管 `plugins.v2` 入口，默认不激活自动调度。
-- 站点采用双轨：`sites/` 是 V2 适配器的旧桥参照，`sites/native/` 是原生实现；逐站迁移前必须单独验证。
+- 站点采用双轨：`sites/` 的46份 V2 站点副本已标 deprecated，保留用于 registry 元数据发现与未迁移域名参照；`sites/native/` 是原生执行实现。旧桥实际仅支持 hdsky/haitang 的 pilot 回退；生产切换前不删除副本或 `core/pilot.py`。
 - 任何提交结果都必须尝试新页面回读；按钮文本和 UID 只能来自页面证据。
 - `unconfirmed` 独立于 `failed`，回读不可达、解析失败或身份冲突不得猜测成功/失败。
 
@@ -81,7 +81,7 @@
 - `RecordSpec` 默认 page_message，每个 XPath 必须选中唯一消息元素；多选择器遇空值、歧义或无效表达式继续扫描，首个非空文本停止，再按 status_map 声明顺序映射 signed/unsigned（无匹配仍 unconfirmed，不继续找成功词）。NexusSignin 的合成占位声明默认回退消息链，站点可关闭 use_default_message；response_json 仍按 response_field 的精确类型和值匹配。signed_marker 可确认安全前读 already 和提交后新页 success；UID/日期仅展示，不以缺失字段或整页文本补造结论。校准记录见 sites/native/AGENTS.md。
 - `NexusSignin` 提供 attendance 页面 GET、唯一 POST 表单发现、验证码钩子和提交后的无条件新页面 GET 回读；提交响应不能替代回读，超时或异常不得自动重试。
 - `SignContext` 由执行边界注入已认证的 HTTP client、站点锁、取消事件及可选 `page/ocr`；`SiteModule` 不查凭据、不创建或关闭资源，资源生命周期由 `core.native`/runner 管理。
-- 执行双轨分流：native 站点签到/只读核验走原生模块，其他站点及模拟登录保留旧桥。unlock_all_sites 默认 false，此时 verified、hook_implemented 和旧试点门控生效；显式 true 会绕过这三门，但不改变 verified，也不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到仍不适用；M-Team 模块仍仅返回 skipped。signin_applicable 是 registry 展示的适用性，不等于 verified 或生产授权：排除登录专用站、M-Team，并检查原生 hook/verified；后端不以该展示字段替代执行检查。
+- 执行双轨分流：native 站点签到/只读核验走原生模块；模拟登录使用下方独立登录契约，不构造旧桥。旧桥仅保留非 native 签到/核验分支（实际实现限 hdsky/haitang 试点回退，不是排除清单域名的通用签到器）。unlock_all_sites 默认 false，此时 verified、hook_implemented 和旧试点门控生效；显式 true 会绕过这三门，但不改变 verified，也不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到仍不适用；M-Team 模块仍仅返回 skipped。signin_applicable 是 registry 展示的适用性，不等于 verified 或生产授权：排除登录专用站、M-Team，并检查原生 hook/verified；后端不以该展示字段替代执行检查。
 
 ## 阶段2数据契约
 - `core/registry.py` 使用 `pkgutil` 遍历 `sites/`，逐模块导入并收集 `_ISiteSigninHandler` 子类；导入异常只进入 `skipped` 日志，不阻断其他站点。注册项包含 `id/name/login_capable/credential/cf`，并追加 `rousi/sunnypt` 两个 integrations 注册项；`/sites` 返回 `sources.adapters` 与 `sources.integrations` 计数。
@@ -91,7 +91,7 @@
 - 配置页以 `/sites` 为主数据源；仅在 registry 整包导入失败时使用 `frontend/src/sites.json` 作为静态兜底，不把静态清单当生产主数据源。
 
 ## S5 试点执行边界
-- 同站账号锁忙时立即 skipped；试点在身份尚未解析前使用站点级锁，避免首次绑定与后续执行交错。原生 Cookie 优先取宿主站点管理（包括已同步的 CookieCloud Cookie），缺失时可取 custom_sites_data 中域名匹配的 local_cookie 候选；不主动拉取 CookieCloud、不登录续期。
+- 同站账号锁忙时立即 skipped；试点在身份尚未解析前使用站点级锁，避免首次绑定与后续执行交错。原生 Cookie 按 cookiecloud → managed_site → local_cookie 选择；CookieCloud 使用宿主配置，只读本地密文（启用本地模式时）或单次远端下载，失败静默回退，不回写、不登录续期。按请求 host 与 Cookie domain 边界匹配，不将同名站点或兄弟域 Cookie 混用。
 - 无 Cookie 返回 auth_failed，不实例化适配器或请求页面。旧桥第一次前读从账号导航识别 UID 后建立 identity.bindings，后续显式冲突停止；原生消息制已移除 UID 作为成功判定门槛，UID/日期仅展示，站点专属身份核验仍保留。换号须先人工确认旧绑定。
 - 前读已签标记或本人今日成功记录 → already；明确可提交按钮/表单 → 提交；其余 → unconfirmed 且不提交。原生轨道 UID 未解析但表单明确时允许提交，成功由声明消息或 signed_marker 确认，不要求定位本人当日行；旧桥仍保留身份绑定及本人行验证。
 - 桥仅使用既有适配器的提交方法；HDSky 只有未识别验证码（没有提交）才换 OCR 引擎，提交后不重试。无论二元组真假或提交异常，finally 都重新 GET 回读。
@@ -128,13 +128,30 @@
 - 生产激活衔接 S6：备份并停旧插件任务 → preview/execute 配置迁移 → 核对试点 Cookie/UA/UID 和只读回读 → 用户授权手动验证 → 显式保存 scheduler_enabled=true → 核对宿主服务及 next_schedule。回退先关闭门控并确认旧服务移除，再恢复旧插件，禁止两边同时运行。
 
 ## 模拟登录契约
+- native 登录直接调用 SiteModule.parse_login（含 DarkLand/DigitalCore），不要求 verified/hook_implemented，不执行 signin；页面 GET 仅访问首页，不访问 attendance 或保活动作。旧适配器只参与 registry 元数据发现，不参与登录执行。
+- 非 native 登录使用通用页面解析，不构造 PilotBridge；已有 registry ID 按 matcher 找宿主条目，未登记域名必须已在 enabled_sites/login_sites 配置，并由宿主或 custom 条目提供同 host 地址。不得直接请求任意 API 入参 URL。27域排除清单仅表示没有 native 签到声明，不再表示依赖登录旧桥。
 - GET 站点页面后无条件再次 GET 回读，无签到提交、无业务日期；页面可达即 login_ok，UID 尽力解析，缺失不阻断，显式冲突为 unconfirmed。重定向到登录页为 auth_failed，不可达为 unconfirmed。
 - 批量执行勾签到的站点走签到链，仅勾模拟登录的站点走登录链；两项都未勾保留 skipped 记录。单站登录 API 为 POST /login_by_domain（auth: bear），复用站点锁和身份绑定。
 - history 保存 action=sign/login；旧记录无 action 视为 sign。登录结果仅入历史，不覆盖签到小卡或四态统计；历史 login_ok 显示「登录成功」。
-- 默认仅 HDSky/海棠可执行；显式 unlock_all_sites 可绕过模拟登录试点门控，但仍检查启用与登录动作选择。肉丝/SunnyPT 只提供可注入认证检查协议；未接检查器返回 unconfirmed/login_check_not_available，不以非空凭据冒充认证检查通过。真实协议接入须后续逐站授权。
+- 默认仅 HDSky/海棠可执行；显式 unlock_all_sites 可绕过模拟登录试点门控，但仍检查启用与登录动作选择。M-Team（api 凭据）与肉丝/SunnyPT 只提供可注入认证检查协议；未接检查器返回 unconfirmed/login_check_not_available，不以非空凭据冒充认证检查通过。真实协议接入须后续逐站授权。
 
-## 批次 3 计划（3.9.0 收尾，尚未实施）
+## 批次 3 完成（3.15.0，2026-10-22）
+- D1 下沉：20 专属模块（CAPTCHA 12/GET 6/POST 2）并入 generic_sites.json 行为字段（captcha/action_get/safe_read_path/referer/form_data/form_path/response_json/action_path/use_default_message/signin_capable；typed status_map pairs），native 守恒 108。
+- D3：CookieCloud 为独立数据源，候选链第一环（本地文件优先/远端单次 20s/严格域边界/CF-only 子集拒绝/静默降级），不回写。
+- D4：custom 站标准 NexusPHP 签到+emulate 混合路径（未启用 Browserless 不降级）；verify 保持 login_ok。
+- D5：模拟登录全原生（native parse_login/custom/已配置域名通用双 GET），旧桥只剩 pilot 回退。
+- D6：凭证枚举 api→api_key（credentials/integrations/registry/前端徽标/测试）。
+- D7：46 副本 deprecated+legacy 分支 site_removed 防护；文件删除推迟到生产切换+verified 解锁。
+- D9：Luna 审查 8 项 6 过，P2 CF-only 过滤补全（_CF_ONLY_COOKIES）、P3 文档过期描述修正。
+- 52pt 已滑块化（hook=False、signin_capable=False、仅模拟登录；Browserless 滑块实现暂缓）。答题类 chdbits/tjupt 仅模拟登录。
+
+## 批次 3 计划（已实施，见上；保留原文备查）
 - 删旧桥的前置条件：全量重审口径的27站完成生产校准并逐站 verified 解锁；默认链命中、只读 already 或 unlock_all_sites 都不替代该条件，模拟登录依赖需一并核对后再删除。
 - 统一凭证枚举 api → api_key，连同配置、registry、UI 与测试同步迁移；当前版本不改名。
-- 补齐 custom 站点签到流程；现有 custom verify 只证明只读可达/认证边界，不等于签到实现。
-- 接入 cookiecloud 候选来源；现有 managed_site/local_cookie 不代表已主动接入 CookieCloud。后续变更另行授权，不在本轮触发站点请求。
+- cookiecloud 原生候选已于 3.12.0 接入；原生模拟登录同样按 cookiecloud → managed_site → local_cookie 选择；custom 保持本条目 Cookie。本轮仅离线 mock 验证，真实服务器与站点验证仍需授权。
+
+## Custom 签到契约（3.13.0）
+- custom_sites_data 的已启用且勾选签到条目（含数字 ID）直接使用 NexusSignin 默认 attendance 表单流程，不要求 native verified；unlock_all_sites 不能绕过启用与动作选择。registry 的 custom pilot_enabled=True；signin_applicable=True，唯 emulate=true 且 Browserless 未启用时为 false。
+- custom Cookie 使用本条目的 local_cookie；GET attendance → 唯一同源 POST 表单 → 单次提交 → 无条件新页回读默认消息链。前读已签为 already，新页确证为 success，缺证据为 unconfirmed；history action=sign。无唯一表单保留 custom_signin_pending，不猜非 NexusPHP 协议；已识别验证码不自动作答。
+- emulate=true 必须显式 browserless_enabled 且配置 browserless_url；browserless_token 仅用于连接认证。本版为 Browserless 前读/回读 + HTTP 提交混合路径（metadata.transport=browserless_read_http_submit），执行级 Cookie 双向同步，独立 context 及连接 finally 释放；连接/页面错误不降级 HTTP-only、不重试动作。依赖 Playwright/CDP，浏览器指纹绑定 POST 站点可能仍未确认。
+- verify 保留只读 login_ok 语义，不视为签到；custom 模拟登录复用同一可达性语义并无条件二次 GET 回读，仍检查 enabled/login 选择与 Browserless 显式开关。真实站点与 Browserless 服务未实测，另行授权验证；设计取舍见 .agents/notes/implemented/feature/2026-10-22-custom-attendance.md。

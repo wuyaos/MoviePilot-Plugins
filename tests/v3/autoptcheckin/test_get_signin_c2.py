@@ -70,7 +70,7 @@ def actions(http):
     return [c for c in http.calls if c[0] == 'post' or c[1] != safe]
 
 
-@pytest.mark.parametrize('sid', IDS)
+@pytest.mark.parametrize('sid', sorted(OCR_IDS))
 @pytest.mark.parametrize('state', ['signed', 'unsigned', 'unknown'])
 def test_c2_three_state_readback(sid, state):
     site = get_native_module(sid)

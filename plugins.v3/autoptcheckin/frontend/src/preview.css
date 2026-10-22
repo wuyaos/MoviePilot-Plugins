@@ -98,7 +98,7 @@
  --ptc-badge-adapter-bg:rgba(133,84,190,.16); --ptc-badge-adapter-text:#70419d;
  --ptc-badge-custom-bg:rgba(210,126,37,.16); --ptc-badge-custom-text:#955712;
  --ptc-badge-cookie-bg:rgba(24,145,140,.16); --ptc-badge-cookie-text:#116b68;
- --ptc-badge-api-bg:rgba(180,61,142,.16); --ptc-badge-api-text:#963077;
+ --ptc-badge-api_key-bg:rgba(180,61,142,.16); --ptc-badge-api_key-text:#963077;
  --ptc-badge-password-bg:rgba(146,103,67,.16); --ptc-badge-password-text:#785131;
  --ptc-badge-clear-bg:rgba(103,139,116,.16); --ptc-badge-clear-text:#486c53;
  --ptc-badge-unknown-bg:rgba(125,132,143,.16); --ptc-badge-unknown-text:#596372;
@@ -111,7 +111,7 @@
  --ptc-badge-adapter-bg:rgba(133,84,190,.28); --ptc-badge-adapter-text:#d4b0ff;
  --ptc-badge-custom-bg:rgba(210,126,37,.28); --ptc-badge-custom-text:#ffc181;
  --ptc-badge-cookie-bg:rgba(24,145,140,.28); --ptc-badge-cookie-text:#7dded9;
- --ptc-badge-api-bg:rgba(180,61,142,.28); --ptc-badge-api-text:#f2a0d7;
+ --ptc-badge-api_key-bg:rgba(180,61,142,.28); --ptc-badge-api_key-text:#f2a0d7;
  --ptc-badge-password-bg:rgba(146,103,67,.28); --ptc-badge-password-text:#dfb895;
  --ptc-badge-clear-bg:rgba(103,139,116,.28); --ptc-badge-clear-text:#a1c9ac;
  --ptc-badge-unknown-bg:rgba(125,132,143,.28); --ptc-badge-unknown-text:#b9c2d1;
@@ -123,7 +123,7 @@
 .chip.badge-adapter {background:var(--ptc-badge-adapter-bg); color:var(--ptc-badge-adapter-text)}
 .chip.badge-custom {background:var(--ptc-badge-custom-bg); color:var(--ptc-badge-custom-text)}
 .chip.badge-cookie {background:var(--ptc-badge-cookie-bg); color:var(--ptc-badge-cookie-text)}
-.chip.badge-api {background:var(--ptc-badge-api-bg); color:var(--ptc-badge-api-text)}
+.chip.badge-api_key {background:var(--ptc-badge-api_key-bg); color:var(--ptc-badge-api_key-text)}
 .chip.badge-password {background:var(--ptc-badge-password-bg); color:var(--ptc-badge-password-text)}
 .chip.badge-clear {background:var(--ptc-badge-clear-bg); color:var(--ptc-badge-clear-text)}
 .chip.badge-cf-yes {background:var(--ptc-badge-cf-yes-bg); color:var(--ptc-badge-cf-yes-text)}

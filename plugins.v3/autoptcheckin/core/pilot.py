@@ -15,25 +15,28 @@ def hostname(value):
     return (urlsplit(value if '://' in value else 'https://' + value).hostname or '').lower().removeprefix('www.')
 
 
-def site_id_for_domain(value):
+def site_id_for_domain(value, *, include_legacy=False):
     for site_id, spec in PILOTS.items():
         if value == site_id or hostname(value) == hostname(spec['domain']):
             return site_id
-    from .registry import get_registry, get_native_module
+    from .registry import get_registry, get_native_module, _MATCHERS
     for item in get_registry()['sites']:
         if item.get('native'):
             native_url = get_native_module(item['id']).url
             if value == item['id'] or (native_url and hostname(value) == hostname(native_url)):
                 return item['id']
+        if include_legacy and (value == item['id'] or (_MATCHERS.get(item['id']) and _MATCHERS[item['id']](value if '://' in value else 'https://' + value))):
+            return item['id']
     return None
 
 
 def managed_site(site_id):
     from app.db.oper import SiteOper
-    from .registry import get_native_module
-    domain = PILOTS[site_id]['domain'] if site_id in PILOTS else get_native_module(site_id).url
+    from .registry import get_registry, _MATCHERS
+    get_registry()
+    match = _MATCHERS.get(site_id)
     for site in SiteOper().list_order_by_pri():
-        if hostname(site.url) == hostname(domain):
+        if (match and match(site.url)) or (not match and hostname(site.url) == hostname(site_id)):
             return {key: getattr(site, key, None) for key in ('name', 'url', 'cookie', 'ua', 'proxy')}
     return {}
 
@@ -41,6 +44,8 @@ def managed_site(site_id):
 class PilotBridge:
     def __init__(self, site_id, site_info):
         self.site_id, self.info = site_id, dict(site_info)
+        if site_id not in PILOTS:
+            raise KeyError(f"pilot legacy bridge no longer supports {site_id} (deprecated; use native)")
         self.spec = PILOTS[site_id]
         self.verifier = self.spec['verifier']()
         self.adapter = None

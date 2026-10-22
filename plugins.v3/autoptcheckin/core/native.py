@@ -1,11 +1,11 @@
 """Native execution boundary: credentials and resources stay outside site declarations."""
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 from email.message import Message
 from http.cookies import SimpleCookie
 from uuid import uuid4
 
-from .credentials import Credential, CredentialResolver
-from .models import LoginPage, SignResult, SignStatus
+from .credentials import Credential, CredentialResolver, cookiecloud_candidate
+from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
 from .sitemodel import SignContext
 
 
@@ -123,9 +123,13 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
             return finish(SignResult.skipped())
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
-        auth = CredentialResolver().select_cookie({'managed_site': Credential(
+        cloud = cookiecloud_candidate(info.get('url') or site.url)
+        candidates = {'managed_site': Credential(
             'managed_site', info.get('cookie') or '', ''),
-            'local_cookie': Credential('local_cookie', custom_cookie, '')})
+            'local_cookie': Credential('local_cookie', custom_cookie, '')}
+        if cloud.credential is not None:
+            candidates['cookiecloud'] = cloud.credential
+        auth = CredentialResolver().select_cookie(candidates)
         if auth.credential is None:
             return finish(SignResult(SignStatus.AUTH_FAILED, auth.reason))
         session = None
@@ -150,4 +154,59 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
         finally:
             if session is not None:
                 session.close()
+        return finish(result)
+
+
+def read_login_twice(fetch_page, site, uid=""):
+    """A failed first visit never suppresses reread; explicit identities cannot switch."""
+    def read(expected):
+        try:
+            result = site.parse_login(fetch_page())
+        except Exception:
+            return LoginResult(LoginStatus.UNCONFIRMED, '登录回读页面不可达')
+        if expected and result.evidence and result.evidence.uid and result.evidence.uid != expected:
+            return LoginResult(LoginStatus.UNCONFIRMED, '页面账号冲突，已停止判定', evidence=result.evidence)
+        return result
+    first = read(uid)
+    observed = first.evidence.uid if first.evidence else ''
+    result = read(uid or observed or '')
+    if uid and observed and uid != observed:
+        result = first
+    result.account = (uid or (result.evidence.uid if result.confirmed and result.evidence else '') or '')
+    return result
+
+
+def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', credential_check=None):
+    def finish(result):
+        result.site_id, result.run_id = site.id, str(uuid4())
+        result.metadata.update(action='login', trigger=trigger)
+        if runner.history:
+            runner.history(result)
+        return result
+
+    with runner.locks.acquire((site.id, '')) as acquired:
+        if not acquired:
+            return finish(SignResult.skipped())
+        if runner.stop.is_set():
+            return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
+        uid = str(info.get('uid') or '')
+        if site.credential.kind == 'api_key':
+            from ..integrations.login import CredentialLoginProtocol
+            return finish(CredentialLoginProtocol(credential_check).login(info, uid))
+        try:
+            url = info.get('url') or site.url
+            if urlsplit(url).scheme not in {'http', 'https'} or not urlsplit(url).hostname:
+                return finish(LoginResult(LoginStatus.UNCONFIRMED, '登录站点地址未登记'))
+            cloud = cookiecloud_candidate(url)
+            candidates = {'managed_site': Credential('managed_site', info.get('cookie') or ''),
+                          'local_cookie': Credential('local_cookie', custom_cookie)}
+            if cloud.credential is not None:
+                candidates['cookiecloud'] = cloud.credential
+            auth = CredentialResolver().select_cookie(candidates)
+            if auth.credential is None:
+                return finish(LoginResult(LoginStatus.AUTH_FAILED, auth.reason))
+            client = NativeHttpClient(auth.credential, info)
+            result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid)
+        except Exception:
+            result = LoginResult(LoginStatus.UNCONFIRMED, '原生登录执行未确认')
         return finish(result)

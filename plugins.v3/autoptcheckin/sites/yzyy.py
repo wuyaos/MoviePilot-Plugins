@@ -1,3 +1,4 @@
+# DEPRECATED: 原生实现见 sites/native/；此副本仅用于 registry 元数据发现与未迁移域名兜底，签到/登录执行路径已不使用（除 pilot 试点回退）。
 # input: yzyy 论坛站点 Cookie、UA、代理配置
 # output: yzyy Discuz zqlj_sign 动态签到码签到结果
 # pos: AutoPtCheckin 站点适配层，独立专用适配器，不复用 NexusPHP attendance 通用基类

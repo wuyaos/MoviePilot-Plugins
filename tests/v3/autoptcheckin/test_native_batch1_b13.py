@@ -13,9 +13,9 @@ from autoptcheckin.core.registry import discover_sites
 from autoptcheckin.core.sitemodel import SignContext
 from autoptcheckin.sites.native.hdbao import HDBao
 from autoptcheckin.sites.native.hdchina import HDChina
-from autoptcheckin.sites.native.hdcity import HDCity
-from autoptcheckin.sites.native.hdupt import HDUpt
-from autoptcheckin.sites.native.hhanclub import Hhanclub
+from autoptcheckin.sites.native.generic import GenericHdcity as HDCity
+from autoptcheckin.sites.native.generic import GenericHdupt as HDUpt
+from autoptcheckin.sites.native.generic import GenericHhanclub as Hhanclub
 
 SITES = [HDBao, HDChina, HDCity, HDUpt, Hhanclub]
 SPECIAL = [HDChina, HDCity, HDUpt, Hhanclub]

@@ -13,8 +13,8 @@ from copy import deepcopy
 from .core.history import HistoryStore
 from .core.migration import Migration, MigrationError
 from .core.registry import get_registry, get_native_module
-from .core.native import run_native
-from .core.custom import run_custom
+from .core.native import run_native, run_native_login
+from .core.custom import run_custom, CustomNexusSignin
 from typing import Any
 
 try:
@@ -28,7 +28,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.10.0"
+    plugin_version = "3.15.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -165,7 +165,7 @@ class AutoPtCheckin(_PluginBase):
         return await self.api_save_config({**self._config, **deepcopy(config)})
 
     async def api_sites(self) -> dict:
-        registry = get_registry(self._config.get('custom_sites_data', []))
+        registry = get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))
         return {"success": True, "data": {"sites": deepcopy(registry["sites"]), "sources": deepcopy(registry["sources"])}}
 
     async def api_stats(self) -> dict:
@@ -197,7 +197,7 @@ class AutoPtCheckin(_PluginBase):
                 latest.setdefault(item['site'], item)
         enabled = self._config.get('enabled_sites', [])
         rows = []
-        for site in get_registry(self._config.get('custom_sites_data', []))['sites']:
+        for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']:
             sid = site['id']
             if sid not in enabled and sid not in latest:
                 continue
@@ -214,22 +214,23 @@ class AutoPtCheckin(_PluginBase):
         return rows
 
     def _execute_site(self, site_id, read_only=False, trigger="manual", action="sign"):
-        registry = {site['id']: site for site in get_registry(self._config.get('custom_sites_data', []))['sites']}
+        registry = {site['id']: site for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
         custom = next((item for item in self._config.get('custom_sites_data', [])
                        if isinstance(item, dict) and str(item.get('id')) == str(site_id)), None)
         if custom is not None or str(site_id).isdigit() or str(site_id).startswith(('600', 'custom-')):
-            result = run_custom(self._runner, str(site_id), custom or registry.get(site_id, {}),
+            result = run_custom(self._runner, str(site_id), {**(custom or registry.get(site_id, {})), 'uid': self._bound_uids.get(str(site_id), '')},
                                 enabled=str(site_id) in {str(value) for value in self._config.get('enabled_sites', [])},
-                                read_only=read_only, trigger=trigger, action=action)
+                                read_only=read_only, trigger=trigger, action=action, config=self._config,
+                                selected=str(site_id) in {str(value) for value in self._config.get('login_sites' if action == 'login' else 'sign_sites', [])})
             return asdict(result)
         reason = None
         unlock = bool(self._config.get('unlock_all_sites', False))
         site = registry.get(site_id, {})
         if action == 'sign' and site_id in ('darkland', 'digitalcore'):
             reason = 'signin_not_applicable'
-        elif not unlock and site.get('native') and not site.get('verified'):
+        elif action == 'sign' and not unlock and site.get('native') and not site.get('verified'):
             reason = 'native_unverified'
-        elif not unlock and site.get('native') and not site.get('hook_implemented', True):
+        elif action == 'sign' and not unlock and site.get('native') and not site.get('hook_implemented', True):
             reason = 'hook_not_implemented'
         elif not unlock and not site.get('native') and site_id not in PILOTS:
             reason = 'pilot_not_enabled'
@@ -237,7 +238,7 @@ class AutoPtCheckin(_PluginBase):
             reason = 'pilot_not_enabled'
         elif site_id not in self._config.get('enabled_sites', []):
             reason = 'site_disabled'
-        elif action == 'login' and not registry.get(site_id, {}).get('login_capable'):
+        elif action == 'login' and not site.get('login_capable', True):
             reason = 'login_not_supported'
         elif action == 'login' and site_id not in self._config.get('login_sites', []):
             reason = 'login_not_selected'
@@ -262,25 +263,31 @@ class AutoPtCheckin(_PluginBase):
             self._record_result(result)
             return asdict(result)
         info["uid"] = self._bound_uids.get(site_id, "")
-        if site.get('native') and action == 'sign':
+        if site.get('native') or action == 'login':
             custom_cookie = ''
             customs = self._config.get('custom_sites_data') or []
-            site_dom = (site.get('url') or '').split('//')[-1].split('/')[0].lower().removeprefix('www.')
+            site_dom = (site.get('url') or info.get('url') or (str(site_id) if action == 'login' else '')).split('//')[-1].split('/')[0].lower().removeprefix('www.')
             for c in customs:
                 cdom = (c.get('url') or '').split('//')[-1].split('/')[0].lower().removeprefix('www.')
-                if cdom == site_dom and c.get('cookie'):
+                if site_dom and cdom == site_dom and c.get('cookie'):
                     custom_cookie = c['cookie']
+                    if action == 'login' and not site.get('native') and not info.get('url'):
+                        info.update({key: c[key] for key in ('url', 'name') if key in c})
                     break
+            if action == 'login':
+                module = get_native_module(site_id) if site.get('native') else CustomNexusSignin(site_id, {**info, 'url': info.get('url') or ''})
+                result = run_native_login(self._runner, module, info, custom_cookie=custom_cookie, trigger=trigger)
+                return asdict(result)
             result = run_native(self._runner, get_native_module(site_id), info,
                                 read_only=read_only, trigger=trigger,
                                 get_data=getattr(self, "get_data", None), save_data=getattr(self, "save_data", None),
                                 custom_cookie=custom_cookie)
             return asdict(result)
+        # Deprecated legacy 分支：仅供 hdsky/haitang 未命中 native 时的 pilot 回退。
+        # 非 native 签到/核验分支暂保留；PILOTS 不覆盖排除清单域名，不能视为通用签到实现。
+        if site_id not in PILOTS:
+            return asdict(SignResult(SignStatus.SKIPPED, 'skipped(site_removed)'))
         bridge = PilotBridge(site_id, info)
-        if action == 'login':
-            result = self._runner.run_login(site_id, str(info.get('uid') or ''),
-                resolve=bridge.resolve, fetch_page=bridge.fetch_login_page, verifier=bridge.verifier, trigger=trigger)
-            return asdict(result)
         result = self._runner.run(site_id, str(info.get('uid') or ''), datetime.now().astimezone().date().isoformat(),
             resolve=bridge.resolve, fetch_page=bridge.fetch_page, verifier=bridge.verifier,
             submit=bridge.submit, read_only=read_only, allow_page_identity=True, trigger=trigger)
@@ -288,8 +295,11 @@ class AutoPtCheckin(_PluginBase):
 
     async def api_signin_by_domain(self, domain: str = '') -> dict:
         site_id = site_id_for_domain(domain)
+        if not site_id:
+            site_id = next((str(item.get('id')) for item in self._config.get('custom_sites_data', [])
+                            if isinstance(item, dict) and str(item.get('id')) == str(domain)), None)
         if not site_id and self._config.get('unlock_all_sites', False) and domain:
-            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
+            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
             if domain in registry_ids:
                 site_id = domain
         if not site_id:
@@ -298,9 +308,17 @@ class AutoPtCheckin(_PluginBase):
         return {'success': True, 'data': result}
 
     async def api_login_by_domain(self, domain: str = '') -> dict:
-        site_id = site_id_for_domain(domain)
+        site_id = site_id_for_domain(domain, include_legacy=True)
+        if not site_id:
+            from .core.pilot import hostname
+            site_id = next((str(item.get('id')) for item in self._config.get('custom_sites_data', [])
+                            if isinstance(item, dict) and (str(item.get('id')) == str(domain) or (domain and hostname(item.get('url', '')) == hostname(domain)))), None)
+        if not site_id:
+            from .core.pilot import hostname
+            site_id = next((str(value) for value in self._config.get('enabled_sites', [])
+                            if hostname(str(value)) == hostname(domain)), None)
         if not site_id and self._config.get('unlock_all_sites', False) and domain:
-            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
+            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
             if domain in registry_ids:
                 site_id = domain
         if not site_id:
@@ -310,8 +328,11 @@ class AutoPtCheckin(_PluginBase):
 
     async def api_verify_site(self, domain: str = '') -> dict:
         site_id = site_id_for_domain(domain)
+        if not site_id:
+            site_id = next((str(item.get('id')) for item in self._config.get('custom_sites_data', [])
+                            if isinstance(item, dict) and str(item.get('id')) == str(domain)), None)
         if not site_id and self._config.get('unlock_all_sites', False) and domain:
-            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
+            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
             if domain in registry_ids:
                 site_id = domain
         if not site_id:

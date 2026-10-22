@@ -368,14 +368,45 @@
   {
     "id": "nexushd",
     "name": "NexusHD",
-    "url": "https://nexushd.org/",
-    "attendance_path": "/attendance.php"
+    "url": "https://v6.nexushd.org/",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "本次签到获得": "signed",
+      "你今天已经签到过了": "signed",
+      "未签到": "unsigned"
+    },
+    "safe_read_path": "/",
+    "form_path": "/signin.php",
+    "form_data": {
+      "action": "post",
+      "content": ""
+    }
   },
   {
     "id": "shaobaoyuan",
     "name": "烧包乐园",
     "url": "https://ptsbao.club/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
   },
   {
     "id": "ptzone",
@@ -387,6 +418,383 @@
     "id": "vclib",
     "name": "VC-Lib",
     "url": "https://pt.vclib.online/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "baozi",
+    "name": "包子",
+    "url": "https://p.t-baozi.cc/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "dongying",
+    "name": "冬樱",
+    "url": "https://wintersakura.net/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "kelu",
+    "name": "可撸",
+    "url": "https://our.kelu.one/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "naturept",
+    "name": "NaturePT",
+    "url": "https://naturept.top/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "novahd",
+    "name": "NovaHD",
+    "url": "https://pt.novahd.top/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "oshen",
+    "name": "OshenPT",
+    "url": "https://www.oshen.win/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "phoenixpt",
+    "name": "凤凰PT",
+    "url": "https://pt.521.best/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "playlet",
+    "name": "PlayLet",
+    "url": "https://playlet.cc/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "soulvoice",
+    "name": "聆音Club",
+    "url": "https://pt.soulvoice.club/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "tu88",
+    "name": "TU88",
+    "url": "https://pt.tu88.men/",
+    "attendance_path": "/attendance.php",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed",
+      "签到已得": "signed",
+      "簽到已得": "signed",
+      "今天已经签到过": "signed",
+      "今天已經簽到過": "signed",
+      "请勿重复刷新": "signed",
+      "請勿重複刷新": "signed",
+      "已经签到": "signed",
+      "已經簽到": "signed",
+      "今天已经签到": "signed",
+      "今天已經簽到": "signed",
+      "今天已簽到": "signed",
+      "今日已簽到": "signed",
+      "今日已签到": "signed",
+      "未签到": "unsigned"
+    },
+    "captcha": true
+  },
+  {
+    "id": "hdupt",
+    "name": "HDUpt",
+    "url": "https://pt.hdupt.com/",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {},
+    "signed_marker": "//span[@id=\"yiqiandao\"]",
+    "action_get": "/added.php?action=qiandao",
+    "safe_read_path": "/"
+  },
+  {
+    "id": "hhanclub",
+    "name": "憨憨",
+    "url": "https://hhanclub.net/",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "今天已经签到过": "signed",
+      "今天已签到": "signed",
+      "已经签到": "signed",
+      "请勿重复刷新": "signed",
+      "签到成功": "signed",
+      "本次签到获得": "signed",
+      "已连续签到": "signed",
+      "未签到": "unsigned"
+    },
+    "action_get": "/attendance.php",
+    "safe_read_path": "/",
+    "referer": true
+  },
+  {
+    "id": "hdcity",
+    "name": "城市",
+    "url": "https://hdcity.city/",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "本次签到获得魅力": "signed",
+      "Got extra": "signed",
+      "已签到": "signed",
+      "Already checked in today": "signed",
+      "未签到": "unsigned"
+    },
+    "signed_marker": "//a[@href=\"sign\" and contains(., \"已签到\")]",
+    "action_get": "/sign",
+    "safe_read_path": "/"
+  },
+  {
+    "id": "haidan",
+    "name": "海胆",
+    "url": "https://www.haidan.cc/",
+    "message": "//input[@value=\"已经打卡\"]",
+    "status_map": {
+      "已经打卡": "signed"
+    },
+    "action_get": "/signin.php",
+    "safe_read_path": "/index.php"
+  },
+  {
+    "id": "pttime",
+    "name": "PTTime",
+    "url": "https://www.pttime.org/",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "已签到": "signed",
+      "无需再签": "signed",
+      "未签到": "unsigned"
+    },
+    "action_get": "/attendance.php",
+    "safe_read_path": "/"
+  },
+  {
+    "id": "btschool",
+    "name": "BTSchool",
+    "url": "https://pt.btschool.club/",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {},
+    "use_default_message": false,
+    "action_get": "/index.php?action=addbonus",
+    "safe_read_path": "/"
+  },
+  {
+    "id": "hdarea",
+    "name": "好大",
+    "url": "https://hdarea.club/",
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "此次签到您获得": "signed",
+      "请不要重复签到哦": "signed",
+      "未签到": "unsigned"
+    },
+    "signed_marker": "//span[@id=\"sign_in_done\"]",
+    "safe_read_path": "/",
+    "form_path": "/sign_in.php",
+    "form_data": {
+      "action": "sign_in"
+    }
   }
 ]

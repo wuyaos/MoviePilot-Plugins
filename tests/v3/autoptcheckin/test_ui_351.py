@@ -159,7 +159,7 @@ toggleFilteredSelection(); assert.deepEqual(pendingSites.value,['x']);
 
 def test_badge_palette_has_light_and_dark_tokens():
     css = (SRC / 'preview.css').read_text(encoding='utf8')
-    for name in ('mp','adapter','custom','cookie','api','password','clear','unknown'):
+    for name in ('mp','adapter','custom','cookie','api_key','password','clear','unknown'):
         assert css.count('--ptc-badge-'+name+'-bg:rgba(') == 2
         assert '.chip.badge-'+name in css
 

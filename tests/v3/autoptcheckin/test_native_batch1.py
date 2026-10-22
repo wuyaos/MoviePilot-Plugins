@@ -9,11 +9,9 @@ from autoptcheckin.core.credentials import Credential
 from autoptcheckin.core.models import LoginPage
 from autoptcheckin.core.sitemodel import SignContext
 from autoptcheckin.sites.native.agsvpt import Agsvpt
-from autoptcheckin.sites.native.baozi import Baozi
-from autoptcheckin.sites.native.btschool import BTSchool
+from autoptcheckin.sites.native.generic import GenericBaozi as Baozi
+from autoptcheckin.sites.native.generic import GenericBtschool as BTSchool
 from autoptcheckin.sites.native.chdbits import CHDBits
-from importlib import import_module
-Pt52 = import_module("autoptcheckin.sites.native.52pt").Pt52
 
 
 class Http:
@@ -40,7 +38,7 @@ def page(site, message, *, form=False):
         '<input name="imagehash" value="fixture"><img src="image.php?imagehash=fixture"><input name="imagestring"><button type="submit">签到</button></form>'
         if form else ""
     )
-    if form and site.id in ( 'chdbits'):
+    if form and site.id == "chdbits":
         form_markup = '<form><table><tr><td class="text">请问：测试？</td></tr></table><input name="questionid" value="1"><input name="choice[]" value="2"></form>'
     return f'<div class="alert">{message}</div>{form_markup}'
 

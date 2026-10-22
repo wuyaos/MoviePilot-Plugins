@@ -176,6 +176,9 @@ class SiteModule(ABC):
         uid = ""
         try:
             uid = select_text(html.fromstring(page.text), self.record_spec.uid)
+            if not uid:
+                from ..verifiers.nexus import NexusVerifier
+                uid = NexusVerifier().identity(page.text)
         except (ValueError, TypeError, html.etree.XPathError, html.etree.ParserError):
             pass
         return LoginResult(LoginStatus.LOGIN_OK, "站点页面可达", evidence=Evidence(uid=uid or None), site_id=self.id)

@@ -1,3 +1,4 @@
+# DEPRECATED: 原生实现见 sites/native/；此副本仅用于 registry 元数据发现与未迁移域名兜底，签到/登录执行路径已不使用（除 pilot 试点回退）。
 # input: PTTime 站点 Cookie、UA、代理配置与 attendance.php 响应
 # output: PTTime 签到处理器，区分成功、已签到与 Cookie 失效
 # pos: AutoPtCheckin 站点适配层，处理 PTTime 签到接口语义

@@ -67,12 +67,12 @@ def test_custom_configured_ids(probe, site_id):
     assert len(calls) == 1
 
 
-def test_custom_signin_never_requests(probe):
+def test_custom_without_attendance_does_not_submit(probe):
     plugin, calls, _ = probe
     result = plugin._execute_site('custom-60005')
     assert result['status'] == 'skipped'
     assert result['metadata']['reason'] == 'custom_signin_pending'
-    assert calls == []
+    assert calls == ['https://custom.invalid/attendance.php']
 
 
 @pytest.mark.parametrize('condition,status', [('disabled', 'skipped'), ('cookie', 'auth_failed'), ('cancel', 'cancelled'), ('busy', 'skipped')])

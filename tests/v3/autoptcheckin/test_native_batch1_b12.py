@@ -8,10 +8,10 @@ sys.path.insert(0, str(Path(__file__).parents[3] / "plugins.v3"))
 from autoptcheckin.core.credentials import Credential
 from autoptcheckin.core.models import LoginPage
 from autoptcheckin.core.sitemodel import SignContext
-from autoptcheckin.sites.native.dongying import Dongying
+from autoptcheckin.sites.native.generic import GenericDongying as Dongying
 from autoptcheckin.sites.native.dstudio import DStudio
-from autoptcheckin.sites.native.haidan import HaiDan
-from autoptcheckin.sites.native.hdarea import HDArea
+from autoptcheckin.sites.native.generic import GenericHaidan as HaiDan
+from autoptcheckin.sites.native.generic import GenericHdarea as HDArea
 
 
 class Http:

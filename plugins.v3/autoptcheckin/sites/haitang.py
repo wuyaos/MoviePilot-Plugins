@@ -1,3 +1,4 @@
+# DEPRECATED: 原生实现见 sites/native/；此副本仅用于 registry 元数据发现与未迁移域名兜底，签到/登录执行路径已不使用（除 pilot 试点回退）。
 # input: 海棠 htpt.cc 站点 Cookie、UA、代理与 attendance.php 页面
 # output: 提交 action=sign 后回读当日签到状态
 # pos: AutoPtCheckin 站点适配层，处理海棠新版 button POST 表单

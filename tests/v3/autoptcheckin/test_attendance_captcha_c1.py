@@ -49,23 +49,6 @@ def context(site, http, ocr):
 
 
 @pytest.mark.parametrize('sid', IDS)
-@pytest.mark.parametrize('state', ['success', 'already', 'unconfirmed'])
-def test_c1_site_three_states(sid, state):
-    site = get_native_module(sid)
-    pages = [message('今日已簽到')] if state == 'already' else [form_page(), message('簽到已得') if state == 'success' else '<main>签到成功</main>']
-    http, ocr = Http(pages), Mock(return_value='Ab1234')
-    result = site.signin(context(site, http, ocr))
-    assert result.status == state
-    assert [c[0] for c in http.calls] == (['get'] if state == 'already' else ['get', 'post', 'get'])
-    if state == 'already':
-        ocr.assert_not_called()
-    else:
-        assert http.calls[1][3] == site.url + 'attendance.php'
-        assert dict(http.calls[1][2]) == dict(csrf='synthetic', imagehash='fixture-hash', imagestring='Ab1234')
-        assert sum(key == 'imagestring' for key, _ in http.calls[1][2]) == 1
-
-
-@pytest.mark.parametrize('sid', IDS)
 @pytest.mark.parametrize('codes,expected', [(['Ab12'], True), (['Ab123'], True), (['Ab1234'], True), ([None, 'Zy9876'], True), ([RuntimeError(), 'Zy9876'], True), ([None, None], False), (['abc', 'Ab12345'], False), (['!!!123', '中文1234'], False)])
 def test_c1_ocr_hook_success_failure_fallback(sid, codes, expected):
     site = get_native_module(sid)

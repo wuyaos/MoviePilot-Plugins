@@ -58,14 +58,13 @@ def test_integrations_require_real_checker(protocol):
 def test_login_only_dispatch_and_api(monkeypatch):
     import autoptcheckin as module
     calls = []
-    class Bridge:
-        verifier = HDSkyVerifier()
-        def __init__(self, *args): pass
-        def resolve(self): return CredentialResolution(Credential('managed_site','fixture'), 'valid')
-        def fetch_login_page(self): calls.append('get'); return page()
-        def submit(self): pytest.fail('login must never submit')
-    monkeypatch.setattr(module, 'PilotBridge', Bridge)
-    monkeypatch.setattr(module, 'managed_site', lambda sid: {})
+    from autoptcheckin.core.native import NativeHttpClient
+    monkeypatch.setattr(module, 'PilotBridge', lambda *args: pytest.fail('native login must not construct legacy bridge'))
+    monkeypatch.setattr(module, 'managed_site', lambda sid: {'cookie': 'fixture'})
+    def fetch(self, url):
+        calls.append('get')
+        return LoginPage(page(), url)
+    monkeypatch.setattr(NativeHttpClient, 'get', fetch)
     plugin = AutoPtCheckin()
     plugin.init_plugin({'enabled_sites':['hdsky'], 'login_sites':['hdsky']})
     result = plugin._execute_all()[0]

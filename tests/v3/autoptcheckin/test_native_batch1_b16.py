@@ -14,14 +14,14 @@ from autoptcheckin.core.registry import discover_sites
 from autoptcheckin.core.sitemodel import RecordSpec, SignContext
 from autoptcheckin.sites.native.opencd import OpenCD
 from autoptcheckin.sites.native.pterclub import PTerClub
-from autoptcheckin.sites.native.phoenixpt import PhoenixPT
-from autoptcheckin.sites.native.pttime import PTTime
+from autoptcheckin.sites.native.generic import GenericPhoenixpt as PhoenixPT
+from autoptcheckin.sites.native.generic import GenericPttime as PTTime
 from autoptcheckin.sites.native.retrotoon import RetroToon
 from autoptcheckin.sites.native.siqi import SiQi
 from autoptcheckin.sites.native.hdchina import HDChina
-from autoptcheckin.sites.native.hdupt import HDUpt
-from autoptcheckin.sites.native.haidan import HaiDan
-from autoptcheckin.sites.native.btschool import BTSchool
+from autoptcheckin.sites.native.generic import GenericHdupt as HDUpt
+from autoptcheckin.sites.native.generic import GenericHaidan as HaiDan
+from autoptcheckin.sites.native.generic import GenericBtschool as BTSchool
 
 NEW = [OpenCD, PTerClub, PhoenixPT, PTTime, RetroToon, SiQi]
 JSON_SITES = [(OpenCD, "state", "success"), (PTerClub, "status", "1"),
@@ -170,7 +170,7 @@ def test_new_registry_unverified_and_record_spec_validation():
     for cls in NEW:
         assert rows[cls.id]["native"] and not rows[cls.id]["verified"]
         assert not rows[cls.id]["pilot_enabled"]
-    for kwargs in [dict(source="response_json"), dict(source="api"),
+    for kwargs in [dict(source="response_json"), dict(source="api_key"),
                    dict(source="response_json", response_field="code", status_map={0.5: "signed"})]:
         with pytest.raises(ValueError):
             RecordSpec(**kwargs)

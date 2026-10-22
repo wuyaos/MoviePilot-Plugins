@@ -66,8 +66,8 @@
 
 | site | V2 判定依据与流程 | 分类 / 声明 | 安全前读与待办 |
 | --- | --- | --- | --- |
-| darkland | Cffi 浏览器指纹首页；登录标记、Cloudflare/登录表单 | special-hook(login-only)；空签到映射；signin_not_applicable | C6 hook_implemented=True（签到不适用）；任何签到入口 skipped；login_capable=True，登录保留旧桥 |
-| digitalcore | status API 的 user.id 或 user.username | special-hook(login-only)；空签到映射；signin_not_applicable | C6 hook_implemented=True（签到不适用）；不把用户信息当签到；login_capable=True，登录保留旧桥 |
+| darkland | Cffi 浏览器指纹首页；登录标记、Cloudflare/登录表单 | special-hook(login-only)；空签到映射；signin_not_applicable | C6 hook_implemented=True（签到不适用）；任何签到入口 skipped；login_capable=True，登录使用原生 parse_login |
+| digitalcore | status API 的 user.id 或 user.username | special-hook(login-only)；空签到映射；signin_not_applicable | C6 hook_implemented=True（签到不适用）；不把用户信息当签到；login_capable=True，登录使用原生 parse_login |
 | playlet | 通用 CAPTCHA helper 简繁成功/重复词 | special-hook；page_message 合成节点 | attendance；imagehash/imagestring OCR 已实现，待生产消息/表单校准 |
 | ptzone | 无验证码 POST；四个简繁成功词、七个重复词 | standard-declared；page_message 合成节点 | attendance；通用表单及无条件新页回读，待校准消息节点 |
 | shaobaoyuan | 通用 CAPTCHA helper 简繁成功/重复词 | special-hook；page_message 合成节点 | attendance；imagehash/imagestring OCR 已实现，待生产消息/表单校准 |
@@ -105,8 +105,8 @@
 | TTG / ttg | 动态参数 POST | signed_timestamp/signed_token，signed.php；绿色 b 回读 | hook_implemented=True（C3） | 已实现，待生产校准（见分组校准清单） |
 | U2 / u2 | 特殊表单/图片选项 | 9点限制、作用域 _csrf、req/hash/form、提交选项；JS 回执不代替回读 | hook_implemented=True（C3） | 已实现，待生产校准（见分组校准清单） |
 | yzyy | Discuz 动态链接 | 同 Session、Cookie 同步、sign token、本人记录与按钮回读 | hook_implemented=True（C7） | 已实现，待生产校准（见分组校准清单） |
-| DarkLand / darkland | 仅登录指纹 | 浏览器指纹客户端、登录标记、CF/限流；签到不适用 | hook_implemented=True；signin_capable=False（C6） | 签到不适用；模拟登录仍走旧桥 |
-| DigitalCore / digitalcore | 仅登录 API | status API user.id/username；签到不适用 | hook_implemented=True；signin_capable=False（C6） | 签到不适用；模拟登录仍走旧桥 |
+| DarkLand / darkland | 仅登录指纹 | 浏览器指纹客户端、登录标记、CF/限流；签到不适用 | hook_implemented=True；signin_capable=False（C6） | 签到不适用；模拟登录使用原生 parse_login |
+| DigitalCore / digitalcore | 仅登录 API | status API user.id/username；签到不适用 | hook_implemented=True；signin_capable=False（C6） | 签到不适用；模拟登录使用原生 parse_login |
 | M-Team / mteam | API 保活 | Token updateLastBrowse，仅保活，不能生成签到证据 | hook_implemented=False；保活不适用（非遗漏） | 仅保活；signin 保持 skipped，不开放保活动作 |
 | 夜猫 / yema | 布尔 API 回执 | 精确 bool 比较、checkIn 动作与安全回读 | hook_implemented=True（C4） | 已实现，待生产校准（见分组校准清单） |
 | Hares / hares | API证据/动作 GET | code 数值0；未知非0不当已签；安全首页前读 | hook_implemented=True（C4） | 已实现，待生产校准（见分组校准清单） |
@@ -205,10 +205,20 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 - 输入导出实际 sign_sites=88、login_sites=133，并集133；Vc-Lib 管理站与 custom 为同域，去重后132域。按浏览器 Cookie dump 中 c_secure_pass 域名证据筛选；无该证据不等于已证明非 NexusPHP，保守排除。
 - 生成器 scripts/build_generic_sites.py 只输出 id/name/url/attendance_path；域名去 www、去最后一段 TLD、点和连字符转下划线；ID冲突加 _g。
 - 明确别名 pterclub.net→pterclub、kp.m-team.cc→mteam，禁止生成重复通用类；darkland/digitalcore/mteam 排除。custom 数字 ID 的 name/url/id 已由 registry 原样输出。
-- 排除清单（27域，缺 c_secure_pass 证据，批次3+另行处理登录）：FileList (`https://filelist.io/`)、海豚 (`https://dicmusic.com/`)、Anthelion (`https://anthelion.me/`)、JPopsuki (`https://jpopsuki.eu/`)、Nebulance (`https://nebulance.io/`)、青蛙 (`https://www.qingwapt.com/`)、星空 (`https://star-space.net/`)、Aither (`https://aither.cc/`)、猪猪 (`https://piggo.me/`)、我堡 (`https://ourbits.club/`)、春天 (`https://springsunday.net/`)、BeyondHD (`https://beyond-hd.me/`)、龟站 (`https://kamept.com/`)、海豹 (`https://greatposterwall.com/`)、天雪 (`https://skyeysnow.com/`)、AnimeZ (`https://animez.to/`)、梓喵 (`https://azusa.wiki/`)、莫妮卡 (`https://monikadesign.uk/`)、IPT (`https://iptorrents.com/`)、HD-Space (`https://hd-space.org`)、AsianCinema (`https://eiga.moi`)、bitporn (`https://bitporn.eu`)、NordicQuality (`https://nordicq.org`)、bakabt (`https://bakabt.me`)、seedpool (`https://seedpool.org`)、clearjav (`https://clearjav.com`)、dreadvault (`https://dreadvault.org`)。
+- 排除清单（27域，缺 c_secure_pass 证据，无 native 签到声明；登录走通用页面链，边界见插件主 AGENTS.md）：FileList (`https://filelist.io/`)、海豚 (`https://dicmusic.com/`)、Anthelion (`https://anthelion.me/`)、JPopsuki (`https://jpopsuki.eu/`)、Nebulance (`https://nebulance.io/`)、青蛙 (`https://www.qingwapt.com/`)、星空 (`https://star-space.net/`)、Aither (`https://aither.cc/`)、猪猪 (`https://piggo.me/`)、我堡 (`https://ourbits.club/`)、春天 (`https://springsunday.net/`)、BeyondHD (`https://beyond-hd.me/`)、龟站 (`https://kamept.com/`)、海豹 (`https://greatposterwall.com/`)、天雪 (`https://skyeysnow.com/`)、AnimeZ (`https://animez.to/`)、梓喵 (`https://azusa.wiki/`)、莫妮卡 (`https://monikadesign.uk/`)、IPT (`https://iptorrents.com/`)、HD-Space (`https://hd-space.org`)、AsianCinema (`https://eiga.moi`)、bitporn (`https://bitporn.eu`)、NordicQuality (`https://nordicq.org`)、bakabt (`https://bakabt.me`)、seedpool (`https://seedpool.org`)、clearjav (`https://clearjav.com`)、dreadvault (`https://dreadvault.org`)。
 - 遗留：通用站逐站核验实际表单/消息与验证码差异；不以 Cookie 名存在替代生产签到验证，不自动开启 verified。
 
 ## 答题类站点说明（2026-10-22）
 - chdbits/tjupt 为答题类签到（随机问答/豆瓣图片），误答有账号风险，**不建议启用答题功能**；52pt 已改为滑块签到（HTTP 无法完成，须 Browserless/Playwright 实现，暂缓）；registry signin_applicable=False，均仅保留模拟登录。
 - u2 为随机图片选项（非知识问答），保留签到能力。BakatestSignin 为 52pt/chdbits 共用的 bakatest.php 随机问答实现。
 - hares 站点已关闭，native 模块与声明移除（旧桥副本保留）。
+
+## D1 声明下沉（3.11.0）
+
+- 将只有协议参数差异的20个专属模块并入 generic_sites.json，复用 C1/C2/C3/C4 执行器而不另造提交链；verified、动作至多一次、异常后安全回读和未确认语义不变。不迁移 Cookie/CSRF/动态问答等专属流程。
+- CAPTCHA：baozi/dongying/kelu/naturept/novahd/oshen/phoenixpt/playlet/shaobaoyuan/soulvoice/tu88/vclib；GET：hdupt/hhanclub/hdcity/haidan/pttime/btschool；静态 POST：hdarea/nexushd。kelu 的简繁 status_map 顺序原样保留，海胆安全路径仍为 /index.php，既有 signed_marker 保留。
+- 可选字段：captcha 委托 attendance_captcha；action_get + 必填 safe_read_path 选择 GetSignin，referer=true 使用站点首页；form_data + form_path 生成独立表单数据副本；response_json + action_path + 必填 safe_read_path 选择 ApiSignin（本轮没有真实站采用此新声明）；use_default_message=false 关闭默认链；signin_capable=false 返回 skipped 且 registry 展示不适用。message/status_map/success_texts/signed_marker 保留站点证据覆盖。
+- response_json.status_map 的 object 仅表示字符串键；typed pairs 如 [[0,"signed"]] 或 [[true,"signed"],[false,"unsigned"]] 保留数值/布尔类型，禁止数字与布尔相等键共存导致 Python dict 覆盖，不从字符串键猜测类型。
+- 原65条通用声明中 nexushd/shaobaoyuan/vclib 与专属ID重复，按原 registry 最终专属行为覆盖（NexusHD 保留 v6.nexushd.org）；合并后82条通用声明。native 总数108守恒，专属 .py 从47减至27（含既有同ID声明，不等于唯一站点数）。不要运行只输出基础字段的旧导出脚本覆盖此行为表。
+- darkland/digitalcore/mteam 保留专属，新增仅登录字段不迁移其协议；btschool 明确下沉。hdsky/haitang/tjupt/chdbits/yzyy/u2/hdchina/opencd 及其余未列入下沉的专属模块不动，rousi/sunnypt 集成不动；hdchina URL 本轮不改。
+- 离线回归迁移 C1/C2/C3 三态至 generic 参数化，并保留原协议异常/取消/不重试测试；本轮不发送真实请求、不改 dist。生产消息/表单/CAPTCHA 与 hdchina 域名修正留后续授权，离线通过不提升 verified。

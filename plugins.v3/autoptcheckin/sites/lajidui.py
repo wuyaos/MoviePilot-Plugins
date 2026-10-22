@@ -1,3 +1,4 @@
+# DEPRECATED: 原生实现见 sites/native/；此副本仅用于 registry 元数据发现与未迁移域名兜底，签到/登录执行路径已不使用（除 pilot 试点回退）。
 # input: 垃圾堆 Cookie、UA、代理配置与 attendance.php 验证码表单
 # output: 垃圾堆签到处理器，自动识别验证码并提交签到
 # pos: AutoPtCheckin 站点适配层，处理 NexusPHP 验证码签到页

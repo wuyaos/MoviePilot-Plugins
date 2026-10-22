@@ -5,7 +5,7 @@ export function cfBadge(cf) {
   return 'badge-cf-unknown'
 }
 export function credentialBadge(source = '') {
-  if (/jwt|api/i.test(source)) return 'badge-api'
+  if (/jwt|api/i.test(source)) return 'badge-api_key'
   if (/cookie/i.test(source)) return 'badge-cookie'
   if (/password|密码/.test(source)) return 'badge-password'
   return 'badge-unknown'

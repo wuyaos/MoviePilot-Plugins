@@ -11,7 +11,7 @@ from autoptcheckin.core.models import LoginPage
 from autoptcheckin.core.registry import discover_sites
 from autoptcheckin.core.sitemodel import SignContext, SiteModule
 from autoptcheckin.core.nexus import NexusSignin
-from autoptcheckin.sites.native.kelu import Kelu
+from autoptcheckin.sites.native.generic import GenericKelu as Kelu
 from autoptcheckin.sites.native.lajidui import LaJiDui
 from autoptcheckin.sites.native.luckpt import LuckPT
 from autoptcheckin.sites.native.mteam import MTorrent
@@ -88,7 +88,7 @@ def test_mteam_three_state_inputs_never_imply_sign_state(message):
     assert result.metadata["reason"] == "hook_not_implemented"
     assert http.calls == []
     assert isinstance(site, SiteModule) and not isinstance(site, NexusSignin)
-    assert site.credential.kind == "api" and site.credential.cookie_sources == ()
+    assert site.credential.kind == "api_key" and site.credential.cookie_sources == ()
     assert site.url == "" and not site.record_spec.status_map
 
 
@@ -99,7 +99,7 @@ def test_b14_registry_declares_all_unverified():
         assert not rows[cls.id]["pilot_enabled"]
     for cls in SPECIAL:
         assert rows[cls.id]["hook_implemented"] == (cls in (Kelu, LaJiDui))
-    assert rows["mteam"]["credential"] == {"kind": "api", "sources": [], "refresh": None}
+    assert rows["mteam"]["credential"] == {"kind": "api_key", "sources": [], "refresh": None}
 
 
 @pytest.mark.parametrize("site_cls", SITES)

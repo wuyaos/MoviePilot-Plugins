@@ -11,11 +11,11 @@ from autoptcheckin.core.credentials import Credential
 from autoptcheckin.core.models import LoginPage
 from autoptcheckin.core.registry import discover_sites
 from autoptcheckin.core.sitemodel import SignContext
-from autoptcheckin.sites.native.naturept import NaturePT
-from autoptcheckin.sites.native.nexushd import NexusHD
-from autoptcheckin.sites.native.novahd import NovaHD
+from autoptcheckin.sites.native.generic import GenericNaturept as NaturePT
+from autoptcheckin.sites.native.generic import GenericNexushd as NexusHD
+from autoptcheckin.sites.native.generic import GenericNovahd as NovaHD
 from autoptcheckin.sites.native.opencd import OpenCD
-from autoptcheckin.sites.native.oshen import OshenPT
+from autoptcheckin.sites.native.generic import GenericOshen as OshenPT
 
 SITES = [NaturePT, NexusHD, NovaHD, OpenCD, OshenPT]
 MESSAGE_SITES = [NaturePT, NexusHD, NovaHD, OshenPT]
