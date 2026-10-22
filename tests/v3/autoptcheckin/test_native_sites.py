@@ -103,7 +103,7 @@ def test_hdsky_ocr_parameters_and_fallback_only_before_submission():
 def test_hdsky_unsolved_captcha_never_signs(code):
     site = HDSky()
     http = Http(site, [markup(site)])
-    assert site.signin(context(site, http, lambda **kwargs: code)).status == 'unconfirmed'
+    assert site.signin(context(site, http, lambda **kwargs: code)).status == 'protocol_pending'
     assert not any(call[1].endswith('showup.php') for call in http.calls)
 
 

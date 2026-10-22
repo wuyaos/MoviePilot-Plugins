@@ -61,7 +61,7 @@ def test_b15_native_fixture_three_states(site_cls):
     assert site.signin(context(site, http)).status == "already"
     assert len(http.calls) == 1
     http = Http(["<main>签到成功 本次签到获得</main>"])
-    assert site.signin(context(site, http)).status == "unconfirmed"
+    assert site.signin(context(site, http)).status == ("unconfirmed" if site.id == "nexushd" else "protocol_pending")
     http = Http([page(site, "未签到", form=True), page(site, signed)])
     assert site.signin(context(site, http)).status == "success"
     assert [call[0] for call in http.calls] == ["get", "post", "get"]
@@ -82,7 +82,7 @@ def test_b15_special_pre_read_is_homepage(site_cls):
     site = site_cls()
     assert site.attendance_path == "/"
     http = Http(["<main>unknown</main>"])
-    assert site.signin(context(site, http)).status == "unconfirmed"
+    assert site.signin(context(site, http)).status == ("protocol_pending" if site_cls is OpenCD else "unconfirmed")
     assert http.calls[0] == ("get", site.url)
     assert len(http.calls) == (3 if site_cls is NexusHD else 2)
 

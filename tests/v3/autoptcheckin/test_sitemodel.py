@@ -137,7 +137,7 @@ def test_nexus_always_rereads_even_after_submit_error(fresh, expected, post_erro
     '<form method="post" action="https://other.invalid/attendance.php"></form>'])
 def test_nexus_does_not_guess_form(form):
     http = FakeHttp(page(form=form))
-    assert FixtureSite().signin(context(http)).status == "unconfirmed"
+    assert FixtureSite().signin(context(http)).status == 'protocol_pending'
     assert http.calls == [("get", URL)]
 
 

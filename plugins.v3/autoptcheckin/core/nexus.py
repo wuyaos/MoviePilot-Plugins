@@ -5,7 +5,7 @@ from urllib.parse import urljoin, urlsplit
 from lxml import html
 
 from .models import Evidence, LoginPage, LoginStatus, SignResult, SignStatus
-from .sitemodel import RecordSpec, SignContext, SiteModule, page_available
+from .sitemodel import RecordSpec, SignContext, SiteModule, page_available, page_maintenance
 
 
 @dataclass
@@ -124,22 +124,29 @@ class NexusSignin(SiteModule):
         attendance_url = urljoin(self.url, self.attendance_path)
         try:
             page = ctx.http.get(attendance_url)
+        except Exception as exc:
+            return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：{type(exc).__name__}")
+        try:
+            if page_maintenance(page):
+                return ctx.result(status=SignStatus.MAINTENANCE, message="维护中/已关闭")
             login = self.parse_login(page)
             if login.status == LoginStatus.AUTH_FAILED:
                 return ctx.result(status=SignStatus.AUTH_FAILED, message=login.message)
             if not page_available(page):
-                return ctx.result(status=SignStatus.UNCONFIRMED, message="签到页面不可达")
+                return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：HTTP {page.status_code}" if page is not None and page.status_code != 200 else "签到页面不可达：空响应")
             before = self.read_before(ctx, page)
             if before.status == SignStatus.ALREADY:
                 return before
+            if before.metadata.get('reason') == 'identity_conflict':
+                return before
             form = self.discover_form(ctx, page)
             if form is None:
-                return ctx.result(status=SignStatus.UNCONFIRMED, message="未发现唯一签到表单",
+                return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="未发现唯一签到表单",
                                   evidence=before.evidence)
             if not self.solve_captcha(ctx, page, form):
-                return ctx.result(status=SignStatus.UNCONFIRMED, message="验证码未解决，未提交")
+                return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="验证码未解决，未提交")
         except Exception:
-            return ctx.result(status=SignStatus.UNCONFIRMED, message="签到前读或表单解析未确认")
+            return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="签到前读或表单解析未确认")
         if ctx.cancel.is_set():
             return ctx.result(status=SignStatus.CANCELLED, message="任务已取消，未提交")
         try:

@@ -59,7 +59,7 @@ def page(site, message, *, form=False):
     return node
 
 
-@pytest.mark.parametrize("site_cls", [HDBao, HDCity, Hhanclub])
+@pytest.mark.parametrize("site_cls", [HDBao, HDCity])
 def test_b13_native_fixture_three_states(site_cls):
     site = site_cls()
     signed = next(iter(site.record_spec.status_map))
@@ -67,7 +67,7 @@ def test_b13_native_fixture_three_states(site_cls):
     assert site.signin(context(site, http)).status == "already"
     assert len(http.calls) == 1
     http = Http(["<main>已签到 签到成功</main>"])
-    assert site.signin(context(site, http)).status == "unconfirmed"
+    assert site.signin(context(site, http)).status == ("protocol_pending" if site_cls is HDBao else "unconfirmed")
     assert len(http.calls) == (1 if site_cls is HDBao else 3)
     http = Http([page(site, "未签到", form=True), page(site, signed)])
     result = site.signin(context(site, http))
@@ -76,7 +76,7 @@ def test_b13_native_fixture_three_states(site_cls):
     assert [call[0] for call in http.calls] == (["get", "post", "get"] if site_cls is HDBao else ["get"] * 3)
 
 
-@pytest.mark.parametrize("site_cls", [HDBao, HDCity, Hhanclub])
+@pytest.mark.parametrize("site_cls", [HDBao, HDCity])
 @pytest.mark.parametrize("error", [False, True])
 def test_b13_readback_missing_message_is_unconfirmed(site_cls, error):
     site = site_cls()
@@ -85,7 +85,7 @@ def test_b13_readback_missing_message_is_unconfirmed(site_cls, error):
     assert [call[0] for call in http.calls] == (["get", "post", "get"] if site_cls is HDBao else ["get"] * 3)
 
 
-@pytest.mark.parametrize("site_cls,safe_path", [(HDCity, "/"), (Hhanclub, "/")])
+@pytest.mark.parametrize("site_cls,safe_path", [(HDCity, "/")])  # hhanclub 动作页即结果页（见 test_generic_behavior_d1）
 def test_b13_special_pre_read_and_readback_use_safe_page(site_cls, safe_path):
     site = site_cls()
     assert site.hook_implemented is True
@@ -105,7 +105,7 @@ def test_b13_registry_declares_all_unverified():
         assert rows[cls.id]["hook_implemented"] is True
 
 
-@pytest.mark.parametrize("site_cls", [HDBao, HDCity, Hhanclub])
+@pytest.mark.parametrize("site_cls", [HDBao, HDCity])
 @pytest.mark.parametrize("read_only", [False, True])
 def test_b13_unverified_execution_never_reads_credentials(monkeypatch, site_cls, read_only):
     module = importlib.import_module("autoptcheckin")
@@ -139,7 +139,7 @@ def test_hdchina_only_v2_proven_message_is_mapped():
     site = HDChina()
     assert site.pre_read_spec.status_map == {"已签到": "signed"}
     for markup in ('<a href="#">已签到</a>', '<a class="label label-default" href="/other">已签到</a>', page(site, "未知文本")):
-        assert site.signin(context(site, Http([markup]))).status == "unconfirmed"
+        assert site.signin(context(site, Http([markup]))).status == 'protocol_pending'
 
 
 def test_hdupt_empty_marker_or_numeric_reply_is_not_a_message():

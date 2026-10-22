@@ -57,7 +57,7 @@ def test_b14_native_fixture_three_states(site_cls):
     assert site.signin(context(site, http)).status == "already"
     assert len(http.calls) == 1
     http = Http(["<main>已经签到 签到成功</main>"])
-    assert site.signin(context(site, http)).status == "unconfirmed"
+    assert site.signin(context(site, http)).status == 'protocol_pending'
     assert len(http.calls) == 1
     # Synthetic CAPTCHA inputs exercise the implemented hook without production claims.
     http = Http([page("未签到", form=True), page("签到成功")])

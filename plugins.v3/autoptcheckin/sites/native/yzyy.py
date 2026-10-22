@@ -75,6 +75,11 @@ class Yzyy(NexusSignin):
 
     def read_before(self, ctx, page):
         result = self.read_after(ctx, page)
+        if (ctx.credential.uid and result.evidence and result.evidence.uid
+                and str(ctx.credential.uid) != result.evidence.uid):
+            result.message = '页面账号冲突，未提交'
+            result.metadata['reason'] = 'identity_conflict'
+            return result
         if result.status == 'success':
             result.status = type(result.status)('already')
         return result

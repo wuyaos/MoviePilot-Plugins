@@ -151,7 +151,7 @@ def test_c34_cancel_and_unavailable_pre_read(sid):
     site = get_native_module(sid)
     http = Http(site, before=TimeoutError())
     ctx = context(site, http)
-    assert site.signin(ctx).status == 'unconfirmed'
+    assert site.signin(ctx).status == 'network_error'
     assert not http.actions
     ctx.cancel.set()
     assert site.signin(ctx).status == 'cancelled'
@@ -278,5 +278,5 @@ def test_ttg_timestamp_must_have_exactly_ten_digits():
     site = get_native_module('ttg')
     for timestamp in ('123', '12345678901', 'abcdefghij'):
         http = Http(site, before=initial('ttg').replace('1234567890', timestamp))
-        assert site.signin(context(site, http)).status == 'unconfirmed'
+        assert site.signin(context(site, http)).status == 'protocol_pending'
         assert not http.actions

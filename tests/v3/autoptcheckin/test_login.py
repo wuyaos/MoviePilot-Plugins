@@ -73,7 +73,8 @@ def test_login_only_dispatch_and_api(monkeypatch):
     assert asyncio.run(plugin.api_login_by_domain('hdsky'))['data']['status'] == 'login_ok'
     row = plugin._site_results()[0]
     assert row['login_selected'] and row['can_login'] and not row['sign_selected']
-    assert row['status'] == 'unconfirmed'
+    # D4 后 /sites 最新记录含模拟登录：hdsky 仅登录时卡片状态同步为 login_ok
+    assert row['status'] == 'login_ok' and row['action'] == 'login'
     assert next(r for r in plugin.get_api() if r['path'] == '/login_by_domain')['auth'] == 'bear'
     dispatched = []
     monkeypatch.setattr(plugin, '_execute_site', lambda sid, **kw: dispatched.append((sid,kw['action'])))

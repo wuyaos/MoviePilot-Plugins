@@ -10,7 +10,7 @@ from autoptcheckin.core.models import LoginPage
 from autoptcheckin.core.sitemodel import SignContext
 from autoptcheckin.sites.native.agsvpt import Agsvpt
 from autoptcheckin.sites.native.generic import GenericBaozi as Baozi
-from autoptcheckin.sites.native.generic import GenericBtschool as BTSchool
+from autoptcheckin.sites.native.btschool import BTSchool
 from autoptcheckin.sites.native.chdbits import CHDBits
 
 
@@ -50,7 +50,7 @@ def test_batch1_native_fixture_three_states(site_cls):
     assert site.signin(context(site, Http([page(site, signed)]))).status == "already"
 
     unknown = site.signin(context(site, Http(["<main>无声明消息</main>"])))
-    assert unknown.status == "unconfirmed"
+    assert unknown.status == ("unconfirmed" if site.id == "chdbits" else "protocol_pending")
 
     success = site.signin(context(site, Http([page(site, "未签到", form=True), page(site, signed)])))
     assert success.status == "success"

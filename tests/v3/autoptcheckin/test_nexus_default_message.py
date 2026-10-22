@@ -80,9 +80,9 @@ def test_btschool_opts_out_of_unaudited_positive_messages(container):
     ctx = context(site)
     assert site.use_default_message is False
     assert site.read_before(ctx, page).status == site.read_after(ctx, page).status == 'unconfirmed'
-    # Reproduce the false positive this explicit site opt-out prevents.
+    # Scoped entry logic does not promote arbitrary success text, even with default chaining enabled.
     site.use_default_message = True
-    assert site.read_after(ctx, page).status == 'success'
+    assert site.read_after(ctx, page).status == 'unconfirmed'
 
 
 def test_default_message_login_redirect_is_not_sign_evidence():

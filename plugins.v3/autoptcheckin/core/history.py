@@ -80,6 +80,7 @@ class HistoryStore:
 
     def today_counts(self) -> dict[str, int]:
         now = self._clock()
+        # Network/protocol outcomes remain in history, outside the four result cards.
         counts = dict(success=0, signed=0, failed=0, unconfirmed=0)
         with self._lock:
             for item in self._load():

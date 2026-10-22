@@ -47,7 +47,7 @@ def test_b12_native_fixture_three_states(site_cls):
     assert site.signin(context(site, Http([page(site, signed)]))).status == "already"
 
     unknown = site.signin(context(site, Http(["<main>无声明消息</main>"])))
-    assert unknown.status == "unconfirmed"
+    assert unknown.status == ("unconfirmed" if site_cls is HDArea else "protocol_pending")
 
     success = site.signin(context(site, Http([page(site, "未签到", form=True), page(site, signed)])))
     assert success.status == "success"

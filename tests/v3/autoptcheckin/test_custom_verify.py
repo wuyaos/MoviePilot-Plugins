@@ -70,8 +70,8 @@ def test_custom_configured_ids(probe, site_id):
 def test_custom_without_attendance_does_not_submit(probe):
     plugin, calls, _ = probe
     result = plugin._execute_site('custom-60005')
-    assert result['status'] == 'skipped'
-    assert result['metadata']['reason'] == 'custom_signin_pending'
+    assert result['status'] == 'protocol_pending'
+    assert result['message'] == '未发现唯一签到表单'
     assert calls == ['https://custom.invalid/attendance.php']
 
 

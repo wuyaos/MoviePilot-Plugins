@@ -48,7 +48,7 @@ def attendance(probe, monkeypatch):
     (SIGNED, None, 'already', ['GET']),
     (FORM, '<main>unknown</main>', 'unconfirmed', ['GET', 'POST', 'GET']),
     (FORM, None, 'unconfirmed', ['GET', 'POST', 'GET']),
-    ('<main>not Nexus</main>', None, 'skipped', ['GET']),
+    ('<main>not Nexus</main>', None, 'protocol_pending', ['GET']),
 ])
 def test_custom_signin_three_states(attendance, before, after, status, methods):
     plugin, calls, pages, _ = attendance

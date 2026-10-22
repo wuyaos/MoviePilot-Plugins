@@ -16,11 +16,11 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 82
-    assert len({row['id'] for row in rows}) == 82
-    assert len({row['url'] for row in rows}) == 82
+    assert len(rows) == 80
+    assert len({row['id'] for row in rows}) == 80
+    assert len({row['url'] for row in rows}) == 80
     assert all({'id', 'name', 'url'} <= set(row) for row in rows)
-    assert sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows) == 62
+    assert sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows) == 58
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'jpopsuki', 'nebulance', 'filelist', 'iptorrents'} & {row['id'] for row in rows}
 
 
@@ -28,7 +28,7 @@ def test_generic_dynamic_registry_and_default_message_chain():
     rows = registry.discover_sites()['sites']
     native = [row for row in rows if row['native']]
     # Baseline includes GTK and LP-Bits in addition to the original 46 declarations.
-    assert len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2 == 27
+    assert len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2 == 29
     assert len(native) == 108  # 26 unique dedicated IDs + 82 generic declarations
     assert len({row['id'] for row in rows}) == len(rows)
     for cls in generic.build_generic_sites():
@@ -37,7 +37,7 @@ def test_generic_dynamic_registry_and_default_message_chain():
         assert issubclass(cls, NexusSignin)
         assert row['native'] and not row['verified'] and row['hook_implemented']
         assert row['credential']['kind'] == 'cookie' and not row['pilot_enabled']
-        if cls.id not in {'btschool', 'haidan'}:
+        if cls.id not in {'haidan', 'audiences', 'discfan', 'ptfans', 'hhanclub'}:
             assert cls().message_spec().message == NexusSignin.DEFAULT_MESSAGE_XPATHS
 
 

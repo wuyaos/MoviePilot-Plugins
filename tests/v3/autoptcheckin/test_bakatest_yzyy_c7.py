@@ -115,7 +115,7 @@ def test_yzyy_repeat_conflict_and_foreign_action():
     ctx.credential = Credential('test', 'synthetic', '99')
     assert site.read_after(ctx, LoginPage(discuz('今日已打卡', '今日已打卡'))).status == 'unconfirmed'
     http = Http([discuz().replace('href="plugin.php', 'href="https://other.invalid/plugin.php')])
-    assert site.signin(context(site, http)).status == 'unconfirmed'
+    assert site.signin(context(site, http)).status == 'protocol_pending'
     assert len(http.calls) == 1
 
 

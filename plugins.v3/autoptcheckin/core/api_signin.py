@@ -3,7 +3,7 @@ from urllib.parse import urljoin
 
 from .models import LoginStatus, SignStatus
 from .nexus import NexusSignin, SigninForm
-from .sitemodel import page_available
+from .sitemodel import page_available, page_maintenance
 
 
 class ApiSignin(NexusSignin):
@@ -24,18 +24,23 @@ class ApiSignin(NexusSignin):
         safe_url = urljoin(self.url, self.attendance_path)
         try:
             page = ctx.http.get(safe_url)
+        except Exception as exc:
+            return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：{type(exc).__name__}")
+        try:
+            if page_maintenance(page):
+                return ctx.result(status=SignStatus.MAINTENANCE, message="维护中/已关闭")
             if self.parse_login(page).status == LoginStatus.AUTH_FAILED:
                 return ctx.result(status=SignStatus.AUTH_FAILED)
             if not page_available(page):
-                return ctx.result(status=SignStatus.UNCONFIRMED)
+                return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：HTTP {page.status_code}" if page is not None and page.status_code != 200 else "签到页面不可达：空响应")
             before = self.read_before(ctx, page)
             if before.status == SignStatus.ALREADY:
                 return before
             form = self.discover_form(ctx, page)
             if form is None or not self.solve_captcha(ctx, page, form):
-                return ctx.result(status=SignStatus.UNCONFIRMED, message="动作参数未确认，未提交")
+                return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="动作参数未确认，未提交")
         except Exception:
-            return ctx.result(status=SignStatus.UNCONFIRMED, message="动作前读未确认")
+            return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="动作前读未确认")
         if ctx.cancel.is_set():
             return ctx.result(status=SignStatus.CANCELLED)
         receipt = None

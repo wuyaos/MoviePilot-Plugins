@@ -4,7 +4,7 @@
 - 默认仅 HDSky（hdsky）和海棠（haitang）开放手动试点；显式 unlock_all_sites 的执行边界见原生站点契约；不接管 `plugins.v2` 入口，默认不激活自动调度。
 - 站点采用双轨：`sites/` 的46份 V2 站点副本已标 deprecated，保留用于 registry 元数据发现与未迁移域名参照；`sites/native/` 是原生执行实现。旧桥实际仅支持 hdsky/haitang 的 pilot 回退；生产切换前不删除副本或 `core/pilot.py`。
 - 任何提交结果都必须尝试新页面回读；按钮文本和 UID 只能来自页面证据。
-- `unconfirmed` 独立于 `failed`，回读不可达、解析失败或身份冲突不得猜测成功/失败。
+- `unconfirmed` 独立于 `failed`，提交后回读不可达、证据不足或身份冲突不得猜测成功/失败；签到前读维护/关闭用 `maintenance`，其他不可达用 `network_error`，未适配表单/参数、验证码未解决或提交前解析异常用 `protocol_pending`。模拟登录状态契约不变。
 
 ## 验证
 - `PYTHONIOENCODING=utf-8 micromamba run -n base python -m pytest tests/v3/autoptcheckin`
@@ -44,11 +44,11 @@
 ### 数据页
 - 站点名优先采用适配器 match 命中的 MP 登记名，未匹配保留适配器名；/sites 和 /stats 使用相同映射。图标仅读取 SiteOper.get_icon_by_domain 的 data:image 缓存，不加载远程 URL；配置卡及数据卡显示图标，缺失/加载失败用首字母占位。关闭按钮用 ghost 描边，×/移除 chip 用 danger 描边。
 - 今日总览显示下次调度时间、调度模式/间隔与时段，提供「立即签到 / 只读核验」；其下四张统计卡按「今日成功 / 已签 / 失败 / 未确认」顺序显示数量，颜色见下表。
-- 站点小卡仅显示站点名与缓存图标、签到状态徽标、按配置显示单站签到、模拟登录小按钮，并恒显只读核验按钮；不展示 UID、时间、凭证来源、消息或奖励明细。总览保留只读核验入口；停用/非试点站禁用执行按钮。
-- 卡片区提供成功/已签/失败/未确认/停用筛选 chips，再点选中态恢复全部；认证失败归失败，skipped 沿用停用色归停用。切换筛选重置为筛选后前 8 张，空匹配显示独立空态。
+- 站点小卡两行紧凑布局：第一行图标+站点名+状态徽标（消息全文放徽标 title），第二行按配置显示单站签到、模拟登录小按钮并恒显只读核验按钮；不展示结果文字行、UID、时间、凭证来源或奖励明细。总览保留只读核验入口；停用/非试点站禁用执行按钮。
+- 卡片区提供成功/已签/失败/未确认/站点不可达/协议待适配/维护中/已关闭/停用筛选 chips，再点选中态恢复全部；认证失败归失败，skipped 沿用停用色归停用；维护、网络及协议状态虽共用 off 中性色，筛选按状态值独立匹配，不按颜色混入停用。切换筛选重置为筛选后前 8 张，空匹配显示独立空态。
 - 桌面三列等宽等高小卡，中屏两列、640px 以下单列；末张不跨列。默认前 8 张，failed/unconfirmed/auth_failed 优先且同优先级保持原顺序；其余用「展开其余 X 个站点」/「收起其余站点」切换，空态单独展示。
-- 历史通过现有 page/size API 每页 100 条加载全部保留记录，按浏览器本地日期前端聚合；分组头为「YYYY-MM-DD · N 条记录」，默认仅当天展开，其余收起。列顺序为「时间 / 站点 / 状态 / 最近消息 / 证据」；证据按钮切换展开/收起，紧随对应记录插入跨五列的证据行；API 与存储不变。
-- 证据行只呈现实际回读的「回读按钮文本 / 本人 UID / 记录日期 / 记录状态」，桌面四列；缺失证据值留空，不输出占位文案，不从按钮单独推定签到结果。底部保留五态图例。历史消息使用真实 item.message，奖励如有拼在消息末尾，不借回读按钮文本替代执行结论；历史结果时间按浏览器本地时间显示 YYYY/MM/DD HH:mm:ss，存储 ISO 不变。
+- 历史通过现有 page/size API 每页 100 条加载全部保留记录，按浏览器本地日期前端聚合；分组头为「YYYY-MM-DD · N 条记录」，默认仅当天展开，其余收起。列顺序为「时间 / 站点 / 状态 / 最近消息 / 证据」；证据按钮切换展开/收起，紧随对应记录插入跨五列的证据行；API 与存储不变。历史表容器 max-height:60vh、内部横纵滚动，证据展开行在同一容器内，不撑破宿主页面。
+- 证据行只呈现实际回读的「回读按钮文本 / 本人 UID / 记录日期 / 记录状态」，桌面四列；缺失证据值留空，不输出占位文案，不从按钮单独推定签到结果。底部图例同步包含站点不可达、协议待适配、维护中/已关闭，均沿用 off 主题变量。历史消息使用真实 item.message，奖励如有拼在消息末尾，不借回读按钮文本替代执行结论；历史结果时间按浏览器本地时间显示 YYYY/MM/DD HH:mm:ss，存储 ISO 不变。
 - 不提供迁移预览区；不要把静态预览的演示按钮、示例快照提示或刷新恢复示例文案带入正式页面。
 
 ### 状态色映射
@@ -62,6 +62,25 @@
 - 统计卡、结果徽标、历史状态和图例共用上表，不将未确认合并为失败；能力「可签到」沿用 success，CF 有盾沿用 unknown。
 - 配置和数据视图都不绘制根 card 边框、圆角或阴影，外框交给宿主弹窗。
 - 主题跟随宿主 `html.v-theme--dark` / `html.v-theme--light`（MutationObserver 实时监听）；无宿主主题 class 时回退 `prefers-color-scheme`。颜色变量集中定义于 `frontend/src/preview.css` 的 `--ptc-*` 清单，组件样式不得使用主题硬编码色。
+
+### 结果枚举（3.21.0）
+| 值 | 中文 | 产生条件 | 今日四卡归类 |
+| --- | --- | --- | --- |
+| success | 成功 | 提交后有确证 | success |
+| already → signed（历史） | 已签 | 前读已有已签证据 | signed |
+| failed | 失败 | 明确未签证据 | failed |
+| auth_failed | 认证失败 | 缺凭据或认证页 | failed（仅 sign） |
+| unconfirmed | 未确认 | 提交后证据不足或身份冲突；旧轨道/登录未知结果保留兼容 | unconfirmed（仅 sign） |
+| maintenance | 维护中/已关闭 | 签到前读及 native 核验 HTTP 403/502/503，或响应体前 2 KiB（UTF-8）含维护/关闭文案（英文不区分大小写）；提交后回读与模拟登录语义不变 | 不计入 |
+| network_error | 站点不可达 | 签到前读空响应、排除维护状态后的非认证 HTTP 错误或请求异常（含 native 核验） | 不计入 |
+| protocol_pending | 协议待适配 | 签到无唯一表单、参数/验证码未解决或提交前解析异常 | 不计入 |
+| skipped | 已跳过 | 门控、未选动作或锁忙 | 不计入 |
+| cancelled | 已取消 | 执行取消 | 不计入 |
+| login_ok | 登录成功 | 页面可达的模拟登录/自定义核验 | 不计入 |
+| disabled（展示值） | 停用 | 未启用的站点卡 | 不计入 |
+
+- 保留既有存储值，不批量重写历史 unconfirmed；新增状态只影响新的对应产生点。GetSignin 继承 Nexus 流程，无需复制分类逻辑；API 动作回执及提交后无条件回读不变。
+- 憨憨的 register-now-info 声明必须使用 XPath class-token 匹配，不能把 CSS 选择器交给 lxml.xpath；attendance 前读/动作/回读使用相同 URL，测试必须按调用顺序提供响应。
 
 ### 徽标色映射
 - 徽标用 `--ptc-badge-*` 半透明背景和同系文字，深浅主题各一套；配置下拉、chips、收起行与数据页使用同一来源映射。
@@ -87,7 +106,7 @@
 - `core/registry.py` 使用 `pkgutil` 遍历 `sites/`，逐模块导入并收集 `_ISiteSigninHandler` 子类；导入异常只进入 `skipped` 日志，不阻断其他站点。注册项包含 `id/name/login_capable/credential/cf`，并追加 `rousi/sunnypt` 两个 integrations 注册项；`/sites` 返回 `sources.adapters` 与 `sources.integrations` 计数。
 - 适配器凭证默认 `kind=cookie`、来源 `cookiecloud/managed_site/local_cookie`；集成凭证从 integrations 的 `CredentialSpec` 获取。注册表只缓存元数据，不实例化适配器或请求站点。模拟登录表示访问页面，不要求专属登录动作；适配器默认 login_capable=true（含 HDSky），仅显式 false 的特殊站关闭。
 - `core/history.py` 使用 `get_data/save_data` 的 key `history.records` 保存 `{time,site,action,status,message,reward,evidence}`；`list(page,size)` 按时间倒序分页，默认每页 20、上限 100；追加和读取均清理超过 90 天的记录。历史只保存回读证据，不保存凭据。
-- `/stats` 返回 `today: {success,signed,failed,unconfirmed}` 与 `next_schedule`；`/history` 返回 `{total,items}`。签到 action 的 auth_failed 计入失败卡，保留原始历史状态；空态仅表示实际存储为空。
+- `/stats` 返回 `today: {success,signed,failed,unconfirmed}` 与 `next_schedule`；`/history` 返回 `{total,items}`。签到 action 的 auth_failed 计入失败卡；maintenance/network_error/protocol_pending 仅保留历史及站点卡，不计入四张统计卡，也不增统计键，避免把未执行当签到失败；保留原始历史状态；空态仅表示实际存储为空。
 - 配置页以 `/sites` 为主数据源；仅在 registry 整包导入失败时使用 `frontend/src/sites.json` 作为静态兜底，不把静态清单当生产主数据源。
 
 ## S5 试点执行边界
@@ -95,7 +114,7 @@
 - 无 Cookie 返回 auth_failed，不实例化适配器或请求页面。旧桥第一次前读从账号导航识别 UID 后建立 identity.bindings，后续显式冲突停止；原生消息制已移除 UID 作为成功判定门槛，UID/日期仅展示，站点专属身份核验仍保留。换号须先人工确认旧绑定。
 - 前读已签标记或本人今日成功记录 → already；明确可提交按钮/表单 → 提交；其余 → unconfirmed 且不提交。原生轨道 UID 未解析但表单明确时允许提交，成功由声明消息或 signed_marker 确认，不要求定位本人当日行；旧桥仍保留身份绑定及本人行验证。
 - 桥仅使用既有适配器的提交方法；HDSky 只有未识别验证码（没有提交）才换 OCR 引擎，提交后不重试。无论二元组真假或提交异常，finally 都重新 GET 回读。
-- 原生判定依次经历“四件套 → 消息制（移除 UID/日期门槛）→ 默认消息链 + signed_marker”；提交后仍无条件回读，消息链得到明确记录状态或 marker 确认后才下结论。原生 UID/日期仅作展示证据；旧桥仍对显式身份冲突立即停止。按钮文本保留展示，缺失不阻断；页面不可达、消息或状态缺失 → unconfirmed。每次尝试（含只读核验、忙、缺凭证）独立写 history。
+- 原生判定依次经历“四件套 → 消息制（移除 UID/日期门槛）→ 默认消息链 + signed_marker”；提交后仍无条件回读，消息链得到明确记录状态或 marker 确认后才下结论。原生 UID/日期仅作展示证据；旧桥仍对显式身份冲突立即停止。按钮文本保留展示，缺失不阻断；提交后页面不可达、消息或状态缺失 → unconfirmed；前读网络/协议分类见边界。每次尝试（含只读核验、忙、缺凭证）独立写 history。
 - 当前 HTML 夹具是**合成回归夹具**，不是生产页面证据；保守选择器未匹配时不补造 UID/日期/状态，不把全页成功词当提交后证据。
 - 生产切换：先在 QNAP 备份旧配置并停用旧插件对应两站调度 → 安装 3.3.0 → 确认站点管理 Cookie/UA 与选择 → 单站只读 verify_site 核验真实结构/UID → 未确认时脱敏采样补齐解析 → 用户确认后手动签到。本地调试实例可能也有真实 Cookie，执行前必须核实；真实试点需用户单独授权，未核验页面结构前不得宣称真实签到成功。
 
@@ -152,6 +171,6 @@
 
 ## Custom 签到契约（3.13.0）
 - custom_sites_data 的已启用且勾选签到条目（含数字 ID）直接使用 NexusSignin 默认 attendance 表单流程，不要求 native verified；unlock_all_sites 不能绕过启用与动作选择。registry 的 custom pilot_enabled=True；signin_applicable=True，唯 emulate=true 且 Browserless 未启用时为 false。
-- custom Cookie 使用本条目的 local_cookie；GET attendance → 唯一同源 POST 表单 → 单次提交 → 无条件新页回读默认消息链。前读已签为 already，新页确证为 success，缺证据为 unconfirmed；history action=sign。无唯一表单保留 custom_signin_pending，不猜非 NexusPHP 协议；已识别验证码不自动作答。
+- custom Cookie 使用本条目的 local_cookie；GET attendance → 唯一同源 POST 表单 → 单次提交 → 无条件新页回读默认消息链。前读已签为 already，新页确证为 success，缺证据为 unconfirmed；history action=sign。无唯一表单返回 protocol_pending，不猜非 NexusPHP 协议；已识别验证码不自动作答。
 - emulate=true 必须显式 browserless_enabled 且配置 browserless_url；browserless_token 仅用于连接认证。本版为 Browserless 前读/回读 + HTTP 提交混合路径（metadata.transport=browserless_read_http_submit），执行级 Cookie 双向同步，独立 context 及连接 finally 释放；连接/页面错误不降级 HTTP-only、不重试动作。依赖 Playwright/CDP，浏览器指纹绑定 POST 站点可能仍未确认。
 - verify 保留只读 login_ok 语义，不视为签到；custom 模拟登录复用同一可达性语义并无条件二次 GET 回读，仍检查 enabled/login 选择与 Browserless 显式开关。真实站点与 Browserless 服务未实测，另行授权验证；设计取舍见 .agents/notes/implemented/feature/2026-10-22-custom-attendance.md。

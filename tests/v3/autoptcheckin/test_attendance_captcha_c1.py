@@ -12,7 +12,7 @@ from autoptcheckin.core.native import NativeHttpClient
 from autoptcheckin.core.registry import get_native_module, discover_sites
 from autoptcheckin.core.sitemodel import SignContext
 
-IDS = 'baozi dongying kelu naturept novahd oshen phoenixpt playlet shaobaoyuan soulvoice tu88 vclib'.split()
+IDS = 'baozi dongying kelu naturept novahd oshen playlet shaobaoyuan soulvoice tu88 vclib'.split()
 
 
 def message(text):
@@ -69,7 +69,7 @@ def test_c1_ocr_hook_success_failure_fallback(sid, codes, expected):
 def test_c1_unsolved_never_submits(sid):
     site = get_native_module(sid)
     http, ocr = Http([form_page()]), Mock(return_value=None)
-    assert site.signin(context(site, http, ocr)).status == 'unconfirmed'
+    assert site.signin(context(site, http, ocr)).status == 'protocol_pending'
     assert len(http.calls) == 1 and ocr.call_count == 2
 
 
@@ -102,7 +102,7 @@ def test_c1_invalid_inputs_do_not_call_ocr_or_submit(sid, mode):
     ctx = context(site, http, None if mode == 'no_ocr' else ocr)
     if mode == 'cancel':
         ctx.cancel.set()
-    assert site.signin(ctx).status == ('cancelled' if mode == 'cancel' else 'unconfirmed')
+    assert site.signin(ctx).status == ('cancelled' if mode == 'cancel' else 'protocol_pending')
     ocr.assert_not_called()
     assert not any(c[0] == 'post' for c in http.calls)
 

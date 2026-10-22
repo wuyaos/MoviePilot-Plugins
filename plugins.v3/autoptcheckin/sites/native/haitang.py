@@ -22,6 +22,14 @@ class Haitang(NexusSignin):
         tree = html.fromstring(page.text)
         if tree.xpath('//form[contains(@action,"attendance.php")]//*[self::button or self::input][@type="submit" and @disabled]'):
             return None
+        # The calendar repeats action=sign; only the primary daily button is eligible.
+        primary = tree.xpath('//form[@method="post" and @action="attendance.php"]'
+                             '[input[@name="action" and @value="sign"]]'
+                             '[button[@type="submit" and not(@disabled)][contains(.,"立即签到")]]')
+        if len(primary) == 1:
+            return SigninForm(urljoin(self.url, self.attendance_path), [("action", "sign")])
+        if len(primary) > 1:
+            return None
         form = super().discover_form(ctx, page)
         if form is None:
             if tree.forms:

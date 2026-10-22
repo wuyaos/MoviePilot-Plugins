@@ -72,6 +72,19 @@ def select_text(tree, selector: str | None) -> str:
     return (node.get("value") or node.text_content()).strip()
 
 
+def page_maintenance(page: LoginPage | None) -> bool:
+    """Only inspect the response body's first 2 KiB; never classify post-action reads."""
+    if page is None:
+        return False
+    if page.status_code in {403, 502, 503}:
+        return True
+    prefix = page.text.encode("utf-8")[:2048].decode("utf-8", errors="ignore").casefold()
+    return any(marker in prefix for marker in (
+        "维护中", "站点维护", "正在维护", "站点已关闭", "网站已关闭",
+        "temporarily unavailable", "site is down", "under maintenance", "site is closed",
+    ))
+
+
 def page_available(page: LoginPage | None) -> bool:
     return page is not None and page.status_code == 200 and bool(page.text)
 

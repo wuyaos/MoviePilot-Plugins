@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from .credentials import Credential, CredentialResolver, cookiecloud_candidate
 from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
-from .sitemodel import SignContext
+from .sitemodel import SignContext, page_available, page_maintenance
 
 
 def decode_response(response):
@@ -104,6 +104,12 @@ def native_context(site, credential, info, lock, cancel):
 
 def run_native(runner, site, info, *, read_only=False, trigger='manual', context_factory=native_context, get_data=None, save_data=None, custom_cookie=''):
     """Same site-level lock as legacy/login; every outcome gets one history entry."""
+    try:
+        from app.runtime.log import logger
+    except Exception:
+        from types import SimpleNamespace
+        logger = SimpleNamespace(info=lambda *a, **k: None)
+
     def finish(result):
         result.site_id, result.run_id = site.id, str(uuid4())
         result.metadata.update(action='sign', trigger=trigger)
@@ -111,6 +117,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
             runner.history(result)
         if runner.notify:
             runner.notify(result)
+        logger.info(f'【PT 签到中心】{getattr(site, 'name', site.id)}（{site.id}）{read_only and "只读核验" or "签到"}结果：{getattr(result.status, 'value', result.status)} | {result.message}')
         return result
 
     if getattr(site, 'signin_capable', True) is False:
@@ -141,10 +148,17 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                 ctx.http.session = session
             ctx.get_data, ctx.save_data = get_data, save_data
             if read_only:
-                page = ctx.http.get(urljoin(site.url, site.attendance_path))
+                try:
+                    page = ctx.http.get(urljoin(site.url, site.attendance_path))
+                except Exception:
+                    return finish(SignResult(SignStatus.NETWORK_ERROR, '签到页面不可达：请求异常'))
+                if page_maintenance(page):
+                    return finish(SignResult(SignStatus.MAINTENANCE, "维护中/已关闭"))
                 login = site.parse_login(page)
                 if login.status == 'auth_failed':
                     result = ctx.result(status='auth_failed', message=login.message)
+                elif not page_available(page):
+                    result = SignResult(SignStatus.NETWORK_ERROR, '签到页面不可达')
                 else:
                     result = site.read_before(ctx, page)
             else:
@@ -177,11 +191,18 @@ def read_login_twice(fetch_page, site, uid=""):
 
 
 def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', credential_check=None):
+    try:
+        from app.runtime.log import logger
+    except Exception:
+        from types import SimpleNamespace
+        logger = SimpleNamespace(info=lambda *a, **k: None)
+
     def finish(result):
         result.site_id, result.run_id = site.id, str(uuid4())
         result.metadata.update(action='login', trigger=trigger)
         if runner.history:
             runner.history(result)
+        logger.info(f'【PT 签到中心】{getattr(site, 'name', site.id)}（{site.id}）模拟登录结果：{getattr(result.status, 'value', result.status)} | {result.message}')
         return result
 
     with runner.locks.acquire((site.id, '')) as acquired:

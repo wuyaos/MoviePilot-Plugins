@@ -33,12 +33,6 @@ class CustomNexusSignin(NexusSignin):
         tree = html.fromstring(page.text)
         return not tree.xpath('//input[@name="imagehash" or @name="imagestring" or @name="captcha"]')
 
-    def signin(self, ctx):
-        result = super().signin(ctx)
-        if result.message == '未发现唯一签到表单':
-            return SignResult.skipped('custom_signin_pending')
-        return result
-
 
 class BrowserlessReadHttpSubmit:
     """One isolated browser context; the POST response is never attendance evidence."""
@@ -86,6 +80,11 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
     config = config or {}
 
     def finish(result):
+        try:
+            from app.runtime.log import logger
+        except Exception:
+            from types import SimpleNamespace
+            logger = SimpleNamespace(info=lambda *a, **k: None)
         result.site_id, result.run_id = site_id, str(uuid4())
         result.metadata.update(action='login' if read_only else action, trigger=trigger)
         if info.get('emulate'):

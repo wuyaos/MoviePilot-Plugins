@@ -28,7 +28,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.15.0"
+    plugin_version = "3.22.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -193,8 +193,8 @@ class AutoPtCheckin(_PluginBase):
     def _site_results(self):
         latest = {}
         for item in self._history.list(1, 100)['items']:
-            if item.get('action', 'sign') == 'sign':
-                latest.setdefault(item['site'], item)
+            # 签到与模拟登录都进入站点最新状态（列表按时间倒序，首个即最新）
+            latest.setdefault(item['site'], item)
         enabled = self._config.get('enabled_sites', [])
         rows = []
         for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']:
@@ -204,7 +204,7 @@ class AutoPtCheckin(_PluginBase):
             record = latest.get(sid, {})
             active = sid in enabled
             rows.append({**site, **record, 'id': sid,
-                'status': record.get('status', 'unconfirmed') if active else 'disabled',
+                'status': record.get('status', 'off') if active else 'disabled',
                 'uid': record.get('evidence', {}).get('uid', ''),
                 'sign_selected': sid in self._config.get('sign_sites', []),
                 'login_selected': sid in self._config.get('login_sites', []),
@@ -213,8 +213,26 @@ class AutoPtCheckin(_PluginBase):
                 'can_verify': active and site.get('pilot_enabled', False)})
         return rows
 
+    def _signed_today(self, site_id):
+        """今日已有 success/already/signed 签到记录则跳过，避免重复执行。"""
+        try:
+            records = self.get_data('history.records') or []
+            today = datetime.now().strftime('%Y-%m-%d')
+            for r in records:
+                if (str(r.get('site')) == str(site_id) and r.get('action', 'sign') == 'sign'
+                        and str(r.get('time') or '').startswith(today)
+                        and r.get('status') in ('success', 'already', 'signed')):
+                    return True
+        except Exception:
+            pass
+        return False
+
     def _execute_site(self, site_id, read_only=False, trigger="manual", action="sign"):
         registry = {site['id']: site for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
+        if action == 'sign' and not read_only and self._config.get('skip_signed_today', True) and self._signed_today(site_id):
+            from app.runtime.log import logger
+            logger.info(f'【PT 签到中心】{site_id} 今日已签，跳过')
+            return {'status': 'skipped', 'message': '今日已签，跳过', 'site_id': site_id}
         custom = next((item for item in self._config.get('custom_sites_data', [])
                        if isinstance(item, dict) and str(item.get('id')) == str(site_id)), None)
         if custom is not None or str(site_id).isdigit() or str(site_id).startswith(('600', 'custom-')):

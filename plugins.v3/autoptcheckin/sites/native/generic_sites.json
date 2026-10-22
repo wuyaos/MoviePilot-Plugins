@@ -21,7 +21,11 @@
     "id": "audiences",
     "name": "观众",
     "url": "https://audiences.me/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "message": "//h2[contains(concat(\" \",normalize-space(@class),\" \"),\" attendance-card__title \")]",
+    "status_map": {
+      "今天已签到": "signed"
+    }
   },
   {
     "id": "bilibili",
@@ -69,7 +73,13 @@
     "id": "discfan",
     "name": "蝶粉",
     "url": "https://discfan.net/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signed_marker": "//a[@href=\"attendance.php\" and (contains(.,\"签到已得\") or contains(.,\"簽到已得\"))]",
+    "message": "//h2[normalize-space(.)=\"签到成功\" or normalize-space(.)=\"簽到成功\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed"
+    }
   },
   {
     "id": "dragonhd",
@@ -219,7 +229,8 @@
     "id": "pt_0ff",
     "name": "自由农场",
     "url": "https://pt.0ff.cc/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signin_capable": false
   },
   {
     "id": "pt_aling",
@@ -291,7 +302,13 @@
     "id": "ptfans",
     "name": "PTFans",
     "url": "https://ptfans.cc/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signed_marker": "//a[@href=\"attendance.php\" and (contains(.,\"签到已得\") or contains(.,\"簽到已得\"))]",
+    "message": "//h2[normalize-space(.)=\"签到成功\" or normalize-space(.)=\"簽到成功\"]",
+    "status_map": {
+      "签到成功": "signed",
+      "簽到成功": "signed"
+    }
   },
   {
     "id": "pthome",
@@ -464,7 +481,8 @@
       "今日已签到": "signed",
       "未签到": "unsigned"
     },
-    "captcha": true
+    "captcha": true,
+    "signed_marker": "//a[@href=\"attendance.php\" and (contains(.,\"签到已得\") or contains(.,\"簽到已得\"))]"
   },
   {
     "id": "dongying",
@@ -620,7 +638,8 @@
       "今日已签到": "signed",
       "未签到": "unsigned"
     },
-    "captcha": true
+    "captcha": true,
+    "signin_capable": false
   },
   {
     "id": "playlet",
@@ -698,7 +717,8 @@
       "今日已签到": "signed",
       "未签到": "unsigned"
     },
-    "captcha": true
+    "captcha": true,
+    "signed_marker": "//a[@href=\"attendance.php\" and (contains(.,\"签到已得\") or contains(.,\"簽到已得\"))]"
   },
   {
     "id": "hdupt",
@@ -726,8 +746,16 @@
       "未签到": "unsigned"
     },
     "action_get": "/attendance.php",
-    "safe_read_path": "/",
-    "referer": true
+    "safe_read_path": "/attendance.php",
+    "referer": true,
+    "signed_marker": "//*[contains(concat(' ', normalize-space(@class), ' '), ' register-now-info ')]",
+    "record_spec": {
+      "message": "//*[contains(concat(' ', normalize-space(@class), ' '), ' register-now-info ')]",
+      "status_map": {
+        "本次签到获得": "signed",
+        "这是您的第": "signed"
+      }
+    }
   },
   {
     "id": "hdcity",
@@ -755,30 +783,6 @@
     },
     "action_get": "/signin.php",
     "safe_read_path": "/index.php"
-  },
-  {
-    "id": "pttime",
-    "name": "PTTime",
-    "url": "https://www.pttime.org/",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
-    "status_map": {
-      "签到成功": "signed",
-      "已签到": "signed",
-      "无需再签": "signed",
-      "未签到": "unsigned"
-    },
-    "action_get": "/attendance.php",
-    "safe_read_path": "/"
-  },
-  {
-    "id": "btschool",
-    "name": "BTSchool",
-    "url": "https://pt.btschool.club/",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
-    "status_map": {},
-    "use_default_message": false,
-    "action_get": "/index.php?action=addbonus",
-    "safe_read_path": "/"
   },
   {
     "id": "hdarea",

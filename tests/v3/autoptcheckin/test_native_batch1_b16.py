@@ -15,13 +15,13 @@ from autoptcheckin.core.sitemodel import RecordSpec, SignContext
 from autoptcheckin.sites.native.opencd import OpenCD
 from autoptcheckin.sites.native.pterclub import PTerClub
 from autoptcheckin.sites.native.generic import GenericPhoenixpt as PhoenixPT
-from autoptcheckin.sites.native.generic import GenericPttime as PTTime
+from autoptcheckin.sites.native.pttime import PTTime
 from autoptcheckin.sites.native.retrotoon import RetroToon
 from autoptcheckin.sites.native.siqi import SiQi
 from autoptcheckin.sites.native.hdchina import HDChina
 from autoptcheckin.sites.native.generic import GenericHdupt as HDUpt
 from autoptcheckin.sites.native.generic import GenericHaidan as HaiDan
-from autoptcheckin.sites.native.generic import GenericBtschool as BTSchool
+from autoptcheckin.sites.native.btschool import BTSchool
 
 NEW = [OpenCD, PTerClub, PhoenixPT, PTTime, RetroToon, SiQi]
 JSON_SITES = [(OpenCD, "state", "success"), (PTerClub, "status", "1"),
@@ -37,7 +37,7 @@ class Http:
         self.calls = []
         self.error = error
 
-    def get(self, url):
+    def get(self, url, **kwargs):
         self.calls.append(("get", url))
         return LoginPage(next(self.pages), url)
 
@@ -70,7 +70,7 @@ def test_response_json_exact_receipt_not_homepage(cls, field, value):
         assert ctx.read_record(LoginPage(json.dumps(data), site.url), site.record_spec).status == "unconfirmed"
     for text in ["broken JSON", '<p>success</p>', payload]:
         http = Http([text])
-        assert site.signin(context(site, http)).status == "unconfirmed"
+        assert site.signin(context(site, http)).status == ("protocol_pending" if cls in (OpenCD, HDChina) else "unconfirmed")
         assert http.calls[0] == ("get", urljoin(site.url, site.attendance_path))
 
 
@@ -83,15 +83,15 @@ def test_response_json_exact_receipt_not_homepage(cls, field, value):
 def test_audited_pre_read_positive_marker(cls, markup):
     site = cls()
     http = Http([markup])
-    assert site.signin(context(site, http)).status == "already"
-    assert len(http.calls) == 1
+    assert site.signin(context(site, http)).status == ("skipped" if cls is PhoenixPT else "already")
+    assert len(http.calls) == (0 if cls is PhoenixPT else 1)
     for text in ['<main>已签到 show-log yiqiandao success</main>', '<main>unknown</main>']:
         http = Http([text])
-        assert site.signin(context(site, http)).status == "unconfirmed"
+        assert site.signin(context(site, http)).status == ("protocol_pending" if cls in (OpenCD, HDChina) else "unconfirmed")
         assert len(http.calls) == (3 if cls in (HDUpt, HaiDan) else 2 if cls is OpenCD else 1)
 
 
-@pytest.mark.parametrize("cls", [PhoenixPT, PTTime, SiQi])
+@pytest.mark.parametrize("cls", [PhoenixPT, SiQi])
 def test_new_message_three_states(cls):
     site = cls()
     signed = next(k for k, v in site.record_spec.status_map.items() if v == "signed")
@@ -99,8 +99,8 @@ def test_new_message_three_states(cls):
         ctx = context(site, Http([]))
         assert ctx.read_record(LoginPage(message(text), site.url), site.message_spec()).status == state
     http = Http([message(signed)])
-    assert site.signin(context(site, http)).status == "already"
-    assert len(http.calls) == 1
+    assert site.signin(context(site, http)).status == ("skipped" if cls is PhoenixPT else "already")
+    assert len(http.calls) == (0 if cls is PhoenixPT else 1)
 
 
 def reward(text):
@@ -110,7 +110,7 @@ def reward(text):
 def claim(csrf=True):
     return ('<form action="/attendance.php" method="post">'
             + ('<input name="csrf_token" value="fixture-csrf">' if csrf else '')
-            + '<button name="claim" value="yes">Claim</button></form>')
+            + '<input type="submit" name="claim" value="yes"></form>')
 
 
 @pytest.mark.parametrize("error", [False, True])
@@ -126,20 +126,22 @@ def test_retrotoon_three_states_and_unconditional_readback(error):
     assert site.signin(context(site, http)).status == "unconfirmed"
     assert [x[0] for x in http.calls] == ["get", "post", "get"]
     http = Http([claim(False)])
-    assert site.signin(context(site, http)).status == "unconfirmed"
+    assert site.signin(context(site, http)).status == 'protocol_pending'
     assert len(http.calls) == 1
 
 
 @pytest.mark.parametrize("cls", [OpenCD, PTerClub, PTTime, BTSchool, HDUpt, HDChina, HaiDan])
 def test_action_endpoints_never_used_for_pre_read(cls):
     site = cls()
-    assert site.attendance_path in {"/", "/index.php"}
+    assert site.attendance_path in {"/", "/index.php", "/attendance.php?type=list"}
     http = Http(["<main>unknown</main>"])
-    assert site.signin(context(site, http)).status == "unconfirmed"
+    assert site.signin(context(site, http)).status == ("protocol_pending" if cls in (OpenCD, HDChina, BTSchool) else "unconfirmed")
     safe = ("get", urljoin(site.url, site.attendance_path))
     assert http.calls[0] == safe
     if cls is OpenCD:
         assert http.calls == [safe, ("get", site.url + "plugin_sign-in.php")]
+    elif cls is BTSchool:
+        assert http.calls == [safe]
     elif getattr(site, "action_path", ""):
         assert http.calls == [safe, ("get", urljoin(site.url, site.action_path)), safe]
     else:

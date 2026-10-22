@@ -11,7 +11,9 @@ class SignStatus(StrEnum):
     SKIPPED = "skipped"
     CANCELLED = "cancelled"
     AUTH_FAILED = "auth_failed"
+    MAINTENANCE = "maintenance"
     NETWORK_ERROR = "network_error"
+    PROTOCOL_PENDING = "protocol_pending"
 
 class LoginStatus(StrEnum):
     LOGIN_OK = "login_ok"

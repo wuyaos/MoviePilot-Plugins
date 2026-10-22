@@ -113,7 +113,7 @@ def test_zhuque_skill_receipt_exact_status_not_homepage():
         payload = json.dumps({'status': value, 'data': {'code': 'FIRE_GENSHIN_CHARACTER_MAGIC_SUCCESS', 'bonus': 0}})
         assert context(site, Http()).read_record(LoginPage(payload, site.url), site.record_spec).status == state
         http = Http([payload])
-        assert site.signin(context(site, http)).status == 'unconfirmed'
+        assert site.signin(context(site, http)).status == 'protocol_pending'
         assert http.calls == [('get', site.url)]
 
 
@@ -154,7 +154,7 @@ def test_new_sites_registry_and_hook_gates(monkeypatch, read_only, verified):
 def test_side_effect_endpoints_not_used_for_pre_read(site_id):
     site = get_native_module(site_id)
     http = Http(['<main>unknown</main>'])
-    assert site.signin(context(site, http)).status == 'unconfirmed'
+    assert site.signin(context(site, http)).status == ('protocol_pending' if site_id in {'ttg', 'zhuque', 'yzyy'} else 'unconfirmed')
     safe = ('get', urljoin(site.url, site.attendance_path))
     assert http.calls == ([safe, ('get', site.url + 'api/consumer/checkIn'), safe] if site_id == 'yema' else [safe])
     assert site.attendance_path in {'/', '/plugin.php?id=zqlj_sign'}

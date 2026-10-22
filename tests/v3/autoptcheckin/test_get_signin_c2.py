@@ -1,6 +1,8 @@
 """C2 synthetic fixtures: action receipts never substitute for safe fresh pages."""
 import sys
 from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from urllib.parse import urljoin
 from unittest.mock import Mock
 
@@ -13,7 +15,7 @@ from autoptcheckin.core.native import NativeHttpClient
 from autoptcheckin.core.registry import get_native_module, discover_sites
 from autoptcheckin.core.sitemodel import SignContext
 
-IDS = 'btschool haidan hdcity hdupt hhanclub pttime lajidui siqi'.split()
+IDS = 'btschool haidan hdcity hdupt pttime lajidui siqi'.split()  # hhanclub 单列 test_generic_behavior_d1
 OCR_IDS = {'lajidui', 'siqi'}
 
 
@@ -22,12 +24,19 @@ def message(text):
 
 
 def signed(sid):
+    if sid == 'btschool':
+        return '<a href="userdetails.php?id=42">Fixture</a><a href="logout.php">退出</a>'
+    if sid == 'pttime':
+        today = datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y%m%d')
+        return f'<span class="ml10">签到日：{today}</span>'
     return {'haidan': '<input value="已经打卡">', 'hdupt': '<span id="yiqiandao"></span>',
             'siqi': '<div class="notice attend-success-effect active"></div>',
-            'hdcity': message('Already checked in today'), 'btschool': '<main>签到成功</main>'}.get(sid, message('已经签到' if sid == 'hhanclub' else '签到成功'))
+            'hdcity': message('Already checked in today'), 'btschool': '<main>签到成功</main>'}.get(sid, message('签到成功'))
 
 
 def before(sid):
+    if sid == 'btschool':
+        return signed(sid) + '<a href="index.php?action=addbonus">每日签到</a>'
     if sid not in OCR_IDS:
         return '<main>每日签到</main>'
     return ('<form method="post" action="attendance.php"><input name="imagehash" value="fixture">'
@@ -77,7 +86,7 @@ def test_c2_three_state_readback(sid, state):
     fresh = signed(sid) if state == 'signed' else message('未签到') if state == 'unsigned' else '<main>签到成功</main>'
     http = Http(site, fresh)
     result = site.signin(context(site, http))
-    expected = 'success' if state == 'signed' and sid != 'btschool' else 'failed' if state == 'unsigned' and sid not in {'btschool', 'haidan'} else 'unconfirmed'
+    expected = 'success' if state == 'signed' else 'failed' if state == 'unsigned' and sid not in {'btschool', 'haidan', 'pttime'} else 'unconfirmed'
     assert result.status == expected
     assert len(actions(http)) == 1 and http.reads == 2
     assert http.calls[0][1] == http.calls[-1][1] == urljoin(site.url, site.attendance_path)
@@ -92,8 +101,8 @@ def test_c2_already_never_repeats_action_except_unconfirmable_btschool(sid):
     site = get_native_module(sid)
     http = Http(site, signed(sid), initial=signed(sid))
     result = site.signin(context(site, http))
-    assert result.status == ('unconfirmed' if sid == 'btschool' else 'already')
-    assert len(actions(http)) == (1 if sid == 'btschool' else 0)
+    assert result.status == 'already'
+    assert len(actions(http)) == 0
 
 
 @pytest.mark.parametrize('sid', IDS)
@@ -102,7 +111,7 @@ def test_c2_action_exception_still_reads_once(sid, fresh):
     site = get_native_module(sid)
     http = Http(site, signed(sid) if fresh == 'signed' else TimeoutError() if fresh == 'timeout' else '<body>签到成功</body>', action_error=True)
     result = site.signin(context(site, http))
-    assert result.status == ('success' if fresh == 'signed' and sid != 'btschool' else 'unconfirmed')
+    assert result.status == ('success' if fresh == 'signed' else 'unconfirmed')
     assert len(actions(http)) == 1 and http.reads == 2
 
 
@@ -110,7 +119,7 @@ def test_c2_action_exception_still_reads_once(sid, fresh):
 def test_c2_cancel_and_unavailable_pre_read_never_submit(sid):
     site = get_native_module(sid)
     http = Http(site, signed(sid), initial=TimeoutError())
-    assert site.signin(context(site, http)).status == 'unconfirmed'
+    assert site.signin(context(site, http)).status == 'network_error'
     assert not actions(http)
     ctx = context(site, http)
     ctx.cancel.set()
@@ -126,7 +135,7 @@ def test_c2_ocr_limits_fallback_and_no_retry(sid, codes, expected):
     result = site.signin(context(site, http, ocr))
     submitted = sid == 'siqi' if expected is None else expected
     assert len(actions(http)) == int(submitted)
-    assert result.status == ('success' if submitted else 'unconfirmed')
+    assert result.status == ('success' if submitted else 'protocol_pending')
     for call in ocr.call_args_list:
         assert call.kwargs['max_len'] == (None if sid == 'siqi' else 6)
         assert call.kwargs['referer'] == site.url + 'attendance.php'

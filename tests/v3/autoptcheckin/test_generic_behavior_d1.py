@@ -16,7 +16,7 @@ import test_get_signin_c2 as c2
 import test_post_api_signin_c34 as c34
 
 CAPTCHA = c1.IDS
-GET = 'btschool haidan hdcity hdupt hhanclub pttime'.split()
+GET = 'haidan hdcity hdupt'.split()  # hhanclub 动作页即结果页，单列
 POST = ['hdarea', 'nexushd']
 
 
@@ -50,6 +50,24 @@ def test_generic_get_three_states(sid, state):
     assert http.calls[0][1] == http.calls[-1][1]
     if sid == 'hhanclub':
         assert c2.actions(http)[0][2] == site.url
+
+
+@pytest.mark.parametrize('state', ['already', 'success', 'unconfirmed'])
+def test_hhanclub_visit_signin(state):
+    """Same URL for pre-read, action and readback: fixtures follow call order."""
+    site = get_native_module('hhanclub')
+    signed = '<p class="register-now-info register-info">已连续签到142天，本次签到获得715个憨豆。</p>'
+    unsigned = '<main>今日可签到</main>'
+    pages = [signed] if state == 'already' else [unsigned, signed, signed if state == 'success' else unsigned]
+    http = Mock()
+    from autoptcheckin.core.models import LoginPage
+    http.get.side_effect = [LoginPage(text, site.url + 'attendance.php') for text in pages]
+    assert site.signin(c2.context(site, http)).status == state
+    assert http.get.call_count == (1 if state == 'already' else 3)
+    assert all(call.args == (site.url + 'attendance.php',) for call in http.get.call_args_list)
+    if state != 'already':
+        assert http.get.call_args_list[1].kwargs == {'referer': site.url}
+    http.post.assert_not_called()
 
 
 @pytest.mark.parametrize('sid', POST)
