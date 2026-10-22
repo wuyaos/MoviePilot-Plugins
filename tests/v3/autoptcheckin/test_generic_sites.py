@@ -16,9 +16,9 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 60
-    assert len({row['id'] for row in rows}) == 60
-    assert len({row['url'] for row in rows}) == 60
+    assert len(rows) == 65
+    assert len({row['id'] for row in rows}) == 65
+    assert len({row['url'] for row in rows}) == 65
     assert all(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows)
     assert all(row['attendance_path'] == '/attendance.php' for row in rows)
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'jpopsuki', 'nebulance', 'filelist', 'iptorrents'} & {row['id'] for row in rows}
@@ -29,7 +29,7 @@ def test_generic_dynamic_registry_and_default_message_chain():
     native = [row for row in rows if row['native']]
     # Baseline includes GTK and LP-Bits in addition to the original 46 declarations.
     baseline = len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2
-    assert len(native) == baseline + 60
+    assert len(native) == 108  # 43 dedicated + 65 generic declarations
     assert len({row['id'] for row in rows}) == len(rows)
     for cls in generic.build_generic_sites():
         row = next(row for row in rows if row['id'] == cls.id)

@@ -92,9 +92,12 @@ def discover_sites(package_name: str | None = None) -> dict:
                 skipped.append({'module': module_name, 'error': type(exc).__name__})
     for item in sites:
         item['signin_capable'] = item['id'] not in ('darkland', 'digitalcore')
-        # 签到不适用：登录专用站、mteam（保活语义，hook 未实现且无签到流程）
-        item['signin_applicable'] = item['signin_capable'] and item['id'] != 'mteam' and (
+        # 签到不适用：登录专用站、mteam（保活语义）、答题类（52pt/chdbits/tjupt，误答风险不建议启用）
+        quiz = {'52pt', 'chdbits', 'tjupt'}
+        item['signin_applicable'] = item['signin_capable'] and item['id'] != 'mteam' and item['id'] not in quiz and (
             not item.get('native') or item.get('hook_implemented', True) or item.get('verified', False))
+        if item['id'] in quiz:
+            item['signin_note'] = '答题类签到不建议使用（误答有账号风险），仅保留模拟登录'
         item['pilot_enabled'] = (item['verified'] and item.get('hook_implemented', True)) if item['native'] else item['id'] in ('hdsky', 'haitang')
     for item in skipped:
         logging.getLogger(__name__).warning("跳过站点适配器 %s (%s)", item["module"], item["error"])

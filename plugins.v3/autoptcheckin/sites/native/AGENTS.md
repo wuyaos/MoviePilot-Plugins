@@ -178,7 +178,7 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 - 52pt/chdbits 共用 BakatestSignin：唯一问答表单、questionid、随机 choice[]、V2 usercomment/wantskip，单次 POST 后无条件回读；数字点魔力值仅作奖励展示，状态仍依赖新页 scoped 消息。生产消息节点仍占位，不把整页奖励正则冒充状态。
 - yzyy：只接受唯一 .signbtn 下同源 plugin.php 的动态 sign token；执行边界在站点锁内创建 Session，finally 关闭，刷新 Cookie 同步到执行级字典；动作异常仍回读按钮文本与 tb_my 本人行，UID 来自 um 导航，冲突保持未确认，不使用动作响应兜底。
 - 本批已实现但 record_spec 仍含合成节点的24站：baozi、dongying、kelu、naturept、novahd、oshen、phoenixpt、playlet、shaobaoyuan、soulvoice、tu88、vclib、btschool、hdcity、hdupt、hhanclub、pttime、lajidui、siqi、hdarea、nexushd、ttg、52pt、chdbits。其中 hdupt/siqi/ttg 另有已签 marker；BTSchool 空映射不能确认成功。其余消息节点、表单及 CAPTCHA 仍待真实采样校准。
-- 非占位的 haidan、u2、tjupt、yzyy 仍需生产页面/本人行/时段/图片问答核验；hares、hdchina、opencd、pterclub、zhuque、yema 仍需真实 JSON 类型/值、CSRF/OCR/Cookie 与安全页核验。无合成节点不代表生产 verified。
+- 非占位的 haidan、u2、tjupt、yzyy 仍需生产页面/本人行/时段/图片问答核验；hdchina、opencd、pterclub、zhuque、yema（hares 站点已关闭，2026-10-22 移除） 仍需真实 JSON 类型/值、CSRF/OCR/Cookie 与安全页核验。无合成节点不代表生产 verified。
 - 非本批普通声明站 agsvpt、dstudio、hdbao、luckpt、muxuege、ptzone 也仍有合成 record_spec；不适用站 darkland/digitalcore/mteam 的空占位不属于签到校准任务。全部非试点 verified 保持 False；未发送真实请求，未改 dist，版本收尾不开放执行。
 
 ## 批次 2 校准实测（2026-10-21，本地 MP + qnap Cookie）
@@ -207,3 +207,8 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 - 明确别名 pterclub.net→pterclub、kp.m-team.cc→mteam，禁止生成重复通用类；darkland/digitalcore/mteam 排除。custom 数字 ID 的 name/url/id 已由 registry 原样输出。
 - 排除清单（27域，缺 c_secure_pass 证据，批次3+另行处理登录）：FileList (`https://filelist.io/`)、海豚 (`https://dicmusic.com/`)、Anthelion (`https://anthelion.me/`)、JPopsuki (`https://jpopsuki.eu/`)、Nebulance (`https://nebulance.io/`)、青蛙 (`https://www.qingwapt.com/`)、星空 (`https://star-space.net/`)、Aither (`https://aither.cc/`)、猪猪 (`https://piggo.me/`)、我堡 (`https://ourbits.club/`)、春天 (`https://springsunday.net/`)、BeyondHD (`https://beyond-hd.me/`)、龟站 (`https://kamept.com/`)、海豹 (`https://greatposterwall.com/`)、天雪 (`https://skyeysnow.com/`)、AnimeZ (`https://animez.to/`)、梓喵 (`https://azusa.wiki/`)、莫妮卡 (`https://monikadesign.uk/`)、IPT (`https://iptorrents.com/`)、HD-Space (`https://hd-space.org`)、AsianCinema (`https://eiga.moi`)、bitporn (`https://bitporn.eu`)、NordicQuality (`https://nordicq.org`)、bakabt (`https://bakabt.me`)、seedpool (`https://seedpool.org`)、clearjav (`https://clearjav.com`)、dreadvault (`https://dreadvault.org`)。
 - 遗留：通用站逐站核验实际表单/消息与验证码差异；不以 Cookie 名存在替代生产签到验证，不自动开启 verified。
+
+## 答题类站点说明（2026-10-22）
+- 52pt/chdbits/tjupt 为答题类签到（随机问答/豆瓣图片），误答有账号风险，**不建议启用答题功能**；registry signin_applicable=False，仅保留模拟登录。
+- u2 为随机图片选项（非知识问答），保留签到能力。BakatestSignin 为 52pt/chdbits 共用的 bakatest.php 随机问答实现。
+- hares 站点已关闭，native 模块与声明移除（旧桥副本保留）。

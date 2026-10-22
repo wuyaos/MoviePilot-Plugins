@@ -182,9 +182,9 @@ def test_yzyy_identity_conflict_does_not_submit():
 
 def test_c7_inventory_all_b18_ids_are_accounted_for():
     from autoptcheckin.core.registry import discover_sites
-    ids = set('52pt chdbits baozi dongying kelu naturept novahd oshen phoenixpt playlet shaobaoyuan soulvoice tu88 vclib lajidui siqi btschool haidan hdarea hdcity hdupt hhanclub nexushd pttime tjupt ttg u2 yzyy darkland digitalcore mteam yema hares hdchina opencd pterclub zhuque'.split())
+    ids = set('52pt chdbits baozi dongying kelu naturept novahd oshen phoenixpt playlet shaobaoyuan soulvoice tu88 vclib lajidui siqi btschool haidan hdarea hdcity hdupt hhanclub nexushd pttime tjupt ttg u2 yzyy darkland digitalcore mteam yema hdchina opencd pterclub zhuque'.split())
     rows = {row['id']: row for row in discover_sites()['sites']}
-    assert len(ids) == 37 and ids <= rows.keys()
+    assert len(ids) == 36 and ids <= rows.keys()
     for site_id in ids:
         assert rows[site_id]['hook_implemented'] is (site_id != 'mteam')
         assert rows[site_id]['verified'] is False

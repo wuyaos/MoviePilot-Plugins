@@ -11,7 +11,6 @@ from autoptcheckin.core.sitemodel import SignContext
 from autoptcheckin.sites.native.dongying import Dongying
 from autoptcheckin.sites.native.dstudio import DStudio
 from autoptcheckin.sites.native.haidan import HaiDan
-from autoptcheckin.sites.native.hares import Hares
 from autoptcheckin.sites.native.hdarea import HDArea
 
 

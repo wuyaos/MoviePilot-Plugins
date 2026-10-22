@@ -15,9 +15,9 @@ from autoptcheckin.core.registry import get_native_module, discover_sites
 from autoptcheckin.core.sitemodel import RecordSpec, SignContext
 from autoptcheckin.core.native import NativeHttpClient
 
-IDS = 'hdarea nexushd ttg u2 hares hdchina opencd pterclub zhuque yema'.split()
-API = 'hares hdchina opencd pterclub zhuque yema'.split()
-RECEIPTS = dict(hares={'code': 0}, hdchina={'state': 'success'}, opencd={'state': 'success'},
+IDS = 'hdarea nexushd ttg u2 hdchina opencd pterclub zhuque yema'.split()
+API = 'hdchina opencd pterclub zhuque yema'.split()
+RECEIPTS = dict(hdchina={'state': 'success'}, opencd={'state': 'success'},
                 pterclub={'status': '1'}, zhuque={'status': 200, 'data': {'bonus': 0}}, yema={'success': True})
 
 

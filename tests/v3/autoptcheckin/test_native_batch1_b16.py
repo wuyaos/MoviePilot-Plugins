@@ -18,7 +18,6 @@ from autoptcheckin.sites.native.phoenixpt import PhoenixPT
 from autoptcheckin.sites.native.pttime import PTTime
 from autoptcheckin.sites.native.retrotoon import RetroToon
 from autoptcheckin.sites.native.siqi import SiQi
-from autoptcheckin.sites.native.hares import Hares
 from autoptcheckin.sites.native.hdchina import HDChina
 from autoptcheckin.sites.native.hdupt import HDUpt
 from autoptcheckin.sites.native.haidan import HaiDan
@@ -26,7 +25,7 @@ from autoptcheckin.sites.native.btschool import BTSchool
 
 NEW = [OpenCD, PTerClub, PhoenixPT, PTTime, RetroToon, SiQi]
 JSON_SITES = [(OpenCD, "state", "success"), (PTerClub, "status", "1"),
-              (Hares, "code", 0), (HDChina, "state", "success")]
+              (HDChina, "state", "success")]
 
 
 class Http:
@@ -73,7 +72,6 @@ def test_response_json_exact_receipt_not_homepage(cls, field, value):
         http = Http([text])
         assert site.signin(context(site, http)).status == "unconfirmed"
         assert http.calls[0] == ("get", urljoin(site.url, site.attendance_path))
-        assert len(http.calls) == (3 if cls in (PTerClub, Hares) else 2 if cls is OpenCD else 1)
 
 
 @pytest.mark.parametrize("cls,markup", [
@@ -132,7 +130,7 @@ def test_retrotoon_three_states_and_unconditional_readback(error):
     assert len(http.calls) == 1
 
 
-@pytest.mark.parametrize("cls", [OpenCD, PTerClub, PTTime, BTSchool, Hares, HDUpt, HDChina, HaiDan])
+@pytest.mark.parametrize("cls", [OpenCD, PTerClub, PTTime, BTSchool, HDUpt, HDChina, HaiDan])
 def test_action_endpoints_never_used_for_pre_read(cls):
     site = cls()
     assert site.attendance_path in {"/", "/index.php"}

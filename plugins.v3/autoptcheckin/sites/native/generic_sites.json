@@ -358,5 +358,35 @@
     "name": "织梦",
     "url": "https://zmpt.cc/",
     "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "hdwing",
+    "name": "HDWing",
+    "url": "https://hdwing.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "nexushd",
+    "name": "NexusHD",
+    "url": "https://nexushd.org/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "shaobaoyuan",
+    "name": "烧包乐园",
+    "url": "https://ptsbao.club/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "ptzone",
+    "name": "PTZone",
+    "url": "https://www.ptzone.xyz/",
+    "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "vclib",
+    "name": "VC-Lib",
+    "url": "https://pt.vclib.online/",
+    "attendance_path": "/attendance.php"
   }
 ]
