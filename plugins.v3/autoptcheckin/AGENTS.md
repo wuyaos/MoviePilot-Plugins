@@ -43,7 +43,7 @@
 
 ### 数据页
 - 站点名优先采用适配器 match 命中的 MP 登记名，未匹配保留适配器名；/sites 和 /stats 使用相同映射。图标仅读取 SiteOper.get_icon_by_domain 的 data:image 缓存，不加载远程 URL；配置卡及数据卡显示图标，缺失/加载失败用首字母占位。关闭按钮用 ghost 描边，×/移除 chip 用 danger 描边。
-- 今日总览显示下次调度时间、调度模式/间隔与时段，提供「立即签到 / 只读核验」；其下四张统计卡按「成功 / 已签 / 失败 / 未确认」显示全站最新状态分布（每站最近一次执行结果聚合，success/signed/failed+auth_failed/unconfirmed），不再按今日执行计数；标题为「站点状态总览」。
+- 今日总览显示下次调度时间、调度模式/间隔与时段，提供「立即签到 / 只读核验」；其下统计区为「签到 · 今日」「模拟登录 · 今日」两组并排同一行（窄屏 640px 以下纵向堆叠），每组 3 张统计卡按「成功 / 失败 / 未确认」统计当日有执行的站点（每轨最新记录聚合，success/signed/failed+auth_failed/unconfirmed），不再按今日执行计数；标题为「站点状态总览」。
 - 站点小卡两行紧凑布局：第一行图标+站点名+状态徽标（消息全文放徽标 title），第二行按配置显示单站签到、模拟登录小按钮并恒显只读核验按钮；不展示结果文字行、UID、时间、凭证来源或奖励明细。总览保留只读核验入口；停用/非试点站禁用执行按钮。
 - 卡片区提供成功/已签/失败/未确认/站点不可达/协议待适配/维护中/已关闭/停用筛选 chips，再点选中态恢复全部；认证失败归失败，skipped 沿用停用色归停用；维护、网络及协议状态虽共用 off 中性色，筛选按状态值独立匹配，不按颜色混入停用。切换筛选重置为筛选后前 8 张，空匹配显示独立空态。
 - 桌面三列等宽等高小卡，中屏两列、640px 以下单列；末张不跨列。默认前 8 张，failed/unconfirmed/auth_failed 优先且同优先级保持原顺序；其余用「展开其余 X 个站点」/「收起其余站点」切换，空态单独展示。
@@ -148,7 +148,7 @@
 - `scheduler_enabled` 默认 false，是生产切换门控，不随 S6 的 enabled 迁移；false 时包括 onlyonce 在内均不注册。常规服务另需 enabled=true；未激活时 `/stats.next_schedule=null`，`schedule_status` 解释阶段限制。
 - cron 注册 `AutoSignIn / PT 签到中心`；interval 注册 `AutoSignIn.{index} / PT 签到中心 HH:mm`。服务由宿主拥有，不创建插件后台调度器；stop_service 经 SDK remove_plugin_job 清理，配置 API 保存后 update_plugin_job 重建，宿主保存走宿主重建流程。
 - interval 对齐 V2 `__generate_schedule_crons` + TimerUtils.random_scheduler：次数 max(1, int((end-begin)/interval))，从 begin:00 累加 [max(30,interval*30),interval*60] 随机分钟，最小 interval=0.5，0<=begin<end<=23。schedule_crons/schedule_signature 用 get_data/save_data 保存，signature 相同复用，变化重排；不采用重载重新随机，以免调度漂移。
-- 数据页「立即运行一次」设置 onlyonce 并触发一次性操作；onlyonce 优先只返回 `AutoSignIn.once` DateTrigger（即使 scheduler_enabled=false）；回调先持久化 onlyonce=false 再执行，重载不重复消费。进程在消费写盘后崩溃不自动重试，避免重复签到；失败由人工核验后再决定。
+- 数据页「立即运行一次」设置 onlyonce 并触发一次性操作；onlyonce 优先只返回 `AutoSignIn.once` DateTrigger（即使 scheduler_enabled=false），且 `_scheduled_once` 消费后直接全量执行，不受 scheduler_enabled/常规运行门控限制；回调先持久化 onlyonce=false 再执行，重载不重复消费。进程在消费写盘后崩溃不自动重试，避免重复签到；失败由人工核验后再决定。
 - 调度与 manual_signin 共用全量 runner 路径、试点范围与账号锁，history 增加 trigger=scheduler/manual；不因为启用调度扩大试点。next_schedule 从已声明的真实 Trigger 计算，不从展示配置猜测。
 - 生产激活衔接 S6：备份并停旧插件任务 → preview/execute 配置迁移 → 核对试点 Cookie/UA/UID 和只读回读 → 用户授权手动验证 → 显式保存 scheduler_enabled=true → 核对宿主服务及 next_schedule。回退先关闭门控并确认旧服务移除，再恢复旧插件，禁止两边同时运行。
 

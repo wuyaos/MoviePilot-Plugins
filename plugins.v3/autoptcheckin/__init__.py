@@ -29,7 +29,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.32.0"
+    plugin_version = "3.33.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -279,7 +279,7 @@ class AutoPtCheckin(_PluginBase):
                 'can_signin': sid in enabled and site.get('signin_applicable', False) and sid in self._config.get('sign_sites', []),
                 'can_login': sid in self._config.get('login_sites', []),
                 'can_verify': sid in enabled,
-                'signin_selected': sid in self._config.get('sign_sites', []),
+                'sign_selected': sid in self._config.get('sign_sites', []),
                 'login_selected': sid in self._config.get('login_sites', []),
                 'pilot_enabled': site.get('pilot_enabled', False),
                 '_sign_record': sign, '_login_record': login})
@@ -455,10 +455,17 @@ class AutoPtCheckin(_PluginBase):
         return await self.api_run_once()
 
     def _scheduled_once(self):
+        """一次性执行（立即签到/立即运行一次）不受 scheduler_enabled 门控，直接全量执行。"""
         with self._migration.lock:
             if not self._config.get("onlyonce", False):
                 return
-            return self._scheduled_signin()
+            self._config["onlyonce"] = False
+            if hasattr(self, "update_config"):
+                self.update_config(deepcopy(self._config))
+            self._scheduler.clear()
+        if self._runner.stop.is_set():
+            return
+        return self._execute_all("scheduler")
 
     def _scheduled_signin(self):
         with self._migration.lock:

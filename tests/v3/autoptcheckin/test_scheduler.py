@@ -81,6 +81,16 @@ def test_onlyonce_triggers_without_scheduler_gate():
     once = p.get_service()
     assert len(once) == 1 and 'once' in once[0]['id']
 
+def test_once_executes_without_scheduler_enabled():
+    data = {}
+    p = plugin({'enabled': True, 'onlyonce': True}, data)
+    calls = []
+    p._execute_all = lambda trigger: calls.append((trigger, data['config']['onlyonce']))
+    services = p.get_service()
+    assert [s['id'] for s in services] == ['AutoSignIn.once']
+    services[0]['func']()
+    assert calls == [('scheduler', False)]
+    assert data['config']['onlyonce'] is False
 def test_once_consumed_before_execution_and_reload():
     data = {}
     p = plugin({**BASE, 'enabled': False, 'onlyonce': True}, data)

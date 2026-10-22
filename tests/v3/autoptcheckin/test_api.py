@@ -70,6 +70,17 @@ def test_empty_results_do_not_fabricate_evidence():
     assert run(plugin.api_history())['data']['items'] == []
 
 
+def test_site_tracks_action_selection_keys():
+    """数据页站点卡按钮按 sign_selected/login_selected 渲染，键名与前端一致。"""
+    plugin = Plugin()
+    plugin.init_plugin({'enabled': True, 'enabled_sites': ['hdsky', '52pt'],
+                        'sign_sites': ['hdsky'], 'login_sites': ['52pt']})
+    rows = {row['id']: row for row in run(plugin.api_stats())['data']['sites']}
+    assert rows['hdsky']['sign_selected'] is True and rows['hdsky']['login_selected'] is False
+    assert rows['52pt']['sign_selected'] is False and rows['52pt']['login_selected'] is True
+    assert all('signin_selected' not in row for row in rows.values())
+
+
 def test_frontend_defaults_and_distribution():
     defaults = json.loads((PKG / 'config_defaults.json').read_text(encoding='utf8'))
     assert defaults['enabled_sites'] == []
