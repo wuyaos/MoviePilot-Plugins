@@ -139,6 +139,9 @@ class NexusSignin(SiteModule):
                 return before
             if before.metadata.get('reason') == 'identity_conflict':
                 return before
+            if getattr(self, "protocol_pending", False):
+                return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="滑动验证码协议待适配，未提交",
+                                  evidence=before.evidence)
             form = self.discover_form(ctx, page)
             if form is None:
                 return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="未发现唯一签到表单",

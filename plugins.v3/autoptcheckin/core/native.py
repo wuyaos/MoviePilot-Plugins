@@ -4,6 +4,7 @@ from email.message import Message
 from http.cookies import SimpleCookie
 from uuid import uuid4
 
+from .browserless import BrowserQLClient, native_browser_client
 from .credentials import Credential, CredentialResolver, cookiecloud_candidate
 from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
 from .sitemodel import SignContext, page_available, page_maintenance
@@ -102,7 +103,7 @@ def native_context(site, credential, info, lock, cancel):
                        page=None, ocr=ocr, site_lock=lock, cancel=cancel, public_get=public_get)
 
 
-def run_native(runner, site, info, *, read_only=False, trigger='manual', context_factory=native_context, get_data=None, save_data=None, custom_cookie=''):
+def run_native(runner, site, info, *, read_only=False, trigger='manual', context_factory=native_context, get_data=None, save_data=None, custom_cookie='', config=None):
     """Same site-level lock as legacy/login; every outcome gets one history entry."""
     try:
         from app.runtime.log import logger
@@ -146,6 +147,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                 import requests
                 session = requests.Session()
                 ctx.http.session = session
+            ctx.http = native_browser_client(site, ctx.http, info, config or {})
             ctx.get_data, ctx.save_data = get_data, save_data
             if read_only:
                 try:
@@ -163,6 +165,8 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                     result = site.read_before(ctx, page)
             else:
                 result = site.signin(ctx)
+            if isinstance(ctx.http, BrowserQLClient) and not ctx.http.fallback:
+                result.metadata['transport'] = 'browserql'
         except Exception:
             result = SignResult(SignStatus.UNCONFIRMED, '原生签到执行未确认')
         finally:
@@ -190,7 +194,7 @@ def read_login_twice(fetch_page, site, uid=""):
     return result
 
 
-def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', credential_check=None):
+def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', credential_check=None, config=None):
     try:
         from app.runtime.log import logger
     except Exception:

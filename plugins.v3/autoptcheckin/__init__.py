@@ -28,7 +28,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.22.0"
+    plugin_version = "3.23.1"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -294,12 +294,12 @@ class AutoPtCheckin(_PluginBase):
                     break
             if action == 'login':
                 module = get_native_module(site_id) if site.get('native') else CustomNexusSignin(site_id, {**info, 'url': info.get('url') or ''})
-                result = run_native_login(self._runner, module, info, custom_cookie=custom_cookie, trigger=trigger)
+                result = run_native_login(self._runner, module, info, custom_cookie=custom_cookie, trigger=trigger, config=self._config)
                 return asdict(result)
             result = run_native(self._runner, get_native_module(site_id), info,
                                 read_only=read_only, trigger=trigger,
                                 get_data=getattr(self, "get_data", None), save_data=getattr(self, "save_data", None),
-                                custom_cookie=custom_cookie)
+                                custom_cookie=custom_cookie, config=self._config)
             return asdict(result)
         # Deprecated legacy 分支：仅供 hdsky/haitang 未命中 native 时的 pilot 回退。
         # 非 native 签到/核验分支暂保留；PILOTS 不覆盖排除清单域名，不能视为通用签到实现。

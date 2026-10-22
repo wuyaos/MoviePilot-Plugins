@@ -110,7 +110,7 @@ def test_run_native_consumes_cookiecloud_once(cloud, available):
     seen = []
     def context(site, credential, info, lock, cancel):
         seen.append(credential.source)
-        return SimpleNamespace()
+        return SimpleNamespace(http=SimpleNamespace())
     result = native.run_native(SignRunner(), site, {'url': site.url, 'cookie': 'synthetic-managed'},
                                context_factory=context)
     assert result.status == 'success'

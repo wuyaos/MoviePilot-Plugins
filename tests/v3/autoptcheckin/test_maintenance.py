@@ -78,14 +78,14 @@ def test_post_submit_maintenance_is_still_unconfirmed():
     assert http.get.call_count == 2
 
 
-@pytest.mark.parametrize('site_id', ['phoenixpt', 'pt_0ff'])
+@pytest.mark.parametrize('site_id', ['phoenixpt'])
 def test_closed_sites_registry_signin_not_applicable(site_id):
     row = next(row for row in discover_sites()['sites'] if row['id'] == site_id)
     assert row['signin_applicable'] is False
     assert row['signin_capable'] is False
 
 
-@pytest.mark.parametrize('site_id', ['phoenixpt', 'pt_0ff'])
+@pytest.mark.parametrize('site_id', ['phoenixpt'])
 def test_closed_sites_signin_skips_without_request(site_id):
     obj, http = get_native_module(site_id), Mock()
     assert obj.signin(context(obj, http)).status == SignStatus.SKIPPED

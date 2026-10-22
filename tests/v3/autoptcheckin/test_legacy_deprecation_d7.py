@@ -15,7 +15,7 @@ from autoptcheckin.core.registry import get_registry
 @pytest.mark.parametrize('action,read_only', [('sign', False), ('sign', True), ('login', False)])
 def test_all_native_sites_never_construct_pilot_bridge(monkeypatch, action, read_only):
     rows = [row for row in get_registry()['sites'] if row.get('native')]
-    assert len(rows) == 108
+    assert len(rows) == 109
     monkeypatch.setattr(entry, 'PilotBridge', lambda *args: pytest.fail('native constructed legacy bridge'))
     monkeypatch.setattr(entry, 'managed_site', lambda sid: {})
     run = Mock(return_value=SignResult(SignStatus.UNCONFIRMED, 'offline dispatch'))

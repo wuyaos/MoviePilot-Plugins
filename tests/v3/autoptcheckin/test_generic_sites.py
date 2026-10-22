@@ -16,11 +16,11 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 80
-    assert len({row['id'] for row in rows}) == 80
-    assert len({row['url'] for row in rows}) == 80
+    assert len(rows) == 81
+    assert len({row['id'] for row in rows}) == 81
+    assert len({row['url'] for row in rows}) == 81
     assert all({'id', 'name', 'url'} <= set(row) for row in rows)
-    assert sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows) == 58
+    assert sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows) == 56
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'jpopsuki', 'nebulance', 'filelist', 'iptorrents'} & {row['id'] for row in rows}
 
 
@@ -29,7 +29,7 @@ def test_generic_dynamic_registry_and_default_message_chain():
     native = [row for row in rows if row['native']]
     # Baseline includes GTK and LP-Bits in addition to the original 46 declarations.
     assert len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2 == 29
-    assert len(native) == 108  # 26 unique dedicated IDs + 82 generic declarations
+    assert len(native) == 109  # Includes the newly declared ourbits site.
     assert len({row['id'] for row in rows}) == len(rows)
     for cls in generic.build_generic_sites():
         row = next(row for row in rows if row['id'] == cls.id)

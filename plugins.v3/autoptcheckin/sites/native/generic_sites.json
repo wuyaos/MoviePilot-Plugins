@@ -25,7 +25,8 @@
     "message": "//h2[contains(concat(\" \",normalize-space(@class),\" \"),\" attendance-card__title \")]",
     "status_map": {
       "今天已签到": "signed"
-    }
+    },
+    "browserless": true
   },
   {
     "id": "bilibili",
@@ -133,7 +134,8 @@
     "id": "hdkyl",
     "name": "麒麟",
     "url": "https://www.hdkyl.in/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "browserless": true
   },
   {
     "id": "hdtime",
@@ -187,7 +189,8 @@
     "id": "mua_xloli",
     "name": "萝莉",
     "url": "https://mua.xloli.cc/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "browserless": true
   },
   {
     "id": "musopia",
@@ -230,7 +233,9 @@
     "name": "自由农场",
     "url": "https://pt.0ff.cc/",
     "attendance_path": "/attendance.php",
-    "signin_capable": false
+    "signin_capable": true,
+    "browserless": true,
+    "protocol_pending": true
   },
   {
     "id": "pt_aling",
@@ -455,7 +460,8 @@
       "今日已签到": "signed",
       "未签到": "unsigned"
     },
-    "captcha": true
+    "captcha": true,
+    "browserless": true
   },
   {
     "id": "baozi",
@@ -799,6 +805,21 @@
     "form_path": "/sign_in.php",
     "form_data": {
       "action": "sign_in"
+    }
+  },
+  {
+    "id": "ourbits",
+    "name": "我堡",
+    "url": "https://ourbits.club/",
+    "attendance_path": "/attendance.php",
+    "browserless": true,
+    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
+    "status_map": {
+      "今天已经签到过": "signed",
+      "今天已签到": "signed",
+      "已经签到": "signed",
+      "签到成功": "signed",
+      "未签到": "unsigned"
     }
   }
 ]
