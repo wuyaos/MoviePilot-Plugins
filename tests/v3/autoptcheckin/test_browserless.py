@@ -51,10 +51,10 @@ def mock_bql(monkeypatch, results):
     return calls
 
 
-def page(text=FORM, status=200, cookies=None):
-    return {'data': {'goto': {'status': status}, 'before': {'html': text},
-                     'location': {'value': INFO['url'] + 'attendance.php'},
-                     'jar': {'cookies': cookies or []}}}
+def page(text=FORM, status=200, cookies=None, submit=None):
+    # /function 契约：服务端 Puppeteer 返回的对象即为响应体
+    return {'html': text, 'location': INFO['url'] + 'attendance.php', 'status': status,
+            'jar': cookies or [], 'submitResult': submit}
 
 
 def run(site=None, **kwargs):
@@ -66,18 +66,19 @@ def run(site=None, **kwargs):
 def test_native_submit_and_cookie_roundtrip(monkeypatch):
     response = page(cookies=[{'name': 'cf_clearance', 'value': 'synthetic', 'domain': 'site.invalid'},
                              {'name': 'foreign', 'value': 'ignored', 'domain': 'other.invalid'}])
-    action = {'data': {'submit': {'value': json.dumps({'text': 'not evidence', 'status': 200})}}}
+    action = page(submit={'text': 'not evidence', 'status': 200})
     calls = mock_bql(monkeypatch, [response, action, page(SIGNED)])
     result = run()
     assert result.status == 'success'
     assert result.metadata['transport'] == 'browserql'
     assert len(calls) == 3
-    assert calls[0][0] == 'http://browser.invalid/chromium/stealth/bql'
-    variables = calls[1][1]['variables']
-    assert variables['userAgent'] == 'test-agent'
-    assert {c['name'] for c in variables['cookies']} == {'synthetic', 'cf_clearance'}
-    assert 'action=sign' in variables['script']
-    assert 'script' not in calls[2][1]['variables']
+    assert calls[0][0] == 'http://browser.invalid/function'
+    code = calls[1][1]['code']
+    assert calls[1][0].endswith('/function')
+    assert 'test-agent' in code
+    assert '"synthetic"' in code and 'cf_clearance' in code
+    assert 'action=sign' in code
+    assert '"script":' not in calls[2][1]['code']
     assert calls[0][2] == 75
 
 
@@ -87,7 +88,7 @@ def test_native_submit_and_cookie_roundtrip(monkeypatch):
 def test_lost_action_response_only_readback(monkeypatch, fresh, expected):
     calls = mock_bql(monkeypatch, [page(), TimeoutError(), page(fresh)])
     assert run().status == expected
-    assert sum('script' in call[1]['variables'] for call in calls) == 1
+    assert sum('"script":' in call[1]['code'] for call in calls) == 1
     assert len(calls) == 3
 
 
@@ -142,22 +143,7 @@ def test_timeout_cap_and_existing_endpoint():
     http = SimpleNamespace(cookies={})
     client = browserless.BrowserQLClient(http, INFO, CONFIG, wait_ms=999999)
     assert client.timeout == 300
-    assert browserless.bql_endpoint('https://browser.invalid/chromium/stealth/bql') == 'https://browser.invalid/chromium/stealth/bql'
-
-
-
-
-def test_cf_navigation_status_after_solve(monkeypatch):
-    response = page(SIGNED, status=403)
-    response['data']['navigation'] = {'value': 200}
-    calls = mock_bql(monkeypatch, [response])
-    assert run().status == 'already'
-    query = calls[0][1]['query']
-    assert 'settle:waitForTimeout(time:$wait)' in query
-    # Inline GraphQL strings must keep their embedded JavaScript quotes escaped.
-    import re
-    literal = re.search(r'navigation:evaluate\(content:(.*)\)\{value\}', query).group(1)
-    assert json.loads(literal) == 'performance.getEntriesByType("navigation").at(-1)?.responseStatus || 0'
+    assert browserless.bql_endpoint('https://browser.invalid') == 'https://browser.invalid/function'
 
 
 

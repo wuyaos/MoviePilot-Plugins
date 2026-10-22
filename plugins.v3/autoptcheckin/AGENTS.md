@@ -103,7 +103,7 @@
 - 执行双轨分流：native 站点签到/只读核验走原生模块；模拟登录使用下方独立登录契约，不构造旧桥。旧桥仅保留非 native 签到/核验分支（实际实现限 hdsky/haitang 试点回退，不是排除清单域名的通用签到器）。unlock_all_sites 默认 false，此时 verified、hook_implemented 和旧试点门控生效；显式 true 会绕过这三门，但不改变 verified，也不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到仍不适用；M-Team 模块仍仅返回 skipped。signin_applicable 是 registry 展示的适用性，不等于 verified 或生产授权：排除登录专用站、M-Team，并检查原生 hook/verified；后端不以该展示字段替代执行检查。
 
 ### Native Browserless（3.23.0）
-- 仅 ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema 声明 browserless；必须显式启用 browserless_enabled 并提供 HTTP(S) browserless_url。native 使用 BrowserQL HTTP，不依赖 Playwright/CDP；custom 保留原 Playwright 混合路径。
+- 仅 ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema 声明 browserless；必须显式启用 browserless_enabled 并提供 HTTP(S) browserless_url。native 使用 Browserless /function（服务端 Puppeteer 脚本，v2 开源版无 BQL 端点），不依赖本地 Playwright/CDP；custom 保留原 Playwright 混合路径。模拟登录一律不走 Browserless。
 - 复用 Nexus 前读→协议解析→单次提交→无条件回读，不猜浏览器按钮或新增判定规则。BQL GET 渲染并 solve，POST 在页面内 fetch 原协议；每次请求独立浏览器，Cookie 双向同步只在本次执行内，结果 transport=browserql。未启用、未配置或首次连接失败保持原 HTTP 分类；已开始 BQL 后不重放动作，响应丢失仅按既有 finally 只读回查，证据不足为 unconfirmed。
 - 默认 solve 与页面稳定等待各 15 秒，HTTP 超时为两项等待预算之和加 45 秒，上限 300 秒。Cookie/UA/脚本通过 variables 传入，不记录端点认证参数、请求体或远端错误原文。
 - pt_0ff 前读已签可判 already，否则 protocol_pending，禁止滑块提交；yema 保留禁止签到；模拟登录一律不走 Browserless（用户裁决），BQL 仅服务签到路径。滑块模拟、真实过盾及站点提交效果未验证，需后续授权校准。

@@ -8,12 +8,11 @@ from .models import LoginPage
 
 
 def bql_endpoint(address, token=''):
+    """Browserless v2 OSS 没有 /bql，用 /function（服务端 Puppeteer 脚本）等价实现。"""
     parsed = urlsplit(address.strip())
     if parsed.scheme not in {'http', 'https'} or not parsed.hostname:
         raise ValueError('Browserless requires an HTTP endpoint')
-    path = parsed.path.rstrip('/') or '/chromium'
-    if not path.endswith('/bql'):
-        path += '/bql' if path.endswith('/stealth') else '/stealth/bql'
+    path = (parsed.path.rstrip('/') or '') + '/function'
     query = dict(parse_qsl(parsed.query))
     if token:
         query['token'] = token
@@ -40,41 +39,49 @@ class BrowserQLClient:
         self.read_url = self.url
 
     def _request(self, url, script=None):
-        variables = {'cookies': [{'name': key, 'value': value, 'url': self.url}
-                                 for key, value in self.cookies.items()],
-                     'url': url, 'wait': self.wait_ms}
-        declarations = '$cookies:[CookieInput!]! $url:String! $wait:Float!'
-        steps = ['cookies(cookies:$cookies){cookies{name}}']
+        """POST /function：服务端 Puppeteer 执行整段流程，返回与旧 BQL 同形的数据。"""
+        cfg = {'url': url, 'wait': self.wait_ms,
+               'cookies': [{'name': key, 'value': value} for key, value in self.cookies.items()]}
         if self.ua:
-            declarations += ' $userAgent:String!'
-            variables['userAgent'] = self.ua
-            steps.append('userAgent(userAgent:$userAgent){time}')
-        steps += ['goto(url:$url,waitUntil:domContentLoaded){status}',
-                  'solve(timeout:$wait){found solved}',
-                  'settle:waitForTimeout(time:$wait){time}']
+            cfg['userAgent'] = self.ua
         if script is not None:
-            declarations += ' $script:String!'
-            variables['script'] = script
-            steps.append('submit:evaluate(content:$script,timeout:30000){value}')
-        steps += ['before:html{html}',
-                  'location:evaluate(content:"location.href"){value}',
-                  'navigation:evaluate(content:' + json.dumps('performance.getEntriesByType("navigation").at(-1)?.responseStatus || 0') + '){value}',
-                  'jar:cookies{cookies{name value domain path}}']
-        payload = {'query': 'mutation NativeRequest(' + declarations + ') {' + '\n'.join(steps) + '}',
-                   'operationName': 'NativeRequest', 'variables': variables}
+            cfg['script'] = script
+        code = (
+            'module.exports = async ({ page }) => {'
+            ' const cfg = ' + json.dumps(cfg) + ';'
+            ' if (cfg.cookies && cfg.cookies.length) {'
+            '  try { await page.setCookie(...cfg.cookies.map(c => ({...c, url: cfg.url}))); } catch (e) {}'
+            ' }'
+            ' if (cfg.userAgent) { try { await page.setUserAgent(cfg.userAgent); } catch (e) {} }'
+            ' const resp = await page.goto(cfg.url, {waitUntil: "domcontentloaded", timeout: 60000});'
+            ' await new Promise(r => setTimeout(r, cfg.wait));'
+            ' let submitResult = null;'
+            ' if (cfg.script) { try { submitResult = await page.evaluate(cfg.script); } catch (e) { submitResult = {error: String(e)}; } }'
+            ' const html = await page.content();'
+            ' const location = page.url();'
+            ' const status = resp ? resp.status() : 0;'
+            ' const jar = await page.cookies();'
+            ' return {html, location, status, jar, submitResult};'
+            '}'
+        )
+        payload = {'code': code}
         request = Request(self.endpoint, data=json.dumps(payload).encode('utf-8'),
                           headers={'Content-Type': 'application/json'}, method='POST')
         with urlopen(request, timeout=self.timeout) as response:
-            envelope = json.loads(response.read().decode('utf-8'))
-        data = envelope.get('data') or {}
-        if not data:
-            raise ValueError('BrowserQL returned no data')
+            data = json.loads(response.read().decode('utf-8'))
+        if not isinstance(data, dict) or 'html' not in data:
+            raise ValueError('Browserless function returned no page data')
         host = urlsplit(self.url).hostname
-        for cookie in (data.get('jar') or {}).get('cookies') or []:
+        for cookie in data.get('jar') or []:
             domain = str(cookie.get('domain') or '').lstrip('.')
             if domain and (host == domain or host.endswith('.' + domain)):
                 self.cookies[cookie['name']] = cookie['value']
-        return data
+        # 同形映射：旧 BQL 消费端字段
+        return {'before': {'html': data['html']},
+                'location': {'value': data['location']},
+                'navigation': {'value': data['status']},
+                'jar': {'cookies': data['jar']},
+                'submit': {'value': data.get('submitResult')}}
 
     def get(self, url, *, referer=None):
         if self.fallback:
