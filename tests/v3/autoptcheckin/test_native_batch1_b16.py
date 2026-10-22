@@ -153,7 +153,7 @@ def test_all_unimplemented_hooks_double_gate(monkeypatch, read_only, verified):
     plugin = module.AutoPtCheckin()
     rows = discover_sites()["sites"]
     special = [row for row in rows if row.get("native") and row.get("hook_implemented") is False]
-    assert {"52pt", "chdbits"}.isdisjoint({r["id"] for r in special})
+    assert {"chdbits"}.isdisjoint({r["id"] for r in special})  # 52pt 已改滑块、hook=False 归入 special
     def forbidden(*args, **kwargs):
         pytest.fail("gate must precede credentials and network")
     monkeypatch.setattr(module, "managed_site", forbidden)

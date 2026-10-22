@@ -40,12 +40,12 @@ def page(site, message, *, form=False):
         '<input name="imagehash" value="fixture"><img src="image.php?imagehash=fixture"><input name="imagestring"><button type="submit">签到</button></form>'
         if form else ""
     )
-    if form and site.id in ('52pt', 'chdbits'):
+    if form and site.id in ( 'chdbits'):
         form_markup = '<form><table><tr><td class="text">请问：测试？</td></tr></table><input name="questionid" value="1"><input name="choice[]" value="2"></form>'
     return f'<div class="alert">{message}</div>{form_markup}'
 
 
-@pytest.mark.parametrize("site_cls", [Pt52, Agsvpt, Baozi, CHDBits])
+@pytest.mark.parametrize("site_cls", [Agsvpt, Baozi, CHDBits])
 def test_batch1_native_fixture_three_states(site_cls):
     site = site_cls()
     signed = next(iter(site.record_spec.status_map))

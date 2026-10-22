@@ -52,7 +52,7 @@ def context(site, http):
     return SignContext(site.id, Credential('test', 'synthetic'), http)
 
 
-@pytest.mark.parametrize('site_id', ['52pt', 'chdbits'])
+@pytest.mark.parametrize('site_id', ['chdbits'])
 @pytest.mark.parametrize('text,status', [('今天已经签过到了', 'success'), ('未签到', 'failed'), ('未知内容', 'unconfirmed')])
 def test_bakatest_three_states_and_random_choice(site_id, text, status):
     site = get_native_module(site_id)
@@ -66,7 +66,7 @@ def test_bakatest_three_states_and_random_choice(site_id, text, status):
     assert data == {'questionid': '42', 'usercomment': '太难了！', 'wantskip': '不会'}
 
 
-@pytest.mark.parametrize('site_id', ['52pt', 'chdbits'])
+@pytest.mark.parametrize('site_id', ['chdbits'])
 def test_bakatest_repeat_timeout_and_missing_form(site_id):
     site = get_native_module(site_id)
     http = Http([message('今天已经签过到了')])
@@ -182,9 +182,9 @@ def test_yzyy_identity_conflict_does_not_submit():
 
 def test_c7_inventory_all_b18_ids_are_accounted_for():
     from autoptcheckin.core.registry import discover_sites
-    ids = set('52pt chdbits baozi dongying kelu naturept novahd oshen phoenixpt playlet shaobaoyuan soulvoice tu88 vclib lajidui siqi btschool haidan hdarea hdcity hdupt hhanclub nexushd pttime tjupt ttg u2 yzyy darkland digitalcore mteam yema hdchina opencd pterclub zhuque'.split())
+    ids = set('chdbits baozi dongying kelu naturept novahd oshen phoenixpt playlet shaobaoyuan soulvoice tu88 vclib lajidui siqi btschool haidan hdarea hdcity hdupt hhanclub nexushd pttime tjupt ttg u2 yzyy darkland digitalcore mteam yema hdchina opencd pterclub zhuque'.split())
     rows = {row['id']: row for row in discover_sites()['sites']}
-    assert len(ids) == 36 and ids <= rows.keys()
+    assert len(ids) == 35 and ids <= rows.keys()
     for site_id in ids:
         assert rows[site_id]['hook_implemented'] is (site_id != 'mteam')
         assert rows[site_id]['verified'] is False
