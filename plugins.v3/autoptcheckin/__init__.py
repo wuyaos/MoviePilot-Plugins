@@ -29,7 +29,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.33.0"
+    plugin_version = "3.34.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -255,11 +255,27 @@ class AutoPtCheckin(_PluginBase):
             return 'off'
         return 'off'
 
+    def _recent_records(self, pages: int = 4):
+        """按时间倒序聚合最近多页历史（每页 100），供轨道最新状态计算使用。"""
+        items = []
+        for page in range(1, max(1, pages) + 1):
+            batch = self._history.list(page, 100)['items']
+            items.extend(batch)
+            if len(batch) < 100:
+                break
+        return items
+
     def _site_tracks(self):
         """每站双轨道：sign/login 各自的最新状态（展示层归一：成功/失败/未确认/off/站点侧状况）。"""
-        latest = {}
-        for item in self._history.list(1, 100)['items']:
-            latest.setdefault((item['site'], item.get('action', 'sign')), item)
+        # 覆盖最近多页记录，避免站点多时单页 100 条截断导致老站显示未尝试；
+        # skipped/cancelled 是纯空转结果，存在更早结论时不作为轨道最新状态。
+        conclusive, fallback = {}, {}
+        for item in self._recent_records():
+            key = (item['site'], item.get('action', 'sign'))
+            fallback.setdefault(key, item)
+            if item.get('status') not in ('skipped', 'cancelled'):
+                conclusive.setdefault(key, item)
+        latest = {**fallback, **conclusive}
         enabled = self._config.get('enabled_sites', [])
         rows = []
         for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']:

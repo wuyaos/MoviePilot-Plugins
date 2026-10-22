@@ -120,20 +120,24 @@ def test_custom_site_dialog_contract():
     assert 'customDialog.value.showModal()' in source
 
 
-def test_page_history_five_columns_and_optional_evidence():
+def test_page_history_four_columns_without_evidence():
+    """历史四列（时间/站点/状态/最近消息），证据字段只在存储契约保留、不在 UI 展开。"""
     source = (SRC / 'Page.vue').read_text(encoding='utf8')
-    assert "['时间','站点','状态','最近消息','证据']" in source
-    assert 'colspan="6"' not in source and 'colspan="5"' in source
+    assert "['时间','站点','状态','最近消息']" in source
+    assert 'colspan="5"' not in source and '证据' not in source and 'item.evidence' not in source
+    assert 'colspan="4"' in source
     assert '未解析到' not in source
-    assert "{{ item.evidence?.[key] || '' }}" in source
     assert 'resultMessage(item)' in source
-    functions = source.split('function formatTime(value)', 1)[1].split('async function get(path)', 1)[0]
-    script = "const assert=require('node:assert/strict'); function formatTime(value)" + functions + """
-assert.equal(formatTime('2026-01-02T03:04:05'), '2026/01/02 03:04:05');
-assert.equal(formatTime(null), '');
-assert.equal(resultMessage({message:'签到成功',reward:'+87 爆米花'}), '签到成功 +87 爆米花');
-assert.equal(resultMessage({message:'签到前页面已签标记',evidence:{button_text:'已签到'}}), '签到前页面已签标记');
-"""
+    functions = source.split('function formatTime(value)', 1)[1].split('function formatShort(value)', 1)[0]
+    script = (
+        "const assert=require('node:assert/strict'); function formatTime(value)"
+        + functions
+        + "function resultMessage(item) { return [item.message, item.reward].filter(Boolean).join(' ') }\n"
+        + "assert.equal(formatTime('2026-01-02T03:04:05'), '2026/01/02 03:04:05');\n"
+        + "assert.equal(formatTime(null), '');\n"
+        + "assert.equal(resultMessage({message:'签到成功',reward:'+87 爆米花'}), '签到成功 +87 爆米花');\n"
+        + "assert.equal(resultMessage({message:'签到前页面已签标记',evidence:{button_text:'已签到'}}), '签到前页面已签标记');\n"
+    )
     subprocess.run(['node','-e',script],check=True,capture_output=True,text=True)
 
 

@@ -43,12 +43,12 @@
 
 ### 数据页
 - 站点名优先采用适配器 match 命中的 MP 登记名，未匹配保留适配器名；/sites 和 /stats 使用相同映射。图标仅读取 SiteOper.get_icon_by_domain 的 data:image 缓存，不加载远程 URL；配置卡及数据卡显示图标，缺失/加载失败用首字母占位。关闭按钮用 ghost 描边，×/移除 chip 用 danger 描边。
-- 今日总览显示下次调度时间、调度模式/间隔与时段，提供「立即签到 / 只读核验」；其下统计区为「签到 · 今日」「模拟登录 · 今日」两组并排同一行（窄屏 640px 以下纵向堆叠），每组 3 张统计卡按「成功 / 失败 / 未确认」统计当日有执行的站点（每轨最新记录聚合，success/signed/failed+auth_failed/unconfirmed），不再按今日执行计数；标题为「站点状态总览」。
-- 站点小卡两行紧凑布局：第一行图标+站点名+状态徽标（消息全文放徽标 title），第二行按配置显示单站签到、模拟登录小按钮并恒显只读核验按钮；不展示结果文字行、UID、时间、凭证来源或奖励明细。总览保留只读核验入口；停用/非试点站禁用执行按钮。
-- 卡片区提供成功/已签/失败/未确认/站点不可达/协议待适配/维护中/已关闭/停用筛选 chips，再点选中态恢复全部；认证失败归失败，skipped 沿用停用色归停用；维护、网络及协议状态虽共用 off 中性色，筛选按状态值独立匹配，不按颜色混入停用。切换筛选重置为筛选后前 8 张，空匹配显示独立空态。
+- 今日总览显示下次调度时间、调度模式/间隔与时段，提供「立即签到 / 只读核验 / 立即运行 / 清理缓存」；下次调度时间格式 `YYYY/MM/DD HH:mm`（本地时区），间隔模式时段显示 `HH:00~HH:00`；其下统计区为「签到 · 今日」「登录 · 今日」两组并排同一行（窄屏 640px 以下纵向堆叠），每组 3 张统计卡按「成功 / 失败 / 未确认」统计当日有执行的站点（每轨最新记录聚合，success/signed/failed+auth_failed/unconfirmed），不再按今日执行计数；标题为「站点状态总览」。
+- 站点小卡两行紧凑布局：第一行图标+站点名+站点名后方无文字「测试连接」图标按钮（原只读核验，ghost pico，title/aria-label=测试连接）+「签到」「登录」两枚徽标，徽标文字固定为签到/登录、颜色表状态（绿=成功、红=失败、橙=未确认、灰=未进行），仅站点不可达/维护中/协议待适配以状态文字入徽标（不可达/维护/待适配，沿用 off 色），消息全文放徽标 title；第二行按配置显示「签到」「登录」pico 小按钮；不展示结果文字行、UID、时间、凭证来源或奖励明细。总览保留只读核验入口；停用/非试点站禁用执行按钮。可见文案统一用「登录」，不再出现「模拟登录」。数据页底部不放图例。
+- 卡片区筛选 chips 与站点徽标同款样式：签到（绿/红/橙=成功/失败/未确认）、登录（绿/红）、不可达、维护、待适配、停用/未尝试（均 off 色），再点选中态恢复全部；认证失败归失败，skipped 沿用停用色归停用；维护、网络及协议状态虽共用 off 中性色，筛选按状态值独立匹配，不按颜色混入停用。切换筛选重置为筛选后前 8 张，空匹配显示独立空态。
 - 桌面三列等宽等高小卡，中屏两列、640px 以下单列；末张不跨列。默认前 8 张，failed/unconfirmed/auth_failed 优先且同优先级保持原顺序；其余用「展开其余 X 个站点」/「收起其余站点」切换，空态单独展示。
-- 历史通过现有 page/size API 每页 100 条加载全部保留记录，按浏览器本地日期前端聚合；分组头为「YYYY-MM-DD · N 条记录」，默认仅当天展开，其余收起。列顺序为「时间 / 站点 / 状态 / 最近消息 / 证据」；证据按钮切换展开/收起，紧随对应记录插入跨五列的证据行；API 与存储不变。历史表容器 max-height:60vh、内部横纵滚动，证据展开行在同一容器内，不撑破宿主页面。
-- 证据行只呈现实际回读的「回读按钮文本 / 本人 UID / 记录日期 / 记录状态」，桌面四列；缺失证据值留空，不输出占位文案，不从按钮单独推定签到结果。底部图例同步包含站点不可达、协议待适配、维护中/已关闭，均沿用 off 主题变量。历史消息使用真实 item.message，奖励如有拼在消息末尾，不借回读按钮文本替代执行结论；历史结果时间按浏览器本地时间显示 YYYY/MM/DD HH:mm:ss，存储 ISO 不变。
+- 历史通过现有 page/size API 每页 100 条加载全部保留记录，按浏览器本地日期前端聚合；分组头为「YYYY-MM-DD · N 条记录」，默认仅当天展开，其余收起。列顺序为「时间 / 站点 / 状态 / 最近消息」四列；不提供证据展开行，失败与异常说明（403/503/维护等）由最近消息列承载；API 与存储不变。历史表容器 max-height:60vh、内部横纵滚动，证据展开行在同一容器内，不撑破宿主页面。
+- 历史不展示回读按钮文本/UID/记录日期/记录状态等证据字段（回读证据仍按存储契约保留在 history.records，仅不在 UI 展开）。历史消息使用真实 item.message，奖励如有拼在消息末尾，不借回读按钮文本替代执行结论；历史结果时间按浏览器本地时间显示 YYYY/MM/DD HH:mm:ss，存储 ISO 不变。
 - 不提供迁移预览区；不要把静态预览的演示按钮、示例快照提示或刷新恢复示例文案带入正式页面。
 
 ### 状态色映射
@@ -112,7 +112,7 @@
 - `core/registry.py` 使用 `pkgutil` 遍历 `sites/`，逐模块导入并收集 `_ISiteSigninHandler` 子类；导入异常只进入 `skipped` 日志，不阻断其他站点。注册项包含 `id/name/login_capable/credential/cf`，并追加 `rousi/sunnypt` 两个 integrations 注册项；`/sites` 返回 `sources.adapters` 与 `sources.integrations` 计数。
 - 适配器凭证默认 `kind=cookie`、来源 `cookiecloud/managed_site/local_cookie`；集成凭证从 integrations 的 `CredentialSpec` 获取。注册表只缓存元数据，不实例化适配器或请求站点。模拟登录表示访问页面，不要求专属登录动作；适配器默认 login_capable=true（含 HDSky），仅显式 false 的特殊站关闭。
 - `core/history.py` 使用 `get_data/save_data` 的 key `history.records` 保存 `{time,site,action,status,message,reward,evidence}`；`list(page,size)` 按时间倒序分页，默认每页 20、上限 100；追加和读取均清理超过 90 天的记录。历史只保存回读证据，不保存凭据。
-- `/stats` 返回 `today: {success,signed,failed,unconfirmed}` 与 `next_schedule`；`/history` 返回 `{total,items}`。签到 action 的 auth_failed 计入失败卡；maintenance/network_error/protocol_pending 仅保留历史及站点卡，不计入四张统计卡，也不增统计键，避免把未执行当签到失败；保留原始历史状态；空态仅表示实际存储为空。
+- `/stats` 返回 `today: {success,signed,failed,unconfirmed}` 与 `next_schedule`；`/history` 返回 `{total,items}`。签到 action 的 auth_failed 计入失败卡；maintenance/network_error/protocol_pending 仅保留历史及站点卡，不计入四张统计卡，也不增统计键，避免把未执行当签到失败；保留原始历史状态；空态仅表示实际存储为空。轨道最新记录聚合覆盖最近 400 条（_recent_records 分页聚合），skipped/cancelled 存在更早结论时不作为轨道最新状态（避免锁忙/门控跳过掩盖已有结果）。
 - 配置页以 `/sites` 为主数据源；仅在 registry 整包导入失败时使用 `frontend/src/sites.json` 作为静态兜底，不把静态清单当生产主数据源。
 
 ## S5 试点执行边界
@@ -124,7 +124,7 @@
 - 当前 HTML 夹具是**合成回归夹具**，不是生产页面证据；保守选择器未匹配时不补造 UID/日期/状态，不把全页成功词当提交后证据。
 - 生产切换：先在 QNAP 备份旧配置并停用旧插件对应两站调度 → 安装 3.3.0 → 确认站点管理 Cookie/UA 与选择 → 单站只读 verify_site 核验真实结构/UID → 未确认时脱敏采样补齐解析 → 用户确认后手动签到。本地调试实例可能也有真实 Cookie，执行前必须核实；真实试点需用户单独授权，未核验页面结构前不得宣称真实签到成功。
 
-- 来源按实际登记判定：registry 以适配器 match 匹配 SiteOper URL，已登记为 MP 站点，未登记为插件适配；custom_sites_data 为自定义站点。`/sites` 的 registry 是站点清单权威来源；前端仅将本次会话尚未保存的自定义草稿做去重 overlay，已保存项不再本地重复拼接，草稿按 ID 覆盖或删除；宿主保存后回传 initialConfig 时清空 overlay 并重新获取 /sites。来源动态读取，不将凭据缓存入 registry。
+- 来源按实际登记判定：registry 以适配器 match 匹配 SiteOper URL，已登记为 MP 站点，未登记为插件适配；custom_sites_data 为自定义站点；与适配器/宿主站点同域（hostname 去重）的自定义条目不再单列，仅作为该域 Cookie 来源（执行链按域名桥接 custom_cookie）。`/sites` 的 registry 是站点清单权威来源；前端仅将本次会话尚未保存的自定义草稿做去重 overlay，已保存项不再本地重复拼接，草稿按 ID 覆盖或删除；宿主保存后回传 initialConfig 时清空 overlay 并重新获取 /sites。来源动态读取，不将凭据缓存入 registry。
 
 ## 组件与宿主玻璃主题
 - Config/Page 共用 preview.css 的 .btn/.input/.switch/.chip/table；常规控件统一 36px 最小高度、6px 圆角、同一焦点框，紧凑列表 chip 是明确的小号变体。

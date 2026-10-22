@@ -154,8 +154,20 @@ def get_registry(custom_sites_data=None, browserless_enabled=False) -> dict:
         except Exception:
             logging.getLogger(__name__).warning('站点来源匹配失败：%s', site['id'])
     known = {site['id'] for site in registry['sites']}
+
+    def _host(url):
+        try:
+            return (urlsplit(url or '').hostname or '').lower().removeprefix('www.')
+        except Exception:
+            return ''
+    known_hosts = {host for host in (_host(site.get('url')) for site in registry['sites']) if host}
     for item in custom_sites_data or []:
         if not isinstance(item, dict) or not item.get('id') or item['id'] in known:
+            continue
+        # 与适配器/宿主站点同域的自定义条目不再单列为自定义站点，
+        # 仅作为该域名的 Cookie 来源（执行链按域名桥接 custom_cookie）。
+        host = _host(item.get('url'))
+        if host and host in known_hosts:
             continue
         registry['sites'].append({'id': item['id'], 'name': item.get('name', ''),
             'url': item.get('url', ''), 'emulate': bool(item.get('emulate', False)),

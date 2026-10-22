@@ -206,3 +206,13 @@ def test_custom_sign_api_without_global_unlock(attendance, site_id):
     result = asyncio.run(plugin.api_signin_by_domain(domain=str(site_id)))
     assert result['success'] and result['data']['status'] == 'success'
     assert calls == [('GET', URL), ('POST', URL), ('GET', URL)]
+
+
+def test_custom_entry_matching_adapter_domain_dedupes():
+    """与适配器同域的自定义条目只作为 Cookie 来源，不再单列为自定义站点。"""
+    carrier = {'id': 'custom-hdwing', 'name': 'HDWing', 'url': 'https://hdwing.org/', 'cookie': 'fixture'}
+    sites = get_registry([carrier])['sites']
+    assert not any(row['id'] == 'custom-hdwing' for row in sites)
+    assert any(row['id'] == 'hdwing' and row['source'] == '插件适配' for row in sites)
+    independent = get_registry([{'id': 'custom-x', 'name': 'X', 'url': 'https://unregistered.invalid/'}])['sites']
+    assert any(row['id'] == 'custom-x' for row in independent)
