@@ -142,7 +142,7 @@
 
 | site | 已实现协议 / 安全前读及回读 | 遗留校准 |
 | --- | --- | --- |
-| btschool | GET index.php?action=addbonus；/ | 无正向确证；历史恒 unconfirmed，仅验证执行链，入口消失不算已签 |
+| btschool | GET index.php?action=addbonus；/ | 2026-10-23 用户裁决：登录态首页入口消失即已签，成功文本二选一即可——既有 read_before/read_after（ALREADY→SUCCESS）已符合；待采样补成功文本映射 |
 | haidan | GET signin.php；index.php | input[value="已经打卡"] 的生产结构 |
 | hdcity | GET /sign；/ | 中英文映射保留，安全首页消息节点仍为合成占位 |
 | hdupt | GET added.php?action=qiandao；/ | span#yiqiandao 生产回读；数字回执不作证据 |

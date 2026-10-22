@@ -60,6 +60,7 @@ class SignRunner:
             result.metadata.setdefault("business_date", business_date)
             result.metadata["trigger"] = trigger
             result.metadata["action"] = "sign"
+            result.metadata["read_only"] = read_only
             if self.history:
                 self.history(result)
             if self.notify:

@@ -155,7 +155,7 @@ def test_execute_site_dual_track_and_gate(monkeypatch, native, verified, expecte
     module = importlib.import_module('autoptcheckin')
     plugin = module.AutoPtCheckin()
     plugin._config = {'enabled_sites': ['hdsky'], 'sign_sites': ['hdsky']}
-    monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites': [dict(id='hdsky', native=native, verified=verified, signin_capable=True)]})
+    monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites': [dict(id='hdsky', native=native, verified=verified, signin_capable=True, signin_applicable=True, login_capable=True, source='插件适配')]})
     calls = []
     def managed(sid):
         calls.append('managed')
@@ -163,12 +163,13 @@ def test_execute_site_dual_track_and_gate(monkeypatch, native, verified, expecte
     monkeypatch.setattr(module, 'managed_site', managed)
     monkeypatch.setattr(module, 'run_native', lambda *args, **kwargs: SignResult(SignStatus.SUCCESS, 'native'))
     monkeypatch.setattr(plugin._runner, 'run', lambda *args, **kwargs: SignResult(SignStatus.SUCCESS, 'legacy'))
-    result = plugin._execute_all()[0]  # 批次已转后台线程，语义断言直接调 _execute_all
-    assert result['message'] == expected
+    results = plugin._execute_all()  # 批次已转后台线程，语义断言直接调 _execute_all
     if expected == 'native_unverified':
-        assert result['status'] == 'skipped' and result['metadata']['reason'] == expected
-        assert not calls and plugin._history.list()['total'] == 1
+        assert results == []
+        assert plugin._track_store().state_of('hdsky', 'sign') == 'disabled'
+        assert not calls and plugin._history.list()['total'] == 0
     else:
+        assert results[0]['message'] == expected
         assert calls == ['managed']
 
 
@@ -185,7 +186,7 @@ def test_run_native_context_lock_history_and_readonly(read_only):
         return SignContext(site.id, credential, http, site_lock=lock, cancel=cancel)
     result = run_native(runner, site, {'cookie': 'synthetic'}, read_only=read_only, context_factory=factory)
     assert result.status == 'already' and len(history) == 1
-    assert result.metadata == dict(action='sign', trigger='manual') and len(http.calls) == 1
+    assert result.metadata == dict(action='sign', trigger='manual', read_only=read_only) and len(http.calls) == 1
 
 
 @pytest.mark.parametrize('mode,status', [('busy', 'skipped'), ('missing', 'auth_failed'), ('cancel', 'cancelled')])

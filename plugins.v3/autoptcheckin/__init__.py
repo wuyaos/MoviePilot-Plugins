@@ -16,6 +16,7 @@ from .core.migration import Migration, MigrationError
 from .core.registry import get_registry, get_native_module
 from .core.native import run_native, run_native_login
 from .core.custom import run_custom, CustomNexusSignin
+from .core.state_store import DISABLED, FAILED, PENDING, SUCCESS, TrackStateStore
 from typing import Any
 
 try:
@@ -29,7 +30,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.34.0"
+    plugin_version = "3.35.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -47,6 +48,7 @@ class AutoPtCheckin(_PluginBase):
         self._site_config: dict[str, Any] = {}
         self._runner = SignRunner(history=self._record_result)
         self._history = HistoryStore(getattr(self, "get_data", None), getattr(self, "save_data", None))
+        self._state = None
 
     def init_plugin(self, config: dict | None = None) -> None:
         with self._migration.lock:
@@ -72,6 +74,12 @@ class AutoPtCheckin(_PluginBase):
             timezone = None
         self._scheduler = Scheduler(getattr(self, "get_data", None), getattr(self, "save_data", None), timezone)
 
+        store = self._track_store()
+        store.rollover()
+        if not store.snapshot()["sites"]:
+            # 首次/损坏重建：从最近历史派生初始结论（历史层已把 already 归一为 signed）。
+            store.rebuild_from_history(self._recent_records())
+        self._recompute_track_states()
     def get_state(self) -> bool:
         return self._running or (not self._runner.stop.is_set() and bool(self._config.get("scheduler_enabled", False)) and bool(self._config.get("onlyonce", False)))
 
@@ -178,83 +186,99 @@ class AutoPtCheckin(_PluginBase):
             schedule.update({"interval_hours": self._config.get("interval_hours", 2),
                              "begin_hour": self._config.get("begin_hour", 9),
                              "end_hour": self._config.get("end_hour", 23)})
-        # 按动作分组：签到/模拟登录各取每站最新记录统计
-        def _counts(track):
-            """当日口径：只统计今天有执行的站点（含已签跳过）。"""
-            counts = {"success": 0, "failed": 0, "unconfirmed": 0}
-            today = datetime.now().strftime('%Y-%m-%d')
-            for row in self._site_tracks():
-                sign, login = row['_sign_record'], row['_login_record']
-                rec = (sign or {}) if track == 'sign' else (login or {})
-                if not rec or not str(rec.get('time') or '').startswith(today):
-                    continue
-                st = row[f'{track}_status']
-                if st in ('success', 'signed', 'already', 'login_ok'):
-                    counts['success'] += 1
-                elif st in ('failed', 'auth_failed'):
-                    counts['failed'] += 1
-                elif st == 'unconfirmed':
-                    counts['unconfirmed'] += 1
-            return counts
-        latest_counts = {'sign': _counts('sign'), 'login': _counts('login')}
+        # 站点行与三卡统计全部来自状态表；历史仅作流水审计。
+        self._track_store().rollover()
+        rows = self._site_rows()
+        latest = self._track_store().counts()
         return {"success": True, "data": {"today": self._history.today_counts(),
-                "latest": latest_counts,
-                "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": self._site_tracks()}}
+                "latest": latest,
+                "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": rows}}
 
+    def _site_rows(self) -> list[dict]:
+        """数据页站点行：状态表提供轨道状态，registry 提供元数据与控制位。"""
+        registry = get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']
+        enabled = {str(v) for v in self._config.get('enabled_sites', [])}
+        sign_sel = {str(v) for v in self._config.get('sign_sites', [])}
+        login_sel = {str(v) for v in self._config.get('login_sites', [])}
+        rows = []
+        for site in registry:
+            sid = str(site['id'])
+            if sid not in enabled and not self._track_store().entry_of(sid, 'sign') and not self._track_store().entry_of(sid, 'login'):
+                continue
+            sign = self._track_store().entry_of(sid, 'sign')
+            login = self._track_store().entry_of(sid, 'login')
+            rows.append({'id': sid, 'name': site.get('name', sid), 'url': site.get('url', ''),
+                'icon': site.get('icon', ''), 'source': site.get('source', ''),
+                'sign_state': sign.get('state', 'disabled' if sid not in enabled else 'pending'),
+                'sign_status': sign.get('status', ''), 'sign_time': sign.get('time', ''),
+                'sign_message': sign.get('message', ''),
+                'login_state': login.get('state', 'disabled' if sid not in enabled else 'pending'),
+                'login_status': login.get('status', ''), 'login_time': login.get('time', ''),
+                'login_message': login.get('message', ''),
+                'enabled': sid in enabled,
+                'can_signin': sid in enabled and sid in sign_sel and sign.get('state') != DISABLED,
+                'can_login': sid in enabled and sid in login_sel and login.get('state') != DISABLED,
+                'can_verify': sid in enabled,
+                'sign_selected': sid in sign_sel, 'login_selected': sid in login_sel})
+        return rows
     async def api_history(self, page: int = 1, size: int = 20) -> dict:
         return {"success": True, "data": self._history.list(page, size)}
 
     def _record_result(self, result):
         self._history.append(result)
+        metadata = getattr(result, "metadata", None) or {}
+        status = getattr(getattr(result, "status", None), "value", "")
+        # already 在入口统一归一为 signed：状态表与任何下游都不再出现 already。
+        if status == "already":
+            status = "signed"
+        if not metadata.get("read_only") and status not in ("skipped", "cancelled"):
+            reason = metadata.get("reason")
+            self._track_store().apply_result(
+                str(result.site_id), metadata.get("action", "sign"), status,
+                message=getattr(result, "message", "") or "", reason=reason)
         if result.account and result.site_id not in self._bound_uids:
             self._bound_uids[result.site_id] = result.account
             if hasattr(self, "save_data"):
                 self.save_data("identity.bindings", dict(self._bound_uids))
 
-    def _site_results(self, action=None):
-        # 每站每动作取最新记录（列表按时间倒序）；action=None 保留旧行为（全局最新）
-        latest = {}
-        for item in self._history.list(1, 100)['items']:
-            if action is not None and item.get('action', 'sign') != action:
-                continue
-            key = (item['site'], action) if action is not None else item['site']
-            latest.setdefault(key, item)
-        enabled = self._config.get('enabled_sites', [])
-        rows = []
-        for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']:
-            sid = site['id']
-            if sid not in enabled and sid not in latest:
-                continue
-            record = (latest.get((sid, action)) if action is not None else latest.get(sid)) or {}
-            active = sid in enabled
-            rows.append({**site, **record, 'id': sid,
-                'status': record.get('status', 'off') if active else 'disabled',
-                'uid': record.get('evidence', {}).get('uid', ''),
-                'sign_selected': sid in self._config.get('sign_sites', []),
-                'login_selected': sid in self._config.get('login_sites', []),
-                'can_login': active and sid in self._config.get('login_sites', []) and site.get('pilot_enabled', False) and site.get('login_capable', False),
-                'can_signin': active and sid in self._config.get('sign_sites', []) and site.get('pilot_enabled', False),
-                'can_verify': active and site.get('pilot_enabled', False)})
-        return rows
+    def _track_store(self) -> TrackStateStore:
+        """惰性构造：测试/宿主在构造后才注入 get_data/save_data，因此不能在 __init__ 固化。"""
+        if self._state is None:
+            self._state = TrackStateStore(getattr(self, "get_data", None), getattr(self, "save_data", None))
+        return self._state
 
-    @staticmethod
-    def _bucket(status):
-        if status in ('success', 'signed', 'already', 'login_ok'):
-            return 'success'
-        if status in ('failed', 'auth_failed'):
-            return 'failed'
-        if status == 'unconfirmed':
-            return 'unconfirmed'
-        if status in ('network_error',):
-            return 'network_error'
-        if status in ('maintenance',):
-            return 'maintenance'
-        if status in ('protocol_pending',):
-            return 'protocol_pending'
-        if status in ('skipped', 'disabled', 'off'):
-            return 'off'
-        return 'off'
-
+    def _recompute_track_states(self) -> None:
+        """配置变更后全量重算 pending/disabled；已有 success/failed 结论保留。"""
+        decisions: dict[str, dict[str, tuple[str, str | None]]] = {}
+        enabled = {str(v) for v in self._config.get("enabled_sites", [])}
+        sign_sel = {str(v) for v in self._config.get("sign_sites", [])}
+        login_sel = {str(v) for v in self._config.get("login_sites", [])}
+        unlock = bool(self._config.get("unlock_all_sites", False))
+        for site in get_registry(self._config.get("custom_sites_data", []), bool(self._config.get("browserless_enabled")))["sites"]:
+            sid = str(site["id"])
+            if sid not in enabled and not self._track_store().entry_of(sid, "sign") and not self._track_store().entry_of(sid, "login"):
+                continue
+            decisions[sid] = {}
+            if sid not in enabled:
+                decisions[sid]["sign"] = (DISABLED, "site_disabled")
+                decisions[sid]["login"] = (DISABLED, "site_disabled")
+                continue
+            if sid not in sign_sel or site.get("signin_capable") is False or not site.get("signin_applicable", False):
+                decisions[sid]["sign"] = (DISABLED, "not_capable" if site.get("signin_capable") is False or not site.get("signin_applicable", False) else "signin_not_selected")
+            elif not unlock and site.get("native") and not (site.get("verified") and site.get("hook_implemented", True)):
+                decisions[sid]["sign"] = (DISABLED, "native_unverified")
+            else:
+                decisions[sid]["sign"] = (PENDING, None)
+            if sid not in login_sel or site.get("login_capable") is False:
+                decisions[sid]["login"] = (DISABLED, "login_not_selected" if sid not in login_sel else "login_not_supported")
+            elif site.get("source") == "自定义站点":
+                # 自定义站在 _execute_site 的 custom 分支执行，不经 PILOTS 门控。
+                decisions[sid]["login"] = (PENDING, None)
+            elif not unlock and not site.get("native") and sid not in PILOTS:
+                decisions[sid]["login"] = (DISABLED, "pilot_not_enabled")
+            else:
+                decisions[sid]["login"] = (PENDING, None)
+        self._track_store().reconfigure(decisions)
     def _recent_records(self, pages: int = 4):
         """按时间倒序聚合最近多页历史（每页 100），供轨道最新状态计算使用。"""
         items = []
@@ -265,62 +289,11 @@ class AutoPtCheckin(_PluginBase):
                 break
         return items
 
-    def _site_tracks(self):
-        """每站双轨道：sign/login 各自的最新状态（展示层归一：成功/失败/未确认/off/站点侧状况）。"""
-        # 覆盖最近多页记录，避免站点多时单页 100 条截断导致老站显示未尝试；
-        # skipped/cancelled 是纯空转结果，存在更早结论时不作为轨道最新状态。
-        conclusive, fallback = {}, {}
-        for item in self._recent_records():
-            key = (item['site'], item.get('action', 'sign'))
-            fallback.setdefault(key, item)
-            if item.get('status') not in ('skipped', 'cancelled'):
-                conclusive.setdefault(key, item)
-        latest = {**fallback, **conclusive}
-        enabled = self._config.get('enabled_sites', [])
-        rows = []
-        for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']:
-            sid = site['id']
-            if sid not in enabled and not any(k[0] == sid for k in latest):
-                continue
-            sign = latest.get((sid, 'sign'), {})
-            login = latest.get((sid, 'login'), {})
-            newest = max((sign, login), key=lambda x: x.get('time', ''))
-            rows.append({'id': sid, 'name': site.get('name', sid), 'url': site.get('url', ''),
-                'icon': site.get('icon', ''),
-                'sign_status': self._bucket(sign.get('status')) if sign else 'off',
-                'login_status': self._bucket(login.get('status')) if login else 'off',
-                'sign_message': sign.get('message', ''), 'login_message': login.get('message', ''),
-                'detail': newest.get('message', ''), 'time': newest.get('time', ''),
-                'enabled': sid in enabled,
-                'can_signin': sid in enabled and site.get('signin_applicable', False) and sid in self._config.get('sign_sites', []),
-                'can_login': sid in self._config.get('login_sites', []),
-                'can_verify': sid in enabled,
-                'sign_selected': sid in self._config.get('sign_sites', []),
-                'login_selected': sid in self._config.get('login_sites', []),
-                'pilot_enabled': site.get('pilot_enabled', False),
-                '_sign_record': sign, '_login_record': login})
-        return rows
 
-    def _signed_today(self, site_id):
-        """今日已有 success/already/signed 签到记录则跳过，避免重复执行。"""
-        try:
-            records = self.get_data('history.records') or []
-            today = datetime.now().strftime('%Y-%m-%d')
-            for r in records:
-                if (str(r.get('site')) == str(site_id) and r.get('action', 'sign') == 'sign'
-                        and str(r.get('time') or '').startswith(today)
-                        and r.get('status') in ('success', 'already', 'signed')):
-                    return True
-        except Exception:
-            pass
-        return False
 
     def _execute_site(self, site_id, read_only=False, trigger="manual", action="sign"):
         registry = {site['id']: site for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
-        if action == 'sign' and not read_only and self._config.get('skip_signed_today', True) and self._signed_today(site_id):
-            from app.runtime.log import logger
-            logger.info(f'【PT 签到中心】{site_id} 今日已签，跳过')
-            return {'status': 'skipped', 'message': '今日已签，跳过', 'site_id': site_id}
+        # “今日已签”由状态表 success 态承担：成功站不进队列，这里不再重复拦截。
         custom = next((item for item in self._config.get('custom_sites_data', [])
                        if isinstance(item, dict) and str(item.get('id')) == str(site_id)), None)
         if custom is not None or str(site_id).isdigit() or str(site_id).startswith(('600', 'custom-')):
@@ -447,9 +420,39 @@ class AutoPtCheckin(_PluginBase):
         return {'success': True, 'data': result}
 
     def _execute_all(self, trigger="manual"):
-        return [self._execute_site(site_id, trigger=trigger,
-                    action="login" if site_id in self._config.get("login_sites", []) and site_id not in self._config.get("sign_sites", []) else "sign")
-                for site_id in dict.fromkeys(self._config.get('enabled_sites', []))]
+        """双队列串行：先签到后登录；队列=状态表 failed/pending；单站失败当场重试 ≤ retry_count。"""
+        self._recompute_track_states()
+        self._track_store().rollover()
+        self._track_store().reset_retry_budget()
+        results = []
+        for action in ("sign", "login"):
+            for site_id in self._due_for(action):
+                results.append(self._run_with_retry(site_id, action, trigger))
+        leftover = {action: self._track_store().due_sites(action) for action in ("sign", "login")}
+        if any(leftover.values()):
+            try:
+                from app.runtime.log import logger
+                logger.info(f'【PT 签到中心】本轮收尾待办（下一轮继续）：'
+                            f'签到 {leftover["sign"] or "无"}；登录 {leftover["login"] or "无"}')
+            except ImportError:
+                pass
+        return results
+
+    def _due_for(self, action: str) -> list[str]:
+        enabled = {str(v) for v in self._config.get('enabled_sites', [])}
+        selected = {str(v) for v in self._config.get('sign_sites' if action == 'sign' else 'login_sites', [])}
+        due = set(self._track_store().due_sites(action))
+        return [sid for sid in dict.fromkeys(self._config.get('enabled_sites', []))
+                if str(sid) in enabled and str(sid) in selected and str(sid) in due]
+
+    def _run_with_retry(self, site_id, action, trigger):
+        result = self._execute_site(site_id, trigger=trigger, action=action)
+        attempts = max(0, int(self._config.get("retry_count", 3) or 0))
+        for _ in range(attempts):
+            if self._track_store().state_of(str(site_id), action) != FAILED:
+                break
+            result = self._execute_site(site_id, trigger=trigger, action=action)
+        return result
 
     async def api_run_once(self) -> dict:
         """从数据页注册一次性 DateTrigger；不受常规调度门控影响。"""
@@ -462,8 +465,9 @@ class AutoPtCheckin(_PluginBase):
         return {"success": True, "data": {"scheduled": True}}
 
     async def api_clean_today(self) -> dict:
-        """清理签到历史中的当日缓存，保留历史存储契约。"""
+        """清理本日缓存：清当日历史，并把状态表非禁用轨道重置为 pending（强制今天重跑）。"""
         removed = await asyncio.to_thread(self._history.clear_today)
+        self._track_store().clear_transient()
         return {"success": True, "data": {"removed": removed}}
 
     async def api_manual_signin(self) -> dict:

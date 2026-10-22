@@ -71,16 +71,16 @@ def test_login_only_dispatch_and_api(monkeypatch):
     assert result['status'] == 'login_ok' and calls == ['get','get']
     assert plugin._history.list()['items'][0]['action'] == 'login'
     assert asyncio.run(plugin.api_login_by_domain('hdsky'))['data']['status'] == 'login_ok'
-    row = plugin._site_results()[0]
+    row = plugin._site_rows()[0]
     assert row['login_selected'] and row['can_login'] and not row['sign_selected']
     # D4 后 /sites 最新记录含模拟登录：hdsky 仅登录时卡片状态同步为 login_ok
-    assert row['status'] == 'login_ok' and row['action'] == 'login'
+    assert row['login_state'] == 'success'
     assert next(r for r in plugin.get_api() if r['path'] == '/login_by_domain')['auth'] == 'bear'
     dispatched = []
     monkeypatch.setattr(plugin, '_execute_site', lambda sid, **kw: dispatched.append((sid,kw['action'])))
     plugin._config.update(enabled_sites=['hdsky','haitang','rousi'],sign_sites=['hdsky'],login_sites=['hdsky','haitang','rousi'])
     plugin._execute_all()
-    assert dispatched == [('hdsky','sign'),('haitang','login'),('rousi','login')]
+    assert dispatched == [('hdsky','sign'),('haitang','login')]
 
 
 def test_login_uid_conflict_and_shared_lock():
@@ -97,10 +97,9 @@ def test_login_nonpilot_never_reads_host(monkeypatch):
     monkeypatch.setattr(module, 'managed_site', lambda sid: pytest.fail('pilot gate'))
     plugin = AutoPtCheckin()
     plugin.init_plugin({'enabled_sites':['rousi'], 'login_sites':['rousi']})
-    result = plugin._execute_all()[0]
-    assert result['status'] == 'skipped'
-    assert result['metadata']['reason'] == 'pilot_not_enabled'
-    assert plugin._history.list()['items'][0]['action'] == 'login'
+    assert plugin._execute_all() == []
+    assert plugin._track_store().state_of('rousi', 'login') == 'disabled'
+    assert plugin._history.list()['total'] == 0
 
 
 def test_login_parser_failure_does_not_veto_reachability():

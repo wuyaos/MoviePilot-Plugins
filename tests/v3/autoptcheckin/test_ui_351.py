@@ -184,12 +184,13 @@ const assert = require('node:assert/strict');
 const ref = value => ({value});
 const computed = getter => ({get value() {return getter()}});
 const stats=ref({sites:Array.from({length:12},(_,i)=>({id:i,
-  status:i===10?'failed':i===11?'unconfirmed':'success',
-  sign_status:i===10?'failed':i===11?'unconfirmed':'success',
-  login_status:'off',
+  sign_state:i===10||i===11?'failed':'success',
+  sign_status:i===11?'unconfirmed':'success',
+  login_state:'pending', login_status:'',
   name:'站点'+i}))});
 const history=ref({items:[{time:new Date().toISOString()},{time:'2020-01-02T03:04:05'},{time:'2020-01-02T04:04:05'}]});
 const showAllSites""" + functions + """
+assert.equal(trackStates.length,9); assert.deepEqual(trackStates[0],{key:'sign_success',label:'签到',cls:'success'});
 assert.equal(visibleSites.value.length,8);
 assert.deepEqual(visibleSites.value.slice(0,2).map(s=>s.id),[10,11]);
 showAllSites.value=true; assert.equal(visibleSites.value.length,12);

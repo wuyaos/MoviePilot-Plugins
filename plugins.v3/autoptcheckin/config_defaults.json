@@ -14,7 +14,6 @@
     "sign_sites": [],
     "login_sites": [],
     "retry_count": 3,
-    "retry_keyword": "错误|失败",
     "custom_site_urls": "",
     "custom_sites_data": [],
     "custom_site_name": "",
@@ -30,6 +29,5 @@
     "sunnypt_password": "",
     "sunnypt_token": "",
     "scheduler_enabled": false,
-    "unlock_all_sites": false,
-    "skip_signed_today": true
+    "unlock_all_sites": false
 }

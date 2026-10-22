@@ -53,14 +53,16 @@ class NexusSignin(SiteModule):
         '//table[contains(@class,"t1")]//tr[1]',
         '//div[@id="main"]//font[contains(text(),"签到")]',
     )
-    DEFAULT_STATUS_MAP = {
-        '签到成功': 'signed', '已签到': 'signed', '今天已经签到': 'signed', '已经签到': 'signed',
-        '今天已签到': 'signed', '連續簽到': 'signed', '连续签到': 'signed', '签到已得': 'signed',
-        '請勿重複刷新': 'signed', '请勿重复刷新': 'signed', '您今天已经签到过了': 'signed',
-        '打卡成功': 'signed', '已打卡': 'signed', '簽到成功': 'signed', '已簽到': 'signed',
-        '今天已打卡': 'signed', '已經簽到': 'signed', '請勿重複': 'signed',
-        '未签到': 'unsigned', '未簽到': 'unsigned',
-    }
+    # 已签判据是词表：出现在唯一消息元素里即视为已签；新词只加列表，不再逐条写映射。
+    SIGNED_TEXTS = (
+        '签到成功', '已签到', '今天已经签到', '已经签到', '今天已签到',
+        '連續簽到', '连续签到', '签到已得', '簽到已得',
+        '請勿重複刷新', '请勿重复刷新', '您今天已经签到过了',
+        '打卡成功', '已打卡', '簽到成功', '已簽到', '今天已打卡', '已經簽到', '請勿重複',
+    )
+    UNSIGNED_TEXTS = ('未签到', '未簽到')
+    DEFAULT_STATUS_MAP = {**{text: 'signed' for text in SIGNED_TEXTS},
+                          **{text: 'unsigned' for text in UNSIGNED_TEXTS}}
 
     def message_spec(self) -> RecordSpec:
         spec = self.record_spec

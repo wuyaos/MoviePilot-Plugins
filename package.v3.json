@@ -9,6 +9,7 @@
         "level": 1,
         "system_version": ">=3.0.0",
         "history": {
+            "v3.35.0": "轨道状态表（success/failed/pending/disabled）+双队列当场重试；already 全局收敛 signed；移除 retry_keyword/skip_signed_today；pterclub 改 .net；TTG 编码修复",
             "v3.34.0": "数据页徽标改签到/登录+状态色；测试连接图标按钮；历史去证据展开；自定义同域条目并入适配器来源；轨道最新记录抗跳过掩盖",
             "v3.33.0": "修复数据页状态映射丢失导致的统计/徽标渲染失败；统计两组并排一行；onlyonce 一次性执行不再被 scheduler_enabled 拦截",
             "v3.32.0": "统计卡改当日口径（今日有执行的站点计数）；站点卡保持最新状态",

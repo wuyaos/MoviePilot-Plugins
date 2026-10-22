@@ -6,7 +6,7 @@ from ...core.sitemodel import RecordSpec
 class PTerClub(ApiSignin):
     id = 'pterclub'
     name = 'PTerClub'
-    url = 'https://pterclub.com/'
+    url = 'https://pterclub.net/'
     attendance_path = '/'
     hook_implemented = True
     record_spec = RecordSpec(source="response_json", response_field='status', status_map={'1': 'signed'})

@@ -56,8 +56,8 @@ def test_generic_unverified_gate_no_credentials_or_network(monkeypatch):
     plugin._config = {'enabled_sites': ['hddolby'], 'sign_sites': ['hddolby']}
     monkeypatch.setattr(registry, 'managed_sites', lambda: [])
     monkeypatch.setattr(module, 'managed_site', lambda *args: pytest.fail('credentials must not be read before gate'))
-    result = plugin._execute_all()[0]  # 批次已转后台线程，语义断言直接调 _execute_all
-    assert result['status'] == 'skipped' and result['metadata']['reason'] == 'native_unverified'
+    assert plugin._execute_all() == []
+    assert plugin._track_store().state_of('hddolby', 'sign') == 'disabled'
 
 
 def test_generator_filters_sources_and_deduplicates(tmp_path, monkeypatch, capsys):

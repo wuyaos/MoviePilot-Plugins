@@ -86,7 +86,7 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
             from types import SimpleNamespace
             logger = SimpleNamespace(info=lambda *a, **k: None)
         result.site_id, result.run_id = site_id, str(uuid4())
-        result.metadata.update(action='login' if read_only else action, trigger=trigger)
+        result.metadata.update(action='login' if read_only else action, trigger=trigger, read_only=read_only)
         if info.get('emulate'):
             result.metadata['transport'] = 'browserless_read_http_submit'
         if result.status == SignStatus.SKIPPED:

@@ -17,6 +17,12 @@ def decode_response(response):
     header['content-type'] = response.headers.get('Content-Type', '')
     charset = header.get_content_charset()
     if charset:
+        # 部分站点（如 TTG）误标 ISO-8859-1/ascii，页面实际是 UTF-8：latin-1 家族先按严格 UTF-8 试。
+        if charset.lower() in ("latin-1", "iso-8859-1", "ascii", "us-ascii"):
+            try:
+                return content.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                pass
         try:
             return content.decode(charset, errors='replace')
         except LookupError:
@@ -113,7 +119,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
 
     def finish(result):
         result.site_id, result.run_id = site.id, str(uuid4())
-        result.metadata.update(action='sign', trigger=trigger)
+        result.metadata.update(action='sign', trigger=trigger, read_only=read_only)
         if runner.history:
             runner.history(result)
         if runner.notify:
