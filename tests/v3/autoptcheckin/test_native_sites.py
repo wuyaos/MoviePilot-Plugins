@@ -163,7 +163,7 @@ def test_execute_site_dual_track_and_gate(monkeypatch, native, verified, expecte
     monkeypatch.setattr(module, 'managed_site', managed)
     monkeypatch.setattr(module, 'run_native', lambda *args, **kwargs: SignResult(SignStatus.SUCCESS, 'native'))
     monkeypatch.setattr(plugin._runner, 'run', lambda *args, **kwargs: SignResult(SignStatus.SUCCESS, 'legacy'))
-    result = asyncio.run(plugin.api_manual_signin())['data']['results'][0]
+    result = plugin._execute_all()[0]  # 批次已转后台线程，语义断言直接调 _execute_all
     assert result['message'] == expected
     if expected == 'native_unverified':
         assert result['status'] == 'skipped' and result['metadata']['reason'] == expected

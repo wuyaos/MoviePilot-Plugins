@@ -138,7 +138,7 @@ def test_api_auth_failure_history_and_readonly(monkeypatch):
     response = asyncio.run(plugin.api_signin_by_domain('hdsky.me'))
     assert response['data']['status'] == 'auth_failed'
     assert asyncio.run(plugin.api_verify_site('hdsky'))['data']['status'] == 'auth_failed'
-    results = asyncio.run(plugin.api_manual_signin())['data']['results']
+    results = plugin._execute_all()
     assert [r['status'] for r in results] == ['auth_failed', 'skipped']
     assert results[1]['metadata']['reason'] == 'pilot_not_enabled'
     # enabled but not selected for sign-in is still an independent skipped attempt

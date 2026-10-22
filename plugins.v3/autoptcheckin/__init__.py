@@ -2,6 +2,7 @@
 """PT 签到中心 V3：HDSky / 海棠试点执行与回读。"""
 import json
 import asyncio
+import threading
 from datetime import datetime
 from dataclasses import asdict
 from .core.scheduler import Scheduler
@@ -28,7 +29,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.27.0"
+    plugin_version = "3.28.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -397,8 +398,14 @@ class AutoPtCheckin(_PluginBase):
         return {"success": True, "data": {"removed": removed}}
 
     async def api_manual_signin(self) -> dict:
-        results = await asyncio.to_thread(self._execute_all)
-        return {'success': True, 'data': {'results': results}}
+        """批次转后台线程：客户端断开不再取消整批（uvicorn 会取消 async 任务）。"""
+        thread = getattr(self, '_batch_thread', None)
+        if thread is not None and thread.is_alive():
+            return {'success': False, 'message': '批次仍在执行中'}
+        self._batch_thread = threading.Thread(target=self._execute_all, daemon=True,
+                                              name='ptc-manual-signin')
+        self._batch_thread.start()
+        return {'success': True, 'data': {'started': True}}
 
     def _scheduled_once(self):
         with self._migration.lock:
