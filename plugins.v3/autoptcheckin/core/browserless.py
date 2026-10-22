@@ -47,7 +47,7 @@ class BrowserQLClient:
         if script is not None:
             cfg['script'] = script
         code = (
-            'module.exports = async ({ page }) => {'
+            'export default async ({ page }) => {'
             ' const cfg = ' + json.dumps(cfg) + ';'
             ' if (cfg.cookies && cfg.cookies.length) {'
             '  try { await page.setCookie(...cfg.cookies.map(c => ({...c, url: cfg.url}))); } catch (e) {}'
