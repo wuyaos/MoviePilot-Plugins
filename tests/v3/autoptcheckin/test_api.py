@@ -85,7 +85,8 @@ def test_site_tracks_action_selection_keys():
 def test_frontend_defaults_and_distribution():
     defaults = json.loads((PKG / 'config_defaults.json').read_text(encoding='utf8'))
     assert defaults['enabled_sites'] == []
-    assert defaults['browserless_enabled'] is False
+    assert {'mteam_username', 'mteam_password', 'mteam_totp'} <= defaults.keys()
+    assert not {'browserless_enabled', 'browserless_url', 'browserless_token'} & defaults.keys()
     assert defaults['site_browserless'] == []
     assert {'rousi_username', 'rousi_password', 'sunnypt_username', 'sunnypt_password', 'sunnypt_token'} <= defaults.keys()
     remote = (PKG / 'dist/assets/remoteEntry.js').read_text(encoding='utf8')
@@ -93,13 +94,10 @@ def test_frontend_defaults_and_distribution():
     assert not (PKG / 'form_builder.py').exists()
 
 
-def test_site_browserless_backfill_and_site_metadata():
+def test_site_emulation_list_and_site_metadata():
     plugin = Plugin()
-    plugin.init_plugin({'browserless_enabled': True})
-    assert plugin._config['site_browserless'] == [
-        'audiences', 'hdkyl', 'mua_xloli', 'ourbits', 'pt_0ff', 'vclib', 'yema']
-    assert plugin._site_config['site_browserless'] == plugin._config['site_browserless']
-    assert run(plugin.api_site_config())['data']['site_browserless'] == plugin._config['site_browserless']
+    plugin.init_plugin({})
+    assert plugin._config.get('site_browserless', []) == []
     plugin._config.update(enabled_sites=['mteam'], site_browserless=['mteam'])
     row = next(row for row in plugin._site_rows() if row['id'] == 'mteam')
-    assert row['cf'] == 'unknown' and row['emulate'] is True and row['browserless'] is False
+    assert row['cf'] == 'unknown' and row['emulate'] is True

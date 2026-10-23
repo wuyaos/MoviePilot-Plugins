@@ -93,25 +93,28 @@ def test_custom_signin_id_types(attendance, site_id):
 def test_custom_emulate_gate_and_registry(attendance, enabled):
     plugin, calls, _, _ = attendance
     plugin._config['custom_sites_data'][0]['emulate'] = True
-    plugin._config['browserless_enabled'] = enabled
+    plugin._config['site_browserless'] = ['custom-60005'] if enabled else []
     result = plugin._execute_site('custom-60005')
-    assert result['metadata']['reason'] == ('browserless_not_configured' if enabled else 'browserless_disabled')
+    if enabled:
+        assert result['status'] == 'unconfirmed'
+    else:
+        assert result['metadata']['reason'] == 'emulation_not_selected'
     assert not calls
-    row = next(row for row in get_registry(plugin._config['custom_sites_data'], browserless_enabled=enabled)['sites']
+    row = next(row for row in get_registry(plugin._config['custom_sites_data'])['sites']
                if row['id'] == 'custom-60005')
-    assert row['signin_applicable'] is enabled
+    assert row['signin_applicable'] is True
     assert row['pilot_enabled'] is True
 
 
 def test_custom_emulate_hybrid_get_post_get(attendance, monkeypatch):
     plugin, calls, _, _ = attendance
-    plugin._config.update(browserless_enabled=True, browserless_url='ws://browser.invalid/')
+    plugin._config['site_browserless'] = ['custom-60005']
     plugin._config['custom_sites_data'][0]['emulate'] = True
     events = []
 
     @contextmanager
     def client(credential, info, config):
-        assert info['emulate'] and config['browserless_enabled']
+        assert info['emulate'] and 'custom-60005' in config['site_browserless']
         events.append('open')
         try:
             yield custom.NativeHttpClient(credential, info)
@@ -121,60 +124,39 @@ def test_custom_emulate_hybrid_get_post_get(attendance, monkeypatch):
     monkeypatch.setattr(custom, 'custom_client', client)
     result = plugin._execute_site('custom-60005')
     assert result['status'] == 'success'
-    assert result['metadata']['transport'] == 'browserless_read_http_submit'
+    assert result['metadata']['transport'] == 'cloak'
     assert calls == [('GET', URL), ('POST', URL), ('GET', URL)]
     assert events == ['open', 'close']
 
 
-def test_hybrid_cookie_sync_and_fresh_page_reads():
+def test_cloak_custom_client_lifecycle(probe, monkeypatch):
     from types import SimpleNamespace
-    events = []
-    http = SimpleNamespace(cookies={'session': 'fixture'}, post=lambda url, **kw: events.append('post'))
-    context = SimpleNamespace(add_cookies=lambda cookies: events.append('cookies'),
-                              cookies=lambda url: [{'name': 'session', 'value': 'refreshed'}])
-    page = SimpleNamespace(goto=lambda *args, **kw: events.append('goto') or SimpleNamespace(status=200),
-                           content=lambda: SIGNED, url=URL)
-    client = custom.BrowserlessReadHttpSubmit(http, context, page, URL)
-    client.get(URL)
-    assert http.cookies['session'] == 'refreshed'
-    client.post(URL, data=[])
-    assert client.get(URL).text == SIGNED
-    assert events == ['cookies', 'goto', 'post', 'cookies', 'goto']
-
-
-@pytest.mark.parametrize('fail', [False, True])
-def test_browserless_context_lifecycle_and_token(probe, monkeypatch, fail):
-    import sys
-    from types import ModuleType, SimpleNamespace
+    from autoptcheckin.core import cloak
     from autoptcheckin.core.credentials import Credential
     events = []
-    context = SimpleNamespace(new_page=lambda: object(), close=lambda: events.append('context-close'))
-    browser = SimpleNamespace(new_context=lambda **kw: context, close=lambda: events.append('browser-close'))
-
-    def connect(endpoint, **kwargs):
-        assert endpoint == 'ws://browser.invalid/?token=fixture'
-        assert kwargs['timeout'] == 20000
-        events.append('connect')
-        return browser
-
-    @contextmanager
-    def playwright():
-        yield SimpleNamespace(chromium=SimpleNamespace(connect_over_cdp=connect))
-        events.append('playwright-close')
-
-    module = ModuleType('playwright.sync_api')
-    module.sync_playwright = playwright
-    monkeypatch.setitem(sys.modules, 'playwright.sync_api', module)
-    info = {'url': URL, 'emulate': True}
-    try:
-        with custom.custom_client(Credential('local_cookie', 'synthetic-cookie'), info,
-                                  {'browserless_url': 'ws://browser.invalid/', 'browserless_token': 'fixture'}) as client:
-            assert isinstance(client, custom.BrowserlessReadHttpSubmit)
-            if fail:
-                raise RuntimeError('synthetic')
-    except RuntimeError:
-        assert fail
-    assert events[:3] == ['connect', 'context-close', 'browser-close']
+    class Page:
+        url = URL
+        def goto(self, *args, **kwargs): events.append("goto"); return SimpleNamespace(status=200)
+        def wait_for_timeout(self, _): pass
+        def content(self): return SIGNED
+    class Context:
+        def new_page(self): return Page()
+        def add_cookies(self, cookies): events.append("cookies")
+        def cookies(self, url): return [{"name": "session", "value": "refreshed"}]
+        def close(self): events.append("close")
+    monkeypatch.setattr(cloak, "launch_context", lambda **kwargs: Context())
+    class Http:
+        cookies = {"sid": "x"}
+        def __init__(self, credential, info): pass
+        def get_bytes(self, url): return b""
+        def retain_cookies(self, names): pass
+        def post(self, url, **kwargs): return None
+    monkeypatch.setattr(custom, "NativeHttpClient", Http)
+    info = {"url": URL, "id": "custom-60005", "emulate": True}
+    with custom.custom_client(Credential("local_cookie", "synthetic-cookie"), info,
+                              {"site_browserless": ["custom-60005"]}) as client:
+        assert client.get(URL).text == SIGNED
+    assert events == ["cookies", "goto", "close"]
 
 
 @pytest.mark.parametrize('condition,status', [('disabled', 'skipped'), ('cookie', 'auth_failed'),

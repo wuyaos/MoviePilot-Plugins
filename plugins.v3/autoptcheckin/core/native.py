@@ -4,7 +4,7 @@ from email.message import Message
 from http.cookies import SimpleCookie
 from uuid import uuid4
 
-from .browserless import BrowserQLClient, native_browser_client
+from .cloak import native_cloak_client, CloakHttpClient
 from .credentials import Credential, CredentialResolver, cookiecloud_candidate
 from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
 from .sitemodel import SignContext, page_available, page_maintenance
@@ -153,7 +153,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                 import requests
                 session = requests.Session()
                 ctx.http.session = session
-            ctx.http = native_browser_client(site, ctx.http, info, config or {})
+            ctx.http = native_cloak_client(site, ctx.http, info, config or {})
             ctx.get_data, ctx.save_data = get_data, save_data
             if read_only:
                 try:
@@ -171,11 +171,13 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                     result = site.read_before(ctx, page)
             else:
                 result = site.signin(ctx)
-            if isinstance(ctx.http, BrowserQLClient) and not ctx.http.fallback:
-                result.metadata['transport'] = 'browserql'
+            if isinstance(ctx.http, CloakHttpClient):
+                result.metadata['transport'] = 'cloak'
         except Exception:
             result = SignResult(SignStatus.UNCONFIRMED, '原生签到执行未确认')
         finally:
+            if "ctx" in locals() and isinstance(getattr(ctx, "http", None), CloakHttpClient):
+                ctx.http.close()
             if session is not None:
                 session.close()
         return finish(result)
@@ -222,6 +224,13 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
         uid = str(info.get('uid') or '')
+        if site.id == "mteam":
+            try:
+                result = site.keepalive_login({**(config or {}), **info})
+            except Exception:
+                result = LoginResult(LoginStatus.UNCONFIRMED, "M-Team 保活登录未确认")
+            result.metadata["transport"] = "cloak"
+            return finish(result)
         if site.credential.kind in ('api_key', 'password'):
             from ..integrations.login import CredentialLoginProtocol
             return finish(CredentialLoginProtocol(credential_check).login(info, uid))

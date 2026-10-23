@@ -26,7 +26,8 @@
     "status_map": {
       "今天已签到": "signed"
     },
-    "browserless": true
+    "browserless": true,
+    "emulate": true
   },
   {
     "id": "bilibili",
@@ -135,7 +136,8 @@
     "name": "麒麟",
     "url": "https://www.hdkyl.in/",
     "attendance_path": "/attendance.php",
-    "browserless": true
+    "browserless": true,
+    "emulate": true
   },
   {
     "id": "hdtime",
@@ -190,7 +192,8 @@
     "name": "萝莉",
     "url": "https://mua.xloli.cc/",
     "attendance_path": "/attendance.php",
-    "browserless": true
+    "browserless": true,
+    "emulate": true
   },
   {
     "id": "musopia",
@@ -235,7 +238,8 @@
     "attendance_path": "/attendance.php",
     "signin_capable": true,
     "browserless": true,
-    "protocol_pending": true
+    "protocol_pending": true,
+    "emulate": true
   },
   {
     "id": "pt_aling",
@@ -461,7 +465,8 @@
       "未签到": "unsigned"
     },
     "captcha": true,
-    "browserless": true
+    "browserless": true,
+    "emulate": true
   },
   {
     "id": "baozi",
@@ -820,6 +825,7 @@
       "已经签到": "signed",
       "签到成功": "signed",
       "未签到": "unsigned"
-    }
+    },
+    "emulate": true
   }
 ]

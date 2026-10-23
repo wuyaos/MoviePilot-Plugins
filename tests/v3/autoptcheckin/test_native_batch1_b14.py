@@ -89,7 +89,7 @@ def test_mteam_three_state_inputs_never_imply_sign_state(message):
     assert http.calls == []
     assert isinstance(site, SiteModule) and not isinstance(site, NexusSignin)
     assert site.credential.kind == "api_key" and site.credential.cookie_sources == ()
-    assert site.url == "" and not site.record_spec.status_map
+    assert site.url == "" and site.login_capable and not site.record_spec.status_map
 
 
 def test_b14_registry_declares_all_unverified():

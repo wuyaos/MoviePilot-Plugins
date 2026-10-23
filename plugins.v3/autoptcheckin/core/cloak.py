@@ -1,0 +1,108 @@
+"""CloakBrowser page and HTTP-compatible transport."""
+from pathlib import Path
+from urllib.parse import urlencode, urlsplit
+
+from .models import LoginPage
+
+try:
+    from app.sdk.browser import launch_browser_context as launch_context
+except ImportError:
+    launch_context = None
+
+
+def state_path(site_id):
+    """返回插件独立数据目录中的站点浏览器存档路径。"""
+    from app.sdk.config import settings
+    return Path(settings.PLUGIN_DATA_PATH) / "AutoPtCheckin" / "cloak_state" / f"{site_id}.json"
+
+
+class CloakSession:
+    """封装一次同步 CloakBrowser 上下文，异常向执行层传播。"""
+    def __init__(self, *, state=None, cookie="", url="", headless=True, humanize=True, locale="zh-CN"):
+        self.state, self.cookie, self.url = state, cookie, url
+        self.headless, self.humanize, self.locale = headless, humanize, locale
+        self.context = self.page = None
+
+    def __enter__(self):
+        launcher = launch_context
+        if launcher is None:
+            from app.sdk.browser import launch_browser_context as launcher
+        kwargs = {"headless": self.headless, "humanize": self.humanize, "locale": self.locale}
+        if self.state and Path(self.state).is_file():
+            kwargs["storage_state"] = str(self.state)
+        try:
+            self.context = launcher(**kwargs)
+            self.page = self.context.new_page()
+            if self.cookie and self.url:
+                host = urlsplit(self.url).hostname
+                cookies = []
+                for pair in self.cookie.split(";"):
+                    key, sep, value = pair.strip().partition("=")
+                    if sep:
+                        cookies.append({"name": key, "value": value, "domain": host, "path": "/"})
+                if cookies:
+                    self.context.add_cookies(cookies)
+            return self
+        except Exception:
+            self.close()
+            raise
+
+    def goto(self, url): return self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    def fill(self, selector, text): self.page.locator(selector).fill(text)
+    def click(self, selector): self.page.locator(selector).click()
+    def evaluate(self, js, *args): return self.page.evaluate(js, *args)
+    def mouse_move(self, x, y, steps=1): self.page.mouse.move(x, y, steps=steps)
+    def save_state(self, path):
+        path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+        self.context.storage_state(path=str(path))
+    def close(self):
+        if self.context:
+            self.context.close(); self.context = None
+    def __exit__(self, exc_type, exc, tb): self.close()
+
+
+class CloakHttpClient:
+    """映射浏览器页面为 native 签到执行器所需的同步 HTTP 契约。"""
+    def __init__(self, http, info, site):
+        self.http, self.info, self.site = http, info, site
+        self.url = info.get("url") or site.url
+        cookie = "; ".join(f"{k}={v}" for k, v in http.cookies.items())
+        self.session = CloakSession(cookie=cookie, url=self.url)
+        self.session.__enter__()
+
+    def _sync_cookies(self):
+        for cookie in self.session.context.cookies(self.url):
+            self.http.cookies[cookie["name"]] = cookie["value"]
+
+    def get(self, url, *, referer=None):
+        response = self.session.goto(url)
+        self.session.page.wait_for_timeout(15000)
+        self.session.page.wait_for_timeout(15000)
+        self._sync_cookies()
+        return LoginPage(self.session.page.content(), self.session.page.url,
+                         response.status if response else 0)
+
+    def post(self, url, *, data=None, json=None, headers=None, referer=None):
+        import json as json_module
+        body = json_module.dumps(json) if json is not None else urlencode(data or [])
+        request_headers = {"Content-Type": "application/json; charset=UTF-8" if json is not None
+                           else "application/x-www-form-urlencoded; charset=UTF-8", **(headers or {})}
+        options = {"method": "POST", "credentials": "include", "headers": request_headers, "body": body}
+        if referer: options["referrer"] = referer
+        result = self.session.page.evaluate(
+            "async ({url, options}) => { const r=await fetch(url,options); return {text:await r.text(),url:r.url,status:r.status}; }",
+            {"url": url, "options": options})
+        self._sync_cookies()
+        return LoginPage(result.get("text", ""), result.get("url") or url, result.get("status") or 0)
+
+    def get_bytes(self, url): return self.http.get_bytes(url)
+    def retain_cookies(self, names): return self.http.retain_cookies(names)
+    def close(self): self.session.close()
+
+
+def native_cloak_client(site, http, info, config):
+    """启动声明且名单授权的单次仿真上下文；其余站点保留原 HTTP 客户端。"""
+    if not (getattr(site, "emulate", False) and
+            site.id in {str(value) for value in config.get("site_browserless", [])}):
+        return http
+    return CloakHttpClient(http, {**info, "url": info.get("url") or site.url}, site)

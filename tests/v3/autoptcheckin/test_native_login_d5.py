@@ -47,7 +47,7 @@ def test_native_api_dispatch_without_bridge(sid, offline, monkeypatch):
     obj = plugin(sid)
     result = asyncio.run(obj.api_login_by_domain(sid))['data']
     if sid == 'mteam':
-        assert result['status'] == 'skipped'
+        assert result['status'] == 'auth_failed'
         assert offline == calls == []
     else:
         assert result['status'] == 'login_ok'
@@ -178,8 +178,10 @@ def test_non_native_registry_id_uses_matcher(offline, monkeypatch):
     assert len(offline) == 2
 
 
-def test_mteam_checker_protocol(offline):
+def test_mteam_missing_login_credentials(offline):
     site = registry.get_native_module('mteam')
-    result = native.run_native_login(SignRunner(), site, {}, credential_check=lambda ctx: CredentialCheck('valid'))
-    assert result.status == 'login_ok'
+    result = native.run_native_login(SignRunner(), site, {}, config={})
+    assert result.status == 'auth_failed'
+    assert result.message == '缺少 M-Team 账号或密码'
+    assert result.metadata['transport'] == 'cloak'
     assert not offline

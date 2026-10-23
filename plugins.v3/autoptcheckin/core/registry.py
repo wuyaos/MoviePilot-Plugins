@@ -88,14 +88,14 @@ def discover_sites(package_name: str | None = None) -> dict:
                                   'verified': bool(getattr(cls, 'verified', False)),
                                   'login_capable': cls.login_capable, 'url': cls.url or '', 'credential': credential(cls.credential),
                                   'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'hook_implemented': bool(getattr(cls, 'hook_implemented', True)),
-                                  'browserless': bool(getattr(cls, 'browserless', False))})
+                                  'emulate': bool(getattr(cls, 'emulate', False))})
             except Exception as exc:
                 skipped.append({'module': module_name, 'error': type(exc).__name__})
     for item in sites:
         item['signin_capable'] = (getattr(_NATIVE_MODULES[item['id']], 'signin_capable', True)
                                   if item.get('native') else item['id'] not in ('darkland', 'digitalcore'))
         # 签到不适用：登录专用站、mteam（保活语义）、答题/滑块类（chdbits/tjupt 答题误答风险；
-        # 52pt 已改滑块签到，HTTP 无法完成，须 Browserless 实现，均仅保留模拟登录）
+        # 52pt 已改滑块签到，HTTP 无法完成，须 CloakBrowser 实现，均仅保留模拟登录）
         quiz = {'52pt', 'chdbits', 'tjupt'}
         item['signin_applicable'] = item['signin_capable'] and item['id'] != 'mteam' and item['id'] not in quiz and (
             not item.get('native') or item.get('hook_implemented', True) or item.get('verified', False))
@@ -139,7 +139,7 @@ def get_native_module(site_id):
     return _NATIVE_MODULES[site_id]()
 
 
-def get_registry(custom_sites_data=None, browserless_enabled=False) -> dict:
+def get_registry(custom_sites_data=None) -> dict:
     registry = deepcopy(_discovery())
     try:
         managed = managed_sites()
@@ -179,7 +179,7 @@ def get_registry(custom_sites_data=None, browserless_enabled=False) -> dict:
             'url': item.get('url', ''), 'emulate': bool(item.get('emulate', False)),
             'source': '自定义站点', 'icon': '', 'native': False, 'verified': False,
             'pilot_enabled': True, 'login_capable': True, 'signin_capable': True,
-            'signin_applicable': not item.get('emulate') or browserless_enabled,
+            'signin_applicable': True,
             'credential': credential(CredentialSpec()), 'cf': 'unknown'})
         known.add(item['id'])
     return registry

@@ -16,14 +16,14 @@
 ### 配置页
 - 只设「设置 / 站点」两 Tab，默认显示「设置」；使用 Vue 响应式 model 与原生 Tab，不拆出调度或凭证 Tab。
 - 「设置」按基础设置、执行调度、Browserless 分组：基础设置的「启用插件 / 发送通知」同行。
-- 执行调度填写框按字段数量和可用宽度多列自适应（auto-fit，最小宽约 180px），不固定两列；时间窗口保持文本输入。凭据区与 Browserless 地址/令牌同样自适应，窄屏自动降列。
-- Browserless：标题「Browserless（可选）」之后放无可见文字的开关（保留 aria-label="启用 Browserless"），再放地址/令牌自适应填写框，不重复显示开关标签。一次性操作不在配置页显示；「立即运行一次 / 清理本日缓存」位于数据页今日总览，与立即签到、只读核验并列；配置页底部保留保存操作。
+- 执行调度填写框按字段数量和可用宽度多列自适应（auto-fit，最小宽约 180px），不固定两列；时间窗口保持文本输入。凭据区同样自适应，窄屏自动降列。
+- 仿真开关仅按站点逐项配置，不提供全局仿真服务地址或令牌。一次性操作不在配置页显示；「立即运行一次 / 清理本日缓存」位于数据页今日总览，与立即签到、只读核验并列；配置页底部保留保存操作。
 - 「站点」依次呈现启用数量、可按名称筛选的多选站点清单、可移除的已选 chips、启用站点卡片；启用数量行末提供「编辑自定义站点」按钮；无启用项时显示空态。选择器使用带搜索框的多选下拉及可移除 chips；多选后「确认选择」一次性更新 enabled_sites 并插入平铺列表，下拉顶部「全选/全不选」仅切换当前筛选结果集合（无筛选为全部站点），不影响草稿中的其他项；取消不改变启用清单，保存配置前不持久化。已选 chips 回显在选择框内（/sites 加载后按 enabled_sites 映射）；打开时回显 pendingSites 草稿，勾选/移除即时更新草稿，关闭未确认则恢复已启用 chips；关闭态移除 chip 直接更新 enabled_sites。弹层使用原生 popover top layer 避免宿主裁切，按视口剩余空间上下翻转、水平约束，最大高度 min(400px,60vh) 并内部滚动；滚动/resize 重新定位。
 - 「编辑自定义站点」打开 dialog 列表（站点名 / 地址 / 仿真 / 保存、删除），直接行内编辑，提供新增行；不提供启用勾选。名称必填、地址限 HTTP(S)；行内保存仅更新 custom_sites_data，新站不自动启用；删除同步清理 enabled_sites 与动作集合。关闭丢弃未保存编辑，保留已保存行。自定义站点与 MP 站点共用主选择器、来源固定「自定义站点」；仍需主表单保存才持久化。
 - 窄屏（预览断点 640px）字段与站点数据卡改为单列；统计卡、证据字段改为两列，避免强制保留桌面同行布局。
 
 ### 配置站点卡片
-- 收起态使用约 36px 的紧凑行：小号移除按钮 → 站点名 → 来源徽标 → 签到勾选框 → 模拟登录勾选框（支持时）→ Browserless（仅 site.emulate=true）→「展开配置/收起配置」按钮。整行不触发展开，仅显式按钮切换；全部展开/收起语义不变。动作勾选可直接交互，不触发详情折叠；Browserless 不由 CF 或全局开关推断。详情默认收起；行内使用 flex align-items:center，站点名固定列宽，徽标紧随且垂直居中。
+- 收起态使用约 36px 的紧凑行：小号移除按钮 → 站点名 → 来源徽标 → 签到勾选框 → 模拟登录勾选框（支持时）→ 仿真（仅 site.emulate=true）→「展开配置/收起配置」按钮。整行不触发展开，仅显式按钮切换；全部展开/收起语义不变。动作勾选可直接交互，不触发详情折叠；仿真不由 CF 推断。详情默认收起；行内使用 flex align-items:center，站点名固定列宽，徽标紧随且垂直居中。
 - 已启用列表为单一平铺紧凑行，不显示分组；提供独立名称筛选、全部展开/收起。「全部展开」打开所有已启用站点详情（不受筛选限制），「全部收起」关闭所有详情。列表最大高度 68vh 并内部滚动，桌面以一屏至少 15 行为验收。
 - 徽标枚举：来源「MP 站点 / 插件适配 / 自定义站点」；能力「可签到」，支持模拟登录时才显示「模拟登录」徽标与选项；凭证方式 `cookie / api / password`，允许组合，API 可标注 JWT；CF 状态「CF 有盾 / CF 无盾 / CF 未检测」，未知不得当成无盾。
 - 收起态即可勾选「签到」；支持模拟登录时才显示「模拟登录」勾选（同行），直接同步 sign_sites/login_sites，不改变 enabled_sites；勾选不触发详情展开，展开态显示来源、凭证方式、CF 状态、模拟登录能力的只读站点类型行，以及凭据、自定义地址/仿真等额外配置，不重复动作勾选或移除按钮。自定义站点同时展示地址与仿真状态；收起态站点名前的 × 经行内二次确认移出启用，同步 chips 与启用数量。
@@ -37,7 +37,7 @@
 - API 相对插件 ID：GET/PUT `/config`、GET/PUT `/site_config`；GET `/stats`、`/history`、`/status`；POST `/run_once`、`/clean_today`、`/signin_by_domain?domain=...` 单站执行、`/verify_site?domain=...` 只读核验、`/login_by_domain?domain=...` 模拟登录；`/manual_signin` 与 `/notify_preview` 已删除；所有端点显式设置 `auth: bear`（默认 apikey 不适用于宿主前端）；配置与凭据只在宿主鉴权边界内读写，不进入统计/日志。
 - `/site_config` 使用既有 flat keys（enabled_sites/sign_sites/login_sites/custom_sites_data 及专属凭据）；与完整 config 同源，get_data/save_data 保存站点子集。
 - UI 执行按钮仍按 registry.pilot_enabled 门控；后端 unlock_all_sites 是独立校准开关，不会自动修改 UI 门控或 verified。
-- Browserless 使用全局 `browserless_enabled / browserless_url / browserless_token` 与 per-site `site_browserless` 名单；native 站点须同时全局启用、在名单内且类声明 browserless=true 才使用，模拟登录不使用。全局启用而名单为空/缺失时，从 registry 声明自动回填。
+- 仿真由站点声明与 `site_browserless` 名单共同门控，无全局开关；M-Team 保活登录是独立的真实浏览器登录，不属于仿真签到。
 - 在 `frontend/` 执行 `npm ci --ignore-scripts && npm run build`；同步提交 dist，node_modules 不入库。
 - 用宿主页面核验 Tab、条件字段、选移站点、卡片折叠、凭据显隐、证据展开；离线测试不能代替渲染验收。
 
@@ -102,11 +102,11 @@
 - `SignContext` 由执行边界注入已认证的 HTTP client、站点锁、取消事件及可选 `page/ocr`；`SiteModule` 不查凭据、不创建或关闭资源，资源生命周期由 `core.native`/runner 管理。
 - 执行双轨分流：native 站点签到/只读核验走原生模块；模拟登录使用下方独立登录契约，不构造旧桥。旧桥仅保留非 native 签到/核验分支（实际实现限 hdsky/haitang 试点回退，不是排除清单域名的通用签到器）。unlock_all_sites 默认 false，此时 verified、hook_implemented 和旧试点门控生效；显式 true 会绕过这三门，但不改变 verified，也不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到仍不适用；M-Team 模块仍仅返回 skipped。signin_applicable 是 registry 展示的适用性，不等于 verified 或生产授权：排除登录专用站、M-Team，并检查原生 hook/verified；后端不以该展示字段替代执行检查。
 
-### Native Browserless（3.23.0）
-- 仅 ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema 声明 browserless；必须同时全局启用 browserless_enabled、在 site_browserless 名单内并提供 HTTP(S) browserless_url。native 使用 Browserless /function（服务端 Puppeteer 脚本，v2 开源版无 BQL 端点），不依赖本地 Playwright/CDP；custom 保留原 Playwright 混合路径。模拟登录一律不走 Browserless。
-- 复用 Nexus 前读→协议解析→单次提交→无条件回读，不猜浏览器按钮或新增判定规则。BQL GET 渲染并 solve，POST 在页面内 fetch 原协议；每次请求独立浏览器，Cookie 双向同步只在本次执行内，结果 transport=browserql。未启用、未配置或首次连接失败保持原 HTTP 分类；已开始 BQL 后不重放动作，响应丢失仅按既有 finally 只读回查，证据不足为 unconfirmed。
-- 默认 solve 与页面稳定等待各 15 秒，HTTP 超时为两项等待预算之和加 45 秒，上限 300 秒。Cookie/UA/脚本通过 variables 传入，不记录端点认证参数、请求体或远端错误原文。
-- pt_0ff 前读已签可判 already，否则 protocol_pending，禁止滑块提交；yema 保留禁止签到；模拟登录一律不走 Browserless（用户裁决），BQL 仅服务签到路径。滑块模拟、真实过盾及站点提交效果未验证，需后续授权校准。
+### 仿真通道（CloakBrowser）
+- 仅 ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema 声明仿真；生效条件为站点声明且 ID 在 `site_browserless` 名单中，无全局开关。native 与 custom 仿真使用 CloakBrowser，结果 `transport=cloak`。一般模拟登录不走仿真；M-Team 保活登录是专门的真实浏览器账密登录例外，不执行签到。
+- 复用 Nexus 前读→协议解析→单次提交→无条件回读，不猜浏览器按钮或新增判定规则。CloakBrowser 负责页面渲染与页面内 fetch 原协议，Cookie 双向同步仅限本次执行；不得重放动作，结果 `transport=cloak`。
+- 默认 solve 与页面稳定等待各 15 秒，超时预算为两项等待加 45 秒，上限 300 秒；单次导航上限 30 秒。
+- pt_0ff 前读已签可判 already，否则 protocol_pending，禁止滑块提交；yema 保留禁止签到；常规模拟登录不走仿真。滑块模拟与真实过盾未验证，需后续授权校准。
 
 ## 阶段2数据契约
 - `core/registry.py` 使用 `pkgutil` 遍历 `sites/`，逐模块导入并收集 `_ISiteSigninHandler` 子类；导入异常只进入 `skipped` 日志，不阻断其他站点。注册项包含 `id/name/login_capable/credential/cf`，并追加 `rousi/sunnypt` 两个 integrations 注册项；`/sites` 返回 `sources.adapters` 与 `sources.integrations` 计数。
@@ -178,12 +178,12 @@
 - cookiecloud 原生候选已于 3.12.0 接入；原生模拟登录同样按 cookiecloud → managed_site → local_cookie 选择；custom 保持本条目 Cookie。本轮仅离线 mock 验证，真实服务器与站点验证仍需授权。
 
 ## Custom 签到契约（3.13.0）
-- custom_sites_data 的已启用且勾选签到条目（含数字 ID）直接使用 NexusSignin 默认 attendance 表单流程，不要求 native verified；unlock_all_sites 不能绕过启用与动作选择。registry 的 custom pilot_enabled=True；signin_applicable=True，唯 emulate=true 且 Browserless 未启用时为 false。
+- custom_sites_data 的已启用且勾选签到条目（含数字 ID）直接使用 NexusSignin 默认 attendance 表单流程，不要求 native verified；unlock_all_sites 不能绕过启用与动作选择。registry 的 custom pilot_enabled=True；signin_applicable=True，仿真能力由站点声明与 `site_browserless` 名单决定。
 - custom Cookie 使用本条目的 local_cookie；GET attendance → 唯一同源 POST 表单 → 单次提交 → 无条件新页回读默认消息链。前读已签为 already，新页确证为 success，缺证据为 unconfirmed；history action=sign。无唯一表单返回 protocol_pending，不猜非 NexusPHP 协议；已识别验证码不自动作答。
-- emulate=true 必须显式 browserless_enabled 且配置 browserless_url；browserless_token 仅用于连接认证。本版为 Browserless 前读/回读 + HTTP 提交混合路径（metadata.transport=browserless_read_http_submit），执行级 Cookie 双向同步，独立 context 及连接 finally 释放；连接/页面错误不降级 HTTP-only、不重试动作。依赖 Playwright/CDP，浏览器指纹绑定 POST 站点可能仍未确认。
-- verify 保留只读 login_ok 语义，不视为签到；custom 模拟登录复用同一可达性语义并无条件二次 GET 回读，仍检查 enabled/login 选择与 Browserless 显式开关。真实站点与 Browserless 服务未实测，另行授权验证；设计取舍见 .agents/notes/implemented/feature/2026-10-22-custom-attendance.md。
+- emulate=true 且自定义站点 ID 位于 `site_browserless` 时启用 CloakBrowser 前读/回读 + HTTP 提交混合路径（`metadata.transport=cloak`），执行级 Cookie 双向同步；连接/页面错误不降级 HTTP-only、不重试动作。
+- verify 保留只读 login_ok 语义，不视为签到；custom 模拟登录复用同一可达性语义并无条件二次 GET 回读，仍检查 enabled/login 选择；模拟登录不走仿真。真实站点未实测，另行授权验证；设计取舍见 .agents/notes/implemented/feature/2026-10-22-custom-attendance.md。
 
 ### 3.36.0 后端数据与端点契约
-- `/manual_signin` 与 `/notify_preview` 已移除；保留 `/verify_site` 只读核验入口及 `/run_once`。数据页按钮、错误消息行、统计合并卡、历史按天、配置 switch 与 per-site Browserless 的渲染由前端契约负责；接口不另增前端字段。
-- `/stats.sites[]` 提供 `cf`（未知为 `unknown`）、`emulate`（`site_browserless` 名单或自定义站点 emulate）及声明值 `browserless`。
-- 集成凭据分类：rousi/sunnypt 为 password（账密登录；SunnyPT JWT 是登录产物）；mteam 保留 api_key，但 `login_capable=false`。
+- `/manual_signin` 与 `/notify_preview` 已移除；保留 `/verify_site` 只读核验入口及 `/run_once`。数据页按钮、错误消息行、统计合并卡、历史按天、配置 switch 与 per-site 仿真的渲染由前端契约负责；接口不另增前端字段。
+- `/stats.sites[]` 提供 `cf`（未知为 `unknown`）、`emulate`（`site_browserless` 名单或自定义站点 emulate）及声明值 `emulate`。
+- 集成凭据分类：rousi/sunnypt 为 password（账密登录；SunnyPT JWT 是登录产物）；mteam 保留 api_key 元数据，支持 CloakBrowser 保活登录（`login_capable=true`）。

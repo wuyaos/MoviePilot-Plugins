@@ -1,6 +1,6 @@
-"""Custom Nexus attendance, with an optional Browserless-read/HTTP-submit transport."""
+"""Custom Nexus attendance with an optional CloakBrowser-read/HTTP-submit transport."""
 from contextlib import contextmanager
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from lxml import html
@@ -34,45 +34,24 @@ class CustomNexusSignin(NexusSignin):
         return not tree.xpath('//input[@name="imagehash" or @name="imagestring" or @name="captcha"]')
 
 
-class BrowserlessReadHttpSubmit:
-    """One isolated browser context; the POST response is never attendance evidence."""
-    def __init__(self, http, context, page, url):
-        self.http, self.context, self.page, self.url = http, context, page, url
-
-    def get(self, url):
-        self.context.add_cookies([{'name': key, 'value': value, 'url': self.url}
-                                  for key, value in self.http.cookies.items()])
-        response = self.page.goto(url, wait_until='domcontentloaded', timeout=20000)
-        self.http.cookies.update({cookie['name']: cookie['value']
-                                  for cookie in self.context.cookies(self.url)})
-        return LoginPage(self.page.content(), self.page.url, response.status if response else 0)
-
-    def post(self, url, **kwargs):
-        return self.http.post(url, **kwargs)
-
-
 @contextmanager
 def custom_client(credential, info, config):
     http = NativeHttpClient(credential, info)
-    if not info.get('emulate'):
+    if not info.get("emulate"):
         yield http
         return
-    from playwright.sync_api import sync_playwright
-    endpoint = urlsplit(config['browserless_url'])
-    query = dict(parse_qsl(endpoint.query))
-    if config.get('browserless_token'):
-        query['token'] = config['browserless_token']
-    endpoint = urlunsplit(endpoint._replace(query=urlencode(query)))
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.connect_over_cdp(endpoint, timeout=20000)
-        try:
-            context = browser.new_context(**({'user_agent': info['ua']} if info.get('ua') else {}))
-            try:
-                yield BrowserlessReadHttpSubmit(http, context, context.new_page(), info['url'])
-            finally:
-                context.close()
-        finally:
-            browser.close()
+    from types import SimpleNamespace
+    from .cloak import CloakHttpClient
+    client = CloakHttpClient(http, info, SimpleNamespace(id=info.get("id", "custom"), url=info["url"]))
+    class ReadHttpSubmit:
+        def get(self, url): return client.get(url)
+        def post(self, url, **kwargs): return http.post(url, **kwargs)
+        def get_bytes(self, url): return http.get_bytes(url)
+        def retain_cookies(self, names): return http.retain_cookies(names)
+    try:
+        yield ReadHttpSubmit()
+    finally:
+        client.close()
 
 
 def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
@@ -88,7 +67,7 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
         result.site_id, result.run_id = site_id, str(uuid4())
         result.metadata.update(action='login' if read_only else action, trigger=trigger, read_only=read_only)
         if info.get('emulate'):
-            result.metadata['transport'] = 'browserless_read_http_submit'
+            result.metadata['transport'] = 'cloak'
         if result.status == SignStatus.SKIPPED:
             result.metadata['reason'] = result.message
         if runner.history:
@@ -99,11 +78,9 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
         return finish(SignResult.skipped('site_disabled'))
     if not read_only and not selected:
         return finish(SignResult.skipped('login_not_selected' if action == 'login' else 'signin_not_selected'))
-    if info.get('emulate'):
-        if not config.get('browserless_enabled'):
-            return finish(SignResult.skipped('browserless_disabled'))
-        if not config.get('browserless_url'):
-            return finish(SignResult.skipped('browserless_not_configured'))
+    if info.get('emulate') and action != "login":
+        if str(site_id) not in {str(value) for value in config.get('site_browserless', [])}:
+            return finish(SignResult.skipped('emulation_not_selected'))
     with runner.locks.acquire((site_id, '')) as acquired:
         if not acquired:
             return finish(SignResult.skipped())
@@ -114,10 +91,12 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
             return finish(SignResult(SignStatus.AUTH_FAILED, '缺少 Cookie'))
         try:
             url = info.get('url') or ''
+            info["id"] = site_id
             if urlsplit(url).scheme not in {'http', 'https'} or not urlsplit(url).netloc:
                 return finish(SignResult(SignStatus.UNCONFIRMED, '自定义站点地址无效'))
             credential = Credential('local_cookie', cookie)
-            with custom_client(credential, info, config) as client:
+            client_info = {**info, "emulate": bool(info.get("emulate") and action != "login")}
+            with custom_client(credential, client_info, config) as client:
                 if not read_only and action == 'sign':
                     ctx = SignContext(site_id, credential, client, site_lock=runner.locks, cancel=runner.stop)
                     result = CustomNexusSignin(site_id, info).signin(ctx)

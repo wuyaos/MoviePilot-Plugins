@@ -31,13 +31,13 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.36.0"
+    plugin_version = "3.37.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
     SITE_KEYS = ("enabled_sites", "sign_sites", "login_sites", "site_browserless", "custom_sites_data",
                  "rousi_username", "rousi_password", "sunnypt_username",
-                 "sunnypt_password", "sunnypt_token")
+                 "sunnypt_password", "sunnypt_token", "mteam_username", "mteam_password", "mteam_totp")
 
     def __init__(self):
         super().__init__()
@@ -70,9 +70,6 @@ class AutoPtCheckin(_PluginBase):
             self._bound_uids = self.get_data("identity.bindings") or {}
         self._site_config.update({key: deepcopy(self._config[key]) for key in self.SITE_KEYS if key in self._config})
         self._config.update(deepcopy(self._site_config))
-        if self._config.get("browserless_enabled") and not self._config.get("site_browserless"):
-            self._config["site_browserless"] = [str(site["id"]) for site in get_registry()["sites"] if site.get("browserless")]
-            self._site_config["site_browserless"] = list(self._config["site_browserless"])
         if hasattr(self, "save_data"):
             self.save_data("site_config", deepcopy(self._site_config))
 
@@ -182,12 +179,12 @@ class AutoPtCheckin(_PluginBase):
         return await self.api_save_config({**self._config, **deepcopy(config)})
 
     async def api_sites(self) -> dict:
-        registry = get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))
+        registry = get_registry(self._config.get('custom_sites_data', []))
         sites = deepcopy(registry["sites"])
         emulate_ids = {str(v) for v in self._config.get('site_browserless', [])}
         for site in sites:
             site.setdefault('cf', 'unknown')
-            site['emulate'] = str(site.get('id')) in emulate_ids or bool(site.get('emulate', False)) or bool(site.get('browserless', False))
+            site['emulate'] = str(site.get('id')) in emulate_ids or bool(site.get('emulate', False))
         return {"success": True, "data": {"sites": sites, "sources": deepcopy(registry["sources"])}}
 
     async def api_stats(self) -> dict:
@@ -208,7 +205,7 @@ class AutoPtCheckin(_PluginBase):
 
     def _site_rows(self) -> list[dict]:
         """数据页站点行：状态表提供轨道状态，registry 提供元数据与控制位。"""
-        registry = get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']
+        registry = get_registry(self._config.get('custom_sites_data', []))['sites']
         enabled = {str(v) for v in self._config.get('enabled_sites', [])}
         sign_sel = {str(v) for v in self._config.get('sign_sites', [])}
         login_sel = {str(v) for v in self._config.get('login_sites', [])}
@@ -223,8 +220,7 @@ class AutoPtCheckin(_PluginBase):
                 'icon': site.get('icon', ''), 'source': site.get('source', ''),
                 'cf': site.get('cf', 'unknown'),
                 'emulate': sid in {str(v) for v in self._config.get('site_browserless', [])} or bool(site.get('emulate', False)),
-                'browserless': bool(site.get('browserless', False)),
-                'sign_state': sign.get('state', 'disabled' if sid not in enabled else 'pending'),
+                                'sign_state': sign.get('state', 'disabled' if sid not in enabled else 'pending'),
                 'sign_status': sign.get('status', ''), 'sign_time': sign.get('time', ''),
                 'sign_message': sign.get('message', ''),
                 'login_state': login.get('state', 'disabled' if sid not in enabled else 'pending'),
@@ -272,7 +268,7 @@ class AutoPtCheckin(_PluginBase):
         sign_sel = {str(v) for v in self._config.get("sign_sites", [])}
         login_sel = {str(v) for v in self._config.get("login_sites", [])}
         unlock = bool(self._config.get("unlock_all_sites", False))
-        for site in get_registry(self._config.get("custom_sites_data", []), bool(self._config.get("browserless_enabled")))["sites"]:
+        for site in get_registry(self._config.get("custom_sites_data", []))["sites"]:
             sid = str(site["id"])
             if sid not in enabled and not self._track_store().entry_of(sid, "sign") and not self._track_store().entry_of(sid, "login"):
                 continue
@@ -321,7 +317,7 @@ class AutoPtCheckin(_PluginBase):
 
 
     def _execute_site(self, site_id, read_only=False, trigger="manual", action="sign"):
-        registry = {site['id']: site for site in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
+        registry = {site['id']: site for site in get_registry(self._config.get('custom_sites_data', []))['sites']}
         # “今日已签”由状态表 success 态承担：成功站不进队列，这里不再重复拦截。
         custom = next((item for item in self._config.get('custom_sites_data', [])
                        if isinstance(item, dict) and str(item.get('id')) == str(site_id)), None)
@@ -371,6 +367,8 @@ class AutoPtCheckin(_PluginBase):
             self._record_result(result)
             return asdict(result)
         info["uid"] = self._bound_uids.get(site_id, "")
+        if site_id == "mteam":
+            info.update({key: self._config.get(key, "") for key in ("mteam_username", "mteam_password", "mteam_totp")})
         if site.get('native') or action == 'login':
             custom_cookie = ''
             customs = self._config.get('custom_sites_data') or []
@@ -407,7 +405,7 @@ class AutoPtCheckin(_PluginBase):
             site_id = next((str(item.get('id')) for item in self._config.get('custom_sites_data', [])
                             if isinstance(item, dict) and str(item.get('id')) == str(domain)), None)
         if not site_id and self._config.get('unlock_all_sites', False) and domain:
-            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
+            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
             if domain in registry_ids:
                 site_id = domain
         if not site_id:
@@ -426,7 +424,7 @@ class AutoPtCheckin(_PluginBase):
             site_id = next((str(value) for value in self._config.get('enabled_sites', [])
                             if hostname(str(value)) == hostname(domain)), None)
         if not site_id and self._config.get('unlock_all_sites', False) and domain:
-            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
+            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
             if domain in registry_ids:
                 site_id = domain
         if not site_id:
@@ -440,7 +438,7 @@ class AutoPtCheckin(_PluginBase):
             site_id = next((str(item.get('id')) for item in self._config.get('custom_sites_data', [])
                             if isinstance(item, dict) and str(item.get('id')) == str(domain)), None)
         if not site_id and self._config.get('unlock_all_sites', False) and domain:
-            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))['sites']}
+            registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
             if domain in registry_ids:
                 site_id = domain
         if not site_id:
@@ -532,6 +530,7 @@ class AutoPtCheckin(_PluginBase):
 
     def _scheduled_once(self):
         """一次性执行（立即签到/立即运行一次）不受 scheduler_enabled 门控，直接全量执行。"""
+        stop_before = self._runner.stop.is_set()
         with self._migration.lock:
             if not self._config.get("onlyonce", False):
                 return
@@ -539,6 +538,10 @@ class AutoPtCheckin(_PluginBase):
             if hasattr(self, "update_config"):
                 self.update_config(deepcopy(self._config))
             self._scheduler.clear()
+        # update_config 触发宿主任务重建时会回调 stop_service 置位 stop；
+        # 这不是真实取消（round 尚未开始），恢复进入前状态，否则一次性执行必被拦。
+        if not stop_before and self._runner.stop.is_set():
+            self._runner.stop.clear()
         if self._runner.stop.is_set():
             return
         return self._execute_all("scheduler")
