@@ -96,8 +96,8 @@ def discover_sites(package_name: str | None = None) -> dict:
         item['signin_capable'] = (getattr(_NATIVE_MODULES[item['id']], 'signin_capable', True)
                                   if item.get('native') else item['id'] not in ('darkland', 'digitalcore'))
         # 签到不适用：登录专用站、mteam（保活语义）、答题/滑块类（chdbits/tjupt 答题误答风险；
-        # 52pt 已改滑块签到，HTTP 无法完成，须 CloakBrowser 实现，均仅保留模拟登录）
-        quiz = {'52pt', 'chdbits', 'tjupt'}
+        # 52pt 使用 CloakBrowser 滑块动作；答题站仍仅保留模拟登录）
+        quiz = {'chdbits', 'tjupt'}
         item['signin_applicable'] = item['signin_capable'] and item['id'] != 'mteam' and item['id'] not in quiz and (
             not item.get('native') or item.get('hook_implemented', True) or item.get('verified', False))
         if item['id'] in quiz:

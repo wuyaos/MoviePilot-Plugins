@@ -853,5 +853,29 @@
     "name": "龟站",
     "url": "https://kamept.com/",
     "attendance_path": "/attendance.php"
+  },
+  {
+    "id": "52pt",
+    "name": "52PT",
+    "url": "https://52pt.site/",
+    "attendance_path": "/attendance.php",
+    "signin_capable": true,
+    "cloak_steps": [
+      "slider",
+      "sign_button"
+    ],
+    "emulate": true
+  },
+  {
+    "id": "yema",
+    "name": "YemaPT",
+    "url": "https://yemapt.org/",
+    "attendance_path": "/",
+    "signin_capable": true,
+    "cloak_steps": [
+      "human_verify",
+      "sign_button"
+    ],
+    "emulate": true
   }
 ]

@@ -82,7 +82,8 @@ def test_retrotoon_claim_ignores_timezone_form():
     assert site.discover_form(None, LoginPage(claim * 2 + timezone, page.url)) is None
 
 
-def test_yema_stops_signin_without_disabling_login():
+def test_yema_signin_capability_and_login_are_enabled():
     site = get_native_module('yema')
-    assert site.signin_capable is False
+    assert site.signin_capable is True
     assert site.login_capable is True
+    assert site.cloak_steps == ['human_verify', 'sign_button']

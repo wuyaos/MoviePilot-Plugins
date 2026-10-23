@@ -106,7 +106,7 @@
 
 ### 仿真通道（CloakBrowser）
 - 仿真名单（`site_browserless`）：ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema、52pt、piggo、kamept；生效条件为站点声明且 ID 在名单中，无全局开关。native 与 custom 仿真使用 CloakBrowser，结果 `transport=cloak`。一般模拟登录不走仿真；M-Team 保活登录是专门的真实浏览器账密登录例外，不执行签到。
-- 复用 Nexus 前读→动作→无条件回读，结论一律来自回读证据。Cookie 双向同步仅限本次执行；不得重放动作。
+- 复用 Nexus 前读→动作→无条件回读，结论一律来自回读证据。Cookie 双向同步仅限本次执行；不得重放动作。页面动作后的落点页 stash 即为回读证据；站点每次进入可能发放新的滑块门页，不能用二次 GET 替代动作回读。
 - **页面动作站（`cloak_steps`）**：pt_0ff=[slider,sign_button]（滑块有时不出现，出现才拖动）、52pt=[slider,sign_button]、yema=[human_verify,sign_button]、piggo/kamept=[sign_button]。`run_page_action` 步骤缺失不阻断（absent 继续下一步），点击后等 5s，最终以回读消息链判定成功/已签/未确认，不猜测按钮结果。 pt_0ff 拖到底松开后门页先显示「验证通过」，约 8 秒自动跳转真实签到页；回读出现「签到已得N」才是成功证据，默认消息链已覆盖。slider 拖动后轮询等待标题/正文离开「滑动认证/拖动滑块验证」门页（每 1.5s，最多 25s），离开后再稳定等待 2s，超时如实保留未确认。
 - **轮内共享会话**：一轮 ≥2 个仿真站到期时共用一个 CloakSession（`_runner.shared_cloak`），按站注入 Cookie，不重复开关浏览器；会话生命周期归轮次，异常降级为逐站独立会话。
 - **手动门控旁路**：`signin_by_domain`/`login_by_domain`（trigger=manual）绕过 native_unverified/hook_not_implemented/pilot_not_enabled（手动单站即显式人工授权）；调度轮仍受门控。darkland/digitalcore（signin_not_applicable）与 login_not_supported 不受旁路影响。
@@ -174,7 +174,7 @@
 - D6：凭证枚举 api→api_key（credentials/integrations/registry/前端徽标/测试）。
 - D7：46 副本 deprecated+legacy 分支 site_removed 防护；文件删除推迟到生产切换+verified 解锁。
 - D9：Luna 审查 8 项 6 过，P2 CF-only 过滤补全（_CF_ONLY_COOKIES）、P3 文档过期描述修正。
-- 52pt 已滑块化（hook=False、signin_capable=False、仅模拟登录；Browserless 滑块实现暂缓）。答题类 chdbits/tjupt 仅模拟登录。
+- 52pt 已滑块化并接入页面动作签到，yema 恢复 signin_capable=True；答题类 chdbits/tjupt 仅模拟登录。
 
 ## 批次 3 计划（已实施，见上；保留原文备查）
 - 删旧桥的前置条件：全量重审口径的27站完成生产校准并逐站 verified 解锁；默认链命中、只读 already 或 unlock_all_sites 都不替代该条件，模拟登录依赖需一并核对后再删除。

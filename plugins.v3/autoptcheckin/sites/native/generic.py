@@ -11,7 +11,7 @@ from ...core.attendance_captcha import solve_attendance_captcha
 from ...core.credentials import CredentialSpec
 from ...core.get_signin import GetSignin
 from ...core.nexus import NexusSignin, SigninForm
-from ...core.sitemodel import RecordSpec
+from ...core.sitemodel import RecordSpec, page_available
 
 NATIVE_ALIASES = {"pterclub.net": "pterclub", "kp.m-team.cc": "mteam"}
 _DECLARATIONS = Path(__file__).with_name("generic_sites.json")
@@ -87,11 +87,25 @@ def build_generic_sites() -> list[type[NexusSignin]]:
                 return SigninForm(urljoin(self.url, self.attendance_path), [])
 
             def submit(self, ctx, form):
-                from ..core.cloak import run_page_action
+                from ...core.cloak import run_page_action
                 run_page_action(ctx.http.session, list(steps))
+                # 动作后落点页即回读证据：站点每次进入都可能发新滑块门页，
+                # 二次 GET 会重新拿到门页导致证据丢失（自由农场实证）。
+                from ...core.models import LoginPage
+                page = ctx.http.session.page
+                ctx.cloak_read = LoginPage(page.content(), page.url, 200)
+
+            def read_after(self, ctx, page, _base=base):
+                stashed = getattr(ctx, "cloak_read", None)
+                if stashed is not None:
+                    ctx.cloak_read = None
+                    if page_available(stashed):
+                        return _base.read_after(self, ctx, stashed)
+                return _base.read_after(self, ctx, page)
 
             attrs["discover_form"] = discover_form
             attrs["submit"] = submit
+            attrs["read_after"] = read_after
         generated = type(class_name, (base,), attrs)
         globals()[class_name] = generated
         classes.append(generated)

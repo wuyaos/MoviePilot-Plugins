@@ -152,3 +152,60 @@ def test_generic_response_json_rejects_colliding_keys(monkeypatch, tmp_path):
 def test_generic_success_text_override(monkeypatch, tmp_path):
     site = generate(monkeypatch, tmp_path, success_texts=['fixture success'])
     assert site.message_spec().status_map['fixture success'] == 'signed'
+
+
+def test_cloak_action_readback_prefers_stashed_landing_page(monkeypatch):
+    site = get_native_module('pt_0ff')
+    landing = '<h2>签到已得100</h2>'
+
+    class Page:
+        url = site.url
+        def content(self): return landing
+
+    class Session:
+        page = Page()
+
+    class Http:
+        session = Session()
+        def get(self, *args, **kwargs):
+            from autoptcheckin.core.models import LoginPage
+            return LoginPage('<html>滑动认证 拖动滑块验证</html>', site.url, 200)
+
+    # run_page_action is imported locally from core.cloak.
+    from autoptcheckin.core import cloak
+    monkeypatch.setattr(cloak, 'run_page_action', lambda session, steps: None)
+    result = site.signin(c1.context(site, Http(), None))
+    assert result.status == 'success', result.evidence
+    assert result.message == '签到已得100'
+
+
+def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatch):
+    rows = {row['id']: row for row in json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))}
+    assert rows['yema']['signin_capable'] is True
+    assert rows['52pt']['signin_capable'] is True
+    assert rows['pt_0ff']['signin_capable'] is True
+    assert rows['piggo']['emulate'] is True and rows['piggo']['cloak_steps'] == ['sign_button']
+    assert 'emulate' not in rows['kamept']
+    from autoptcheckin.core import cloak
+    monkeypatch.setattr(cloak, 'run_page_action', lambda session, steps: None)
+    for sid in ('yema', '52pt'):
+        site = get_native_module(sid)
+        assert site.signin_capable is True
+        entry = next(row for row in discover_sites()['sites'] if row['id'] == sid)
+        assert entry['signin_capable'] is True and entry['signin_applicable'] is True
+
+        class Page:
+            url = site.url
+            def content(self): return '<h2>签到已得100</h2>'
+
+        class Session:
+            page = Page()
+
+        class Http:
+            session = Session()
+            def get(self, *args, **kwargs):
+                from autoptcheckin.core.models import LoginPage
+                return LoginPage('<main>门页</main>', site.url, 200)
+
+        result = site.signin(c1.context(site, Http(), None))
+        assert result.status == 'success' and result.message == '签到已得100'

@@ -100,11 +100,11 @@ def test_login_only_never_invents_signin_or_sends_requests(site_id):
     assert http.calls == []
 
 
-def test_yema_boolean_evidence_exact_not_coerced():
+def test_yema_uses_cloak_page_actions_not_api_receipt():
     site = get_native_module('yema')
-    for value in [True, False, None, 1, 'true']:
-        page = LoginPage(json.dumps({'success': value}), site.url)
-        assert context(site, Http()).read_record(page, site.record_spec).status == ('signed' if value is True else 'unsigned' if value is False else 'unconfirmed')
+    assert site.signin_capable and site.cloak_steps == ['human_verify', 'sign_button']
+    assert site.record_spec.source == 'page_message'
+
 
 
 def test_zhuque_skill_receipt_exact_status_not_homepage():
@@ -150,7 +150,7 @@ def test_new_sites_registry_and_hook_gates(monkeypatch, read_only, verified):
         assert result['metadata']['reason'] == ('signin_not_applicable' if site_id in ['darkland', 'digitalcore'] else 'hook_not_implemented' if verified else 'native_unverified')
 
 
-@pytest.mark.parametrize('site_id', ['ttg', 'yema', 'zhuque', 'yzyy'])
+@pytest.mark.parametrize('site_id', ['ttg', 'zhuque', 'yzyy'])
 def test_side_effect_endpoints_not_used_for_pre_read(site_id):
     site = get_native_module(site_id)
     http = Http(['<main>unknown</main>'])

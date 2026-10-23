@@ -15,10 +15,10 @@ from autoptcheckin.core.registry import get_native_module, discover_sites
 from autoptcheckin.core.sitemodel import RecordSpec, SignContext
 from autoptcheckin.core.native import NativeHttpClient
 
-IDS = 'hdarea nexushd ttg u2 hdchina opencd pterclub zhuque yema'.split()
-API = 'hdchina opencd pterclub zhuque yema'.split()
+IDS = 'hdarea nexushd ttg u2 hdchina opencd pterclub zhuque'.split()
+API = 'hdchina opencd pterclub zhuque'.split()
 RECEIPTS = dict(hdchina={'state': 'success'}, opencd={'state': 'success'},
-                pterclub={'status': '1'}, zhuque={'status': 200, 'data': {'bonus': 0}}, yema={'success': True})
+                pterclub={'status': '1'}, zhuque={'status': 200, 'data': {'bonus': 0}})
 
 
 def message(text):
@@ -214,7 +214,7 @@ def test_opencd_never_sends_cookie_to_foreign_image():
 
 @pytest.mark.parametrize('value,state', [(True, 'signed'), (False, 'unsigned'), (1, 'unconfirmed'), (0, 'unconfirmed'), ('true', 'unconfirmed'), ('false', 'unconfirmed'), (None, 'unconfirmed'), ({}, 'unconfirmed')])
 def test_record_spec_bool_exact_type(value, state):
-    site = get_native_module('yema')
+    site = get_native_module('hdchina')
     ctx = context(site, Http(site))
     spec = RecordSpec(source='response_json', response_field='success', status_map={True: 'signed', False: 'unsigned'})
     assert ctx.read_record(LoginPage(json.dumps({'success': value}), site.url), spec).status == state

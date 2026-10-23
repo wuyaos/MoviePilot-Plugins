@@ -1,16 +1,18 @@
-"""YemaPT: V2-derived declaration; production verification remains gated."""
-from ...core.api_signin import ApiSignin
+"""YemaPT page-action sign-in using the shared CloakBrowser flow."""
+from .generic import build_generic_sites
 from ...core.sitemodel import RecordSpec
 
+_base = next(site for site in build_generic_sites() if site.id == "yema")
 
-class YemaPT(ApiSignin):
-    id = 'yema'
-    name = 'YemaPT'
-    url = 'https://yemapt.org/'
-    attendance_path = '/'
-    # 用户裁决：yema 暂停签到，仅模拟登录（布尔 API 空消息待查）
-    signin_capable = False
-    emulate = True  # 布尔 API 前读需浏览器过盾（yemapt growth 页）
+
+class YemaPT(_base):
+    id = "yema"
+    name = "YemaPT"
+    url = "https://yemapt.org/"
+    attendance_path = "/"
+    emulate = True
     hook_implemented = True
-    record_spec = RecordSpec(source="response_json", response_field="success", status_map={True: "signed", False: "unsigned"})
-    action_path = '/api/consumer/checkIn'
+    record_spec = RecordSpec(
+        '//*[@id="batch2-message-pending-calibration"]',
+        {"签到成功": "signed", "签到已得": "signed", "今天已经签到过": "signed", "未签到": "unsigned"},
+    )

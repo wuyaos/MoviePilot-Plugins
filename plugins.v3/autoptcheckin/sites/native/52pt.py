@@ -1,20 +1,14 @@
-"""52PT: 滑块签到（2026-10-22 确认，非 bakatest 问答）；仅模拟登录，答题类模块已废弃。
-
-滑块签到需要浏览器拖动验证，HTTP 流程无法完成；如需实现须接入 CloakBrowser
-滑块轨迹模拟，属后续批次。当前 signin_applicable=False（registry 答题/滑块类排除），
-仅保留模拟登录（访问页面确认登录态）。
-"""
-from ...core.nexus import NexusSignin
+"""52PT slider check-in uses the shared CloakBrowser page-action flow."""
+from .generic import build_generic_sites
 from ...core.sitemodel import RecordSpec
 
+_base = next(site for site in build_generic_sites() if site.id == "52pt")
 
-class Pt52(NexusSignin):
-    id = '52pt'
-    name = '52PT'
-    url = 'https://52pt.site/'
-    attendance_path = '/'
-    hook_implemented = False
-    signin_capable = False
-    # 滑块流程未实现；消息选择器为默认链回退，未校准
+
+class Pt52(_base):
+    name = "52PT"
+    url = "https://52pt.site/"
+    attendance_path = "/"
+    hook_implemented = True
     record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]',
                              {'今天已经签过到了': 'signed', '未签到': 'unsigned'})

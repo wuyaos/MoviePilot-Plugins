@@ -16,9 +16,9 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 83
-    assert len({row['id'] for row in rows}) == 83
-    assert len({row['url'] for row in rows}) == 83
+    assert len(rows) == 85
+    assert len({row['id'] for row in rows}) == 85
+    assert len({row['url'] for row in rows}) == 85
     assert all({'id', 'name', 'url'} <= set(row) for row in rows)
     base_rows = sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows)
     assert base_rows == 50  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
