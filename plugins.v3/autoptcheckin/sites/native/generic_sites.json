@@ -828,6 +828,7 @@
     "name": "猪猪",
     "url": "https://piggo.me/",
     "attendance_path": "/attendance.php",
+    "cloak_entry_path": "/",
     "cloak_steps": [
       "sign_button"
     ],

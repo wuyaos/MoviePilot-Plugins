@@ -37,6 +37,8 @@ class Pt52(_base):
         from ...core.cloak import run_page_action
         from ...core.models import LoginPage
         page = ctx.http.session.page
-        run_page_action(ctx.http.session, list(getattr(self, 'cloak_steps', ()) or ('slider', 'sign_button')))
+        # 内联滑块在 torrents.php 本页；不点击「签到赚魔力」入口（独立页已暂停）。
+        steps = list(getattr(self, 'cloak_steps', ()) or ('slider', 'sign_button'))
+        run_page_action(ctx.http.session, steps)
         # 动作后落点页即回读证据；二次 GET 可能重新拿到门页。
         ctx.cloak_read = LoginPage(page.content(), page.url, 200)

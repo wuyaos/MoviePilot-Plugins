@@ -219,6 +219,7 @@ def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatc
     assert rows['52pt']['signin_capable'] is True
     assert rows['pt_0ff']['signin_capable'] is True
     assert rows['piggo']['emulate'] is True and rows['piggo']['cloak_steps'] == ['sign_button']
+    assert rows['piggo']['cloak_entry_path'] == '/'
     assert 'emulate' not in rows['kamept']
     from autoptcheckin.core import cloak
     monkeypatch.setattr(cloak, 'run_page_action', lambda session, steps: None)

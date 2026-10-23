@@ -11,7 +11,7 @@ except ImportError:
     launch_context = None
 
 
-TURNSTILE_HEADFUL_SITES = {"vclib"}
+TURNSTILE_HEADFUL_SITES = {"vclib", "piggo"}
 
 
 def state_path(site_id):
@@ -94,8 +94,26 @@ class CloakHttpClient:
             self.http.cookies[cookie["name"]] = cookie["value"]
 
     def get(self, url, *, referer=None):
+        # Piggo may issue its anti-bot cookie only on the site root.  Prime that
+        # page before the attendance request; the action page remains the
+        # returned page and is still the sole pre-read evidence.
+        entry_path = getattr(self.site, "cloak_entry_path", "")
+        target = urlsplit(url)
+        if entry_path and target.path != entry_path:
+            entry = f"{target.scheme}://{target.netloc}{entry_path}"
+            self.session.goto(entry)
+            self.session.page.wait_for_timeout(15000)
+            self._sync_cookies()
         response = self.session.goto(url)
         self.session.page.wait_for_timeout(15000)
+        # Piggo can return one 468 challenge response even after the first
+        # root visit.  Re-prime the same browser session once; no action is
+        # replayed and the final page remains the only evidence.
+        if getattr(response, "status", 0) == 468 and entry_path and target.path != entry_path:
+            self.session.goto(f"{target.scheme}://{target.netloc}{entry_path}")
+            self.session.page.wait_for_timeout(15000)
+            self._sync_cookies()
+            response = self.session.goto(url)
         self.session.page.wait_for_timeout(15000)
         self._sync_cookies()
         try:
@@ -138,19 +156,77 @@ def _wait_for_slider_page_exit(page):
     return False
 
 
+def _wait_for_locator(page, selectors, timeout_ms=20000):
+    """等待延迟渲染的页面动作控件；站点页面可先返回壳再挂载控件。"""
+    deadline = timeout_ms
+    while deadline >= 0:
+        for selector in selectors:
+            loc = page.locator(selector).first
+            try:
+                if loc.count():
+                    return loc
+            except Exception:
+                pass
+        if deadline == 0:
+            break
+        wait = min(500, deadline)
+        page.wait_for_timeout(wait)
+        deadline -= wait
+    return None
+
+
+def _enabled_sign_button(page):
+    """只返回已完成滑块后可提交的按钮，不误点门页提示按钮。"""
+    selectors = (
+        'button:has-text("提交签到")',
+        'input[type="submit"][value*="提交签到"]',
+        '#sign-button', '#sign_btn', '[id*="sign"] button',
+        'button:has-text("立即签到")', 'button:has-text("点我签到")',
+        'button:has-text("签到")', 'a:has-text("立即签到")',
+        'a:has-text("签到")', 'input[type="submit"][value*="签到"]',
+        'button:has-text("打卡")', 'text=打卡',
+    )
+    loc = _wait_for_locator(page, selectors)
+    if loc is None:
+        return None
+    try:
+        text = (loc.inner_text() or "").strip()
+    except Exception:
+        text = ""
+    if "请先完成滑块" in text or "完成滑块" in text:
+        return None
+    try:
+        if hasattr(loc, "is_enabled") and not loc.is_enabled():
+            return None
+    except Exception:
+        pass
+    return loc
+
+
 def run_page_action(session, steps):
     """CloakBrowser 页面内动作：滑块拖动 / 人工验证 / 签到按钮；步骤缺失不阻断，最终以回读判定。"""
     page = session.page
     results = []
     for step in steps:
         try:
-            if step == 'slider':
-                handle = page.locator(
+            if step == 'attendance_link':
+                # 52PT currently exposes the daily page behind the home/torrent
+                # navigation link; open it before looking for the delayed slider.
+                link = _wait_for_locator(page, ('a:has-text("签到赚魔力")',))
+                if link is None:
+                    results.append((step, 'absent'))
+                    continue
+                link.click()
+                page.wait_for_timeout(5000)
+                results.append((step, 'clicked'))
+            elif step == 'slider':
+                handle = _wait_for_locator(page, (
                     '#dragHandler, [class*="dragHandler"], #slider-btn, '
                     '[id*="slider"] .handle, [class*="slider"][class*="handle"], '
                     '[class*="slider"] .handle, [class*="drag"][class*="handle"], '
-                    '[class*="slider"] [class*="btn"]').first
-                if handle.count() == 0:
+                    '[class*="slider"] [class*="btn"]',
+                ))
+                if handle is None:
                     results.append((step, 'absent'))
                     continue
                 box = handle.bounding_box()
@@ -211,18 +287,12 @@ def run_page_action(session, steps):
                         break
                 results.append((step, 'clicked' if clicked else 'absent'))
             elif step == 'sign_button':
-                clicked = False
-                for sel in ('button:has-text("立即签到")', 'button:has-text("点我签到")',
-                            'button:has-text("签到")', 'a:has-text("立即签到")',
-                            'a:has-text("签到")', 'input[type="submit"][value*="签到"]',
-                            'button:has-text("打卡")', 'text=打卡'):
-                    loc = page.locator(sel).first
-                    if loc.count():
-                        loc.click()
-                        page.wait_for_timeout(5000)
-                        clicked = True
-                        page.wait_for_timeout(8000)
-                        break
+                loc = _enabled_sign_button(page)
+                clicked = loc is not None
+                if clicked:
+                    loc.click()
+                    page.wait_for_timeout(5000)
+                    page.wait_for_timeout(8000)
                 results.append((step, 'clicked' if clicked else 'absent'))
         except Exception:
             results.append((step, 'error'))
