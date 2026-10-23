@@ -28,7 +28,7 @@
 - 已启用列表为单一平铺紧凑行，不显示分组；提供独立名称筛选、全部展开/收起。「全部展开」打开所有已启用站点详情（不受筛选限制），「全部收起」关闭所有详情。列表最大高度 68vh 并内部滚动，桌面以一屏至少 15 行为验收。
 - 徽标枚举：来源「MP 站点 / 插件适配 / 自定义站点」；能力「可签到」，支持模拟登录时才显示「模拟登录」徽标与选项；凭证方式 `cookie / api / password`，允许组合，API 可标注 JWT；CF 状态「CF 有盾 / CF 无盾 / CF 未检测」，未知不得当成无盾。
 - 收起态即可勾选「签到」；支持模拟登录时才显示「模拟登录」勾选（同行），直接同步 sign_sites/login_sites，不改变 enabled_sites；勾选不触发详情展开，展开态显示来源、凭证方式、CF 状态、模拟登录能力的只读站点类型行，以及凭据、自定义地址/仿真等额外配置，不重复动作勾选或移除按钮。自定义站点同时展示地址与仿真状态；收起态站点名前的 × 经行内二次确认移出启用，同步 chips 与启用数量。
-- 凭据区按站点所需字段生成：肉丝为「账号 / 密码」，SunnyPT 为「账号 / 密码 / JWT（可选）」，列数按可用宽度自适应；纯 Cookie 示例站点不额外生成账号密码区。账号用普通文本，密码、JWT、令牌用 `type: password`。
+- 凭据区按站点所需字段生成：肉丝为「账号 / 密码」，SunnyPT 为「账号 / 密码」，列数按可用宽度自适应；纯 Cookie 示例站点不额外生成账号密码区。账号用普通文本，密码、JWT、令牌用 `type: password`。
 - 仅在站点启用且至少勾选签到或模拟登录、并且该站有专属凭据字段时显示凭据区；取消两个动作即隐藏，不能因选择了站点就无条件显示凭据。
 
 ### Vue 模式与宿主契约
@@ -187,4 +187,4 @@
 ### 3.36.0 后端数据与端点契约
 - `/manual_signin` 与 `/notify_preview` 已移除；保留 `/verify_site` 只读核验入口及 `/run_once`。数据页按钮、错误消息行、统计合并卡、历史按天、配置 switch 与 per-site 仿真的渲染由前端契约负责；接口不另增前端字段。
 - `/stats.sites[]` 提供 `cf`（未知为 `unknown`）、`emulate`（`site_browserless` 名单或自定义站点 emulate）及声明值 `emulate`。
-- 集成凭据分类：rousi/sunnypt 为 password（账密登录；SunnyPT JWT 是登录产物）；mteam 保留 api_key 元数据，支持 CloakBrowser 保活登录（`login_capable=true`）。
+- 集成凭据分类：rousi/sunnypt 为 password（账密登录；SunnyPT JWT 是登录产物）；mteam 凭据 password（账密登录；登录态 Cookie/storage_state 内置存储，失效自动重新账密登录），CloakBrowser 保活（`login_capable=true`）。
