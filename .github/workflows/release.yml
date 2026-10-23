@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'package.v2.json'
+      - 'package.v3.json'
   workflow_dispatch:
     inputs:
       plugin_id:
@@ -119,4 +120,94 @@ jobs:
 
           if not has_release:
               print("ℹ️ 无需创建新 Release（所有插件 tag 已存在或无 release 配置）")
+          PYEOF
+
+      - name: Read package.v3.json and create releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          INPUT_PLUGIN_ID: ${{ github.event.inputs.plugin_id }}
+        run: |
+          python3 << 'PYEOF'
+          import json, os, subprocess, zipfile, tempfile, shutil
+          from pathlib import Path
+
+          repo = os.environ.get("GITHUB_REPOSITORY", "")
+          plugin_filter = os.environ.get("INPUT_PLUGIN_ID", "").strip()
+
+          print(f"repo={repo} plugin_filter={plugin_filter!r} (v3)")
+
+          with open("package.v3.json", encoding="utf-8") as f:
+              data = json.load(f)
+
+          has_release = False
+          for pid, meta in data.items():
+              if not isinstance(meta, dict) or "version" not in meta:
+                  continue
+              if not meta.get("release"):
+                  continue
+              if plugin_filter and pid.lower() != plugin_filter.lower():
+                  continue
+
+              version = str(meta["version"])
+              tag = f"{pid}_v{version}"
+              asset_name = f"{pid.lower()}_v{version}.zip"
+
+              plugin_dir = None
+              for d in Path("plugins.v3").iterdir():
+                  if d.is_dir() and d.name.lower() == pid.lower():
+                      plugin_dir = d
+                      break
+              if not plugin_dir:
+                  print(f"\u26a0\ufe0f {pid}: \u63d2\u4ef6\u76ee\u5f55\u4e0d\u5b58\u5728\uff0c\u8df3\u8fc7")
+                  continue
+
+              result = subprocess.run(
+                  ["gh", "release", "view", tag, "-R", repo],
+                  capture_output=True, text=True
+              )
+              if result.returncode == 0:
+                  print(f"\u23ed\ufe0f {pid} v{version}: tag\u5df2\u5b58\u5728\uff0c\u8df3\u8fc7")
+                  continue
+
+              workdir = tempfile.mkdtemp()
+              asset_path = os.path.join(workdir, asset_name)
+              with zipfile.ZipFile(asset_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                  for root, dirs, files in os.walk(plugin_dir):
+                      dirs[:] = [d for d in dirs if d != "__pycache__" and d != "node_modules"]
+                      for fn in files:
+                          fp = Path(root) / fn
+                          arcname = fp.relative_to(plugin_dir)
+                          zf.write(fp, arcname)
+
+              title = f"{pid} v{version}"
+              notes = meta.get("history", {})
+              latest_note = ""
+              if isinstance(notes, dict):
+                  latest_note = notes.get(f"v{version}", "")
+              body = latest_note if latest_note else f"{pid} v{version}"
+
+              print(f"\U0001f4e6 \u521b\u5efa release: tag={tag} asset={asset_name}")
+              result = subprocess.run(
+                  ["gh", "release", "create", tag,
+                   "-R", repo,
+                   "--title", title,
+                   "--notes", body,
+                   "--target", "main",
+                   asset_path],
+                  capture_output=True, text=True
+              )
+              if result.returncode != 0:
+                  print(f"\u274c {pid} v{version}: \u521b\u5efa\u5931\u8d25")
+                  print(f"   stdout: {result.stdout}")
+                  print(f"   stderr: {result.stderr}")
+                  shutil.rmtree(workdir, ignore_errors=True)
+                  continue
+
+              shutil.rmtree(workdir, ignore_errors=True)
+              has_release = True
+              print(f"\u2705 {pid} v{version}: Release \u5df2\u521b\u5efa tag={tag}")
+
+          if not has_release:
+              print("\u2139\ufe0f v3 \u65e0\u9700\u521b\u5efa\u65b0 Release\uff08\u6240\u6709\u63d2\u4ef6 tag \u5df2\u5b58\u5728\u6216\u65e0 release \u914d\u7f6e\uff09")
           PYEOF

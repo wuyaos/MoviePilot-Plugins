@@ -75,7 +75,8 @@
             "v3.0.3": "配置页 Tab 化与凭证字段",
             "v3.0.4": "站点每行签到/模拟登录勾选、凭证动态显示、Browserless 配置",
             "v3.0.0": "V3 骨架"
-        }
+        },
+        "release": true
     },
     "RuntimePatchGuard": {
         "name": "运行时补丁守卫",
