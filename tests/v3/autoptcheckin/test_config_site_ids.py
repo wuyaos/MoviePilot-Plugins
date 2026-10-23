@@ -40,6 +40,11 @@ saveCustomSite({...model.custom_sites_data[0], name:'Renamed'});
 assert.equal(selected.value.length, 9);
 assert.equal(selected.value[0].name, 'Renamed');
 assert.equal(model.custom_sites_data.length, 8);
+// Custom dialog action switch updates flat action and enabled collections immediately.
+toggleCustomSignin(model.custom_sites_data[1], true);
+assert.ok(model.sign_sites.includes('60006') && model.enabled_sites.includes('60006'));
+toggleCustomSignin(model.custom_sites_data[1], false);
+assert.ok(!model.sign_sites.includes('60006') && model.enabled_sites.includes('60006'));
 deleteCustomSite('60005');
 assert.ok(!sites.value.some(s=>s.id==='60005'));
 assert.ok(!model.enabled_sites.includes('60005'));

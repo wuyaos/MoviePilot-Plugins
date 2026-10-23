@@ -1,63 +1,70 @@
-"""推送消息渲染：单站结果与轮次摘要共用一套格式；/notify_preview 与真实推送走同一路径。
+"""V2 风格的逐站签到与登录轮次通知。"""
 
-输出格式（notify_format，默认 plain）与渠道适配（MP V3 宿主实测口径）：
-- Telegram：MarkdownV2 / HTML / plain 均支持（宿主 telegramify 标准化）；
-- 飞书：默认 Markdown 卡片，显式 plain 才发纯文本；
-- Discord：原生渲染 Markdown；Slack：mrkdwn 用单星号，`**` 会降级显示；
-- 钉钉 / QQBot / SynologyChat / VoceChat / WebPush：纯文本，Markdown 符号原样露出。
-"""
-from .models import SignResult
-
-SUCCESS_STATUSES = frozenset({"success", "signed", "already", "login_ok"})
-FAILED_STATUSES = frozenset({"failed", "auth_failed"})
-UNCONFIRMED_STATUSES = frozenset({"unconfirmed"})
-
-# notify_format 合法值；parse_mode 透传宿主 Message（Telegram/飞书识别，其余渠道忽略）。
 FORMATS = ("plain", "markdown", "html")
 PARSE_MODES = {"plain": "plain", "markdown": "MarkdownV2", "html": "HTML"}
 
 
-def format_notification(site: str, result: SignResult) -> str:
-    """单站行；奖励仅在解析到时出现，不再输出「未知」兜底。"""
-    parts = [f"{site}：{result.status.value}", (result.message or "").strip()]
-    reward = (result.reward.reported if result.reward and result.reward.reported else "").strip()
-    if reward:
-        parts.append(f"奖励：{reward}")
-    return "，".join(part for part in parts if part)
+def _bold(text: str, fmt: str) -> str:
+    if fmt == "markdown":
+        return f"**{text}**"
+    if fmt == "html":
+        return f"<b>{text}</b>"
+    return text
 
 
-def _track_lines(summary: dict) -> list[tuple[str, dict]]:
-    return [(label, summary.get(track) or {})
-            for track, label in (("sign", "签到"), ("login", "登录"))
-            if any((summary.get(track) or {}).values())]
+def _sign_text(entry: dict) -> tuple[int, str]:
+    status = entry.get("status", "")
+    message = (entry.get("message") or "").strip()
+    reason = entry.get("reason", "")
+    if status in ("signed", "already"):
+        return 1, "今日已签到"
+    if status == "success":
+        return 0, "签到成功" + (f"，{message}" if message and "签到成功" not in message else "")
+    if status == "auth_failed":
+        cred = entry.get("credential", "cookie")
+        return 2, "签到失败，Cookie 已失效" if cred == "cookie" else "签到失败，认证失败"
+    if status == "network_error":
+        return 2, "签到失败，网络请求失败或超时，无法确认签到结果！"
+    if status == "maintenance":
+        return 2, "签到失败，站点关闭维护中，请稍后再试！"
+    if status == "unconfirmed":
+        return 2, "签到结果未确认，请人工核验"
+    if status == "protocol_pending":
+        return 2, "签到失败，验证码/协议未适配"
+    if status == "failed":
+        return 2, "签到失败" + (f"，{message}" if message else "")
+    return 2, "签到失败" + (f"，{message}" if message else (f"，{reason}" if reason else ""))
 
 
-def format_round_summary(summary: dict, fmt: str = "plain") -> str:
-    """轮次/预览摘要。summary 形如：
-    {"sign": {"success": 2, "failed": 1, "unconfirmed": 0, "other": 1},
-     "login": {...}, "failures": ["13city（签到：站点不可达）", ...]}
-    """
+def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[str, str]]:
+    """返回分轨消息（标题、文本）；summary 按 action 提供计数与逐站 entries。"""
     fmt = fmt if fmt in FORMATS else "plain"
-
-    def bold(text: str) -> str:
-        return {"plain": text, "markdown": f"**{text}**", "html": f"<b>{text}</b>"}[fmt]
-
-    track_lines = []
-    for label, counts in _track_lines(summary):
-        stats = (f"成功 {counts.get('success', 0)} · 失败 {counts.get('failed', 0)}"
-                 f" · 未确认 {counts.get('unconfirmed', 0)} · 待办 {counts.get('other', 0)}")
-        track_lines.append(f"{bold(label)} {stats}")
-    body = "\n".join(track_lines) or "本轮无待执行站点"
-    lines = [body]
-    failures = summary.get("failures") or []
-    if failures:
-        shown = failures[:10]
-        if fmt == "html":
-            lines.append("<ul>" + "".join(f"<li>{item}</li>" for item in shown)
-                         + ("<li>…</li>" if len(failures) > 10 else "") + "</ul>")
-        elif fmt == "plain":
-            lines.append("异常与失败：" + "、".join(shown) + ("…" if len(failures) > 10 else ""))
+    result = []
+    for track, title, verb in (("sign", "【站点自动签到】", "签到"),
+                               ("login", "【站点自动登录】", "模拟登录")):
+        data = summary.get(track) or {}
+        entries = list(data.get("entries", []))
+        if not data.get("total") and not entries:
+            continue
+        lines = [
+            f"全部{verb}数量: {data.get('total', 0)}（启用且已勾选{verb}）",
+            f"本次{verb}数量: {data.get('executed', 0)}（本轮实际执行）",
+            f"下次{verb}数量: {data.get('next', 0)}（本轮后仍待办）",
+        ]
+        if track == "sign":
+            ordered = sorted(entries, key=lambda item: _sign_text(item[1])[0])
+            for site, entry in ordered:
+                _, text = _sign_text(entry)
+                lines.append(f"【{site}】{text}")
         else:
-            lines.append("\n".join(f"- {item}" for item in shown)
-                         + ("\n- …" if len(failures) > 10 else ""))
-    return "\n\n".join(lines)
+            for site, entry in entries:
+                status = entry.get("status", "")
+                message = (entry.get("message") or "").strip()
+                text = "模拟登录成功" if status == "login_ok" else "模拟登录失败"
+                if message:
+                    text += f"，{message}"
+                lines.append(f"【{site}】{text}")
+        if fmt != "plain":
+            lines = [_bold(lines[0], fmt), *lines[1:]]
+        result.append((title, "\n".join(lines)))
+    return result

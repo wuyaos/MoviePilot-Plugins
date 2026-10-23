@@ -17,7 +17,7 @@ from .core.registry import get_registry, get_native_module
 from .core.native import run_native, run_native_login, run_integration
 from .core.custom import run_custom, CustomNexusSignin
 from .core.state_store import DISABLED, FAILED, GATE_SKIPS, PENDING, SUCCESS, TrackStateStore
-from .core.notify import PARSE_MODES, format_round_summary
+from .core.notify import PARSE_MODES, format_round_notifications
 from typing import Any
 
 try:
@@ -51,14 +51,17 @@ class AutoPtCheckin(_PluginBase):
         self._runner = SignRunner(history=self._record_result)
         self._history = HistoryStore(getattr(self, "get_data", None), getattr(self, "save_data", None))
         self._state = None
+        self._last_round = []
+        self._round_active = False
 
     def init_plugin(self, config: dict | None = None) -> None:
         with self._migration.lock:
             self._init_config(config)
 
-    def _init_config(self, config: dict | None = None) -> None:
-        self.stop_service()
-        self._runner.stop.clear()
+    def _init_config(self, config: dict | None = None, preserve_round: bool = False) -> None:
+        if not preserve_round:
+            self.stop_service()
+            self._runner.stop.clear()
         self._config = deepcopy(config or {})
         # 迁移/前端多次确认可能累积重复站点 ID：保序去重，避免队列重复执行。
         for key in ("enabled_sites", "sign_sites", "login_sites", "site_browserless"):
@@ -66,6 +69,8 @@ class AutoPtCheckin(_PluginBase):
             if isinstance(values, list):
                 self._config[key] = list(dict.fromkeys(str(v) for v in values))
         self._running = bool(self._config.get("enabled", False))
+        if preserve_round:
+            self._runner.stop.clear()
         if hasattr(self, "get_data"):
             self._site_config = self.get_data("site_config") or {}
             self._bound_uids = self.get_data("identity.bindings") or {}
@@ -165,8 +170,11 @@ class AutoPtCheckin(_PluginBase):
 
     def _save_config(self, config: dict) -> None:
         with self._migration.lock:
+            round_active = self._round_active
             self.update_config(config)
-            self.init_plugin(config)
+            if round_active:
+                self._runner.stop.clear()
+            self._init_config(config, preserve_round=round_active)
             try:
                 from app.sdk.scheduler import update_plugin_job
             except ImportError:
@@ -455,6 +463,15 @@ class AutoPtCheckin(_PluginBase):
         return {'success': True, 'data': result}
 
     def _execute_all(self, trigger="manual"):
+        """执行完整轮次；配置保存不会终止在途轮次。"""
+        self._round_active = True
+        self._last_round = []
+        try:
+            return self._execute_all_round(trigger)
+        finally:
+            self._round_active = False
+
+    def _execute_all_round(self, trigger="manual"):
         """双队列串行：先签到后登录；队列=状态表 failed/pending；单站失败当场重试 ≤ retry_count。"""
         self._recompute_track_states()
         self._track_store().rollover()
@@ -472,9 +489,14 @@ class AutoPtCheckin(_PluginBase):
                 shared = None
         try:
             results = []
+            executed = []
             for action in ("sign", "login"):
                 for site_id in self._due_for(action):
+                    if self._runner.stop.is_set():
+                        break
+                    executed.append((str(site_id), action))
                     results.append(self._run_with_retry(site_id, action, trigger))
+            self._last_round = executed
         finally:
             self._runner.shared_cloak = None
             if shared is not None:
@@ -504,39 +526,40 @@ class AutoPtCheckin(_PluginBase):
         return result
 
     def _round_summary(self) -> dict:
-        """从状态表当日结论构建推送摘要（与 /notify_preview 同一渲染路径）。"""
-        today = datetime.now().date().isoformat()
-        summary = {"sign": {}, "login": {}, "failures": []}
-        labels = {"sign": "签到", "login": "登录"}
-        for site, tracks in self._track_store().snapshot()["sites"].items():
-            for track, entry in tracks.items():
-                if track not in summary or not str(entry.get("time", "")).startswith(today):
-                    continue
-                bucket = summary[track]
-                state, status = entry.get("state"), entry.get("status", "")
-                if state == SUCCESS:
-                    bucket["success"] = bucket.get("success", 0) + 1
-                elif state == FAILED and status == "unconfirmed":
-                    bucket["unconfirmed"] = bucket.get("unconfirmed", 0) + 1
-                    summary["failures"].append(f'{site}（{labels[track]}：未确认）')
-                elif state == FAILED:
-                    bucket["failed"] = bucket.get("failed", 0) + 1
-                    summary["failures"].append(f'{site}（{labels[track]}：{entry.get("message") or status}）')
-        for track in ("sign", "login"):
-            due = len(self._track_store().due_sites(track))
-            if due:
-                summary[track]["other"] = due
+        """状态表当日快照与本轮实际执行集合合并为逐站通知数据。"""
+        snapshot = self._track_store().snapshot()["sites"]
+        enabled = {str(v) for v in self._config.get("enabled_sites", [])}
+        site_rows = get_registry(self._config.get("custom_sites_data", []))["sites"]
+        labels = {str(row["id"]): row.get("name", str(row["id"])) for row in site_rows}
+        credential_kinds = {str(row["id"]): (row.get("credential") or {}).get("kind", "cookie")
+                            for row in site_rows}
+        summary = {track: {"total": 0, "executed": 0, "next": 0, "entries": []}
+                   for track in ("sign", "login")}
+        executed = set(self._last_round)
+        for track, key in (("sign", "sign_sites"), ("login", "login_sites")):
+            selected = {str(v) for v in self._config.get(key, [])}
+            due = set(self._track_store().due_sites(track))
+            data = summary[track]
+            data["total"] = len(enabled & selected)
+            data["next"] = len(enabled & selected & due)
+            data["executed"] = sum(1 for site, action in executed if action == track)
+            for site in enabled & selected:
+                entry = snapshot.get(site, {}).get(track, {})
+                if entry and str(entry.get("time", "")).startswith(datetime.now().date().isoformat()):
+                    entry["credential"] = credential_kinds.get(site, "cookie")
+                    data["entries"].append((labels.get(site, site), entry))
+        for track in summary:
+            summary[track]["entries"].sort(key=lambda row: row[0].casefold())
         return summary
 
     def _notify_round(self, trigger: str) -> None:
-        """轮次结束按开关推送摘要；未启用 notify 时静默跳过。"""
+        """轮次结束分别推送签到与登录逐站摘要。"""
         try:
             if not self._config.get("notify"):
                 return
             fmt = self._config.get("notify_format", "plain")
-            text = format_round_summary(self._round_summary(), fmt)
-            self.post_message(title=f'PT 签到中心（{trigger}）', text=text,
-                              parse_mode=PARSE_MODES.get(fmt))
+            for title, text in format_round_notifications(self._round_summary(), fmt):
+                self.post_message(title=title, text=text, parse_mode=PARSE_MODES.get(fmt))
         except Exception:
             pass
 

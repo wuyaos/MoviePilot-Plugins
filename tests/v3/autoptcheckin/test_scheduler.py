@@ -45,6 +45,8 @@ def test_interval_expansion_and_persistence(monkeypatch, interval, expected):
     assert len(services) == expected
     assert [s['id'] for s in services] == [f'AutoSignIn.{i}' for i in range(expected)]
     assert services[0]['name'].endswith('09:00')  # 首槽固定为开始时间（BASE begin=9）
+    assert data['schedule_crons'][0] == '0 9 * * *'
+    assert data['schedule_signature'].endswith(':v2')
     crons = deepcopy(data['schedule_crons'])
     monkeypatch.setattr('autoptcheckin.core.scheduler.random.randint', lambda *args: pytest.fail('reload randomized'))
     p.init_plugin(config)
@@ -155,3 +157,16 @@ def test_scheduler_runner_records_trigger_without_cookie(monkeypatch):
     record = asyncio.run(p.api_history())['data']['items'][0]
     assert record['status'] == 'auth_failed'
     assert record['trigger'] == 'scheduler'
+
+
+def test_saving_config_during_running_round_does_not_cancel_it(monkeypatch):
+    sdk = types.ModuleType('app.sdk.scheduler')
+    sdk.remove_plugin_job = lambda pid: None
+    sdk.update_plugin_job = lambda pid: None
+    monkeypatch.setitem(sys.modules, 'app.sdk.scheduler', sdk)
+    p = plugin(BASE)
+    p._round_active = True
+    p._runner.stop.clear()
+    p._save_config({**BASE, 'cron_mode': 'cron', 'cron': '0 10 * * *'})
+    assert p._runner.stop.is_set() is False
+    assert p._running is True
