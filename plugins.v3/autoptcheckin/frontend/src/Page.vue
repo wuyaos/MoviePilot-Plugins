@@ -66,9 +66,7 @@ const trackChip = (site, kind) => {
   const state = site[kind + '_state']
   const raw = site[kind + '_status']
   const label = kind === 'login' ? '登录' : '签到'
-  if (state !== 'success' && raw === 'network_error') return ['不可达', 'off']
-  if (state !== 'success' && raw === 'maintenance') return ['维护', 'off']
-  if (state !== 'success' && raw === 'protocol_pending') return ['待适配', 'off']
+  if (raw === 'protocol_pending') return ['待适配', 'unknown']
   if (state === 'success') return [label, 'success']
   if (state === 'failed') return [label, raw === 'unconfirmed' ? 'unknown' : 'failure']
   return [label, 'off']
@@ -85,9 +83,12 @@ const cardCls = site => {
   return pick(site.sign_state, site.sign_status) || pick(site.login_state, site.login_status) || 'off'
 }
 function cardMessage(site) {
-  if (site.sign_state === 'failed' && site.sign_message) return site.sign_message
-  if (site.login_state === 'failed' && site.login_message) return site.login_message
-  return ''
+  const pick = (kind) => {
+    if (site[kind + '_state'] === 'success') return ''
+    const msg = site[kind + '_message']
+    return msg ? `${kind === 'login' ? '登录' : '签到'}：${msg}` : ''
+  }
+  return pick('sign') || pick('login')
 }
 const trackStates = [
   {key: 'sign_success', label: '签到', cls: 'success'},
