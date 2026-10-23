@@ -870,91 +870,106 @@
     "id": "dicmusic",
     "name": "海豚",
     "url": "https://dicmusic.com/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "anthelion",
     "name": "Anthelion",
     "url": "https://anthelion.me/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "jpopsuki",
     "name": "JPopsuki",
     "url": "https://jpopsuki.eu/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "nebulance",
     "name": "Nebulance",
     "url": "https://nebulance.io/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "qingwapt",
     "name": "青蛙",
     "url": "https://www.qingwapt.com/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "starspace",
     "name": "星空",
     "url": "https://star-space.net/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "aither",
     "name": "Aither",
     "url": "https://aither.cc/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "beyondhd",
     "name": "BeyondHD",
     "url": "https://beyond-hd.me/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "greatposterwall",
     "name": "海豹",
     "url": "https://greatposterwall.com/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "skyeysnow",
     "name": "天雪",
     "url": "https://skyeysnow.com/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "animez",
     "name": "AnimeZ",
     "url": "https://animez.to/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "azusa",
     "name": "梓喵",
     "url": "https://azusa.wiki/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "monikadesign",
     "name": "莫妮卡",
     "url": "https://monikadesign.uk/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "ipt",
     "name": "IPT",
     "url": "https://iptorrents.com/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "springsunday",
     "name": "春天",
     "url": "https://springsunday.net/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false
   },
   {
     "id": "filelist",

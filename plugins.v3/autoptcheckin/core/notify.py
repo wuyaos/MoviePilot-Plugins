@@ -19,18 +19,22 @@ def _sign_text(entry: dict) -> tuple[int, str]:
     if status in ("signed", "already"):
         return 1, "今日已签到"
     if status == "success":
-        return 0, "签到成功" + (f"，{message}" if message and "签到成功" not in message else "")
+        # 完整消息（可能含奖励信息），仅在重复前缀时去重。
+        if message:
+            return 0, message if "签到成功" in message else f"签到成功，{message}"
+        return 0, "签到成功"
     if status == "auth_failed":
         cred = entry.get("credential", "cookie")
         return 2, "签到失败，Cookie 已失效" if cred == "cookie" else "签到失败，认证失败"
     if status == "network_error":
-        return 2, "签到失败，网络请求失败或超时，无法确认签到结果！"
+        # pending 族：不冠「失败」，按未确认语义报告。
+        return 3, "网络请求失败或超时，本轮未确认，稍后自动重试"
     if status == "maintenance":
-        return 2, "签到失败，站点关闭维护中，请稍后再试！"
+        return 3, "站点维护中/已关闭，本轮跳过"
     if status == "unconfirmed":
-        return 2, "签到结果未确认，请人工核验"
+        return 3, "签到结果未确认，请人工核验"
     if status == "protocol_pending":
-        return 2, "签到失败，验证码/协议未适配"
+        return 3, "验证码/协议未适配，未提交"
     if status == "failed":
         return 2, "签到失败" + (f"，{message}" if message else "")
     return 2, "签到失败" + (f"，{message}" if message else (f"，{reason}" if reason else ""))
@@ -60,7 +64,12 @@ def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[
             for site, entry in entries:
                 status = entry.get("status", "")
                 message = (entry.get("message") or "").strip()
-                text = "模拟登录成功" if status == "login_ok" else "模拟登录失败"
+                if status == "login_ok":
+                    text = "模拟登录成功"
+                elif status == "unconfirmed":
+                    text = "模拟登录结果未确认，请人工核验"
+                else:
+                    text = "模拟登录失败"
                 if message:
                     text += f"，{message}"
                 lines.append(f"【{site}】{text}")

@@ -21,7 +21,7 @@ def test_generic_declarations_unique_and_credential_free():
     assert len({row['url'] for row in rows}) == 102
     assert all({'id', 'name', 'url'} <= set(row) for row in rows)
     base_rows = sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows)
-    assert base_rows == 65  # 50 基础 + 15 仅登录（attendance_path=null 属四字段键集）  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
+    assert base_rows == 50  # 15 仅登录站带 signin_capable=false 计入 extras（键集五字段）  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
     extras = [row for row in rows if set(row) != {'id', 'name', 'url', 'attendance_path'}]
     assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path'} for row in extras)
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'iptorrents'} & {row['id'] for row in rows}  # jpopsuki/nebulance/filelist 已转正为仅登录声明

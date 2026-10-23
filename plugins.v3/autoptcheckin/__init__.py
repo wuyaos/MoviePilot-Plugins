@@ -55,8 +55,10 @@ class AutoPtCheckin(_PluginBase):
         self._round_active = False
 
     def init_plugin(self, config: dict | None = None) -> None:
+        # 宿主配置保存走 init_plugin（PluginConfigCommand.update）；在途轮次同样保护，
+        # 否则 _init_config 默认的 stop_service 会打断运行中的队列（reviewer 3b24554a P1-2）。
         with self._migration.lock:
-            self._init_config(config)
+            self._init_config(config, preserve_round=self._round_active)
 
     def _init_config(self, config: dict | None = None, preserve_round: bool = False) -> None:
         if not preserve_round:
