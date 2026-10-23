@@ -3,7 +3,7 @@
     "notify": true,
     "cron": "",
     "cron_mode": "interval",
-    "interval_hours": 2,
+    "interval_hours": 6,
     "begin_hour": 8,
     "end_hour": 24,
     "onlyonce": false,
