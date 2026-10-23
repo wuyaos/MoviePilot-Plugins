@@ -37,8 +37,8 @@ class Scheduler:
                 crons = [str(config.get("cron", "")).strip()]
             elif mode == "interval":
                 interval = float(config.get("interval_hours", 2))
-                begin, end = int(config.get("begin_hour", 9)), int(config.get("end_hour", 23))
-                if not math.isfinite(interval) or interval < 0.5 or not 0 <= begin < end <= 23:
+                begin, end = int(config.get("begin_hour", 8)), int(config.get("end_hour", 24))
+                if not math.isfinite(interval) or interval < 0.5 or not 0 <= begin < end <= 24:
                     raise ValueError("invalid interval window")
                 signature = f"interval:{interval}:{begin}:{end}"
                 crons = self.get_data("schedule_crons") or []
@@ -50,7 +50,7 @@ class Scheduler:
                         minute += random.randint(max(30, int(interval * 60 * 0.5)), int(interval * 60))
                         if minute // 60 > end:
                             break
-                        crons.append(f"{minute % 60} {minute // 60} * * *")
+                        crons.append(f"{minute % 60} {min(minute // 60, 23)} * * *")
                     self.save_data("schedule_crons", crons)
                     self.save_data("schedule_signature", signature)
             else:

@@ -18,7 +18,7 @@ const selected = ref([{id:'alpha', browserless:true}, {id:'hotel'}, {id:'tango',
 const groupKey = site => site.id[0];
 const openGroups = ref([]), openSites = ref([]);
 const model = {enabled_sites:['alpha'], site_browserless:['alpha']};
-const hasExtraSettings = site => (site.fields || []).length > 0 || site.browserless === true || site.source === '自定义站点';
+const hasExtraSettings = site => (site.fields || []).length > 0 || site.emulate === true || site.browserless === true || site.source === '自定义站点';
 """ + functions + """
 expandSites();
 assert.deepEqual(openSites.value, ['alpha','tango']);
@@ -48,7 +48,7 @@ assert.deepEqual(pendingSites.value, model.enabled_sites);
     assert 'class="btn ghost mini expand-icon"' in source
     assert 'v-if="hasExtraSettings(site)"' in source
     assert '@click.prevent="toggleSite(site.id)"' in source
-    assert 'site-metadata' in source
+    assert 'site-metadata' not in source  # 3.37 用户裁决：展开态不再显示站点类型/凭证/URL 行
     assert '@click="expandSites"' in source and '@click="collapseSites"' in source
     assert 'v-model="pendingSites"' in source
     assert '@click="confirmSites"' in source

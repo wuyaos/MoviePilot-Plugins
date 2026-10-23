@@ -134,7 +134,7 @@ def test_stop_and_config_reregistration(monkeypatch):
     assert [s['id'] for s in p.get_service()] == ['AutoSignIn']
 
 
-@pytest.mark.parametrize('overrides', [{'cron_mode': 'cron', 'cron': 'bad'}, {'interval_hours': 0}, {'begin_hour': 23}, {'end_hour': 24}, {'interval_hours': 'nan'}])
+@pytest.mark.parametrize('overrides', [{'cron_mode': 'cron', 'cron': 'bad'}, {'interval_hours': 0}, {'begin_hour': 23}, {'end_hour': 25}, {'interval_hours': 'nan'}])
 def test_invalid_schedule_is_not_registered(overrides):
     p = plugin({**BASE, **overrides})
     assert p.get_service() == []
