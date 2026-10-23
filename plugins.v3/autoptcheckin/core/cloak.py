@@ -69,6 +69,7 @@ class CloakHttpClient:
         self.url = info.get("url") or site.url
         cookie = "; ".join(f"{k}={v}" for k, v in http.cookies.items())
         if shared is not None:
+            # 轮内共享会话：按站注入 cookie，不重复开关浏览器（生命周期归轮次所有）。
             self.session = shared
             self.shared = True
             host = urlsplit(self.url).hostname
