@@ -5,6 +5,9 @@
 .config-site>summary .row-left{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
 .config-site>summary .row-right{display:grid;grid-template-columns:68px 68px 36px;justify-items:end;align-items:center;column-gap:18px;flex-shrink:0;margin-left:auto}
 .config-site>summary .row-right .switch.mini-switch{justify-self:start;width:68px;white-space:nowrap}
+.config-site>summary .row-right .sign-switch{grid-column:1}
+.config-site>summary .row-right .login-switch{grid-column:2}
+.config-site>summary .row-right .expand-icon{grid-column:3;border:none;background:transparent;box-shadow:none}
 .config-site>summary .row-right .expand-icon{justify-self:end;width:36px}
 .config-site>summary .row-right .check{font-size:13px;white-space:nowrap}
 .expand-icon{min-height:28px;width:32px;padding:0;font-size:14px;line-height:1}.config-site>summary::-webkit-details-marker{display:none}.config-site>summary:hover{background:var(--ptc-surface-muted)}.config-site>summary:focus-visible{outline-offset:-3px}.config-site .badges{margin:8px 0}.site-detail{padding:16px 18px;border-top:1px solid var(--ptc-line)}@media(max-width:640px){.pt-center{padding:18px 12px 48px}.win{padding:16px}.card-head{padding:18px 16px}.grid,.data-grid{grid-template-columns:1fr}.stats-row{grid-template-columns:1fr}.site-card{padding:14px}.site-head{flex-wrap:wrap}.footer{padding:14px 16px}.topline{align-items:flex-start}.card-head{flex-wrap:wrap}}@media(prefers-reduced-motion:reduce){.pt-center *{transition:none!important}}
