@@ -1,22 +1,44 @@
+"""Discover forum adapters from integration modules; each declares its own UI and protocol metadata."""
 from dataclasses import asdict
-from .credentials import hostname
-from ..integrations.fengchao import Fengchao
-from ..integrations.yaowan import Yaowan
-from ..integrations.ssdforum import SSDForum
+from importlib import import_module
+from pkgutil import iter_modules
 
-ADAPTERS = {"fengchao": Fengchao, "yaowan": Yaowan, "ssdforum": SSDForum}
-NAMES = {"fengchao": "蜂巢", "yaowan": "药丸", "ssdforum": "SSDForum"}
+
+def _hostname(value):
+    from .credentials import hostname
+    return hostname(value)
+
+
+def _discover():
+    package = import_module("..integrations", __package__)
+    adapters = {}
+    for entry in iter_modules(package.__path__):
+        if entry.name.startswith("_"):
+            continue
+        module = import_module(f"{package.__name__}.{entry.name}")
+        declaration, adapter = getattr(module, "SITE", None), getattr(module, "ADAPTER", None)
+        if not isinstance(declaration, dict) or adapter is None:
+            continue
+        site_id = declaration.get("id")
+        if not site_id or site_id in adapters:
+            raise ValueError(f"invalid_or_duplicate_forum_site:{site_id}")
+        adapters[site_id] = (declaration, adapter)
+    return adapters
+
+
+_REGISTERED = _discover()
+ADAPTERS = {key: value[1] for key, value in _REGISTERED.items()}
 
 
 def get_site(value):
-    for site_id, adapter in ADAPTERS.items():
-        if value == site_id or hostname(value) == hostname(adapter.base):
-            return {"id": site_id, "name": NAMES[site_id], "domain": hostname(adapter.base),
-                    "credential": adapter.credential_spec, "adapter": adapter}
+    for site_id, (declaration, adapter) in _REGISTERED.items():
+        if value == site_id or _hostname(value) == _hostname(declaration["domain"]):
+            return {**declaration, "id": site_id, "adapter": adapter,
+                    "credential": adapter.credential_spec}
     return None
 
 
 def get_registry():
-    return [{"id": key, "name": NAMES[key], "domain": hostname(adapter.base),
-             "source": "插件适配", "signin_capable": True, "login_capable": False,
-             "credential": asdict(adapter.credential_spec)} for key, adapter in ADAPTERS.items()]
+    return [{**declaration, "credential": {**asdict(adapter.credential_spec),
+                                             "fields": declaration.get("fields", [])}}
+            for declaration, adapter in _REGISTERED.values()]

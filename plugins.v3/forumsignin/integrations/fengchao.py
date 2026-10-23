@@ -46,7 +46,6 @@ class Fengchao:
                 identity, identity_fresh = fresh, True
         except Exception:
             pass
-        # A failed status read must not overwrite the successful sync timestamp/cache.
         status = self.request("GET", "/status")
         account = status.get("account") or {}
         checkin = status.get("checkIn") or {}
@@ -56,7 +55,11 @@ class Fengchao:
                 "points": account.get("points"), "currentStreak": checkin.get("currentStreak"),
                 "unreadNotificationCount": account.get("unreadNotificationCount"),
                 "checkedInToday": checkin.get("checkedInToday")}
-        # Identity alone is not a fresh status: require the displayed business values.
         if not info["uid"].strip() or info["points"] is None or info["currentStreak"] is None:
             raise ValueError("sync_unconfirmed")
         return info, identity if identity_fresh else None
+
+SITE = {"id":"fengchao", "name":"蜂巢", "domain":"fengchao.chat", "source":"插件适配",
+        "signin_capable":True, "login_capable":False,
+        "fields":[{"key":"fengchao_api_key","label":"Bearer Token","type":"password"}]}
+ADAPTER = Fengchao

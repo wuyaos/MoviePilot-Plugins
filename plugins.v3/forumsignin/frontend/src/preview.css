@@ -142,3 +142,19 @@
 .site-initial {display:inline-flex; align-items:center; justify-content:center; background:var(--ptc-surface-muted); color:var(--ptc-text-muted); font-size:12px}
 .picker-selection .chip {border:1px solid var(--ptc-danger); color:var(--ptc-danger)}
 .data-grid .row {gap:6px}
+
+/* ForumSignin compact rows and daily history share the PT Center theme tokens. */
+.enabled-site-list .config-site>summary {min-height:36px;display:flex;align-items:center;gap:8px;padding:3px 8px}
+.enabled-site-list .remove-icon {width:22px;height:22px;min-height:22px;flex:0 0 22px;font-size:18px;line-height:18px}
+.enabled-site-list .site-name {min-width:92px;flex:0 1 130px}
+.enabled-site-list .compact-switch {font-size:11px;gap:5px;white-space:nowrap}
+.enabled-site-list .compact-switch input {width:32px;height:18px}
+.enabled-site-list .compact-switch input:after {width:12px;height:12px}
+.enabled-site-list .compact-switch input:checked:after {transform:translateX(14px)}
+.history-group {border-bottom:1px solid var(--ptc-line)}
+.history-summary {padding:10px 14px;color:var(--ptc-text);background:var(--ptc-surface-muted);cursor:pointer;font-weight:600}
+.history-group table {margin:0}
+.stats {grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:640px){.enabled-site-list .config-site>summary{height:auto;min-height:36px;flex-wrap:wrap}.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+.site-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 0;font-size:11px;color:var(--ptc-text-muted)}.site-totals b{font-size:20px;margin-right:3px}.success-number{color:var(--ptc-success-text)}.failure-number{color:var(--ptc-failure-text)}.unknown-number{color:var(--ptc-unknown-text)}

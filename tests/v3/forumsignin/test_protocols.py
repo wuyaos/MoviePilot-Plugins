@@ -34,7 +34,7 @@ class Client:
         item = self.responses.pop(0)
         if isinstance(item, Exception):
             raise item
-        return SimpleNamespace(text=item if isinstance(item, str) else "", json=lambda: item)
+        return item if hasattr(item, "text") else SimpleNamespace(text=item if isinstance(item, str) else "", json=lambda: item)
     def close(self):
         self.closed = True
 
@@ -126,7 +126,7 @@ def test_host_contract_and_gating():
     assert plugin.get_form()[0] is None and plugin.get_page() is None
     assert all(route["auth"] == "bear" and route["endpoint"].__self__ is plugin and route["methods"] for route in plugin.get_api())
     assert len(get_registry()) == 3
-    assert all(not site["login_capable"] for site in get_registry())
+    assert {site["id"]: site["login_capable"] for site in get_registry()} == {"fengchao": False, "yaowan": True, "ssdforum": False}
     assert plugin._execute("ssdforum")["data"]["status"] == "skipped"
     plugin.init_plugin({"enabled": True, "enabled_sites": ["ssdforum"]})
     assert plugin._execute("ssdforum")["data"]["status"] == "auth_failed"
@@ -245,3 +245,40 @@ def test_sync_cached_identity_and_zero_values_commit(monkeypatch, close_raises):
     assert plugin._get("fengchao_sync_status")["success"] is True
     assert not plugin._locks["fengchao"].locked()
     assert plugin._history.list()["total"] == 0
+
+
+def test_yaowan_account_login_and_cookie_refresh():
+    credential = Credential("local_cookie", "", username="synthetic-user", password="synthetic-password")
+    initial = SimpleNamespace(text='{"csrfToken":"initial"}', cookies={"flarum_session":"session-1"})
+    login = SimpleNamespace(text="{}", cookies={"flarum_remember":"remember-1", "flarum_session":"session-2"})
+    home = SimpleNamespace(text=page(), cookies={})
+    unauth = SimpleNamespace(text='{"userId":0}', cookies={})
+    client = Client([unauth, initial, login, home])
+    client.credential = credential
+    adapter = Yaowan(client)
+    assert adapter.fetch_page() == home.text
+    assert client.credential.value == "flarum_remember=remember-1; flarum_session=session-2"
+    assert [(call[0], call[1]) for call in client.calls] == [("GET", "/"), ("GET", "/"), ("POST", "/login"), ("GET", "/")]
+    assert "synthetic-password" not in repr(client.credential)
+
+
+def test_registry_declares_dynamic_credential_fields():
+    sites = get_registry()
+    assert {site["id"] for site in sites} == {"fengchao", "yaowan", "ssdforum"}
+    yaowan = next(site for site in sites if site["id"] == "yaowan")
+    assert {field["key"] for field in yaowan["credential"]["fields"]} == {
+        "yaowan_cookie", "yaowan_username", "yaowan_password"
+    }
+
+
+def test_clean_cache_preserves_history():
+    plugin = ForumSignin()
+    plugin.init_plugin({"enabled": True})
+    plugin._history.append(SignResult(SignStatus.SUCCESS, site_id="yaowan"))
+    for key in ("identity.yaowan", "_fengchao_identity", "fengchao_user_info"):
+        plugin._save(key, {"synthetic": True})
+    result = plugin.clean_cache()
+    assert result["success"] is True
+    assert all(plugin._get(key) is None for key in ("identity.yaowan", "_fengchao_identity", "fengchao_user_info"))
+    assert plugin._history.list()["total"] == 1
+    assert {route["path"] for route in plugin.get_api()} >= {"/run_once", "/clean_cache"}
