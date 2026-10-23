@@ -14,21 +14,22 @@ def test_config_expand_collapse_and_batch_confirmation():
     script = """
 const assert = require('node:assert/strict');
 const ref = value => ({value});
-const selected = ref([{id:'alpha'}, {id:'hotel'}, {id:'tango'}]);
+const selected = ref([{id:'alpha', browserless:true}, {id:'hotel'}, {id:'tango', fields:[{key:'rousi_username'}]}]);
 const groupKey = site => site.id[0];
 const openGroups = ref([]), openSites = ref([]);
-const model = {enabled_sites:['alpha']};
+const model = {enabled_sites:['alpha'], site_browserless:['alpha']};
+const hasExtraSettings = site => (site.fields || []).length > 0 || site.browserless === true || site.source === '自定义站点';
 """ + functions + """
 expandSites();
-assert.deepEqual(openSites.value, ['alpha','hotel','tango']);
-
-toggleSite('hotel');
 assert.deepEqual(openSites.value, ['alpha','tango']);
+
+toggleSite('tango');
+assert.deepEqual(openSites.value, ['alpha']);
 collapseSites();
 assert.deepEqual(openSites.value, []);
 
 expandSites();
-assert.equal(openSites.value.length, 3);
+assert.equal(openSites.value.length, 2);
 togglePicker();
 pendingSites.value.push('hotel','tango');
 assert.deepEqual(model.enabled_sites, ['alpha']);
@@ -45,6 +46,7 @@ assert.deepEqual(pendingSites.value, model.enabled_sites);
     assert ':open="openSites.includes(site.id)"' in source
     assert '<summary @click.prevent>' in source
     assert 'class="btn ghost mini expand-icon"' in source
+    assert 'v-if="hasExtraSettings(site)"' in source
     assert '@click.prevent="toggleSite(site.id)"' in source
     assert 'site-metadata' in source
     assert '@click="expandSites"' in source and '@click="collapseSites"' in source
@@ -66,9 +68,12 @@ def test_config_summary_actions_and_emulate_contract():
     source = (SRC / 'Config.vue').read_text(encoding='utf8')
     summary = source.split(':open="openSites.includes(site.id)"><summary', 1)[1].split('</summary>', 1)[0]
     assert summary.count('type="checkbox"') == 2
+    assert 'role="switch"' in summary
     assert 'v-if="site.login_capable"' in summary
-    assert 'cfBadge' in summary and 'credentialBadge' in summary
-    assert summary.index('site.source') < summary.index('credentialBadge') < summary.index('cfBadge') < summary.index('siteConfigured') < summary.index('model.sign_sites') < summary.index('model.login_sites')
+    assert 'credentialBadge' in summary
+    assert 'v-if="site.cf === true"' in summary and 'CF 盾' in summary
+    assert 'v-if="site.emulate === true || siteEmulated(site)"' in summary and '仿真' in summary
+    assert summary.index('site.source') < summary.index('credentialBadge') < summary.index('CF 盾') < summary.index('仿真') < summary.index('model.sign_sites') < summary.index('model.login_sites')
     assert summary.index('model.login_sites') < summary.index('expand-icon')
     detail = source.split('<div class="site-detail">', 1)[1]
     assert 'v-model="model.sign_sites"' not in detail and 'v-model="model.login_sites"' not in detail
@@ -128,7 +133,8 @@ def test_page_history_four_columns_without_evidence():
     assert 'colspan="4"' in source
     assert '未解析到' not in source
     assert 'resultMessage(item)' in source
-    functions = source.split('function formatTime(value)', 1)[1].split('function formatShort(value)', 1)[0]
+    functions = source.split('function formatTime(value)', 1)[1].split('\nfunction historyDay', 1)[0]
+    assert 'historyDays' in source and 'history-day' in source
     script = (
         "const assert=require('node:assert/strict'); function formatTime(value)"
         + functions
@@ -198,7 +204,8 @@ toggleSiteFilter('sign_failed'); assert.equal(showAllSites.value,false); assert.
 toggleSiteFilter('sign_failed'); assert.equal(visibleSites.value.length,8);
 toggleSiteFilter('off'); assert.equal(visibleSites.value.length,0);
 toggleSiteFilter('off');
-const today=historyDay(new Date()); assert.equal(dayIsOpen(today),true);
+const today=historyDay(new Date());
+assert.equal(historyDays.value.some(g=>g.day===today),false);
 assert.equal(dayIsOpen('2020-01-02'),false);
 toggleDay('2020-01-02'); assert.equal(dayIsOpen('2020-01-02'),true);
 assert.equal(historyDays.value.find(g=>g.day==='2020-01-02').records.length,2);

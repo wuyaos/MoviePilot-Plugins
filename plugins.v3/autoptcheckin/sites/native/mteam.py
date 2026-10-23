@@ -10,6 +10,8 @@ class MTorrent(SiteModule):
     # V2 derives api.<domain> from the managed URL; preserve its multi-domain match.
     url = ""
     credential = CredentialSpec(kind="api_key", cookie_sources=())
+    login_capable = False
+    browserless = False
     hook_implemented = False
     # No HTML message or sign-state semantics are established by updateLastBrowse.
     record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]', {})

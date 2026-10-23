@@ -18,8 +18,8 @@ class CustomNexusSignin(NexusSignin):
     def __init__(self, site_id, info):
         self.id, self.name, self.url = site_id, info.get('name', ''), info['url']
 
-    def parse_login(self, page):
-        result = super().parse_login(page)
+    def parse_login(self, page, credential=None):
+        result = super().parse_login(page, credential)
         if result.status == LoginStatus.LOGIN_OK:
             try:
                 if html.fromstring(page.text).xpath('//input[translate(@type,"PASSWORD","password")="password"]'):
@@ -126,7 +126,8 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
                 else:
                     page = client.get(url)
                     if page is not None and login_redirect(page):
-                        result = LoginResult(LoginStatus.AUTH_FAILED, '页面转向登录或认证失败')
+                        # custom 条目凭据固定为本条目 Cookie，跳登录页即 Cookie 失效。
+                        result = LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效（跳转登录页）')
                     elif not page_available(page):
                         result = LoginResult(LoginStatus.UNCONFIRMED, '站点页面不可达')
                     elif html.fromstring(page.text).xpath('//input[translate(@type,"PASSWORD","password")="password"]'):

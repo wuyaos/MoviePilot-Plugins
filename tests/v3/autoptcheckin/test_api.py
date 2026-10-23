@@ -24,6 +24,8 @@ def test_render_and_api_contract():
     routes = {(item['path'], method) for item in plugin.get_api() for method in item['methods']}
     assert {('/config', 'GET'), ('/config', 'PUT'), ('/site_config', 'GET'),
             ('/site_config', 'PUT'), ('/stats', 'GET'), ('/history', 'GET')} <= routes
+    assert ('/verify_site', 'POST') in routes and ('/run_once', 'POST') in routes
+    assert ('/manual_signin', 'POST') not in routes and ('/notify_preview', 'GET') not in routes
     assert all(item['auth'] == 'bear' for item in plugin.get_api())
     assert all(callable(item['endpoint']) and item['endpoint'].__self__ is plugin for item in plugin.get_api())
     plugin.init_plugin({'enabled': True, 'onlyonce': True})
@@ -84,7 +86,20 @@ def test_frontend_defaults_and_distribution():
     defaults = json.loads((PKG / 'config_defaults.json').read_text(encoding='utf8'))
     assert defaults['enabled_sites'] == []
     assert defaults['browserless_enabled'] is False
+    assert defaults['site_browserless'] == []
     assert {'rousi_username', 'rousi_password', 'sunnypt_username', 'sunnypt_password', 'sunnypt_token'} <= defaults.keys()
     remote = (PKG / 'dist/assets/remoteEntry.js').read_text(encoding='utf8')
     assert './Config' in remote and './Page' in remote
     assert not (PKG / 'form_builder.py').exists()
+
+
+def test_site_browserless_backfill_and_site_metadata():
+    plugin = Plugin()
+    plugin.init_plugin({'browserless_enabled': True})
+    assert plugin._config['site_browserless'] == [
+        'audiences', 'hdkyl', 'mua_xloli', 'ourbits', 'pt_0ff', 'vclib', 'yema']
+    assert plugin._site_config['site_browserless'] == plugin._config['site_browserless']
+    assert run(plugin.api_site_config())['data']['site_browserless'] == plugin._config['site_browserless']
+    plugin._config.update(enabled_sites=['mteam'], site_browserless=['mteam'])
+    row = next(row for row in plugin._site_rows() if row['id'] == 'mteam')
+    assert row['cf'] == 'unknown' and row['emulate'] is True and row['browserless'] is False

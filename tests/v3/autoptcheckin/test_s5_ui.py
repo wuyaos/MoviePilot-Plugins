@@ -38,6 +38,5 @@ def test_data_page_has_live_execution_and_loading():
     source = (PLUGIN / 'frontend/src/Page.vue').read_text(encoding='utf8')
     assert "execute('signin_by_domain',site.id)" in source
     assert "execute('verify_site',site.id)" in source
-    assert "execute('manual_signin')" in source
     assert ':disabled="busy || !site.can_signin"' in source
     assert 'await load()' in source

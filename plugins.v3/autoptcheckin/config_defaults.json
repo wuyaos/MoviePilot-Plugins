@@ -30,5 +30,6 @@
     "sunnypt_token": "",
     "scheduler_enabled": false,
     "unlock_all_sites": false,
-    "notify_format": "plain"
+    "notify_format": "plain",
+    "site_browserless": []
 }

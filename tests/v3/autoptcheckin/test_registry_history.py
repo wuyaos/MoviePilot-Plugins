@@ -26,7 +26,7 @@ def test_registry_discovery_and_isolation(tmp_path, monkeypatch):
     assert good['credential']['sources'] == ['cookiecloud', 'managed_site', 'local_cookie']
     assert all({'id','name','login_capable','credential','cf'} <= site.keys() for site in result['sites'])
     assert result['skipped'] == [{'module': 'fixture_sites.broken', 'error': 'RuntimeError'}]
-    assert next(site for site in result['sites'] if site['id'] == 'sunnypt')['credential']['kind'] == 'api_key'
+    assert next(site for site in result['sites'] if site['id'] == 'sunnypt')['credential']['kind'] == 'password'
 
 
 def test_history_persistence_pagination_retention():
@@ -52,7 +52,7 @@ def test_real_api_contract(monkeypatch):
     module = importlib.import_module('autoptcheckin')
     monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites':[{'id':'fixture'}], 'sources':{'adapters':1,'integrations':0}})
     plugin = AutoPtCheckin()
-    assert asyncio.run(plugin.api_sites())['data']['sites'] == [{'id':'fixture'}]
+    assert asyncio.run(plugin.api_sites())['data']['sites'] == [{'id':'fixture', 'cf':'unknown', 'emulate': False}]
     assert any(route['path'] == '/sites' and route['auth'] == 'bear' for route in plugin.get_api())
     assert asyncio.run(plugin.api_history())['data'] == {'total':0,'items':[]}
     plugin._history.append(SignResult(SignStatus.UNCONFIRMED, site_id='fixture'))

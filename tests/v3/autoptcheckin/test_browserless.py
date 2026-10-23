@@ -16,7 +16,7 @@ from autoptcheckin.core.nexus import NexusSignin
 from autoptcheckin.core.runner import SignRunner
 from autoptcheckin.core.sitemodel import RecordSpec
 
-CONFIG = {'browserless_enabled': True, 'browserless_url': 'http://browser.invalid', 'browserless_token': ''}
+CONFIG = {'browserless_enabled': True, 'browserless_url': 'http://browser.invalid', 'browserless_token': '', 'site_browserless': ['synthetic', 'pt_0ff']}
 INFO = {'url': 'https://site.invalid/', 'cookie': 'synthetic=session', 'ua': 'test-agent'}
 FORM = '<form method="post" action="/attendance.php"><input name="action" value="sign"><button>签到</button></form>'
 SIGNED = '<h2>签到成功</h2>'

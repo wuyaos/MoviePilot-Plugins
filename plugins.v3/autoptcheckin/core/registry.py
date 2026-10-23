@@ -87,7 +87,8 @@ def discover_sites(package_name: str | None = None) -> dict:
                     sites.append({'id': cls.id, 'name': cls.name, 'native': True,
                                   'verified': bool(getattr(cls, 'verified', False)),
                                   'login_capable': cls.login_capable, 'url': cls.url or '', 'credential': credential(cls.credential),
-                                  'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'hook_implemented': bool(getattr(cls, 'hook_implemented', True))})
+                                  'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'hook_implemented': bool(getattr(cls, 'hook_implemented', True)),
+                                  'browserless': bool(getattr(cls, 'browserless', False))})
             except Exception as exc:
                 skipped.append({'module': module_name, 'error': type(exc).__name__})
     for item in sites:

@@ -8,7 +8,7 @@ _CF_ONLY_COOKIES = {"cf_clearance", "__cf_bm", "__cfruid", "__cf_chl_tk", "cf_ch
 
 @dataclass(frozen=True)
 class CredentialSpec:
-    kind: Literal["cookie", "api_key"] = "cookie"
+    kind: Literal["cookie", "api_key", "password"] = "cookie"
     cookie_sources: tuple[str, ...] = ("cookiecloud", "managed_site", "local_cookie")
     refresh: Literal["password"] | None = None
     identity_field: str = "uid"

@@ -6,8 +6,8 @@ from threading import Event
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "plugins.v3"))
-from autoptcheckin.core.credentials import Credential
-from autoptcheckin.core.models import Evidence, LoginPage, RewardSummary, SignStatus
+from autoptcheckin.core.credentials import Credential, CredentialSpec
+from autoptcheckin.core.models import Evidence, LoginPage, LoginStatus, RewardSummary, SignStatus
 from autoptcheckin.core.nexus import NexusSignin
 from autoptcheckin.core.sitemodel import RecordSpec, SignContext
 
@@ -193,3 +193,13 @@ def test_nexus_cancel_during_submit_still_rereads():
 
 def test_record_empty_document_is_unconfirmed():
     assert context().read_record(LoginPage("   "), SPEC).status == "unconfirmed"
+
+
+def test_parse_login_redirect_message_depends_on_credential_kind():
+    site = FixtureSite()
+    redirected = LoginPage("login", "https://fixture.invalid/login.php")
+    cookie = site.parse_login(redirected, CredentialSpec(kind="cookie"))
+    password = site.parse_login(redirected, CredentialSpec(kind="password"))
+    assert cookie.status is password.status is LoginStatus.AUTH_FAILED
+    assert cookie.message == "Cookie 已失效（跳转登录页）"
+    assert password.message == "页面转向登录或认证失败"

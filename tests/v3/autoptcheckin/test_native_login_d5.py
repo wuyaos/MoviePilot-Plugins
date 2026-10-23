@@ -39,16 +39,15 @@ def test_native_api_dispatch_without_bridge(sid, offline, monkeypatch):
     site = registry.get_native_module(sid)
     calls = []
     original = site.parse_login
-    def parse(page):
+    def parse(page, credential=None):
         calls.append(page)
-        return original(page)
+        return original(page, credential)
     site.parse_login = parse
     monkeypatch.setattr(entry, 'get_native_module', lambda _: site)
     obj = plugin(sid)
     result = asyncio.run(obj.api_login_by_domain(sid))['data']
     if sid == 'mteam':
-        assert result['status'] == 'unconfirmed'
-        assert result['message'] == 'login_check_not_available'
+        assert result['status'] == 'skipped'
         assert offline == calls == []
     else:
         assert result['status'] == 'login_ok'

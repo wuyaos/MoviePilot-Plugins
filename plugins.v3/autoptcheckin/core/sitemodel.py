@@ -184,9 +184,11 @@ class SiteModule(ABC):
         """Perform site-specific sign-in using injected resources only."""
         raise NotImplementedError
 
-    def parse_login(self, page: LoginPage | None) -> LoginResult:
+    def parse_login(self, page: LoginPage | None, credential: "CredentialSpec | None" = None) -> LoginResult:
         if page is not None and login_redirect(page):
-            return LoginResult(LoginStatus.AUTH_FAILED, "页面转向登录或认证失败", site_id=self.id)
+            # cookie 凭据下跳登录页 = 会话失效，给出可直读的运维提示。
+            message = "Cookie 已失效（跳转登录页）" if credential is None or (credential.kind or "cookie") == "cookie" else "页面转向登录或认证失败"
+            return LoginResult(LoginStatus.AUTH_FAILED, message, site_id=self.id)
         if not page_available(page):
             return LoginResult(LoginStatus.UNCONFIRMED, "登录页面不可达", site_id=self.id)
         uid = ""

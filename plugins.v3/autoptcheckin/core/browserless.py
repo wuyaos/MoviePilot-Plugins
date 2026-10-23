@@ -124,6 +124,7 @@ class BrowserQLClient:
 
 def native_browser_client(site, http, info, config):
     if not (getattr(site, 'browserless', False) and config.get('browserless_enabled')
+            and site.id in {str(value) for value in config.get('site_browserless', [])}
             and config.get('browserless_url')):
         return http
     try:

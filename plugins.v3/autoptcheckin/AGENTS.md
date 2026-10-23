@@ -34,10 +34,10 @@
 - `get_render_mode()` 返回 `("vue", "dist/assets")`；宿主无条件解包 get_form：`get_form()` 返回 `(None, defaults)`，`get_page()` 返回 None，不再生成 Vuetify JSON。
 - Vite originjs ESM 联邦名为 `AutoPtCheckin`，入口 `remoteEntry.js` 暴露 `./Config` 与 `./Page`；共享宿主 Vue 3.5.13，不打包第二份 Vue 或 Vuetify。
 - 宿主 Config 传入 `initial-config / api / plugin-id`；`save(model)` 事件由宿主 PUT `plugin/{id}` 保存。`close / switch / layout({maxWidth})` 事件由宿主处理。Page 接收 `api / plugin-id / show_switch`。
-- API 相对插件 ID：GET/PUT `/config`、GET/PUT `/site_config`；GET `/stats`、`/history`、`/status`；POST `/run_once`、`/clean_today`、`/signin_by_domain?domain=...` 单站执行、`/verify_site?domain=...` 只读回读、`/login_by_domain?domain=...` 模拟登录、`/manual_signin` 按 sign_sites/login_sites 分流已启用站点。所有端点显式设置 `auth: bear`（默认 apikey 不适用于宿主前端）；配置与凭据只在宿主鉴权边界内读写，不进入统计/日志。
+- API 相对插件 ID：GET/PUT `/config`、GET/PUT `/site_config`；GET `/stats`、`/history`、`/status`；POST `/run_once`、`/clean_today`、`/signin_by_domain?domain=...` 单站执行、`/verify_site?domain=...` 只读核验、`/login_by_domain?domain=...` 模拟登录；`/manual_signin` 与 `/notify_preview` 已删除；所有端点显式设置 `auth: bear`（默认 apikey 不适用于宿主前端）；配置与凭据只在宿主鉴权边界内读写，不进入统计/日志。
 - `/site_config` 使用既有 flat keys（enabled_sites/sign_sites/login_sites/custom_sites_data 及专属凭据）；与完整 config 同源，get_data/save_data 保存站点子集。
 - UI 执行按钮仍按 registry.pilot_enabled 门控；后端 unlock_all_sites 是独立校准开关，不会自动修改 UI 门控或 verified。
-- Browserless 为独立 `enabled / url / token` 三字段；只有 enabled 为真才参与执行，不能由地址或令牌推断启用。
+- Browserless 使用全局 `browserless_enabled / browserless_url / browserless_token` 与 per-site `site_browserless` 名单；native 站点须同时全局启用、在名单内且类声明 browserless=true 才使用，模拟登录不使用。全局启用而名单为空/缺失时，从 registry 声明自动回填。
 - 在 `frontend/` 执行 `npm ci --ignore-scripts && npm run build`；同步提交 dist，node_modules 不入库。
 - 用宿主页面核验 Tab、条件字段、选移站点、卡片折叠、凭据显隐、证据展开；离线测试不能代替渲染验收。
 
@@ -103,7 +103,7 @@
 - 执行双轨分流：native 站点签到/只读核验走原生模块；模拟登录使用下方独立登录契约，不构造旧桥。旧桥仅保留非 native 签到/核验分支（实际实现限 hdsky/haitang 试点回退，不是排除清单域名的通用签到器）。unlock_all_sites 默认 false，此时 verified、hook_implemented 和旧试点门控生效；显式 true 会绕过这三门，但不改变 verified，也不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到仍不适用；M-Team 模块仍仅返回 skipped。signin_applicable 是 registry 展示的适用性，不等于 verified 或生产授权：排除登录专用站、M-Team，并检查原生 hook/verified；后端不以该展示字段替代执行检查。
 
 ### Native Browserless（3.23.0）
-- 仅 ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema 声明 browserless；必须显式启用 browserless_enabled 并提供 HTTP(S) browserless_url。native 使用 Browserless /function（服务端 Puppeteer 脚本，v2 开源版无 BQL 端点），不依赖本地 Playwright/CDP；custom 保留原 Playwright 混合路径。模拟登录一律不走 Browserless。
+- 仅 ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema 声明 browserless；必须同时全局启用 browserless_enabled、在 site_browserless 名单内并提供 HTTP(S) browserless_url。native 使用 Browserless /function（服务端 Puppeteer 脚本，v2 开源版无 BQL 端点），不依赖本地 Playwright/CDP；custom 保留原 Playwright 混合路径。模拟登录一律不走 Browserless。
 - 复用 Nexus 前读→协议解析→单次提交→无条件回读，不猜浏览器按钮或新增判定规则。BQL GET 渲染并 solve，POST 在页面内 fetch 原协议；每次请求独立浏览器，Cookie 双向同步只在本次执行内，结果 transport=browserql。未启用、未配置或首次连接失败保持原 HTTP 分类；已开始 BQL 后不重放动作，响应丢失仅按既有 finally 只读回查，证据不足为 unconfirmed。
 - 默认 solve 与页面稳定等待各 15 秒，HTTP 超时为两项等待预算之和加 45 秒，上限 300 秒。Cookie/UA/脚本通过 variables 传入，不记录端点认证参数、请求体或远端错误原文。
 - pt_0ff 前读已签可判 already，否则 protocol_pending，禁止滑块提交；yema 保留禁止签到；模拟登录一律不走 Browserless（用户裁决），BQL 仅服务签到路径。滑块模拟、真实过盾及站点提交效果未验证，需后续授权校准。
@@ -151,7 +151,7 @@
 - cron 注册 `AutoSignIn / PT 签到中心`；interval 注册 `AutoSignIn.{index} / PT 签到中心 HH:mm`。服务由宿主拥有，不创建插件后台调度器；stop_service 经 SDK remove_plugin_job 清理，配置 API 保存后 update_plugin_job 重建，宿主保存走宿主重建流程。
 - interval 对齐 V2 `__generate_schedule_crons` + TimerUtils.random_scheduler：次数 max(1, int((end-begin)/interval))，从 begin:00 累加 [max(30,interval*30),interval*60] 随机分钟，最小 interval=0.5，0<=begin<end<=23。schedule_crons/schedule_signature 用 get_data/save_data 保存，signature 相同复用，变化重排；不采用重载重新随机，以免调度漂移。
 - 数据页「立即运行一次」设置 onlyonce 并触发一次性操作；onlyonce 优先只返回 `AutoSignIn.once` DateTrigger（即使 scheduler_enabled=false），且 `_scheduled_once` 消费后直接全量执行，不受 scheduler_enabled/常规运行门控限制；回调先持久化 onlyonce=false 再执行，重载不重复消费。进程在消费写盘后崩溃不自动重试，避免重复签到；失败由人工核验后再决定。
-- 调度与 manual_signin 共用全量 runner 路径、试点范围与账号锁，history 增加 trigger=scheduler/manual；不因为启用调度扩大试点。next_schedule 从已声明的真实 Trigger 计算，不从展示配置猜测。
+- 调度与立即运行共用全量 runner 路径、试点范围与账号锁，history 增加 trigger=scheduler/manual；不因为启用调度扩大试点。next_schedule 从已声明的真实 Trigger 计算，不从展示配置猜测。
 - 生产激活衔接 S6：备份并停旧插件任务 → preview/execute 配置迁移 → 核对试点 Cookie/UA/UID 和只读回读 → 用户授权手动验证 → 显式保存 scheduler_enabled=true → 核对宿主服务及 next_schedule。回退先关闭门控并确认旧服务移除，再恢复旧插件，禁止两边同时运行。
 
 ## 模拟登录契约
@@ -160,7 +160,7 @@
 - GET 站点页面后无条件再次 GET 回读，无签到提交、无业务日期；页面可达即 login_ok，UID 尽力解析，缺失不阻断，显式冲突为 unconfirmed。重定向到登录页为 auth_failed，不可达为 unconfirmed。
 - 批量执行勾签到的站点走签到链，仅勾模拟登录的站点走登录链；两项都未勾保留 skipped 记录。单站登录 API 为 POST /login_by_domain（auth: bear），复用站点锁和身份绑定。
 - history 保存 action=sign/login；旧记录无 action 视为 sign。登录结果仅入历史，不覆盖签到小卡或四态统计；历史 login_ok 显示「登录成功」。
-- 默认仅 HDSky/海棠可执行；显式 unlock_all_sites 可绕过模拟登录试点门控，但仍检查启用与登录动作选择。M-Team（api 凭据）与肉丝/SunnyPT 只提供可注入认证检查协议；未接检查器返回 unconfirmed/login_check_not_available，不以非空凭据冒充认证检查通过。真实协议接入须后续逐站授权。
+- 默认仅 HDSky/海棠可执行；显式 unlock_all_sites 可绕过模拟登录试点门控，但仍检查启用与登录动作选择。M-Team API 凭据站与 rousi/sunnypt 账密站（JWT 为登录产物）只提供可注入认证检查协议；未接检查器返回 unconfirmed/login_check_not_available，不以非空凭据冒充认证检查通过。真实协议接入须后续逐站授权。
 
 ## 批次 3 完成（3.15.0，2026-10-22）
 - D1 下沉：20 专属模块（CAPTCHA 12/GET 6/POST 2）并入 generic_sites.json 行为字段（captcha/action_get/safe_read_path/referer/form_data/form_path/response_json/action_path/use_default_message/signin_capable；typed status_map pairs），native 守恒 108。
@@ -182,3 +182,8 @@
 - custom Cookie 使用本条目的 local_cookie；GET attendance → 唯一同源 POST 表单 → 单次提交 → 无条件新页回读默认消息链。前读已签为 already，新页确证为 success，缺证据为 unconfirmed；history action=sign。无唯一表单返回 protocol_pending，不猜非 NexusPHP 协议；已识别验证码不自动作答。
 - emulate=true 必须显式 browserless_enabled 且配置 browserless_url；browserless_token 仅用于连接认证。本版为 Browserless 前读/回读 + HTTP 提交混合路径（metadata.transport=browserless_read_http_submit），执行级 Cookie 双向同步，独立 context 及连接 finally 释放；连接/页面错误不降级 HTTP-only、不重试动作。依赖 Playwright/CDP，浏览器指纹绑定 POST 站点可能仍未确认。
 - verify 保留只读 login_ok 语义，不视为签到；custom 模拟登录复用同一可达性语义并无条件二次 GET 回读，仍检查 enabled/login 选择与 Browserless 显式开关。真实站点与 Browserless 服务未实测，另行授权验证；设计取舍见 .agents/notes/implemented/feature/2026-10-22-custom-attendance.md。
+
+### 3.36.0 后端数据与端点契约
+- `/manual_signin` 与 `/notify_preview` 已移除；保留 `/verify_site` 只读核验入口及 `/run_once`。数据页按钮、错误消息行、统计合并卡、历史按天、配置 switch 与 per-site Browserless 的渲染由前端契约负责；接口不另增前端字段。
+- `/stats.sites[]` 提供 `cf`（未知为 `unknown`）、`emulate`（`site_browserless` 名单或自定义站点 emulate）及声明值 `browserless`。
+- 集成凭据分类：rousi/sunnypt 为 password（账密登录；SunnyPT JWT 是登录产物）；mteam 保留 api_key，但 `login_capable=false`。

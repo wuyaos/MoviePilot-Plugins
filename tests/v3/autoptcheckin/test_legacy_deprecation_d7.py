@@ -27,7 +27,7 @@ def test_all_native_sites_never_construct_pilot_bridge(monkeypatch, action, read
     for row in rows:
         run.reset_mock()
         result = obj._execute_site(row['id'], action=action, read_only=read_only)
-        if action == 'sign' and (row['id'] in {'darkland', 'digitalcore'} or not row['signin_capable']):
+        if (action == 'sign' and (row['id'] in {'darkland', 'digitalcore'} or not row['signin_capable'])) or (action == 'login' and row['id'] == 'mteam'):
             assert result['status'] == 'skipped'
             run.assert_not_called()
         else:

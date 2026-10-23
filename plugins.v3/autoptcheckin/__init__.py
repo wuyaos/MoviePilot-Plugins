@@ -31,11 +31,11 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.35.0"
+    plugin_version = "3.36.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
-    SITE_KEYS = ("enabled_sites", "sign_sites", "login_sites", "custom_sites_data",
+    SITE_KEYS = ("enabled_sites", "sign_sites", "login_sites", "site_browserless", "custom_sites_data",
                  "rousi_username", "rousi_password", "sunnypt_username",
                  "sunnypt_password", "sunnypt_token")
 
@@ -60,7 +60,7 @@ class AutoPtCheckin(_PluginBase):
         self._runner.stop.clear()
         self._config = deepcopy(config or {})
         # 迁移/前端多次确认可能累积重复站点 ID：保序去重，避免队列重复执行。
-        for key in ("enabled_sites", "sign_sites", "login_sites"):
+        for key in ("enabled_sites", "sign_sites", "login_sites", "site_browserless"):
             values = self._config.get(key)
             if isinstance(values, list):
                 self._config[key] = list(dict.fromkeys(str(v) for v in values))
@@ -70,6 +70,9 @@ class AutoPtCheckin(_PluginBase):
             self._bound_uids = self.get_data("identity.bindings") or {}
         self._site_config.update({key: deepcopy(self._config[key]) for key in self.SITE_KEYS if key in self._config})
         self._config.update(deepcopy(self._site_config))
+        if self._config.get("browserless_enabled") and not self._config.get("site_browserless"):
+            self._config["site_browserless"] = [str(site["id"]) for site in get_registry()["sites"] if site.get("browserless")]
+            self._site_config["site_browserless"] = list(self._config["site_browserless"])
         if hasattr(self, "save_data"):
             self.save_data("site_config", deepcopy(self._site_config))
 
@@ -111,10 +114,8 @@ class AutoPtCheckin(_PluginBase):
         routes = [
             {"path": "/migrate/preview", "endpoint": self.api_migrate_preview, "methods": ["GET"]},
             {"path": "/migrate/execute", "endpoint": self.api_migrate_execute, "methods": ["POST"]},
-            {"path": "/manual_signin", "endpoint": self.api_manual_signin, "methods": ["POST"]},
             {"path": "/run_once", "endpoint": self.api_run_once, "methods": ["POST"]},
             {"path": "/clean_today", "endpoint": self.api_clean_today, "methods": ["POST"]},
-            {"path": "/notify_preview", "endpoint": self.api_notify_preview, "methods": ["GET"]},
             {"path": "/verify_site", "endpoint": self.api_verify_site, "methods": ["POST"]},
             {"path": "/status", "endpoint": self.api_status, "methods": ["GET"]},
             {"path": "/sites", "endpoint": self.api_sites, "methods": ["GET"]},
@@ -182,7 +183,12 @@ class AutoPtCheckin(_PluginBase):
 
     async def api_sites(self) -> dict:
         registry = get_registry(self._config.get('custom_sites_data', []), bool(self._config.get('browserless_enabled')))
-        return {"success": True, "data": {"sites": deepcopy(registry["sites"]), "sources": deepcopy(registry["sources"])}}
+        sites = deepcopy(registry["sites"])
+        emulate_ids = {str(v) for v in self._config.get('site_browserless', [])}
+        for site in sites:
+            site.setdefault('cf', 'unknown')
+            site['emulate'] = str(site.get('id')) in emulate_ids or bool(site.get('emulate', False)) or bool(site.get('browserless', False))
+        return {"success": True, "data": {"sites": sites, "sources": deepcopy(registry["sources"])}}
 
     async def api_stats(self) -> dict:
         mode = self._config.get("cron_mode", "interval")
@@ -215,6 +221,9 @@ class AutoPtCheckin(_PluginBase):
             login = self._track_store().entry_of(sid, 'login')
             rows.append({'id': sid, 'name': site.get('name', sid), 'url': site.get('url', ''),
                 'icon': site.get('icon', ''), 'source': site.get('source', ''),
+                'cf': site.get('cf', 'unknown'),
+                'emulate': sid in {str(v) for v in self._config.get('site_browserless', [])} or bool(site.get('emulate', False)),
+                'browserless': bool(site.get('browserless', False)),
                 'sign_state': sign.get('state', 'disabled' if sid not in enabled else 'pending'),
                 'sign_status': sign.get('status', ''), 'sign_time': sign.get('time', ''),
                 'sign_message': sign.get('message', ''),
@@ -505,13 +514,6 @@ class AutoPtCheckin(_PluginBase):
         except Exception:
             pass
 
-    async def api_notify_preview(self) -> dict:
-        """渲染推送预览：与真实推送同一格式，但不发送。"""
-        self._track_store().rollover()
-        fmt = self._config.get("notify_format", "plain")
-        return {"success": True, "data": {"text": format_round_summary(self._round_summary(), fmt),
-                "enabled": bool(self._config.get("notify")), "format": fmt}}
-
     async def api_run_once(self) -> dict:
         """从数据页注册一次性 DateTrigger；不受常规调度门控影响。"""
         with self._migration.lock:
@@ -527,10 +529,6 @@ class AutoPtCheckin(_PluginBase):
         removed = await asyncio.to_thread(self._history.clear_today)
         self._track_store().clear_transient()
         return {"success": True, "data": {"removed": removed}}
-
-    async def api_manual_signin(self) -> dict:
-        """手动全量签到：走 onlyonce DateTrigger（APScheduler 线程，写库路径已被验证）。"""
-        return await self.api_run_once()
 
     def _scheduled_once(self):
         """一次性执行（立即签到/立即运行一次）不受 scheduler_enabled 门控，直接全量执行。"""

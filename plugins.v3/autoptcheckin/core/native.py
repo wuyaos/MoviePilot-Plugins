@@ -162,7 +162,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                     return finish(SignResult(SignStatus.NETWORK_ERROR, '签到页面不可达：请求异常'))
                 if page_maintenance(page):
                     return finish(SignResult(SignStatus.MAINTENANCE, "维护中/已关闭"))
-                login = site.parse_login(page)
+                login = site.parse_login(page, site.credential)
                 if login.status == 'auth_failed':
                     result = ctx.result(status='auth_failed', message=login.message)
                 elif not page_available(page):
@@ -181,11 +181,12 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
         return finish(result)
 
 
-def read_login_twice(fetch_page, site, uid=""):
+def read_login_twice(fetch_page, site, uid="", credential=None):
     """A failed first visit never suppresses reread; explicit identities cannot switch."""
     def read(expected):
         try:
-            result = site.parse_login(fetch_page())
+            page = fetch_page()
+            result = site.parse_login(page, credential) if credential is not None else site.parse_login(page)
         except Exception:
             return LoginResult(LoginStatus.UNCONFIRMED, '登录回读页面不可达')
         if expected and result.evidence and result.evidence.uid and result.evidence.uid != expected:
@@ -221,7 +222,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
         uid = str(info.get('uid') or '')
-        if site.credential.kind == 'api_key':
+        if site.credential.kind in ('api_key', 'password'):
             from ..integrations.login import CredentialLoginProtocol
             return finish(CredentialLoginProtocol(credential_check).login(info, uid))
         try:
@@ -237,7 +238,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             if auth.credential is None:
                 return finish(LoginResult(LoginStatus.AUTH_FAILED, auth.reason))
             client = NativeHttpClient(auth.credential, info)
-            result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid)
+            result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid, site.credential)
         except Exception:
             result = LoginResult(LoginStatus.UNCONFIRMED, '原生登录执行未确认')
         return finish(result)
