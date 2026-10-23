@@ -196,9 +196,14 @@ def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatc
 
         class Page:
             url = site.url
-            def content(self): return '<h2>签到已得100</h2>'
+            def content(self):
+                # yema：Ant 按钮态即证据；52pt：默认消息链匹配落点页。
+                return ('<button class="ant-btn">已签到，明日继续</button>' if sid == 'yema'
+                        else '<h2>签到已得100</h2>')
             def goto(self, *args, **kwargs): return None
             def wait_for_timeout(self, *args, **kwargs): return None
+            def wait_for_load_state(self, *args, **kwargs): return None
+            def inner_text(self): return ''
 
         class Session:
             page = Page()
@@ -207,8 +212,11 @@ def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatc
             session = Session()
             def get(self, *args, **kwargs):
                 from autoptcheckin.core.models import LoginPage
-                # 首页含「签到赚魔力」入口（52pt 两段式：入口消失=已签）。
-                return LoginPage('<a href="52bakatestdate0823.php">签到赚魔力</a>', site.url, 200)
+                # torrents 页含「签到赚魔力」入口（入口消失=已签）。
+                return LoginPage('<a href="52bakatestdate0823.php">签到赚魔力</a><div id="slider-container"><div id="slider-btn"></div></div><input id="sign_captcha">', site.url, 200)
 
         result = site.signin(c1.context(site, Http(), None))
-        assert result.status == 'success' and result.message == '签到已得100'
+        # yema 按钮态映射 signed（回读判已签，SUCCESS/ALREADY 均表示证据成立）。
+        expected_message = '已签到，明日继续' if sid == 'yema' else '签到已得100'
+        assert result.message == expected_message and str(result.status).endswith(('success', 'already')), \
+            f'{sid}: {result.status} | {result.message} | {result.evidence}'
