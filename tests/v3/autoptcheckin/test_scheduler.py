@@ -147,7 +147,7 @@ def test_host_timezone_once():
     assert str(services[0]['trigger'].run_date.tzinfo) == 'Asia/Shanghai'
 
 
-def test_scheduler_pilot_runner_records_trigger_without_cookie(monkeypatch):
+def test_scheduler_runner_records_trigger_without_cookie(monkeypatch):
     monkeypatch.setattr('autoptcheckin.managed_site', lambda sid: {})
     p = plugin({**BASE, 'enabled_sites': ['hdsky'], 'sign_sites': ['hdsky']})
     p.get_service()[0]['func']()

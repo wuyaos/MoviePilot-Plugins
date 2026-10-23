@@ -96,7 +96,6 @@ def test_b14_registry_declares_all_unverified():
     rows = {row["id"]: row for row in discover_sites()["sites"]}
     for cls in SITES:
         assert rows[cls.id]["native"] and not rows[cls.id]["verified"]
-        assert not rows[cls.id]["pilot_enabled"]
     for cls in SPECIAL:
         assert rows[cls.id]["hook_implemented"] == (cls in (Kelu, LaJiDui))
     assert rows["mteam"]["credential"] == {"kind": "password", "sources": [], "refresh": None}
@@ -147,6 +146,6 @@ def test_mteam_preserves_legacy_multi_domain_matcher(monkeypatch):
 
 @pytest.mark.parametrize("value", ["", "https://", "/", "https://unrelated.invalid/"])
 def test_mteam_empty_url_does_not_match_missing_hostname(value):
-    from autoptcheckin.core.pilot import site_id_for_domain
+    from autoptcheckin.core.registry import site_id_for_domain
     assert site_id_for_domain(value) is None
     assert site_id_for_domain("mteam") == "mteam"

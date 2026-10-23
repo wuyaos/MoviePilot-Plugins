@@ -16,12 +16,12 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 85
-    assert len({row['id'] for row in rows}) == 85
-    assert len({row['url'] for row in rows}) == 85
+    assert len(rows) == 86  # 3.38 收敛：81 原声明 + cspt + kamept/piggo + hares 转正
+    assert len({row['id'] for row in rows}) == 86
+    assert len({row['url'] for row in rows}) == 86
     assert all({'id', 'name', 'url'} <= set(row) for row in rows)
     base_rows = sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows)
-    assert base_rows == 50  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
+    assert base_rows == 51  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
     extras = [row for row in rows if set(row) != {'id', 'name', 'url', 'attendance_path'}]
     assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path'} for row in extras)
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'jpopsuki', 'nebulance', 'filelist', 'iptorrents'} & {row['id'] for row in rows}
@@ -32,14 +32,14 @@ def test_generic_dynamic_registry_and_default_message_chain():
     native = [row for row in rows if row['native']]
     # Baseline includes GTK and LP-Bits in addition to the original 46 declarations.
     assert len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2 == 29
-    assert len(native) == 111  # Includes the newly declared ourbits site.
+    assert len(native) == 112  # Native package discovery includes all declarations.
     assert len({row['id'] for row in rows}) == len(rows)
     for cls in generic.build_generic_sites():
         row = next(row for row in rows if row['id'] == cls.id)
         assert cls.__module__ == generic.__name__
         assert issubclass(cls, NexusSignin)
         assert row['native'] and not row['verified'] and row['hook_implemented']
-        assert row['credential']['kind'] == 'cookie' and not row['pilot_enabled']
+        assert row['credential']['kind'] == 'cookie'
         if cls.id not in {'haidan', 'audiences', 'discfan', 'ptfans', 'hhanclub'}:
             assert cls().message_spec().message == NexusSignin.DEFAULT_MESSAGE_XPATHS
 

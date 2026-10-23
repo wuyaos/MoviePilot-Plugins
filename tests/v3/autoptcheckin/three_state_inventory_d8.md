@@ -1,3 +1,5 @@
+> 历史记录：以下内容记载旧桥清理前的状态，不代表当前代码。旧桥、PILOTS 门控与 sites 顶层副本已移除；现状以插件主 AGENTS.md 和当前测试为准。
+
 # D8 三态夹具盘点（3.15.0）
 
 口径：按当前 registry 的站点 ID 统计离线合成输入覆盖，不等于生产页面校准。三态指正向、明确未签/可提交、未知输入；没有可靠 unsigned 判据的站点，未签输入允许仍为 unconfirmed，不为了凑三种输出伪造失败。success/already/unconfirmed 流程夹具也单独注明。通用基类测试不计为每个声明站的逐站夹具。
@@ -19,8 +21,8 @@
 - `52pt` 已是未实现滑块流程且 signin_capable=False；无有效签到三态夹具，不再沿用 bakatest 测试。删除 B1 测试里未使用的 Pt52/import_module 导入；CHDBits 的 bakatest 三态保留。
 - `darkland`、`digitalcore`、`mteam` 不适用签到三态，已有 skipped/无签到请求验证；不算遗漏站。
 - `hares` 已移除 native 声明，无 native 测试 import 残留；旧副本和元数据仍保留，不能把已关闭站点补成有效签到夹具。
-- 全量测试收集检查没有已删除专属模块的失效 import。新增 D7 回归检查108个 native ID 的 sign/verify/login 分流不构造 PilotBridge，并检查46份副本保留 deprecated 标记；该分流 mock 不是三态行为覆盖。
+- 全量测试收集检查没有已删除专属模块的失效 import。新增 D7 回归检查原生 ID 的 sign/verify/login 分流不构造旧桥，并检查旧副本状态；该分流 mock 不是三态行为覆盖。
 
 ## 执行边界风险
 
-`PilotBridge` 只实现 hdsky/haitang。非 native 签到/核验分支按 D7 要求保留；hares 旧元数据若在 unlock_all_sites=True 下被启用并选择签到，可能进入该分支，因 PILOTS 缺少该 ID 抛 KeyError。默认试点门控会阻止它；本轮不扩大为行为修复。27域排除清单没有 native 声明，不意味着旧桥已实现这些域名的签到。
+旧 `PilotBridge` 仅实现 hdsky/haitang；该实现与旧适配器元数据现已删除。历史问题描述已失效，仅作为当时审计记录保留。27域排除清单没有 native 声明，不代表这些域名具有签到实现。

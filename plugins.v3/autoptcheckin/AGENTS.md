@@ -1,10 +1,10 @@
 # PT 签到中心 V3
 
 ## 边界
-- 默认仅 HDSky（hdsky）和海棠（haitang）开放手动试点；显式 unlock_all_sites 的执行边界见原生站点契约；不接管 `plugins.v2` 入口，默认不激活自动调度。
+- 站点由 `sites/native/` 原生声明、generic 声明与 integrations 组成；不接管 `plugins.v2` 入口，默认不激活自动调度。
 - 站点语义（2026-10-23 用户裁决）：zhuque 的 fireGenshinCharacterMagic「释放技能」动作即其签到能力（signin_capable=True，按技能动作回执判定）；vclib 人工验证、52pt 内联滑块均走 CloakBrowser 页面动作签到。
 - 站点规则（2026-10-24）：HDDolby 公告「API 访问不计有效登录；严禁 Cookies/伪造 UA 模拟登录，违者警告或封号」——hddolby 声明 `login_notice`，配置/数据卡显示 ⚠ 徽标（title 全文）提醒用户定期浏览器人工登录，登录轨不强行关闭（用户裁决）。同类站点规则按此先例加 notice 徽标。
-- 站点采用双轨：`sites/` 的46份 V2 站点副本已标 deprecated，保留用于 registry 元数据发现与未迁移域名参照；`sites/native/` 是原生执行实现。旧桥实际仅支持 hdsky/haitang 的 pilot 回退；生产切换前不删除副本或 `core/pilot.py`。
+- Registry 仅发现 `sites/native/`；generic 声明由 native 包提供，rousi/sunnypt 由 integrations 注册。旧适配器副本和旧执行桥已移除。
 - 任何提交结果都必须尝试新页面回读；按钮文本和 UID 只能来自页面证据。
 - `unconfirmed` 独立于 `failed`，提交后回读不可达、证据不足或身份冲突不得猜测成功/失败；签到前读维护/关闭用 `maintenance`，其他不可达用 `network_error`，未适配表单/参数、验证码未解决或提交前解析异常用 `protocol_pending`。模拟登录状态契约不变。
 
@@ -38,7 +38,7 @@
 - 宿主 Config 传入 `initial-config / api / plugin-id`；`save(model)` 事件由宿主 PUT `plugin/{id}` 保存。`close / switch / layout({maxWidth})` 事件由宿主处理。Page 接收 `api / plugin-id / show_switch`。
 - API 相对插件 ID：GET/PUT `/config`、GET/PUT `/site_config`；GET `/stats`、`/history`、`/status`；POST `/run_once`、`/clean_today`、`/signin_by_domain?domain=...` 单站执行、`/verify_site?domain=...` 只读核验、`/login_by_domain?domain=...` 模拟登录；`/manual_signin` 与 `/notify_preview` 已删除；所有端点显式设置 `auth: bear`（默认 apikey 不适用于宿主前端）；配置与凭据只在宿主鉴权边界内读写，不进入统计/日志。
 - `/site_config` 使用既有 flat keys（enabled_sites/sign_sites/login_sites/custom_sites_data 及专属凭据）；与完整 config 同源，get_data/save_data 保存站点子集。
-- UI 执行按钮仍按 registry.pilot_enabled 门控；后端 unlock_all_sites 是独立校准开关，不会自动修改 UI 门控或 verified。
+- UI 执行按钮按站点启用状态、动作选择与能力门控；后端 unlock_all_sites 不自动修改 verified。
 - 仿真由站点声明与 `site_browserless` 名单共同门控，无全局开关；M-Team 保活登录是独立的真实浏览器登录，不属于仿真签到。
 - 在 `frontend/` 执行 `npm ci --ignore-scripts && npm run build`；同步提交 dist，node_modules 不入库。
 - 用宿主页面核验 Tab、条件字段、选移站点、卡片折叠、凭据显隐、证据展开；离线测试不能代替渲染验收。
@@ -46,7 +46,7 @@
 ### 数据页
 - 站点名优先采用适配器 match 命中的 MP 登记名，未匹配保留适配器名；/sites 和 /stats 使用相同映射。图标仅读取 SiteOper.get_icon_by_domain 的 data:image 缓存，不加载远程 URL；配置卡及数据卡显示图标，缺失/加载失败用首字母占位。关闭按钮用 ghost 描边，×/移除 chip 用 danger 描边。
 - 今日总览显示下次调度时间、调度模式/间隔与时段，提供「立即签到 / 只读核验 / 立即运行 / 清理缓存」；下次调度时间格式 `YYYY/MM/DD HH:mm`（本地时区），间隔模式时段显示 `HH:00~HH:00`；其下统计区为「签到 · 今日」「登录 · 今日」两组并排同一行（窄屏 640px 以下纵向堆叠），每组 3 张统计卡按「成功 / 失败 / 未确认」统计当日有执行的站点（每轨最新记录聚合，success/signed/failed+auth_failed/unconfirmed），不再按今日执行计数；标题为「站点状态总览」。
-- 站点小卡两行紧凑布局：第一行图标+站点名+站点名后方无文字「测试连接」图标按钮（原只读核验，ghost pico，title/aria-label=测试连接）+「签到」「登录」两枚徽标，徽标文字固定为签到/登录、颜色表状态（绿=成功、红=失败、橙=未确认、灰=未进行），仅站点不可达/维护中/协议待适配以状态文字入徽标（不可达/维护/待适配，沿用 off 色），消息全文放徽标 title；第二行按配置显示「签到」「登录」pico 小按钮；不展示结果文字行、UID、时间、凭证来源或奖励明细。总览保留只读核验入口；停用/非试点站禁用执行按钮。可见文案统一用「登录」，不再出现「模拟登录」。数据页底部不放图例。
+- 站点小卡两行紧凑布局：第一行图标+站点名+站点名后方无文字「测试连接」图标按钮（原只读核验，ghost pico，title/aria-label=测试连接）+「签到」「登录」两枚徽标，徽标文字固定为签到/登录、颜色表状态（绿=成功、红=失败、橙=未确认、灰=未进行），仅站点不可达/维护中/协议待适配以状态文字入徽标（不可达/维护/待适配，沿用 off 色），消息全文放徽标 title；第二行按配置显示「签到」「登录」pico 小按钮；不展示结果文字行、UID、时间、凭证来源或奖励明细。总览保留只读核验入口；停用或不支持对应能力的站点禁用执行按钮。可见文案统一用「登录」，不再出现「模拟登录」。数据页底部不放图例。
 - 卡片区筛选 chips 与站点徽标同款样式：签到（绿/红/橙=成功/失败/未确认）、登录（绿/红）、不可达、维护、待适配、停用/未尝试（均 off 色），再点选中态恢复全部；认证失败归失败，skipped 沿用停用色归停用；维护、网络及协议状态虽共用 off 中性色，筛选按状态值独立匹配，不按颜色混入停用。切换筛选重置为筛选后前 8 张，空匹配显示独立空态。
 - 桌面三列等宽等高小卡，中屏两列、640px 以下单列；末张不跨列。默认前 8 张，failed/unconfirmed/auth_failed 优先且同优先级保持原顺序；其余用「展开其余 X 个站点」/「收起其余站点」切换，空态单独展示。
 - 历史通过现有 page/size API 每页 100 条加载全部保留记录，按浏览器本地日期前端聚合；分组头为「YYYY-MM-DD · N 条记录」，默认仅当天展开，其余收起。列顺序为「时间 / 站点 / 状态 / 最近消息」四列；不提供证据展开行，失败与异常说明（403/503/维护等）由最近消息列承载；API 与存储不变。历史表容器 max-height:60vh、内部横纵滚动，证据展开行在同一容器内，不撑破宿主页面。
@@ -103,35 +103,29 @@
 - `RecordSpec` 默认 page_message，每个 XPath 必须选中唯一消息元素；多选择器遇空值、歧义或无效表达式继续扫描，首个非空文本停止，再按 status_map 声明顺序映射 signed/unsigned（无匹配仍 unconfirmed，不继续找成功词）。NexusSignin 的合成占位声明默认回退消息链，站点可关闭 use_default_message；response_json 仍按 response_field 的精确类型和值匹配。signed_marker 可确认安全前读 already 和提交后新页 success；UID/日期仅展示，不以缺失字段或整页文本补造结论。校准记录见 sites/native/AGENTS.md。
 - `NexusSignin` 提供 attendance 页面 GET、唯一 POST 表单发现、验证码钩子和提交后的无条件新页面 GET 回读；提交响应不能替代回读，超时或异常不得自动重试。
 - `SignContext` 由执行边界注入已认证的 HTTP client、站点锁、取消事件及可选 `page/ocr`；`SiteModule` 不查凭据、不创建或关闭资源，资源生命周期由 `core.native`/runner 管理。
-- 执行双轨分流：native 站点签到/只读核验走原生模块；模拟登录使用下方独立登录契约，不构造旧桥。旧桥仅保留非 native 签到/核验分支（实际实现限 hdsky/haitang 试点回退，不是排除清单域名的通用签到器）。unlock_all_sites 默认 false，此时 verified、hook_implemented 和旧试点门控生效；显式 true 会绕过这三门，但不改变 verified，也不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到仍不适用；M-Team 模块仍仅返回 skipped。signin_applicable 是 registry 展示的适用性，不等于 verified 或生产授权：排除登录专用站、M-Team，并检查原生 hook/verified；后端不以该展示字段替代执行检查。
+- native 站点签到/只读核验走原生模块，登录使用独立登录路径；custom 与 integrations 各走专属执行器。unlock_all_sites 默认 false，仅影响 native verified/hook 门控；不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到不适用；M-Team 不提供签到。signin_applicable 是 registry 展示适用性，后端仍执行对应能力检查。
 
 ### 仿真通道（CloakBrowser）
 - 仿真名单（`site_browserless`）：ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema、52pt、piggo、kamept；生效条件为站点声明且 ID 在名单中，无全局开关。native 与 custom 仿真使用 CloakBrowser，结果 `transport=cloak`。一般模拟登录不走仿真；M-Team 保活登录是专门的真实浏览器账密登录例外，不执行签到。
 - 复用 Nexus 前读→动作→无条件回读，结论一律来自回读证据。Cookie 双向同步仅限本次执行；不得重放动作。页面动作后的落点页 stash 即为回读证据；站点每次进入可能发放新的滑块门页，不能用二次 GET 替代动作回读。
 - **页面动作站（`cloak_steps`）**：pt_0ff=[slider,sign_button]（滑块有时不出现，出现才拖动）、52pt=[slider,sign_button]、yema=[human_verify,sign_button]、vclib=[human_verify,sign_button]（Cloudflare Turnstile，headful CloakBrowser 等待 token 最多 60 秒）、piggo/kamept=[sign_button]。`run_page_action` 步骤缺失不阻断（absent 继续下一步），点击后等 5s，最终以回读消息链判定成功/已签/未确认，不猜测按钮结果。 pt_0ff 拖到底松开后门页先显示「验证通过」，约 8 秒自动跳转真实签到页；回读出现「签到已得N」才是成功证据，默认消息链已覆盖。slider 拖动后轮询等待标题/正文离开「滑动认证/拖动滑块验证」门页（每 1.5s，最多 25s），离开后再稳定等待 2s，超时如实保留未确认。
 - **轮内共享会话**：一轮 ≥2 个仿真站到期时共用一个 CloakSession（`_runner.shared_cloak`），按站注入 Cookie，不重复开关浏览器；会话生命周期归轮次，异常降级为逐站独立会话。
-- **手动门控旁路**：`signin_by_domain`/`login_by_domain`（trigger=manual）绕过 native_unverified/hook_not_implemented/pilot_not_enabled（手动单站即显式人工授权）；调度轮仍受门控。darkland/digitalcore（signin_not_applicable）与 login_not_supported 不受旁路影响。
+- **手动门控旁路**：`signin_by_domain`/`login_by_domain`（trigger=manual）绕过 native_unverified/hook_not_implemented 及 legacy 未启用门控（手动单站即显式人工授权）；调度轮仍受门控。darkland/digitalcore（signin_not_applicable）与 login_not_supported 不受旁路影响。
 - 默认 solve 与页面稳定等待各 15 秒；单次导航上限 30 秒。滑块拖动为 humanize 步进鼠标（24 步），真实过盾效果需生产验证。
 
 ## 阶段2数据契约
-- `core/registry.py` 使用 `pkgutil` 遍历 `sites/`，逐模块导入并收集 `_ISiteSigninHandler` 子类；导入异常只进入 `skipped` 日志，不阻断其他站点。注册项包含 `id/name/login_capable/credential/cf`，并追加 `rousi/sunnypt` 两个 integrations 注册项；`/sites` 返回 `sources.adapters` 与 `sources.integrations` 计数。
-- 适配器凭证默认 `kind=cookie`、来源 `cookiecloud/managed_site/local_cookie`；集成凭证从 integrations 的 `CredentialSpec` 获取。注册表只缓存元数据，不实例化适配器或请求站点。模拟登录表示访问页面，不要求专属登录动作；适配器默认 login_capable=true（含 HDSky），仅显式 false 的特殊站关闭。
+- `core/registry.py` 使用 `pkgutil` 遍历 `sites/native/`，逐模块导入并收集 `SiteModule` 子类；导入异常只进入 `skipped` 日志，不阻断其他站点。注册项包含 `id/name/login_capable/credential/cf`，并追加 `rousi/sunnypt` 两个 integrations 注册项；`/sites` 返回 `sources.adapters` 与 `sources.integrations` 计数。
+- native 站点凭证默认 `kind=cookie`、来源 `cookiecloud/managed_site/local_cookie`；集成凭证从 integrations 的 `CredentialSpec` 获取。注册表只缓存元数据，不实例化适配器或请求站点。模拟登录表示访问页面，不要求专属登录动作；native 站点默认 login_capable=true（含 HDSky），仅显式 false 的特殊站关闭。
 - `core/history.py` 使用 `get_data/save_data` 的 key `history.records` 保存 `{time,site,action,status,message,reward,evidence}`；`list(page,size)` 按时间倒序分页，默认每页 20、上限 100；追加和读取均清理超过 90 天的记录。历史只保存回读证据，不保存凭据。
 - 轨道状态表（3.35.0）：`save_data("track.state")` 持久化每站×轨道（sign/login）的规范化状态，`core/state_store.py` 唯一实现。四值：success/failed/pending/disabled；映射唯一入口 `normalize(track,status,reason)`——sign 成功族={success,signed}（already 已在 `_record_result` 入口归一为 signed，状态表不出现）、login 成功={login_ok}；门控类 skip（reason ∈ 登记清单）→ disabled(reason)；其余失败族与无记录 → failed/pending；maintenance/network_error/protocol_pending 与未知/空状态 → pending；锁忙 skipped 与 cancelled 只写历史不改表。写入点：`_record_result`（read_only 结果跳过）；`init_plugin`/每轮 `_execute_all` 前全量重算 pending/disabled（`_recompute_track_states`，success/failed 结论保留）；日切（state.time 非今日的 success → pending）；清理缓存联动 `clear_transient`（非禁用→pending）。
 - 双队列执行（3.35.0）：`_execute_all` 先签到后登录串行；队列=启用∧勾选∧状态∈{failed,pending}；单站结果 failed 当场重试 ≤ `retry_count`；收尾把 failed/pending 清单写日志留给下一轮。`skip_signed_today`/`_signed_today`/`_site_tracks`/`_counts`/`_bucket`/`_site_results` 退役：`/stats` 的站点行与三卡统计直接读状态表（字段 sign_state/sign_status/sign_time/sign_message、login_*；latest 按 success/failed/unconfirmed 当日计数）。
 - `/stats` 返回 `latest:{sign:{success,failed,unconfirmed}, login:{...}}` 与 `next_schedule`；`/history` 返回 `{total,items}`。签到 action 的 auth_failed 计入失败卡；maintenance/network_error/protocol_pending 仅保留历史及站点卡，不计入四张统计卡，也不增统计键，避免把未执行当签到失败；保留原始历史状态；空态仅表示实际存储为空。
 - 配置页以 `/sites` 为主数据源；仅在 registry 整包导入失败时使用 `frontend/src/sites.json` 作为静态兜底，不把静态清单当生产主数据源。
 
-## S5 试点执行边界
-- 同站账号锁忙时立即 skipped；试点在身份尚未解析前使用站点级锁，避免首次绑定与后续执行交错。原生 Cookie 按 cookiecloud → managed_site → local_cookie 选择；CookieCloud 使用宿主配置，只读本地密文（启用本地模式时）或单次远端下载，失败静默回退，不回写、不登录续期。按请求 host 与 Cookie domain 边界匹配，不将同名站点或兄弟域 Cookie 混用。
-- 无 Cookie 返回 auth_failed，不实例化适配器或请求页面。旧桥第一次前读从账号导航识别 UID 后建立 identity.bindings，后续显式冲突停止；原生消息制已移除 UID 作为成功判定门槛，UID/日期仅展示，站点专属身份核验仍保留。换号须先人工确认旧绑定。
-- 前读已签标记或本人今日成功记录 → already；明确可提交按钮/表单 → 提交；其余 → unconfirmed 且不提交。原生轨道 UID 未解析但表单明确时允许提交，成功由声明消息或 signed_marker 确认，不要求定位本人当日行；旧桥仍保留身份绑定及本人行验证。
-- 桥仅使用既有适配器的提交方法；HDSky 只有未识别验证码（没有提交）才换 OCR 引擎，提交后不重试。无论二元组真假或提交异常，finally 都重新 GET 回读。
-- 原生判定依次经历“四件套 → 消息制（移除 UID/日期门槛）→ 默认消息链 + signed_marker”；提交后仍无条件回读，消息链得到明确记录状态或 marker 确认后才下结论。原生 UID/日期仅作展示证据；旧桥仍对显式身份冲突立即停止。按钮文本保留展示，缺失不阻断；提交后页面不可达、消息或状态缺失 → unconfirmed；前读网络/协议分类见边界。每次尝试（含只读核验、忙、缺凭证）独立写 history。
-- 当前 HTML 夹具是**合成回归夹具**，不是生产页面证据；保守选择器未匹配时不补造 UID/日期/状态，不把全页成功词当提交后证据。
-- 生产切换：先在 QNAP 备份旧配置并停用旧插件对应两站调度 → 安装 3.3.0 → 确认站点管理 Cookie/UA 与选择 → 单站只读 verify_site 核验真实结构/UID → 未确认时脱敏采样补齐解析 → 用户确认后手动签到。本地调试实例可能也有真实 Cookie，执行前必须核实；真实试点需用户单独授权，未核验页面结构前不得宣称真实签到成功。
-
-- 来源按实际登记判定：registry 以适配器 match 匹配 SiteOper URL，已登记为 MP 站点，未登记为插件适配；custom_sites_data 为自定义站点；与适配器/宿主站点同域（hostname 去重）的自定义条目不再单列，仅作为该域 Cookie 来源（执行链按域名桥接 custom_cookie）。`/sites` 的 registry 是站点清单权威来源；前端仅将本次会话尚未保存的自定义草稿做去重 overlay，已保存项不再本地重复拼接，草稿按 ID 覆盖或删除；宿主保存后回传 initialConfig 时清空 overlay 并重新获取 /sites。来源动态读取，不将凭据缓存入 registry。
+## 执行边界
+- 账号锁忙立即 skipped；站点锁在身份解析前获取，避免首次绑定与后续执行交错。Cookie 按 cookiecloud → managed_site → local_cookie 选择，并按请求 host 与 Cookie domain 边界匹配。
+- 无 Cookie 返回 auth_failed，不请求签到页面。原生轨道 UID/日期仅展示；提交状态依声明消息或 signed_marker 确认，证据不足为 unconfirmed。每次尝试独立写 history。
+- 原生签到与只读核验走 `run_native`；custom 走 `run_custom`；rousi/sunnypt 走 integrations；M-Team 登录走独立 CloakBrowser。其它无执行实现的旧站点返回 `skipped(site_removed)`。
 
 ## 组件与宿主玻璃主题
 - Config/Page 共用 preview.css 的 .btn/.input/.switch/.chip/table；常规控件统一 36px 最小高度、6px 圆角、同一焦点框，紧凑列表 chip 是明确的小号变体。
@@ -156,34 +150,33 @@
 - cron 注册 `AutoSignIn / PT 签到中心`；interval 注册 `AutoSignIn.{index} / PT 签到中心 HH:mm`。服务由宿主拥有，不创建插件后台调度器；stop_service 经 SDK remove_plugin_job 清理，配置 API 保存后 update_plugin_job 重建，宿主保存走宿主重建流程。
 - interval 对齐 V2 `__generate_schedule_crons` + TimerUtils.random_scheduler：次数 max(1, int((end-begin)/interval))，从 begin:00 累加 [max(30,interval*30),interval*60] 随机分钟，最小 interval=0.5，0<=begin<end<=23。schedule_crons/schedule_signature 用 get_data/save_data 保存，signature 相同复用，变化重排；不采用重载重新随机，以免调度漂移。
 - 数据页「立即运行一次」设置 onlyonce 并触发一次性操作；onlyonce 优先只返回 `AutoSignIn.once` DateTrigger（即使 scheduler_enabled=false），且 `_scheduled_once` 消费后直接全量执行，不受 scheduler_enabled/常规运行门控限制；回调先持久化 onlyonce=false 再执行，重载不重复消费。进程在消费写盘后崩溃不自动重试，避免重复签到；失败由人工核验后再决定。
-- 调度与立即运行共用全量 runner 路径、试点范围与账号锁，history 增加 trigger=scheduler/manual；不因为启用调度扩大试点。next_schedule 从已声明的真实 Trigger 计算，不从展示配置猜测。
-- 生产激活衔接 S6：备份并停旧插件任务 → preview/execute 配置迁移 → 核对试点 Cookie/UA/UID 和只读回读 → 用户授权手动验证 → 显式保存 scheduler_enabled=true → 核对宿主服务及 next_schedule。回退先关闭门控并确认旧服务移除，再恢复旧插件，禁止两边同时运行。
+- 调度与立即运行共用全量 runner 路径、站点选择与账号锁，history 增加 trigger=scheduler/manual；调度不绕过站点门控。next_schedule 从已声明的真实 Trigger 计算，不从展示配置猜测。
+- 生产激活衔接 S6：备份并停旧插件任务 → preview/execute 配置迁移 → 核对站点 Cookie/UA/UID 和只读回读 → 用户授权手动验证 → 显式保存 scheduler_enabled=true → 核对宿主服务及 next_schedule。回退先关闭门控并确认旧服务移除，再恢复旧插件，禁止两边同时运行。
 
 ## 模拟登录契约
-- native 登录直接调用 SiteModule.parse_login（含 DarkLand/DigitalCore），不要求 verified/hook_implemented，不执行 signin；页面 GET 仅访问首页，不访问 attendance 或保活动作。旧适配器只参与 registry 元数据发现，不参与登录执行。
-- 非 native 登录使用通用页面解析，不构造 PilotBridge；已有 registry ID 按 matcher 找宿主条目，未登记域名必须已在 enabled_sites/login_sites 配置，并由宿主或 custom 条目提供同 host 地址。不得直接请求任意 API 入参 URL。27域排除清单仅表示没有 native 签到声明，不再表示依赖登录旧桥。
+- native 登录直接调用 SiteModule.parse_login（含 DarkLand/DigitalCore），不要求 verified/hook_implemented，不执行 signin；页面 GET 仅访问首页，不访问 attendance 或保活动作。站点 registry 不发现旧适配器。
+- 非 native 集成之外的已配置域名登录使用通用页面解析；已有 registry ID 按 matcher 找宿主条目，未登记域名必须已在 enabled_sites/login_sites 配置，并由宿主或 custom 条目提供同 host 地址。不得直接请求任意 API 入参 URL。27域排除清单仅表示没有 native 签到声明，不再表示依赖登录旧桥。
 - GET 站点页面后无条件再次 GET 回读，无签到提交、无业务日期；页面可达即 login_ok，UID 尽力解析，缺失不阻断，显式冲突为 unconfirmed。重定向到登录页为 auth_failed，不可达为 unconfirmed。
 - 批量执行勾签到的站点走签到链，仅勾模拟登录的站点走登录链；两项都未勾保留 skipped 记录。单站登录 API 为 POST /login_by_domain（auth: bear），复用站点锁和身份绑定。
 - history 保存 action=sign/login；旧记录无 action 视为 sign。登录结果仅入历史，不覆盖签到小卡或四态统计；历史 login_ok 显示「登录成功」。
-- 默认仅 HDSky/海棠使用试点门控；rousi/sunnypt 使用专属集成协议并在启用与动作选择后可执行。PeerGo 登录先 GET `/api/v1/session`，Cookie 无效时使用账密 POST 刷新；签到读取 session/attendance，已有 claimed_today 不重复提交，提交带 Origin、Referer、X-CSRF-Token 与唯一 Idempotency-Key。SunnyPT 优先配置 JWT，否则账密换 token；Bearer 签到按 code=0/400001/400000 分类，token 失效时重新登录并最多重试一次。M-Team 仍仅由独立 CloakBrowser 真实登录实现，不经通用 password 集成协议。
+- rousi/sunnypt 使用专属集成协议并在启用与动作选择后可执行。PeerGo 登录先 GET `/api/v1/session`，Cookie 无效时使用账密 POST 刷新；签到读取 session/attendance，已有 claimed_today 不重复提交，提交带 Origin、Referer、X-CSRF-Token 与唯一 Idempotency-Key。SunnyPT 优先配置 JWT，否则账密换 token；Bearer 签到按 code=0/400001/400000 分类，token 失效时重新登录并最多重试一次。M-Team 仍仅由独立 CloakBrowser 真实登录实现，不经通用 password 集成协议。
 
 ## 批次 3 完成（3.15.0，2026-10-22）
 - D1 下沉：20 专属模块（CAPTCHA 12/GET 6/POST 2）并入 generic_sites.json 行为字段（captcha/action_get/safe_read_path/referer/form_data/form_path/response_json/action_path/use_default_message/signin_capable；typed status_map pairs），native 守恒 108。
 - D3：CookieCloud 为独立数据源，候选链第一环（本地文件优先/远端单次 20s/严格域边界/CF-only 子集拒绝/静默降级），不回写。
 - D4：custom 站标准 NexusPHP 签到+emulate 混合路径（未启用 Browserless 不降级）；verify 保持 login_ok。
-- D5：模拟登录全原生（native parse_login/custom/已配置域名通用双 GET），旧桥只剩 pilot 回退。
+- D5：模拟登录全原生（native parse_login/custom/已配置域名通用双 GET），已移除旧桥回退。
 - D6：凭证枚举 api→api_key（credentials/integrations/registry/前端徽标/测试）。
-- D7：46 副本 deprecated+legacy 分支 site_removed 防护；文件删除推迟到生产切换+verified 解锁。
+- D7：移除旧适配器副本与旧桥代码。
 - D9：Luna 审查 8 项 6 过，P2 CF-only 过滤补全（_CF_ONLY_COOKIES）、P3 文档过期描述修正。
 - 52pt 已滑块化并接入页面动作签到，yema 恢复 signin_capable=True；答题类 chdbits/tjupt 仅模拟登录。
 
 ## 批次 3 计划（已实施，见上；保留原文备查）
-- 删旧桥的前置条件：全量重审口径的27站完成生产校准并逐站 verified 解锁；默认链命中、只读 already 或 unlock_all_sites 都不替代该条件，模拟登录依赖需一并核对后再删除。
 - 统一凭证枚举 api → api_key，连同配置、registry、UI 与测试同步迁移；当前版本不改名。
 - cookiecloud 原生候选已于 3.12.0 接入；原生模拟登录同样按 cookiecloud → managed_site → local_cookie 选择；custom 保持本条目 Cookie。本轮仅离线 mock 验证，真实服务器与站点验证仍需授权。
 
 ## Custom 签到契约（3.13.0）
-- custom_sites_data 的已启用且勾选签到条目（含数字 ID）直接使用 NexusSignin 默认 attendance 表单流程，不要求 native verified；unlock_all_sites 不能绕过启用与动作选择。registry 的 custom pilot_enabled=True；signin_applicable=True，仿真能力由站点声明与 `site_browserless` 名单决定。
+- custom_sites_data 的已启用且勾选签到条目（含数字 ID）直接使用 NexusSignin 默认 attendance 表单流程，不要求 native verified；unlock_all_sites 不能绕过启用与动作选择。registry 将 custom 注册为可执行站点；signin_applicable=True，仿真能力由站点声明与 `site_browserless` 名单决定。
 - custom Cookie 使用本条目的 local_cookie；GET attendance → 唯一同源 POST 表单 → 单次提交 → 无条件新页回读默认消息链。前读已签为 already，新页确证为 success，缺证据为 unconfirmed；history action=sign。无唯一表单返回 protocol_pending，不猜非 NexusPHP 协议；已识别验证码不自动作答。
 - emulate=true 且自定义站点 ID 位于 `site_browserless` 时启用 CloakBrowser 前读/回读 + HTTP 提交混合路径（`metadata.transport=cloak`），执行级 Cookie 双向同步；连接/页面错误不降级 HTTP-only、不重试动作。
 - verify 保留只读 login_ok 语义，不视为签到；custom 模拟登录复用同一可达性语义并无条件二次 GET 回读，仍检查 enabled/login 选择；模拟登录不走仿真。真实站点未实测，另行授权验证；设计取舍见 .agents/notes/implemented/feature/2026-10-22-custom-attendance.md。

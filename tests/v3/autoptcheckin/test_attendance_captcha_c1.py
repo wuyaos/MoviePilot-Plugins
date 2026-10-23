@@ -111,7 +111,6 @@ def test_c1_registry_still_unverified():
     rows = {row['id']: row for row in discover_sites()['sites']}
     for sid in IDS:
         assert rows[sid]['hook_implemented'] and not rows[sid]['verified']
-        assert not rows[sid]['pilot_enabled']
 
 
 def test_native_post_optional_referer_forwarding(monkeypatch):

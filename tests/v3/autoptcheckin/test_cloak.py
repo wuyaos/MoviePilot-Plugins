@@ -90,3 +90,50 @@ def test_turnstile_timeout_is_reported_without_submission():
     session = type('Session', (), {'page': page})()
     assert cloak.run_page_action(session, ['human_verify']) == [('human_verify', 'turnstile-timeout')]
     assert page.waits == [1500] * 40 + [8000]
+
+
+def test_shared_cloak_close_keeps_round_session_open_for_next_site(monkeypatch):
+    from types import SimpleNamespace
+    from autoptcheckin.core.cloak import CloakHttpClient
+
+    class SharedContext:
+        def __init__(self):
+            self.added = []
+            self.closed = False
+        def add_cookies(self, cookies): self.added.extend(cookies)
+        def close(self): self.closed = True
+
+    session = SimpleNamespace(context=SharedContext())
+    first = CloakHttpClient(SimpleNamespace(cookies={'first': 'one'}),
+                            {'url': 'https://vclib.example/'},
+                            SimpleNamespace(id='vclib', url='https://vclib.example/'), shared=session)
+    first.close()
+    assert not session.context.closed
+
+    CloakHttpClient(SimpleNamespace(cookies={'second': 'two'}),
+                    {'url': 'https://piggo.example/'}, SimpleNamespace(id='piggo', url=''), shared=session)
+    assert any(cookie['name'] == 'second' and cookie['domain'] == 'piggo.example'
+               for cookie in session.context.added)
+
+
+def test_piggo_round_site_opens_headful_cloak_without_vclib(monkeypatch):
+    from types import SimpleNamespace
+    from autoptcheckin import AutoPtCheckin
+    from autoptcheckin.core import cloak
+
+    opened = []
+    class FakeSession:
+        def __init__(self, **kwargs): opened.append(kwargs)
+        def __enter__(self): return self
+        def close(self): pass
+
+    monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
+    plugin = AutoPtCheckin()
+    plugin._config = {'site_browserless': ['piggo', 'yema']}
+    plugin._recompute_track_states = lambda: None
+    plugin._track_store = lambda: SimpleNamespace(rollover=lambda: None)
+    plugin._due_for = lambda action: ['piggo', 'yema'] if action == 'sign' else []
+    plugin._run_with_retry = lambda *args: None
+    plugin._notify_round = lambda *args: None
+    plugin._execute_all()
+    assert opened and opened[0]['headless'] is False

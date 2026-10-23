@@ -13,10 +13,9 @@ from autoptcheckin.core.registry import get_registry
 
 
 @pytest.mark.parametrize('action,read_only', [('sign', False), ('sign', True), ('login', False)])
-def test_all_native_sites_never_construct_pilot_bridge(monkeypatch, action, read_only):
+def test_all_native_sites_dispatch_without_legacy_bridge(monkeypatch, action, read_only):
     rows = [row for row in get_registry()['sites'] if row.get('native')]
-    assert len(rows) == 111
-    monkeypatch.setattr(entry, 'PilotBridge', lambda *args: pytest.fail('native constructed legacy bridge'))
+    assert len(rows) == 112  # 3.38：hares 转正为 generic 声明（白兔，仅登录）
     monkeypatch.setattr(entry, 'managed_site', lambda sid: {})
     run = Mock(return_value=SignResult(SignStatus.UNCONFIRMED, 'offline dispatch'))
     monkeypatch.setattr(entry, 'run_native', run)
@@ -38,10 +37,7 @@ def test_all_native_sites_never_construct_pilot_bridge(monkeypatch, action, read
                 assert run.call_args.kwargs['read_only'] is read_only
 
 
-def test_legacy_copies_retained_with_deprecation_marker():
+def test_legacy_copies_and_bridge_removed():
     sites = ROOT / 'plugins.v3/autoptcheckin/sites'
-    copies = [path for path in sites.glob('*.py') if path.name != '__init__.py']
-    assert len(copies) == 46
-    for path in copies:
-        assert path.read_text(encoding='utf-8').splitlines()[0].startswith('# DEPRECATED:')
-    assert (sites.parent / 'core/pilot.py').is_file()
+    assert sorted(path.name for path in sites.glob('*.py')) == ['__init__.py']
+    assert not (sites.parent / 'core/pilot.py').exists()

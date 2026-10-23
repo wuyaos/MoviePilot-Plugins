@@ -100,7 +100,6 @@ def test_b13_registry_declares_all_unverified():
     rows = {row["id"]: row for row in discover_sites()["sites"]}
     for cls in SITES:
         assert rows[cls.id]["native"] and not rows[cls.id]["verified"]
-        assert not rows[cls.id]["pilot_enabled"]
     for cls in SPECIAL:
         assert rows[cls.id]["hook_implemented"] is True
 

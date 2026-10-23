@@ -140,7 +140,7 @@ def test_new_sites_registry_and_hook_gates(monkeypatch, read_only, verified):
     monkeypatch.setattr(module, 'run_native', forbidden)
     for site_id in IDS:
         row = rows[site_id]
-        assert row['native'] and not row['verified'] and not row['pilot_enabled']
+        assert row['native'] and not row['verified']
         assert row['hook_implemented'] == (site_id in CAPTCHA + ['ptzone', 'tjupt', 'darkland', 'digitalcore', 'yzyy'] + C34)
         if verified and site_id in CAPTCHA + ['ptzone', 'tjupt', 'darkland', 'digitalcore', 'yzyy'] + C34:
             continue

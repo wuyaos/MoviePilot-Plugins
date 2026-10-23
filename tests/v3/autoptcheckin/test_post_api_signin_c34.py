@@ -226,7 +226,7 @@ def test_record_spec_bool_exact_type(value, state):
 def test_c34_registry_remains_unverified():
     rows = {row['id']: row for row in discover_sites()['sites']}
     for sid in IDS:
-        assert rows[sid]['hook_implemented'] and not rows[sid]['verified'] and not rows[sid]['pilot_enabled']
+        assert rows[sid]['hook_implemented'] and not rows[sid]['verified']
 
 
 def test_native_http_cookie_refresh_json_headers(monkeypatch):

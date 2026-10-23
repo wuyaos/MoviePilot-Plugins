@@ -103,7 +103,7 @@ def test_custom_emulate_gate_and_registry(attendance, enabled):
     row = next(row for row in get_registry(plugin._config['custom_sites_data'])['sites']
                if row['id'] == 'custom-60005')
     assert row['signin_applicable'] is True
-    assert row['pilot_enabled'] is True
+    assert row['signin_applicable'] is True
 
 
 def test_custom_emulate_hybrid_get_post_get(attendance, monkeypatch):

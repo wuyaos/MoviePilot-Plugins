@@ -12,10 +12,44 @@ from .sitemodel import SiteModule
 from .credentials import CredentialSpec
 from ..integrations.rousi import ROUSI_CREDENTIALS
 from ..integrations.sunnypt import SUNNYPT_CREDENTIALS
+from ..integrations.rousi import BASE as ROUSI_BASE
+from ..integrations.sunnypt import API as SUNNYPT_API
 
 
 _MATCHERS = {}
 _NATIVE_MODULES = {}
+
+def hostname(value):
+    return (urlsplit(value if '://' in value else 'https://' + str(value or '')).hostname or '').lower().removeprefix('www.')
+
+
+def managed_site(site_id):
+    from app.db.oper import SiteOper
+    get_registry()
+    match = _MATCHERS.get(site_id)
+    for site in SiteOper().list_order_by_pri():
+        if (match and match(site.url)) or (not match and hostname(site.url) == hostname(site_id)):
+            return {key: getattr(site, key, None) for key in ('name', 'url', 'cookie', 'ua', 'proxy')}
+    return {}
+
+
+def site_id_for_domain(value, *, include_legacy=False):
+    _discovery()
+    normalized = hostname(value)
+    for site_id, module in _NATIVE_MODULES.items():
+        if value == site_id or (module.url and hostname(module.url) == normalized):
+            return site_id
+    if value in ('rousi', 'sunnypt'):
+        return value
+    for site_id, matcher in _MATCHERS.items():
+        if value == site_id:
+            return site_id
+        try:
+            if matcher(value if '://' in str(value) else 'https://' + str(value)):
+                return site_id
+        except Exception:
+            continue
+    return None
 
 def credential(spec: CredentialSpec) -> dict:
     return {"kind": spec.kind, "sources": list(spec.cookie_sources), "refresh": spec.refresh}
@@ -29,47 +63,9 @@ def discover_sites(package_name: str | None = None) -> dict:
         try:
             package = importlib.import_module(candidate)
             package_name = candidate
-            base = package._ISiteSigninHandler
-            modules = list(pkgutil.iter_modules(package.__path__))
             break
         except Exception as exc:
             skipped.append({"module": candidate, "error": type(exc).__name__})
-    else:
-        modules = []
-        base = None
-    for info in modules:
-        if info.name == "native":
-            continue
-        module_name = f"{package_name}.{info.name}"
-        try:
-            module = importlib.import_module(module_name)
-            for _, cls in inspect.getmembers(module, inspect.isclass):
-                if base is None or cls is base or cls.__module__ != module_name or not issubclass(cls, base) or inspect.isabstract(cls):
-                    continue
-                site_id = getattr(cls, "site_id", None) or info.name
-                if callable(getattr(cls, "match", None)):
-                    _MATCHERS[site_id] = cls.match
-                sites.append({"id": getattr(cls, "site_id", None) or info.name,
-                              "name": getattr(cls, "site_name", None) or getattr(cls, "name", None) or info.name,
-                              "login_capable": bool(getattr(cls, "login_capable", True)),
-                              "credential": credential(CredentialSpec()), "cf": "unknown", "source": "插件适配"})
-        except Exception as exc:
-            skipped.append({"module": module_name, "error": type(exc).__name__})
-    adapter_count = len(sites)
-    # 只在整个 registry 无可用适配器时使用旧静态清单，不掩盖单站导入失败。
-    if not sites and skipped:
-        fallback = json.loads((Path(__file__).parents[1] / "sites_fallback.json").read_text(encoding="utf-8"))
-        sites = [{"id": item["id"], "name": item["name"], "login_capable": item.get("login_capable", True),
-                  "credential": credential(CredentialSpec()), "cf": "unknown", "source": "插件适配"}
-                 for item in fallback if item["id"] not in ("rousi", "sunnypt")]
-    for site_id, name, spec in (("rousi", "肉丝 PeerGo", ROUSI_CREDENTIALS),
-                                ("sunnypt", "SunnyPT", SUNNYPT_CREDENTIALS)):
-        sites.append({"id": site_id, "name": name, "login_capable": True,
-                      "credential": credential(spec), "cf": "unknown", "source": "插件适配"})
-    for item in sites:
-        item['native'] = False
-        item['verified'] = False
-    # Native metadata replaces the same legacy ID, while the adapter stays on disk.
     native_path = Path(package.__file__).parent / "native" if package else None
     if native_path and native_path.is_dir():
         for info in pkgutil.iter_modules([str(native_path)]):
@@ -80,9 +76,8 @@ def discover_sites(package_name: str | None = None) -> dict:
                     if cls.__module__ != module_name or not issubclass(cls, SiteModule) or inspect.isabstract(cls):
                         continue
                     _NATIVE_MODULES[cls.id] = cls
-                    # API-only declarations retain the legacy multi-domain matcher.
                     if cls.url:
-                        matcher = cls.match if callable(getattr(cls, 'match', None)) else (lambda url, base=cls.url: (urlsplit(url).hostname or '').removeprefix('www.') == (urlsplit(base).hostname or '').removeprefix('www.'))
+                        matcher = cls.match if callable(getattr(cls, 'match', None)) else (lambda url, base=cls.url: hostname(url) == hostname(base))
                         _MATCHERS[cls.id] = matcher
                     sites = [item for item in sites if item['id'] != cls.id]
                     sites.append({'id': cls.id, 'name': cls.name, 'native': True,
@@ -92,6 +87,13 @@ def discover_sites(package_name: str | None = None) -> dict:
                                   'emulate': bool(getattr(cls, 'emulate', False)), 'notice': getattr(cls, 'login_notice', '') or ''})
             except Exception as exc:
                 skipped.append({'module': module_name, 'error': type(exc).__name__})
+    adapter_count = len(sites)
+    _MATCHERS['rousi'] = lambda url: hostname(url) == hostname(ROUSI_BASE)
+    _MATCHERS['sunnypt'] = lambda url: hostname(url) in {hostname(SUNNYPT_API), 'sunnypt.top'}
+    for site_id, name, spec in (("rousi", "肉丝 PeerGo", ROUSI_CREDENTIALS),
+                                ("sunnypt", "SunnyPT", SUNNYPT_CREDENTIALS)):
+        sites.append({"id": site_id, "name": name, "native": False, "verified": False, "login_capable": True,
+                      "credential": credential(spec), "cf": "unknown", "source": "插件适配"})
     for item in sites:
         item['signin_capable'] = (getattr(_NATIVE_MODULES[item['id']], 'signin_capable', True)
                                   if item.get('native') else item['id'] not in ('darkland', 'digitalcore'))
@@ -102,14 +104,8 @@ def discover_sites(package_name: str | None = None) -> dict:
             not item.get('native') or item.get('hook_implemented', True) or item.get('verified', False))
         if item['id'] in quiz:
             item['signin_note'] = '答题类签到不建议使用（误答有账号风险），仅保留模拟登录'
-        item['pilot_enabled'] = (item['verified'] and item.get('hook_implemented', True)) if item['native'] else item['id'] in ('hdsky', 'haitang')
     for item in skipped:
-        # sites/ 顶层是 DEPRECATED 副本（仅 MP 运行时可导入），离线失败属预期，降为 debug。
-        logger = logging.getLogger(__name__)
-        if item["module"].startswith("autoptcheckin.sites.") and not item["module"].startswith("autoptcheckin.sites.native."):
-            logger.debug("跳过 deprecated 站点副本 %s (%s)", item["module"], item["error"])
-        else:
-            logger.warning("跳过站点适配器 %s (%s)", item["module"], item["error"])
+        logging.getLogger(__name__).warning("跳过原生站点模块 %s (%s)", item["module"], item["error"])
     return {"sites": sorted(sites, key=lambda item: item["id"]), "skipped": skipped,
             "sources": {"adapters": adapter_count, "integrations": 2}}
 
@@ -179,7 +175,7 @@ def get_registry(custom_sites_data=None) -> dict:
         registry['sites'].append({'id': item['id'], 'name': item.get('name', ''),
             'url': item.get('url', ''), 'emulate': bool(item.get('emulate', False)),
             'source': '自定义站点', 'icon': '', 'native': False, 'verified': False,
-            'pilot_enabled': True, 'login_capable': True, 'signin_capable': True,
+            'login_capable': True, 'signin_capable': True,
             'signin_applicable': True,
             'credential': credential(CredentialSpec()), 'cf': 'unknown'})
         known.add(item['id'])

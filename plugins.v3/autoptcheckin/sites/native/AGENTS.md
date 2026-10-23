@@ -1,7 +1,9 @@
+> 历史校准记录中的“试点/旧桥”只描述当时流程；旧桥和试点门控已移除，当前执行契约以插件主 AGENTS.md 为准。
+
 # Native declarations and evidence audit
 
 ## 边界
-- 旧 `sites/` 副本是迁移依据；B1 声明一律 `native=True, verified=False`；下表保留各历史批次的 hook/verified 状态，不代表当前生产授权；当前默认门控及显式 unlock_all_sites 例外见插件主 AGENTS.md。
+- 历史校准表中的旧 `sites/` 路径均指已删除的 V2 副本；B1 声明一律 `native=True, verified=False`；下表保留各历史批次的 hook/verified 状态，不代表当前生产授权；当前默认门控及显式 unlock_all_sites 例外见插件主 AGENTS.md。
 - 凭证与证据来源是两个维度：凭证术语为 cookie/password/api_key，证据来源为 page_message/response_json。OpenCD 使用 cookie + response_json；蜂巢对照为 api_key + response_json，不在本插件添加论坛站。旧凭证枚举 api 的统一改名不在本批范围；集成账密站为 rousi/sunnypt（kind=password，PeerGo 会话失效时账密刷新，SunnyPT JWT 为登录产物；执行分支由 integrations 实现并复用站点锁），mteam 保留 api_key 元数据，独立支持 CloakBrowser 真实登录保活。
 - `RecordSpec.source=page_message` 只匹配唯一消息元素；`response_json` 按 `response_field` 取顶层标量并以类型和值精确匹配 `status_map`，不把任意非空值当成功。
 - `pre_read_spec` 用于安全页面前读及只读核验；`signed_marker` 同时用于安全新页回读；页面 JSON 不冒充动作回执。response_json 声明不继承通用 POST；六站真实动作、回执接线与无条件安全回读已在 C4 实现。
@@ -33,13 +35,13 @@
 | dongying | 通用 CAPTCHA helper 简繁成功/重复文案 | special-hook，缺变体；需修正 | 补齐全部 helper 文案；attendance |
 | dstudio | POST 后表单消失且签到成功/签到已得；重复词 | standard-declared 缺签到已得；需修正 | 补签到已得；不新增旧宽泛获得/连续签到作为回读判据；attendance |
 | haidan | GET signin.php 后 index.php 的 value="已经打卡" | 仅占位消息；需修正 | 使用 input[value="已经打卡"]；special-hook；index.php |
-| haitang | action=sign POST，回读成功/本次签到获得/今日已签到等 | 既有试点 page_message；无需修正 | 映射覆盖原版；保持试点与无条件回读，不宣称真实选择器已核验；attendance |
+| haitang | action=sign POST，回读成功/本次签到获得/今日已签到等 | 既有 page_message 声明；历史试点标记已移除 | 映射覆盖原版；保持试点与无条件回读，不宣称真实选择器已核验；attendance |
 | hares | GET attendance.php?action=sign；JSON code=0 成功，code=1 示例重复 | 误用 page_message 占位；需修正 | response_json code 精确数值0；未知非0不猜已签；hook_implemented=True；/ |
 | hdarea | POST sign_in.php action=sign_in；此次签到您获得/请不要重复签到哦 | special-hook；无需修正 | 文案一致；/ |
 | hdbao | POST；签到成功/签到已得/获得/连续签到及重复词 | standard-declared；无需修正 | 文案一致，宽泛词限合成指定消息节点，生产仍待校准；attendance |
 | hdchina | 首页确切已签到 anchor；Cookie刷新+x-csrf POST；JSON state 示例 success | 只有首页 page_message，漏 JSON；需修正 | response_json state 精确success；独立 pre_read_spec 保留 anchor；hook_implemented=True；index.php |
 | hdcity | GET /sign 即签到；本次签到获得魅力/Got extra/已签到/Already checked in today | special-hook；无需修正 | 中英文一致；前读 / 避免动作 |
-| hdsky | 首页已签到；image_code_ajax 验证码；showup JSON success | 已实现试点 OCR；回读 page_message | 无需修改执行语义：JSON 是动作响应，当前试点特意以新首页已签到确认，不拿提交回执代替回读；index.php |
+| hdsky | 首页已签到；image_code_ajax 验证码；showup JSON success | 已实现 OCR；历史试点标记已移除 | 无需修改执行语义：JSON 是动作响应，当前试点特意以新首页已签到确认，不拿提交回执代替回读；index.php |
 | hdupt | span#yiqiandao 存在；动作 GET added.php?action=qiandao 任意数字响应 | 错将未使用文本常量当消息，漏 marker；需修正 | 补已签 marker，清空伪消息映射；GET hook 已实现，数字响应不作证据；/ |
 | hhanclub | GET attendance 即签到，需 Referer；签到成功/本次签到获得/已连续签到与重复词 | special-hook；无需修正 | 文案一致，前读 / 避免动作 |
 | kelu | 通用 CAPTCHA helper 简繁文案 | special-hook；无需修正 | 全部变体一致；attendance |
@@ -115,7 +117,7 @@
 | PTerClub / pterclub | API证据/动作 GET | attendance-ajax.php status 字符串1；0 不单独证明重复 | hook_implemented=True（C4） | 已实现，待生产校准（见分组校准清单） |
 | 朱雀 / zhuque | API证据/技能动作 | x-csrf-token、JSON POST、status 数值200/data.bonus；保留技能语义 | hook_implemented=True（C4） | 已实现，待生产校准（见分组校准清单） |
 
-已实现 HDSky OCR 试点不列为待实现 hook；海棠试点不变。普通声明站仍需真实消息节点校准，不在特殊钩子清单重复列出。所有真实请求和生产启用另需授权。
+已实现 历史 HDSky/海棠试点记录不代表当前门控。普通声明站仍需真实消息节点校准，不在特殊钩子清单重复列出。所有真实请求和生产启用另需授权。
 
 ## C1：attendance CAPTCHA hook（3.8.1）
 
@@ -179,7 +181,7 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 - yzyy：只接受唯一 .signbtn 下同源 plugin.php 的动态 sign token；执行边界在站点锁内创建 Session，finally 关闭，刷新 Cookie 同步到执行级字典；动作异常仍回读按钮文本与 tb_my 本人行，UID 来自 um 导航，冲突保持未确认，不使用动作响应兜底。
 - 本批已实现但 record_spec 仍含合成节点的24站：baozi、dongying、kelu、naturept、novahd、oshen、phoenixpt、playlet、shaobaoyuan、soulvoice、tu88、vclib、btschool、hdcity、hdupt、hhanclub、pttime、lajidui、siqi、hdarea、nexushd、ttg、52pt、chdbits。其中 hdupt/siqi/ttg 另有已签 marker；BTSchool 空映射不能确认成功。其余消息节点、表单及 CAPTCHA 仍待真实采样校准。
 - 非占位的 haidan、u2、tjupt、yzyy 仍需生产页面/本人行/时段/图片问答核验；hdchina、opencd、pterclub、zhuque、yema（hares 站点已关闭，2026-10-22 移除） 仍需真实 JSON 类型/值、CSRF/OCR/Cookie 与安全页核验。无合成节点不代表生产 verified。
-- 非本批普通声明站 agsvpt、dstudio、hdbao、luckpt、muxuege、ptzone 也仍有合成 record_spec；不适用站 darkland/digitalcore/mteam 的空占位不属于签到校准任务。全部非试点 verified 保持 False；未发送真实请求，未改 dist，版本收尾不开放执行。
+- 非本批普通声明站 agsvpt、dstudio、hdbao、luckpt、muxuege、ptzone 也仍有合成 record_spec；不适用站 darkland/digitalcore/mteam 的空占位不属于签到校准任务。全部verified 保持 False；未发送真实请求，未改 dist，版本收尾不开放执行。
 
 ## 批次 2 校准实测（2026-10-21，本地 MP + qnap Cookie）
 
@@ -211,7 +213,7 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 ## 答题类站点说明（2026-10-22）
 - chdbits/tjupt 为答题类签到（随机问答/豆瓣图片），误答有账号风险，**不建议启用答题功能**；52pt 已改为滑块签到（HTTP 无法完成，须 CloakBrowser 实现，暂缓）；registry signin_applicable=False，均仅保留模拟登录。
 - u2 为随机图片选项（非知识问答），保留签到能力。BakatestSignin 为 52pt/chdbits 共用的 bakatest.php 随机问答实现。
-- hares 站点已关闭，native 模块与声明移除（旧桥副本保留）。
+- hares 站点已关闭，native 模块与声明移除（已移除旧桥副本已删除）。
 
 ## D1 声明下沉（3.11.0）
 

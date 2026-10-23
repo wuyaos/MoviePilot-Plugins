@@ -8,7 +8,7 @@ from types import SimpleNamespace, ModuleType
 import pytest
 
 import autoptcheckin as entry
-from autoptcheckin.core import native, pilot, registry
+from autoptcheckin.core import native, registry
 from autoptcheckin.core.credentials import Credential, CredentialCheck, CredentialResolution
 from autoptcheckin.core.models import LoginPage
 from autoptcheckin.core.runner import SignRunner
@@ -18,7 +18,6 @@ from autoptcheckin.core.runner import SignRunner
 def offline(monkeypatch):
     calls = []
     monkeypatch.setattr(native, 'cookiecloud_candidate', lambda url: CredentialResolution(None, 'unavailable'))
-    monkeypatch.setattr(entry, 'PilotBridge', lambda *args: pytest.fail('legacy bridge constructed'))
     monkeypatch.setattr(entry, 'managed_site', lambda sid: {'cookie': 'synthetic'})
     def get(self, url):
         calls.append((url, self.credential.source))
@@ -61,7 +60,6 @@ def test_native_api_dispatch_without_bridge(sid, offline, monkeypatch):
 @pytest.mark.parametrize('config,reason', [
     ({'enabled_sites': []}, 'site_disabled'),
     ({'login_sites': []}, 'login_not_selected'),
-    ({'unlock_all_sites': False}, 'pilot_not_enabled'),
 ])
 def test_native_login_gates(config, reason, offline):
     result = plugin('darkland', **config)._execute_site('darkland', action='login')
@@ -69,7 +67,7 @@ def test_native_login_gates(config, reason, offline):
     assert not offline
 
 
-def test_signin_gates_do_not_block_pilot_login(offline, monkeypatch):
+def test_signin_gates_do_not_block_login(offline, monkeypatch):
     real = entry.get_registry
     def unverified(*args):
         data = real(*args)
@@ -152,7 +150,7 @@ def test_non_native_domain_requires_configured_managed_host(registered, offline,
     monkeypatch.setitem(sys.modules, 'app.db.oper', oper)
     row = SimpleNamespace(url='https://filelist.invalid/', name='fixture', cookie='synthetic', ua=None, proxy=False)
     monkeypatch.setattr(oper, 'SiteOper', lambda: SimpleNamespace(list_order_by_pri=lambda: [row] if registered else []), raising=False)
-    monkeypatch.setattr(entry, 'managed_site', pilot.managed_site)
+    monkeypatch.setattr(entry, 'managed_site', registry.managed_site)
     obj = plugin('filelist.invalid')
     result = asyncio.run(obj.api_login_by_domain('https://filelist.invalid/'))['data']
     assert result['status'] == ('login_ok' if registered else 'unconfirmed')
@@ -170,10 +168,10 @@ def test_non_native_registry_id_uses_matcher(offline, monkeypatch):
         return data
     monkeypatch.setattr(registry, 'get_registry', with_legacy)
     monkeypatch.setattr(entry, 'get_registry', with_legacy)
-    monkeypatch.setitem(registry._MATCHERS, 'legacy_fixture', lambda url: pilot.hostname(url) == 'legacy.invalid')
+    monkeypatch.setitem(registry._MATCHERS, 'legacy_fixture', lambda url: registry.hostname(url) == 'legacy.invalid')
     row = SimpleNamespace(url='https://legacy.invalid/', name='fixture', cookie='synthetic', ua=None, proxy=False)
     monkeypatch.setattr(oper, 'SiteOper', lambda: SimpleNamespace(list_order_by_pri=lambda: [row]), raising=False)
-    monkeypatch.setattr(entry, 'managed_site', pilot.managed_site)
+    monkeypatch.setattr(entry, 'managed_site', registry.managed_site)
     assert asyncio.run(plugin('legacy_fixture').api_login_by_domain('legacy.invalid'))['data']['status'] == 'login_ok'
     assert len(offline) == 2
 

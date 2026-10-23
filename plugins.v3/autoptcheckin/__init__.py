@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PT 签到中心 V3：HDSky / 海棠试点执行与回读。"""
+"""PT 签到中心 V3：PT 站点签到、登录与回读。"""
 import json
 import asyncio
 import threading
@@ -8,7 +8,7 @@ from dataclasses import asdict
 from .core.scheduler import Scheduler
 from .core.runner import SignRunner
 from .core.models import SignResult, SignStatus
-from .core.pilot import PILOTS, PilotBridge, managed_site, site_id_for_domain
+from .core.registry import managed_site, site_id_for_domain, hostname
 from pathlib import Path
 from copy import deepcopy
 from .core.history import HistoryStore
@@ -149,7 +149,7 @@ class AutoPtCheckin(_PluginBase):
 
     async def api_status(self) -> dict:
         return {"success": True, "data": {"state": "running" if self._running else "stopped",
-                "version": self.plugin_version, "current_stage": "pilot", "today": self._history.today_counts(), "next_schedule": self._next_schedule()}}
+                "version": self.plugin_version, "today": self._history.today_counts(), "next_schedule": self._next_schedule()}}
 
     async def api_config(self) -> dict:
         """仅经宿主认证 API 读取配置；不写日志或回显至统计。"""
@@ -293,18 +293,18 @@ class AutoPtCheckin(_PluginBase):
             elif not unlock and site.get("native") and not site.get("hook_implemented", True):
                 decisions[sid]["sign"] = (DISABLED, "hook_not_implemented")
             elif site.get("source") == "自定义站点":
-                # 自定义站在 _execute_site 的 custom 分支执行，不经 PILOTS 门控。
+                # 自定义站在 _execute_site 的 custom 分支执行，不受非原生站点门控。
                 decisions[sid]["sign"] = (PENDING, None)
-            elif not unlock and not site.get("native") and sid not in PILOTS:
+            elif not unlock and not site.get("native") and sid not in ("rousi", "sunnypt", "mteam"):
                 decisions[sid]["sign"] = (DISABLED, "pilot_not_enabled")
             else:
                 decisions[sid]["sign"] = (PENDING, None)
             if sid not in login_sel or site.get("login_capable") is False:
                 decisions[sid]["login"] = (DISABLED, "login_not_selected" if sid not in login_sel else "login_not_supported")
             elif site.get("source") == "自定义站点":
-                # 自定义站在 _execute_site 的 custom 分支执行，不经 PILOTS 门控。
+                # 自定义站在 _execute_site 的 custom 分支执行，不受非原生站点门控。
                 decisions[sid]["login"] = (PENDING, None)
-            elif not unlock and sid not in PILOTS:
+            elif not unlock and not site.get("native") and sid not in ("rousi", "sunnypt", "mteam"):
                 decisions[sid]["login"] = (DISABLED, "pilot_not_enabled")
             else:
                 decisions[sid]["login"] = (PENDING, None)
@@ -334,7 +334,7 @@ class AutoPtCheckin(_PluginBase):
             return asdict(result)
         reason = None
         unlock = bool(self._config.get('unlock_all_sites', False))
-        # 手动单站触发即显式人工授权：绕过 verified/hook/试点门控（调度轮仍门控）。
+        # 手动签到绕过 native verified/hook 门控（调度轮仍门控）。
         manual_bypass = trigger == 'manual' and action == 'sign'
         site = registry.get(site_id, {})
         if action == 'sign' and site_id in ('darkland', 'digitalcore'):
@@ -343,9 +343,9 @@ class AutoPtCheckin(_PluginBase):
             reason = 'native_unverified'
         elif action == 'sign' and not unlock and not manual_bypass and site.get('native') and not site.get('hook_implemented', True):
             reason = 'hook_not_implemented'
-        elif not unlock and not manual_bypass and not site.get('native') and site_id not in PILOTS and site_id not in ('rousi', 'sunnypt'):
+        elif not unlock and not manual_bypass and not site.get('native') and site.get('source') != '自定义站点' and site_id not in ('rousi', 'sunnypt', 'mteam'):
             reason = 'pilot_not_enabled'
-        elif not unlock and not manual_bypass and action == 'login' and site_id not in PILOTS and site_id not in ('rousi', 'sunnypt'):
+        elif not unlock and not manual_bypass and action == 'login' and not site.get('native') and site.get('source') != '自定义站点' and site_id not in ('rousi', 'sunnypt', 'mteam'):
             reason = 'pilot_not_enabled'
         elif site_id not in self._config.get('enabled_sites', []):
             reason = 'site_disabled'
@@ -363,6 +363,12 @@ class AutoPtCheckin(_PluginBase):
             result.metadata['reason'] = reason
             result.metadata["trigger"] = trigger
             result.metadata["action"] = action
+            self._record_result(result)
+            return asdict(result)
+        if action != 'login' and not site.get('native') and site_id not in ('rousi', 'sunnypt', 'mteam'):
+            result = SignResult(SignStatus.SKIPPED, 'skipped(site_removed)')
+            result.site_id = site_id
+            result.metadata.update({'reason': 'site_removed', 'trigger': trigger, 'action': action})
             self._record_result(result)
             return asdict(result)
         try:
@@ -399,15 +405,6 @@ class AutoPtCheckin(_PluginBase):
                                 get_data=getattr(self, "get_data", None), save_data=getattr(self, "save_data", None),
                                 custom_cookie=custom_cookie, config=self._config)
             return asdict(result)
-        # Deprecated legacy 分支：仅供 hdsky/haitang 未命中 native 时的 pilot 回退。
-        # 非 native 签到/核验分支暂保留；PILOTS 不覆盖排除清单域名，不能视为通用签到实现。
-        if site_id not in PILOTS:
-            return asdict(SignResult(SignStatus.SKIPPED, 'skipped(site_removed)'))
-        bridge = PilotBridge(site_id, info)
-        result = self._runner.run(site_id, str(info.get('uid') or ''), datetime.now().astimezone().date().isoformat(),
-            resolve=bridge.resolve, fetch_page=bridge.fetch_page, verifier=bridge.verifier,
-            submit=bridge.submit, read_only=read_only, allow_page_identity=True, trigger=trigger)
-        return asdict(result)
 
     async def api_signin_by_domain(self, domain: str = '') -> dict:
         site_id = site_id_for_domain(domain)
@@ -419,18 +416,16 @@ class AutoPtCheckin(_PluginBase):
             if domain in registry_ids:
                 site_id = domain
         if not site_id:
-            return {'success': False, 'message': 'pilot_not_enabled：仅开放 HDSky、海棠', 'data': None}
+            return {'success': False, 'message': '未找到可用站点', 'data': None}
         result = await asyncio.to_thread(self._execute_site, site_id)
         return {'success': True, 'data': result}
 
     async def api_login_by_domain(self, domain: str = '') -> dict:
         site_id = site_id_for_domain(domain, include_legacy=True)
         if not site_id:
-            from .core.pilot import hostname
             site_id = next((str(item.get('id')) for item in self._config.get('custom_sites_data', [])
                             if isinstance(item, dict) and (str(item.get('id')) == str(domain) or (domain and hostname(item.get('url', '')) == hostname(domain)))), None)
         if not site_id:
-            from .core.pilot import hostname
             site_id = next((str(value) for value in self._config.get('enabled_sites', [])
                             if hostname(str(value)) == hostname(domain)), None)
         if not site_id and self._config.get('unlock_all_sites', False) and domain:
@@ -438,7 +433,7 @@ class AutoPtCheckin(_PluginBase):
             if domain in registry_ids:
                 site_id = domain
         if not site_id:
-            return {'success': False, 'message': 'pilot_not_enabled：仅开放 HDSky、海棠', 'data': None}
+            return {'success': False, 'message': '未找到可用站点', 'data': None}
         result = await asyncio.to_thread(self._execute_site, site_id, action='login')
         return {'success': True, 'data': result}
 
@@ -452,7 +447,7 @@ class AutoPtCheckin(_PluginBase):
             if domain in registry_ids:
                 site_id = domain
         if not site_id:
-            return {'success': False, 'message': 'pilot_not_enabled：仅开放 HDSky、海棠', 'data': None}
+            return {'success': False, 'message': '未找到可用站点', 'data': None}
         result = await asyncio.to_thread(self._execute_site, site_id, True)
         return {'success': True, 'data': result}
 

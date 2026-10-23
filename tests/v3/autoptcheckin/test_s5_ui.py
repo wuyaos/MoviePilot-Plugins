@@ -31,7 +31,7 @@ def test_embedded_views_do_not_render_second_frame():
 def test_hdsky_can_emulate_login():
     registry = importlib.import_module('autoptcheckin.core.registry').get_registry()
     site = next(site for site in registry['sites'] if site['id'] == 'hdsky')
-    assert site['login_capable'] and site['signin_capable'] and site['pilot_enabled']
+    assert site['login_capable'] and site['signin_capable']
 
 
 def test_data_page_has_live_execution_and_loading():

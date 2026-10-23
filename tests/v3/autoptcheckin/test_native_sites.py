@@ -111,7 +111,7 @@ def test_registry_native_overrides_legacy_without_duplicate_ids():
     result = discover_sites()
     for sid in ('hdsky', 'haitang'):
         rows = [row for row in result['sites'] if row['id'] == sid]
-        assert len(rows) == 1 and rows[0]['native'] and rows[0]['verified'] and rows[0]['pilot_enabled']
+        assert len(rows) == 1 and rows[0]['native'] and rows[0]['verified']
     batch1 = {'52pt', 'agsvpt', 'baozi', 'btschool', 'chdbits'}
     expected_native = {path.stem for path in (Path(__file__).parents[3] / 'plugins.v3' / 'autoptcheckin' / 'sites' / 'native').glob('*.py') if path.stem != '__init__'}
     from autoptcheckin.sites.native.generic import build_generic_sites
@@ -135,7 +135,7 @@ def test_native_discovery_default_unverified_and_import_isolation(tmp_path, monk
     monkeypatch.syspath_prepend(str(tmp_path))
     result = discover_sites('n3_fixture_sites')
     row = next(row for row in result['sites'] if row['id'] == 'n3sample')
-    assert row['native'] and not row['verified'] and not row['pilot_enabled']
+    assert row['native'] and not row['verified']
     assert result['skipped'] == [{'module': 'n3_fixture_sites.native.broken', 'error': 'RuntimeError'}]
 
 
@@ -150,11 +150,11 @@ def test_sites_api_merges_custom_metadata_without_cache_or_credential_leak(monke
     assert not any(row['id'] == 'custom_one' for row in get_registry()['sites'])
 
 
-@pytest.mark.parametrize('native,verified,expected', [(True, True, 'native'), (True, False, 'native_unverified'), (False, False, 'legacy')])
+@pytest.mark.parametrize('native,verified,expected', [(True, True, 'native'), (True, False, 'native_unverified'), (False, False, 'removed')])
 def test_execute_site_dual_track_and_gate(monkeypatch, native, verified, expected):
     module = importlib.import_module('autoptcheckin')
     plugin = module.AutoPtCheckin()
-    plugin._config = {'enabled_sites': ['hdsky'], 'sign_sites': ['hdsky']}
+    plugin._config = {'enabled_sites': ['hdsky'], 'sign_sites': ['hdsky'], 'unlock_all_sites': native and verified}
     monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites': [dict(id='hdsky', native=native, verified=verified, signin_capable=True, signin_applicable=True, login_capable=True, source='插件适配')]})
     calls = []
     def managed(sid):
@@ -163,11 +163,16 @@ def test_execute_site_dual_track_and_gate(monkeypatch, native, verified, expecte
     monkeypatch.setattr(module, 'managed_site', managed)
     monkeypatch.setattr(module, 'run_native', lambda *args, **kwargs: SignResult(SignStatus.SUCCESS, 'native'))
     monkeypatch.setattr(plugin._runner, 'run', lambda *args, **kwargs: SignResult(SignStatus.SUCCESS, 'legacy'))
-    results = plugin._execute_all()  # 批次已转后台线程，语义断言直接调 _execute_all
+    results = [] if expected == 'removed' else plugin._execute_all(trigger='scheduler')  # removed 直接验证无执行实现
     if expected == 'native_unverified':
         assert results == []
         assert plugin._track_store().state_of('hdsky', 'sign') == 'disabled'
         assert not calls and plugin._history.list()['total'] == 0
+    elif expected == 'removed':
+        calls.clear()
+        result = plugin._execute_site('hdsky')
+        assert result['status'] == 'skipped' and result['message'] == 'skipped(site_removed)'
+        assert not calls
     else:
         assert results[0]['message'] == expected
         assert calls == ['managed']
@@ -205,7 +210,7 @@ def test_run_native_preconditions_do_not_create_resources(mode, status):
 
 
 def test_custom_site_enters_sign_queue_and_gate_skip_writes_disabled():
-    """回归：自定义站必须进签到队列（recompute sign 分支豁免 PILOTS 门控）；
+    """回归：自定义站必须进入签到队列；
     门控类 skip 必须写 disabled 状态表且不被当场重试（避免重复执行噪音）。"""
     module = importlib.import_module('autoptcheckin')
     plugin = module.AutoPtCheckin()

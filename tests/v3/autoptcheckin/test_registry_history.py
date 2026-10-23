@@ -7,26 +7,30 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[3] / 'plugins.v3'))
 from autoptcheckin import AutoPtCheckin
 from autoptcheckin.core.history import HistoryStore
-from autoptcheckin.core.registry import discover_sites
+from autoptcheckin.core.registry import discover_sites, site_id_for_domain
 from autoptcheckin.core.models import Evidence, SignResult, SignStatus
 
 
-def test_registry_discovery_and_isolation(tmp_path, monkeypatch):
+def test_registry_discovers_only_native_package_and_isolates_import_failures(tmp_path, monkeypatch):
     package = tmp_path / 'fixture_sites'
-    package.mkdir()
+    native = package / 'native'
+    native.mkdir(parents=True)
     (package / '__init__.py').write_text('class _ISiteSigninHandler: pass\n')
-    (package / 'good.py').write_text('from . import _ISiteSigninHandler\nclass Good(_ISiteSigninHandler):\n site_name = "Good"\n def login(self): pass\n')
-    (package / 'broken.py').write_text('raise RuntimeError("offline failure")\n')
-    (package / 'alias.py').write_text('from .good import Good\n')
+    (package / 'legacy.py').write_text('raise RuntimeError("legacy module must not be imported")\n')
+    (native / '__init__.py').write_text('')
+    (native / 'broken.py').write_text('raise RuntimeError("offline failure")\n')
     monkeypatch.syspath_prepend(str(tmp_path))
     result = discover_sites('fixture_sites')
-    assert result['sources'] == {'adapters': 1, 'integrations': 2}
-    good = next(site for site in result['sites'] if site['id'] == 'good')
-    assert good['login_capable'] and good['name'] == 'Good'
-    assert good['credential']['sources'] == ['cookiecloud', 'managed_site', 'local_cookie']
-    assert all({'id','name','login_capable','credential','cf'} <= site.keys() for site in result['sites'])
-    assert result['skipped'] == [{'module': 'fixture_sites.broken', 'error': 'RuntimeError'}]
-    assert next(site for site in result['sites'] if site['id'] == 'sunnypt')['credential']['kind'] == 'password'
+    assert result['sources'] == {'adapters': 0, 'integrations': 2}
+    assert {site['id'] for site in result['sites']} == {'rousi', 'sunnypt'}
+    assert result['skipped'] == [{'module': 'fixture_sites.native.broken', 'error': 'RuntimeError'}]
+
+
+def test_domain_lookup_uses_native_and_integration_registry_matchers():
+    assert site_id_for_domain('https://hdsky.me/index.php') == 'hdsky'
+    assert site_id_for_domain('rousi.pro') == 'rousi'
+    assert site_id_for_domain('https://sunnypt.top/user/attendance') == 'sunnypt'
+    assert site_id_for_domain('unknown.invalid') is None
 
 
 def test_history_persistence_pagination_retention():

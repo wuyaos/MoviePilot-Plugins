@@ -858,5 +858,11 @@
       "sign_button"
     ],
     "emulate": true
+  },
+  {
+    "id": "hares",
+    "name": "白兔",
+    "url": "https://club.hares.top/",
+    "attendance_path": "/attendance.php"
   }
 ]

@@ -1,6 +1,10 @@
 import asyncio
 import pytest
-from test_pilot_runner import page, DATE
+from pathlib import Path
+DATE = '2026-10-17'
+FIXTURES = Path(__file__).parent / 'fixtures'
+def page(site='hdsky', state='success'):
+    return (FIXTURES / f'{site}_{state}.html').read_text(encoding='utf8')
 from autoptcheckin import AutoPtCheckin
 from autoptcheckin.core.models import Evidence, LoginPage, LoginResult, LoginStatus
 from autoptcheckin.core.verification import normalize_evidence, verify_login
@@ -59,7 +63,6 @@ def test_login_only_dispatch_and_api(monkeypatch):
     import autoptcheckin as module
     calls = []
     from autoptcheckin.core.native import NativeHttpClient
-    monkeypatch.setattr(module, 'PilotBridge', lambda *args: pytest.fail('native login must not construct legacy bridge'))
     monkeypatch.setattr(module, 'managed_site', lambda sid: {'cookie': 'fixture'})
     def fetch(self, url):
         calls.append('get')
@@ -80,7 +83,7 @@ def test_login_only_dispatch_and_api(monkeypatch):
     monkeypatch.setattr(plugin, '_execute_site', lambda sid, **kw: dispatched.append((sid,kw['action'])))
     plugin._config.update(enabled_sites=['hdsky','haitang','rousi'],sign_sites=['hdsky'],login_sites=['hdsky','haitang','rousi'])
     plugin._execute_all()
-    assert dispatched == [('hdsky','sign'),('haitang','login')]
+    assert dispatched == [('hdsky','sign'),('haitang','login'),('rousi','login')]
 
 
 def test_login_uid_conflict_and_shared_lock():
@@ -100,7 +103,7 @@ def test_login_integration_is_enabled_by_default(monkeypatch):
     plugin.init_plugin({'enabled_sites':['rousi'], 'login_sites':['rousi']})
     result = plugin._execute_site('rousi', action='login')
     assert result['status'] == 'login_ok'
-    assert plugin._track_store().state_of('rousi', 'login') == 'disabled'  # mocked dispatcher does not persist
+    assert plugin._track_store().state_of('rousi', 'login') == 'pending'  # mocked dispatcher does not persist
 
 
 def test_login_parser_failure_does_not_veto_reachability():
