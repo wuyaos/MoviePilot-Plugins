@@ -38,3 +38,7 @@ C5/C6 使用 ctx 注入 get_data/save_data 与无凭据 public_get；TJUPT 的 t
 
 
 C7 查漏发现 B1-8 为25行/37个ID，原24站口径漏掉随机问答与 Discuz 分配。经授权补齐52pt/chdbits/yzyy；前两站共用 BakatestSignin，随机单选沿用V2，不引入LLM；数字奖励仅展示，不覆盖新页消息状态。yzyy 必须同 Session 传递临时 sign token，故仅该站在 run_native 站点锁内创建 caller-owned Session 并 finally 释放；RequestUtils 注入该 Session，响应/Session Cookie 同步到执行级字典。拒绝每次新客户端仅带最初 Cookie 的方案（sid 刷新使 token 失效），拒绝旧响应成功词兜底（不是新页证据）。回读 .signbtn 与 tb_my 本人行，身份取 um 导航，不取排行榜首人；身份/消息冲突未确认。测试 test_bakatest_yzyy_c7.py 覆盖三态、重复、动作异常、回读失败、同源 token、Cookie 更新和锁内 Session 异常释放；生产结构仍待授权校准。M-Team 不因清单收尾变成签到站。
+
+## 3.20.0 站点校准例外
+
+[BTSchool 入口反向语义与 PTTime 详情回读](2026-10-22-signincenter-calibration-320.md) 记录用户新裁决；仅 BTSchool 恒未确认例外被替代，不改变其他站的安全回读原则。
