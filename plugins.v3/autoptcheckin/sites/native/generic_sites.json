@@ -898,8 +898,7 @@
     "id": "qingwapt",
     "name": "青蛙",
     "url": "https://www.qingwapt.com/",
-    "attendance_path": null,
-    "signin_capable": false
+    "attendance_path": "/attendance.php"
   },
   {
     "id": "starspace",
