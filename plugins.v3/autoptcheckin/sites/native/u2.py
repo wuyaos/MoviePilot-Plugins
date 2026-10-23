@@ -17,6 +17,16 @@ class U2(NexusSignin):
     hook_implemented = True
     record_spec = RecordSpec('//a[@href="showup.php"]', {'已签到': 'signed', 'Show Up': 'signed', 'Показать': 'signed', '已簽到': 'signed'})
 
+    def read_before(self, ctx, page):
+        result = super().read_before(ctx, page)
+        # 站点按每日 9 点重置签到状态：9 点前页面的已签 anchor 属昨日，不作为今日证据。
+        from ...core.models import SignStatus
+        if datetime.now().hour < 9 and result.status == SignStatus.ALREADY:
+            return ctx.result(status=SignStatus.UNCONFIRMED,
+                              message='9 点前站点保留昨日签到状态，暂不判定',
+                              evidence=result.evidence)
+        return result
+
     def discover_form(self, ctx, page):
         # Keep read-only/already evidence available before 09:00, but never submit.
         if datetime.now().hour < 9:

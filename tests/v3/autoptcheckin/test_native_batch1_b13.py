@@ -114,7 +114,7 @@ def test_b13_unverified_execution_never_reads_credentials(monkeypatch, site_cls,
         pytest.fail("gate must run before credentials or network resources")
     monkeypatch.setattr(module, "managed_site", forbidden)
     monkeypatch.setattr(module, "run_native", forbidden)
-    result = plugin._execute_site(site_cls.id, read_only=read_only)
+    result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
     assert result["status"] == "skipped"
     assert result["metadata"]["reason"] == "native_unverified"
 
@@ -130,7 +130,7 @@ def test_b13_verified_without_hook_is_still_blocked(monkeypatch, site_cls, read_
         pytest.fail("unimplemented hook must never create requests")
     monkeypatch.setattr(module, "managed_site", forbidden)
     monkeypatch.setattr(module, "run_native", forbidden)
-    result = plugin._execute_site(site_cls.id, read_only=read_only)
+    result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
     assert result["status"] == "skipped"
     assert result["metadata"]["reason"] == "hook_not_implemented"
 

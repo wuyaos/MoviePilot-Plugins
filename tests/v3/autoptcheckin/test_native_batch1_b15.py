@@ -108,6 +108,6 @@ def test_b15_double_gate_before_credentials_or_network(monkeypatch, site_cls, re
         pytest.fail("gate must run before credentials or network resources")
     monkeypatch.setattr(module, "managed_site", forbidden)
     monkeypatch.setattr(module, "run_native", forbidden)
-    result = plugin._execute_site(site_cls.id, read_only=read_only)
+    result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
     assert result["status"] == "skipped"
     assert result["metadata"]["reason"] == ("hook_not_implemented" if verified else "native_unverified")

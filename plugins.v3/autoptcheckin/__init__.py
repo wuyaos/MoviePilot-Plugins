@@ -14,7 +14,7 @@ from copy import deepcopy
 from .core.history import HistoryStore
 from .core.migration import Migration, MigrationError
 from .core.registry import get_registry, get_native_module
-from .core.native import run_native, run_native_login
+from .core.native import run_native, run_native_login, run_integration
 from .core.custom import run_custom, CustomNexusSignin
 from .core.state_store import DISABLED, FAILED, GATE_SKIPS, PENDING, SUCCESS, TrackStateStore
 from .core.notify import PARSE_MODES, format_round_summary
@@ -31,7 +31,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "3.37.0"
+    plugin_version = "3.38.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -332,16 +332,18 @@ class AutoPtCheckin(_PluginBase):
             return asdict(result)
         reason = None
         unlock = bool(self._config.get('unlock_all_sites', False))
+        # 手动单站触发即显式人工授权：绕过 verified/hook/试点门控（调度轮仍门控）。
+        manual_bypass = trigger == 'manual' and action == 'sign'
         site = registry.get(site_id, {})
         if action == 'sign' and site_id in ('darkland', 'digitalcore'):
             reason = 'signin_not_applicable'
-        elif action == 'sign' and not unlock and site.get('native') and not site.get('verified'):
+        elif action == 'sign' and not unlock and not manual_bypass and site.get('native') and not site.get('verified'):
             reason = 'native_unverified'
-        elif action == 'sign' and not unlock and site.get('native') and not site.get('hook_implemented', True):
+        elif action == 'sign' and not unlock and not manual_bypass and site.get('native') and not site.get('hook_implemented', True):
             reason = 'hook_not_implemented'
-        elif not unlock and not site.get('native') and site_id not in PILOTS:
+        elif not unlock and not manual_bypass and not site.get('native') and site_id not in PILOTS and site_id not in ('rousi', 'sunnypt'):
             reason = 'pilot_not_enabled'
-        elif not unlock and action == 'login' and site_id not in PILOTS:
+        elif not unlock and not manual_bypass and action == 'login' and site_id not in PILOTS and site_id not in ('rousi', 'sunnypt'):
             reason = 'pilot_not_enabled'
         elif site_id not in self._config.get('enabled_sites', []):
             reason = 'site_disabled'
@@ -370,6 +372,9 @@ class AutoPtCheckin(_PluginBase):
             self._record_result(result)
             return asdict(result)
         info["uid"] = self._bound_uids.get(site_id, "")
+        if site_id in ('rousi', 'sunnypt'):
+            result = run_integration(self._runner, site_id, site.get('name', site_id), info, self._config, action=action, trigger=trigger)
+            return asdict(result)
         if site_id == "mteam":
             info.update({key: self._config.get(key, "") for key in ("mteam_username", "mteam_password", "mteam_totp")})
         if site.get('native') or action == 'login':
@@ -453,10 +458,30 @@ class AutoPtCheckin(_PluginBase):
         """双队列串行：先签到后登录；队列=状态表 failed/pending；单站失败当场重试 ≤ retry_count。"""
         self._recompute_track_states()
         self._track_store().rollover()
-        results = []
-        for action in ("sign", "login"):
-            for site_id in self._due_for(action):
-                results.append(self._run_with_retry(site_id, action, trigger))
+        # 仿真名单站点共用一个 CloakBrowser 会话（轮内挨个执行，省去逐站开关）。
+        emulated = {str(v) for v in self._config.get('site_browserless', [])}
+        round_sites = [str(sid) for action in ("sign", "login") for sid in self._due_for(action)]
+        shared = None
+        if sum(1 for sid in round_sites if sid in emulated) >= 2:
+            try:
+                from .core.cloak import CloakSession
+                shared = CloakSession(url='https://example.com/')
+                shared.__enter__()
+                self._runner.shared_cloak = shared
+            except Exception:
+                shared = None
+        try:
+            results = []
+            for action in ("sign", "login"):
+                for site_id in self._due_for(action):
+                    results.append(self._run_with_retry(site_id, action, trigger))
+        finally:
+            self._runner.shared_cloak = None
+            if shared is not None:
+                try:
+                    shared.close()
+                except Exception:
+                    pass
         self._notify_round(trigger)
         return results
 

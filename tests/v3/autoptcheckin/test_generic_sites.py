@@ -16,11 +16,14 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 81
-    assert len({row['id'] for row in rows}) == 81
-    assert len({row['url'] for row in rows}) == 81
+    assert len(rows) == 83
+    assert len({row['id'] for row in rows}) == 83
+    assert len({row['url'] for row in rows}) == 83
     assert all({'id', 'name', 'url'} <= set(row) for row in rows)
-    assert sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows) == 56
+    base_rows = sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows)
+    assert base_rows == 49  # six emulate and six signin_capable declarations are extras
+    extras = [row for row in rows if set(row) != {'id', 'name', 'url', 'attendance_path'}]
+    assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message'} for row in extras)
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'jpopsuki', 'nebulance', 'filelist', 'iptorrents'} & {row['id'] for row in rows}
 
 
@@ -29,7 +32,7 @@ def test_generic_dynamic_registry_and_default_message_chain():
     native = [row for row in rows if row['native']]
     # Baseline includes GTK and LP-Bits in addition to the original 46 declarations.
     assert len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2 == 29
-    assert len(native) == 109  # Includes the newly declared ourbits site.
+    assert len(native) == 111  # Includes the newly declared ourbits site.
     assert len({row['id'] for row in rows}) == len(rows)
     for cls in generic.build_generic_sites():
         row = next(row for row in rows if row['id'] == cls.id)

@@ -51,7 +51,7 @@ def build_generic_sites() -> list[type[NexusSignin]]:
             "hook_implemented": True,
             "verified": False,
         }
-        for key in ("signed_marker", "use_default_message", "signin_capable", "emulate", "protocol_pending", "login_notice"):
+        for key in ("signed_marker", "use_default_message", "signin_capable", "emulate", "protocol_pending", "login_notice", "cloak_steps"):
             if key in item:
                 attrs[key] = item[key]
         if "success_texts" in item:
@@ -79,6 +79,19 @@ def build_generic_sites() -> list[type[NexusSignin]]:
             attrs["solve_captcha"] = _solve_captcha
         if item.get("signin_capable") is False:
             attrs["signin"] = _signin_not_applicable
+        if item.get("cloak_steps"):
+            steps = tuple(item["cloak_steps"])
+
+            def discover_form(self, ctx, page):
+                # 浏览器动作站无标准表单；合成提交占位让标准前读/回读流程承载动作。
+                return SigninForm(urljoin(self.url, self.attendance_path), [])
+
+            def submit(self, ctx, form):
+                from ..core.cloak import run_page_action
+                run_page_action(ctx.http.session, list(steps))
+
+            attrs["discover_form"] = discover_form
+            attrs["submit"] = submit
         generated = type(class_name, (base,), attrs)
         globals()[class_name] = generated
         classes.append(generated)

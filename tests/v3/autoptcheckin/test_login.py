@@ -92,14 +92,15 @@ def test_login_uid_conflict_and_shared_lock():
     assert result.status == 'skipped' and result.metadata['action'] == 'login'
 
 
-def test_login_nonpilot_never_reads_host(monkeypatch):
+def test_login_integration_is_enabled_by_default(monkeypatch):
     import autoptcheckin as module
-    monkeypatch.setattr(module, 'managed_site', lambda sid: pytest.fail('pilot gate'))
+    monkeypatch.setattr(module, 'managed_site', lambda sid: {'cookie': ''})
+    monkeypatch.setattr(module, 'run_integration', lambda *a, **kw: LoginResult(LoginStatus.LOGIN_OK))
     plugin = AutoPtCheckin()
     plugin.init_plugin({'enabled_sites':['rousi'], 'login_sites':['rousi']})
-    assert plugin._execute_all() == []
-    assert plugin._track_store().state_of('rousi', 'login') == 'disabled'
-    assert plugin._history.list()['total'] == 0
+    result = plugin._execute_site('rousi', action='login')
+    assert result['status'] == 'login_ok'
+    assert plugin._track_store().state_of('rousi', 'login') == 'disabled'  # mocked dispatcher does not persist
 
 
 def test_login_parser_failure_does_not_veto_reachability():

@@ -1,5 +1,6 @@
 """CloakBrowser page and HTTP-compatible transport."""
 from pathlib import Path
+from urllib.parse import urlsplit
 from urllib.parse import urlencode, urlsplit
 
 from .models import LoginPage
@@ -63,10 +64,24 @@ class CloakSession:
 
 class CloakHttpClient:
     """映射浏览器页面为 native 签到执行器所需的同步 HTTP 契约。"""
-    def __init__(self, http, info, site):
+    def __init__(self, http, info, site, shared=None):
         self.http, self.info, self.site = http, info, site
         self.url = info.get("url") or site.url
         cookie = "; ".join(f"{k}={v}" for k, v in http.cookies.items())
+        if shared is not None:
+            # 轮内共享会话：按站注入 cookie，不重复开关浏览器（生命周期归轮次所有）。
+            self.session = shared
+            self.shared = True
+            host = urlsplit(self.url).hostname
+            cookies = []
+            for pair in cookie.split(";"):
+                key, sep, value = pair.strip().partition("=")
+                if sep:
+                    cookies.append({"name": key, "value": value, "domain": host, "path": "/"})
+            if cookies:
+                self.session.context.add_cookies(cookies)
+            return
+        self.shared = False
         self.session = CloakSession(cookie=cookie, url=self.url)
         self.session.__enter__()
 
@@ -100,9 +115,63 @@ class CloakHttpClient:
     def close(self): self.session.close()
 
 
-def native_cloak_client(site, http, info, config):
+def run_page_action(session, steps):
+    """CloakBrowser 页面内动作：滑块拖动 / 人工验证 / 签到按钮。步骤缺失不阻断，最终以回读判定。"""
+    page = session.page
+    results = []
+    for step in steps:
+        try:
+            if step == 'slider':
+                handle = page.locator(
+                    '[class*="slider"][class*="handle"], [class*="slider"] .handle, '
+                    '[id*="slider"] .handle, [class*="drag"][class*="handle"], '
+                    '[class*="slider"] [class*="btn"]').first
+                if handle.count() == 0:
+                    results.append((step, 'absent'))
+                    continue
+                box = handle.bounding_box()
+                parent = handle.locator('xpath=..').bounding_box() or {}
+                distance = max(120.0, float(parent.get('width') or 300) - float(box['width']))
+                page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+                page.mouse.down()
+                page.mouse.move(box['x'] + box['width'] / 2 + distance,
+                                box['y'] + box['height'] / 2, steps=24)
+                page.mouse.up()
+                page.wait_for_timeout(4000)
+                results.append((step, 'dragged'))
+            elif step == 'human_verify':
+                clicked = False
+                for sel in ('text=人工验证', 'text=点击验证', 'text=点击进行人工验证',
+                            '[class*="verify"] button', '[class*="captcha"] button',
+                            'input[type="button"][value*="验证"]'):
+                    loc = page.locator(sel).first
+                    if loc.count():
+                        loc.click()
+                        page.wait_for_timeout(5000)
+                        clicked = True
+                        break
+                results.append((step, 'clicked' if clicked else 'absent'))
+            elif step == 'sign_button':
+                clicked = False
+                for sel in ('button:has-text("立即签到")', 'button:has-text("点我签到")',
+                            'button:has-text("签到")', 'a:has-text("立即签到")',
+                            'a:has-text("签到")', 'input[type="submit"][value*="签到"]',
+                            'button:has-text("打卡")', 'text=打卡'):
+                    loc = page.locator(sel).first
+                    if loc.count():
+                        loc.click()
+                        page.wait_for_timeout(5000)
+                        clicked = True
+                        break
+                results.append((step, 'clicked' if clicked else 'absent'))
+        except Exception:
+            results.append((step, 'error'))
+    return results
+
+
+def native_cloak_client(site, http, info, config, shared=None):
     """启动声明且名单授权的单次仿真上下文；其余站点保留原 HTTP 客户端。"""
     if not (getattr(site, "emulate", False) and
             site.id in {str(value) for value in config.get("site_browserless", [])}):
         return http
-    return CloakHttpClient(http, {**info, "url": info.get("url") or site.url}, site)
+    return CloakHttpClient(http, {**info, "url": info.get("url") or site.url}, site, shared=shared)

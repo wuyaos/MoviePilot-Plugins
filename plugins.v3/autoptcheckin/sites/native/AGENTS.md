@@ -2,7 +2,7 @@
 
 ## 边界
 - 旧 `sites/` 副本是迁移依据；B1 声明一律 `native=True, verified=False`；下表保留各历史批次的 hook/verified 状态，不代表当前生产授权；当前默认门控及显式 unlock_all_sites 例外见插件主 AGENTS.md。
-- 凭证与证据来源是两个维度：凭证术语为 cookie/password/api_key，证据来源为 page_message/response_json。OpenCD 使用 cookie + response_json；蜂巢对照为 api_key + response_json，不在本插件添加论坛站。旧凭证枚举 api 的统一改名不在本批范围；集成账密站为 rousi/sunnypt（kind=password，SunnyPT JWT 为登录产物），mteam 保留 api_key 元数据，独立支持 CloakBrowser 真实登录保活。
+- 凭证与证据来源是两个维度：凭证术语为 cookie/password/api_key，证据来源为 page_message/response_json。OpenCD 使用 cookie + response_json；蜂巢对照为 api_key + response_json，不在本插件添加论坛站。旧凭证枚举 api 的统一改名不在本批范围；集成账密站为 rousi/sunnypt（kind=password，PeerGo 会话失效时账密刷新，SunnyPT JWT 为登录产物；执行分支由 integrations 实现并复用站点锁），mteam 保留 api_key 元数据，独立支持 CloakBrowser 真实登录保活。
 - `RecordSpec.source=page_message` 只匹配唯一消息元素；`response_json` 按 `response_field` 取顶层标量并以类型和值精确匹配 `status_map`，不把任意非空值当成功。
 - `pre_read_spec` 用于安全页面前读及只读核验；`signed_marker` 同时用于安全新页回读；页面 JSON 不冒充动作回执。response_json 声明不继承通用 POST；六站真实动作、回执接线与无条件安全回读已在 C4 实现。
 - `batch2-message-pending-calibration` 是历史合成占位，当前 NexusSignin 默认回退消息链（可由 use_default_message 关闭），不是生产选择器；`未签到` 为合成回归输入。没有证据保持 unconfirmed，不从整个页面、表单消失或未知 JSON 值推断成功。

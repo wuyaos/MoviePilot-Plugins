@@ -145,7 +145,7 @@ def test_new_sites_registry_and_hook_gates(monkeypatch, read_only, verified):
         if verified and site_id in CAPTCHA + ['ptzone', 'tjupt', 'darkland', 'digitalcore', 'yzyy'] + C34:
             continue
         monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites': [dict(row, verified=verified)]})
-        result = plugin._execute_site(site_id, read_only=read_only)
+        result = plugin._execute_site(site_id, read_only=read_only, trigger="scheduler")
         assert result['status'] == 'skipped'
         assert result['metadata']['reason'] == ('signin_not_applicable' if site_id in ['darkland', 'digitalcore'] else 'hook_not_implemented' if verified else 'native_unverified')
 

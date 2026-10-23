@@ -162,7 +162,7 @@ def test_all_unimplemented_hooks_double_gate(monkeypatch, read_only, verified):
     monkeypatch.setattr(module, "run_native", forbidden)
     for row in special:
         monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [dict(row, verified=verified)]})
-        result = plugin._execute_site(row["id"], read_only=read_only)
+        result = plugin._execute_site(row["id"], read_only=read_only, trigger="scheduler")
         assert result["status"] == "skipped"
         assert result["metadata"]["reason"] == ("hook_not_implemented" if verified else "native_unverified")
 

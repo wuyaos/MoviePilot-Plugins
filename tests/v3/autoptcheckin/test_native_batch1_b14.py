@@ -89,7 +89,7 @@ def test_mteam_three_state_inputs_never_imply_sign_state(message):
     assert http.calls == []
     assert isinstance(site, SiteModule) and not isinstance(site, NexusSignin)
     assert site.credential.kind == "password" and site.credential.cookie_sources == ()
-    assert site.url == "" and site.login_capable and not site.record_spec.status_map
+    assert site.url == "https://kp.m-team.cc/" and site.login_capable and not site.record_spec.status_map
 
 
 def test_b14_registry_declares_all_unverified():
@@ -111,7 +111,7 @@ def test_b14_unverified_execution_never_reads_credentials(monkeypatch, site_cls,
         pytest.fail("gate must run before credentials or network resources")
     monkeypatch.setattr(module, "managed_site", forbidden)
     monkeypatch.setattr(module, "run_native", forbidden)
-    result = plugin._execute_site(site_cls.id, read_only=read_only)
+    result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
     assert result["status"] == "skipped"
     assert result["metadata"]["reason"] == "native_unverified"
 
@@ -127,7 +127,7 @@ def test_b14_verified_without_hook_is_still_blocked(monkeypatch, site_cls, read_
         pytest.fail("unimplemented hook must never create requests")
     monkeypatch.setattr(module, "managed_site", forbidden)
     monkeypatch.setattr(module, "run_native", forbidden)
-    result = plugin._execute_site(site_cls.id, read_only=read_only)
+    result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
     assert result["status"] == "skipped"
     assert result["metadata"]["reason"] == "hook_not_implemented"
 

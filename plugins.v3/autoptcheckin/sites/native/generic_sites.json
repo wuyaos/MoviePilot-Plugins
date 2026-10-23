@@ -241,8 +241,11 @@
     "attendance_path": "/attendance.php",
     "signin_capable": true,
     "browserless": true,
-    "protocol_pending": true,
-    "emulate": true
+    "emulate": true,
+    "cloak_steps": [
+      "slider",
+      "sign_button"
+    ]
   },
   {
     "id": "pt_aling",
@@ -833,6 +836,26 @@
       "签到成功": "signed",
       "未签到": "unsigned"
     },
+    "emulate": true
+  },
+  {
+    "id": "piggo",
+    "name": "猪猪",
+    "url": "https://piggo.me/",
+    "attendance_path": "/attendance.php",
+    "cloak_steps": [
+      "sign_button"
+    ],
+    "emulate": true
+  },
+  {
+    "id": "kamept",
+    "name": "龟站",
+    "url": "https://kamept.com/",
+    "attendance_path": "/attendance.php",
+    "cloak_steps": [
+      "sign_button"
+    ],
     "emulate": true
   }
 ]

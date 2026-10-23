@@ -70,8 +70,10 @@ class NativeHttpClient:
             self.cookies.update(self.session.cookies.get_dict())
         return LoginPage(decode_response(response), response.url, response.status_code)
 
-    def get(self, url, *, referer=None):
+    def get(self, url, *, referer=None, headers=None):
         kwargs = {'referer': referer} if referer is not None else {}
+        if headers is not None:
+            kwargs['headers'] = headers
         return self._request('get', url, **kwargs)
 
     def get_bytes(self, url):
@@ -153,7 +155,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                 import requests
                 session = requests.Session()
                 ctx.http.session = session
-            ctx.http = native_cloak_client(site, ctx.http, info, config or {})
+            ctx.http = native_cloak_client(site, ctx.http, info, config or {}, shared=getattr(runner, "shared_cloak", None))
             ctx.get_data, ctx.save_data = get_data, save_data
             if read_only:
                 try:
@@ -250,4 +252,39 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid, site.credential)
         except Exception:
             result = LoginResult(LoginStatus.UNCONFIRMED, '原生登录执行未确认')
+        return finish(result)
+
+
+def run_integration(runner, site_id, name, info, config, action='sign', trigger='manual'):
+    """Run an API integration with the normal site lock and history boundary."""
+    from .credentials import Credential
+    from ..integrations import rousi, sunnypt
+    integration = {'rousi': rousi, 'sunnypt': sunnypt}[site_id]
+    try:
+        from app.runtime.log import logger
+    except Exception:
+        from types import SimpleNamespace
+        logger = SimpleNamespace(info=lambda *a, **k: None)
+    def finish(result):
+        result.site_id, result.run_id = site_id, str(uuid4())
+        result.metadata.update(action=action, trigger=trigger)
+        if runner.history:
+            runner.history(result)
+        if runner.notify and action == 'sign':
+            runner.notify(result)
+        logger.info(f'【PT 签到中心】{name}（{site_id}）{action}结果：{getattr(result.status, "value", result.status)} | {result.message}')
+        return result
+    with runner.locks.acquire((site_id, '')) as acquired:
+        if not acquired:
+            return finish(SignResult.skipped())
+        if runner.stop.is_set():
+            return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
+        credential = Credential('managed_site', info.get('cookie') or '')
+        http = NativeHttpClient(credential, info)
+        credentials = {**info, **config}
+        try:
+            result = integration.login(http, credentials) if action == 'login' else integration.signin(http, credentials)
+        except Exception:
+            status = LoginStatus.UNCONFIRMED if action == 'login' else SignStatus.UNCONFIRMED
+            result = LoginResult(status, '站点接口执行未确认') if action == 'login' else SignResult(status, '站点接口执行未确认')
         return finish(result)

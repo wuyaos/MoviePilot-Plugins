@@ -9,6 +9,13 @@ class MTorrent(SiteModule):
     id = "mteam"
     name = "M-Team"
     url = "https://kp.m-team.cc/"
+
+    @classmethod
+    def match(cls, url: str) -> bool:
+        """V2 多域名口径：hostname 任一段含 m-team 即命中（m-team.cc/m-team.io）。"""
+        from urllib.parse import urlsplit
+        host = (urlsplit(url).hostname or "").removeprefix("www.")
+        return "m-team" in host.split(".")
     credential = CredentialSpec(kind="password", cookie_sources=())
     login_capable = True
     emulate = False

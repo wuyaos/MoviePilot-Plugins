@@ -82,6 +82,7 @@
 
 - 保留既有存储值，不批量重写历史 unconfirmed；新增状态只影响新的对应产生点。GetSignin 继承 Nexus 流程，无需复制分类逻辑；API 动作回执及提交后无条件回读不变。
 - 憨憨的 register-now-info 声明必须使用 XPath class-token 匹配，不能把 CSS 选择器交给 lxml.xpath；attendance 前读/动作/回读使用相同 URL，测试必须按调用顺序提供响应。
+- U2 按每日 9 点重置：9 点前 read_before 的 ALREADY 一律降级 unconfirmed（昨日状态不作为今日证据，修复 01:00 误判已签）；9 点后表单提交「一切随缘」随机选项。
 
 ### 徽标色映射
 - 徽标用 `--ptc-badge-*` 半透明背景和同系文字，深浅主题各一套；配置下拉、chips、收起行与数据页使用同一来源映射。
@@ -104,10 +105,12 @@
 - 执行双轨分流：native 站点签到/只读核验走原生模块；模拟登录使用下方独立登录契约，不构造旧桥。旧桥仅保留非 native 签到/核验分支（实际实现限 hdsky/haitang 试点回退，不是排除清单域名的通用签到器）。unlock_all_sites 默认 false，此时 verified、hook_implemented 和旧试点门控生效；显式 true 会绕过这三门，但不改变 verified，也不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到仍不适用；M-Team 模块仍仅返回 skipped。signin_applicable 是 registry 展示的适用性，不等于 verified 或生产授权：排除登录专用站、M-Team，并检查原生 hook/verified；后端不以该展示字段替代执行检查。
 
 ### 仿真通道（CloakBrowser）
-- 仅 ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema 声明仿真；生效条件为站点声明且 ID 在 `site_browserless` 名单中，无全局开关。native 与 custom 仿真使用 CloakBrowser，结果 `transport=cloak`。一般模拟登录不走仿真；M-Team 保活登录是专门的真实浏览器账密登录例外，不执行签到。
-- 复用 Nexus 前读→协议解析→单次提交→无条件回读，不猜浏览器按钮或新增判定规则。CloakBrowser 负责页面渲染与页面内 fetch 原协议，Cookie 双向同步仅限本次执行；不得重放动作，结果 `transport=cloak`。
-- 默认 solve 与页面稳定等待各 15 秒，超时预算为两项等待加 45 秒，上限 300 秒；单次导航上限 30 秒。
-- pt_0ff 前读已签可判 already，否则 protocol_pending，禁止滑块提交；yema 保留禁止签到；常规模拟登录不走仿真。滑块模拟与真实过盾未验证，需后续授权校准。
+- 仿真名单（`site_browserless`）：ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema、52pt、piggo、kamept；生效条件为站点声明且 ID 在名单中，无全局开关。native 与 custom 仿真使用 CloakBrowser，结果 `transport=cloak`。一般模拟登录不走仿真；M-Team 保活登录是专门的真实浏览器账密登录例外，不执行签到。
+- 复用 Nexus 前读→动作→无条件回读，结论一律来自回读证据。Cookie 双向同步仅限本次执行；不得重放动作。
+- **页面动作站（`cloak_steps`）**：pt_0ff=[slider,sign_button]（滑块有时不出现，出现才拖动）、52pt=[slider,sign_button]、yema=[human_verify,sign_button]、piggo/kamept=[sign_button]。`run_page_action` 步骤缺失不阻断（absent 继续下一步），点击后等 5s，最终以回读消息链判定成功/已签/未确认，不猜测按钮结果。
+- **轮内共享会话**：一轮 ≥2 个仿真站到期时共用一个 CloakSession（`_runner.shared_cloak`），按站注入 Cookie，不重复开关浏览器；会话生命周期归轮次，异常降级为逐站独立会话。
+- **手动门控旁路**：`signin_by_domain`/`login_by_domain`（trigger=manual）绕过 native_unverified/hook_not_implemented/pilot_not_enabled（手动单站即显式人工授权）；调度轮仍受门控。darkland/digitalcore（signin_not_applicable）与 login_not_supported 不受旁路影响。
+- 默认 solve 与页面稳定等待各 15 秒；单次导航上限 30 秒。滑块拖动为 humanize 步进鼠标（24 步），真实过盾效果需生产验证。
 
 ## 阶段2数据契约
 - `core/registry.py` 使用 `pkgutil` 遍历 `sites/`，逐模块导入并收集 `_ISiteSigninHandler` 子类；导入异常只进入 `skipped` 日志，不阻断其他站点。注册项包含 `id/name/login_capable/credential/cf`，并追加 `rousi/sunnypt` 两个 integrations 注册项；`/sites` 返回 `sources.adapters` 与 `sources.integrations` 计数。
