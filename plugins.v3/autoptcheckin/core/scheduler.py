@@ -40,7 +40,7 @@ class Scheduler:
                 begin, end = int(config.get("begin_hour", 8)), int(config.get("end_hour", 24))
                 if not math.isfinite(interval) or interval < 0.5 or not 0 <= begin < end <= 24:
                     raise ValueError("invalid interval window")
-                signature = f"interval:{interval}:{begin}:{end}"
+                signature = f"interval:{interval}:{begin}:{end}:v2"  # v2: 首槽=开始时间
                 crons = self.get_data("schedule_crons") or []
                 if self.get_data("schedule_signature") != signature or not crons:
                     crons = [f"0 {begin} * * *"]  # 2026-10-23 用户裁决：开始时间本身是首个时刻（8-24 → 8:00 也算）。
