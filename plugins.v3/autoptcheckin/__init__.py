@@ -216,9 +216,12 @@ class AutoPtCheckin(_PluginBase):
                 continue
             sign = self._track_store().entry_of(sid, 'sign')
             login = self._track_store().entry_of(sid, 'login')
+            cf_markers = ('cf-chl', 'cloudflare', 'just a moment', 'verify you are human', 'challenge-platform')
+            latest_messages = f"{sign.get('message', '')} {login.get('message', '')}".lower()
+            cf_hit = any(marker in latest_messages for marker in cf_markers)
             rows.append({'id': sid, 'name': site.get('name', sid), 'url': site.get('url', ''),
                 'icon': site.get('icon', ''), 'source': site.get('source', ''),
-                'cf': site.get('cf', 'unknown'),
+                'cf': True if cf_hit else site.get('cf', 'unknown'),
                 'emulate': sid in {str(v) for v in self._config.get('site_browserless', [])} or bool(site.get('emulate', False)),
                                 'sign_state': sign.get('state', 'disabled' if sid not in enabled else 'pending'),
                 'sign_status': sign.get('status', ''), 'sign_time': sign.get('time', ''),

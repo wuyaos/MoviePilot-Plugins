@@ -88,7 +88,7 @@ def test_mteam_three_state_inputs_never_imply_sign_state(message):
     assert result.metadata["reason"] == "hook_not_implemented"
     assert http.calls == []
     assert isinstance(site, SiteModule) and not isinstance(site, NexusSignin)
-    assert site.credential.kind == "api_key" and site.credential.cookie_sources == ()
+    assert site.credential.kind == "password" and site.credential.cookie_sources == ()
     assert site.url == "" and site.login_capable and not site.record_spec.status_map
 
 
@@ -99,7 +99,7 @@ def test_b14_registry_declares_all_unverified():
         assert not rows[cls.id]["pilot_enabled"]
     for cls in SPECIAL:
         assert rows[cls.id]["hook_implemented"] == (cls in (Kelu, LaJiDui))
-    assert rows["mteam"]["credential"] == {"kind": "api_key", "sources": [], "refresh": None}
+    assert rows["mteam"]["credential"] == {"kind": "password", "sources": [], "refresh": None}
 
 
 @pytest.mark.parametrize("site_cls", SITES)

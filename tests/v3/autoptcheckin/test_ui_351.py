@@ -69,7 +69,7 @@ def test_config_summary_actions_and_emulate_contract():
     summary = source.split(':open="openSites.includes(site.id)"><summary', 1)[1].split('</summary>', 1)[0]
     assert summary.count('type="checkbox"') == 2
     assert 'role="switch"' in summary
-    assert 'v-if="site.login_capable"' in summary
+    assert 'v-if="site.login_capable"' not in summary  # 3.37 用户裁决：登录开关所有站点可见
     assert 'credentialBadge' in summary
     assert 'v-if="site.cf === true"' in summary and 'CF 盾' in summary
     assert 'v-if="site.emulate === true || siteEmulated(site)"' in summary and '仿真' in summary

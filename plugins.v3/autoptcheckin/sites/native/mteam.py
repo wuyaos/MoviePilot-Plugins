@@ -9,7 +9,7 @@ class MTorrent(SiteModule):
     id = "mteam"
     name = "M-Team"
     url = ""
-    credential = CredentialSpec(kind="api_key", cookie_sources=())
+    credential = CredentialSpec(kind="password", cookie_sources=())
     login_capable = True
     emulate = False
     hook_implemented = False
