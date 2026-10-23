@@ -869,7 +869,7 @@
   {
     "id": "yema",
     "name": "YemaPT",
-    "url": "https://yemapt.org/",
+    "url": "https://www.yemapt.org/",
     "attendance_path": "/",
     "signin_capable": true,
     "cloak_steps": [

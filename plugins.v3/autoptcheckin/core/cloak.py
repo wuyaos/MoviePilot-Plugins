@@ -191,6 +191,15 @@ def run_page_action(session, steps):
         page.wait_for_load_state('networkidle', timeout=15000)
     except Exception:
         page.wait_for_timeout(8000)
+    try:
+        from pathlib import Path as _P
+        import json as _json
+        _P('D:/tmp/action_diag.json').write_text(_json.dumps(
+            {'site': getattr(session, 'debug_site', '?'), 'results': results,
+             'title': page.title(), 'url': page.url,
+             'body': page.locator('body').inner_text()[:300]}, ensure_ascii=False), encoding='utf-8')
+    except Exception:
+        pass
     return results
 
 

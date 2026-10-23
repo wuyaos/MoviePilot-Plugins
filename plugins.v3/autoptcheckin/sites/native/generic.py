@@ -86,9 +86,9 @@ def build_generic_sites() -> list[type[NexusSignin]]:
                 # 浏览器动作站无标准表单；合成提交占位让标准前读/回读流程承载动作。
                 return SigninForm(urljoin(self.url, self.attendance_path), [])
 
-            def submit(self, ctx, form):
+            def submit(self, ctx, form, _steps=tuple(steps)):
                 from ...core.cloak import run_page_action
-                run_page_action(ctx.http.session, list(steps))
+                run_page_action(ctx.http.session, list(_steps))
                 # 动作后落点页即回读证据：站点每次进入都可能发新滑块门页，
                 # 二次 GET 会重新拿到门页导致证据丢失（自由农场实证）。
                 from ...core.models import LoginPage
