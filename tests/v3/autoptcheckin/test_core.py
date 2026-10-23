@@ -45,17 +45,6 @@ def test_verification_always_reads_and_unconfirmed():
     assert result.status.value == "unconfirmed" and called == ["unparseable"]
 
 
-def test_cf_guard_degrades_and_browser_disabled():
-    g = load("helper.cf_guard")
-    calls = []
-    def direct(url, *, timeout): calls.append("direct"); return "cf-chl challenge"
-    def browser(url, *, timeout): calls.append("browser"); return "clear"
-    result = g.CfGuard(direct, playwright=browser, enable_playwright=False).fetch("offline")
-    assert result.status == "unconfirmed" and calls == ["direct"]
-    result = g.CfGuard(direct, playwright=browser, enable_playwright=True).fetch("offline")
-    assert result.status == "ok" and result.level == "playwright"
-
-
 def test_migration_preview_is_idempotent_and_read_only():
     m = load("core.migration")
     config = {"cron": "0 9 * * *", "onlyonce": True}

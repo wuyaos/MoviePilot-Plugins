@@ -116,13 +116,6 @@ class CloakHttpClient:
             response = self.session.goto(url)
         self.session.page.wait_for_timeout(15000)
         self._sync_cookies()
-        try:
-            from pathlib import Path as _P
-            log = _P('D:/tmp/cloak_get.log')
-            with log.open('a', encoding='utf-8') as f:
-                f.write(f"[{getattr(self.site, 'id', '?')}] GET {url} -> {response.status if response else 0} | {self.session.page.title()[:40]} | cookie_n={len(self.http.cookies)}\n")
-        except Exception:
-            pass
         return LoginPage(self.session.page.content(), self.session.page.url,
                          response.status if response else 0)
 
@@ -141,7 +134,11 @@ class CloakHttpClient:
 
     def get_bytes(self, url): return self.http.get_bytes(url)
     def retain_cookies(self, names): return self.http.retain_cookies(names)
-    def close(self): self.session.close()
+    def close(self):
+        # 共享会话生命周期归轮次（_execute_all finally 统一关闭），单站不关。
+        if getattr(self, "shared", False):
+            return
+        self.session.close()
 
 
 def _wait_for_slider_page_exit(page):
@@ -209,17 +206,7 @@ def run_page_action(session, steps):
     results = []
     for step in steps:
         try:
-            if step == 'attendance_link':
-                # 52PT currently exposes the daily page behind the home/torrent
-                # navigation link; open it before looking for the delayed slider.
-                link = _wait_for_locator(page, ('a:has-text("签到赚魔力")',))
-                if link is None:
-                    results.append((step, 'absent'))
-                    continue
-                link.click()
-                page.wait_for_timeout(5000)
-                results.append((step, 'clicked'))
-            elif step == 'slider':
+            if step == 'slider':
                 handle = _wait_for_locator(page, (
                     '#dragHandler, [class*="dragHandler"], #slider-btn, '
                     '[id*="slider"] .handle, [class*="slider"][class*="handle"], '
@@ -300,15 +287,6 @@ def run_page_action(session, steps):
         page.wait_for_load_state('networkidle', timeout=15000)
     except Exception:
         page.wait_for_timeout(8000)
-    try:
-        from pathlib import Path as _P
-        import json as _json
-        _P('D:/tmp/action_diag.json').write_text(_json.dumps(
-            {'site': getattr(session, 'debug_site', '?'), 'results': results,
-             'title': page.title(), 'url': page.url,
-             'body': page.locator('body').inner_text()[:300]}, ensure_ascii=False), encoding='utf-8')
-    except Exception:
-        pass
     return results
 
 
