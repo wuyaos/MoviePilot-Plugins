@@ -8,7 +8,7 @@ from ...core.sitemodel import RecordSpec, SignContext, SiteModule
 class MTorrent(SiteModule):
     id = "mteam"
     name = "M-Team"
-    url = ""
+    url = "https://kp.m-team.cc/"
     credential = CredentialSpec(kind="password", cookie_sources=())
     login_capable = True
     emulate = False
