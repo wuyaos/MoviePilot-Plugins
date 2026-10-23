@@ -2,6 +2,7 @@
 import asyncio
 import json
 from copy import deepcopy
+import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -216,6 +217,20 @@ class ForumSignin(_PluginBase):
             return None
         return HttpClient(site["adapter"].base, credential, self._get("fengchao_instance_id") or "")
 
+    def _execute_with_retry(self, domain, readonly=False):
+        # V2 语义：失败/网络异常按 retry_count/retry_interval 分钟退避重试；成功/已签/未确认/认证失败不重试（未确认重放有重复提交风险）。
+        result = self._execute(domain, readonly=readonly)
+        if readonly:
+            return result
+        attempts = max(0, int(self._config.get('retry_count', 0) or 0))
+        interval = max(1, int(self._config.get('retry_interval', 10) or 10))
+        for _ in range(attempts):
+            if result.status not in (SignStatus.FAILED, SignStatus.NETWORK_ERROR):
+                break
+            time.sleep(interval * 60)
+            result = self._execute(domain, readonly=readonly)
+        return result
+
     def _execute(self, domain, readonly=False):
         site = get_site(domain)
         if not site:
@@ -294,7 +309,7 @@ class ForumSignin(_PluginBase):
         results = []
         for site in get_registry():
             if site["id"] in self._config.get("enabled_sites", []):
-                results.append(self._execute(site["domain"]))
+                results.append(self._execute_with_retry(site["domain"]))
         return self._response(results)
 
     async def api_run_once(self):

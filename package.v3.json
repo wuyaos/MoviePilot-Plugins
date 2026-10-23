@@ -102,8 +102,7 @@
         "level": 1,
         "system_version": ">=3.0.0",
         "history": {
-            "v3.1.0": "UI aligns PT Center; adds registration-driven forum adapters, scheduling and credential refresh",
-            "v3.6.2": "batch1-2：迁移冬樱、DStudio、海胆、白兔、好大原生声明与离线三态夹具",
+            "v3.1.0": "论坛站点注册表化（新增论坛五步接入）；药丸账密自动登录续期；SSD/蜂巢补缺；对齐签到中心 UI（配置页单页）；通知与重试修复",
             "v3.0.1": "审查修复",
             "v3.0.0": "F1/F2：后端骨架、三站协议与保守回读验证"
         }

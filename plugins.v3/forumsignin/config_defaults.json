@@ -6,7 +6,6 @@
   "onlyonce": false,
   "retry_count": 0,
   "retry_interval": 10,
-  "history_days": 90,
   "fengchao_api_key": "",
   "timed_update_enabled": false,
   "timed_update_cron": "0 */6 * * *",
