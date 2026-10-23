@@ -2,6 +2,7 @@
 
 ## 边界
 - 默认仅 HDSky（hdsky）和海棠（haitang）开放手动试点；显式 unlock_all_sites 的执行边界见原生站点契约；不接管 `plugins.v2` 入口，默认不激活自动调度。
+- 站点规则（2026-10-24）：HDDolby 公告「API 访问不计有效登录；严禁 Cookies/伪造 UA 模拟登录，违者警告或封号」——hddolby 声明 `login_notice`，配置/数据卡显示 ⚠ 徽标（title 全文）提醒用户定期浏览器人工登录，登录轨不强行关闭（用户裁决）。同类站点规则按此先例加 notice 徽标。
 - 站点采用双轨：`sites/` 的46份 V2 站点副本已标 deprecated，保留用于 registry 元数据发现与未迁移域名参照；`sites/native/` 是原生执行实现。旧桥实际仅支持 hdsky/haitang 的 pilot 回退；生产切换前不删除副本或 `core/pilot.py`。
 - 任何提交结果都必须尝试新页面回读；按钮文本和 UID 只能来自页面证据。
 - `unconfirmed` 独立于 `failed`，提交后回读不可达、证据不足或身份冲突不得猜测成功/失败；签到前读维护/关闭用 `maintenance`，其他不可达用 `network_error`，未适配表单/参数、验证码未解决或提交前解析异常用 `protocol_pending`。模拟登录状态契约不变。
@@ -160,7 +161,7 @@
 - GET 站点页面后无条件再次 GET 回读，无签到提交、无业务日期；页面可达即 login_ok，UID 尽力解析，缺失不阻断，显式冲突为 unconfirmed。重定向到登录页为 auth_failed，不可达为 unconfirmed。
 - 批量执行勾签到的站点走签到链，仅勾模拟登录的站点走登录链；两项都未勾保留 skipped 记录。单站登录 API 为 POST /login_by_domain（auth: bear），复用站点锁和身份绑定。
 - history 保存 action=sign/login；旧记录无 action 视为 sign。登录结果仅入历史，不覆盖签到小卡或四态统计；历史 login_ok 显示「登录成功」。
-- 默认仅 HDSky/海棠可执行；显式 unlock_all_sites 可绕过模拟登录试点门控，但仍检查启用与登录动作选择。M-Team API 凭据站与 rousi/sunnypt 账密站（JWT 为登录产物）只提供可注入认证检查协议；未接检查器返回 unconfirmed/login_check_not_available，不以非空凭据冒充认证检查通过。真实协议接入须后续逐站授权。
+- 默认仅 HDSky/海棠使用试点门控；rousi/sunnypt 使用专属集成协议并在启用与动作选择后可执行。PeerGo 登录先 GET `/api/v1/session`，Cookie 无效时使用账密 POST 刷新；签到读取 session/attendance，已有 claimed_today 不重复提交，提交带 Origin、Referer、X-CSRF-Token 与唯一 Idempotency-Key。SunnyPT 优先配置 JWT，否则账密换 token；Bearer 签到按 code=0/400001/400000 分类，token 失效时重新登录并最多重试一次。M-Team 仍仅由独立 CloakBrowser 真实登录实现，不经通用 password 集成协议。
 
 ## 批次 3 完成（3.15.0，2026-10-22）
 - D1 下沉：20 专属模块（CAPTCHA 12/GET 6/POST 2）并入 generic_sites.json 行为字段（captcha/action_get/safe_read_path/referer/form_data/form_path/response_json/action_path/use_default_message/signin_capable；typed status_map pairs），native 守恒 108。

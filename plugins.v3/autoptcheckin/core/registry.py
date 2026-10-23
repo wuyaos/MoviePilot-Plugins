@@ -64,7 +64,7 @@ def discover_sites(package_name: str | None = None) -> dict:
                  for item in fallback if item["id"] not in ("rousi", "sunnypt")]
     for site_id, name, spec in (("rousi", "肉丝 PeerGo", ROUSI_CREDENTIALS),
                                 ("sunnypt", "SunnyPT", SUNNYPT_CREDENTIALS)):
-        sites.append({"id": site_id, "name": name, "login_capable": False,
+        sites.append({"id": site_id, "name": name, "login_capable": True,
                       "credential": credential(spec), "cf": "unknown", "source": "插件适配"})
     for item in sites:
         item['native'] = False
@@ -82,13 +82,14 @@ def discover_sites(package_name: str | None = None) -> dict:
                     _NATIVE_MODULES[cls.id] = cls
                     # API-only declarations retain the legacy multi-domain matcher.
                     if cls.url:
-                        _MATCHERS[cls.id] = lambda url, base=cls.url: (urlsplit(url).hostname or '').removeprefix('www.') == (urlsplit(base).hostname or '').removeprefix('www.')
+                        matcher = cls.match if callable(getattr(cls, 'match', None)) else (lambda url, base=cls.url: (urlsplit(url).hostname or '').removeprefix('www.') == (urlsplit(base).hostname or '').removeprefix('www.'))
+                        _MATCHERS[cls.id] = matcher
                     sites = [item for item in sites if item['id'] != cls.id]
                     sites.append({'id': cls.id, 'name': cls.name, 'native': True,
                                   'verified': bool(getattr(cls, 'verified', False)),
                                   'login_capable': cls.login_capable, 'url': cls.url or '', 'credential': credential(cls.credential),
                                   'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'hook_implemented': bool(getattr(cls, 'hook_implemented', True)),
-                                  'emulate': bool(getattr(cls, 'emulate', False))})
+                                  'emulate': bool(getattr(cls, 'emulate', False)), 'notice': getattr(cls, 'login_notice', '') or ''})
             except Exception as exc:
                 skipped.append({'module': module_name, 'error': type(exc).__name__})
     for item in sites:

@@ -105,7 +105,8 @@
     "id": "et8",
     "name": "他吹吹风",
     "url": "https://et8.org/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signin_capable": false
   },
   {
     "id": "gamegamept",
@@ -117,7 +118,8 @@
     "id": "hddolby",
     "name": "高清杜比",
     "url": "https://www.hddolby.com/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "login_notice": "站点规则：严禁 Cookies/伪造 UA 模拟登录，请定期浏览器人工登录"
   },
   {
     "id": "hdfans",
@@ -205,7 +207,8 @@
     "id": "nanyangpt",
     "name": "南洋",
     "url": "https://nanyangpt.com/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signin_capable": false
   },
   {
     "id": "nicept",
@@ -257,7 +260,8 @@
     "id": "pt_eastgame",
     "name": "吐鲁番",
     "url": "https://pt.eastgame.org/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signin_capable": false
   },
   {
     "id": "pt_hdclone",
@@ -269,19 +273,22 @@
     "id": "pt_itzmx",
     "name": "ITZMX",
     "url": "https://pt.itzmx.com/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signin_capable": false
   },
   {
     "id": "pt_keepfrds",
     "name": "朋友",
     "url": "https://pt.keepfrds.com/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signin_capable": false
   },
   {
     "id": "pt_sjtu_edu",
     "name": "葡萄",
     "url": "https://pt.sjtu.edu.cn/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signin_capable": false
   },
   {
     "id": "pt_tey",
