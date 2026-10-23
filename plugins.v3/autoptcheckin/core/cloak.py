@@ -94,6 +94,13 @@ class CloakHttpClient:
         self.session.page.wait_for_timeout(15000)
         self.session.page.wait_for_timeout(15000)
         self._sync_cookies()
+        try:
+            from pathlib import Path as _P
+            log = _P('D:/tmp/cloak_get.log')
+            with log.open('a', encoding='utf-8') as f:
+                f.write(f"[{getattr(self.site, 'id', '?')}] GET {url} -> {response.status if response else 0} | {self.session.page.title()[:40]} | cookie_n={len(self.http.cookies)}\n")
+        except Exception:
+            pass
         return LoginPage(self.session.page.content(), self.session.page.url,
                          response.status if response else 0)
 
@@ -135,9 +142,10 @@ def run_page_action(session, steps):
         try:
             if step == 'slider':
                 handle = page.locator(
-                    '#dragHandler, [class*="dragHandler"], [id*="slider"] .handle, '
-                    '[class*="slider"][class*="handle"], [class*="slider"] .handle, '
-                    '[class*="drag"][class*="handle"], [class*="slider"] [class*="btn"]').first
+                    '#dragHandler, [class*="dragHandler"], #slider-btn, '
+                    '[id*="slider"] .handle, [class*="slider"][class*="handle"], '
+                    '[class*="slider"] .handle, [class*="drag"][class*="handle"], '
+                    '[class*="slider"] [class*="btn"]').first
                 if handle.count() == 0:
                     results.append((step, 'absent'))
                     continue
@@ -159,6 +167,19 @@ def run_page_action(session, steps):
                 page.mouse.up()
                 exited = _wait_for_slider_page_exit(page)
                 results.append((step, 'dragged' if exited else 'timeout'))
+            elif step == 'altcha':
+                wrap = page.locator('.altcha-checkbox-wrap').first
+                if wrap.count() == 0:
+                    results.append((step, 'absent'))
+                    continue
+                wrap.locator('input').click()
+                verified = False
+                for _ in range(14):
+                    page.wait_for_timeout(1500)
+                    if '已验证' in wrap.inner_text():
+                        verified = True
+                        break
+                results.append((step, 'verified' if verified else 'timeout'))
             elif step == 'human_verify':
                 clicked = False
                 for sel in ('text=人工验证', 'text=点击验证', 'text=点击进行人工验证',

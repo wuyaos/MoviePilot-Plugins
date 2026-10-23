@@ -858,7 +858,7 @@
     "id": "52pt",
     "name": "52PT",
     "url": "https://52pt.site/",
-    "attendance_path": "/attendance.php",
+    "attendance_path": "/52bakatestdate0823.php",
     "signin_capable": true,
     "cloak_steps": [
       "slider",
@@ -870,10 +870,10 @@
     "id": "yema",
     "name": "YemaPT",
     "url": "https://www.yemapt.org/",
-    "attendance_path": "/",
+    "attendance_path": "/#/user/growth",
     "signin_capable": true,
     "cloak_steps": [
-      "human_verify",
+      "altcha",
       "sign_button"
     ],
     "emulate": true

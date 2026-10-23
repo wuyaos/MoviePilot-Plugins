@@ -13,6 +13,7 @@ class YemaPT(_base):
     emulate = True
     hook_implemented = True
     record_spec = RecordSpec(
-        '//*[@id="batch2-message-pending-calibration"]',
-        {"签到成功": "signed", "签到已得": "signed", "今天已经签到过": "signed", "未签到": "unsigned"},
+        '//button[contains(text(), "签到")] | //*[contains(text(), "签到成功")]'
+        ' | //*[contains(text(), "签到已得")] | //*[contains(text(), "已签到")]',
+        {'已签到': 'signed', '签到成功': 'signed', '签到已得': 'signed', '立即签到': 'unsigned'},
     )

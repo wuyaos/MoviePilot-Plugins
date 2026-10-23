@@ -86,4 +86,4 @@ def test_yema_signin_capability_and_login_are_enabled():
     site = get_native_module('yema')
     assert site.signin_capable is True
     assert site.login_capable is True
-    assert site.cloak_steps == ['human_verify', 'sign_button']
+    assert site.cloak_steps == ['altcha', 'sign_button']

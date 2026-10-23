@@ -197,6 +197,8 @@ def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatc
         class Page:
             url = site.url
             def content(self): return '<h2>签到已得100</h2>'
+            def goto(self, *args, **kwargs): return None
+            def wait_for_timeout(self, *args, **kwargs): return None
 
         class Session:
             page = Page()
@@ -205,7 +207,8 @@ def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatc
             session = Session()
             def get(self, *args, **kwargs):
                 from autoptcheckin.core.models import LoginPage
-                return LoginPage('<main>门页</main>', site.url, 200)
+                # 首页含「签到赚魔力」入口（52pt 两段式：入口消失=已签）。
+                return LoginPage('<a href="52bakatestdate0823.php">签到赚魔力</a>', site.url, 200)
 
         result = site.signin(c1.context(site, Http(), None))
         assert result.status == 'success' and result.message == '签到已得100'
