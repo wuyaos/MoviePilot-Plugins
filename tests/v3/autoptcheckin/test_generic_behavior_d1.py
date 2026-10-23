@@ -179,6 +179,40 @@ def test_cloak_action_readback_prefers_stashed_landing_page(monkeypatch):
     assert result.message == '签到已得100'
 
 
+
+def test_vclib_cloak_human_verify_chain(monkeypatch):
+    site = get_native_module('vclib')
+    assert site.emulate is True and site.cloak_steps == ['human_verify', 'sign_button']
+    assert '人工验证' in site.login_notice
+
+    class Page:
+        url = site.url + '/attendance.php'
+        def content(self): return '<div class="ant-message">签到成功</div>'
+        def goto(self, *a, **k): return None
+        def wait_for_timeout(self, *a, **k): return None
+        def wait_for_load_state(self, *a, **k): return None
+        def inner_text(self): return ''
+
+    class Session:
+        page = Page()
+
+    class Http:
+        session = Session()
+        def get(self, *a, **k):
+            from autoptcheckin.core.models import LoginPage
+            return LoginPage('<main>attendance 表单</main>', site.url + '/attendance.php', 200)
+
+    from autoptcheckin.core import cloak
+    steps = []
+    def fake_action(session, step_list):
+        steps.extend(step_list)
+        session.page.__class__.content = lambda self: '<div class="ant-message">签到成功</div>'
+    monkeypatch.setattr(cloak, 'run_page_action', fake_action)
+    result = site.signin(c1.context(site, Http(), None))
+    assert steps == ['human_verify', 'sign_button']
+    assert result.status.value in ('success', 'already')
+
+
 def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatch):
     rows = {row['id']: row for row in json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))}
     assert rows['yema']['signin_capable'] is True

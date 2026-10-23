@@ -12,7 +12,7 @@ from autoptcheckin.core.native import NativeHttpClient
 from autoptcheckin.core.registry import get_native_module, discover_sites
 from autoptcheckin.core.sitemodel import SignContext
 
-IDS = 'baozi dongying kelu naturept novahd oshen playlet shaobaoyuan soulvoice tu88 vclib'.split()
+IDS = 'baozi dongying kelu naturept novahd oshen playlet shaobaoyuan soulvoice tu88'.split()
 
 
 def message(text):

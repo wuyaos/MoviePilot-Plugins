@@ -7,8 +7,15 @@ const props = defineProps({ initialConfig: Object, api: Object, pluginId: {type:
 const brokenIcons = ref({})
 const emit = defineEmits(['save', 'switch', 'close', 'layout'])
 const model = reactive({ ...structuredClone(defaults), ...JSON.parse(JSON.stringify(props.initialConfig || {})) })
+// 站点清单字段统一为字符串：配置里可能存数字 ID，与 /sites 字符串 id 严格相等会失配。
+for (const key of ['enabled_sites', 'sign_sites', 'login_sites']) {
+  if (Array.isArray(model[key])) model[key] = model[key].map(String)
+}
 watch(() => props.initialConfig, value => {
   Object.assign(model, structuredClone(defaults), JSON.parse(JSON.stringify(value || {})))
+  for (const key of ['enabled_sites', 'sign_sites', 'login_sites']) {
+    if (Array.isArray(model[key])) model[key] = model[key].map(String)
+  }
   customOverlay.value = []
   loadSites()
 })

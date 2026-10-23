@@ -2,6 +2,7 @@
 
 ## 边界
 - 默认仅 HDSky（hdsky）和海棠（haitang）开放手动试点；显式 unlock_all_sites 的执行边界见原生站点契约；不接管 `plugins.v2` 入口，默认不激活自动调度。
+- 站点语义（2026-10-23 用户裁决）：zhuque 的 fireGenshinCharacterMagic「释放技能」动作即其签到能力（signin_capable=True，按技能动作回执判定）；vclib 人工验证、52pt 内联滑块均走 CloakBrowser 页面动作签到。
 - 站点规则（2026-10-24）：HDDolby 公告「API 访问不计有效登录；严禁 Cookies/伪造 UA 模拟登录，违者警告或封号」——hddolby 声明 `login_notice`，配置/数据卡显示 ⚠ 徽标（title 全文）提醒用户定期浏览器人工登录，登录轨不强行关闭（用户裁决）。同类站点规则按此先例加 notice 徽标。
 - 站点采用双轨：`sites/` 的46份 V2 站点副本已标 deprecated，保留用于 registry 元数据发现与未迁移域名参照；`sites/native/` 是原生执行实现。旧桥实际仅支持 hdsky/haitang 的 pilot 回退；生产切换前不删除副本或 `core/pilot.py`。
 - 任何提交结果都必须尝试新页面回读；按钮文本和 UID 只能来自页面证据。

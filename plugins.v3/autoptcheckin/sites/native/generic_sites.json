@@ -455,28 +455,12 @@
     "name": "VC-Lib",
     "url": "https://pt.vclib.online/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
-    "status_map": {
-      "签到成功": "signed",
-      "簽到成功": "signed",
-      "签到已得": "signed",
-      "簽到已得": "signed",
-      "今天已经签到过": "signed",
-      "今天已經簽到過": "signed",
-      "请勿重复刷新": "signed",
-      "請勿重複刷新": "signed",
-      "已经签到": "signed",
-      "已經簽到": "signed",
-      "今天已经签到": "signed",
-      "今天已經簽到": "signed",
-      "今天已簽到": "signed",
-      "今日已簽到": "signed",
-      "今日已签到": "signed",
-      "未签到": "unsigned"
-    },
-    "captcha": true,
     "browserless": true,
-    "emulate": true
+    "emulate": true,
+    "cloak_steps": [
+      "human_verify",
+      "sign_button"
+    ]
   },
   {
     "id": "baozi",
@@ -859,12 +843,13 @@
     "name": "52PT",
     "url": "https://52pt.site/",
     "attendance_path": "/torrents.php",
-    "signin_capable": true,
+    "emulate": true,
     "cloak_steps": [
       "slider",
       "sign_button"
     ],
-    "emulate": true
+    "signin_capable": true,
+    "login_notice": "滑块签到，请留意账号安全"
   },
   {
     "id": "yema",

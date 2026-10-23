@@ -14,6 +14,7 @@ class ZhuQue(ApiSignin):
     url = 'https://zhuque.in/'
     attendance_path = '/'
     hook_implemented = True
+
     record_spec = RecordSpec(source="response_json", response_field="status", status_map={200: "signed"})
 
     def discover_form(self, ctx, page):

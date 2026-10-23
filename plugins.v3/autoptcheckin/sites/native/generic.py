@@ -75,7 +75,8 @@ def build_generic_sites() -> list[type[NexusSignin]]:
             attrs["record_spec"] = RecordSpec(source="response_json",
                                                response_field=response["field"], status_map=states)
             attrs["action_path"] = item["action_path"]
-        if item.get("captcha", False):
+        # cloak_steps 页面动作自含验证处理；OCR/滑块 solve 仅在非动作站挂载。
+        if item.get("captcha", False) and not item.get("cloak_steps"):
             attrs["solve_captcha"] = _solve_captcha
         if item.get("signin_capable") is False:
             attrs["signin"] = _signin_not_applicable
