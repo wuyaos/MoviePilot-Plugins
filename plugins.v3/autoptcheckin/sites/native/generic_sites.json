@@ -863,6 +863,7 @@
     "id": "hares",
     "name": "白兔",
     "url": "https://club.hares.top/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signin_capable": false
   }
 ]

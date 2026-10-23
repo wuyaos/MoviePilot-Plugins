@@ -5,6 +5,7 @@
 - 站点语义（2026-10-23 用户裁决）：zhuque 的 fireGenshinCharacterMagic「释放技能」动作即其签到能力（signin_capable=True，按技能动作回执判定）；vclib 人工验证、52pt 内联滑块均走 CloakBrowser 页面动作签到。
 - 站点规则（2026-10-24）：HDDolby 公告「API 访问不计有效登录；严禁 Cookies/伪造 UA 模拟登录，违者警告或封号」——hddolby 声明 `login_notice`，配置/数据卡显示 ⚠ 徽标（title 全文）提醒用户定期浏览器人工登录，登录轨不强行关闭（用户裁决）。同类站点规则按此先例加 notice 徽标。
 - Registry 仅发现 `sites/native/`；generic 声明由 native 包提供，rousi/sunnypt 由 integrations 注册。旧适配器副本和旧执行桥已移除。
+- hares（白兔）由被删副本转正为 generic 声明：`signin_capable=false` 仅登录；与旧基线的差异（name=白兔、url=club.hares.top）为明确接受的变更。
 - 任何提交结果都必须尝试新页面回读；按钮文本和 UID 只能来自页面证据。
 - `unconfirmed` 独立于 `failed`，提交后回读不可达、证据不足或身份冲突不得猜测成功/失败；签到前读维护/关闭用 `maintenance`，其他不可达用 `network_error`，未适配表单/参数、验证码未解决或提交前解析异常用 `protocol_pending`。模拟登录状态契约不变。
 

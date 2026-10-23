@@ -7,15 +7,17 @@ const props = defineProps({ initialConfig: Object, api: Object, pluginId: {type:
 const brokenIcons = ref({})
 const emit = defineEmits(['save', 'switch', 'close', 'layout'])
 const model = reactive({ ...structuredClone(defaults), ...JSON.parse(JSON.stringify(props.initialConfig || {})) })
-// 站点清单字段统一为字符串：配置里可能存数字 ID，与 /sites 字符串 id 严格相等会失配。
-for (const key of ['enabled_sites', 'sign_sites', 'login_sites']) {
-  if (Array.isArray(model[key])) model[key] = model[key].map(String)
-}
-watch(() => props.initialConfig, value => {
-  Object.assign(model, structuredClone(defaults), JSON.parse(JSON.stringify(value || {})))
-  for (const key of ['enabled_sites', 'sign_sites', 'login_sites']) {
+// API 与历史配置中的自定义 ID 可能是数字；表单内统一使用字符串关联站点。
+function normalizeSiteIds() {
+  for (const key of ['enabled_sites', 'sign_sites', 'login_sites', 'site_browserless']) {
     if (Array.isArray(model[key])) model[key] = model[key].map(String)
   }
+  model.custom_sites_data = model.custom_sites_data.map(site => ({...site, id: String(site.id)}))
+}
+normalizeSiteIds()
+watch(() => props.initialConfig, value => {
+  Object.assign(model, structuredClone(defaults), JSON.parse(JSON.stringify(value || {})))
+  normalizeSiteIds()
   customOverlay.value = []
   loadSites()
 })
@@ -122,7 +124,7 @@ function toggleFilteredSelection() {
 }
 function remove(id) { model.enabled_sites = model.enabled_sites.filter(s => s !== id); openSites.value = openSites.value.filter(s => s !== id) }
 function save() { emit('save', JSON.parse(JSON.stringify(model))) }
-async function loadSites() { try { const response = await props.api?.get(`plugin/${props.pluginId || 'AutoPtCheckin'}/sites`); registrySites.value = (response?.data?.sites || response?.sites || []).map(site => ({...site, source: site.source, fields: credentialFields[site.id] || [], credential: site.credential && site.credential.kind ? site.credential.kind : 'cookie'})) } catch { registrySites.value = [] } }
+async function loadSites() { try { const response = await props.api?.get(`plugin/${props.pluginId || 'AutoPtCheckin'}/sites`); registrySites.value = (response?.data?.sites || response?.sites || []).map(site => ({...site, id: String(site.id), source: site.source, fields: credentialFields[site.id] || [], credential: site.credential && site.credential.kind ? site.credential.kind : 'cookie'})) } catch { registrySites.value = [] } }
 let stopTheme
 onMounted(() => { stopTheme = watchHostTheme(); loadSites(); window.addEventListener('resize', positionPicker); window.addEventListener('scroll', positionPicker, true) })
 onBeforeUnmount(() => { stopTheme?.(); window.removeEventListener('resize', positionPicker); window.removeEventListener('scroll', positionPicker, true) })
