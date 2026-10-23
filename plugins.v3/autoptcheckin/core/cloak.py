@@ -11,6 +11,9 @@ except ImportError:
     launch_context = None
 
 
+TURNSTILE_HEADFUL_SITES = {"vclib"}
+
+
 def state_path(site_id):
     """返回插件独立数据目录中的站点浏览器存档路径。"""
     from app.sdk.config import settings
@@ -82,7 +85,8 @@ class CloakHttpClient:
                 self.session.context.add_cookies(cookies)
             return
         self.shared = False
-        self.session = CloakSession(cookie=cookie, url=self.url)
+        self.session = CloakSession(cookie=cookie, url=self.url,
+                                    headless=site.id not in TURNSTILE_HEADFUL_SITES)
         self.session.__enter__()
 
     def _sync_cookies(self):
@@ -181,6 +185,20 @@ def run_page_action(session, steps):
                         break
                 results.append((step, 'verified' if verified else 'timeout'))
             elif step == 'human_verify':
+                # Vc-Lib Turnstile 依赖 headful CloakBrowser；等待响应 token 后才允许后续提交。
+                token = page.locator('input[name="cf-turnstile-response"]').first
+                if token.count():
+                    ok = False
+                    for _ in range(40):
+                        try:
+                            if (token.input_value() or '').strip():
+                                ok = True
+                                break
+                        except Exception:
+                            pass
+                        page.wait_for_timeout(1500)
+                    results.append((step, 'turnstile-ok' if ok else 'turnstile-timeout'))
+                    continue
                 clicked = False
                 for sel in ('text=人工验证', 'text=点击验证', 'text=点击进行人工验证',
                             '[class*="verify"] button', '[class*="captcha"] button',

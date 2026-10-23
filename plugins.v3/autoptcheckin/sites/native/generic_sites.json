@@ -460,7 +460,8 @@
     "cloak_steps": [
       "human_verify",
       "sign_button"
-    ]
+    ],
+    "login_notice": "人工验证签到，需浏览器环境"
   },
   {
     "id": "baozi",

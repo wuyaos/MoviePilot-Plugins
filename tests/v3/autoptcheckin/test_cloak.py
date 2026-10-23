@@ -60,3 +60,33 @@ def test_slider_wait_reports_gate_timeout_without_stability_wait():
     page = _Page(["滑动认证"] * 16, ["拖动滑块验证"] * 16)
     assert cloak._wait_for_slider_page_exit(page) is False
     assert page.waits == [1500] * 16
+
+
+class _Token:
+    def __init__(self, values): self.values = iter(values)
+    def count(self): return 1
+    def input_value(self): return next(self.values)
+
+
+class _TurnstilePage:
+    def __init__(self, values):
+        self.token = _Token(values)
+        self.waits = []
+    def locator(self, selector):
+        assert selector == 'input[name="cf-turnstile-response"]'
+        return type('FirstLocator', (), {'first': self.token})()
+    def wait_for_timeout(self, milliseconds): self.waits.append(milliseconds)
+
+
+def test_turnstile_waits_for_token_before_continuing():
+    page = _TurnstilePage(['', '', 'token-value'])
+    session = type('Session', (), {'page': page})()
+    assert cloak.run_page_action(session, ['human_verify']) == [('human_verify', 'turnstile-ok')]
+    assert page.waits == [1500, 1500, 8000]
+
+
+def test_turnstile_timeout_is_reported_without_submission():
+    page = _TurnstilePage([''] * 40)
+    session = type('Session', (), {'page': page})()
+    assert cloak.run_page_action(session, ['human_verify']) == [('human_verify', 'turnstile-timeout')]
+    assert page.waits == [1500] * 40 + [8000]
