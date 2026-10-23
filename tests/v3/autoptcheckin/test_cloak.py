@@ -31,3 +31,32 @@ def test_cloak_session_launch_cookie_and_resource_cleanup(monkeypatch, tmp_path)
         {"name": "x", "value": "y", "domain": "pt.example", "path": "/"},
     ]
     assert context.calls[-1] == "closed"
+
+
+class _Body:
+    def __init__(self, page): self.page = page
+    def inner_text(self): return next(self.page.bodies)
+
+
+class _Page:
+    def __init__(self, titles, bodies):
+        self.titles = iter(titles)
+        self.bodies = iter(bodies)
+        self.waits = []
+    def title(self): return next(self.titles)
+    def locator(self, selector):
+        assert selector == "body"
+        return _Body(self)
+    def wait_for_timeout(self, milliseconds): self.waits.append(milliseconds)
+
+
+def test_slider_waits_until_gate_page_redirects():
+    page = _Page(["滑动认证", "Farmm :: 签到"], ["拖动滑块验证", "签到已得325"])
+    assert cloak._wait_for_slider_page_exit(page) is True
+    assert page.waits == [1500, 2000]
+
+
+def test_slider_wait_reports_gate_timeout_without_stability_wait():
+    page = _Page(["滑动认证"] * 16, ["拖动滑块验证"] * 16)
+    assert cloak._wait_for_slider_page_exit(page) is False
+    assert page.waits == [1500] * 16

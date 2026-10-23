@@ -747,7 +747,7 @@
     "url": "https://pt.hdupt.com/",
     "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {},
-    "signed_marker": "//span[@id=\"yiqiandao\"]",
+    "signed_marker": "//span[@id='yiqiandao' and not(@style)]",
     "action_get": "/added.php?action=qiandao",
     "safe_read_path": "/"
   },
@@ -815,7 +815,7 @@
       "请不要重复签到哦": "signed",
       "未签到": "unsigned"
     },
-    "signed_marker": "//span[@id=\"sign_in_done\"]",
+    "signed_marker": "//span[@id='sign_in_done' and not(@style)]",
     "safe_read_path": "/",
     "form_path": "/sign_in.php",
     "form_data": {
@@ -852,10 +852,6 @@
     "id": "kamept",
     "name": "龟站",
     "url": "https://kamept.com/",
-    "attendance_path": "/attendance.php",
-    "cloak_steps": [
-      "sign_button"
-    ],
-    "emulate": true
+    "attendance_path": "/attendance.php"
   }
 ]

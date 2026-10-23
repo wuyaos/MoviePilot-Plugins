@@ -173,6 +173,16 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                     result = site.read_before(ctx, page)
             else:
                 result = site.signin(ctx)
+            if (site.id == 'yzyy' and not read_only
+                    and result.status == SignStatus.AUTH_FAILED):
+                # Cookie 失效：Discuz 账密登录刷新 Cookie 后重签一次（用户裁决，全 HTTP）。
+                from ..integrations import yzyy
+                try:
+                    refreshed = yzyy.login(ctx.http, {**info, **(config or {})})
+                except Exception:
+                    refreshed = None
+                if refreshed is not None and refreshed.status == LoginStatus.LOGIN_OK:
+                    result = site.signin(ctx)
             if isinstance(ctx.http, CloakHttpClient):
                 result.metadata['transport'] = 'cloak'
         except Exception:
@@ -236,6 +246,20 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
         if site.credential.kind in ('api_key', 'password'):
             from ..integrations.login import CredentialLoginProtocol
             return finish(CredentialLoginProtocol(credential_check).login(info, uid))
+        if site.id == 'yzyy':
+            from ..integrations import yzyy
+            try:
+                url = info.get('url') or site.url
+                cloud = cookiecloud_candidate(url)
+                candidates = {'managed_site': Credential('managed_site', info.get('cookie') or ''),
+                              'local_cookie': Credential('local_cookie', custom_cookie)}
+                if cloud.credential is not None:
+                    candidates['cookiecloud'] = cloud.credential
+                auth = CredentialResolver().select_cookie(candidates)
+                client = NativeHttpClient(auth.credential or Credential('managed_site', ''), info)
+                return finish(yzyy.login(client, {**info, **(config or {})}))
+            except Exception:
+                return finish(LoginResult(LoginStatus.UNCONFIRMED, 'yzyy 登录执行未确认'))
         try:
             url = info.get('url') or site.url
             if urlsplit(url).scheme not in {'http', 'https'} or not urlsplit(url).hostname:

@@ -110,3 +110,35 @@ def test_execute_site_routes_integration_sign_and_login(monkeypatch):
     assert plugin._execute_site('rousi')['status'] == 'success'
     assert plugin._execute_site('sunnypt', action='login')['status'] == 'login_ok'
     assert dispatched == [('rousi', 'sign', 'offline-cookie'), ('sunnypt', 'login', 'offline-cookie')]
+
+
+def test_yzyy_login_reuses_valid_cookie_and_relogins_on_expiry():
+    from autoptcheckin.integrations import yzyy
+    from autoptcheckin.core.models import LoginResult, LoginStatus
+
+    class FakeHttp:
+        def __init__(self, pages):
+            self.pages = list(pages)
+            self.posts = []
+        def get(self, url, **kwargs):
+            return self.pages.pop(0)
+        def post(self, url, **kwargs):
+            self.posts.append((url, kwargs.get('data')))
+            return self.pages.pop(0)
+
+    class Page:
+        def __init__(self, text):
+            self.text = text
+
+    # Cookie 有效：首页含 logout → 直接 LOGIN_OK，不发登录 POST
+    http = FakeHttp([Page('index action=logout 退出')])
+    result = yzyy.login(http, {'yzyy_username': 'u', 'yzyy_password': 'p'})
+    assert result.status == LoginStatus.LOGIN_OK and not http.posts
+    # Cookie 失效：无 logout → 登录页 formhash → POST → 首页 logout → LOGIN_OK
+    http = FakeHttp([Page('登录'), Page('formhash name="formhash" value="abc123"'),
+                     Page('login result'), Page('action=logout 退出')])
+    result = yzyy.login(http, {'yzyy_username': 'u', 'yzyy_password': 'p'})
+    assert result.status == LoginStatus.LOGIN_OK and len(http.posts) == 1
+    # 无账密：AUTH_FAILED
+    result = yzyy.login(FakeHttp([Page('登录')]), {})
+    assert result.status == LoginStatus.AUTH_FAILED

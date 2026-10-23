@@ -22,7 +22,7 @@ function applyTimeWindow() {
   model.begin_hour = begin; model.end_hour = end
 }
 watch(() => [model.begin_hour, model.end_hour], ([b, e]) => { timeWindow.value = `${b}-${e}` })
-const credentialFields = {rousi:[{key:'rousi_username',label:'肉丝账号',type:'text'},{key:'rousi_password',label:'肉丝密码',type:'password'}], sunnypt:[{key:'sunnypt_username',label:'SunnyPT 账号',type:'text'},{key:'sunnypt_password',label:'SunnyPT 密码',type:'password'}],mteam:[{key:'mteam_username',label:'M-Team 账号',type:'text'},{key:'mteam_password',label:'M-Team 密码',type:'password'},{key:'mteam_totp',label:'M-Team TOTP 密钥（可选）',type:'password'}]}
+const credentialFields = {rousi:[{key:'rousi_username',label:'肉丝账号',type:'text'},{key:'rousi_password',label:'肉丝密码',type:'password'}], sunnypt:[{key:'sunnypt_username',label:'SunnyPT 账号',type:'text'},{key:'sunnypt_password',label:'SunnyPT 密码',type:'password'}],yzyy:[{key:'yzyy_username',label:'yzyy 账号',type:'text'},{key:'yzyy_password',label:'yzyy 密码',type:'password'}],mteam:[{key:'mteam_username',label:'M-Team 账号',type:'text'},{key:'mteam_password',label:'M-Team 密码',type:'password'},{key:'mteam_totp',label:'M-Team TOTP 密钥（可选）',type:'password'}]}
 const siteConfigured = site => model.sign_sites.includes(site.id) || model.login_sites.includes(site.id)
 const hasExtraSettings = site => (site.fields || []).length > 0 || site.emulate === true || site.browserless === true || site.source === '自定义站点'
 const siteEmulated = site => { const list = model.site_browserless || (model.site_browserless = []); return list.includes(site.id) }

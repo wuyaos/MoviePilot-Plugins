@@ -37,7 +37,8 @@ class AutoPtCheckin(_PluginBase):
 
     SITE_KEYS = ("enabled_sites", "sign_sites", "login_sites", "site_browserless", "custom_sites_data",
                  "rousi_username", "rousi_password", "sunnypt_username",
-                 "sunnypt_password", "sunnypt_token", "mteam_username", "mteam_password", "mteam_totp")
+                 "sunnypt_password", "sunnypt_token", "mteam_username", "mteam_password", "mteam_totp",
+                 "yzyy_username", "yzyy_password")
 
     def __init__(self):
         super().__init__()
@@ -212,7 +213,8 @@ class AutoPtCheckin(_PluginBase):
         rows = []
         for site in registry:
             sid = str(site['id'])
-            if sid not in enabled and not self._track_store().entry_of(sid, 'sign') and not self._track_store().entry_of(sid, 'login'):
+            # 卡片严格随配置：仅显示启用站点。
+            if sid not in enabled:
                 continue
             sign = self._track_store().entry_of(sid, 'sign')
             login = self._track_store().entry_of(sid, 'login')

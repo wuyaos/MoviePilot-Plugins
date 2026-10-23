@@ -69,7 +69,6 @@ class CloakHttpClient:
         self.url = info.get("url") or site.url
         cookie = "; ".join(f"{k}={v}" for k, v in http.cookies.items())
         if shared is not None:
-            # 轮内共享会话：按站注入 cookie，不重复开关浏览器（生命周期归轮次所有）。
             self.session = shared
             self.shared = True
             host = urlsplit(self.url).hostname
@@ -115,30 +114,50 @@ class CloakHttpClient:
     def close(self): self.session.close()
 
 
+def _wait_for_slider_page_exit(page):
+    """等待自由农场滑块验证门页完成延迟跳转；超时保留当前页面供回读判定。"""
+    for _ in range(16):
+        title = page.title()
+        body = page.locator("body").inner_text()
+        if "滑动认证" not in title and "滑动认证" not in body and "拖动滑块验证" not in body:
+            page.wait_for_timeout(2000)
+            return True
+        page.wait_for_timeout(1500)
+    return False
+
+
 def run_page_action(session, steps):
-    """CloakBrowser 页面内动作：滑块拖动 / 人工验证 / 签到按钮。步骤缺失不阻断，最终以回读判定。"""
+    """CloakBrowser 页面内动作：滑块拖动 / 人工验证 / 签到按钮；步骤缺失不阻断，最终以回读判定。"""
     page = session.page
     results = []
     for step in steps:
         try:
             if step == 'slider':
                 handle = page.locator(
+                    '#dragHandler, [class*="dragHandler"], [id*="slider"] .handle, '
                     '[class*="slider"][class*="handle"], [class*="slider"] .handle, '
-                    '[id*="slider"] .handle, [class*="drag"][class*="handle"], '
-                    '[class*="slider"] [class*="btn"]').first
+                    '[class*="drag"][class*="handle"], [class*="slider"] [class*="btn"]').first
                 if handle.count() == 0:
                     results.append((step, 'absent'))
                     continue
                 box = handle.bounding_box()
                 parent = handle.locator('xpath=..').bounding_box() or {}
-                distance = max(120.0, float(parent.get('width') or 300) - float(box['width']))
-                page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+                track = parent or {}
+                track_x, track_w = float(track.get('x') or 0), float(track.get('width') or 0)
+                start_x = box['x'] + box['width'] / 2
+                end_x = (track_x + track_w - box['width'] / 2 - 2) if track_w > box['width'] else start_x + 260
+                distance = max(120.0, end_x - start_x)
+                page.mouse.move(start_x, box['y'] + box['height'] / 2)
+                page.wait_for_timeout(600)
                 page.mouse.down()
-                page.mouse.move(box['x'] + box['width'] / 2 + distance,
-                                box['y'] + box['height'] / 2, steps=24)
+                page.wait_for_timeout(300)
+                page.mouse.move(start_x + distance * 0.55, box['y'] + box['height'] / 2 + 2, steps=10)
+                page.mouse.move(start_x + distance * 0.9, box['y'] + box['height'] / 2 - 1, steps=10)
+                page.mouse.move(start_x + distance + 1, box['y'] + box['height'] / 2, steps=8)
+                page.wait_for_timeout(500)
                 page.mouse.up()
-                page.wait_for_timeout(4000)
-                results.append((step, 'dragged'))
+                exited = _wait_for_slider_page_exit(page)
+                results.append((step, 'dragged' if exited else 'timeout'))
             elif step == 'human_verify':
                 clicked = False
                 for sel in ('text=人工验证', 'text=点击验证', 'text=点击进行人工验证',
@@ -162,10 +181,15 @@ def run_page_action(session, steps):
                         loc.click()
                         page.wait_for_timeout(5000)
                         clicked = True
+                        page.wait_for_timeout(8000)
                         break
                 results.append((step, 'clicked' if clicked else 'absent'))
         except Exception:
             results.append((step, 'error'))
+    try:
+        page.wait_for_load_state('networkidle', timeout=15000)
+    except Exception:
+        page.wait_for_timeout(8000)
     return results
 
 

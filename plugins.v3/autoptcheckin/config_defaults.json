@@ -31,5 +31,7 @@
     "site_browserless": [],
     "mteam_username": "",
     "mteam_password": "",
-    "mteam_totp": ""
+    "mteam_totp": "",
+    "yzyy_username": "",
+    "yzyy_password": ""
 }
