@@ -91,7 +91,10 @@ class AutoPtCheckin(_PluginBase):
         return self._running or (not self._runner.stop.is_set() and bool(self._config.get("scheduler_enabled", False)) and bool(self._config.get("onlyonce", False)))
 
     def get_service(self) -> list:
-        if self._scheduler is None or self._runner.stop.is_set():
+        # 不以 stop 门控注册：宿主任何 stop_service（重建/重载）都会置位 stop，
+        # 若在此返回空列表，宿主将移除全部服务且再无调度器去清除 stop（死锁）。
+        # stop 只用于中断在途执行；注册始终按当前配置给出。
+        if self._scheduler is None:
             return []
         if self._scheduler.services:
             return list(self._scheduler.services)
