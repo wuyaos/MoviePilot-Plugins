@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urljoin
 
+from unittest.mock import patch
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "plugins.v3"))
@@ -64,7 +65,9 @@ def test_anchor_evidence_without_invented_unsigned(site_id, path, signed, unsign
         assert context(site, Http()).read_record(page, site.record_spec).status == state
     for word in site.record_spec.status_map:
         http = Http([f'<a href="{path}">{word}</a>'])
-        assert site.signin(context(site, http)).status == 'already'
+        with patch('autoptcheckin.sites.native.u2.datetime') as fake_dt:
+            fake_dt.now.return_value.hour = 10  # 9 点后：anchor 即今日已签证据（u2 9 点重置守卫不影响）
+            assert site.signin(context(site, http)).status == 'already', (site_id, word)
         assert len(http.calls) == 1
     page = LoginPage("<script>window.location.href = 'showup.php';</script>", site.url)
     assert context(site, Http()).read_record(page, site.record_spec).status == 'unconfirmed'

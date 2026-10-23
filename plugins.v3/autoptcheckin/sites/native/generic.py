@@ -42,7 +42,7 @@ def build_generic_sites() -> list[type[NexusSignin]]:
             "id": item["id"],
             "name": item["name"],
             "url": item["url"],
-            "attendance_path": item.get("safe_read_path", item.get("attendance_path", "/attendance.php")),
+            "attendance_path": item.get("safe_read_path", item.get("attendance_path")),  # null=仅登录站
             "credential": CredentialSpec(),
             "record_spec": RecordSpec(
                 item.get("message", '//*[@id="batch2-message-pending-calibration"]'),
@@ -78,7 +78,11 @@ def build_generic_sites() -> list[type[NexusSignin]]:
         # cloak_steps 页面动作自含验证处理；OCR/滑块 solve 仅在非动作站挂载。
         if item.get("captcha", False) and not item.get("cloak_steps"):
             attrs["solve_captcha"] = _solve_captcha
-        if item.get("signin_capable") is False:
+        # attendance_path 显式为 null（键存在且值为 None）＝仅登录站，signin 一律不适用；
+        # 键缺省（D1 下沉站用 safe_read_path/action_path）不在此列。
+        login_only = item.get("signin_capable") is False or (
+            "attendance_path" in item and item["attendance_path"] is None)
+        if login_only:
             attrs["signin"] = _signin_not_applicable
         if item.get("cloak_steps"):
             steps = tuple(item["cloak_steps"])

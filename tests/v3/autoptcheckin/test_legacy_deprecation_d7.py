@@ -15,7 +15,7 @@ from autoptcheckin.core.registry import get_registry
 @pytest.mark.parametrize('action,read_only', [('sign', False), ('sign', True), ('login', False)])
 def test_all_native_sites_dispatch_without_legacy_bridge(monkeypatch, action, read_only):
     rows = [row for row in get_registry()['sites'] if row.get('native')]
-    assert len(rows) == 112  # 3.38：hares 转正为 generic 声明（白兔，仅登录）
+    assert len(rows) == 128  # 3.38：hares 转正 + FileList/15 排除清单站转仅登录声明
     monkeypatch.setattr(entry, 'managed_site', lambda sid: {})
     run = Mock(return_value=SignResult(SignStatus.UNCONFIRMED, 'offline dispatch'))
     monkeypatch.setattr(entry, 'run_native', run)

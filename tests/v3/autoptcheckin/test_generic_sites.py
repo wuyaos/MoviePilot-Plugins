@@ -16,15 +16,15 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 86  # 3.38 收敛：81 原声明 + cspt + kamept/piggo + hares 转正
-    assert len({row['id'] for row in rows}) == 86
-    assert len({row['url'] for row in rows}) == 86
+    assert len(rows) == 102  # 3.38：86 + FileList + 27 域排除清单 15 站转仅登录声明（attendance_path=null）
+    assert len({row['id'] for row in rows}) == 102
+    assert len({row['url'] for row in rows}) == 102
     assert all({'id', 'name', 'url'} <= set(row) for row in rows)
     base_rows = sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows)
-    assert base_rows == 50  # hares 转仅登录（signin_capable=false）后计入 extras  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
+    assert base_rows == 65  # 50 基础 + 15 仅登录（attendance_path=null 属四字段键集）  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
     extras = [row for row in rows if set(row) != {'id', 'name', 'url', 'attendance_path'}]
     assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path'} for row in extras)
-    assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'jpopsuki', 'nebulance', 'filelist', 'iptorrents'} & {row['id'] for row in rows}
+    assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'iptorrents'} & {row['id'] for row in rows}  # jpopsuki/nebulance/filelist 已转正为仅登录声明
 
 
 def test_generic_dynamic_registry_and_default_message_chain():
@@ -32,7 +32,7 @@ def test_generic_dynamic_registry_and_default_message_chain():
     native = [row for row in rows if row['native']]
     # Baseline includes GTK and LP-Bits in addition to the original 46 declarations.
     assert len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2 == 29
-    assert len(native) == 112  # Native package discovery includes all declarations.
+    assert len(native) == 128  # Native package discovery includes all declarations.
     assert len({row['id'] for row in rows}) == len(rows)
     for cls in generic.build_generic_sites():
         row = next(row for row in rows if row['id'] == cls.id)
