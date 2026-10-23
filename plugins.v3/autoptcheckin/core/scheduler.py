@@ -43,10 +43,10 @@ class Scheduler:
                 signature = f"interval:{interval}:{begin}:{end}"
                 crons = self.get_data("schedule_crons") or []
                 if self.get_data("schedule_signature") != signature or not crons:
+                    crons = [f"0 {begin} * * *"]  # 2026-10-23 用户裁决：开始时间本身是首个时刻（8-24 → 8:00 也算）。
                     minute = begin * 60
-                    crons = []
-                    # 与 V2 TimerUtils.random_scheduler 相同：从 begin 起累计随机间隔。
-                    for _ in range(max(1, int((end - begin) / interval))):
+                    # 与 V2 TimerUtils.random_scheduler 相同：其后从 begin 起累计随机间隔。
+                    for _ in range(max(1, int((end - begin) / interval)) - 1):
                         minute += random.randint(max(30, int(interval * 60 * 0.5)), int(interval * 60))
                         if minute // 60 > end:
                             break

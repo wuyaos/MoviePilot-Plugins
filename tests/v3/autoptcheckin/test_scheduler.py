@@ -44,7 +44,7 @@ def test_interval_expansion_and_persistence(monkeypatch, interval, expected):
     services = p.get_service()
     assert len(services) == expected
     assert [s['id'] for s in services] == [f'AutoSignIn.{i}' for i in range(expected)]
-    assert services[0]['name'].endswith(f'{9 + int(interval):02d}:{int(interval % 1 * 60):02d}')
+    assert services[0]['name'].endswith('09:00')  # 首槽固定为开始时间（BASE begin=9）
     crons = deepcopy(data['schedule_crons'])
     monkeypatch.setattr('autoptcheckin.core.scheduler.random.randint', lambda *args: pytest.fail('reload randomized'))
     p.init_plugin(config)
@@ -127,8 +127,9 @@ def test_stop_and_config_reregistration(monkeypatch):
     p = plugin(BASE)
     p.get_service()
     p.stop_service()
-    assert p.get_service() == [] and p._next_schedule() is None
-    assert p._runner.stop.is_set()
+    # 3.38 修复：stop 不再抑制注册（宿主 stop_service 置位 stop 会让 get_service
+    # 永久返回空 → 服务被移除且无调度器清除 stop 的死锁）；stop 只中断在途执行。
+    assert len(p.get_service()) == 7 and p._runner.stop.is_set()  # 首槽=09:00 + 6 随机槽
     p._save_config({**BASE, 'cron_mode': 'cron', 'cron': '0 9 * * *'})
     assert calls[-2:] == [('remove', 'AutoPtCheckin'), ('update', 'AutoPtCheckin')]
     assert [s['id'] for s in p.get_service()] == ['AutoSignIn']
