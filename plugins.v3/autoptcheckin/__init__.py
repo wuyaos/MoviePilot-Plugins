@@ -31,7 +31,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.0"
+    plugin_version = "4.0.1"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -614,12 +614,11 @@ class AutoPtCheckin(_PluginBase):
             data["total"] = len(enabled & selected)
             data["next"] = len(enabled & selected & due)
             data["executed"] = sum(1 for site, action in executed if action == track)
-            # 逐站行：本轮实际执行的站点 + 当日失败站点（失败明细必须可见）。
+            # 逐站行：本轮实际执行的站点 + 当日有待办结论的站点（failed 与 pending 均显示明细）。
             today = datetime.now().date().isoformat()
-            failed_today = {site for site in enabled & selected & due
-                            if (snapshot.get(site, {}).get(track, {}).get("state") == "failed"
-                                and str(snapshot[site][track].get("time", "")).startswith(today))}
-            shown = {site for site, action in executed if action == track} | failed_today
+            due_today = {site for site in enabled & selected & due
+                         if str(snapshot.get(site, {}).get(track, {}).get("time", "")).startswith(today)}
+            shown = {site for site, action in executed if action == track} | due_today
             for site in shown:
                 entry = snapshot.get(site, {}).get(track, {})
                 if entry and str(entry.get("time", "")).startswith(today):

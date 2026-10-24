@@ -27,15 +27,14 @@ def _sign_text(entry: dict) -> tuple[int, str]:
         cred = entry.get("credential", "cookie")
         return 2, "签到失败，Cookie 已失效" if cred == "cookie" else "签到失败，认证失败"
     if status == "network_error":
-        # pending 族：不冠「失败」，按未确认语义报告。
-        return 3, "网络请求失败或超时，本轮未确认，稍后自动重试"
+        # pending 族：不冠「失败」，按未确认语义报告；附带可达性诊断（HTTP 502/超时等）。
+        return 3, "网络请求失败或超时，本轮未确认，稍后自动重试" + (f"（{message}）" if message else "")
     if status == "maintenance":
-        return 3, "站点维护中/已关闭，本轮跳过"
+        return 3, "站点维护中/已关闭，本轮跳过" + (f"（{message}）" if message else "")
     if status == "unconfirmed":
-        return 3, "签到结果未确认，请人工核验"
+        return 3, "签到结果未确认，请人工核验" + (f"（{message}）" if message else "")
     if status == "protocol_pending":
-        return 3, "验证码/协议未适配，未提交"
-    if status == "failed":
+        return 3, "验证码/协议未适配，未提交" + (f"（{message}）" if message else "")
         return 2, "签到失败" + (f"，{message}" if message else "")
     return 2, "签到失败" + (f"，{message}" if message else (f"，{reason}" if reason else ""))
 
@@ -79,7 +78,7 @@ def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[
                 if status == "login_ok":
                     rendered.append((0, site, "模拟登录成功" + (f"，{message}" if message else "")))
                 elif status == "unconfirmed":
-                    rendered.append((3, site, "模拟登录结果未确认，请人工核验"))
+                    rendered.append((3, site, "模拟登录结果未确认，请人工核验" + (f"（{message}）" if message else "")))
                 else:
                     rendered.append((2, site, "模拟登录失败" + (f"，{message}" if message else "")))
             rendered.sort(key=lambda item: (item[0], item[1]))

@@ -26,3 +26,19 @@ def test_notify_round_separates_tracks_and_orders_sign_results():
     assert '【Failed】签到失败，Cookie 已失效' in text
     assert rendered[1][0] == '【PT 签到中心】'
     assert '【Login】模拟登录成功，页面可达' in rendered[1][1]
+
+
+def test_notify_pending_entries_carry_diagnostic_message():
+    rendered = format_round_notifications({
+        'sign': {'total': 3, 'executed': 0, 'next': 2, 'entries': [
+            ('Yema', {'status': 'network_error', 'message': '签到页面不可达：网络超时/无响应'}),
+            ('Sbao', {'status': 'protocol_pending', 'message': '未发现唯一签到表单'}),
+        ]},
+        'login': {'total': 1, 'executed': 0, 'next': 1, 'entries': [
+            ('Dic', {'status': 'unconfirmed', 'message': '登录页面不可达'})]},
+    })
+    sign_text = rendered[0][1]
+    assert '【Yema】网络请求失败或超时，本轮未确认，稍后自动重试（签到页面不可达：网络超时/无响应）' in sign_text
+    assert '【Sbao】验证码/协议未适配，未提交（未发现唯一签到表单）' in sign_text
+    login_text = rendered[1][1]
+    assert '【Dic】模拟登录结果未确认，请人工核验（登录页面不可达）' in login_text
