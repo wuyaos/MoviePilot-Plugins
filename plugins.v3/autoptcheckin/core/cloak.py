@@ -22,9 +22,10 @@ def state_path(site_id):
 
 class CloakSession:
     """封装一次同步 CloakBrowser 上下文，异常向执行层传播。"""
-    def __init__(self, *, state=None, cookie="", url="", headless=True, humanize=True, locale="zh-CN"):
+    def __init__(self, *, state=None, cookie="", url="", headless=True, humanize=True, locale="zh-CN", navigation_timeout=30000):
         self.state, self.cookie, self.url = state, cookie, url
         self.headless, self.humanize, self.locale = headless, humanize, locale
+        self.navigation_timeout = navigation_timeout
         self.context = self.page = None
 
     def __enter__(self):
@@ -51,7 +52,8 @@ class CloakSession:
             self.close()
             raise
 
-    def goto(self, url): return self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    def goto(self, url):
+        return self.page.goto(url, wait_until="domcontentloaded", timeout=self.navigation_timeout)
     def fill(self, selector, text): self.page.locator(selector).fill(text)
     def click(self, selector): self.page.locator(selector).click()
     def evaluate(self, js, *args): return self.page.evaluate(js, *args)
@@ -86,7 +88,9 @@ class CloakHttpClient:
             return
         self.shared = False
         self.session = CloakSession(cookie=cookie, url=self.url,
-                                    headless=site.id not in TURNSTILE_HEADFUL_SITES)
+                                    headless=site.id not in TURNSTILE_HEADFUL_SITES,
+                                    navigation_timeout=60000 if getattr(site, "slow", False) else 30000)
+        self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
         self.session.__enter__()
 
     def _sync_cookies(self):
@@ -252,7 +256,7 @@ def run_page_action(session, steps):
                 token = page.locator('input[name="cf-turnstile-response"]').first
                 if token.count():
                     ok = False
-                    for _ in range(40):
+                    for _ in range(max(1, int(getattr(session, 'human_verify_timeout', 60000) / 1500))):
                         try:
                             if (token.input_value() or '').strip():
                                 ok = True

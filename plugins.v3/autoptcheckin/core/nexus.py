@@ -135,7 +135,12 @@ class NexusSignin(SiteModule):
             if login.status == LoginStatus.AUTH_FAILED:
                 return ctx.result(status=SignStatus.AUTH_FAILED, message=login.message)
             if not page_available(page):
-                return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：HTTP {page.status_code}" if page is not None and page.status_code != 200 else "签到页面不可达：空响应")
+                code = page.status_code if page is not None else 0
+                detail = f"HTTP {code}" if code else "网络超时/无响应"
+                return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：{detail}")
+            if getattr(page, 'status_code', 200) and page.status_code >= 400:
+                # 2026-10-24 用户裁决口径：403/404/5xx 一律站点不可达，不进入表单/判定流程。
+                return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"站点不可达：HTTP {page.status_code}")
             before = self.read_before(ctx, page)
             if before.status == SignStatus.ALREADY:
                 return before

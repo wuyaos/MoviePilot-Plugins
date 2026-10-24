@@ -192,13 +192,74 @@ class AutoPtCheckin(_PluginBase):
             return {"success": False, "message": "未知站点配置字段", "data": None}
         return await self.api_save_config({**self._config, **deepcopy(config)})
 
+    def _resolve_favicon(self, base: str) -> str:
+        """解析站点图标：首页 <link rel=icon> → /favicon.ico；失败返回空串。结果缓存于 icon.cache。"""
+        import base64
+        import re
+        try:
+            from app.sdk.network import RequestUtils
+            ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36"
+            origin = base.rstrip("/")
+            fetched = {}
+
+            def get(url, referer=None):
+                try:
+                    resp = RequestUtils(timeout=8, ua=ua, referer=referer or origin).get_res(url, allow_redirects=True)
+                    if resp is not None and resp.status_code == 200 and resp.content:
+                        fetched[resp.headers.get("Content-Type", "")] = resp.content
+                        return resp
+                except Exception:
+                    pass
+                return None
+
+            home = get(origin + "/")
+            icon_url = ""
+            if home is not None:
+                match = re.search(r'<link[^>]+rel=["\'][^"\']*icon[^"\']*["\'][^>]*href=["\']([^"\']+)["\']', home.text or "", re.I)
+                if match:
+                    icon_url = match.group(1)
+                    if icon_url.startswith("//"):
+                        icon_url = "https:" + icon_url
+                    elif not icon_url.startswith("http"):
+                        icon_url = origin + "/" + icon_url.lstrip("/")
+            resp = get(icon_url or origin + "/favicon.ico", referer=origin + "/")
+            for ctype, content in fetched.items():
+                if content and len(content) > 24:
+                    mime = ctype.split(";")[0].strip() or "image/x-icon"
+                    if "text" not in mime:
+                        return "data:" + mime + ";base64," + base64.b64encode(content).decode()
+        except Exception:
+            pass
+        return ""
+
     async def api_sites(self) -> dict:
         registry = get_registry(self._config.get('custom_sites_data', []))
         sites = deepcopy(registry["sites"])
         emulate_ids = {str(v) for v in self._config.get('site_browserless', [])}
+        icon_cache = self.get_data("icon.cache") or {} if hasattr(self, "get_data") else {}
+        pending_icons = []
         for site in sites:
             site.setdefault('cf', 'unknown')
             site['emulate'] = str(site.get('id')) in emulate_ids or bool(site.get('emulate', False))
+            sid = str(site.get('id', ''))
+            if not site.get('icon') and icon_cache.get(sid):
+                site['icon'] = icon_cache[sid]
+            if (site.get('source') == 'MP 站点' and not site.get('icon')
+                    and icon_cache.get(sid) is None and site.get('url')):
+                pending_icons.append((sid, site['url']))
+        if pending_icons:
+            import asyncio
+            changed = False
+            for sid, url in pending_icons:
+                icon = await asyncio.to_thread(self._resolve_favicon, url)
+                if icon:
+                    icon_cache[sid] = icon
+                    changed = True
+            if changed and hasattr(self, "save_data"):
+                self.save_data("icon.cache", icon_cache)
+                for site in sites:
+                    if not site.get('icon') and icon_cache.get(str(site.get('id', ''))):
+                        site['icon'] = icon_cache[str(site.get('id', ''))]
         return {"success": True, "data": {"sites": sites, "sources": deepcopy(registry["sources"])}}
 
     async def api_stats(self) -> dict:
@@ -224,6 +285,7 @@ class AutoPtCheckin(_PluginBase):
         sign_sel = {str(v) for v in self._config.get('sign_sites', [])}
         login_sel = {str(v) for v in self._config.get('login_sites', [])}
         rows = []
+        icon_cache = self.get_data("icon.cache") or {} if hasattr(self, "get_data") else {}
         for site in registry:
             sid = str(site['id'])
             # 卡片严格随配置：仅显示启用站点。
@@ -234,8 +296,9 @@ class AutoPtCheckin(_PluginBase):
             cf_markers = ('cf-chl', 'cloudflare', 'just a moment', 'verify you are human', 'challenge-platform')
             latest_messages = f"{sign.get('message', '')} {login.get('message', '')}".lower()
             cf_hit = any(marker in latest_messages for marker in cf_markers)
+            icon = site.get('icon', '') or icon_cache.get(sid, '')
             rows.append({'id': sid, 'name': site.get('name', sid), 'url': site.get('url', ''),
-                'icon': site.get('icon', ''), 'source': site.get('source', ''),
+                'icon': icon, 'source': site.get('source', ''),
                 'cf': True if cf_hit else site.get('cf', 'unknown'),
                 'emulate': sid in {str(v) for v in self._config.get('site_browserless', [])} or bool(site.get('emulate', False)),
                                 'sign_state': sign.get('state', 'disabled' if sid not in enabled else 'pending'),
@@ -247,6 +310,10 @@ class AutoPtCheckin(_PluginBase):
                 'enabled': sid in enabled,
                 'can_signin': sid in enabled and sid in sign_sel and sign.get('state') != DISABLED,
                 'can_login': sid in enabled and sid in login_sel and login.get('state') != DISABLED,
+                'sign_disabled_struct': sign.get('state') == DISABLED and sign.get('reason') in (
+                    'signin_not_applicable', 'signin_not_supported', 'site_disabled'),
+                'login_disabled_struct': login.get('state') == DISABLED and login.get('reason') in (
+                    'login_not_supported', 'login_not_selected', 'site_disabled'),
                 'can_verify': sid in enabled,
                 'sign_selected': sid in sign_sel, 'login_selected': sid in login_sel})
         return rows

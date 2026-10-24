@@ -62,7 +62,8 @@
     "id": "cspt",
     "name": "财神",
     "url": "https://cspt.top/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signed_marker": "//*[contains(text(), \"签到已得\")]"
   },
   {
     "id": "cyanbug",
@@ -857,7 +858,8 @@
       "altcha",
       "sign_button"
     ],
-    "emulate": true
+    "emulate": true,
+    "slow": true
   },
   {
     "id": "hares",

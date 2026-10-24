@@ -200,18 +200,29 @@ def read_login_twice(fetch_page, site, uid="", credential=None):
     def read(expected):
         try:
             page = fetch_page()
+        except Exception:
+            return LoginResult(LoginStatus.UNCONFIRMED, '登录页面不可达')
+        code = getattr(page, 'status_code', 200) or 0
+        if code >= 400 or code == 0:
+            # 2026-10-24 口径：403/404/5xx/无响应 = 站点不可达，不得判 login_ok。
+            return LoginResult(LoginStatus.UNCONFIRMED, f'登录页面不可达：HTTP {code}' if code else '登录页面不可达：网络超时/无响应')
+        try:
             result = site.parse_login(page, credential) if credential is not None else site.parse_login(page)
         except Exception:
             return LoginResult(LoginStatus.UNCONFIRMED, '登录回读页面不可达')
         if expected and result.evidence and result.evidence.uid and result.evidence.uid != expected:
             return LoginResult(LoginStatus.UNCONFIRMED, '页面账号冲突，已停止判定', evidence=result.evidence)
         return result
+    # Always perform the second page read.  The first response may be a timeout,
+    # stale page, or an intermediate authentication result; only the reread is
+    # the final login evidence.
     first = read(uid)
-    observed = first.evidence.uid if first.evidence else ''
-    result = read(uid or observed or '')
-    if uid and observed and uid != observed:
-        result = first
-    result.account = (uid or (result.evidence.uid if result.confirmed and result.evidence else '') or '')
+    result = read(uid)
+    first_uid = first.evidence.uid if first.evidence else ''
+    second_uid = result.evidence.uid if result.evidence else ''
+    if first_uid and second_uid and first_uid != second_uid:
+        result = LoginResult(LoginStatus.UNCONFIRMED, '页面账号冲突，已停止判定', evidence=result.evidence)
+    result.account = uid or (result.evidence.uid if result.evidence else '') or ''
     return result
 
 
@@ -236,28 +247,6 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
         uid = str(info.get('uid') or '')
-        if getattr(site, 'browser_login', False):
-            # 会话绑定浏览器指纹的站点（如 FileList）：HTTP 重放 Cookie 必失败，
-            # 用 CloakBrowser 真实浏览器带 Cookie 访问首页，以 logout 标记判定登录态。
-            from .cloak import CloakSession
-            base = info.get('url') or site.url
-            pairs = []
-            from urllib.parse import urlsplit as _urlsplit
-            for part in (info.get('cookie') or '').split(';'):
-                k, sep, v = part.strip().partition('=')
-                if sep:
-                    pairs.append({'name': k, 'value': v, 'domain': (_urlsplit(base).hostname or '').lstrip('.'), 'path': '/'})
-            try:
-                with CloakSession(url=base, cookies=pairs) as browser:
-                    browser.goto(base)
-                    body = browser.page.locator('body').inner_text()
-                    if 'logout' in body.lower() or 'log out' in body.lower():
-                        result = LoginResult(LoginStatus.LOGIN_OK, '浏览器核验：已登录')
-                    else:
-                        result = LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效（浏览器核验跳转登录页）')
-            except Exception as exc:
-                result = LoginResult(LoginStatus.UNCONFIRMED, f'浏览器登录核验异常：{type(exc).__name__}')
-            return finish(result)
         if site.id == "mteam":
             try:
                 result = site.keepalive_login({**(config or {}), **info})
@@ -268,6 +257,28 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
         if site.credential.kind in ('api_key', 'password'):
             from ..integrations.login import CredentialLoginProtocol
             return finish(CredentialLoginProtocol(credential_check).login(info, uid))
+        if getattr(site, 'browser_login', False):
+            # 会话绑定浏览器指纹的站点（如 FileList）：HTTP 重放 Cookie 必失败，
+            # 用 CloakBrowser 真实浏览器带站点管理 Cookie 访问首页，以 logout 标记判定登录态。
+            from .cloak import CloakSession
+            from urllib.parse import urlsplit as _usp
+            url = info.get('url') or site.url
+            host = (_usp(url).hostname or '').lstrip('.')
+            raw = info.get('cookie') or custom_cookie or ''
+            pairs = []
+            for part in raw.split(';'):
+                k, sep, v = part.strip().partition('=')
+                if sep:
+                    pairs.append({'name': k, 'value': v, 'domain': host, 'path': '/'})
+            try:
+                with CloakSession(url=url, cookies=pairs) as browser:
+                    browser.goto(url)
+                    body = browser.page.locator('body').inner_text()
+                    if 'logout' in body.lower() or 'log out' in body.lower():
+                        return finish(LoginResult(LoginStatus.LOGIN_OK, '浏览器核验：已登录'))
+                    return finish(LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效（浏览器核验跳转登录页）'))
+            except Exception as exc:
+                return finish(LoginResult(LoginStatus.UNCONFIRMED, f'浏览器登录核验异常：{type(exc).__name__}'))
         if site.id == 'yzyy':
             from ..integrations import yzyy
             try:

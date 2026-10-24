@@ -51,7 +51,7 @@ def build_generic_sites() -> list[type[NexusSignin]]:
             "hook_implemented": True,
             "verified": False,
         }
-        for key in ("signed_marker", "use_default_message", "signin_capable", "emulate", "protocol_pending", "login_notice", "cloak_steps", "cloak_entry_path", "browser_login"):
+        for key in ("signed_marker", "use_default_message", "signin_capable", "emulate", "slow", "protocol_pending", "login_notice", "cloak_steps", "cloak_entry_path", "browser_login"):
             if key in item:
                 attrs[key] = item[key]
         if "success_texts" in item:

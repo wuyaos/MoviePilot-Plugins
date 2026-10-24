@@ -26,7 +26,7 @@ def test_record_without_button_confirms(state, expected):
 @pytest.mark.parametrize('value,expected,uid', [
     (page(), 'login_ok', '42'), ('<html>reachable</html>', 'login_ok', None),
     (LoginPage('login', 'https://fixture.invalid/login.php'), 'auth_failed', None),
-    (LoginPage('error', status_code=503), 'unconfirmed', None), ('', 'unconfirmed', None)])
+    (LoginPage('error', status_code=403), 'auth_failed', None), (LoginPage('error', status_code=503), 'unconfirmed', None), (LoginPage('error', status_code=0), 'unconfirmed', None), ('', 'unconfirmed', None)])
 def test_login_three_states(verifier, value, expected, uid):
     result = verify_login(lambda: value, verifier, '')
     assert result.status == expected
