@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from urllib.parse import urljoin
 
+from lxml import html
+
 from ...core.api_signin import ApiSignin
 from ...core.attendance_captcha import solve_attendance_captcha
 from ...core.credentials import CredentialSpec
@@ -31,6 +33,21 @@ def _signin_not_applicable(self, ctx):
     return result
 
 
+def _shaobaoyuan_read_before(self, ctx, page):
+    # This site's nginx denial is served with HTTP 200, even with its stored Cookie.
+    text = page.text if page is not None else ""
+    if text and len(text.encode("utf-8")) <= 2048:
+        doc = html.fromstring(text)
+        if (doc.xpath('//title[normalize-space(.)="403 Forbidden"]')
+                and doc.xpath('//h1[normalize-space(.)="403 Forbidden"]')
+                and doc.xpath('//center[normalize-space(.)="nginx"]')
+                and not doc.xpath('//form')):
+            result = ctx.result(status="network_error", message="站点防护页拦截：nginx 403 Forbidden（HTTP 200）")
+            result.metadata["defer_submission"] = True
+            return result
+    return NexusSignin.read_before(self, ctx, page)
+
+
 def build_generic_sites() -> list[type[NexusSignin]]:
     declarations = json.loads(_DECLARATIONS.read_text(encoding="utf-8"))
     classes = []
@@ -54,6 +71,8 @@ def build_generic_sites() -> list[type[NexusSignin]]:
         for key in ("signed_marker", "use_default_message", "signin_capable", "emulate", "slow", "protocol_pending", "login_notice", "cloak_steps", "cloak_entry_path", "browser_login", "headful", "slow_timeout", "impersonate"):
             if key in item:
                 attrs[key] = item[key]
+        if item["id"] == "shaobaoyuan":
+            attrs["read_before"] = _shaobaoyuan_read_before
         if "success_texts" in item:
             attrs["success_texts"] = tuple(item["success_texts"])
         if "action_get" in item:

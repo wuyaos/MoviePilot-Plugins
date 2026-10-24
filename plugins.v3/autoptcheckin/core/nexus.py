@@ -1,5 +1,6 @@
 """Native Nexus form flow. Submission replies never replace a fresh message read."""
 from dataclasses import dataclass, replace
+from time import monotonic
 from urllib.parse import urljoin, urlsplit
 
 from lxml import html
@@ -139,10 +140,12 @@ class NexusSignin(SiteModule):
         if ctx.cancel.is_set():
             return ctx.result(status=SignStatus.CANCELLED, message="任务已取消")
         attendance_url = urljoin(self.url, self.attendance_path)
+        started = monotonic()
         try:
             page = ctx.http.get(attendance_url)
         except Exception as exc:
-            return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：{type(exc).__name__}")
+            return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：{type(exc).__name__}（{monotonic() - started:.1f}s）")
+        elapsed = monotonic() - started
         try:
             if page_maintenance(page):
                 return ctx.result(status=SignStatus.MAINTENANCE, message="维护中/已关闭")
@@ -152,12 +155,13 @@ class NexusSignin(SiteModule):
             if not page_available(page):
                 code = page.status_code if page is not None else 0
                 detail = f"HTTP {code}" if code else "网络超时/无响应"
-                return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：{detail}")
+                return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"签到页面不可达：{detail}（{elapsed:.1f}s）")
             if getattr(page, 'status_code', 200) and page.status_code >= 400:
                 # 2026-10-24 用户裁决口径：403/404/5xx 一律站点不可达，不进入表单/判定流程。
-                return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"站点不可达：HTTP {page.status_code}")
+                return ctx.result(status=SignStatus.NETWORK_ERROR, message=f"站点不可达：HTTP {page.status_code}（{elapsed:.1f}s）")
             before = self.read_before(ctx, page)
-            if before.status == SignStatus.ALREADY:
+            if (before.status == SignStatus.ALREADY
+                    or before.metadata.get('defer_submission')):
                 return before
             if before.metadata.get('reason') == 'identity_conflict':
                 return before

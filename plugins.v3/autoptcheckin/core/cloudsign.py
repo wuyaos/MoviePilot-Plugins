@@ -161,9 +161,30 @@ def _bql_request(endpoint: str, payload: dict, timeout: float) -> dict:
         data = resp.json()
     except ValueError as exc:
         raise CloudSignError("request", f"云签响应不是 JSON（{_host(endpoint)}）") from exc
-    if data.get("errors"):
-        raise CloudSignError("request", f"云签 GraphQL 错误：{json.dumps(data['errors'][:1], ensure_ascii=False)[:200]}")
-    return data.get("data") or {}
+    if not isinstance(data.get("data"), dict):
+        # 校验级错误（非执行失败）：没有 data 可用，保持异常语义
+        raise CloudSignError("request", f"云签 GraphQL 错误：{json.dumps((data.get('errors') or [])[:1], ensure_ascii=False)[:200]}")
+    result = data["data"]
+    errors = data.get("errors") or []
+    if errors:
+        # 2026-10-25 官方语义（docs.browserless.io → BQL Error Handling）：
+        # 失败步骤不中止 mutation，HTTP 200 下 errors[] 与 data 并存，失败字段为 null、
+        # 其余字段照常执行。errors 不抛：响应里的回读 HTML（after/verifyPage）是分类仲裁
+        # 所需证据（如 evaluate 撞导航时页面可能已自动签到），调用方按分类结果消费。
+        result["_errors"] = [
+            f"{e.get('path')[0] if isinstance(e.get('path'), list) and e.get('path') else '?'}: {str(e.get('message') or '')[:120]}"
+            for e in errors
+        ]
+        logger.warning("云签 BQL 步骤失败（继续按回读分类）：%s", result["_errors"])
+    return result
+
+
+def _error_suffix(data: dict) -> str:
+    """把 _bql_request 记录的步骤失败摘要拼进结果消息，便于诊断（不改变状态分类）。"""
+    errors = data.get("_errors") or []
+    if not errors:
+        return ""
+    return f"；BQL步骤失败[{'; '.join(errors[:2])}]"
 
 
 def cookie_objects(cookie: str, url: str) -> list[dict]:
@@ -374,8 +395,12 @@ def _sign_click(endpoint: str, token: str, target: str, cookies: list, rule: dic
             "turnstileWait": 10000, "wait": rule.get("wait", 6000),
         },
     }, timeout=75)
-    state = _classify(str((data.get("after") or {}).get("html") or ""), rule)
-    return _state_result(state, rule, clicked=True, page_html=str((data.get("after") or {}).get("html") or ""))
+    html = str((data.get("after") or {}).get("html") or "")
+    state = _classify(html, rule)
+    result = _state_result(state, rule, clicked=True, page_html=html)
+    if result.status != "success":
+        return CloudResult(result.status, f"{result.message}{_error_suffix(data)}")
+    return result
 
 
 def _sign_auto(endpoint: str, token: str, target: str, cookies: list, rule: dict) -> CloudResult:
@@ -394,7 +419,7 @@ def _sign_auto(endpoint: str, token: str, target: str, cookies: list, rule: dict
         return _state_result(state, rule)
     solve_token = str(((stage1.get("solve") or {}).get("token")) or "").strip()
     if not solve_token:
-        return _result("protocol_pending", "云签 solve 失败：未获取到 Turnstile token")
+        return _result("protocol_pending", f"云签 solve 失败：未获取到 Turnstile token{_error_suffix(stage1)}")
     session_url = session_endpoint(str(((stage1.get("session") or {}).get("browserQLEndpoint")) or ""), token)
     stage2_endpoint = session_url or endpoint
     verify = rule.get("verify")
@@ -419,7 +444,8 @@ def _sign_auto(endpoint: str, token: str, target: str, cookies: list, rule: dict
             state = "success"
     if state == "unknown":
         diag = _diag_hint(stage2.get("autoDiag"))
-        return _result("failed", f"云签提交后未确认签到：页面未见成功/已签标记{'；' + diag if diag else ''}")
+        err = _error_suffix(stage2)
+        return _result("failed", f"云签提交后未确认签到：页面未见成功/已签标记{'；' + diag if diag else ''}{err}")
     return _state_result(state, rule)
 
 

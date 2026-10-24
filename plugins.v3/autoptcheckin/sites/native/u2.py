@@ -21,10 +21,15 @@ class U2(NexusSignin):
         result = super().read_before(ctx, page)
         # 站点按每日 9 点重置签到状态：9 点前页面的已签 anchor 属昨日，不作为今日证据。
         from ...core.models import SignStatus
-        if datetime.now().hour < 9 and result.status == SignStatus.ALREADY:
-            return ctx.result(status=SignStatus.UNCONFIRMED,
-                              message='9 点前站点保留昨日签到状态，暂不判定',
-                              evidence=result.evidence)
+        if datetime.now().hour < 9 and result.status != SignStatus.CANCELLED:
+            message = ('9 点前站点保留昨日签到状态，暂不判定'
+                       if result.status == SignStatus.ALREADY
+                       else '签到页 9 点后刷新，本轮不提交')
+            deferred = ctx.result(status=SignStatus.UNCONFIRMED,
+                                   message=message,
+                                   evidence=result.evidence)
+            deferred.metadata['defer_submission'] = True
+            return deferred
         return result
 
     def discover_form(self, ctx, page):
