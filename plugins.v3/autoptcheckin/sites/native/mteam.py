@@ -50,9 +50,12 @@ class MTorrent(SiteModule):
                     import pyotp
                     browser.fill('input[autocomplete="one-time-code"], input[name*="totp" i], input[name*="otp" i]',
                                  pyotp.TOTP(info["mteam_totp"]).now())
-                email_code = browser.evaluate("() => !!document.querySelector('input[type=email][name*=code i], input[name*=emailCode i]')")
-                if email_code:
-                    return False, "站点要求邮箱验证码，需同网络人工登录一次"
+                two_fa = browser.evaluate(
+                    "() => /\u96d9\u91cd\u8a8d\u8b49|\u9a8c\u8bc1\u78bc|\u90f5\u7bb1/.test(document.body.innerText) &&"
+                    " !!document.querySelector('input[name*=code i], input[name*=otp i], input[type=text][name*=auth i]')"
+                )
+                if email_code or two_fa:
+                    return False, "M-Team 要求邮箱双重认证，自动化无法完成；请在浏览器人工登录一次（40 天内有效）"
                 browser.click('button[type="submit"]')
                 try:
                     browser.page.wait_for_url("**/index**", timeout=15000)
