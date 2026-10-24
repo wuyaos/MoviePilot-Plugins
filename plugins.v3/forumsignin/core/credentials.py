@@ -7,7 +7,6 @@ class CredentialSpec:
     kind: str = "cookie"
     cookie_sources: tuple = ("managed_site", "local_cookie")
     refresh: str | None = None
-    identity_field: str = "uid"
 
 @dataclass(frozen=True)
 class Credential:

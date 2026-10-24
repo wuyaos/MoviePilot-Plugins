@@ -9,7 +9,6 @@ class SignStatus(StrEnum):
     FAILED = "failed"
     UNCONFIRMED = "unconfirmed"
     SKIPPED = "skipped"
-    CANCELLED = "cancelled"
     AUTH_FAILED = "auth_failed"
     NETWORK_ERROR = "network_error"
 

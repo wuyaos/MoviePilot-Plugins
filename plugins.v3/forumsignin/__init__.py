@@ -13,7 +13,7 @@ from uuid import uuid4
 from .core.credentials import Credential, cookiecloud_cookie, resolve
 from .core.history import HistoryStore
 from .core.models import SignResult, SignStatus
-from .core.registry import ADAPTERS, get_registry, get_site
+from .core.registry import ADAPTERS, get_registry, get_site, site_names
 from .core.runner import run_page
 from .http_client import HttpClient
 from .integrations.pt_life import StatsNotReady, collect_site_statistics, push_snapshot
@@ -38,7 +38,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.20"
+    plugin_version = "3.1.21"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -509,7 +509,7 @@ class ForumSignin(_PluginBase):
             labels = {SignStatus.SUCCESS: "✅ 签到成功", SignStatus.ALREADY: "📅 今日已签到",
                       SignStatus.FAILED: "❌ 签到失败", SignStatus.UNCONFIRMED: "⚠️ 结果未确认",
                       SignStatus.AUTH_FAILED: "🔒 认证失败", SignStatus.NETWORK_ERROR: "🌐 网络异常",
-                      SignStatus.SKIPPED: "⏭️ 跳过"}
+                      SignStatus.SKIPPED: "⏭️ 跳过", **site_names()}
             blocks = []
             for site_id, result in results:
                 name = next((site["name"] for site in registry if site["id"] == site_id), site_id)

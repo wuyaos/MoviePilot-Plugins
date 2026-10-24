@@ -30,6 +30,12 @@ _REGISTERED = _discover()
 ADAPTERS = {key: value[1] for key, value in _REGISTERED.items()}
 
 
+def site_names() -> dict:
+    """站点 id → 中文名（通知文案用）。"""
+    return {site_id: (declaration.get("name") or site_id)
+            for site_id, (declaration, _) in _REGISTERED.items()}
+
+
 def get_site(value):
     for site_id, (declaration, adapter) in _REGISTERED.items():
         if value == site_id or _hostname(value) == _hostname(declaration["domain"]):
