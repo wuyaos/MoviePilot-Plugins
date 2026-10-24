@@ -159,6 +159,12 @@
 
 .site-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 0;font-size:11px;color:var(--ptc-text-muted)}.site-totals b{font-size:20px;margin-right:3px}.success-number{color:var(--ptc-success-text)}.failure-number{color:var(--ptc-failure-text)}.unknown-number{color:var(--ptc-unknown-text)}
 
+/* 密码框明文切换：输入框与眼睛按钮同行。 */
+.secret-wrap {display:flex; gap:6px; align-items:center; min-width:0}
+.secret-wrap .input {flex:1; min-width:0}
+.secret-wrap .eye {flex:0 0 34px; min-height:34px; padding:0; border:1px solid var(--ptc-line); border-radius:8px; background:var(--ptc-surface-muted); color:var(--ptc-text); font-size:15px}
+.secret-wrap .eye:hover {border-color:var(--ptc-blue)}
+
 /* 基础设置开关同行；论坛名超链接样式。 */
 .toggles-row {display:flex; gap:24px; align-items:center; margin-bottom:14px}
 .forum-link {color:var(--ptc-blue); text-decoration:none; font-weight:600}
