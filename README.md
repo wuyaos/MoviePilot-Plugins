@@ -38,7 +38,7 @@ MoviePilot官方插件市场：https://github.com/jxxghp/MoviePilot-Plugins
 
 | 插件 ID | 插件 | 版本 | 简述 |
 |---|---|---|---|
-| AutoPtCheckin | [PT 签到中心](#v3-autoptcheckin) | 4.0.11 | PT 站点自动签到与模拟登录（V3 重构版） |
+| AutoPtCheckin | [PT 签到中心](#v3-autoptcheckin) | 4.0.12 | PT 站点自动签到与模拟登录（V3 重构版） |
 | ForumSignin | [论坛签到](#v3-forumsignin) | 3.1.21 | 蜂巢、药丸与 SSDForum 论坛签到 |
 | RuntimePatchGuard | [运行时补丁守卫](#v3-runtimepatchguard) | 1.0.0 | 站点解析网络请求总时长守卫，防慢站挂起线程 |
 | Hhanclubrescueseed | [憨憨保种区](#v3-hhanclubrescueseed) | 3.0.0 | 憨憨 BT 保种区自动保种（fork 自 Seed680） |
@@ -232,7 +232,7 @@ yzyy 论坛每日签到，自动获取签到码完成签到。
 
 <a id="v3-autoptcheckin"></a>
 ### [PT 签到中心 AutoPtCheckin (V3)](https://github.com/wuyaos/MoviePilot-Plugins/tree/main/plugins.v3/autoptcheckin)
-> 版本 4.0.11 · 作者 wuyaos
+> 版本 4.0.12 · 作者 wuyaos
 
 PT 站点自动签到与模拟登录的 V3 重构版，面向 MoviePilot V3 插件体系。
 

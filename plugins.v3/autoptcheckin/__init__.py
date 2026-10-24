@@ -35,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.11"
+    plugin_version = "4.0.12"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
