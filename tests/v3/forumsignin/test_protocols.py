@@ -140,8 +140,15 @@ def test_credentials_sources_and_ambiguity():
 def test_http_error_is_not_str_plus_int(response):
     client = HttpClient("https://forum.invalid", Credential("local_cookie", "synthetic"))
     client.session = SimpleNamespace(request=lambda *a, **k: response)
-    with pytest.raises(RuntimeError, match="no_response|status_code=503"):
+    with pytest.raises(RuntimeError, match="no_response|HTTP 503"):
         client.request("POST", "/checkin")
+
+def test_http_error_carries_server_message():
+    response = SimpleNamespace(status_code=409, json=lambda: {"code": 409, "message": "快照批次冲突"})
+    client = HttpClient("https://forum.invalid", Credential("local_cookie", "synthetic"))
+    client.session = SimpleNamespace(request=lambda *a, **k: response)
+    with pytest.raises(RuntimeError, match=r"HTTP 409: 快照批次冲突"):
+        client.request("PUT", "/status")
 
 def test_host_contract_and_gating():
     plugin = ForumSignin()

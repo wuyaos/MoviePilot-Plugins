@@ -38,7 +38,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.18"
+    plugin_version = "3.1.19"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -273,7 +273,8 @@ class ForumSignin(_PluginBase):
                          "streak": self._streak_days(site["id"])})
         return self._response({"today": self._history.today_counts(), "latest": latest, "sites": sites,
                                "next_schedule": self._next_schedule(), "site_counts": site_counts, "fengchao_sync": self._get("fengchao_sync_status") or {},
-                               "fengchao_user_info": self._get("fengchao_user_info")})
+                               "fengchao_user_info": self._get("fengchao_user_info"),
+                               "pt_life": self._get("last_pt_life_push") or {}})
 
     def _next_schedule(self):
         now = datetime.now().astimezone()
@@ -366,7 +367,7 @@ class ForumSignin(_PluginBase):
                 credential = Credential("cookiecloud", cookie)
         if credential is None:
             return None
-        return HttpClient(site["adapter"].base, credential, self._get("fengchao_instance_id") or "")
+        return HttpClient(site["adapter"].base, credential, self._get("fengchao_instance_id") or "", self.plugin_version)
 
     def _execute_with_retry(self, domain, readonly=False):
         # V2 语义：失败/网络异常按 retry_count/retry_interval 分钟退避重试；成功/已签/未确认/认证失败不重试（未确认重放有重复提交风险）。
@@ -602,7 +603,7 @@ class ForumSignin(_PluginBase):
         except ImportError:
             mp_version = ""
         interval = max(1, int(self._config.get("retry_interval", 10) or 10))
-        batch_id = f"{instance_id}-{datetime.now().astimezone().isoformat()[:19]}"
+        batch_id = f"{instance_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:12]}"
         attempts = max(1, int(retries or 0) + 1)
         client, detail = None, ""
         try:

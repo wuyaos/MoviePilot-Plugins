@@ -19,7 +19,7 @@ def response_text(response):
 
 
 class HttpClient:
-    def __init__(self, base, credential, instance_id=""):
+    def __init__(self, base, credential, instance_id="", version=""):
         self.base = base
         self.credential = credential
         self.instance_id = instance_id
@@ -33,7 +33,9 @@ class HttpClient:
         if self.credential.source == "local_api":
             headers.update({"Authorization": f"Bearer {self.credential.value}",
                             "X-MoviePilot-Instance-Id": self.instance_id,
-                            "X-MoviePilot-Plugin-Version": "3.0.0"})
+                            "X-MoviePilot-Plugin-Version": self.version or "3.0.0"})
+            if self.version:
+                headers["X-MoviePilot-Version"] = self.version
         else:
             headers["Cookie"] = self.credential.value
         headers.update(kwargs.pop("headers", {}))
@@ -46,7 +48,14 @@ class HttpClient:
         if response is None:
             raise RuntimeError("no_response")
         if response.status_code != 200:
-            raise RuntimeError(f"status_code={response.status_code}")
+            detail = ""
+            try:
+                payload = response.json()
+                if isinstance(payload, dict):
+                    detail = str(payload.get("message") or "")[:200]
+            except Exception:
+                detail = ""
+            raise RuntimeError(f"HTTP {response.status_code}" + (f": {detail}" if detail else ""))
         return response
 
     def text(self, response):
