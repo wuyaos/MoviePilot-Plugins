@@ -282,3 +282,43 @@ def test_clean_cache_preserves_history():
     assert all(plugin._get(key) is None for key in ("identity.yaowan", "_fengchao_identity", "fengchao_user_info"))
     assert plugin._history.list()["total"] == 1
     assert {route["path"] for route in plugin.get_api()} >= {"/run_once", "/clean_cache"}
+
+def test_cookiecloud_fallback_when_local_cookie_missing():
+    """本地 Cookie 缺失时 _client 走 CookieCloud 并回写配置；已有本地 Cookie 不触发。"""
+    from unittest.mock import patch
+    from forum_under_test.core.credentials import cookiecloud_cookie
+
+    plugin = ForumSignin()
+    plugin.get_data = lambda key=None: {}
+    plugin.save_data = lambda key, value: None
+    plugin.update_config = lambda config: None
+    site = get_site("ssdforum")
+    assert site is not None
+
+    calls = []
+    def fake_cookiecloud(url):
+        calls.append(url)
+        return "synthetic=1"
+
+    with patch("forum_under_test.cookiecloud_cookie", side_effect=fake_cookiecloud):
+        credential = plugin._client(site).credential
+    assert calls == [site["adapter"].base]
+    assert credential.source == "cookiecloud" and credential.value == "synthetic=1"
+    assert plugin._config.get("ssdforum_cookie") == "synthetic=1"
+
+    plugin._config["ssdforum_cookie"] = "local=1"
+    calls.clear()
+    with patch("forum_under_test.cookiecloud_cookie", side_effect=fake_cookiecloud):
+        credential = plugin._client(site).credential
+    assert calls == [] and credential.source == "local_cookie" and credential.value == "local=1"
+
+
+def test_cookiecloud_unavailable_keeps_auth_failed():
+    from unittest.mock import patch
+    plugin = ForumSignin()
+    plugin.get_data = lambda key=None: {}
+    plugin.save_data = lambda key, value: None
+    plugin.update_config = lambda config: None
+    site = get_site("ssdforum")
+    with patch("forum_under_test.cookiecloud_cookie", return_value=""):
+        assert plugin._client(site) is None

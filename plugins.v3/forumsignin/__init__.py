@@ -9,7 +9,7 @@ from pathlib import Path
 from threading import Lock, RLock
 from uuid import uuid4
 
-from .core.credentials import resolve
+from .core.credentials import Credential, cookiecloud_cookie, resolve
 from .core.history import HistoryStore
 from .core.models import SignResult, SignStatus
 from .core.registry import ADAPTERS, get_registry, get_site
@@ -176,6 +176,7 @@ class ForumSignin(_PluginBase):
         for site in sites:
             result = latest.get(site["id"], {})
             site.update({"enabled": site["id"] in self._config.get("enabled_sites", []),
+                         "can_sync": site["id"] == "fengchao",
                          "status": result.get("status", "disabled"), "message": result.get("message", "")})
         return self._response({"today": self._history.today_counts(), "latest": latest, "sites": sites,
                                "next_schedule": self._next_schedule(), "site_counts": site_counts, "fengchao_sync": self._get("fengchao_sync_status"),
@@ -213,6 +214,17 @@ class ForumSignin(_PluginBase):
 
     def _client(self, site):
         credential = resolve(site, self._config, self._managed_sites() if site["id"] != "fengchao" else ())
+        if credential is None and site["credential"].kind != "api":
+            # 凭据链：本地 Cookie 缺失时取 CookieCloud 并回写配置；失效续期由 adapter（药丸账密）或回写承担。
+            cookie = cookiecloud_cookie(site["adapter"].base)
+            if cookie:
+                cookie_key = next((f["key"] for f in site.get("fields", [])
+                                   if f.get("key", "").endswith("_cookie")), "")
+                if cookie_key:
+                    self._config[cookie_key] = cookie
+                    if hasattr(self, "update_config"):
+                        self.update_config(deepcopy(self._config))
+                credential = Credential("cookiecloud", cookie)
         if credential is None:
             return None
         return HttpClient(site["adapter"].base, credential, self._get("fengchao_instance_id") or "")
@@ -362,5 +374,7 @@ class ForumSignin(_PluginBase):
             finally:
                 lock.release()
 
-    async def api_update_info(self):
+    async def api_update_info(self, domain: str = "fengchao.chat"):
+        if domain not in ("fengchao.chat", "pting.club"):
+            return self._response(success=False, message="unknown_site")
         return await asyncio.to_thread(self.update_info)

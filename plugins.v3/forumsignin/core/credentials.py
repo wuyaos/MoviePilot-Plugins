@@ -50,3 +50,51 @@ def resolve(site, config, managed=()):
     if cookie or (username and password):
         return Credential("local_cookie", cookie, username=username, password=password)
     return None
+
+
+def cookiecloud_cookie(url):
+    """只读宿主 CookieCloud，返回匹配域名的 Cookie 串；不可用返回空串，不记录凭据。"""
+    import json
+    from hashlib import md5
+    from pathlib import Path
+    from urllib.parse import quote
+
+    host = hostname(url)
+    try:
+        from app.sdk.config import settings
+        from app.sdk.utilities import CryptoJsUtils
+
+        key = (settings.COOKIECLOUD_KEY or "").strip()
+        password = (settings.COOKIECLOUD_PASSWORD or "").strip()
+        if not host or not key or not password:
+            return ""
+        if settings.COOKIECLOUD_ENABLE_LOCAL:
+            if key in {".", ".."} or any(char in key for char in "/\\:"):
+                return ""
+            data = json.loads((Path(settings.COOKIE_PATH) / f"{key}.json").read_text(encoding="utf-8"))
+        else:
+            from app.sdk.network import RequestUtils
+
+            server = (settings.COOKIECLOUD_HOST or "").strip().rstrip("/")
+            parsed = urlsplit(server)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                return ""
+            response = RequestUtils(timeout=20, content_type="application/json").get_res(
+                url=f"{server}/get/{quote(key, safe='')}", allow_redirects=False, raise_exception=True)
+            if response is None or response.status_code != 200:
+                return ""
+            data = response.json()
+        crypt_key = md5(f"{key}-{password}".encode()).hexdigest()[:16].encode()
+        payload = json.loads(CryptoJsUtils.decrypt(data["encrypted"], crypt_key).decode("utf-8"))
+        pairs = []
+        for items in payload.get("cookie_data", payload).values():
+            for item in items:
+                domain = (item.get("domain") or "").lower()
+                if not (host == domain.lstrip(".") or (domain.startswith(".") and host.endswith(domain))):
+                    continue
+                name, value = item.get("name"), item.get("value")
+                if isinstance(name, str) and name and isinstance(value, str):
+                    pairs.append((name, value))
+        return "; ".join(f"{name}={value}" for name, value in pairs)
+    except Exception:
+        return ""
