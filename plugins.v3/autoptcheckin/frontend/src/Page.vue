@@ -68,7 +68,7 @@ const trackChip = (site, kind) => {
   const state = site[kind + '_state']
   const raw = site[kind + '_status']
   const label = kind === 'login' ? '登录' : '签到'
-  if (raw === 'protocol_pending') return ['待适配', 'unknown']
+  if (raw === 'protocol_pending') return [site && site.shield === 'cloud' ? '未确认' : '待适配', 'unknown']
   if (state === 'success') return [label, 'success']
   if (state === 'failed') return [label, raw === 'unconfirmed' ? 'unknown' : 'failure']
   return [label, 'off']

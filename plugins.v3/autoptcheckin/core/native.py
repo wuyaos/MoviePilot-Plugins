@@ -315,14 +315,19 @@ def persist_cookie_result(result, http, site_id, cookie_source, get_data, save_d
 def read_login_twice(fetch_page, site, uid="", credential=None):
     """A failed first visit never suppresses reread; explicit identities cannot switch."""
     def read(expected):
+        import time as _time
+        t0 = _time.monotonic()
         try:
             page = fetch_page()
         except Exception:
-            return LoginResult(LoginStatus.UNCONFIRMED, '登录页面不可达')
+            return LoginResult(LoginStatus.UNCONFIRMED,
+                               f'登录页面不可达（{_time.monotonic() - t0:.1f}s）')
         code = getattr(page, 'status_code', 200) or 0
         if code >= 400 or code == 0:
             # 2026-10-24 口径：403/404/5xx/无响应 = 站点不可达，不得判 login_ok。
-            return LoginResult(LoginStatus.UNCONFIRMED, f'登录页面不可达：HTTP {code}' if code else '登录页面不可达：网络超时/无响应')
+            detail = f'HTTP {code}' if code else '网络超时/无响应'
+            return LoginResult(LoginStatus.UNCONFIRMED,
+                               f'登录页面不可达：{detail}（{_time.monotonic() - t0:.1f}s）')
         try:
             result = site.parse_login(page, credential) if credential is not None else site.parse_login(page)
         except Exception:

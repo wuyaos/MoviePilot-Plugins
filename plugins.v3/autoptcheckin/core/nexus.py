@@ -1,5 +1,6 @@
 """Native Nexus form flow. Submission replies never replace a fresh message read."""
 from dataclasses import dataclass, replace
+import re
 from time import monotonic
 from urllib.parse import urljoin, urlsplit
 
@@ -179,6 +180,11 @@ class NexusSignin(SiteModule):
                     low = (page.text or '')[:20000].lower()
                     if 'just a moment' in low or 'challenge-platform' in low or '__cf_chl' in low:
                         return ctx.result(status=SignStatus.NETWORK_ERROR, message="CF 盾拦截：页面为浏览器挑战页")
+                    low_head = (page.text or '')[:20000]
+                    if re.search(r'403\s*forbidden|<center>nginx', low_head, re.IGNORECASE):
+                        return ctx.result(status=SignStatus.PROTOCOL_PENDING,
+                                          message="站点防护页拦截：未识别的 403/防护页，下轮重试",
+                                          evidence=before.evidence)
                     return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="未发现唯一签到表单",
                                       evidence=before.evidence)
                 if not self.solve_captcha(ctx, page, form):
