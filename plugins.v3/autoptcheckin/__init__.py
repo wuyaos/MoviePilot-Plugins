@@ -614,10 +614,15 @@ class AutoPtCheckin(_PluginBase):
             data["total"] = len(enabled & selected)
             data["next"] = len(enabled & selected & due)
             data["executed"] = sum(1 for site, action in executed if action == track)
-            # 逐站行只显示本轮实际执行的站点（executed），非当日历史结论。
-            for site, action in (row for row in executed if row[1] == track):
+            # 逐站行：本轮实际执行的站点 + 当日失败站点（失败明细必须可见）。
+            today = datetime.now().date().isoformat()
+            failed_today = {site for site in enabled & selected & due
+                            if (snapshot.get(site, {}).get(track, {}).get("state") == "failed"
+                                and str(snapshot[site][track].get("time", "")).startswith(today))}
+            shown = {site for site, action in executed if action == track} | failed_today
+            for site in shown:
                 entry = snapshot.get(site, {}).get(track, {})
-                if entry and str(entry.get("time", "")).startswith(datetime.now().date().isoformat()):
+                if entry and str(entry.get("time", "")).startswith(today):
                     entry = dict(entry)
                     entry["credential"] = credential_kinds.get(site, "cookie")
                     data["entries"].append((labels.get(site, site), entry))

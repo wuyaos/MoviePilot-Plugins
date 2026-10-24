@@ -44,8 +44,8 @@ def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[
     """返回分轨消息（标题、文本）；summary 按 action 提供计数与逐站 entries。"""
     fmt = fmt if fmt in FORMATS else "plain"
     result = []
-    for track, title, verb in (("sign", "【站点自动签到】", "签到"),
-                               ("login", "【站点自动登录】", "模拟登录")):
+    for track, title, verb in (("sign", "【PT 签到中心】", "签到"),
+                               ("login", "【PT 签到中心】", "模拟登录")):
         data = summary.get(track) or {}
         entries = list(data.get("entries", []))
         if not data.get("total") and not entries:
