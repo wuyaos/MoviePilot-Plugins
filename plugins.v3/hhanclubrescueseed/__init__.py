@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.1.6"
+    plugin_version = "3.1.7"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -639,6 +639,7 @@ class Hhanclubrescueseed(_PluginBase):
                                                     unfinished += 1
                                         if unfinished >= int(self._max_downloading):
                                             logger.info(f"下载器未完成种子 {unfinished} 个，已达上限 {self._max_downloading}，停止本轮页面下载")
+                                            limit_reached = True
                                             break
                                     except Exception as e:
                                         logger.warning(f"检查未完成种子数失败: {str(e)}")
