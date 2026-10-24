@@ -5,6 +5,43 @@ from ...core.models import LoginResult, LoginStatus, SignResult
 from ...core.sitemodel import RecordSpec, SignContext, SiteModule
 
 
+_MTEAM_OTP_SUBMIT_SELECTORS = (
+    'text=登 錄',
+    'text=登录',
+    'text=登錄',
+    'xpath=//*[self::button or self::div or self::span or self::input or @role="button"]['
+    'contains(normalize-space(.), "登") or contains(@value, "登")]',
+    '[role=button]:has-text("登")',
+    'button[type=submit]',
+    'input[type=submit]',
+)
+
+
+def _wait_for_mteam_index(page, timeout):
+    try:
+        page.wait_for_url("**/index**", timeout=timeout)
+        return True
+    except Exception:
+        return "/index" in page.url
+
+
+def _submit_mteam_otp(page):
+    """Submit the SPA 2FA form, allowing OTP-only auto-submit first."""
+    if _wait_for_mteam_index(page, timeout=3000):
+        return True
+    for selector in _MTEAM_OTP_SUBMIT_SELECTORS:
+        try:
+            locator = page.locator(selector).first
+            if locator.count():
+                locator.click()
+                break
+        except Exception:
+            continue
+    else:
+        page.keyboard.press("Enter")
+    return _wait_for_mteam_index(page, timeout=15000)
+
+
 class MTorrent(SiteModule):
     id = "mteam"
     name = "M-Team"
@@ -51,29 +88,21 @@ class MTorrent(SiteModule):
                     browser.fill('input[autocomplete="one-time-code"], input[name*="totp" i], input[name*="otp" i]',
                                  pyotp.TOTP(info["mteam_totp"]).now())
                 two_fa = browser.evaluate(
-                    "() => /\u96d9\u91cd\u8a8d\u8b49|\u9a8c\u8bc1\u78bc|\u90f5\u7bb1/.test(document.body.innerText) &&"
+                    "() => /\u96d9\u91cd\u8a8d\u8b49|\u9a8c\u8b49\u78bc|\u90f5\u7bb1/.test(document.body.innerText) &&"
                     " !!document.querySelector('input[name*=code i], input[name*=otp i], input[type=text][name*=auth i]')"
                 )
                 if two_fa:
                     # 站点提示页含「帳號被禁用?」等通用文案，仅为提示非封禁；要求 6 位验证码，TOTP 可自动填。
                     pass  # 落到下方 #otp-code 分支处理
                 browser.click('button[type="submit"]')
-                try:
-                    browser.page.wait_for_url("**/index**", timeout=15000)
-                except Exception:
-                    pass
-                if "/index" not in browser.page.url:
+                if not _wait_for_mteam_index(browser.page, timeout=15000):
                     # 双重认证页：#otp-code（6 位验证码，TOTP 密钥可算）——填入后二次提交。
                     otp = browser.page.locator('#otp-code').first
                     if otp.count() and info.get("mteam_totp"):
                         import pyotp
                         otp.fill(pyotp.TOTP(info["mteam_totp"]).now())
-                        browser.page.wait_for_timeout(500)
-                        browser.click('button:has-text("登 錄"), button:has-text("登录"), button[type="submit"]')
-                        try:
-                            browser.page.wait_for_url("**/index**", timeout=15000)
-                        except Exception:
-                            pass
+                        browser.page.wait_for_timeout(800)
+                        _submit_mteam_otp(browser.page)
                 if "/index" not in browser.page.url:
                     feature = browser.evaluate("() => document.body.innerText.slice(0,300)")
                     return False, "登录未到达 /index：" + str(feature)

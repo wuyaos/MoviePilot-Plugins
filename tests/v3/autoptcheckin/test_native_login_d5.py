@@ -183,3 +183,78 @@ def test_mteam_missing_login_credentials(offline):
     assert result.message == '缺少 M-Team 账号或密码'
     assert result.metadata['transport'] == 'cloak'
     assert not offline
+
+class _MTeamLocator:
+    def __init__(self, page, selector, present=True):
+        self.page = page
+        self.selector = selector
+        self.present = present
+
+    @property
+    def first(self):
+        return self
+
+    def count(self):
+        return int(self.present)
+
+    def click(self):
+        self.page.clicked = self.selector
+        self.page.url = 'https://kp.m-team.cc/index'
+
+
+class _MTeamOtpPage:
+    url = 'https://kp.m-team.cc/login'
+
+    def __init__(self, present_selector=None, auto_submit=False):
+        self.present_selector = present_selector
+        self.auto_submit = auto_submit
+        self.clicked = None
+        self.entered = False
+
+    def wait_for_url(self, _pattern, timeout):
+        if self.auto_submit or '/index' in self.url:
+            self.url = 'https://kp.m-team.cc/index'
+            return
+        raise TimeoutError(timeout)
+
+    def locator(self, selector):
+        return _MTeamLocator(self, selector, selector == self.present_selector)
+
+    class _Keyboard:
+        def __init__(self, page): self.page = page
+        def press(self, key):
+            assert key == 'Enter'
+            self.page.entered = True
+            self.page.url = 'https://kp.m-team.cc/index'
+
+    @property
+    def keyboard(self):
+        return self._Keyboard(self)
+
+
+def test_mteam_otp_waits_for_auto_submit_before_clicking():
+    from autoptcheckin.sites.native.mteam import _submit_mteam_otp
+
+    page = _MTeamOtpPage(auto_submit=True)
+    assert _submit_mteam_otp(page) is True
+    assert page.clicked is None
+    assert page.entered is False
+
+
+def test_mteam_otp_clicks_non_button_login_element():
+    from autoptcheckin.sites.native.mteam import _MTEAM_OTP_SUBMIT_SELECTORS, _submit_mteam_otp
+
+    selector = _MTEAM_OTP_SUBMIT_SELECTORS[3]
+    page = _MTeamOtpPage(present_selector=selector)
+    assert _submit_mteam_otp(page) is True
+    assert page.clicked == selector
+    assert page.entered is False
+
+
+def test_mteam_otp_falls_back_to_enter():
+    from autoptcheckin.sites.native.mteam import _submit_mteam_otp
+
+    page = _MTeamOtpPage()
+    assert _submit_mteam_otp(page) is True
+    assert page.clicked is None
+    assert page.entered is True
