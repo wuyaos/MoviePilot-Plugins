@@ -367,7 +367,7 @@ def test_run_once_aggregates_results_and_flushes_notify():
     plugin._config["enabled_sites"] = ["ssdforum"]
     plugin._config["notify"] = True
 
-    def fake_result(domain, readonly=False):
+    def fake_result(domain, readonly=False, trigger=None):
         r = SignResult(SignStatus.SUCCESS, "连续签到 5 天")
         r.site_id = "ssdforum"
         plugin._history.append(r)

@@ -132,7 +132,7 @@ def test_run_once_pushes_only_when_fengchao_confirmed(monkeypatch):
     plugin, _fake = make_plugin()
     pushed = []
     monkeypatch.setattr(plugin, "_push_pt_life", lambda retries=0: pushed.append(retries) or (True, ""))
-    plugin._execute_with_retry = lambda domain, readonly=False: {
+    plugin._execute_with_retry = lambda domain, readonly=False, trigger=None: {
         "site_id": domain.split(".")[0], "status": "already" if "fengchao" in domain else "skipped"}
     plugin.run_once()
     assert pushed == [0]

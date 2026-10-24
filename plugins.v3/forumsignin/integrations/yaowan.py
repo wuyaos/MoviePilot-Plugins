@@ -93,7 +93,7 @@ class Yaowan:
         except Exception:
             return page
 
-    def fetch_page(self):
+    def fetch_page(self, allow_login=True):
         credential = self._credential()
         response = self._homepage(credential.value if credential else "")
         if self.verifier.identity(self._text(response) or ""):
@@ -101,6 +101,8 @@ class Yaowan:
         refreshed = self._refresh_remember()
         if refreshed and self.verifier.identity(self._text(refreshed) or ""):
             return self._attach_api_state(refreshed)
+        if not allow_login:  # 只读核验不 POST /login（AGENTS.md 约束）
+            return self._text(response)
         logged_in = self._login()
         return self._attach_api_state(logged_in) if logged_in else self._text(response)
 
@@ -120,7 +122,7 @@ class Yaowan:
                 except Exception:
                     pass
         try:
-            page = self.fetch_page()
+            page = self.fetch_page(allow_login=not readonly)
         except PermissionError:
             return SignResult(SignStatus.AUTH_FAILED, "凭证已失效或无权限，未提交")
         except (ConnectionError, TimeoutError, OSError):

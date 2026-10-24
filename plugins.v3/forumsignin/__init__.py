@@ -19,7 +19,7 @@ from .http_client import HttpClient
 from .integrations.pt_life import StatsNotReady, collect_site_statistics, push_snapshot
 
 try:
-    from app.core.event import eventmanager
+    from app.sdk.events import eventmanager
     from app.sdk.plugin import _PluginBase
     from app.schemas.types import EventType
 except ImportError:  # 离线契约测试无宿主
@@ -53,6 +53,7 @@ class ForumSignin(_PluginBase):
         self._locks = {key: Lock() for key in ADAPTERS}
         self._config_lock = RLock()
         self._services = []
+        self._round_lock = Lock()
         self._stopped = True
         self._memory = {}
         self._history = HistoryStore(self._get, self._save)
@@ -176,16 +177,22 @@ class ForumSignin(_PluginBase):
         data = getattr(event, "event_data", None) or {}
         if data.get("action") != "signin_once":
             return
+        if self._stopped or not self._config.get("enabled"):
+            return  # 插件停用/卸载后旧 handler 到达时静默忽略（含 reload 后的残留监听）
         import threading
 
         def _worker():
+            if not self._round_lock.acquire(blocking=False):
+                logger.info("论坛签到：上一轮仍在执行，忽略远程命令")
+                return
             try:
                 self.run_once()
             except Exception:
                 logger.error("论坛签到：远程命令执行异常", exc_info=True)
+            finally:
+                self._round_lock.release()
 
         threading.Thread(target=_worker, daemon=True, name="forumsignin-remote-command").start()
-
     def _register_commands(self) -> None:
         """init_plugin 时注册远程命令监听（幂等）。"""
         if eventmanager is None or EventType is None:
@@ -369,9 +376,9 @@ class ForumSignin(_PluginBase):
             return None
         return HttpClient(site["adapter"].base, credential, self._get("fengchao_instance_id") or "", self.plugin_version)
 
-    def _execute_with_retry(self, domain, readonly=False):
+    def _execute_with_retry(self, domain, readonly=False, trigger=None):
         # V2 语义：失败/网络异常按 retry_count/retry_interval 分钟退避重试；成功/已签/未确认/认证失败不重试（未确认重放有重复提交风险）。
-        result = self._execute_result(domain, readonly=readonly)
+        result = self._execute_result(domain, readonly=readonly, trigger=trigger)
         if readonly:
             return asdict(result)
         attempts = max(0, int(self._config.get('retry_count', 0) or 0))
@@ -380,18 +387,21 @@ class ForumSignin(_PluginBase):
             if result.status not in (SignStatus.FAILED, SignStatus.NETWORK_ERROR):
                 break
             time.sleep(interval * 60)
-            result = self._execute_result(domain, readonly=readonly)
+            result = self._execute_result(domain, readonly=readonly, trigger=trigger)
         return asdict(result)
 
-    def _execute(self, domain, readonly=False):
-        return self._response(asdict(self._execute_result(domain, readonly=readonly)))
+    def _execute(self, domain, readonly=False, trigger=None):
+        return self._response(asdict(self._execute_result(domain, readonly=readonly, trigger=trigger)))
 
-    def _execute_result(self, domain, readonly=False):
+    def _execute_result(self, domain, readonly=False, trigger=None):
         site = get_site(domain)
         if not site:
             result = SignResult.skipped("站点未注册")
             result.site_id = str(domain)
-            self._history.append(result)
+            try:
+                self._history.append(result)
+            except Exception:
+                logger.warning("论坛签到 %s：历史记录写入失败（不影响签到结果）", result.site_id, exc_info=True)
             return result
         site_id = site["id"]
         lock = self._locks[site_id]
@@ -400,7 +410,8 @@ class ForumSignin(_PluginBase):
         try:
             if not acquired:
                 result = SignResult.skipped()
-            elif not self.get_state() or site_id not in self._config["enabled_sites"]:
+            elif not self._config.get("enabled") or site_id not in self._config["enabled_sites"]:
+                # 轮内判定只看配置开关：保存配置会短暂置 _stopped，若在此检查会腰斩执行中的轮次
                 result = SignResult.skipped("站点未启用")
             else:
                 client = self._client(site)
@@ -478,9 +489,13 @@ class ForumSignin(_PluginBase):
                 if acquired:
                     lock.release()
         result.site_id = site_id
-        result.metadata["trigger"] = "verify" if readonly else "manual"
-        self._history.append(result)
-        if not readonly and self._config.get("notify"):
+        result.metadata["trigger"] = trigger or ("verify" if readonly else "manual")
+        try:
+            self._history.append(result)
+        except Exception:
+            logger.warning("论坛签到 %s：历史记录写入失败（不影响签到结果）", result.site_id, exc_info=True)
+        if (not readonly and result.status != SignStatus.SKIPPED
+                and self._config.get("notify")):
             self._notify_buffer.append((site_id, result))
         return result
 
@@ -493,8 +508,8 @@ class ForumSignin(_PluginBase):
             registry = get_registry()
             labels = {SignStatus.SUCCESS: "✅ 签到成功", SignStatus.ALREADY: "📅 今日已签到",
                       SignStatus.FAILED: "❌ 签到失败", SignStatus.UNCONFIRMED: "⚠️ 结果未确认",
-                      SignStatus.AUTH_FAILED: "🔒 认证失败", SignStatus.NETWORK_ERROR: "🌐 网络异常"}
-            blocks = []
+                      SignStatus.AUTH_FAILED: "🔒 认证失败", SignStatus.NETWORK_ERROR: "🌐 网络异常",
+                      SignStatus.SKIPPED: "⏭️ 跳过"}
             blocks = []
             for site_id, result in results:
                 name = next((site["name"] for site in registry if site["id"] == site_id), site_id)
@@ -526,7 +541,10 @@ class ForumSignin(_PluginBase):
         if site_id == "fengchao":
             info = self._get("fengchao_user_info") or {}
             if info.get("currentStreak") is not None:
-                return int(info["currentStreak"])
+                try:
+                    return max(0, int(info["currentStreak"]))
+                except (TypeError, ValueError):
+                    pass  # 异常值不炸 stats，回退历史连续计数
         rows = [r for r in (self._history.list(1, 500).get("items") or []) if r.get("site") == site_id]
         rows.sort(key=lambda r: r.get("time") or "", reverse=True)
         if not rows:
@@ -553,7 +571,11 @@ class ForumSignin(_PluginBase):
         results = []
         for site in get_registry():
             if site["id"] in self._config.get("enabled_sites", []):
-                results.append(self._execute_with_retry(site["domain"]))
+                try:
+                    results.append(self._execute_with_retry(site["domain"], trigger="scheduled"))
+                except Exception as exc:
+                    # 单站历史/持久化异常不腰斩整轮（P0：静默漏签代价高于跳过）
+                    logger.error("论坛签到 %s：单站执行异常，继续其余站点：%s", site["id"], type(exc).__name__)
         fengchao_result = next((r for r in results
                                 if isinstance(r, dict) and r.get("site_id") == "fengchao"), None)
         if fengchao_result and fengchao_result.get("status") in ("success", "already", "signed"):
@@ -702,7 +724,7 @@ class ForumSignin(_PluginBase):
         return f"{type(exc).__name__}: {message or 'unknown_error'}"
 
     async def api_update_info(self, domain: str = "fengchao.chat"):
-        if domain not in ("fengchao.chat", "pting.club"):
+        if domain != "fengchao.chat":  # update_info 恒为蜂巢同步；药丸域走 verify/signin_by_domain
             return self._response(success=False, message="unknown_site")
         result = await asyncio.to_thread(self.update_info)
         try:

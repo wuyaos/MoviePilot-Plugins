@@ -32,7 +32,7 @@ def resolve(site, config, managed=()):
         return Credential("local_api", value) if value else None
     binding = config.get(site["id"] + "_managed_site_id")
     matches = [row for row in managed if hostname(row.get("url", "")) == site["domain"]]
-    if binding is not None:
+    if binding:  # 空串视为未绑定，避免写入 "" 后站点永远 UNCONFIRMED
         matches = [row for row in matches if str(row.get("id")) == str(binding)]
         if not matches:
             raise ValueError("managed_site_binding_missing")
