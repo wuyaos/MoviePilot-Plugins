@@ -30,7 +30,7 @@ def test_forum_page_contract():
     assert "site-icon site-initial" in source and "can_sync" in source
     assert "site-totals" not in source and "next_schedule" in source
     assert "连续签到" in source and "currentStreak" in source and "points" not in source and "maxStreak" not in source and "lastCheckInDate" not in source and "checkedInToday" not in source
-    assert "连续签到 {{site.streak ?? streak(site)}} 天" in source and "v-else-if=\"site.message\"" in source
+    assert "连续签到 {{site.streak ?? streak(site)}} 天" in source and 'v-if="site.message"' in source
     assert "data?.attributes" not in source and "totalContinuousCheckIn" not in source
 
 

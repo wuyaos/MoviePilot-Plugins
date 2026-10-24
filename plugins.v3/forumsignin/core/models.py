@@ -21,6 +21,7 @@ class Evidence:
     status: str = ""
     source: str = "page"
     raw_summary: str = ""
+    note: str = ""
 
 @dataclass(frozen=True)
 class RewardSummary:

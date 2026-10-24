@@ -37,7 +37,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.14"
+    plugin_version = "3.1.15"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -267,7 +267,8 @@ class ForumSignin(_PluginBase):
                     self._save("icon.cache", icons)
             site.update({"enabled": site["id"] in self._config.get("enabled_sites", []),
                          "can_sync": site["id"] == "fengchao", "icon": icons.get(site["id"], ""),
-                         "status": result.get("status", "disabled"), "message": result.get("message", ""),
+                         "status": result.get("status", "disabled"),
+                         "message": self._card_message(site["id"], result),
                          "streak": self._streak_days(site["id"])})
         return self._response({"today": self._history.today_counts(), "latest": latest, "sites": sites,
                                "next_schedule": self._next_schedule(), "site_counts": site_counts, "fengchao_sync": self._get("fengchao_sync_status") or {},
@@ -498,7 +499,8 @@ class ForumSignin(_PluginBase):
                 state = labels.get(result.status, "签到完成")
                 if result.status in (SignStatus.SUCCESS, SignStatus.ALREADY):
                     days = self._streak_days(site_id)
-                    note = f"连续签到 {days} 天" if days else (result.message or "—")
+                    note = (result.message if result.message and result.message != "本人当日签到记录已确认"
+                            else (f"连续签到{days}天" if days else "—"))
                 else:
                     note = result.message or "—"
                 blocks.append(f"论坛：{name}\n状态：{state}\n说明：{note}")
@@ -507,6 +509,15 @@ class ForumSignin(_PluginBase):
         except Exception as exc:
             logger.warning("通知发送失败（不影响签到结果）：%s", exc)
 
+
+    def _card_message(self, site_id: str, record: dict) -> str:
+        """卡片说明：站点口径文本优先；默认确认句用连续天数替代。"""
+        message = record.get("message", "") if isinstance(record, dict) else ""
+        status = record.get("status", "") if isinstance(record, dict) else ""
+        if status in ("success", "signed", "already") and message in ("", "本人当日签到记录已确认"):
+            days = self._streak_days(site_id)
+            message = f"连续签到{days}天" if days else message
+        return message
 
     def _streak_days(self, site_id: str) -> int:
         """与前端 streak() 同规则：从最近成功记录往回数连续自然日。"""

@@ -14,7 +14,7 @@ def normalize_evidence(evidence: Evidence | None, uid: str, business_date: str,
         return SignResult(SignStatus.UNCONFIRMED, "页面缺少按钮或本人当日记录", evidence=evidence)
     if evidence.status in SUCCESS_STATES:
         return SignResult(SignStatus.ALREADY if before_submit else SignStatus.SUCCESS,
-                          "本人当日签到记录已确认", evidence=evidence)
+                          evidence.note or "本人当日签到记录已确认", evidence=evidence)
     if evidence.status in FAILURE_STATES:
         return SignResult(SignStatus.FAILED, "新页面本人当日记录确认尚未签到", evidence=evidence)
     return SignResult(SignStatus.UNCONFIRMED, "记录状态无法识别", evidence=evidence)

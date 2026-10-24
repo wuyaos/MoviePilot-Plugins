@@ -551,3 +551,26 @@ def test_init_removes_legacy_nested_fengchao_cache():
     plugin.save_data = lambda key, value: saved.append((key, value))
     plugin.init_plugin({"enabled": False})
     assert ("fengchao_user_info", None) in saved
+
+
+def test_native_wording_notes_flow_to_message():
+    from forum_under_test.verifiers.fengchao import verify as fc_verify
+    from forum_under_test.core.verification import normalize_evidence
+
+    res = fc_verify({"userId": "3161", "points": 83,
+                     "checkIn": {"checkedInToday": True, "lastCheckinTime": DAY + " 07:02:00",
+                                 "currentStreak": 24}})
+    assert res.message == "连续签到24天"
+
+    api_state = {"data": {"id": "42", "attributes": {
+        "canCheckin": False, "lastCheckinTime": DAY + " 08:30:00", "totalContinuousCheckIn": 12}}}
+    result = Yaowan(Client([page("未签到"), api_state])).run(readonly=True, business_date=DAY)
+    assert result.message == "已签到 12 天"
+
+    sample = page("未知").replace('<input name="formhash" value="synthetic">',
+                                  '<input name="formhash" value="synthetic">'
+                                  '<p>您今天已经签到过了或者签到时间还未开始</p>'
+                                  '<p>您本月已累计签到:22 天</p><p>您上次签到时间:2026-10-24 07:02</p>')
+    ev = SSDForum.verifier.parse(sample, "42", DAY)
+    assert ev.note == "已累计签到22天，上次签到 2026-10-24"
+    assert normalize_evidence(ev, "42", DAY).message == "已累计签到22天，上次签到 2026-10-24"

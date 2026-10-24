@@ -38,4 +38,6 @@ class YaowanVerifier:
             status = "未签到"
         else:
             status = ""
-        return Evidence(BUTTON_TOKEN, uid, business_date, status, "api", "药丸用户 API 状态")
+        total = state.get("totalContinuousCheckIn")
+        note = f"已签到 {total} 天" if isinstance(total, int) and total > 0 else ""
+        return Evidence(BUTTON_TOKEN, uid, business_date, status, "api", "药丸用户 API 状态", note)
