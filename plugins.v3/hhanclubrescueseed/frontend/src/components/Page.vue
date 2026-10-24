@@ -1,371 +1,197 @@
 <script setup>
-import { computed, inject, onMounted, ref } from 'vue'
+import { computed, getCurrentInstance, inject, onMounted, ref } from 'vue'
 
-// 接收初始配置和宿主能力
 const props = defineProps({
-  model: {
-    type: Object,
-    default: () => ({}),
-  },
-  api: {
-    type: Object,
-    default: () => ({}),
-  },
+  api: { type: Object, default: () => ({}) },
+  pluginId: { type: String, default: 'Hhanclubrescueseed' },
 })
-
 const emit = defineEmits(['action', 'switch', 'close'])
+const toast = inject('moviepilot:toast', null)
+const instance = getCurrentInstance()
+const pluginApi = instance?.proxy?.$pluginApi || props.api
 
-// 使用主应用统一 Toast
-const hostToast = inject('moviepilot:toast', null)
-const $toast = hostToast || {
-  success: msg => console.log('[toast]', msg),
-  error: msg => console.error('[toast]', msg),
-  warning: msg => console.warn('[toast]', msg),
-  info: msg => console.log('[toast]', msg),
+const records = ref([])
+const autoDeleteEnabled = ref(false)
+const loading = ref(false)
+const deleting = ref('')
+const error = ref('')
+
+const headers = [
+  { title: '名称', key: 'title', minWidth: '260px' },
+  { title: '体积', key: 'size', width: '120px' },
+  { title: '下载时间', key: 'added_on', width: '170px' },
+  { title: '做种时长', key: 'seeding_time', width: '130px' },
+  { title: '状态', key: 'status', width: '120px' },
+  { title: '上传体积', key: 'uploaded', width: '130px' },
+  { title: '操作', key: 'actions', sortable: false, align: 'end', width: '90px' },
+]
+
+function notify(type, message) {
+  if (toast && typeof toast[type] === 'function') toast[type](message)
+  else (type === 'error' ? console.error : console.log)(message)
 }
 
-// 组件状态
-const title = ref('憨憨保种区')
-const loading = ref(true)
-const deleting = ref(false)
-const error = ref(null)
-const downloadRecords = ref([])
-const searchTitle = ref('')
-const minSeeders = ref('')
-const maxSeeders = ref('')
-const selectedRecords = ref([])
-const deleteDialog = ref(false)
-
-// 过滤后的记录
-const filteredRecords = computed(() => {
-  let records = [...downloadRecords.value]
-
-  // 按标题搜索
-  if (searchTitle.value) {
-    const searchLower = searchTitle.value.toLowerCase()
-    records = records.filter(record =>
-      (record.title && record.title.toLowerCase().includes(searchLower)) ||
-      (record.zh_title && record.zh_title.toLowerCase().includes(searchLower)),
-    )
-  }
-
-  // 按做种人数筛选
-  if (minSeeders.value !== '') {
-    const min = parseInt(minSeeders.value)
-    if (!isNaN(min)) {
-      records = records.filter(record => {
-        const seeders = parseInt(record.seeders)
-        return !isNaN(seeders) && seeders >= min
-      })
-    }
-  }
-
-  if (maxSeeders.value !== '') {
-    const max = parseInt(maxSeeders.value)
-    if (!isNaN(max)) {
-      records = records.filter(record => {
-        const seeders = parseInt(record.seeders)
-        return !isNaN(seeders) && seeders <= max
-      })
-    }
-  }
-
-  return records
-})
-
-const downloadHeaders = ref([
-  { title: '英文标题', key: 'title' },
-  { title: '中文标题', key: 'zh_title' },
-  { title: '种子大小', key: 'size' },
-  { title: '做种人数', key: 'seeders' },
-  { title: '种子Hash', key: 'torrent_hash' },
-  { title: '下载时间', key: 'download_time' },
-])
-
-// 格式化时间
-function formatTime(timeStr) {
-  // 检查是否为有效日期字符串
-  if (!timeStr) return 'N/A'
-
-  // 尝试解析日期
-  const date = new Date(timeStr)
-  if (isNaN(date.getTime())) {
-    // 如果是无效日期，直接返回原始字符串
-    return timeStr
-  }
-
-  // 返回本地化的时间字符串
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
+function unwrap(response) {
+  return response?.data && typeof response.data.success === 'boolean' ? response.data : response
 }
 
-// 获取和刷新数据
+function valueOf(record, ...keys) {
+  for (const key of keys) if (record?.[key] !== undefined && record?.[key] !== null) return record[key]
+  return ''
+}
+
+function toGb(value) {
+  if (typeof value === 'number') return value
+  const text = String(value || '').trim().toUpperCase()
+  const amount = Number.parseFloat(text)
+  if (!Number.isFinite(amount)) return 0
+  if (text.includes('TB')) return amount * 1024
+  if (text.includes('MB')) return amount / 1024
+  if (text.includes('KB')) return amount / (1024 * 1024)
+  return amount
+}
+
+function formatSize(value) {
+  if (value === '' || value === null || value === undefined) return '-'
+  if (typeof value === 'string' && /[A-Za-z]/.test(value)) return value
+  return `${toGb(value).toFixed(2)} GB`
+}
+
+function formatAddedOn(record) {
+  const value = valueOf(record, 'added_on', 'download_time')
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatSeedingTime(value) {
+  if (value === '' || value === null || value === undefined) return '-'
+  if (typeof value === 'string' && /天\s*\d+小时/.test(value)) return value
+  let hours = Number(value)
+  if (!Number.isFinite(hours)) {
+    const text = String(value)
+    const dayMatch = text.match(/([\d.]+)\s*天/)
+    const hourMatch = text.match(/([\d.]+)\s*小时/)
+    if (dayMatch) hours = Number(dayMatch[1]) * 24 + (hourMatch ? Number(hourMatch[1]) : 0)
+    else hours = Number.parseFloat(text)
+    if (!Number.isFinite(hours)) return text
+  }
+  const days = Math.floor(hours / 24)
+  const remainHours = Math.floor(hours % 24)
+  if (!days) return `${remainHours}小时`
+  return `${days}天${remainHours}小时`
+}
+
+function statusText(value) {
+  const status = String(value || '').toLowerCase()
+  if (status.includes('deleted') || status.includes('删除')) return '已删除'
+  if (status.includes('paused') || status.includes('pause') || status.includes('暂停')) return '已暂停'
+  if (status.includes('complete') || status.includes('达标')) return '已达标'
+  if (status.includes('download') || status.includes('下载')) return '下载中'
+  return '做种中'
+}
+
+function statusColor(value) {
+  return { 做种中: 'success', 下载中: 'info', 已达标: 'primary', 已暂停: 'warning', 已删除: 'grey' }[statusText(value)]
+}
+
+const totalSize = computed(() => `${records.value.reduce((total, record) => total + toGb(record.size), 0).toFixed(2)} GB`)
+const totalUploaded = computed(() => `${records.value.reduce((total, record) => total + toGb(record.uploaded), 0).toFixed(2)} GB`)
+const qualifiedCount = computed(() => records.value.filter(record => statusText(record.status) === '已达标').length)
+
 async function refreshData() {
   loading.value = true
-  error.value = null
-
+  error.value = ''
   try {
-    // 获取下载记录
-    const response = await props.api.get(`plugin/Hhanclubrescueseed/download_records`)
-    if (!response.success) {
-      throw new Error(response.message || '获取下载记录失败')
-    }
-    downloadRecords.value = Array.isArray(response.data) ? response.data : []
+    const response = unwrap(await pluginApi.get('download/records'))
+    if (!response?.success) throw new Error(response?.message || '获取下载记录失败')
+    const data = response.data || {}
+    records.value = Array.isArray(data.records) ? data.records : []
+    autoDeleteEnabled.value = Boolean(data.auto_delete_enabled)
+    emit('action')
   } catch (err) {
-    console.error('获取下载记录失败:', err)
-    error.value = '获取下载记录失败: ' + (err.message || '未知错误')
-    $toast.error(error.value)
-    downloadRecords.value = []
+    error.value = err.message || '获取下载记录失败'
+    records.value = []
+    notify('error', error.value)
   } finally {
     loading.value = false
-    // 通知主应用组件已更新
+  }
+}
+
+async function deleteRecord(record) {
+  const title = String(record?.title || '')
+  if (!title) return
+  deleting.value = title
+  try {
+    const query = `download/records?titles=${encodeURIComponent(title)}`
+    const response = unwrap(await pluginApi.delete(query))
+    if (!response?.success) throw new Error(response?.message || '删除记录失败')
+    records.value = records.value.filter(item => item.title !== title)
+    notify('success', '记录已删除')
     emit('action')
-  }
-}
-
-// 过滤记录
-function filterRecords() {
-  // 通过computed属性自动过滤，无需额外操作
-}
-
-// 删除选中记录
-function confirmDeleteSelected() {
-  deleteDialog.value = true
-}
-
-// 确认删除
-async function deleteConfirmed() {
-  deleting.value = true
-  try {
-    // 删除选中记录
-    await deleteMultipleRecords(selectedRecords.value)
-    selectedRecords.value = []
-
-    // 重新加载数据
-    await refreshData()
   } catch (err) {
-    console.error('删除记录失败:', err)
-    error.value = '删除记录失败: ' + err.message
-    $toast.error(error.value)
+    notify('error', err.message || '删除记录失败')
   } finally {
-    deleteDialog.value = false
-    deleting.value = false
+    deleting.value = ''
   }
 }
 
-// 批量删除记录
-async function deleteMultipleRecords(recordTitles) {
-  // 根据标题从downloadRecords中获取完整的记录对象
-  const records = recordTitles
-    .map(title => downloadRecords.value.find(record => record.title === title))
-    .filter(record => record !== undefined) // 过滤掉未找到的记录
-
-  // 分离有hash和无hash的记录
-  const recordsWithHash = records.filter(record => record && record.torrent_hash)
-
-  // 如果有包含hash的记录，先批量删除种子
-  if (recordsWithHash.length > 0) {
-    const hashes = recordsWithHash.map(record => record.torrent_hash)
-    try {
-      const response = await props.api.post(`plugin/Hhanclubrescueseed/delete_torrents`, hashes)
-      if (!response.success) {
-        console.error('删除种子失败:', response.message)
-        $toast.error('删除种子失败: ' + (response.message || '未知错误'))
-        // 即使部分失败，也继续删除记录
-      }
-    } catch (err) {
-      console.error('删除种子API调用失败:', err)
-      $toast.error('删除种子API调用失败:' + err.message)
-      // 即使API调用失败，也要继续删除记录
-    }
-  }
-
-  // 删除所有选中的记录
-  const titles = records.map(record => record.title)
-
-  // 同时调用后端API删除数据库中的记录
-  try {
-    const response = await props.api.post(`plugin/Hhanclubrescueseed/delete_download_records`, titles)
-    if (!response.success) {
-      console.error('删除下载记录失败:', response.message)
-      $toast.error('删除下载记录失败: ' + (response.message || '未知错误'))
-    }
-  } catch (err) {
-    console.error('删除下载记录API调用失败:', err)
-    $toast.error('删除下载记录API调用失败: ' + (err.message || '未知错误'))
-  }
-}
-
-// 通知主应用切换到配置页面
-function notifySwitch() {
-  emit('switch')
-}
-
-// 通知主应用关闭组件
-function notifyClose() {
+function close() {
   emit('close')
 }
 
-// 组件挂载时加载数据
-onMounted(() => {
-  refreshData()
-})
+onMounted(refreshData)
 </script>
 
 <template>
-  <div class="plugin-page">
-    <v-card>
-      <v-card-item>
-        <template #append>
-          <v-btn icon color="primary" variant="text" @click="notifyClose">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </template>
-        <v-card-title>{{ title }}</v-card-title>
-      </v-card-item>
-      <v-card-text>
-        <v-alert v-if="error" type="error" class="mb-4">
-          {{ error }}
-        </v-alert>
-        <v-skeleton-loader v-if="loading" type="table" />
-        <div v-else>
-          <!-- 搜索和筛选工具栏 -->
-          <v-row class="mb-4">
-            <v-col cols="12" md="4">
-              <v-text-field
-                v-model="searchTitle"
-                label="搜索标题"
-                placeholder="输入标题关键词"
-                clearable
-                density="compact"
-                variant="outlined"
-                hide-details
-                @keyup.enter="filterRecords"
-              >
-                <template #prepend-inner>
-                  <v-icon>mdi-magnify</v-icon>
-                </template>
-              </v-text-field>
-            </v-col>
-            <v-col cols="12" md="3">
-              <v-text-field
-                v-model="minSeeders"
-                label="最小做种人数"
-                type="number"
-                density="compact"
-                variant="outlined"
-                hide-details
-                @keyup.enter="filterRecords"
-              />
-            </v-col>
-            <v-col cols="12" md="3">
-              <v-text-field
-                v-model="maxSeeders"
-                label="最大做种人数"
-                type="number"
-                density="compact"
-                variant="outlined"
-                hide-details
-                @keyup.enter="filterRecords"
-              />
-            </v-col>
-            <v-col cols="12" md="2">
-              <v-btn
-                color="primary"
-                block
-                :disabled="!searchTitle && !minSeeders && !maxSeeders"
-                @click="filterRecords"
-              >
-                <v-icon start>mdi-filter</v-icon>
-                筛选
-              </v-btn>
-            </v-col>
-          </v-row>
-          <!-- 下载记录展示 -->
-          <div class="mt-4">
-            <div class="d-flex align-center justify-space-between mb-2">
-              <div class="text-h6">下载记录</div>
-              <v-btn
-                v-if="selectedRecords.length > 0"
-                color="error"
-                :disabled="selectedRecords.length === 0"
-                @click="confirmDeleteSelected"
-              >
-                <v-icon start>mdi-delete</v-icon>
-                删除选中 ({{ selectedRecords.length }})
-              </v-btn>
-            </div>
-            <v-data-table
-              v-if="filteredRecords && filteredRecords.length > 0"
-              v-model="selectedRecords"
-              :headers="downloadHeaders"
-              :items="filteredRecords"
-              :items-per-page="10"
-              :footer-props="{ 'items-per-page-options': [5, 10, 20, -1] }"
-              item-value="title"
-              show-select
-              class="elevation-1"
-            >
-              <template #item.download_time="{ item }">
-                {{ formatTime(item.download_time) }}
-              </template>
-              <template #item.torrent_hash="{ item }">
-                <span v-if="item.torrent_hash" class="text-success">{{ item.torrent_hash.substring(0, 8) }}...</span>
-                <span v-else class="text-grey">-</span>
-              </template>
-            </v-data-table>
-            <v-alert v-else type="info" class="mt-4">
-              暂无下载记录
-            </v-alert>
-          </div>
-        </div>
-      </v-card-text>
-      <v-card-actions>
-        <v-btn color="primary" :loading="loading" @click="refreshData">
-          <v-icon start>mdi-refresh</v-icon>
-          刷新数据
-        </v-btn>
-        <v-spacer />
-        <v-btn color="primary" @click="notifySwitch">
-          <v-icon start>mdi-cog</v-icon>
-          配置
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-    <!-- 删除确认对话框 -->
-    <v-dialog
-      v-model="deleteDialog"
-      max-width="500"
-    >
-      <v-card>
-        <v-card-title>确认删除</v-card-title>
-        <v-card-text>
-          <p v-if="selectedRecords.length > 0">
-            确定要删除 {{ selectedRecords.length }} 条记录吗？包含种子hash的记录将同时删除下载器中的种子。
-          </p>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="deleteDialog = false">
-            取消
-          </v-btn>
-          <v-btn color="error" :loading="deleting" @click="deleteConfirmed">
-            <v-progress-circular
-              v-if="deleting"
-              size="20"
-              width="2"
-              indeterminate
-            />
-            <span v-else>确认删除</span>
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </div>
+  <v-card class="plugin-page">
+    <v-card-item>
+      <template #prepend><v-icon color="teal-darken-1">mdi-chart-box-outline</v-icon></template>
+      <v-card-title>憨憨保种区</v-card-title>
+      <v-card-subtitle>本地下载记录与下载器实时状态</v-card-subtitle>
+      <template #append><v-btn icon="mdi-close" variant="text" aria-label="关闭" @click="close" /></template>
+    </v-card-item>
+
+    <v-card-text>
+      <v-alert v-if="error" type="error" variant="tonal" class="mb-4">{{ error }}</v-alert>
+      <v-alert v-if="!autoDeleteEnabled" type="info" variant="tonal" class="mb-4">自动清理未启用</v-alert>
+
+      <v-row class="stats-row mb-2">
+        <v-col cols="12" sm="6" md="3"><v-card class="stat-card" variant="tonal"><div class="stat-label">保种总体积</div><div class="stat-value">{{ totalSize }}</div><div class="stat-meta">当前记录汇总</div></v-card></v-col>
+        <v-col cols="12" sm="6" md="3"><v-card class="stat-card" variant="tonal"><div class="stat-label">累计上传量</div><div class="stat-value">{{ totalUploaded }}</div><div class="stat-meta">按下载记录汇总</div></v-card></v-col>
+        <v-col cols="12" sm="6" md="3"><v-card class="stat-card" variant="tonal"><div class="stat-label">已达标数</div><div class="stat-value">{{ qualifiedCount }}<small> 条</small></div><div class="stat-meta">达标标签已写入下载器</div></v-card></v-col>
+        <v-col cols="12" sm="6" md="3"><v-card class="stat-card" variant="tonal"><div class="stat-label">下载记录数</div><div class="stat-value">{{ records.length }}<small> 条</small></div><div class="stat-meta">本地保存的记录</div></v-card></v-col>
+      </v-row>
+
+      <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。</p></div><v-btn color="teal-darken-1" variant="outlined" :loading="loading" prepend-icon="mdi-refresh" @click="refreshData">刷新</v-btn></div>
+      <v-data-table v-if="records.length" :headers="headers" :items="records" item-value="title" class="records-table" :items-per-page="10">
+        <template #item.title="{ item }"><div class="title-cell"><strong>{{ item.title || '-' }}</strong><span v-if="item.site">{{ item.site }}</span><span v-else-if="item.zh_title">{{ item.zh_title }}</span></div></template>
+        <template #item.size="{ item }">{{ formatSize(item.size) }}</template>
+        <template #item.added_on="{ item }">{{ formatAddedOn(item) }}</template>
+        <template #item.seeding_time="{ item }">{{ formatSeedingTime(valueOf(item, 'seeding_time', 'seeding_time_hours')) }}</template>
+        <template #item.status="{ item }"><v-chip size="small" :color="statusColor(item.status)" label>{{ statusText(item.status) }}</v-chip></template>
+        <template #item.uploaded="{ item }">{{ formatSize(item.uploaded) }}</template>
+        <template #item.actions="{ item }"><v-btn icon="mdi-delete-outline" size="small" variant="text" color="error" :loading="deleting === item.title" :aria-label="`删除 ${item.title}`" @click="deleteRecord(item)" /></template>
+      </v-data-table>
+      <v-alert v-else type="info" variant="tonal">暂无下载记录</v-alert>
+    </v-card-text>
+  </v-card>
 </template>
+
+<style scoped>
+.plugin-page { max-width: 1280px; margin: 0 auto; }
+.stats-row { margin-inline: -6px; }
+.stat-card { height: 100%; padding: 16px; border-radius: 10px; }
+.stat-label { color: rgba(0, 0, 0, .62); font-size: .85rem; }
+.stat-value { margin-top: 6px; color: #00695c; font-size: 1.35rem; font-weight: 700; }
+.stat-value small { font-size: .75rem; font-weight: 500; }
+.stat-meta { margin-top: 4px; color: rgba(0, 0, 0, .5); font-size: .78rem; }
+.table-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 22px 0 12px; }
+.table-heading h2 { margin: 0; font-size: 1.2rem; }
+.table-heading p { margin: 4px 0 0; color: rgba(0, 0, 0, .58); font-size: .86rem; }
+.title-cell { display: grid; gap: 3px; max-width: 420px; white-space: normal; }
+.title-cell span { color: rgba(0, 0, 0, .58); font-size: .8rem; }
+.records-table { border: 1px solid rgba(0, 0, 0, .08); border-radius: 8px; }
+@media (max-width: 600px) { .table-heading { align-items: flex-start; flex-direction: column; } }
+</style>
