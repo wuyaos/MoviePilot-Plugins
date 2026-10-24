@@ -351,11 +351,23 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
             return finish(SignResult.skipped())
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
-        credential = Credential('managed_site', info.get('cookie') or '')
+        # 账密站 Cookie 复用：优先用上次账密登录刷新落盘的 Cookie（save_data 键 cookies.refreshed）。
+        refreshed = {}
+        get_data = getattr(runner, 'get_data', None)
+        save_data = getattr(runner, 'save_data', None)
+        if callable(get_data):
+            refreshed = (get_data('cookies.refreshed') or {}).get(site_id, '')
+        credential = Credential('refreshed_cookie' if refreshed else 'managed_site', refreshed or info.get('cookie') or '')
         http = NativeHttpClient(credential, info)
         credentials = {**info, **config}
         try:
             result = integration.login(http, credentials) if action == 'login' else integration.signin(http, credentials)
+            if getattr(result, 'status', None) is not None and str(result.status).endswith(('ok', 'LOGIN_OK')) and callable(save_data):
+                cookie_now = '; '.join(f"{k}={v}" for k, v in http.cookies.items())
+                if cookie_now:
+                    store = (get_data('cookies.refreshed') or {}) if callable(get_data) else {}
+                    store[site_id] = cookie_now
+                    save_data('cookies.refreshed', store)
         except Exception:
             status = LoginStatus.UNCONFIRMED if action == 'login' else SignStatus.UNCONFIRMED
             result = LoginResult(status, '站点接口执行未确认') if action == 'login' else SignResult(status, '站点接口执行未确认')
