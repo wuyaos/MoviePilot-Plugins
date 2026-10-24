@@ -15,7 +15,7 @@ def test_forum_config_contract():
     source = (FRONTEND / "src" / "Config.vue").read_text(encoding="utf-8")
     assert "分论坛设置" in source
     assert "每个论坛独立启用与配置" in source
-    assert "pting.club" in source and "invites.fun" in source and "ssdforum.com" in source
+    assert "pting.club" in source and "invites.fun" in source and "ssdforum.org" in source
     assert source.index("yaowan_username") < source.index("yaowan_password") < source.index("yaowan_cookie")
     assert "timed_update_enabled" in source and "展开配置" not in source and "remove-icon" not in source
     assert "model.onlyonce" not in source and "执行调度" not in source
@@ -44,3 +44,11 @@ def test_theme_and_site_registry_contract():
 def test_stats_exposes_sync_capability():
     source = (ROOT / "__init__.py").read_text(encoding="utf-8")
     assert '"can_sync": site["id"] == "fengchao"' in source
+
+
+def test_page_renders_fengchao_sync_data_and_status():
+    source = (FRONTEND / "src" / "Page.vue").read_text(encoding="utf-8")
+    assert "stats.value?.fengchao_user_info" in source
+    assert "stats.value?.fengchao_sync" in source
+    assert "syncInfo().displayName" in source and "syncInfo().points" in source
+    assert "上次同步：" in source and "同步失败：" in source

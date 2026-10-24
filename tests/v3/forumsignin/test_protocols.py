@@ -352,3 +352,36 @@ def test_run_once_aggregates_results_and_flushes_notify():
     assert response["success"] and len(response["data"]) == 1
     assert "论坛：SSD" in posted[0]["text"] and "✅ 签到成功" in posted[0]["text"]
     assert len(posted) == 1  # 一轮一条
+
+
+def test_ssdforum_legacy_cookie_config_migrates():
+    plugin = ForumSignin()
+    persisted = []
+    plugin.update_config = lambda config: persisted.append(config.copy())
+    plugin._config = {"ssdforumsignin_cookie": "synthetic-cookie", "ssdforum_cookie": ""}
+    plugin._migrate_legacy_invites()
+    assert plugin._config["ssdforum_cookie"] == "synthetic-cookie"
+    assert "ssdforumsignin_cookie" not in plugin._config
+    assert persisted[-1]["ssdforum_cookie"] == "synthetic-cookie"
+
+
+@pytest.mark.parametrize("success,state", [(True, "🔄 同步完成"), (False, "❌ 同步失败")])
+def test_sync_api_notifies_result(monkeypatch, success, state):
+    plugin = ForumSignin()
+    plugin._config["notify"] = True
+    posted = []
+    plugin.post_message = lambda **kwargs: posted.append(kwargs)
+    monkeypatch.setattr(plugin, "update_info", lambda: {
+        "success": success, "message": "synthetic-result" if not success else ""
+    })
+
+    response = asyncio.run(plugin.api_update_info())
+
+    assert response["success"] is success
+    assert len(posted) == 1
+    assert posted[0]["title"] == "【论坛签到】"
+    assert "论坛：蜂巢" in posted[0]["text"]
+    assert f"状态：{state}" in posted[0]["text"]
+    assert "时间：" in posted[0]["text"]
+    if not success:
+        assert "说明：synthetic-result" in posted[0]["text"]

@@ -6,7 +6,7 @@ const props=defineProps({initialConfig:Object,api:Object,pluginId:{type:String,d
 const emit=defineEmits(['save','switch','close','layout'])
 const model=reactive({...structuredClone(defaults),...(props.initialConfig||{})}),error=ref('')
 const revealed=reactive({})
-const forums=[{id:'fengchao',name:'蜂巢',domain:'pting.club',url:'https://pting.club',fields:[['fengchao_api_key','Bearer Token']],toggle:'sync'}, {id:'yaowan',name:'药丸',domain:'invites.fun',url:'https://invites.fun',fields:[['yaowan_username','账号'],['yaowan_password','密码'],['yaowan_cookie','Cookie']],hint:'Cookie 失效时优先账密登录换新，否则取 CookieCloud'}, {id:'ssdforum',name:'SSD',domain:'ssdforum.com',url:'https://ssdforum.com',fields:[['ssdforum_cookie','Cookie']],hint:'Cookie 失效或为空时从 CookieCloud 获取'}]
+const forums=[{id:'fengchao',name:'蜂巢',domain:'pting.club',url:'https://pting.club',fields:[['fengchao_api_key','Bearer Token']],toggle:'sync'}, {id:'yaowan',name:'药丸',domain:'invites.fun',url:'https://invites.fun',fields:[['yaowan_username','账号'],['yaowan_password','密码'],['yaowan_cookie','Cookie']],hint:'Cookie 失效时优先账密登录换新，否则取 CookieCloud'}, {id:'ssdforum',name:'SSD',domain:'ssdforum.org',url:'https://ssdforum.org',fields:[['ssdforum_cookie','Cookie']],hint:'Cookie 失效或为空时从 CookieCloud 获取'}]
 function save(){emit('save',JSON.parse(JSON.stringify(model)))}
 const icons=ref({})
 async function syncStats(){try{const r=await props.api.get(`plugin/${props.pluginId}/stats`);const d=r?.data??r;icons.value=Object.fromEntries((d.sites||[]).map(x=>[x.id,x.icon||'']));return d}catch(e){error.value=e.message||'站点列表加载失败';return {}}}

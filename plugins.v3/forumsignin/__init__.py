@@ -31,7 +31,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.5"
+    plugin_version = "3.1.6"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -101,7 +101,8 @@ class ForumSignin(_PluginBase):
         config = self._config
         legacy_map = {"invites_username": "yaowan_username",
                       "invites_password": "yaowan_password",
-                      "invites_cookie": "yaowan_cookie"}
+                      "invites_cookie": "yaowan_cookie",
+                      "ssdforumsignin_cookie": "ssdforum_cookie"}
         moved = False
         for old_key, new_key in legacy_map.items():
             if old_key not in config:
@@ -117,7 +118,7 @@ class ForumSignin(_PluginBase):
                 moved = True
         if moved:
             self.update_config(deepcopy(config))
-            logger.info("论坛签到：已将 V2 InvitesSignin 配置键迁移为 yaowan_*，站点 id invites→yaowan")
+            logger.info("论坛签到：已迁移旧版论坛签到配置键（InvitesSignin/SSDForumSignin）")
 
     def get_state(self):
         return bool(self._config["enabled"]) and not self._stopped
