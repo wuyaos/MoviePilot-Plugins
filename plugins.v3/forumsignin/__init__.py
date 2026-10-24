@@ -1,5 +1,6 @@
 """ForumSignin V3 backend skeleton; frontend delivered in the next iteration."""
 import asyncio
+import logging
 import json
 from copy import deepcopy
 import time
@@ -21,6 +22,9 @@ try:
 except ImportError:
     class _PluginBase:
         pass
+
+
+logger = logging.getLogger("ForumSignin")
 
 
 class ForumSignin(_PluginBase):
@@ -173,10 +177,16 @@ class ForumSignin(_PluginBase):
         for record in records:
             latest.setdefault(record["site"], record)
         sites = get_registry()
+        icons = self._get("icon.cache") or {}
         for site in sites:
             result = latest.get(site["id"], {})
+            if site["id"] not in icons:
+                icon = await asyncio.to_thread(self._resolve_favicon, site.get("url") or "https://" + site.get("domain", ""))
+                if icon:
+                    icons[site["id"]] = icon
+                    self._save("icon.cache", icons)
             site.update({"enabled": site["id"] in self._config.get("enabled_sites", []),
-                         "can_sync": site["id"] == "fengchao",
+                         "can_sync": site["id"] == "fengchao", "icon": icons.get(site["id"], ""),
                          "status": result.get("status", "disabled"), "message": result.get("message", "")})
         return self._response({"today": self._history.today_counts(), "latest": latest, "sites": sites,
                                "next_schedule": self._next_schedule(), "site_counts": site_counts, "fengchao_sync": self._get("fengchao_sync_status"),
@@ -203,6 +213,46 @@ class ForumSignin(_PluginBase):
                                "version": self.plugin_version, "schedule_error": self._schedule_error,
                                "busy_sites": [key for key, lock in self._locks.items() if lock.locked()]})
 
+    def _resolve_favicon(self, base: str) -> str:
+        """解析论坛站点图标：首页 <link rel=icon> → /favicon.ico；失败返回空串。结果缓存于 icon.cache。"""
+        import base64
+        import re
+        try:
+            from app.sdk.network import RequestUtils
+            ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36"
+            origin = base.rstrip("/")
+            fetched = {}
+
+            def get(url, referer=None):
+                try:
+                    resp = RequestUtils(timeout=10, ua=ua, referer=referer or origin).get_res(url, allow_redirects=True)
+                    if resp is not None and resp.status_code == 200 and resp.content:
+                        fetched[resp.headers.get("Content-Type", "")] = resp.content
+                        return resp
+                except Exception:
+                    pass
+                return None
+
+            home = get(origin + "/")
+            icon_url = ""
+            if home is not None:
+                match = re.search(r'<link[^>]+rel=["\'][^"\']*icon[^"\']*["\'][^>]*href=["\']([^"\']+)["\']', home.text or "", re.I)
+                if match:
+                    icon_url = match.group(1)
+                    if icon_url.startswith("//"):
+                        icon_url = "https:" + icon_url
+                    elif not icon_url.startswith("http"):
+                        icon_url = origin + "/" + icon_url.lstrip("/")
+            resp = get(icon_url or origin + "/favicon.ico", referer=origin + "/")
+            for ctype, content in fetched.items():
+                if content and len(content) > 24:
+                    mime = ctype.split(";")[0].strip() or "image/x-icon"
+                    if "text" not in mime:
+                        return f"data:{mime};base64," + base64.b64encode(content).decode()
+            return ""
+        except Exception:
+            return ""
+
     @staticmethod
     def _managed_sites():
         try:
@@ -218,6 +268,7 @@ class ForumSignin(_PluginBase):
             # 凭据链：本地 Cookie 缺失时取 CookieCloud 并回写配置；失效续期由 adapter（药丸账密）或回写承担。
             cookie = cookiecloud_cookie(site["adapter"].base)
             if cookie:
+                logger.info("%s：本地凭据缺失，已从 CookieCloud 获取并回写配置", site["id"])
                 cookie_key = next((f["key"] for f in site.get("fields", [])
                                    if f.get("key", "").endswith("_cookie")), "")
                 if cookie_key:
@@ -275,6 +326,7 @@ class ForumSignin(_PluginBase):
         except Exception:
             result = SignResult(SignStatus.UNCONFIRMED, "请求或解析异常，需只读核验")
         finally:
+            logger.info("论坛签到 %s：%s（%s）", site_id, result.status.value, result.message or "—")
             try:
                 if client and client.credential.source == "local_cookie":
                     cookie_key = next((field["key"] for field in site.get("fields", [])
@@ -303,16 +355,17 @@ class ForumSignin(_PluginBase):
 
     def _notify_result(self, result):
         try:
-            from app.sdk.notification import NotificationType
+            if not self._config.get("notify"):
+                return
             name = next((site["name"] for site in get_registry() if site["id"] == result.site_id), result.site_id)
             labels = {SignStatus.SUCCESS: "签到成功", SignStatus.ALREADY: "今日已签到",
                       SignStatus.FAILED: "签到失败", SignStatus.UNCONFIRMED: "结果未确认",
                       SignStatus.AUTH_FAILED: "认证失败", SignStatus.NETWORK_ERROR: "网络异常"}
             state = labels.get(result.status, "签到完成")
-            self.post_message(mtype=NotificationType.SiteMessage, title=f"【{name}{state}】",
-                              text=f"时间：{datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")}\n状态：{state}\n原因：{result.message or "—"}")
-        except Exception:
-            pass  # Notification delivery must not alter the sign-in result.
+            self.post_message(title=f"【论坛签到】{name}：{state}",
+                              text=f"时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}\n状态：{state}\n说明：{result.message or '—'}")
+        except Exception as exc:
+            logger.warning("通知发送失败（不影响签到结果）：%s", exc)
 
     async def api_signin_by_domain(self, domain: str):
         return await asyncio.to_thread(self._execute, domain)
@@ -377,4 +430,13 @@ class ForumSignin(_PluginBase):
     async def api_update_info(self, domain: str = "fengchao.chat"):
         if domain not in ("fengchao.chat", "pting.club"):
             return self._response(success=False, message="unknown_site")
-        return await asyncio.to_thread(self.update_info)
+        result = await asyncio.to_thread(self.update_info)
+        try:
+            if self._config.get("notify"):
+                name = "蜂巢"
+                state = "同步完成" if result and result.get("success", True) else "同步失败"
+                self.post_message(title=f"【论坛签到】{name}：{state}",
+                                  text=f"时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}\n状态：{state}\n说明：{(result or {}).get('message') or '—'}")
+        except Exception as exc:
+            logger.warning("同步通知发送失败：%s", exc)
+        return result
