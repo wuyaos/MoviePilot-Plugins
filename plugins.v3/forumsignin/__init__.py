@@ -31,7 +31,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.8"
+    plugin_version = "3.1.9"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -64,6 +64,7 @@ class ForumSignin(_PluginBase):
         self.stop_service()
         self._config = {**self.get_form()[1], **deepcopy(config or {})}
         self._migrate_legacy_invites()
+        self._migrate_legacy_data()
         self._stopped = False
         self._schedule_error = None
         if not self._get("fengchao_instance_id"):
@@ -119,6 +120,12 @@ class ForumSignin(_PluginBase):
         if moved:
             self.update_config(deepcopy(config))
             logger.info("论坛签到：已迁移旧版论坛签到配置键（InvitesSignin/SSDForumSignin）")
+
+    def _migrate_legacy_data(self):
+        info = self._get("fengchao_user_info")
+        data = info.get("data") if isinstance(info, dict) else None
+        if isinstance(data, dict) and isinstance(data.get("attributes"), dict):
+            self._save("fengchao_user_info", None)
 
     def get_state(self):
         return bool(self._config["enabled"]) and not self._stopped
@@ -266,13 +273,17 @@ class ForumSignin(_PluginBase):
             home = get(origin + "/")
             icon_url = ""
             if home is not None:
-                match = re.search(r'<link[^>]+rel=["\'][^"\']*icon[^"\']*["\'][^>]*href=["\']([^"\']+)["\']', home.text or "", re.I)
+                match = re.search(r'<link\b[^>]*>', home.text or "", re.I)
                 if match:
-                    icon_url = match.group(1)
-                    if icon_url.startswith("//"):
-                        icon_url = "https:" + icon_url
-                    elif not icon_url.startswith("http"):
-                        icon_url = origin + "/" + icon_url.lstrip("/")
+                    tag = match.group(0)
+                    rel = re.search(r'\brel=["\']([^"\']*)["\']', tag, re.I)
+                    href = re.search(r'\bhref=["\']([^"\']+)["\']', tag, re.I)
+                    if rel and href and "icon" in rel.group(1).lower():
+                        icon_url = href.group(1)
+                        if icon_url.startswith("//"):
+                            icon_url = "https:" + icon_url
+                        elif not icon_url.startswith("http"):
+                            icon_url = origin + "/" + icon_url.lstrip("/")
             resp = get(icon_url or origin + "/favicon.ico", referer=origin + "/")
             for ctype, content in fetched.items():
                 if content and len(content) > 24:
@@ -302,9 +313,10 @@ class ForumSignin(_PluginBase):
                 cookie_key = next((f["key"] for f in site.get("fields", [])
                                    if f.get("key", "").endswith("_cookie")), "")
                 if cookie_key:
-                    self._config[cookie_key] = cookie
-                    if hasattr(self, "update_config"):
-                        self.update_config(deepcopy(self._config))
+                    with self._config_lock:
+                        self._config[cookie_key] = cookie
+                        if hasattr(self, "update_config"):
+                            self.update_config(deepcopy(self._config))
                 credential = Credential("cookiecloud", cookie)
         if credential is None:
             return None
@@ -357,23 +369,53 @@ class ForumSignin(_PluginBase):
                                           bind=lambda uid: self._save("identity." + site_id, uid),
                                           sample_sink=(lambda html, status: self._save("sample." + site_id + ".html", html))
                                           if site_id in ("yaowan", "ssdforum") else None)
+                    cookie_key = next((field["key"] for field in site.get("fields", [])
+                                       if field.get("key", "").endswith("_cookie")), "")
+                    has_login_fallback = bool(self._config.get(site_id + "_username") and
+                                              self._config.get(site_id + "_password"))
+                    if (not readonly and result.status == SignStatus.AUTH_FAILED and client and
+                            client.credential.source == "local_cookie" and cookie_key and
+                            not has_login_fallback):
+                        client.close()
+                        client = None
+                        with self._config_lock:
+                            self._config[cookie_key] = ""
+                            if hasattr(self, "update_config"):
+                                self.update_config(deepcopy(self._config))
+                        retry_client = self._client(site)
+                        if retry_client is not None:
+                            client = retry_client
+                            adapter = site["adapter"](client)
+                            if site_id == "fengchao":
+                                result = adapter.run(readonly=False)
+                            else:
+                                result = run_page(adapter, bound, False,
+                                                  bind=lambda uid: self._save("identity." + site_id, uid),
+                                                  sample_sink=(lambda html, status: self._save("sample." + site_id + ".html", html))
+                                                  if site_id in ("yaowan", "ssdforum") else None)
         except PermissionError:
             result = SignResult(SignStatus.AUTH_FAILED, "凭证已失效或无权限，未提交")
         except ValueError:
             result = SignResult(SignStatus.UNCONFIRMED, "凭证绑定或协议数据未确认，未自动切换")
-        except Exception:
-            result = SignResult(SignStatus.UNCONFIRMED, "请求或解析异常，需只读核验")
+        except Exception as exc:
+            if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+                result = SignResult(SignStatus.NETWORK_ERROR, "网络连接失败，可重试")
+            else:
+                result = SignResult(SignStatus.UNCONFIRMED, "请求或解析异常，需只读核验")
         finally:
             logger.info("论坛签到 %s：%s（%s）", site_id, result.status.value, result.message or "—")
             try:
-                if client and client.credential.source == "local_cookie":
+                if client and client.credential.source in ("local_cookie", "cookiecloud"):
                     cookie_key = next((field["key"] for field in site.get("fields", [])
                                        if field.get("key", "").endswith("_cookie")), "")
                     refreshed = client.credential.value
-                    if cookie_key and refreshed and refreshed != self._config.get(cookie_key):
-                        self._config[cookie_key] = refreshed
-                        if hasattr(self, "update_config"):
-                            self.update_config(deepcopy(self._config))
+                    if cookie_key and refreshed:
+                        with self._config_lock:
+                            changed = refreshed != self._config.get(cookie_key)
+                            if changed:
+                                self._config[cookie_key] = refreshed
+                                if hasattr(self, "update_config"):
+                                    self.update_config(deepcopy(self._config))
             except Exception:
                 pass  # Cookie renewal persistence must not replace the sign-in result.
             try:
@@ -430,7 +472,8 @@ class ForumSignin(_PluginBase):
 
     def clean_cache(self):
         keys = ("identity.yaowan", "identity.ssdforum", "_fengchao_identity", "fengchao_user_info",
-                "fengchao_user_info_updated_at", "fengchao_sync_status", "yaowan_user_info", "ssdforum_user_info")
+                "fengchao_user_info_updated_at", "fengchao_sync_status")
+        keys = keys + ("icon.cache", "sample.yaowan.html", "sample.ssdforum.html")
         for key in keys:
             self._save(key, None)
             self._memory.pop(key, None)

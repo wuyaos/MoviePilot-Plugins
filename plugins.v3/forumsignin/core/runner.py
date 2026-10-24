@@ -17,7 +17,7 @@ def sanitize_sample(html: str) -> str:
     def clean_tag(match):
         tag = match.group(0)
         tag = re.sub(r"(?i)(\s+(?:value|content|data-[\w-]*(?:token|cookie|secret))\s*=\s*)([\"\'])[^\"\']*\2", r"\1\2[redacted]\2", tag)
-        tag = re.sub(r"(?i)(\s+(?:name|id)\s*=\s*[\"\'](?:formhash|csrf[^\"\']*|token|cookie|password)[\"\'])", r"\1", tag)
+        tag = re.sub(r"(?i)(\s+(?:name|id)\s*=\s*[\"\'](?:formhash|csrf[^\"\']*|token|cookie|password)[\"\'])", "", tag)
         return tag
 
     text = re.sub(r"<[^>]+>", clean_tag, text)
@@ -52,8 +52,12 @@ def run_page(adapter, bound_uid="", readonly=False, bind=None, business_date=Non
             result = SignResult(SignStatus.UNCONFIRMED, "未确认本人当日未签到，不提交", evidence=evidence)
             save_sample(page, result)
             return result
-    except Exception:
-        return SignResult(SignStatus.UNCONFIRMED, "签到前读取不可达或解析异常")
+    except PermissionError:
+        return SignResult(SignStatus.AUTH_FAILED, "凭证已失效或无权限，未提交")
+    except Exception as exc:
+        if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+            return SignResult(SignStatus.NETWORK_ERROR, "签到前网络连接失败")
+        return SignResult(SignStatus.UNCONFIRMED, "签到前解析异常")
     try:
         adapter.submit(page)
     except Exception:
@@ -66,6 +70,11 @@ def run_page(adapter, bound_uid="", readonly=False, bind=None, business_date=Non
             if result.confirmed and hasattr(adapter.verifier, "reward"):
                 result.reward = adapter.verifier.reward(after, uid, day)
             save_sample(after, result)
-        except Exception:
-            result = SignResult(SignStatus.UNCONFIRMED, "新页面不可达或解析异常，需只读复核")
+        except PermissionError:
+            result = SignResult(SignStatus.AUTH_FAILED, "凭证已失效或无权限，需只读复核")
+        except Exception as exc:
+            if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+                result = SignResult(SignStatus.NETWORK_ERROR, "新页面网络连接失败，需只读复核")
+            else:
+                result = SignResult(SignStatus.UNCONFIRMED, "新页面不可达或解析异常，需只读复核")
     return result

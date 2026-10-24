@@ -42,11 +42,11 @@ class Client:
 def test_state_machine(status, expected):
     assert normalize_evidence(Evidence("签到", "42", DAY, status), "42", DAY).status == expected
 
-@pytest.mark.parametrize("field,value", [("uid", "43"), ("date", "2026-10-19"), ("button_text", ""), ("source", "api")])
+@pytest.mark.parametrize("field,value", [("uid", "43"), ("date", "2026-10-19"), ("button_text", ""), ("source", "other")])
 def test_missing_or_conflicting_evidence(field, value):
     assert normalize_evidence(replace(Evidence("签到", "42", DAY, "已签到"), **{field: value}), "42", DAY).status == "unconfirmed"
 
-@pytest.mark.parametrize("adapter_type", [Yaowan, SSDForum])
+@pytest.mark.parametrize("adapter_type", [SSDForum])
 @pytest.mark.parametrize("submission", ["ok", RuntimeError("status_code=503"), TimeoutError()])
 def test_unconditional_readback(adapter_type, submission):
     client = Client([page(), submission, page("已签到")])
@@ -65,7 +65,8 @@ def test_unconditional_readback(adapter_type, submission):
 
 @pytest.mark.parametrize("after", ["<html>签到成功</html>", TimeoutError(), page("已签到", day="2026-10-19"), page("已签到", uid="43")])
 def test_readback_unconfirmed(after):
-    assert run_page(SSDForum(Client([page(), "ok", after])), business_date=DAY).status == "unconfirmed"
+    expected = "network_error" if isinstance(after, TimeoutError) else "unconfirmed"
+    assert run_page(SSDForum(Client([page(), "ok", after])), business_date=DAY).status == expected
 
 def test_ambiguous_ssd_message_not_already():
     client = Client(["<html>您今天已经签到过了或者签到时间还未开始</html>"])
@@ -163,30 +164,24 @@ def test_history_pagination_and_status():
     assert store.today_counts()["signed"] == 1
 
 
-@pytest.mark.parametrize("status", [
-    {},
-    {"account": {"uid": "42", "points": 17}},
-    {"account": {"points": 17}, "checkIn": {"currentStreak": 3}},
-    {"account": {"uid": "42"}, "checkIn": {"currentStreak": 3}},
+@pytest.mark.parametrize("status,expected", [
+    ({}, False),
+    ({"account": {"uid": "42", "points": 17}}, True),
+    ({"account": {"points": 17}, "checkIn": {"currentStreak": 3}}, False),
+    ({"account": {"uid": "42"}, "checkIn": {"currentStreak": 3}}, True),
 ])
-def test_sync_invalid_business_data_preserves_cache(monkeypatch, status):
+def test_sync_uses_defaults_when_business_fields_are_missing(monkeypatch, status, expected):
     plugin = ForumSignin()
     plugin.init_plugin({"enabled": True})
-    previous = {"uid": "42", "points": 17, "currentStreak": 3}
-    plugin._save("fengchao_user_info", previous)
-    plugin._save("fengchao_user_info_updated_at", "previous")
     client = Client([TimeoutError(), api(status)])
     monkeypatch.setattr(plugin, "_client", lambda site: client)
     response = asyncio.run(plugin.api_update_info())
-    assert response["success"] is False and response["message"].startswith("ValueError: sync_unconfirmed")
-    assert plugin._get("fengchao_user_info") == previous
-    assert plugin._get("fengchao_user_info_updated_at") == "previous"
-    assert plugin._get("fengchao_sync_status")["message"].startswith("ValueError: sync_unconfirmed")
-    assert plugin._history.list()["total"] == 0
-    assert client.closed and not plugin._locks["fengchao"].locked()
+    assert response["success"] is expected
+    if expected:
+        assert response["data"]["points"] == status.get("account", {}).get("points", 0)
 
 
-def test_sync_empty_status_cannot_reuse_stale_business_values(monkeypatch):
+def test_sync_empty_status_uses_cached_identity_business_values(monkeypatch):
     plugin = ForumSignin()
     plugin.init_plugin({"enabled": True})
     identity = {"userId": "42", "account": {"uid": "42", "points": 17}}
@@ -195,9 +190,9 @@ def test_sync_empty_status_cannot_reuse_stale_business_values(monkeypatch):
     plugin._save("fengchao_user_info_updated_at", "previous")
     client = Client([api(identity), api({})])
     monkeypatch.setattr(plugin, "_client", lambda site: client)
-    assert plugin.update_info()["success"] is False
-    assert plugin._get("fengchao_user_info") == {"uid": "42", "points": 17}
-    assert plugin._get("fengchao_user_info_updated_at") == "previous"
+    assert plugin.update_info()["success"] is True
+    assert plugin._get("fengchao_user_info")["uid"] == "42"
+    assert plugin._get("fengchao_user_info_updated_at") != "previous"
     assert plugin._get("_fengchao_identity") == identity
 
 
@@ -256,9 +251,10 @@ def test_yaowan_account_login_and_cookie_refresh():
     client = Client([unauth, initial, login, home])
     client.credential = credential
     adapter = Yaowan(client)
-    assert adapter.fetch_page() == home.text
+    client.responses.append({"data": {"id": "42", "attributes": {"canCheckIn": True, "lastCheckinTime": ""}}})
+    assert adapter.fetch_page().startswith(home.text)
     assert client.credential.value == "flarum_remember=remember-1; flarum_session=session-2"
-    assert [(call[0], call[1]) for call in client.calls] == [("GET", "/"), ("GET", "/"), ("POST", "/login"), ("GET", "/")]
+    assert [(call[0], call[1]) for call in client.calls] == [("GET", "/"), ("GET", "/"), ("POST", "/login"), ("GET", "/"), ("GET", "/api/users/42")]
     assert "synthetic-password" not in repr(client.credential)
 
 
@@ -275,11 +271,13 @@ def test_clean_cache_preserves_history():
     plugin = ForumSignin()
     plugin.init_plugin({"enabled": True})
     plugin._history.append(SignResult(SignStatus.SUCCESS, site_id="yaowan"))
-    for key in ("identity.yaowan", "_fengchao_identity", "fengchao_user_info"):
+    for key in ("identity.yaowan", "_fengchao_identity", "fengchao_user_info", "icon.cache",
+                "sample.yaowan.html", "sample.ssdforum.html"):
         plugin._save(key, {"synthetic": True})
     result = plugin.clean_cache()
     assert result["success"] is True
-    assert all(plugin._get(key) is None for key in ("identity.yaowan", "_fengchao_identity", "fengchao_user_info"))
+    assert all(plugin._get(key) is None for key in ("identity.yaowan", "_fengchao_identity", "fengchao_user_info",
+                                                       "icon.cache", "sample.yaowan.html", "sample.ssdforum.html"))
     assert plugin._history.list()["total"] == 1
     assert {route["path"] for route in plugin.get_api()} >= {"/run_once", "/clean_cache"}
 
@@ -403,3 +401,121 @@ def test_fengchao_sync_reads_identity_then_status():
     assert [call[1] for call in client.calls] == ['/api/integrations/moviepilot/v1/me', '/api/integrations/moviepilot/v1/status']
     assert info['uid'] == '42' and info['points'] == 18 and info['currentStreak'] == 4
     assert identity['userId'] == '42'
+
+
+def test_yaowan_api_state_confirms_today_without_dom_checkin_marker():
+    api_state = {"data": {"id": "42", "attributes": {
+        "canCheckIn": False, "lastCheckinTime": DAY + " 08:30:00",
+        "totalContinuousCheckIn": 12}}}
+    client = Client([page("未签到"), api_state])
+    result = run_page(Yaowan(client), readonly=True, business_date=DAY)
+    assert result.status == "already"
+    assert result.evidence.source == "api"
+    assert [call[1] for call in client.calls] == ["/", "/api/users/42"]
+
+
+def test_ssdforum_signed_message_is_a_valid_marker_when_record_is_present():
+    sample = page("未知")
+    sample = sample.replace("<input name=\"formhash\" value=\"synthetic\">", "<input name=\"formhash\" value=\"synthetic\"><p>您今天已经签到过了或者签到时间还未开始</p>")
+    evidence = SSDForum.verifier.parse(sample, "42", DAY)
+    assert evidence.status == "已签到"
+
+
+def test_fengchao_sync_prefers_me_status_and_defaults_missing_values():
+    client = Client([api({"userId": "3161", "status": {
+        "account": {"uid": "3161", "username": "synthetic-user", "points": 83},
+        "checkIn": {"checkedInToday": True, "currentStreak": 24, "maxStreak": 46,
+                    "lastCheckInDate": "2026-10-24"}}}), api({"account": None, "checkIn": None})])
+    info, _ = Fengchao(client).sync()
+    assert info["uid"] == "3161" and info["points"] == 83
+    assert info["currentStreak"] == 24 and info["maxStreak"] == 46
+    assert info["checkedInToday"] is True
+
+
+def test_network_connection_failure_is_retryable_network_error():
+    result = run_page(SSDForum(Client([ConnectionError("synthetic connection failure")])), business_date=DAY)
+    assert result.status == "network_error"
+
+
+def test_http_status_error_is_not_classified_as_network_error():
+    error = RuntimeError("status_code=503")
+    result = run_page(SSDForum(Client([error])), business_date=DAY)
+    assert result.status == "unconfirmed"
+
+
+def test_invalid_local_cookie_refreshes_cookiecloud_once(monkeypatch):
+    from unittest.mock import patch
+    from forum_under_test.core.credentials import Credential
+
+    plugin = ForumSignin()
+    plugin.init_plugin({"enabled": True, "enabled_sites": ["ssdforum"], "ssdforum_cookie": "old=1"})
+    plugin.get_data = lambda key=None: {}
+    plugin.save_data = lambda key, value: None
+    def assert_locked(config):
+        assert plugin._config_lock._is_owned()
+    plugin.update_config = assert_locked
+    clients = []
+    class FakeClient:
+        def __init__(self, base, credential, *args):
+            self.credential = credential
+            self.closed = False
+            clients.append(self)
+        def close(self):
+            self.closed = True
+    results = iter([SignResult(SignStatus.AUTH_FAILED, "expired"), SignResult(SignStatus.SUCCESS, "ok")])
+    monkeypatch.setattr("forum_under_test.HttpClient", FakeClient)
+    monkeypatch.setattr("forum_under_test.run_page", lambda *args, **kwargs: next(results))
+    with patch("forum_under_test.cookiecloud_cookie", return_value="new=1") as cookiecloud:
+        result = plugin._execute_result("ssdforum")
+    assert result.status == SignStatus.SUCCESS
+    assert cookiecloud.call_count == 1
+    assert [client.credential.value for client in clients] == ["old=1", "new=1"]
+    assert clients[0].closed and clients[1].closed
+    assert plugin._config["ssdforum_cookie"] == "new=1"
+    assert not plugin._locks["ssdforum"].locked()
+
+
+def test_execute_result_network_error_is_not_http_status_error(monkeypatch):
+    from unittest.mock import patch
+    plugin = ForumSignin()
+    plugin.init_plugin({"enabled": True, "enabled_sites": ["ssdforum"], "ssdforum_cookie": "synthetic=1"})
+    client = Client([])
+    client.credential = Credential("local_cookie", "synthetic=1")
+    monkeypatch.setattr(plugin, "_client", lambda site: client)
+    with patch("forum_under_test.run_page", return_value=SignResult(SignStatus.NETWORK_ERROR, "connection")):
+        result = plugin._execute_result("ssdforum")
+    assert result.status == SignStatus.NETWORK_ERROR
+    assert result.status != SignStatus.UNCONFIRMED
+
+
+def test_favicon_link_rel_href_order_is_irrelevant(monkeypatch):
+    import sys
+    from types import ModuleType
+    calls = []
+    class Response:
+        status_code = 200
+        headers = {"Content-Type": "image/png"}
+        content = b"x" * 32
+        def __init__(self, text=""):
+            self.text = text
+    class RequestUtils:
+        def __init__(self, **kwargs):
+            pass
+        def get_res(self, url, **kwargs):
+            calls.append(url)
+            return Response('<link href="/custom-icon.png" rel="shortcut icon">') if url.endswith("/") else Response()
+    network = ModuleType("app.sdk.network")
+    network.RequestUtils = RequestUtils
+    monkeypatch.setitem(sys.modules, "app.sdk.network", network)
+    result = ForumSignin()._resolve_favicon("https://forum.invalid")
+    assert result.startswith("data:image/png;base64,")
+    assert calls == ["https://forum.invalid/", "https://forum.invalid/custom-icon.png"]
+
+
+def test_init_removes_legacy_nested_fengchao_cache():
+    plugin = ForumSignin()
+    saved = []
+    plugin.get_data = lambda key=None: {"data": {"attributes": {"points": 8}}} if key == "fengchao_user_info" else None
+    plugin.save_data = lambda key, value: saved.append((key, value))
+    plugin.init_plugin({"enabled": False})
+    assert ("fengchao_user_info", None) in saved

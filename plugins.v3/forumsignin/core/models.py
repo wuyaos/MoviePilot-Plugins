@@ -45,15 +45,3 @@ class SignResult:
     def confirmed(self) -> bool: return self.status in (SignStatus.SUCCESS, SignStatus.ALREADY)
     @classmethod
     def skipped(cls, message: str = "任务忙，未排队") -> "SignResult": return cls(SignStatus.SKIPPED, message)
-
-def extract_reward_sentence(text: str) -> str | None:
-    import re
-    for pattern in (r"(?:奖励|获得|签到奖励)[：:\s]*([^。\n]{1,80})", r"(?:bonus|reward)[：:\s]*([^\.\n]{1,80})"):
-        match = re.search(pattern, text or "", re.I)
-        if match: return match.group(1).strip()
-    return None
-
-def extract_bonus(text: str) -> RewardSummary:
-    import re
-    values = re.findall(r"(?:余额|balance)[^\d-]*([\d.]+)", text or "", re.I)
-    return RewardSummary(reported=extract_reward_sentence(text), current_balance=values[-1] if values else None)
