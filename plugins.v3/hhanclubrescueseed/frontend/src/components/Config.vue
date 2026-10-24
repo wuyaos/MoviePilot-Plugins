@@ -20,6 +20,7 @@ const defaults = {
   downloader: '',
   save_path: '',
   custom_tag: '',
+  user_id: '',
   reward_tag: '',
   reward_hours: 18,
   enable_notification: false,
@@ -143,6 +144,7 @@ onMounted(loadConfig)
             <v-col cols="12" md="4"><v-select v-model="form.downloader" :items="downloaders" item-title="title" item-value="value" label="全局下载器" placeholder="请选择下载器" :rules="[value => !!value || '请选择下载器']" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" md="4"><v-text-field v-model="form.save_path" label="保存路径" placeholder="留空使用下载器默认" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" md="4"><v-text-field v-model="form.custom_tag" label="下载标签" hint="本插件管理池标记" persistent-hint variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" md="4"><v-text-field v-model="form.user_id" label="憨憨站用户 ID" hint="数字 ID，历史保种任务必需" persistent-hint variant="outlined" density="comfortable" /></v-col>
           </v-row>
         </section>
 
