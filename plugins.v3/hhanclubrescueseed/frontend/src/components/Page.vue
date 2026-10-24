@@ -148,7 +148,13 @@ onMounted(refreshData)
       <template #prepend><v-icon color="teal-darken-1">mdi-chart-box-outline</v-icon></template>
       <v-card-title>憨憨保种区</v-card-title>
       <v-card-subtitle>本地下载记录与下载器实时状态</v-card-subtitle>
-      <template #append><v-btn icon="mdi-close" variant="text" aria-label="关闭" @click="close" /></template>
+      <template #append>
+        <div class="d-flex align-center ga-1">
+          <v-btn icon="mdi-cog-outline" variant="text" aria-label="配置插件" title="配置插件" @click="emit('switch')" />
+          <v-btn icon="mdi-refresh" variant="text" aria-label="刷新" title="刷新" @click="refreshData" />
+          <v-btn icon="mdi-close" variant="text" aria-label="关闭" @click="close" />
+        </div>
+      </template>
     </v-card-item>
 
     <v-card-text>

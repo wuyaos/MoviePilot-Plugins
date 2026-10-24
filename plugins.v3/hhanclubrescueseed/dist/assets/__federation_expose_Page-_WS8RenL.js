@@ -1,17 +1,18 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
 import { _ as _export_sfc } from './_plugin-vue_export-helper-pcqpp-6-.js';
 
-const {createTextVNode:_createTextVNode,resolveComponent:_resolveComponent,withCtx:_withCtx,createVNode:_createVNode,toDisplayString:_toDisplayString,openBlock:_openBlock,createBlock:_createBlock,createCommentVNode:_createCommentVNode,createElementVNode:_createElementVNode,createElementBlock:_createElementBlock} = await importShared('vue');
+const {createTextVNode:_createTextVNode,resolveComponent:_resolveComponent,withCtx:_withCtx,createVNode:_createVNode,createElementVNode:_createElementVNode,toDisplayString:_toDisplayString,openBlock:_openBlock,createBlock:_createBlock,createCommentVNode:_createCommentVNode,createElementBlock:_createElementBlock} = await importShared('vue');
 
 
-const _hoisted_1 = { class: "stat-value" };
+const _hoisted_1 = { class: "d-flex align-center ga-1" };
 const _hoisted_2 = { class: "stat-value" };
 const _hoisted_3 = { class: "stat-value" };
 const _hoisted_4 = { class: "stat-value" };
-const _hoisted_5 = { class: "table-heading" };
-const _hoisted_6 = { class: "title-cell" };
-const _hoisted_7 = { key: 0 };
-const _hoisted_8 = { key: 1 };
+const _hoisted_5 = { class: "stat-value" };
+const _hoisted_6 = { class: "table-heading" };
+const _hoisted_7 = { class: "title-cell" };
+const _hoisted_8 = { key: 0 };
+const _hoisted_9 = { key: 1 };
 
 const {computed,getCurrentInstance,inject,onMounted,ref} = await importShared('vue');
 
@@ -182,29 +183,45 @@ return (_ctx, _cache) => {
       _createVNode(_component_v_card_item, null, {
         prepend: _withCtx(() => [
           _createVNode(_component_v_icon, { color: "teal-darken-1" }, {
-            default: _withCtx(() => [...(_cache[0] || (_cache[0] = [
+            default: _withCtx(() => [...(_cache[1] || (_cache[1] = [
               _createTextVNode("mdi-chart-box-outline", -1)
             ]))]),
             _: 1
           })
         ]),
         append: _withCtx(() => [
-          _createVNode(_component_v_btn, {
-            icon: "mdi-close",
-            variant: "text",
-            "aria-label": "关闭",
-            onClick: close
-          })
+          _createElementVNode("div", _hoisted_1, [
+            _createVNode(_component_v_btn, {
+              icon: "mdi-cog-outline",
+              variant: "text",
+              "aria-label": "配置插件",
+              title: "配置插件",
+              onClick: _cache[0] || (_cache[0] = $event => (emit('switch')))
+            }),
+            _createVNode(_component_v_btn, {
+              icon: "mdi-refresh",
+              variant: "text",
+              "aria-label": "刷新",
+              title: "刷新",
+              onClick: refreshData
+            }),
+            _createVNode(_component_v_btn, {
+              icon: "mdi-close",
+              variant: "text",
+              "aria-label": "关闭",
+              onClick: close
+            })
+          ])
         ]),
         default: _withCtx(() => [
           _createVNode(_component_v_card_title, null, {
-            default: _withCtx(() => [...(_cache[1] || (_cache[1] = [
+            default: _withCtx(() => [...(_cache[2] || (_cache[2] = [
               _createTextVNode("憨憨保种区", -1)
             ]))]),
             _: 1
           }),
           _createVNode(_component_v_card_subtitle, null, {
-            default: _withCtx(() => [...(_cache[2] || (_cache[2] = [
+            default: _withCtx(() => [...(_cache[3] || (_cache[3] = [
               _createTextVNode("本地下载记录与下载器实时状态", -1)
             ]))]),
             _: 1
@@ -234,7 +251,7 @@ return (_ctx, _cache) => {
                 variant: "tonal",
                 class: "mb-4"
               }, {
-                default: _withCtx(() => [...(_cache[3] || (_cache[3] = [
+                default: _withCtx(() => [...(_cache[4] || (_cache[4] = [
                   _createTextVNode("自动清理未启用", -1)
                 ]))]),
                 _: 1
@@ -253,9 +270,9 @@ return (_ctx, _cache) => {
                     variant: "tonal"
                   }, {
                     default: _withCtx(() => [
-                      _cache[4] || (_cache[4] = _createElementVNode("div", { class: "stat-label" }, "保种总体积", -1)),
-                      _createElementVNode("div", _hoisted_1, _toDisplayString(totalSize.value), 1),
-                      _cache[5] || (_cache[5] = _createElementVNode("div", { class: "stat-meta" }, "当前记录汇总", -1))
+                      _cache[5] || (_cache[5] = _createElementVNode("div", { class: "stat-label" }, "保种总体积", -1)),
+                      _createElementVNode("div", _hoisted_2, _toDisplayString(totalSize.value), 1),
+                      _cache[6] || (_cache[6] = _createElementVNode("div", { class: "stat-meta" }, "当前记录汇总", -1))
                     ]),
                     _: 1
                   })
@@ -273,9 +290,9 @@ return (_ctx, _cache) => {
                     variant: "tonal"
                   }, {
                     default: _withCtx(() => [
-                      _cache[6] || (_cache[6] = _createElementVNode("div", { class: "stat-label" }, "累计上传量", -1)),
-                      _createElementVNode("div", _hoisted_2, _toDisplayString(totalUploaded.value), 1),
-                      _cache[7] || (_cache[7] = _createElementVNode("div", { class: "stat-meta" }, "按下载记录汇总", -1))
+                      _cache[7] || (_cache[7] = _createElementVNode("div", { class: "stat-label" }, "累计上传量", -1)),
+                      _createElementVNode("div", _hoisted_3, _toDisplayString(totalUploaded.value), 1),
+                      _cache[8] || (_cache[8] = _createElementVNode("div", { class: "stat-meta" }, "按下载记录汇总", -1))
                     ]),
                     _: 1
                   })
@@ -293,35 +310,35 @@ return (_ctx, _cache) => {
                     variant: "tonal"
                   }, {
                     default: _withCtx(() => [
-                      _cache[9] || (_cache[9] = _createElementVNode("div", { class: "stat-label" }, "已达标数", -1)),
-                      _createElementVNode("div", _hoisted_3, [
-                        _createTextVNode(_toDisplayString(qualifiedCount.value), 1),
-                        _cache[8] || (_cache[8] = _createElementVNode("small", null, " 条", -1))
-                      ]),
-                      _cache[10] || (_cache[10] = _createElementVNode("div", { class: "stat-meta" }, "达标标签已写入下载器", -1))
-                    ]),
-                    _: 1
-                  })
-                ]),
-                _: 1
-              }),
-              _createVNode(_component_v_col, {
-                cols: "12",
-                sm: "6",
-                md: "3"
-              }, {
-                default: _withCtx(() => [
-                  _createVNode(_component_v_card, {
-                    class: "stat-card",
-                    variant: "tonal"
-                  }, {
-                    default: _withCtx(() => [
-                      _cache[12] || (_cache[12] = _createElementVNode("div", { class: "stat-label" }, "下载记录数", -1)),
+                      _cache[10] || (_cache[10] = _createElementVNode("div", { class: "stat-label" }, "已达标数", -1)),
                       _createElementVNode("div", _hoisted_4, [
-                        _createTextVNode(_toDisplayString(records.value.length), 1),
-                        _cache[11] || (_cache[11] = _createElementVNode("small", null, " 条", -1))
+                        _createTextVNode(_toDisplayString(qualifiedCount.value), 1),
+                        _cache[9] || (_cache[9] = _createElementVNode("small", null, " 条", -1))
                       ]),
-                      _cache[13] || (_cache[13] = _createElementVNode("div", { class: "stat-meta" }, "本地保存的记录", -1))
+                      _cache[11] || (_cache[11] = _createElementVNode("div", { class: "stat-meta" }, "达标标签已写入下载器", -1))
+                    ]),
+                    _: 1
+                  })
+                ]),
+                _: 1
+              }),
+              _createVNode(_component_v_col, {
+                cols: "12",
+                sm: "6",
+                md: "3"
+              }, {
+                default: _withCtx(() => [
+                  _createVNode(_component_v_card, {
+                    class: "stat-card",
+                    variant: "tonal"
+                  }, {
+                    default: _withCtx(() => [
+                      _cache[13] || (_cache[13] = _createElementVNode("div", { class: "stat-label" }, "下载记录数", -1)),
+                      _createElementVNode("div", _hoisted_5, [
+                        _createTextVNode(_toDisplayString(records.value.length), 1),
+                        _cache[12] || (_cache[12] = _createElementVNode("small", null, " 条", -1))
+                      ]),
+                      _cache[14] || (_cache[14] = _createElementVNode("div", { class: "stat-meta" }, "本地保存的记录", -1))
                     ]),
                     _: 1
                   })
@@ -331,8 +348,8 @@ return (_ctx, _cache) => {
             ]),
             _: 1
           }),
-          _createElementVNode("div", _hoisted_5, [
-            _cache[15] || (_cache[15] = _createElementVNode("div", null, [
+          _createElementVNode("div", _hoisted_6, [
+            _cache[16] || (_cache[16] = _createElementVNode("div", null, [
               _createElementVNode("h2", null, "下载记录"),
               _createElementVNode("p", null, "名称、体积和下载时间来自本地记录，状态数据按记录字段展示。")
             ], -1)),
@@ -343,7 +360,7 @@ return (_ctx, _cache) => {
               "prepend-icon": "mdi-refresh",
               onClick: refreshData
             }, {
-              default: _withCtx(() => [...(_cache[14] || (_cache[14] = [
+              default: _withCtx(() => [...(_cache[15] || (_cache[15] = [
                 _createTextVNode("刷新", -1)
               ]))]),
               _: 1
@@ -359,12 +376,12 @@ return (_ctx, _cache) => {
                 "items-per-page": 10
               }, {
                 "item.title": _withCtx(({ item }) => [
-                  _createElementVNode("div", _hoisted_6, [
+                  _createElementVNode("div", _hoisted_7, [
                     _createElementVNode("strong", null, _toDisplayString(item.title || '-'), 1),
                     (item.site)
-                      ? (_openBlock(), _createElementBlock("span", _hoisted_7, _toDisplayString(item.site), 1))
+                      ? (_openBlock(), _createElementBlock("span", _hoisted_8, _toDisplayString(item.site), 1))
                       : (item.zh_title)
-                        ? (_openBlock(), _createElementBlock("span", _hoisted_8, _toDisplayString(item.zh_title), 1))
+                        ? (_openBlock(), _createElementBlock("span", _hoisted_9, _toDisplayString(item.zh_title), 1))
                         : _createCommentVNode("", true)
                   ])
                 ]),
@@ -410,7 +427,7 @@ return (_ctx, _cache) => {
                 type: "info",
                 variant: "tonal"
               }, {
-                default: _withCtx(() => [...(_cache[16] || (_cache[16] = [
+                default: _withCtx(() => [...(_cache[17] || (_cache[17] = [
                   _createTextVNode("暂无下载记录", -1)
                 ]))]),
                 _: 1
@@ -425,6 +442,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-7a8177a6"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-4854910a"]]);
 
 export { PageComponent as default };
