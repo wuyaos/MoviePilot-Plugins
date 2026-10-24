@@ -361,14 +361,15 @@ class ForumSignin(_PluginBase):
         results, self._notify_buffer = self._notify_buffer, []
         try:
             registry = get_registry()
-            labels = {SignStatus.SUCCESS: "签到成功", SignStatus.ALREADY: "今日已签到",
-                      SignStatus.FAILED: "签到失败", SignStatus.UNCONFIRMED: "结果未确认",
-                      SignStatus.AUTH_FAILED: "认证失败", SignStatus.NETWORK_ERROR: "网络异常"}
+            labels = {SignStatus.SUCCESS: "✅ 签到成功", SignStatus.ALREADY: "📅 今日已签到",
+                      SignStatus.FAILED: "❌ 签到失败", SignStatus.UNCONFIRMED: "⚠️ 结果未确认",
+                      SignStatus.AUTH_FAILED: "🔒 认证失败", SignStatus.NETWORK_ERROR: "🌐 网络异常"}
             blocks = []
             for site_id, result in results:
                 name = next((site["name"] for site in registry if site["id"] == site_id), site_id)
                 state = labels.get(result.status, "签到完成")
-                blocks.append(f"论坛：{name}\n状态：{state}\n说明：{result.message or '—'}")
+                note = (result.message or "—").replace("签到成功，", "")
+                blocks.append(f"论坛：{name}\n状态：{state}\n说明：{note}")
             blocks.append(f"时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}")
             self.post_message(title="【论坛签到】", text="\n\n".join(blocks))
         except Exception as exc:
@@ -443,7 +444,7 @@ class ForumSignin(_PluginBase):
         result = await asyncio.to_thread(self.update_info)
         try:
             if self._config.get("notify"):
-                state = "同步完成" if result and result.get("success", True) else "同步失败"
+                state = ("🔄 同步完成" if result and result.get("success", True) else "❌ 同步失败")
                 self.post_message(title="【论坛签到】",
                                   text=f"论坛：蜂巢\n状态：{state}\n说明：{(result or {}).get('message') or '—'}\n时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}")
         except Exception as exc:
