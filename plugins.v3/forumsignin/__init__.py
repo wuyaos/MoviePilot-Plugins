@@ -38,7 +38,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.21"
+    plugin_version = "3.1.22"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
