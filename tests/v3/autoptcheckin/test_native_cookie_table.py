@@ -193,3 +193,44 @@ def test_yzyy_login_uses_stored_then_managed_without_password(storage, monkeypat
     result = native.run_native_login(runner, login_site('yzyy'), {'cookie': 'session=managed'})
     assert result.metadata['cookie_sources'] == ['stored_cookie', 'managed_site']
     assert data['cookies.table']['yzyy']['source'] == 'managed_site'
+
+
+def test_record_cookie_identical_session_preserves_updated():
+    row = {'cookie': 'session=synthetic', 'source': 'managed_site', 'updated': 'original'}
+    table = {'fixture': row}
+    assert native.record_cookie(table, 'fixture', 'session=synthetic', 'managed_site') is table
+    assert table['fixture'] is row
+    assert row['updated'] == 'original'
+    native.record_cookie(table, 'fixture', 'session=synthetic', 'local_cookie')
+    assert table['fixture']['updated'] != 'original'
+
+
+@pytest.mark.parametrize('table', ['broken', [], {'fixture': 'broken'}, {'fixture': ['broken']}])
+def test_corrupt_cookie_table_falls_back_to_managed(storage, monkeypatch, table):
+    runner, data = storage
+    data['cookies.table'] = table
+    monkeypatch.setattr(native.NativeHttpClient, 'get', lambda self, url: LoginPage('login_ok', url))
+    result = native.run_native_login(runner, login_site(), {'cookie': 'session=managed'})
+    assert result.status == 'login_ok'
+    assert result.metadata['cookie_sources'] == ['managed_site']
+    assert data['cookies.table']['fixture']['source'] == 'managed_site'
+
+
+@pytest.mark.parametrize('legacy', [{}, 'broken', ['broken'], {'rousi': ['broken']}])
+@pytest.mark.parametrize('delete_available', [True, False])
+def test_empty_or_corrupt_legacy_is_migrated_once(storage, monkeypatch, legacy, delete_available):
+    runner, data = storage
+    data['cookies.refreshed'] = legacy
+    if not delete_available:
+        runner.del_data = None
+    monkeypatch.setattr(rousi, 'login', lambda *args: LoginResult('unconfirmed'))
+    assert native.run_integration(runner, 'rousi', 'rousi', {}, {}, action='login').status == 'unconfirmed'
+    assert data['cookies.refreshed.migrated'] is True
+    if delete_available:
+        assert 'cookies.refreshed' not in data
+    original_get = runner.get_data
+    def get(key):
+        assert key != 'cookies.refreshed'
+        return original_get(key)
+    runner.get_data = get
+    assert native.run_integration(runner, 'rousi', 'rousi', {}, {}, action='login').status == 'unconfirmed'

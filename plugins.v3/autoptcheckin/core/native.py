@@ -242,9 +242,12 @@ def save_cookie_table(save_data, cookie_table):
 
 
 def record_cookie(cookie_table, site_id, cookie, cookie_source):
-    """Record only a proven session; updated is the latest confirmation time."""
+    """Record a changed proven session without refreshing identical entries."""
     cookie = (cookie or "").strip()
     if not cookie:
+        return cookie_table
+    previous = cookie_table.get(str(site_id))
+    if isinstance(previous, dict) and previous.get("cookie") == cookie and previous.get("source") == cookie_source:
         return cookie_table
     from datetime import datetime
     cookie_table[str(site_id)] = {"cookie": cookie, "source": cookie_source,
@@ -255,7 +258,9 @@ def record_cookie(cookie_table, site_id, cookie, cookie_source):
 def cookie_candidates(site_id, info, custom_cookie, get_data, url=''):
     """Fetch CookieCloud only after all local candidates were rejected."""
     cookie_table = load_cookie_table(get_data)
-    stored_cookie_entry = cookie_table.get(str(site_id)) or {}
+    stored_cookie_entry = cookie_table.get(str(site_id))
+    if not isinstance(stored_cookie_entry, dict):
+        stored_cookie_entry = {}
     candidates = {
         'stored_cookie': stored_cookie_entry.get('cookie', ''),
         'managed_site': info.get('cookie') or '',
@@ -432,17 +437,18 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
         del_data = getattr(runner, 'del_data', None)
         with _COOKIE_TABLE_LOCK:
             if callable(get_data) and callable(save_data) and not get_data('cookies.refreshed.migrated'):
-                legacy_cookies = get_data('cookies.refreshed') or {}
+                legacy_cookies = get_data('cookies.refreshed')
                 cookie_table = load_cookie_table(get_data)
-                for legacy_site_id, refreshed_cookie in legacy_cookies.items():
+                for legacy_site_id, refreshed_cookie in (legacy_cookies.items() if isinstance(legacy_cookies, dict) else ()):
+                    if not isinstance(refreshed_cookie, str):
+                        continue
                     if legacy_site_id not in cookie_table:
                         record_cookie(cookie_table, legacy_site_id, refreshed_cookie, 'refreshed')
-                if legacy_cookies:
+                if legacy_cookies is not None:
                     save_cookie_table(save_data, cookie_table)
                     if callable(del_data):
                         del_data('cookies.refreshed')
-                    else:
-                        save_data('cookies.refreshed.migrated', True)
+                    save_data('cookies.refreshed.migrated', True)
         attempted_cookie_sources = []
         credentials = {**info, **config}
         result = LoginResult(LoginStatus.AUTH_FAILED, '缺少可用 Cookie')
