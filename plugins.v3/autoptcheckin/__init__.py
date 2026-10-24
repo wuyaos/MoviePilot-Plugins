@@ -254,23 +254,19 @@ class AutoPtCheckin(_PluginBase):
             if (not site.get('icon') and icon_cache.get(sid) is None and site.get('url')):
                 pending_icons.append((sid, site['url']))
         if pending_icons:
-            import asyncio
-            changed = False
-            # 并发解析（16 路）：MP 重启后缓存全空时串行会累计到分钟级，并发后首轮≈最慢单站。
-            import asyncio
-            changed = False
+            # 后台异步解析：/sites 立即返回（icon 空），解析完写缓存，下次打开命中。
+            # 不在请求内等待——MP 重启后缓存全空时即使并发也要等最慢单站（8s 超时）。
+            import threading
 
-            async def _resolve_one(sid: str, url: str):
-                return sid, (await asyncio.to_thread(self._resolve_favicon, url)) or ''
+            def _resolve_batch(cache: dict, pairs: list, plugin):
+                for sid, url in pairs:
+                    cache[sid] = plugin._resolve_favicon(url) or ''
+                if hasattr(plugin, "save_data"):
+                    plugin.save_data("icon.cache", cache)
 
-            for sid, icon in await asyncio.gather(*(_resolve_one(sid, url) for sid, url in pending_icons)):
-                icon_cache[sid] = icon
-                changed = True
-            if changed and hasattr(self, "save_data"):
-                self.save_data("icon.cache", icon_cache)
-                for site in sites:
-                    if not site.get('icon') and icon_cache.get(str(site.get('id', ''))):
-                        site['icon'] = icon_cache[str(site.get('id', ''))]
+            threading.Thread(target=_resolve_batch, args=(icon_cache, pending_icons, self), daemon=True).start()
+            for sid, _ in pending_icons:
+                icon_cache[sid] = ''
         return {"success": True, "data": {"sites": sites, "sources": deepcopy(registry["sources"])}}
 
     async def api_stats(self) -> dict:
