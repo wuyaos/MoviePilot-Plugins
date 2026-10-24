@@ -1,15 +1,4 @@
-"""V2 风格的逐站签到与登录轮次通知。"""
-
-FORMATS = ("plain", "markdown", "html")
-PARSE_MODES = {"plain": "plain", "markdown": "MarkdownV2", "html": "HTML"}
-
-
-def _bold(text: str, fmt: str) -> str:
-    if fmt == "markdown":
-        return f"**{text}**"
-    if fmt == "html":
-        return f"<b>{text}</b>"
-    return text
+"""V2 风格的逐站签到与登录轮次通知（纯文本）。"""
 
 
 def _sign_text(entry: dict) -> tuple[int, str]:
@@ -68,30 +57,12 @@ def _counts(data: dict, entries: list, verb: str) -> tuple[int, int, int, int]:
     return data.get("total", 0), data.get("executed", 0), success, max(data.get("next", 0), failed_next)
 
 
-def build_rich_blocks(summary: dict) -> dict[str, list]:
-    """构造宿主 rich_content 结构化块（NotificationBlock 字典），按渠道能力渲染，
-    替代 text 直发（Telegram 对 HTML div 标签返回 400）。"""
-    icons = {0: "✅", 1: "✔️", 3: "⏳", 2: "❌"}
-    result = {}
-    for track, verb, section in (("sign", "签到", "签到明细"), ("login", "模拟登录", "登录明细")):
-        data = summary.get(track) or {}
-        entries = list(data.get("entries", []))
-        if not data.get("total") and not entries:
-            continue
-        total, executed, success, failed_next = _counts(data, entries, verb)
-        blocks = [
-            {"title": None, "text": f"全部{verb}: {total} · 本次{verb}: {executed} · 成功: {success} · 失败（下次{verb}）: {failed_next}"},
-            {"title": section, "text": None},
-        ]
-        for bucket, site, text in _track_rows(track, entries):
-            blocks.append({"title": f"{icons.get(bucket, '')} {site}".strip(), "text": text})
-        result[track] = blocks
-    return result
+def format_round_notifications(summary: dict) -> list[tuple[str, str, str]]:
+    """返回分轨纯文本消息（track, 标题, 文本）；summary 按 action 提供计数与逐站 entries。
 
-
-def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[str, str]]:
-    """返回分轨消息（标题、文本）；summary 按 action 提供计数与逐站 entries。"""
-    fmt = fmt if fmt in FORMATS else "plain"
+    纯文本是唯一格式：Telegram 等渠道按 HTML 解析富文本会对 <div> 等标签返回
+    400（can't parse entities），且宿主渠道能力差异大，统一降级为无标签文本。
+    """
     result = []
     for track, title, verb in (("sign", "【PT 签到中心】", "签到"),
                                ("login", "【PT 签到中心】", "模拟登录")):
@@ -106,20 +77,14 @@ def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[
             f"成功: {success}",
             f"失败（下次{verb}）: {failed_next}",
         ]
+        ok_rows, bad_rows = [], []
         for bucket, site, text in _track_rows(track, entries):
-            if fmt == "html":
-                color = {0: "#28a745", 1: "#6c757d", 2: "#dc3545", 3: "#fd7e14"}.get(bucket, "#6c757d")
-                lines.append(f'<div style="color:{color}">【{site}】{text}</div>')
-            else:
-                lines.append(f"【{site}】{text}")
-        if fmt == "html":
-            lines = [_bold_html(lines[i]) if i < 3 else lines[i] for i in range(len(lines))]
-        elif fmt == "markdown":
-            lines = [_bold(lines[i], fmt) if i < 3 else lines[i] for i in range(len(lines))]
+            (ok_rows if bucket in (0, 1) else bad_rows).append(f"【{site}】{text}")
+        if ok_rows:
+            lines.append("—— ✅ 成功 ——")
+            lines.extend(ok_rows)
+        if bad_rows:
+            lines.append("—— ❌ 失败（未确认）——")
+            lines.extend(bad_rows)
         result.append((track, title, "\n".join(lines)))
     return result
-
-
-def _bold_html(text: str) -> str:
-    import re
-    return re.sub(r"^(\S+):", r"<b>\1</b>:", text)

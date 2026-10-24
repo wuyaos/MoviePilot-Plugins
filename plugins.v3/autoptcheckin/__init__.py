@@ -18,7 +18,7 @@ from .core.native import run_native, run_native_login, run_integration
 from .core import cloudsign
 from .core.custom import run_custom, CustomNexusSignin
 from .core.state_store import DISABLED, FAILED, GATE_SKIPS, PENDING, SUCCESS, TrackStateStore
-from .core.notify import PARSE_MODES, build_rich_blocks, format_round_notifications
+from .core.notify import format_round_notifications
 from typing import Any
 
 try:
@@ -35,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.8"
+    plugin_version = "4.0.9"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -139,6 +139,7 @@ class AutoPtCheckin(_PluginBase):
             {"path": "/site_config", "endpoint": self.api_save_site_config, "methods": ["PUT"]},
             {"path": "/stats", "endpoint": self.api_stats, "methods": ["GET"]},
             {"path": "/history", "endpoint": self.api_history, "methods": ["GET"]},
+            {"path": "/notify_test", "endpoint": self.api_notify_test, "methods": ["POST"]},
         ]
 
         for route in routes:
@@ -652,34 +653,33 @@ class AutoPtCheckin(_PluginBase):
         return summary
 
     def _notify_round(self, trigger: str) -> None:
-        """轮次结束分别推送签到与登录逐站摘要。"""
+        """轮次结束分别推送签到与登录逐站摘要（纯文本，成功/失败分节）。"""
         try:
             if not self._config.get("notify"):
                 return
-            fmt = self._config.get("notify_format", "plain")
             summary = self._round_summary()
-            rich_map = {}
-            try:
-                from app.schemas.notification import NotificationBlock, NotificationContent
-
-                for key, blocks in build_rich_blocks(summary).items():
-                    try:
-                        rich_map[key] = NotificationContent(
-                            title="【PT 签到中心】",
-                            blocks=[NotificationBlock(**b) for b in blocks],
-                        )
-                    except Exception:
-                        pass
-            except Exception:
-                rich_map = {}
-            for track, title, text in format_round_notifications(summary, fmt):
-                if track in rich_map:
-                    self.post_message(title=title, text=text, parse_mode=PARSE_MODES.get(fmt),
-                                      rich_content=rich_map[track])
-                else:
-                    self.post_message(title=title, text=text, parse_mode=PARSE_MODES.get(fmt))
+            for track, title, text in format_round_notifications(summary):
+                self.post_message(title=title, text=text)
         except Exception:
-            pass
+            from app.runtime.log import logger
+            logger.error("【PT 签到中心】轮次通知发送失败", exc_info=True)
+
+    async def api_notify_test(self) -> dict:
+        """发送测试通知（不受「发送通知」开关限制，验证渠道连通）。"""
+        try:
+            messages = format_round_notifications(self._round_summary())
+        except Exception as exc:
+            return {"success": False, "message": f"构造测试通知失败: {exc}", "data": None}
+        if not messages:
+            return {"success": False, "message": "暂无可通知数据，请先完成一轮签到", "data": None}
+        sent = []
+        for track, title, text in messages:
+            try:
+                self.post_message(title=title, text=text)
+            except Exception as exc:
+                return {"success": False, "message": f"通知发送失败: {exc}", "data": sent}
+            sent.append(track)
+        return {"success": True, "message": f"已发送 {len(sent)} 条测试通知", "data": sent}
 
     async def api_run_once(self) -> dict:
         """立即运行：参考 V2，直接以独立线程执行一轮，不经宿主调度器

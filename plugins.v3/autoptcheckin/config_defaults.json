@@ -20,7 +20,6 @@
   "sunnypt_token": "",
   "scheduler_enabled": false,
   "unlock_all_sites": false,
-  "notify_format": "plain",
   "site_browserless": [],
   "browserless_url": "https://production-sfo.browserless.io",
   "browserless_token": "",

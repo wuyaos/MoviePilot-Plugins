@@ -88,7 +88,7 @@ function toggleCustomSignin(site, checked) {
   }
 }
 function addCustomSite() {
-  const id = 'custom-' + crypto.randomUUID()
+  const id = 'custom-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
   customDraft.value.push({id, name:'', url:'', emulate:false, source:'自定义站点', login_capable:true, credential:'cookie', fields:[]})
 }
 function deleteCustomSite(id) {
@@ -146,7 +146,7 @@ emit('layout', { maxWidth: '1000px' })
 <div class="card-head"><h2>PT 签到中心</h2><button class="btn ghost" @click="emit('close')">关闭</button></div>
 <div class="tabs" role="tablist"><button v-for="(label, key) in {settings:'设置',sites:'站点'}" :key="key" class="tab" role="tab" :aria-selected="tab === key" @click="tab = key">{{ label }}</button></div>
 <section v-show="tab === 'settings'" class="win">
-<div class="group"><h3>基础设置</h3><div class="grid fields-grid"><label class="switch"><input type="checkbox" role="switch" v-model="model.enabled">启用插件</label><label class="switch"><input type="checkbox" role="switch" v-model="model.notify">发送通知</label><label class="field"><span>通知格式</span><select class="input" v-model="model.notify_format"><option value="plain">纯文本</option><option value="markdown">Markdown</option><option value="html">HTML</option></select></label></div><p class="hint">Markdown/HTML：Telegram、飞书、Discord 支持；钉钉等纯文本渠道按原样显示。</p></div>
+<div class="group"><h3>基础设置</h3><div class="grid fields-grid"><label class="switch"><input type="checkbox" role="switch" v-model="model.enabled">启用插件</label><label class="switch"><input type="checkbox" role="switch" v-model="model.notify">发送通知</label></div></div>
 <div class="group"><h3>执行调度</h3><div class="grid fields-grid"><label class="field"><span>调度模式</span><select class="input" v-model="model.cron_mode"><option value="interval">间隔模式</option><option value="cron">Cron 模式</option></select></label><label class="field" v-if="model.cron_mode === 'interval'"><span>执行间隔</span><input class="input" type="number" min="1" v-model.number="model.interval_hours" placeholder="间隔(h)"></label><label class="field"><span>时间窗口</span><input class="input" v-model="timeWindow" placeholder="8-24（开始时间也计入）" @change="applyTimeWindow"></label><label class="field" v-if="model.cron_mode === 'cron'"><span>Cron 表达式</span><input class="input" v-model="model.cron" placeholder="分 时 日 月 周"></label></div><div class="grid fields-grid" style="margin-top:16px"><label class="field"><span>并发数</span><input class="input" type="number" min="1" v-model.number="model.queue_cnt"></label><label class="field"><span>当场重试次数</span><input class="input" type="number" min="0" v-model.number="model.retry_count"></label></div></div>
 
 <div class="group"><h3>Browserless</h3><div class="grid fields-grid"><label class="field"><span>Browserless 服务地址</span><input class="input" v-model="model.browserless_url" placeholder="https://production-sfo.browserless.io"></label><label class="field"><span>Browserless Token</span><input class="input" :type="showPlain['global.browserless_token'] ? 'text' : 'password'" v-model="model.browserless_token" autocomplete="off"><button type="button" class="btn ghost mini eye-btn" :aria-label="(showPlain['global.browserless_token'] ? '隐藏' : '显示')+'Browserless Token'" @click="showPlain['global.browserless_token'] = !showPlain['global.browserless_token']">{{ showPlain['global.browserless_token'] ? '隐藏' : '显示' }}</button></label></div><p class="hint" style="margin:-6px 0 0">用于 CF 盾站点云签（云端浏览器签到），仅对声明 shield=cloud 的站点生效。</p></div>

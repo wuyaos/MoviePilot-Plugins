@@ -162,6 +162,11 @@
 - history 保存 action=sign/login；旧记录无 action 视为 sign。登录结果仅入历史，不覆盖签到小卡或四态统计；历史 login_ok 显示「登录成功」。
 - rousi/sunnypt 使用专属集成协议并在启用与动作选择后可执行。PeerGo 登录先 GET `/api/v1/session`，Cookie 无效时使用账密 POST 刷新；签到读取 session/attendance，已有 claimed_today 不重复提交，提交带 Origin、Referer、X-CSRF-Token 与唯一 Idempotency-Key。SunnyPT 优先配置 JWT，否则账密换 token；Bearer 签到按 code=0/400001/400000 分类，token 失效时重新登录并最多重试一次。M-Team 仍仅由独立 CloakBrowser 真实登录实现，不经通用 password 集成协议。
 
+## 通知契约
+- 通知为纯文本（4.0.9 起）：无 notify_format 配置项、无标签富文本；post_message 不传 parse_mode。分轨两条消息（签到/模拟登录），标题「【PT 签到中心】」。Telegram 等按 HTML 解析的渠道不再因 `<div>` 等标签 400。
+- 正文四行计数（全部/本次/成功/失败下次）+ 逐站行；逐站行分「—— ✅ 成功 ——」「—— ❌ 失败（未确认）——」两节，空节不显示；节内排序沿用 bucket 顺序（签到轨：成功→已签→未确认→失败；登录轨：登录成功→失败→未确认）。
+- POST /notify_test（auth: bear）绕过「发送通知」开关直接推送当前轮数据，用于渠道连通验证；封套与其余端点一致（success/message/data），无数据或发送异常返回 success=false 并附错误消息。
+
 ## 批次 3 完成（3.15.0，2026-10-22）
 - D1 下沉：20 专属模块（CAPTCHA 12/GET 6/POST 2）并入 generic_sites.json 行为字段（captcha/action_get/safe_read_path/referer/form_data/form_path/response_json/action_path/use_default_message/signin_capable；typed status_map pairs），native 守恒 108。
 - D3：CookieCloud 为独立数据源，候选链第一环（本地文件优先/远端单次 20s/严格域边界/CF-only 子集拒绝/静默降级），不回写。
