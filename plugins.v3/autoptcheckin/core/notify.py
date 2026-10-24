@@ -35,8 +35,58 @@ def _sign_text(entry: dict) -> tuple[int, str]:
         return 3, "签到结果未确认，请人工核验" + (f"（{message}）" if message else "")
     if status == "protocol_pending":
         return 3, "验证码/协议未适配，未提交" + (f"（{message}）" if message else "")
-        return 2, "签到失败" + (f"，{message}" if message else "")
     return 2, "签到失败" + (f"，{message}" if message else (f"，{reason}" if reason else ""))
+
+
+def _track_rows(track: str, entries: list) -> list[tuple[int, str, str]]:
+    """统一构造分轨逐站行：(bucket, 站名, 状态文本)，bucket 0成功/1已签/3未确认/2失败。"""
+    rendered = []
+    if track == "sign":
+        for site, entry in entries:
+            bucket, text = _sign_text(entry)
+            rendered.append((bucket, site, text))
+        # 分组排序：成功(0) → 已签(1) → 未确认/待办(3) → 失败(2)
+        rendered.sort(key=lambda item: (0 if item[0] == 0 else 2 if item[0] == 1 else 3 if item[0] == 3 else 4, item[1]))
+    else:
+        for site, entry in entries:
+            status = entry.get("status", "")
+            message = (entry.get("message") or "").strip()
+            if status == "login_ok":
+                rendered.append((0, site, "模拟登录成功" + (f"，{message}" if message else "")))
+            elif status == "unconfirmed":
+                rendered.append((3, site, "模拟登录结果未确认，请人工核验" + (f"（{message}）" if message else "")))
+            else:
+                rendered.append((2, site, "模拟登录失败" + (f"，{message}" if message else "")))
+        rendered.sort(key=lambda item: (item[0], item[1]))
+    return rendered
+
+
+def _counts(data: dict, entries: list, verb: str) -> tuple[int, int, int, int]:
+    """(全部, 本次, 成功, 失败[下次])。"""
+    success = sum(1 for _, e in entries if e.get("status") in ("success", "signed", "already", "login_ok"))
+    failed_next = sum(1 for _, e in entries if e.get("status") not in ("success", "signed", "already", "login_ok"))
+    return data.get("total", 0), data.get("executed", 0), success, max(data.get("next", 0), failed_next)
+
+
+def build_rich_blocks(summary: dict) -> dict[str, list]:
+    """构造宿主 rich_content 结构化块（NotificationBlock 字典），按渠道能力渲染，
+    替代 text 直发（Telegram 对 HTML div 标签返回 400）。"""
+    icons = {0: "✅", 1: "✔️", 3: "⏳", 2: "❌"}
+    result = {}
+    for track, verb, section in (("sign", "签到", "签到明细"), ("login", "模拟登录", "登录明细")):
+        data = summary.get(track) or {}
+        entries = list(data.get("entries", []))
+        if not data.get("total") and not entries:
+            continue
+        total, executed, success, failed_next = _counts(data, entries, verb)
+        blocks = [
+            {"title": None, "text": f"全部{verb}: {total} · 本次{verb}: {executed} · 成功: {success} · 失败（下次{verb}）: {failed_next}"},
+            {"title": section, "text": None},
+        ]
+        for bucket, site, text in _track_rows(track, entries):
+            blocks.append({"title": f"{icons.get(bucket, '')} {site}".strip(), "text": text})
+        result[track] = blocks
+    return result
 
 
 def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[str, str]]:
@@ -49,50 +99,24 @@ def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[
         entries = list(data.get("entries", []))
         if not data.get("total") and not entries:
             continue
-        success = sum(1 for _, e in entries if e.get("status") in ("success", "signed", "already", "login_ok"))
-        failed_next = sum(1 for _, e in entries if e.get("status") not in ("success", "signed", "already", "login_ok"))
+        total, executed, success, failed_next = _counts(data, entries, verb)
         lines = [
-            f"全部{verb}: {data.get('total', 0)}",
-            f"本次{verb}: {data.get('executed', 0)}",
+            f"全部{verb}: {total}",
+            f"本次{verb}: {executed}",
             f"成功: {success}",
-            f"失败（下次{verb}）: {max(data.get('next', 0), failed_next)}",
+            f"失败（下次{verb}）: {failed_next}",
         ]
-        if track == "sign":
-            rendered = []
-            for site, entry in entries:
-                bucket, text = _sign_text(entry)
-                rendered.append((bucket, site, text))
-            # 分组排序：成功(0) → 已签(1) → 未确认/待办(3) → 失败(2)
-            rendered.sort(key=lambda item: (0 if item[0] == 0 else 2 if item[0] == 1 else 3 if item[0] == 3 else 4, item[1]))
-            for bucket, site, text in rendered:
-                if fmt == "html":
-                    color = {0: "#28a745", 1: "#6c757d", 2: "#dc3545", 3: "#fd7e14"}.get(bucket, "#6c757d")
-                    lines.append(f'<div style="color:{color}">【{site}】{text}</div>')
-                else:
-                    lines.append(f"【{site}】{text}")
-        else:
-            rendered = []
-            for site, entry in entries:
-                status = entry.get("status", "")
-                message = (entry.get("message") or "").strip()
-                if status == "login_ok":
-                    rendered.append((0, site, "模拟登录成功" + (f"，{message}" if message else "")))
-                elif status == "unconfirmed":
-                    rendered.append((3, site, "模拟登录结果未确认，请人工核验" + (f"（{message}）" if message else "")))
-                else:
-                    rendered.append((2, site, "模拟登录失败" + (f"，{message}" if message else "")))
-            rendered.sort(key=lambda item: (item[0], item[1]))
-            for bucket, site, text in rendered:
-                if fmt == "html":
-                    color = {0: "#28a745", 2: "#dc3545", 3: "#fd7e14"}.get(bucket, "#6c757d")
-                    lines.append(f'<div style="color:{color}">【{site}】{text}</div>')
-                else:
-                    lines.append(f"【{site}】{text}")
+        for bucket, site, text in _track_rows(track, entries):
+            if fmt == "html":
+                color = {0: "#28a745", 1: "#6c757d", 2: "#dc3545", 3: "#fd7e14"}.get(bucket, "#6c757d")
+                lines.append(f'<div style="color:{color}">【{site}】{text}</div>')
+            else:
+                lines.append(f"【{site}】{text}")
         if fmt == "html":
             lines = [_bold_html(lines[i]) if i < 3 else lines[i] for i in range(len(lines))]
         elif fmt == "markdown":
             lines = [_bold(lines[i], fmt) if i < 3 else lines[i] for i in range(len(lines))]
-        result.append((title, "\n".join(lines)))
+        result.append((track, title, "\n".join(lines)))
     return result
 
 

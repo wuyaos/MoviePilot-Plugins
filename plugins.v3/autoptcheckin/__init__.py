@@ -18,7 +18,7 @@ from .core.native import run_native, run_native_login, run_integration
 from .core import cloudsign
 from .core.custom import run_custom, CustomNexusSignin
 from .core.state_store import DISABLED, FAILED, GATE_SKIPS, PENDING, SUCCESS, TrackStateStore
-from .core.notify import PARSE_MODES, format_round_notifications
+from .core.notify import PARSE_MODES, build_rich_blocks, format_round_notifications
 from typing import Any
 
 try:
@@ -35,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.6"
+    plugin_version = "4.0.7"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -657,8 +657,27 @@ class AutoPtCheckin(_PluginBase):
             if not self._config.get("notify"):
                 return
             fmt = self._config.get("notify_format", "plain")
-            for title, text in format_round_notifications(self._round_summary(), fmt):
-                self.post_message(title=title, text=text, parse_mode=PARSE_MODES.get(fmt))
+            summary = self._round_summary()
+            rich_map = {}
+            try:
+                from app.schemas.notification import NotificationBlock, NotificationContent
+
+                for key, blocks in build_rich_blocks(summary).items():
+                    try:
+                        rich_map[key] = NotificationContent(
+                            title="【PT 签到中心】",
+                            blocks=[NotificationBlock(**b) for b in blocks],
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                rich_map = {}
+            for track, title, text in format_round_notifications(summary, fmt):
+                if track in rich_map:
+                    self.post_message(title=title, text=text, parse_mode=PARSE_MODES.get(fmt),
+                                      rich_content=rich_map[track])
+                else:
+                    self.post_message(title=title, text=text, parse_mode=PARSE_MODES.get(fmt))
         except Exception:
             pass
 

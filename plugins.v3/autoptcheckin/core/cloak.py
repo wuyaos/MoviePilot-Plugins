@@ -285,7 +285,11 @@ def run_page_action(session, steps):
                 if wrap.count() == 0:
                     results.append((step, 'absent'))
                     continue
-                wrap.locator('input').click()
+                # 原生 checkbox 常被 widget 样式隐藏，直接 click 会超时；优先点 label。
+                try:
+                    wrap.locator('label').first.click(timeout=5000)
+                except Exception:
+                    wrap.locator('input').first.click(force=True, timeout=5000)
                 verified = False
                 label = ''
                 for _ in range(max(1, int(getattr(session, "action_timeout", 21000) / 1500))):
