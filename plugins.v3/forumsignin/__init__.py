@@ -5,7 +5,7 @@ import json
 from copy import deepcopy
 import time
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock, RLock
 from uuid import uuid4
@@ -37,7 +37,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.12"
+    plugin_version = "3.1.13"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -491,16 +491,45 @@ class ForumSignin(_PluginBase):
                       SignStatus.FAILED: "❌ 签到失败", SignStatus.UNCONFIRMED: "⚠️ 结果未确认",
                       SignStatus.AUTH_FAILED: "🔒 认证失败", SignStatus.NETWORK_ERROR: "🌐 网络异常"}
             blocks = []
+            blocks = []
             for site_id, result in results:
                 name = next((site["name"] for site in registry if site["id"] == site_id), site_id)
                 state = labels.get(result.status, "签到完成")
-                note = (result.message or "—").replace("签到成功，", "")
+                if result.status in (SignStatus.SUCCESS, SignStatus.ALREADY):
+                    days = self._streak_days(site_id)
+                    note = f"连续签到 {days} 天" if days else (result.message or "—")
+                else:
+                    note = result.message or "—"
                 blocks.append(f"论坛：{name}\n状态：{state}\n说明：{note}")
             blocks.append(f"时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}")
             self.post_message(title="【论坛签到】", text="\n\n".join(blocks))
         except Exception as exc:
             logger.warning("通知发送失败（不影响签到结果）：%s", exc)
 
+
+    def _streak_days(self, site_id: str) -> int:
+        """与前端 streak() 同规则：从最近成功记录往回数连续自然日。"""
+        if site_id == "fengchao":
+            info = self._get("fengchao_user_info") or {}
+            if info.get("currentStreak") is not None:
+                return int(info["currentStreak"])
+        rows = [r for r in (self._history.list(1, 500).get("items") or []) if r.get("site") == site_id]
+        rows.sort(key=lambda r: r.get("time") or "", reverse=True)
+        if not rows:
+            return 0
+        expected = datetime.now().astimezone().strftime("%Y-%m-%d")
+        days = 0
+        for row in rows:
+            if row.get("status") not in ("success", "signed", "already"):
+                break
+            day = (row.get("time") or "")[:10]
+            if day > expected:
+                continue
+            if day != expected:
+                break
+            days += 1
+            expected = (datetime.strptime(expected, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        return days
     async def api_signin_by_domain(self, domain: str):
         result = await asyncio.to_thread(self._execute, domain)
         self._flush_notify()
