@@ -54,6 +54,11 @@ def site_id_for_domain(value, *, include_legacy=False):
 def credential(spec: CredentialSpec) -> dict:
     return {"kind": spec.kind, "sources": list(spec.cookie_sources), "refresh": spec.refresh}
 
+def shield_of(cls):
+    """站点徽标：CF 盾仿真站=cloud，其余仿真站=emulate，非仿真站=None。"""
+    if not getattr(cls, 'emulate', False):
+        return None
+    return 'cloud' if 'human_verify' in tuple(getattr(cls, 'cloak_steps', ()) or ()) else 'emulate'
 
 def discover_sites(package_name: str | None = None) -> dict:
     package_name = package_name or __package__.rsplit(".", 1)[0] + ".sites"
@@ -84,7 +89,8 @@ def discover_sites(package_name: str | None = None) -> dict:
                                   'verified': bool(getattr(cls, 'verified', False)),
                                   'login_capable': cls.login_capable, 'url': cls.url or '', 'credential': credential(cls.credential),
                                   'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'hook_implemented': bool(getattr(cls, 'hook_implemented', True)),
-                                  'emulate': bool(getattr(cls, 'emulate', False)), 'notice': getattr(cls, 'login_notice', '') or ''})
+                                  'emulate': bool(getattr(cls, 'emulate', False)), 'notice': getattr(cls, 'login_notice', '') or '',
+                                  'shield': shield_of(cls)})
             except Exception as exc:
                 skipped.append({'module': module_name, 'error': type(exc).__name__})
     adapter_count = len(sites)
@@ -177,6 +183,7 @@ def get_registry(custom_sites_data=None) -> dict:
             'source': '自定义站点', 'icon': '', 'native': False, 'verified': False,
             'login_capable': True, 'signin_capable': True,
             'signin_applicable': True,
-            'credential': credential(CredentialSpec()), 'cf': 'unknown'})
+            'credential': credential(CredentialSpec()), 'cf': 'unknown',
+            'shield': 'emulate' if bool(item.get('emulate', False)) else None})
         known.add(item['id'])
     return registry

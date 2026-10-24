@@ -93,7 +93,10 @@ def build_generic_sites() -> list[type[NexusSignin]]:
 
             def submit(self, ctx, form, _steps=tuple(steps)):
                 from ...core.cloak import run_page_action
-                run_page_action(ctx.http.session, list(_steps))
+                results = run_page_action(ctx.http.session, list(_steps)) or []
+                # steps 明细暂存到 ctx，read_after 写进 result.metadata（MP 日志 INFO/WARNING 不落盘，
+                # qnap 诊断唯一可靠通道是 history/响应里的 metadata）。
+                ctx.cloak_steps_result = [list(r) for r in results]
                 # 动作后落点页即回读证据：站点每次进入都可能发新滑块门页，
                 # 二次 GET 会重新拿到门页导致证据丢失（自由农场实证）。
                 from ...core.models import LoginPage

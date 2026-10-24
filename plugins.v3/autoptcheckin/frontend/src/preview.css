@@ -109,6 +109,7 @@
  --ptc-badge-cf-yes-bg:rgba(168,84,0,.16); --ptc-badge-cf-yes-text:#a85400;
  --ptc-badge-cf-no-bg:rgba(103,139,116,.16); --ptc-badge-cf-no-text:#486c53;
  --ptc-badge-cf-unknown-bg:rgba(125,132,143,.16); --ptc-badge-cf-unknown-text:#596372;
+ --ptc-badge-shield-cloud-bg:rgba(37,99,235,.16); --ptc-badge-shield-cloud-text:#1d4ed8;
 }
 :global(html[data-ptc-theme=dark] .pt-center), :global(html.v-theme--dark .pt-center) {
  --ptc-badge-mp-bg:rgba(44,112,210,.28); --ptc-badge-mp-text:#9cc5ff;
@@ -122,6 +123,7 @@
  --ptc-badge-cf-yes-bg:rgba(168,84,0,.28); --ptc-badge-cf-yes-text:#ffb26b;
  --ptc-badge-cf-no-bg:rgba(103,139,116,.28); --ptc-badge-cf-no-text:#a1c9ac;
  --ptc-badge-cf-unknown-bg:rgba(125,132,143,.28); --ptc-badge-cf-unknown-text:#b9c2d1;
+ --ptc-badge-shield-cloud-bg:rgba(78,138,255,.28); --ptc-badge-shield-cloud-text:#a8c8ff;
 }
 .chip.badge-mp {background:var(--ptc-badge-mp-bg); color:var(--ptc-badge-mp-text)}
 .chip.badge-adapter {background:var(--ptc-badge-adapter-bg); color:var(--ptc-badge-adapter-text)}
@@ -133,6 +135,7 @@
 .chip.badge-cf-yes {background:var(--ptc-badge-cf-yes-bg); color:var(--ptc-badge-cf-yes-text)}
 .chip.badge-cf-no {background:var(--ptc-badge-cf-no-bg); color:var(--ptc-badge-cf-no-text)}
 .chip.badge-cf-unknown {background:var(--ptc-badge-cf-unknown-bg); color:var(--ptc-badge-cf-unknown-text)}
+.chip.badge-shield-cloud, .chip.shield-cloud {background:var(--ptc-badge-shield-cloud-bg); color:var(--ptc-badge-shield-cloud-text)}
 .chip.badge-unknown {background:var(--ptc-badge-unknown-bg); color:var(--ptc-badge-unknown-text)}
 .chip.badge-signin {background:var(--ptc-success-bg); color:var(--ptc-success-text)}
 .chip.badge-login {background:var(--ptc-signed-bg); color:var(--ptc-signed-text)}

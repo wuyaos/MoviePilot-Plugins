@@ -15,6 +15,7 @@ from .core.history import HistoryStore
 from .core.migration import Migration, MigrationError
 from .core.registry import get_registry, get_native_module
 from .core.native import run_native, run_native_login, run_integration
+from .core import cloudsign
 from .core.custom import run_custom, CustomNexusSignin
 from .core.state_store import DISABLED, FAILED, GATE_SKIPS, PENDING, SUCCESS, TrackStateStore
 from .core.notify import PARSE_MODES, format_round_notifications
@@ -34,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.3"
+    plugin_version = "4.0.4"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -247,8 +248,8 @@ class AutoPtCheckin(_PluginBase):
             sid = str(site.get('id', ''))
             if not site.get('icon') and icon_cache.get(sid):
                 site['icon'] = icon_cache[sid]
-            if (site.get('source') == 'MP 站点' and not site.get('icon')
-                    and icon_cache.get(sid) is None and site.get('url')):
+            # 自定义站点同样解析图标；失败写 '' 占位，避免每次 /sites 都重试同一批 URL。
+            if (not site.get('icon') and icon_cache.get(sid) is None and site.get('url')):
                 pending_icons.append((sid, site['url']))
         if pending_icons:
             import asyncio
@@ -304,6 +305,7 @@ class AutoPtCheckin(_PluginBase):
                 'icon': icon, 'source': site.get('source', ''),
                 'cf': True if cf_hit else site.get('cf', 'unknown'),
                 'emulate': sid in {str(v) for v in self._config.get('site_browserless', [])} or bool(site.get('emulate', False)),
+                'shield': site.get('shield'),
                                 'sign_state': sign.get('state', 'disabled' if sid not in enabled else 'pending'),
                 'sign_status': sign.get('status', ''), 'sign_time': sign.get('time', ''),
                 'sign_message': sign.get('message', ''),
@@ -550,13 +552,16 @@ class AutoPtCheckin(_PluginBase):
         self._recompute_track_states()
         self._track_store().rollover()
         # 仿真名单站点共用一个 CloakBrowser 会话（轮内挨个执行，省去逐站开关）。
-        emulated = {str(v) for v in self._config.get('site_browserless', [])}
+        # 已配 token 的云签站整条走 Browserless，不占本地浏览器，不计入共享基数。
+        emulated = {str(v) for v in self._config.get('site_browserless', [])
+                    if not (cloudsign.enabled(str(v)) and cloudsign.configured(self._config))}
         round_sites = [str(sid) for action in ("sign", "login") for sid in self._due_for(action)]
         shared = None
         if sum(1 for sid in round_sites if sid in emulated) >= 2:
             try:
-                from .core.cloak import CloakSession, site_requires_headful
-                shared = CloakSession(url='https://example.com/', headless=not any(site_requires_headful(sid) for sid in round_sites))
+                from .core.cloak import CloakSession, _resolve_cloak_proxy, site_requires_headful
+                shared = CloakSession(url='https://example.com/', headless=not any(site_requires_headful(sid) for sid in round_sites),
+                                      proxy=_resolve_cloak_proxy(None, None, self._config))
                 shared.__enter__()
                 self._runner.shared_cloak = shared
             except Exception:

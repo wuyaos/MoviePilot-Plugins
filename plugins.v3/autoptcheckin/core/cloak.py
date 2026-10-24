@@ -1,6 +1,8 @@
 """CloakBrowser page and HTTP-compatible transport."""
+import logging
 from pathlib import Path
-from urllib.parse import urlsplit
+
+logger = logging.getLogger(__name__)
 from urllib.parse import urlencode, urlsplit
 
 from .models import LoginPage
@@ -34,10 +36,11 @@ def state_path(site_id):
 
 class CloakSession:
     """封装一次同步 CloakBrowser 上下文，异常向执行层传播。"""
-    def __init__(self, *, state=None, cookie="", url="", headless=True, humanize=True, locale="zh-CN", navigation_timeout=30000):
+    def __init__(self, *, state=None, cookie="", url="", headless=True, humanize=True, locale="zh-CN", navigation_timeout=30000, proxy=None):
         self.state, self.cookie, self.url = state, cookie, url
         self.headless, self.humanize, self.locale = headless, humanize, locale
         self.navigation_timeout = navigation_timeout
+        self.proxy = proxy
         self.action_timeout = navigation_timeout
         self.human_verify_timeout = 60000
         self.context = self.page = None
@@ -47,6 +50,8 @@ class CloakSession:
         if launcher is None:
             from app.sdk.browser import launch_browser_context as launcher
         kwargs = {"headless": self.headless, "humanize": self.humanize, "locale": self.locale}
+        if self.proxy:
+            kwargs["proxy"] = self.proxy
         if self.state and Path(self.state).is_file():
             kwargs["storage_state"] = str(self.state)
         try:
@@ -83,8 +88,9 @@ class CloakSession:
 
 class CloakHttpClient:
     """映射浏览器页面为 native 签到执行器所需的同步 HTTP 契约。"""
-    def __init__(self, http, info, site, shared=None):
+    def __init__(self, http, info, site, shared=None, proxy=None):
         self.http, self.info, self.site = http, info, site
+        self.proxy = proxy
         self.url = info.get("url") or site.url
         cookie = "; ".join(f"{k}={v}" for k, v in http.cookies.items())
         if shared is not None:
@@ -109,7 +115,8 @@ class CloakHttpClient:
         self.session = CloakSession(cookie=cookie, url=self.url,
                                     headless=not (bool(getattr(site, "headful", False)) or
                                                   site.id in TURNSTILE_HEADFUL_SITES),
-                                    navigation_timeout=timeout)
+                                    navigation_timeout=timeout,
+                                    proxy=self.proxy or _resolve_cloak_proxy(self.site, self.info))
         self.session.action_timeout = timeout
         self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
         self.session.__enter__()
@@ -273,32 +280,47 @@ def run_page_action(session, steps):
                 exited = _wait_for_slider_page_exit(page)
                 results.append((step, 'dragged' if exited else 'timeout'))
             elif step == 'altcha':
+                # yema 实测（2026-10-24）：ALTCHA 方框勾选后跑 PoW（数秒），通过后才允许提交签到表单。
                 wrap = page.locator('.altcha-checkbox-wrap').first
                 if wrap.count() == 0:
                     results.append((step, 'absent'))
                     continue
                 wrap.locator('input').click()
                 verified = False
+                label = ''
                 for _ in range(max(1, int(getattr(session, "action_timeout", 21000) / 1500))):
                     page.wait_for_timeout(1500)
-                    if '已验证' in wrap.inner_text():
+                    try:
+                        label = (wrap.inner_text() or '').strip().replace('\n', ' ')[:60]
+                    except Exception:
+                        label = ''
+                    # ALTCHA 官方文案为英文（Verified），中文站点可能覆盖为「已验证」。
+                    if '已验证' in label or 'Verified' in label:
                         verified = True
                         break
-                results.append((step, 'verified' if verified else 'timeout'))
+                results.append((step, 'verified' if verified else f'timeout:{label or "no-text"}'))
             elif step == 'human_verify':
-                # Vc-Lib Turnstile 依赖 headful CloakBrowser；等待响应 token；超时只记录，仍尝试后续签到并回读。
+                # Turnstile：等 token 期间主动进 CF iframe 点勾选框；超时只记录，仍尝试后续签到并回读。
                 token = page.locator('input[name="cf-turnstile-response"]').first
+                ok = False
+                poked = False
+                for _ in range(max(1, int(getattr(session, 'human_verify_timeout', 60000) / 1500))):
+                    try:
+                        if token.count() and (token.input_value() or '').strip():
+                            ok = True
+                            break
+                    except Exception:
+                        pass
+                    try:
+                        if _click_turnstile_checkbox(page):
+                            poked = True
+                            page.wait_for_timeout(2500)
+                            continue
+                    except Exception:
+                        pass
+                    page.wait_for_timeout(1500)
                 if token.count():
-                    ok = False
-                    for _ in range(max(1, int(getattr(session, 'human_verify_timeout', 60000) / 1500))):
-                        try:
-                            if (token.input_value() or '').strip():
-                                ok = True
-                                break
-                        except Exception:
-                            pass
-                        page.wait_for_timeout(1500)
-                    results.append((step, 'turnstile-ok' if ok else 'turnstile-timeout'))
+                    results.append((step, 'turnstile-ok' if ok else ('turnstile-clicked-timeout' if poked else 'turnstile-timeout')))
                     continue
                 clicked = False
                 for sel in ('text=人工验证', 'text=点击验证', 'text=点击进行人工验证',
@@ -321,16 +343,36 @@ def run_page_action(session, steps):
                 results.append((step, 'clicked' if clicked else 'absent'))
         except Exception:
             results.append((step, 'error'))
+        except Exception:
+            results.append((step, 'error'))
     try:
         page.wait_for_load_state('networkidle', timeout=15000)
     except Exception:
         page.wait_for_timeout(8000)
+    # 步骤结果进日志：qnap 无本地浏览器环境，日志是唯一诊断通道（如 altcha=timeout:xxx）。
+    # MP 宿主日志系统只接 app.runtime.log；INFO 级在 qnap 实测不落盘，诊断行用 warning 级。
+    url_hint = getattr(session, 'url', '')
+    try:
+        from app.runtime.log import logger as mp_logger
+        mp_logger.warning('【PT 签到中心】page_action %s steps=%s', url_hint, results)
+    except Exception:
+        logger.warning('【PT 签到中心】page_action %s steps=%s', url_hint, results)
     return results
 
+
+def _resolve_cloak_proxy(site, info, config=None):
+    """仿真会话出口代理：插件配置 cloak_proxy 优先；'off' 强制直连；默认回退宿主 PROXY_HOST。"""
+    if config is not None:
+        value = str(config.get("cloak_proxy") or "").strip()
+        if value:
+            return None if value.lower() == "off" else value
+    import os
+    return os.getenv("PROXY_HOST") or None
 
 def native_cloak_client(site, http, info, config, shared=None):
     """启动声明且名单授权的单次仿真上下文；其余站点保留原 HTTP 客户端。"""
     if not (getattr(site, "emulate", False) and
             site.id in {str(value) for value in config.get("site_browserless", [])}):
         return http
-    return CloakHttpClient(http, {**info, "url": info.get("url") or site.url}, site, shared=shared)
+    return CloakHttpClient(http, {**info, "url": info.get("url") or site.url}, site, shared=shared,
+                           proxy=_resolve_cloak_proxy(site, info, config))

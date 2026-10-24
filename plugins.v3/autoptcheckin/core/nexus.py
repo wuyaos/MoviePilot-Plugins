@@ -34,14 +34,29 @@ class NexusSignin(SiteModule):
             return ctx.result(status=SignStatus.UNCONFIRMED, evidence=Evidence(status="unconfirmed"))
         return ctx.record_result(page, spec, before_submit=True)
 
+    @staticmethod
+    def _with_steps(result: SignResult, steps, ctx: "SignContext | None" = None) -> SignResult:
+        # 动作站 steps 明细/提交异常进 metadata（空则不动）；MP 日志 INFO/WARNING 不落盘，
+        # history/响应 metadata 是 qnap 上唯一的动作诊断通道。
+        meta = result.metadata or {}
+        if steps:
+            meta = {**meta, "page_action": steps}
+        if ctx is not None:
+            err = getattr(ctx, "cloak_submit_error", None)
+            if err:
+                meta = {**meta, "submit_error": err}
+        if meta != (result.metadata or {}):
+            result.metadata = meta
+        return result
+
     def read_after(self, ctx: SignContext, page: LoginPage | None) -> SignResult:
+        steps = getattr(ctx, "cloak_steps_result", None)
         if self.signed_marker:
             result = self.read_before(ctx, page)
             if result.status == SignStatus.ALREADY:
                 result.status = SignStatus.SUCCESS
-                return result
-        return ctx.record_result(page, self.message_spec())
-
+            return self._with_steps(result, steps, ctx)
+        return self._with_steps(ctx.record_result(page, self.message_spec()), steps, ctx)
     # NexusPHP 标准结构默认消息选择器（占位站自动回退，命中即用；全部未命中仍 unconfirmed）
     DEFAULT_MESSAGE_XPATHS = (
         '//h1[contains(.,"签到") or contains(.,"打卡")]',
@@ -146,24 +161,30 @@ class NexusSignin(SiteModule):
                 return before
             if before.metadata.get('reason') == 'identity_conflict':
                 return before
-            if getattr(self, "protocol_pending", False):
-                return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="滑动验证码协议待适配，未提交",
-                                  evidence=before.evidence)
-            form = self.discover_form(ctx, page)
-            if form is None:
-                return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="未发现唯一签到表单",
-                                  evidence=before.evidence)
-            if not self.solve_captcha(ctx, page, form):
-                return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="验证码未解决，未提交")
+            # 页面动作站（cloak_steps）不是 NexusPHP 表单协议：动作链自身负责验证和点击，
+            # 因此直接进入 submit hook，保留统一的无条件回读与异常不重试语义。
+            if getattr(self, "cloak_steps", None):
+                form = SigninForm(attendance_url, [])
+            else:
+                if getattr(self, "protocol_pending", False):
+                    return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="滑动验证码协议待适配，未提交",
+                                      evidence=before.evidence)
+                form = self.discover_form(ctx, page)
+                if form is None:
+                    return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="未发现唯一签到表单",
+                                      evidence=before.evidence)
+                if not self.solve_captcha(ctx, page, form):
+                    return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="验证码未解决，未提交")
         except Exception:
             return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="签到前读或表单解析未确认")
         if ctx.cancel.is_set():
             return ctx.result(status=SignStatus.CANCELLED, message="任务已取消，未提交")
         try:
             self.submit(ctx, form)
-        except Exception:
+        except Exception as exc:
             # A timeout may occur after the server accepted the action. Never retry.
-            pass
+            # 异常进 metadata（截断），qnap 日志不落盘时 history 是唯一诊断通道。
+            ctx.cloak_submit_error = f"{type(exc).__name__}: {exc}"[:300]
         finally:
             # Also run after cancellation during the action or any submission exception.
             try:

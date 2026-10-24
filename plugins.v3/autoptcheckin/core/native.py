@@ -6,6 +6,7 @@ from uuid import uuid4
 from threading import RLock
 
 from .cloak import native_cloak_client, CloakHttpClient
+from . import cloudsign
 from .credentials import Credential, cookiecloud_candidate
 from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
 from .sitemodel import SignContext, page_available, page_maintenance
@@ -168,6 +169,16 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
             session = None
             ctx = None
             try:
+                if cloudsign.enabled(site.id) and not read_only and cloudsign.configured(config or {}):
+                    # 云签分流：整条签到流程替代，不启动本地浏览器，也不回退本地仿真
+                    cloud = cloudsign.sign(site.id, site.url, credential.value, config or {})
+                    result = SignResult(SignStatus(cloud.status), cloud.message)
+                    result.metadata['transport'] = 'cloud'
+                    persist_cookie_result(result, None, site.id, credential.source, get_data, save_data)
+                    if result.status != SignStatus.AUTH_FAILED:
+                        break
+                    continue
+                session = None
                 ctx = context_factory(site, credential, info, runner.locks, runner.stop)
                 if site.id == "yzyy" and isinstance(ctx.http, NativeHttpClient):
                     import requests
