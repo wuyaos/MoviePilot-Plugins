@@ -165,6 +165,12 @@
 .forum-link:hover {text-decoration:underline}
 .forum-domain {color:var(--ptc-text-muted); font-size:12px; font-weight:400}
 
+/* 统一按钮规格：同高、同圆角、同字号；ghost 与主色仅配色不同。 */
+.pt-center .btn {min-height:34px; padding:6px 16px; font-size:13px; border-radius:8px; line-height:1.4}
+.pt-center .btn.ghost, .pt-center .btn.danger, .pt-center .btn.confirm {background:var(--ptc-surface)}
+.pt-center .btn.mini, .pt-center .btn.pico {min-height:28px; padding:4px 12px; font-size:12px}
+.site-icon {background:var(--ptc-surface-muted)}
+
 /* Section inputs share one adaptive row; fields flex and wrap only when narrow. */
 .win>.group>.grid, .forum-config>.site-card>.grid {display:flex; flex-wrap:wrap; gap:12px 18px}
 .win>.group>.grid>.field, .forum-config>.site-card>.grid>.field {flex:1 1 170px; min-width:150px}
@@ -173,7 +179,8 @@
 /* Fixed forum sections and result cards used by the single-page forum UI. */
 .forum-head {display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
 .forum-config>.forum-head {justify-content:flex-start}
-.forum-config>.site-card {padding:14px}
+.forum-config>.site-card {padding:14px; margin-top:12px}
+.forum-config>.forum-head {margin-bottom:10px}
 .forum-config>.site-card>.grid {margin-top:12px}
 .fcard>.row {justify-content:flex-start}
 
