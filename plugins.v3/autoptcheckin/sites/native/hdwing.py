@@ -4,7 +4,7 @@ import re
 from urllib.parse import urljoin
 
 from ...core.models import SignResult, SignStatus
-from ...core.sitemodel import RecordSpec, SiteModule
+from ...core.sitemodel import RecordSpec, SignContext, SiteModule
 
 
 class Hdwing(SiteModule):
