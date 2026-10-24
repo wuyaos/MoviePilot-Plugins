@@ -1,6 +1,7 @@
 """Shared form-post transport for Cookie-authenticated Discuz sign-in pages."""
 from ..core.credentials import CredentialSpec
 
+
 class DiscuzPageAdapter:
     credential_spec = CredentialSpec()
     login_capable = False
@@ -14,7 +15,8 @@ class DiscuzPageAdapter:
         self.client = client
 
     def fetch_page(self):
-        return self.client.request("GET", self.page_path).text
+        response = self.client.request("GET", self.page_path)
+        return self.client.text(response) if hasattr(self.client, "text") else response.text
 
     def submit(self, page):
         fields = {**self.form_fields, "formhash": self.verifier.token(page)}

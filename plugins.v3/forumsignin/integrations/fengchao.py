@@ -2,6 +2,7 @@ from ..core.credentials import CredentialSpec
 from ..core.models import SignResult, SignStatus
 from ..verifiers.fengchao import verify
 
+
 class Fengchao:
     credential_spec = CredentialSpec(kind="api", cookie_sources=())
     login_capable = False
@@ -47,17 +48,25 @@ class Fengchao:
         except Exception:
             pass
         status = self.request("GET", "/status")
-        account = status.get("account") or {}
-        checkin = status.get("checkIn") or {}
-        identity_account = identity.get("status", {}).get("account") or identity.get("account") or {}
-        info = {"uid": str(identity.get("userId") or account.get("uid") or identity_account.get("uid") or ""),
+        identity_status = identity.get("status") or {}
+        identity_account = identity_status.get("account") or identity.get("account") or {}
+        identity_checkin = identity_status.get("checkIn") or identity.get("checkIn") or {}
+        status_account = status.get("account") or {}
+        status_checkin = status.get("checkIn") or {}
+        account = {**status_account, **identity_account}
+        checkin = {**status_checkin, **identity_checkin}
+        info = {"uid": str(identity.get("userId") or account.get("uid") or ""),
                 "displayName": account.get("displayName") or account.get("username"),
-                "points": account.get("points"), "currentStreak": checkin.get("currentStreak"),
+                "points": account.get("points", 0),
+                "currentStreak": checkin.get("currentStreak", 0),
+                "maxStreak": checkin.get("maxStreak", 0),
+                "lastCheckInDate": checkin.get("lastCheckInDate") or "",
                 "unreadNotificationCount": account.get("unreadNotificationCount"),
                 "checkedInToday": checkin.get("checkedInToday")}
-        if not info["uid"].strip() or info["points"] is None or info["currentStreak"] is None:
+        if not info["uid"].strip():
             raise ValueError("sync_unconfirmed")
         return info, identity if identity_fresh else None
+
 
 SITE = {"id":"fengchao", "name":"蜂巢", "domain":"fengchao.chat", "source":"插件适配",
         "signin_capable":True, "login_capable":False,

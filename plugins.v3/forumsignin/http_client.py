@@ -1,4 +1,23 @@
 """Bounded transport, no redirects and no automatic submission retries."""
+import re
+
+
+def response_text(response):
+    """Decode response bytes using the page-declared charset before fallback text."""
+    content = getattr(response, "content", None)
+    if isinstance(content, bytes):
+        head = content[:8192].decode("latin-1", errors="ignore")
+        match = re.search(r"<meta[^>]+charset\s*=\s*[\"']?\s*([\w.-]+)", head, re.I)
+        if not match:
+            match = re.search(r"<meta[^>]+content\s*=\s*[\"'][^\"']*charset\s*=\s*([\w.-]+)", head, re.I)
+        charset = match.group(1) if match else "utf-8"
+        try:
+            return content.decode(charset, errors="replace")
+        except LookupError:
+            pass
+    return getattr(response, "text", "") or ""
+
+
 class HttpClient:
     def __init__(self, base, credential, instance_id=""):
         self.base = base
@@ -29,6 +48,9 @@ class HttpClient:
         if response.status_code != 200:
             raise RuntimeError(f"status_code={response.status_code}")
         return response
+
+    def text(self, response):
+        return response_text(response)
 
     def close(self):
         if self.session is not None:
