@@ -549,6 +549,9 @@ class Hhanclubrescueseed(_PluginBase):
             # 先获取现有的下载记录列表
             download_records = self.get_data("download_records") or []
             for page in range(0, self._max_pages):
+                if self._event.is_set():
+                    logger.info("检测到停止事件，终止本轮页面下载")
+                    break
                 url = "https://" + self.domain + f"/rescue.php?page={page}"
                 logger.info(f"憨憨保种区第{page + 1}页:{url}")
                 torrent_detail_source = self._get_page_source(url=url, site=self.site)
@@ -783,6 +786,11 @@ class Hhanclubrescueseed(_PluginBase):
             return False
 
         try:
+            # 圈定复核：仅允许删除带本插件标签的种子（防止 API 绕过标签承诺误删用户种子）
+            guard = service_info.instance.get_torrents(ids=torrent_hash, tags=self._custom_tag)
+            if not guard:
+                logger.warning(f"种子 {torrent_hash} 不带标签 {self._custom_tag}，拒绝删除")
+                return False
             # 根据下载器类型调用相应的删除方法
             if service_info.type == "qbittorrent":
                 # Qbittorrent 删除种子
@@ -790,7 +798,7 @@ class Hhanclubrescueseed(_PluginBase):
                 return result
             elif service_info.type == "transmission":
                 # Transmission 删除种子
-                result = service_info.instance.remove_torrents(ids=torrent_hash, delete_file=self._delete_files)
+                result = service_info.instance.remove_torrents(hashs=torrent_hash, delete_file=self._delete_files)
                 return result
             else:
                 logger.error(f"不支持的下载器类型: {service_info.type}")
@@ -820,6 +828,8 @@ class Hhanclubrescueseed(_PluginBase):
             reward_tag = self._reward_tag or "憨憨保种达标"
             removed_names = []
             still_over_gb = 0.0
+            quota_removed = 0
+            stuck_removed = 0
             tagged_count = 0
 
             for name, info in infos.items():
@@ -836,6 +846,7 @@ class Hhanclubrescueseed(_PluginBase):
                     if s["seeding_hours"] >= self._reward_hours and reward_tag not in s["tags"]:
                         if self._add_torrent_tag(info, s["hash"], reward_tag):
                             tagged_count += 1
+                            s["tags"].append(reward_tag)
                             logger.info(f"达标打标: {s['name']} 做种 {s['seeding_hours']:.1f}h")
 
                 if not self._auto_delete_enabled:
@@ -855,11 +866,12 @@ class Hhanclubrescueseed(_PluginBase):
                             -x[1]["seeding_hours"]
                         ))
                         for _, s in cands:
-                            if total_gb <= target_gb or len(removed_names) >= self.MAX_REMOVE_PER_RUN:
+                            if self._event.is_set() or total_gb <= target_gb or quota_removed >= self.MAX_REMOVE_PER_RUN:
                                 break
                             if self._delete_torrent_by_hash(s["hash"]):
                                 logger.info(f"配额清理删除: {s['name']}（{s['size_gb']:.2f}GB，平均上传 {s['avg_upspeed']:.0f}B/s）")
                                 removed_names.append(s["name"])
+                                quota_removed += 1
                                 total_gb -= s["size_gb"]
                         still_over_gb = max(0.0, total_gb - target_gb)
 
@@ -867,10 +879,13 @@ class Hhanclubrescueseed(_PluginBase):
                 if self._stuck_days:
                     stuck = [(t, s) for t, s in stats
                              if s["progress"] < 1 and s["added_days"] >= self._stuck_days]
-                    for _, s in stuck[:self.MAX_REMOVE_PER_RUN]:
+                    for _, s in stuck[:max(0, self.MAX_REMOVE_PER_RUN - stuck_removed)]:
+                        if self._event.is_set() or stuck_removed >= self.MAX_REMOVE_PER_RUN:
+                            break
                         if self._delete_torrent_by_hash(s["hash"]):
                             logger.info(f"卡死清理删除: {s['name']}（加入 {s['added_days']:.1f} 天未完成）")
                             removed_names.append(s["name"])
+                            stuck_removed += 1
 
             # 通知：仅在发生删除时发送
             if self._enable_notification and removed_names:
@@ -1042,8 +1057,8 @@ class Hhanclubrescueseed(_PluginBase):
         # 完成率上限（完成数/(完成数+下载数)，两者都解析到才判定）
         if self._completion_ratio_max and finished is not None and leechers is not None:
             ratio = finished / max(finished + leechers, 1)
-            if ratio > float(self._completion_ratio_max):
-                return _skip(f"完成率 {ratio:.2f} > {self._completion_ratio_max}")
+            if ratio * 100 > float(self._completion_ratio_max):
+                return _skip(f"完成率 {ratio * 100:.1f}% > {self._completion_ratio_max}%")
         # 发布时间上限（列表页精确时间，发布距今小时数；解析失败放行）
         if self._connect_time_max_hours and added_titles:
             try:
@@ -1113,7 +1128,11 @@ class Hhanclubrescueseed(_PluginBase):
                     break
 
                 # 通过xpath获取tr元素
-                tr_elements = html.xpath('//*[@id="mainContent"]/div/div[2]/table')[0].xpath('tr')
+                tables = html.xpath('//*[@id="mainContent"]/div/div[2]/table')
+                if not tables:
+                    logger.error(f"用户历史页面第{page + 1}页结构异常，未找到表格")
+                    break
+                tr_elements = tables[0].xpath('tr')
 
                 # 检查tr数量
                 if len(tr_elements) < 2:
@@ -1126,7 +1145,7 @@ class Hhanclubrescueseed(_PluginBase):
                 for i, tr in enumerate(tr_elements[1:], start=1):
                     try:
                         # 检查下载数量限制
-                        if self._download_limit > 0 and success_downloaded_count > self._download_limit:
+                        if self._download_limit > 0 and success_downloaded_count >= self._download_limit:
                             logger.info(f"已达到单次下载数量限制 ({self._download_limit})，停止下载")
                             break
                         # 通过td[2]/a/@href获取种子详情页的地址
