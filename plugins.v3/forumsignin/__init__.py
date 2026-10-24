@@ -31,7 +31,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.0"
+    plugin_version = "3.1.1"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -63,6 +63,7 @@ class ForumSignin(_PluginBase):
     def init_plugin(self, config=None):
         self.stop_service()
         self._config = {**self.get_form()[1], **deepcopy(config or {})}
+        self._migrate_legacy_invites()
         self._stopped = False
         self._schedule_error = None
         if not self._get("fengchao_instance_id"):
@@ -90,6 +91,33 @@ class ForumSignin(_PluginBase):
                                       "trigger": trigger, "func": self.update_info, "kwargs": {}})
             except (ValueError, TypeError):
                 self._schedule_error = "invalid_sync_cron"
+
+    def _migrate_legacy_invites(self):
+        """V2 迁移兼容：旧 InvitesSignin 配置键（invites_*）映射为 yaowan_*，站点 id 同步。
+
+        宿主 API 对凭据读取做掩码，无法在进程外搬运；本方法在进程内用真实值完成键名
+        迁移并 update_config 持久化，凭据不出插件边界。
+        """
+        config = self._config
+        legacy_map = {"invites_username": "yaowan_username",
+                      "invites_password": "yaowan_password",
+                      "invites_cookie": "yaowan_cookie"}
+        moved = False
+        for old_key, new_key in legacy_map.items():
+            if old_key not in config:
+                continue
+            legacy_value = config.pop(old_key)
+            if legacy_value and not config.get(new_key):
+                config[new_key] = legacy_value
+                moved = True
+        for key in ("enabled_sites", "sign_sites"):
+            values = config.get(key)
+            if isinstance(values, list) and "invites" in {str(v) for v in values}:
+                config[key] = ["yaowan" if str(v) == "invites" else str(v) for v in values]
+                moved = True
+        if moved:
+            self.update_config(deepcopy(config))
+            logger.info("论坛签到：已将 V2 InvitesSignin 配置键迁移为 yaowan_*，站点 id invites→yaowan")
 
     def get_state(self):
         return bool(self._config["enabled"]) and not self._stopped
