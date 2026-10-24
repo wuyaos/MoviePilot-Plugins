@@ -159,9 +159,20 @@
 
 .site-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 0;font-size:11px;color:var(--ptc-text-muted)}.site-totals b{font-size:20px;margin-right:3px}.success-number{color:var(--ptc-success-text)}.failure-number{color:var(--ptc-failure-text)}.unknown-number{color:var(--ptc-unknown-text)}
 
+/* Section inputs share one adaptive row; fields flex and wrap only when narrow. */
+.win>.group>.grid, .forum-config>.site-card>.grid {display:flex; flex-wrap:wrap; gap:12px 18px}
+.win>.group>.grid>.field, .forum-config>.site-card>.grid>.field {flex:1 1 170px; min-width:150px}
+.win>.group>.grid>.switch {flex:0 0 auto}
+
 /* Fixed forum sections and result cards used by the single-page forum UI. */
 .forum-head {display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
 .forum-config>.forum-head {justify-content:flex-start}
 .forum-config>.site-card {padding:14px}
 .forum-config>.site-card>.grid {margin-top:12px}
 .fcard>.row {justify-content:flex-start}
+
+/* Data page: breathing room between topbar, cards and history. */
+.data-grid {margin:16px 0 22px}
+.pt-center h3 {margin-top:18px}
+.table-wrap {margin-top:10px}
+.topline {margin-bottom:4px}
