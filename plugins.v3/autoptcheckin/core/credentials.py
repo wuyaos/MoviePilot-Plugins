@@ -1,4 +1,4 @@
-"""凭据只在内存中流转；持久化仅保存明确失效候选的指纹。"""
+"""凭据候选解析；已确认 Cookie 的持久化由 native 执行边界负责。"""
 from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Callable, Literal
@@ -9,7 +9,7 @@ _CF_ONLY_COOKIES = {"cf_clearance", "__cf_bm", "__cfruid", "__cf_chl_tk", "cf_ch
 @dataclass(frozen=True)
 class CredentialSpec:
     kind: Literal["cookie", "api_key", "password"] = "cookie"
-    cookie_sources: tuple[str, ...] = ("cookiecloud", "managed_site", "local_cookie")
+    cookie_sources: tuple[str, ...] = ("stored_cookie", "managed_site", "local_cookie", "cookiecloud")
     refresh: Literal["password"] | None = None
     identity_field: str = "uid"
 

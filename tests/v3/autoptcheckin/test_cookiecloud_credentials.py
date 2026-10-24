@@ -36,14 +36,14 @@ def cloud(monkeypatch, tmp_path):
     return SimpleNamespace(settings=settings, request=request, response=response, decrypt=decrypt)
 
 
-def test_remote_cookiecloud_is_first_candidate_and_closes_response(cloud):
+def test_remote_cookiecloud_follows_local_candidates_and_closes_response(cloud):
     result = cookiecloud_candidate('https://pt.example.invalid/attendance.php')
     assert result.status == 'valid'
     assert result.credential.source == 'cookiecloud'
     selected = CredentialResolver().select_cookie({'cookiecloud': result.credential,
         'managed_site': Credential('managed_site', 'synthetic-managed'),
         'local_cookie': Credential('local_cookie', 'synthetic-local')})
-    assert selected.credential is result.credential
+    assert selected.credential.source == 'managed_site'
     cloud.request.assert_called_once_with(timeout=20, content_type='application/json')
     cloud.request.return_value.get_res.assert_called_once_with(
         url='https://cloud.example.invalid/get/synthetic-key', allow_redirects=False, raise_exception=True)
@@ -102,7 +102,7 @@ def test_cookiecloud_unavailable_is_silent_and_falls_back(cloud, failure, caplog
 
 
 @pytest.mark.parametrize('available', [True, False])
-def test_run_native_consumes_cookiecloud_once(cloud, available):
+def test_run_native_defers_cookiecloud_when_managed_cookie_succeeds(cloud, available):
     if not available:
         cloud.settings.COOKIECLOUD_KEY = ''
     site = SimpleNamespace(id='synthetic-site', url='https://pt.example.invalid',
@@ -114,5 +114,5 @@ def test_run_native_consumes_cookiecloud_once(cloud, available):
     result = native.run_native(SignRunner(), site, {'url': site.url, 'cookie': 'synthetic-managed'},
                                context_factory=context)
     assert result.status == 'success'
-    assert seen == ['cookiecloud' if available else 'managed_site']
-    assert cloud.request.return_value.get_res.call_count == int(available)
+    assert seen == ['managed_site']
+    assert cloud.request.return_value.get_res.call_count == 0

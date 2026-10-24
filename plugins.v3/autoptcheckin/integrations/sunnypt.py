@@ -26,6 +26,8 @@ def _token(http, info):
         return ""
     response = http.post(API + "/login", json={"username": username, "password": password}, headers={"Referer": REFERER})
     body = _body(response)
+    if response.status_code == 200 and body.get("code") == 0:
+        http.cookie_source = "password_login"
     return (body.get("data") or {}).get("token", "") if response.status_code == 200 and body.get("code") == 0 else ""
 
 

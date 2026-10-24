@@ -3,11 +3,16 @@ from urllib.parse import urljoin, urlsplit
 from email.message import Message
 from http.cookies import SimpleCookie
 from uuid import uuid4
+from threading import RLock
 
 from .cloak import native_cloak_client, CloakHttpClient
-from .credentials import Credential, CredentialResolver, cookiecloud_candidate
+from .credentials import Credential, cookiecloud_candidate
 from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
 from .sitemodel import SignContext, page_available, page_maintenance
+
+
+# Different site locks can write the same persisted table concurrently.
+_COOKIE_TABLE_LOCK = RLock()
 
 
 def decode_response(response):
@@ -154,60 +159,132 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
             return finish(SignResult.skipped())
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
-        cloud = cookiecloud_candidate(info.get('url') or site.url)
-        candidates = {'managed_site': Credential(
-            'managed_site', info.get('cookie') or '', ''),
-            'local_cookie': Credential('local_cookie', custom_cookie, '')}
-        if cloud.credential is not None:
-            candidates['cookiecloud'] = cloud.credential
-        auth = CredentialResolver().select_cookie(candidates)
-        if auth.credential is None:
-            return finish(SignResult(SignStatus.AUTH_FAILED, auth.reason))
-        session = None
-        try:
-            ctx = context_factory(site, auth.credential, info, runner.locks, runner.stop)
-            if site.id == "yzyy" and isinstance(ctx.http, NativeHttpClient):
-                import requests
-                session = requests.Session()
-                ctx.http.session = session
-            ctx.http = native_cloak_client(site, ctx.http, info, config or {}, shared=getattr(runner, "shared_cloak", None))
-            ctx.get_data, ctx.save_data = get_data, save_data
-            if read_only:
-                try:
-                    page = ctx.http.get(urljoin(site.url, site.attendance_path))
-                except Exception:
-                    return finish(SignResult(SignStatus.NETWORK_ERROR, '签到页面不可达：请求异常'))
-                if page_maintenance(page):
-                    return finish(SignResult(SignStatus.MAINTENANCE, "维护中/已关闭"))
-                login = site.parse_login(page, site.credential)
-                if login.status == 'auth_failed':
-                    result = ctx.result(status='auth_failed', message=login.message)
-                elif not page_available(page):
-                    result = SignResult(SignStatus.NETWORK_ERROR, '签到页面不可达')
+        get_data = get_data or getattr(runner, 'get_data', None)
+        save_data = save_data or getattr(runner, 'save_data', None)
+        attempted_cookie_sources = []
+        result = SignResult(SignStatus.AUTH_FAILED, '缺少可用 Cookie')
+        for credential in cookie_candidates(site.id, info, custom_cookie, get_data, site.url):
+            attempted_cookie_sources.append(credential.source)
+            session = None
+            ctx = None
+            try:
+                ctx = context_factory(site, credential, info, runner.locks, runner.stop)
+                if site.id == "yzyy" and isinstance(ctx.http, NativeHttpClient):
+                    import requests
+                    session = requests.Session()
+                    ctx.http.session = session
+                ctx.http = native_cloak_client(site, ctx.http, info, config or {}, shared=getattr(runner, "shared_cloak", None))
+                ctx.get_data, ctx.save_data = get_data, save_data
+                if read_only:
+                    try:
+                        page = ctx.http.get(urljoin(site.url, site.attendance_path))
+                    except Exception:
+                        page = None
+                    if page_maintenance(page):
+                        result = SignResult(SignStatus.MAINTENANCE, "维护中/已关闭")
+                    elif not page_available(page):
+                        result = SignResult(SignStatus.NETWORK_ERROR, '签到页面不可达')
+                    else:
+                        login = site.parse_login(page, site.credential)
+                        result = (ctx.result(status='auth_failed', message=login.message)
+                                  if login.status == 'auth_failed' else site.read_before(ctx, page))
                 else:
-                    result = site.read_before(ctx, page)
-            else:
-                result = site.signin(ctx)
-            if (site.id == 'yzyy' and not read_only
-                    and result.status == SignStatus.AUTH_FAILED):
-                # Cookie 失效：Discuz 账密登录刷新 Cookie 后重签一次（用户裁决，全 HTTP）。
-                from ..integrations import yzyy
-                try:
-                    refreshed = yzyy.login(ctx.http, {**info, **(config or {})})
-                except Exception:
-                    refreshed = None
-                if refreshed is not None and refreshed.status == LoginStatus.LOGIN_OK:
                     result = site.signin(ctx)
-            if isinstance(ctx.http, CloakHttpClient):
-                result.metadata['transport'] = 'cloak'
-        except Exception:
-            result = SignResult(SignStatus.UNCONFIRMED, '原生签到执行未确认')
-        finally:
-            if "ctx" in locals() and isinstance(getattr(ctx, "http", None), CloakHttpClient):
-                ctx.http.close()
-            if session is not None:
-                session.close()
+                persist_cookie_result(result, ctx.http, site.id, credential.source, get_data, save_data)
+                if isinstance(ctx.http, CloakHttpClient):
+                    result.metadata['transport'] = 'cloak'
+            except Exception:
+                result = SignResult(SignStatus.UNCONFIRMED, '原生签到执行未确认')
+            finally:
+                if ctx is not None and isinstance(ctx.http, CloakHttpClient):
+                    ctx.http.close()
+                if session is not None:
+                    session.close()
+            # Never replay an uncertain submission or switch on a network failure.
+            if result.status != SignStatus.AUTH_FAILED:
+                break
+        if site.id == 'yzyy' and not read_only and result.status == SignStatus.AUTH_FAILED:
+            from ..integrations import yzyy
+            attempted_cookie_sources.append('password_login')
+            session = None
+            try:
+                ctx = context_factory(site, Credential('password_login', ''), info, runner.locks, runner.stop)
+                ctx.get_data, ctx.save_data = get_data, save_data
+                if isinstance(ctx.http, NativeHttpClient):
+                    import requests
+                    session = requests.Session()
+                    ctx.http.session = session
+                login = yzyy.login(ctx.http, {**info, **(config or {})})
+                persist_cookie_result(login, ctx.http, site.id, 'password_login', get_data, save_data)
+                if login.status == LoginStatus.LOGIN_OK:
+                    result = site.signin(ctx)
+                    persist_cookie_result(result, ctx.http, site.id, 'password_login', get_data, save_data)
+            except Exception:
+                result = SignResult(SignStatus.UNCONFIRMED, '原生签到执行未确认')
+            finally:
+                if session is not None:
+                    session.close()
+        result.metadata['cookie_sources'] = attempted_cookie_sources
         return finish(result)
+
+
+def load_cookie_table(get_data):
+    """读取 Cookie 表：{site_id: {cookie, source, updated}}。"""
+    if not callable(get_data):
+        return {}
+    cookie_table = get_data("cookies.table") or {}
+    return dict(cookie_table) if isinstance(cookie_table, dict) else {}
+
+
+def save_cookie_table(save_data, cookie_table):
+    if callable(save_data):
+        save_data("cookies.table", cookie_table)
+
+
+def record_cookie(cookie_table, site_id, cookie, cookie_source):
+    """Record only a proven session; updated is the latest confirmation time."""
+    cookie = (cookie or "").strip()
+    if not cookie:
+        return cookie_table
+    from datetime import datetime
+    cookie_table[str(site_id)] = {"cookie": cookie, "source": cookie_source,
+                                  "updated": datetime.now().isoformat()}
+    return cookie_table
+
+
+def cookie_candidates(site_id, info, custom_cookie, get_data, url=''):
+    """Fetch CookieCloud only after all local candidates were rejected."""
+    cookie_table = load_cookie_table(get_data)
+    stored_cookie_entry = cookie_table.get(str(site_id)) or {}
+    candidates = {
+        'stored_cookie': stored_cookie_entry.get('cookie', ''),
+        'managed_site': info.get('cookie') or '',
+        'local_cookie': custom_cookie,
+    }
+    attempted_cookie_values = set()
+    for cookie_source, cookie in candidates.items():
+        if cookie and cookie not in attempted_cookie_values:
+            attempted_cookie_values.add(cookie)
+            yield Credential(cookie_source, cookie)
+    cloud = cookiecloud_candidate(info.get('url') or url)
+    if cloud.credential is not None and cloud.credential.value not in attempted_cookie_values:
+        yield cloud.credential
+
+
+def persist_cookie_result(result, http, site_id, cookie_source, get_data, save_data):
+    if not callable(save_data) or result.status not in ('login_ok', 'success', 'signed', 'already'):
+        return
+    # CloakHttpClient owns the browser, while its HTTP delegate owns the jar.
+    cookie_jar = getattr(http, 'cookies', None)
+    if cookie_jar is None and isinstance(http, CloakHttpClient):
+        cookie_jar = http.http.cookies
+    if not cookie_jar:
+        return
+    refreshed_cookie = '; '.join(f"{name}={value}" for name, value in cookie_jar.items())
+    with _COOKIE_TABLE_LOCK:
+        cookie_table = load_cookie_table(get_data)
+        record_cookie(cookie_table, site_id, refreshed_cookie, cookie_source)
+        save_cookie_table(save_data, cookie_table)
 
 
 def read_login_twice(fetch_page, site, uid="", credential=None):
@@ -263,6 +340,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
         uid = str(info.get('uid') or '')
         if site.id == "mteam":
+            # M-Team keeps browser storage_state, never the shared Cookie table.
             try:
                 result = site.keepalive_login({**(config or {}), **info})
             except Exception:
@@ -294,36 +372,34 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
                     return finish(LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效（浏览器核验跳转登录页）'))
             except Exception as exc:
                 return finish(LoginResult(LoginStatus.UNCONFIRMED, f'浏览器登录核验异常：{type(exc).__name__}'))
-        if site.id == 'yzyy':
-            from ..integrations import yzyy
-            try:
-                url = info.get('url') or site.url
-                cloud = cookiecloud_candidate(url)
-                candidates = {'managed_site': Credential('managed_site', info.get('cookie') or ''),
-                              'local_cookie': Credential('local_cookie', custom_cookie)}
-                if cloud.credential is not None:
-                    candidates['cookiecloud'] = cloud.credential
-                auth = CredentialResolver().select_cookie(candidates)
-                client = NativeHttpClient(auth.credential or Credential('managed_site', ''), info)
-                return finish(yzyy.login(client, {**info, **(config or {})}))
-            except Exception:
-                return finish(LoginResult(LoginStatus.UNCONFIRMED, 'yzyy 登录执行未确认'))
+        get_data = getattr(runner, 'get_data', None)
+        save_data = getattr(runner, 'save_data', None)
+        attempted_cookie_sources = []
+        result = LoginResult(LoginStatus.AUTH_FAILED, '缺少可用 Cookie')
         try:
             url = info.get('url') or site.url
             if urlsplit(url).scheme not in {'http', 'https'} or not urlsplit(url).hostname:
                 return finish(LoginResult(LoginStatus.UNCONFIRMED, '登录站点地址未登记'))
-            cloud = cookiecloud_candidate(url)
-            candidates = {'managed_site': Credential('managed_site', info.get('cookie') or ''),
-                          'local_cookie': Credential('local_cookie', custom_cookie)}
-            if cloud.credential is not None:
-                candidates['cookiecloud'] = cloud.credential
-            auth = CredentialResolver().select_cookie(candidates)
-            if auth.credential is None:
-                return finish(LoginResult(LoginStatus.AUTH_FAILED, auth.reason))
-            client = NativeHttpClient(auth.credential, info)
-            result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid, site.credential)
+            for credential in cookie_candidates(site.id, info, custom_cookie, get_data, url):
+                attempted_cookie_sources.append(credential.source)
+                client = NativeHttpClient(credential, info)
+                if site.id == 'yzyy':
+                    from ..integrations import yzyy
+                    result = yzyy.login(client, {})
+                else:
+                    result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid, site.credential)
+                persist_cookie_result(result, client, site.id, credential.source, get_data, save_data)
+                if result.status != LoginStatus.AUTH_FAILED:
+                    break
+            if site.id == 'yzyy' and result.status == LoginStatus.AUTH_FAILED:
+                from ..integrations import yzyy
+                attempted_cookie_sources.append('password_login')
+                client = NativeHttpClient(Credential('password_login', ''), info)
+                result = yzyy.login(client, {**info, **(config or {})})
+                persist_cookie_result(result, client, site.id, 'password_login', get_data, save_data)
         except Exception:
             result = LoginResult(LoginStatus.UNCONFIRMED, '原生登录执行未确认')
+        result.metadata['cookie_sources'] = attempted_cookie_sources
         return finish(result)
 
 
@@ -351,24 +427,58 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
             return finish(SignResult.skipped())
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
-        # 账密站 Cookie 复用：优先用上次账密登录刷新落盘的 Cookie（save_data 键 cookies.refreshed）。
-        refreshed = {}
         get_data = getattr(runner, 'get_data', None)
         save_data = getattr(runner, 'save_data', None)
-        if callable(get_data):
-            refreshed = (get_data('cookies.refreshed') or {}).get(site_id, '')
-        credential = Credential('refreshed_cookie' if refreshed else 'managed_site', refreshed or info.get('cookie') or '')
-        http = NativeHttpClient(credential, info)
+        del_data = getattr(runner, 'del_data', None)
+        with _COOKIE_TABLE_LOCK:
+            if callable(get_data) and callable(save_data) and not get_data('cookies.refreshed.migrated'):
+                legacy_cookies = get_data('cookies.refreshed') or {}
+                cookie_table = load_cookie_table(get_data)
+                for legacy_site_id, refreshed_cookie in legacy_cookies.items():
+                    if legacy_site_id not in cookie_table:
+                        record_cookie(cookie_table, legacy_site_id, refreshed_cookie, 'refreshed')
+                if legacy_cookies:
+                    save_cookie_table(save_data, cookie_table)
+                    if callable(del_data):
+                        del_data('cookies.refreshed')
+                    else:
+                        save_data('cookies.refreshed.migrated', True)
+        attempted_cookie_sources = []
         credentials = {**info, **config}
+        result = LoginResult(LoginStatus.AUTH_FAILED, '缺少可用 Cookie')
         try:
-            result = integration.login(http, credentials) if action == 'login' else integration.signin(http, credentials)
-            if getattr(result, 'status', None) is not None and str(result.status).endswith(('ok', 'LOGIN_OK')) and callable(save_data):
-                cookie_now = '; '.join(f"{k}={v}" for k, v in http.cookies.items())
-                if cookie_now:
-                    store = (get_data('cookies.refreshed') or {}) if callable(get_data) else {}
-                    store[site_id] = cookie_now
-                    save_data('cookies.refreshed', store)
+            candidates = cookie_candidates(site_id, info, '', get_data, getattr(integration, 'BASE', getattr(integration, 'API', '')))
+            if site_id == 'sunnypt':
+                # SunnyPT authenticates with JWT, not Cookies; retain its protocol.
+                credential = next(candidates, Credential('password_login', ''))
+                http = NativeHttpClient(credential, info)
+                attempted_cookie_sources.append(credential.source)
+                result = integration.login(http, credentials) if action == 'login' else integration.signin(http, credentials)
+                cookie_source = getattr(http, 'cookie_source', credential.source)
+                if cookie_source != credential.source:
+                    attempted_cookie_sources.append(cookie_source)
+                persist_cookie_result(result, http, site_id, cookie_source, get_data, save_data)
+            else:
+                for credential in candidates:
+                    attempted_cookie_sources.append(credential.source)
+                    http = NativeHttpClient(credential, info)
+                    # Exhaust Cookie sources before allowing account/password login.
+                    result = integration.login(http, {}) if action == 'login' else integration.signin(http, {})
+                    persist_cookie_result(result, http, site_id, credential.source, get_data, save_data)
+                    if result.status != LoginStatus.AUTH_FAILED:
+                        break
+                if result.status == LoginStatus.AUTH_FAILED:
+                    attempted_cookie_sources.append('password_login')
+                    http = NativeHttpClient(Credential('password_login', ''), info)
+                    result = integration.login(http, credentials)
+                    persist_cookie_result(result, http, site_id, 'password_login', get_data, save_data)
+                    if result.status == LoginStatus.LOGIN_OK and action != 'login':
+                        result = integration.signin(http, credentials)
+                        persist_cookie_result(result, http, site_id, 'password_login', get_data, save_data)
+                    elif action != 'login':
+                        result = SignResult(SignStatus(result.status.value), result.message)
         except Exception:
             status = LoginStatus.UNCONFIRMED if action == 'login' else SignStatus.UNCONFIRMED
             result = LoginResult(status, '站点接口执行未确认') if action == 'login' else SignResult(status, '站点接口执行未确认')
+        result.metadata['cookie_sources'] = attempted_cookie_sources
         return finish(result)

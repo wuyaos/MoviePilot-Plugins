@@ -191,7 +191,7 @@ def test_run_native_context_lock_history_and_readonly(read_only):
         return SignContext(site.id, credential, http, site_lock=lock, cancel=cancel)
     result = run_native(runner, site, {'cookie': 'synthetic'}, read_only=read_only, context_factory=factory)
     assert result.status == 'already' and len(history) == 1
-    assert result.metadata == dict(action='sign', trigger='manual', read_only=read_only) and len(http.calls) == 1
+    assert result.metadata == dict(action='sign', trigger='manual', read_only=read_only, cookie_sources=['managed_site']) and len(http.calls) == 1
 
 
 @pytest.mark.parametrize('mode,status', [('busy', 'skipped'), ('missing', 'auth_failed'), ('cancel', 'cancelled')])

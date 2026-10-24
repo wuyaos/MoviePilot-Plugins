@@ -22,10 +22,10 @@ def test_credentials_order_and_refresh():
     m = load("core.credentials")
     resolver = m.CredentialResolver()
     spec = m.CredentialSpec(refresh="password")
-    # uid 仅展示，不做冲突判断：候选按声明顺序，cookiecloud 命中即返回
+    # uid 仅展示，不做冲突判断：候选按声明顺序，local_cookie 命中即返回
     candidates = {"cookiecloud": m.Credential("cookiecloud", "old", "u2"), "local_cookie": m.Credential("local_cookie", "new", "u1")}
     result = resolver.resolve(spec, candidates, "u1", lambda c: m.CredentialCheck("valid", c.uid))
-    assert result.status == "valid" and result.credential.value == "old"
+    assert result.status == "valid" and result.credential.value == "new"
     renewed = m.Credential("local_cookie", "renewed", "u1")
     checks = iter([m.CredentialCheck("invalid", "u1"), m.CredentialCheck("valid", "u1")])
     result = resolver.resolve(spec, {"cookiecloud": m.Credential("cookiecloud", "expired", "u1")}, "u1",

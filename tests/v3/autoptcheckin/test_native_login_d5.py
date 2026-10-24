@@ -84,9 +84,9 @@ def test_signin_gates_do_not_block_login(offline, monkeypatch):
 def test_native_login_cookie_candidates(source, offline, monkeypatch):
     if source == 'cookiecloud':
         monkeypatch.setattr(native, 'cookiecloud_candidate', lambda url: CredentialResolution(Credential(source, 'synthetic'), 'valid'))
-    if source == 'local_cookie':
+    if source in ('local_cookie', 'cookiecloud'):
         monkeypatch.setattr(entry, 'managed_site', lambda sid: {})
-    obj = plugin('darkland', custom_sites_data=[{'id': 'local', 'url': 'https://darkland.top/', 'cookie': 'synthetic'}])
+    obj = plugin('darkland', custom_sites_data=[{'id': 'local', 'url': 'https://darkland.top/', 'cookie': 'synthetic' if source == 'local_cookie' else ''}])
     assert obj._execute_site('darkland', action='login')['status'] == 'login_ok'
     assert [s for _, s in offline] == [source, source]
 

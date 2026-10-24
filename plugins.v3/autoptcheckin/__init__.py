@@ -460,6 +460,8 @@ class AutoPtCheckin(_PluginBase):
             self._record_result(result)
             return asdict(result)
         info["uid"] = self._bound_uids.get(site_id, "")
+        for callback in ('get_data', 'save_data', 'del_data'):
+            setattr(self._runner, callback, getattr(self, callback, None))
         if site_id in ('rousi', 'sunnypt'):
             result = run_integration(self._runner, site_id, site.get('name', site_id), info, self._config, action=action, trigger=trigger)
             return asdict(result)
