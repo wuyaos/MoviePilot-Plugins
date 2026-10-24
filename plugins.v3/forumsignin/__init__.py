@@ -37,7 +37,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.13"
+    plugin_version = "3.1.14"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -267,7 +267,8 @@ class ForumSignin(_PluginBase):
                     self._save("icon.cache", icons)
             site.update({"enabled": site["id"] in self._config.get("enabled_sites", []),
                          "can_sync": site["id"] == "fengchao", "icon": icons.get(site["id"], ""),
-                         "status": result.get("status", "disabled"), "message": result.get("message", "")})
+                         "status": result.get("status", "disabled"), "message": result.get("message", ""),
+                         "streak": self._streak_days(site["id"])})
         return self._response({"today": self._history.today_counts(), "latest": latest, "sites": sites,
                                "next_schedule": self._next_schedule(), "site_counts": site_counts, "fengchao_sync": self._get("fengchao_sync_status") or {},
                                "fengchao_user_info": self._get("fengchao_user_info")})
