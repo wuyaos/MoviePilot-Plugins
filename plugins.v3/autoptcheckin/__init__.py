@@ -595,9 +595,19 @@ class AutoPtCheckin(_PluginBase):
         # 这不是真实取消（round 尚未开始），恢复进入前状态，否则一次性执行必被拦。
         if not stop_before and self._runner.stop.is_set():
             self._runner.stop.clear()
-        if self._runner.stop.is_set():
-            return
-        return self._execute_all("scheduler")
+        try:
+            return self._execute_all("scheduler")
+        finally:
+            # once 消费后宿主已移除该服务且 reconcile 不会重召零任务插件：
+            # 主动重建 interval 服务并通知宿主重注册（否则次日 9:00 槽丢失）。
+            try:
+                self._scheduler.clear()
+                self._scheduler.build(self._config, self._scheduled_signin)
+                if self._scheduler.services:
+                    from app.sdk.scheduler import update_plugin_job
+                    update_plugin_job(self.plugin_id)
+            except Exception:
+                pass
 
     def _scheduled_signin(self):
         with self._migration.lock:
