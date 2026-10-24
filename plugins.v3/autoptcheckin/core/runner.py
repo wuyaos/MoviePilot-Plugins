@@ -1,6 +1,5 @@
 """统一执行链。旧适配器在逐次提交回读能力获验证前不允许接管。"""
 from contextlib import contextmanager
-from dataclasses import dataclass
 from threading import Event, Lock
 from typing import Callable
 from uuid import uuid4
@@ -29,16 +28,6 @@ class SiteAccountLocks:
                 with self._guard:
                     self._busy.remove(key)
 
-
-@dataclass(frozen=True)
-class LegacyAdapterBridge:
-    adapter: object
-    per_submission_verified: bool = False
-
-    def submit(self, site_info: dict) -> tuple[bool, str]:
-        if not self.per_submission_verified:
-            raise RuntimeError("旧适配器内部逐次提交回读尚未验证，禁止接管")
-        return self.adapter.signin(site_info)
 
 
 class SignRunner:

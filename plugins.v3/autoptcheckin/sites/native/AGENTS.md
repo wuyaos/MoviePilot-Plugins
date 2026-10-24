@@ -79,11 +79,11 @@
 | tu88 | 通用 CAPTCHA helper 简繁成功/重复词 | special-hook；page_message 合成节点 | attendance；imagehash/imagestring OCR 已实现，待生产消息/表单校准 |
 | u2 | showup anchor 四种语言；POST 回执 JS 跳转 | special-hook；只保留 anchor；不以 JS 跳转冒充新页成功 | showup.php；9点时段、签到表单 _csrf/req/hash/form、图片选项与提交已实现，待生产校准 |
 | vclib | 通用 CAPTCHA helper 简繁成功/重复词 | special-hook；page_message 合成节点 | attendance；imagehash/imagestring OCR 已实现，待生产消息/表单校准 |
-| yema | GET api/consumer/checkIn；JSON success 布尔 | special-hook；response_json(success)，精确布尔 | /；动作 GET 与布尔比较已实现，待生产校准；bool 不转成数字1 |
+| yema | CloakBrowser 页面动作：ALTCHA 验证后点击签到按钮 | cloak_steps；altcha + sign_button，提交后以落点页回读 | /#/user/growth；页面动作与回读已实现，按钮缺失不猜测成功 |
 | yzyy | .signbtn 今日已打卡/点击打卡；本人行；同 Session 动态 sign token | special-hook；限定唯一 .signbtn 消息 | plugin.php?id=zqlj_sign；同 Session/Cookie 同步、动态链接、无条件按钮/本人行回读已实现，待生产校准；不移植响应兜底 |
 | zhuque | CSRF + fireGenshinCharacterMagic；JSON status=200、data.bonus | api-evidence；response_json(status)，精确数值200 | /；这是技能动作回执而非独立每日签到；动作与安全回读已实现，待生产校准 |
 
-三态例外：tjupt/u2 的状态只有已签标记，未签/未知输入均 unconfirmed；Yema success 按精确布尔 true→signed、false→unsigned，未知类型保持 unconfirmed；登录站任何内容均不生成签到结果；朱雀非200无充分未签证据，保留 unconfirmed。不编造 unsigned 生产判据。
+三态例外：tjupt/u2 的状态只有已签标记，未签/未知输入均 unconfirmed；Yema 通过 ALTCHA 页面动作并以回读消息判定，按钮缺失或回读证据不足保持 unconfirmed；登录站任何内容均不生成签到结果；朱雀非200无充分未签证据，保留 unconfirmed。不编造 unsigned 生产判据。
 
 ## B1-8：批次 2 输入（特殊钩子盘点）
 

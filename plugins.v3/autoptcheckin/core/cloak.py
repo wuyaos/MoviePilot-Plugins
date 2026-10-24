@@ -347,8 +347,6 @@ def run_page_action(session, steps):
                 results.append((step, 'clicked' if clicked else 'absent'))
         except Exception:
             results.append((step, 'error'))
-        except Exception:
-            results.append((step, 'error'))
     try:
         page.wait_for_load_state('networkidle', timeout=15000)
     except Exception:

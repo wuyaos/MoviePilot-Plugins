@@ -1,4 +1,4 @@
-"""海棠表单定位复用 attendance_post_helper 的选择器，未知结构不推定结果。"""
+"""海棠登录页表单定位；未知结构不推定结果。"""
 from .nexus import NexusVerifier
 
 
