@@ -95,18 +95,6 @@ class MTorrent(SiteModule):
                     import pyotp
                     browser.fill('input[autocomplete="one-time-code"], input[name*="totp" i], input[name*="otp" i]',
                                  pyotp.TOTP(info["mteam_totp"]).now())
-                two_fa_page = "/login" in browser.page.url and ("雙重認證碼" in browser.page.locator('body').inner_text())
-                if two_fa_page:
-                    cooldown.parent.mkdir(parents=True, exist_ok=True)
-                    cooldown.write_text("2fa", encoding="utf-8")
-                    return False, "M-Team 要求邮箱双重认证，自动化无法完成；请浏览器人工登录（成功后 40 天内插件自动核验登录态）"
-                two_fa = browser.evaluate(
-                    "() => /\u96d9\u91cd\u8a8d\u8b49|\u9a8c\u8b49\u78bc|\u90f5\u7bb1/.test(document.body.innerText) &&"
-                    " !!document.querySelector('input[name*=code i], input[name*=otp i], input[type=text][name*=auth i]')"
-                )
-                if two_fa:
-                    # 站点提示页含「帳號被禁用?」等通用文案，仅为提示非封禁；要求 6 位验证码，TOTP 可自动填。
-                    pass  # 落到下方 #otp-code 分支处理
                 browser.click('button[type="submit"]')
                 if not _wait_for_mteam_index(browser.page, timeout=15000):
                     # 双重认证页：#otp-code（6 位验证码，TOTP 密钥可算）——填入后二次提交。
@@ -116,6 +104,10 @@ class MTorrent(SiteModule):
                         otp.fill(pyotp.TOTP(info["mteam_totp"]).now())
                         browser.page.wait_for_timeout(800)
                         _submit_mteam_otp(browser.page)
+                if "/index" not in browser.page.url and info.get("mteam_totp"):
+                    # OTP 已填仍停留 2FA 页：码被拒（站点发的是邮箱码）或限流——冷却 24h 防反复触发风控
+                    cooldown.parent.mkdir(parents=True, exist_ok=True)
+                    cooldown.write_text("otp-rejected", encoding="utf-8")
                 if "/index" not in browser.page.url:
                     feature = browser.evaluate("() => document.body.innerText.slice(0,300)")
                     return False, "登录未到达 /index：" + str(feature)

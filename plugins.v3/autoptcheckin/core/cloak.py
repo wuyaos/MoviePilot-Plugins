@@ -39,7 +39,7 @@ class CloakSession:
         self.headless, self.humanize, self.locale = headless, humanize, locale
         self.navigation_timeout = navigation_timeout
         self.action_timeout = navigation_timeout
-        self.human_verify_timeout = navigation_timeout
+        self.human_verify_timeout = 60000
         self.context = self.page = None
 
     def __enter__(self):
@@ -91,6 +91,7 @@ class CloakHttpClient:
             # 轮内共享会话：按站注入 cookie，不重复开关浏览器（生命周期归轮次所有）。
             self.session = shared
             self.shared = True
+            self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
             host = urlsplit(self.url).hostname
             cookies = []
             for pair in cookie.split(";"):
@@ -107,7 +108,7 @@ class CloakHttpClient:
                                                   site.id in TURNSTILE_HEADFUL_SITES),
                                     navigation_timeout=timeout)
         self.session.action_timeout = timeout
-        self.session.human_verify_timeout = timeout
+        self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
         self.session.__enter__()
 
     def _sync_cookies(self):
@@ -229,7 +230,18 @@ def run_page_action(session, steps):
     results = []
     for step in steps:
         try:
-            if step == 'slider':
+            if step == 'attendance_link':
+                link = _wait_for_locator(page, (
+                    'a[href*="bakatest"]',
+                    'a[href*="attendance"]:has-text("签到")',
+                ))
+                if link is None:
+                    results.append((step, 'absent'))
+                    continue
+                link.click()
+                # click 等待导航；下一步轮询也覆盖同页异步挂载的滑块。
+                results.append((step, 'clicked'))
+            elif step == 'slider':
                 handle = _wait_for_locator(page, (
                     '#dragHandler, [class*="dragHandler"], #slider-btn, '
                     '[id*="slider"] .handle, [class*="slider"][class*="handle"], '
@@ -271,7 +283,7 @@ def run_page_action(session, steps):
                         break
                 results.append((step, 'verified' if verified else 'timeout'))
             elif step == 'human_verify':
-                # Vc-Lib Turnstile 依赖 headful CloakBrowser；等待响应 token 后才允许后续提交。
+                # Vc-Lib Turnstile 依赖 headful CloakBrowser；等待响应 token；超时只记录，仍尝试后续签到并回读。
                 token = page.locator('input[name="cf-turnstile-response"]').first
                 if token.count():
                     ok = False

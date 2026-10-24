@@ -27,7 +27,11 @@
       "今天已签到": "signed"
     },
     "emulate": true,
-    "slow": true
+    "slow": true,
+    "cloak_steps": [
+      "human_verify",
+      "sign_button"
+    ]
   },
   {
     "id": "bilibili",
