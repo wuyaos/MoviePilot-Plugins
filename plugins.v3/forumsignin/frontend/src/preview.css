@@ -159,6 +159,12 @@
 
 .site-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 0;font-size:11px;color:var(--ptc-text-muted)}.site-totals b{font-size:20px;margin-right:3px}.success-number{color:var(--ptc-success-text)}.failure-number{color:var(--ptc-failure-text)}.unknown-number{color:var(--ptc-unknown-text)}
 
+/* 基础设置开关同行；论坛名超链接样式。 */
+.toggles-row {display:flex; gap:24px; align-items:center; margin-bottom:14px}
+.forum-link {color:var(--ptc-blue); text-decoration:none; font-weight:600}
+.forum-link:hover {text-decoration:underline}
+.forum-domain {color:var(--ptc-text-muted); font-size:12px; font-weight:400}
+
 /* Section inputs share one adaptive row; fields flex and wrap only when narrow. */
 .win>.group>.grid, .forum-config>.site-card>.grid {display:flex; flex-wrap:wrap; gap:12px 18px}
 .win>.group>.grid>.field, .forum-config>.site-card>.grid>.field {flex:1 1 170px; min-width:150px}
