@@ -183,7 +183,7 @@ return (_ctx, _cache) => {
           }),
           _createVNode(_component_v_card_subtitle, null, {
             default: _withCtx(() => [...(_cache[28] || (_cache[28] = [
-              _createTextVNode("按列表粗筛、详情精筛和下载器并发控制保种任务", -1)
+              _createTextVNode("按列表页预筛和下载器并发控制保种任务", -1)
             ]))]),
             _: 1
           })
@@ -409,7 +409,7 @@ return (_ctx, _cache) => {
                   }),
                   _cache[34] || (_cache[34] = _createElementVNode("div", null, [
                     _createElementVNode("h3", null, "获取规则"),
-                    _createElementVNode("p", null, "列表页粗筛 → 详情页精筛 → 推送下载器。")
+                    _createElementVNode("p", null, "列表页预筛 → 推送下载器。")
                   ], -1))
                 ]),
                 _createVNode(_component_v_row, { dense: "" }, {
@@ -546,7 +546,7 @@ return (_ctx, _cache) => {
                   })
                 ]),
                 _createElementVNode("div", _hoisted_8, [
-                  _cache[36] || (_cache[36] = _createElementVNode("div", { class: "filter-label" }, "详情页精筛", -1)),
+                  _cache[36] || (_cache[36] = _createElementVNode("div", { class: "filter-label" }, "列表页预筛", -1)),
                   _createVNode(_component_v_row, { dense: "" }, {
                     default: _withCtx(() => [
                       _createVNode(_component_v_col, {
@@ -772,7 +772,7 @@ return (_ctx, _cache) => {
               _cache[44] || (_cache[44] = _createElementVNode("section", { class: "logic-notes" }, [
                 _createElementVNode("div", null, [
                   _createElementVNode("strong", null, "获取链路"),
-                  _createElementVNode("span", null, "按列表顺序抓保种区，依次经过做种数、下载数、体积粗筛，再进入详情页检查完成率和连接时间，通过后推送下载器并打下载标签。")
+                  _createElementVNode("span", null, "按列表顺序抓保种区，依次经过免费、做种数、下载数、完成率、发布时间、体积预筛，通过后推送下载器并打下载标签。")
                 ]),
                 _createElementVNode("div", null, [
                   _createElementVNode("strong", null, "监控链路"),
@@ -817,6 +817,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ce994f7d"]]);
+const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-43260f9d"]]);
 
 export { ConfigComponent as default };

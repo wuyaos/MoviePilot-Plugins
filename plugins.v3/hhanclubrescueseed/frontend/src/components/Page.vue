@@ -104,7 +104,7 @@ async function refreshData() {
   loading.value = true
   error.value = ''
   try {
-    const response = unwrap(await pluginApi.get('download/records'))
+    const response = unwrap(await pluginApi.get('download_records'))
     if (!response?.success) throw new Error(response?.message || '获取下载记录失败')
     const data = response.data || {}
     records.value = Array.isArray(data.records) ? data.records : []
@@ -124,9 +124,7 @@ async function deleteRecord(record) {
   if (!title) return
   deleting.value = title
   try {
-    const query = `download/records?titles=${encodeURIComponent(title)}`
-    const response = unwrap(await pluginApi.delete(query))
-    if (!response?.success) throw new Error(response?.message || '删除记录失败')
+    const response = unwrap(await pluginApi.post('delete_download_records', [title]))
     records.value = records.value.filter(item => item.title !== title)
     notify('success', '记录已删除')
     emit('action')
