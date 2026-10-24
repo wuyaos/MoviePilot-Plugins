@@ -40,6 +40,7 @@ class ForumSignin(_PluginBase):
                  "yaowan_managed_site_id", "ssdforum_managed_site_id")
 
     def __init__(self):
+        self._notify_buffer = []
         super().__init__()
         self._config = self.get_form()[1]
         self._locks = {key: Lock() for key in ADAPTERS}
@@ -350,31 +351,40 @@ class ForumSignin(_PluginBase):
         result.metadata["trigger"] = "verify" if readonly else "manual"
         self._history.append(result)
         if not readonly and self._config.get("notify"):
-            self._notify_result(result)
+            self._notify_buffer.append((site_id, result))
         return self._response(asdict(result))
 
-    def _notify_result(self, result):
+    def _flush_notify(self):
+        """一轮结果合并为一条通知；空缓冲不发送。"""
+        if not self._notify_buffer:
+            return
+        results, self._notify_buffer = self._notify_buffer, []
         try:
-            if not self._config.get("notify"):
-                return
-            name = next((site["name"] for site in get_registry() if site["id"] == result.site_id), result.site_id)
+            registry = get_registry()
             labels = {SignStatus.SUCCESS: "签到成功", SignStatus.ALREADY: "今日已签到",
                       SignStatus.FAILED: "签到失败", SignStatus.UNCONFIRMED: "结果未确认",
                       SignStatus.AUTH_FAILED: "认证失败", SignStatus.NETWORK_ERROR: "网络异常"}
-            state = labels.get(result.status, "签到完成")
-            self.post_message(title="【论坛签到】",
-                              text=f"论坛：{name}\n状态：{state}\n说明：{result.message or '—'}\n时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}")
+            blocks = []
+            for site_id, result in results:
+                name = next((site["name"] for site in registry if site["id"] == site_id), site_id)
+                state = labels.get(result.status, "签到完成")
+                blocks.append(f"论坛：{name}\n状态：{state}\n说明：{result.message or '—'}")
+            blocks.append(f"时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}")
+            self.post_message(title="【论坛签到】", text="\n\n".join(blocks))
         except Exception as exc:
             logger.warning("通知发送失败（不影响签到结果）：%s", exc)
 
     async def api_signin_by_domain(self, domain: str):
-        return await asyncio.to_thread(self._execute, domain)
+        result = await asyncio.to_thread(self._execute, domain)
+        self._flush_notify()
+        return result
 
     def run_once(self):
         results = []
         for site in get_registry():
             if site["id"] in self._config.get("enabled_sites", []):
                 results.append(self._execute_with_retry(site["domain"]))
+        self._flush_notify()
         return self._response(results)
 
     async def api_run_once(self):
