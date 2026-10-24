@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.1.8"
+    plugin_version = "3.1.9"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -118,7 +118,9 @@ class Hhanclubrescueseed(_PluginBase):
                 self._save_path = config.get("save_path")
                 self._custom_tag = config.get("custom_tag")
                 self._enable_notification = config.get("enable_notification", False)
-                self._notify_on_zero_torrents = config.get("notify_on_zero_torrents", True)
+                self._notify_on_zero_torrents = config.get("notify_on_zero_torrents", False)
+                # 仅下载免费种子开关
+                self._free = config.get("free", False)
                 self._history_rescue_enabled = config.get("history_rescue_enabled", False)
                 self._user_id = config.get("user_id", "")
                 self._force_resume = config.get("force_resume", False)

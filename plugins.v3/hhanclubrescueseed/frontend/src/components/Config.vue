@@ -166,7 +166,7 @@ onMounted(loadConfig)
           <div class="filter-block"><div class="filter-label">列表页预筛</div><v-row dense>
             <v-col cols="12" md="4"><v-text-field v-model="form.completion_ratio_max" label="完成率上限（%）" placeholder="留空不筛" type="number" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" md="4"><v-text-field v-model="form.connect_time_max_hours" label="连接时间上限（小时）" placeholder="留空不筛" type="number" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" md="4"><v-text-field v-model="form.free" label="免费种子" hint="当前站点规则：免费种子自动纳入候选" persistent-hint readonly variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" md="4"><v-switch v-model="form.free" color="primary" label="仅下载免费种子" hint="关闭时免费属性不作为筛选条件" persistent-hint /></v-col>
           </v-row></div>
         </section>
 

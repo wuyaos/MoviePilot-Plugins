@@ -170,7 +170,7 @@ onMounted(refreshData)
 
       <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。</p></div><v-btn color="primary" variant="outlined" :loading="loading" prepend-icon="mdi-refresh" @click="refreshData">刷新</v-btn></div>
       <v-data-table v-if="records.length" :headers="headers" :items="records" item-value="title" class="records-table" :items-per-page="10">
-        <template #item.title="{ item }"><div class="title-cell"><strong>{{ item.title || '-' }}</strong><span v-if="item.site">{{ item.site }}</span><span v-else-if="item.zh_title">{{ item.zh_title }}</span></div></template>
+        <template #item.title="{ item }"><div class="title-cell"><strong>{{ item.title || '-' }}</strong><span v-if="item.zh_title">{{ item.zh_title }}</span></div></template>
         <template #item.size="{ item }">{{ formatSize(item.size) }}</template>
         <template #item.added_on="{ item }">{{ formatAddedOn(item) }}</template>
         <template #item.seeding_time="{ item }">{{ formatSeedingTime(valueOf(item, 'seeding_time', 'seeding_time_hours')) }}</template>

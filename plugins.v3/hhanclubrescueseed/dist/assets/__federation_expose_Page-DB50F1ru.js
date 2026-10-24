@@ -12,7 +12,6 @@ const _hoisted_5 = { class: "stat-value" };
 const _hoisted_6 = { class: "table-heading" };
 const _hoisted_7 = { class: "title-cell" };
 const _hoisted_8 = { key: 0 };
-const _hoisted_9 = { key: 1 };
 
 const {computed,getCurrentInstance,inject,onMounted,ref} = await importShared('vue');
 
@@ -378,11 +377,9 @@ return (_ctx, _cache) => {
                 "item.title": _withCtx(({ item }) => [
                   _createElementVNode("div", _hoisted_7, [
                     _createElementVNode("strong", null, _toDisplayString(item.title || '-'), 1),
-                    (item.site)
-                      ? (_openBlock(), _createElementBlock("span", _hoisted_8, _toDisplayString(item.site), 1))
-                      : (item.zh_title)
-                        ? (_openBlock(), _createElementBlock("span", _hoisted_9, _toDisplayString(item.zh_title), 1))
-                        : _createCommentVNode("", true)
+                    (item.zh_title)
+                      ? (_openBlock(), _createElementBlock("span", _hoisted_8, _toDisplayString(item.zh_title), 1))
+                      : _createCommentVNode("", true)
                   ])
                 ]),
                 "item.size": _withCtx(({ item }) => [
@@ -442,6 +439,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-2c17cce3"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-305d04a8"]]);
 
 export { PageComponent as default };

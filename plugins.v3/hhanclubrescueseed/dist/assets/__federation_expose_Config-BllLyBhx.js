@@ -642,15 +642,13 @@ return (_ctx, _cache) => {
                         md: "4"
                       }, {
                         default: _withCtx(() => [
-                          _createVNode(_component_v_text_field, {
+                          _createVNode(_component_v_switch, {
                             modelValue: form.free,
                             "onUpdate:modelValue": _cache[21] || (_cache[21] = $event => ((form.free) = $event)),
-                            label: "免费种子",
-                            hint: "当前站点规则：免费种子自动纳入候选",
-                            "persistent-hint": "",
-                            readonly: "",
-                            variant: "outlined",
-                            density: "comfortable"
+                            color: "primary",
+                            label: "仅下载免费种子",
+                            hint: "关闭时免费属性不作为筛选条件",
+                            "persistent-hint": ""
                           }, null, 8, ["modelValue"])
                         ]),
                         _: 1
@@ -871,6 +869,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-cdc5b4d8"]]);
+const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b8e4bbe4"]]);
 
 export { ConfigComponent as default };
