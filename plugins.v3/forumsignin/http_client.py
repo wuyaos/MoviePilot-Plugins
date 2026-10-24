@@ -23,6 +23,7 @@ class HttpClient:
         self.base = base
         self.credential = credential
         self.instance_id = instance_id
+        self.version = version or ""
         self.session = None
 
     def request(self, method, path, **kwargs):
