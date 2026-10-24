@@ -37,7 +37,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.16"
+    plugin_version = "3.1.17"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -571,6 +571,10 @@ class ForumSignin(_PluginBase):
         return await asyncio.to_thread(self.clean_cache)
 
     async def api_verify_site(self, domain: str):
+        site = next((s for s in get_registry() if s.get("domain") == domain), None)
+        if site and site["id"] == "fengchao":
+            # 蜂巢是纯 API 站：核验走同步路径，不产生页面 verify 的 unconfirmed 记录。
+            return await self.api_update_info(domain)
         return await asyncio.to_thread(self._execute, domain, True)
 
     def update_info(self):

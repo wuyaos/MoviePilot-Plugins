@@ -574,3 +574,20 @@ def test_native_wording_notes_flow_to_message():
     ev = SSDForum.verifier.parse(sample, "42", DAY)
     assert ev.note == "已累计签到22天，上次签到 2026-10-24"
     assert normalize_evidence(ev, "42", DAY).message == "已累计签到22天，上次签到 2026-10-24"
+
+
+def test_verify_site_routes_fengchao_to_sync(monkeypatch):
+    import asyncio
+    plugin = ForumSignin()
+    called = {}
+
+    async def fake_update_info(domain="fengchao.chat"):
+        called["domain"] = domain
+        return plugin._response({"uid": "3161"})
+
+    plugin.api_update_info = fake_update_info
+    monkeypatch.setattr(plugin, "_execute",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("execute called")))
+    result = asyncio.run(plugin.api_verify_site("fengchao.chat"))
+    assert called.get("domain") == "fengchao.chat"
+    assert result.get("success") is True
