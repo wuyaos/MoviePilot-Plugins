@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.1.4"
+    plugin_version = "3.1.5"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -848,7 +848,7 @@ class Hhanclubrescueseed(_PluginBase):
                 # ① 达标打标：做种满 reward_hours 小时且下载完成
                 for _, s in stats:
                     if s["seeding_hours"] >= self._reward_hours and reward_tag not in s["tags"]:
-                        if self._add_torrent_tag(info, s["hash"], reward_tag):
+                        if self._add_torrent_tag(info, s["hash"], reward_tag, org_tags=s["tags"]):
                             tagged_count += 1
                             s["tags"].append(reward_tag)
                             logger.info(f"达标打标: {s['name']} 做种 {s['seeding_hours']:.1f}h")
@@ -933,6 +933,13 @@ class Hhanclubrescueseed(_PluginBase):
             tags = val("tags", "labels") or []
             if isinstance(tags, str):
                 tags = [x.strip() for x in tags.split(",") if x.strip()]
+            # 进度归一到 0-1：qb progress 为 0-1，transmission-rpc progress 为 0-100
+            try:
+                progress = float(progress)
+            except (TypeError, ValueError):
+                progress = 0.0
+            if progress > 1:
+                progress = progress / 100.0
             now = datetime.datetime.now()
             added_days = 0.0
             if added:
@@ -953,7 +960,7 @@ class Hhanclubrescueseed(_PluginBase):
                 "size_gb": float(size) / (1024 ** 3),
                 "uploaded": float(uploaded),
                 "avg_upspeed": (float(uploaded) / float(active_seconds)) if float(active_seconds) > 0 else 0.0,
-                "progress": float(progress),
+                "progress": progress,
                 "seeding_hours": float(active_seconds) / 3600.0,
                 "added_days": added_days,
                 "tags": [str(x) for x in tags],
@@ -963,8 +970,8 @@ class Hhanclubrescueseed(_PluginBase):
             logger.warning(f"解析种子状态失败: {str(e)}")
             return None
 
-    def _add_torrent_tag(self, service_info, torrent_hash: str, tag: str) -> bool:
-        """为种子添加标签（qb 支持标签；tr 尝试 labels，失败仅记日志）"""
+    def _add_torrent_tag(self, service_info, torrent_hash: str, tag: str, org_tags: list = None) -> bool:
+        """为种子添加标签（qb 走库原生追加；tr 走 MP 统一实例 set_torrent_tag 并保留原标签）"""
         if not torrent_hash or not tag:
             return False
         try:
@@ -972,8 +979,10 @@ class Hhanclubrescueseed(_PluginBase):
                 service_info.instance.torrents_add_tags(ids=torrent_hash, tags=tag)
                 return True
             elif service_info.type == "transmission":
-                # tr 的标签接口按 MP 统一实例尽力而为
-                service_info.instance.add_torrent_tag(ids=torrent_hash, tags=tag)
+                # MP tr 统一实例无 add_torrent_tag；set_torrent_tag 默认覆盖标签，
+                # 必须传 org_tags 保留原有标签（如自定义下载标签）
+                service_info.instance.set_torrent_tag(
+                    ids=[torrent_hash], tags=[tag], org_tags=list(org_tags or []))
                 return True
             else:
                 logger.warning(f"不支持的下载器类型，无法打标: {service_info.type}")
