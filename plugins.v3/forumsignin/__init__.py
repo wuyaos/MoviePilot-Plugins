@@ -31,7 +31,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.6"
+    plugin_version = "3.1.7"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -219,7 +219,7 @@ class ForumSignin(_PluginBase):
                          "can_sync": site["id"] == "fengchao", "icon": icons.get(site["id"], ""),
                          "status": result.get("status", "disabled"), "message": result.get("message", "")})
         return self._response({"today": self._history.today_counts(), "latest": latest, "sites": sites,
-                               "next_schedule": self._next_schedule(), "site_counts": site_counts, "fengchao_sync": self._get("fengchao_sync_status"),
+                               "next_schedule": self._next_schedule(), "site_counts": site_counts, "fengchao_sync": self._get("fengchao_sync_status") or {},
                                "fengchao_user_info": self._get("fengchao_user_info")})
 
     def _next_schedule(self):
@@ -354,7 +354,9 @@ class ForumSignin(_PluginBase):
                     else:
                         bound = self._get("identity." + site_id) or ""
                         result = run_page(adapter, bound, readonly,
-                                          bind=lambda uid: self._save("identity." + site_id, uid))
+                                          bind=lambda uid: self._save("identity." + site_id, uid),
+                                          sample_sink=(lambda html, status: self._save("sample." + site_id + ".html", html))
+                                          if site_id in ("yaowan", "ssdforum") else None)
         except PermissionError:
             result = SignResult(SignStatus.AUTH_FAILED, "凭证已失效或无权限，未提交")
         except ValueError:
@@ -460,10 +462,13 @@ class ForumSignin(_PluginBase):
             self._save("fengchao_user_info_updated_at", now)
             self._save("fengchao_sync_status", {"success": True, "time": now})
             return self._response(info)
-        except Exception:
-            self._save("fengchao_sync_status", {"success": False, "message": "sync_unconfirmed",
+        except Exception as exc:
+            # 保留可诊断的异常类型/HTTP 状态；不记录 API key 或响应凭据。
+            detail = self._safe_sync_error(exc)
+            logger.warning("蜂巢个人信息同步失败：%s", detail)
+            self._save("fengchao_sync_status", {"success": False, "message": detail,
                                                 "time": datetime.now().astimezone().isoformat()})
-            return self._response(success=False, message="sync_unconfirmed")
+            return self._response(success=False, message=detail)
         finally:
             try:
                 if client:
@@ -472,6 +477,14 @@ class ForumSignin(_PluginBase):
                 pass  # Cleanup must not replace the synchronization result.
             finally:
                 lock.release()
+
+    @staticmethod
+    def _safe_sync_error(exc):
+        """同步错误只保留类型和短消息，避免把凭据/响应正文写入数据或日志。"""
+        message = str(exc or "").replace("\n", " ").strip()
+        if len(message) > 240:
+            message = message[:240] + "…"
+        return f"{type(exc).__name__}: {message or 'unknown_error'}"
 
     async def api_update_info(self, domain: str = "fengchao.chat"):
         if domain not in ("fengchao.chat", "pting.club"):

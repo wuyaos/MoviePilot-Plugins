@@ -160,9 +160,9 @@
 .site-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 0;font-size:11px;color:var(--ptc-text-muted)}.site-totals b{font-size:20px;margin-right:3px}.success-number{color:var(--ptc-success-text)}.failure-number{color:var(--ptc-failure-text)}.unknown-number{color:var(--ptc-unknown-text)}
 
 /* 密码框明文切换：眼睛内嵌输入框右侧，无边框背景。 */
-.secret-wrap {position:relative; display:flex; align-items:center; min-width:0; flex:1}
+.secret-wrap {position:relative; display:flex; align-items:center; min-width:0; flex:1 1 auto; white-space:nowrap; flex-wrap:nowrap}
 .secret-wrap .input {flex:1; min-width:0; padding-right:38px}
-.secret-wrap .eye {position:absolute; right:8px; width:26px; min-height:26px; padding:0; border:0; background:none; color:var(--ptc-text-muted); font-size:14px; cursor:pointer}
+.secret-wrap .eye {position:absolute; top:50%; transform:translateY(-50%); right:8px; width:26px; min-height:26px; padding:0; border:0; background:none; color:var(--ptc-text-muted); font-size:14px; cursor:pointer}
 .secret-wrap .eye:hover {color:var(--ptc-blue)}
 
 /* 基础设置开关同行；论坛名超链接样式。 */
@@ -193,5 +193,5 @@
 /* Data page: breathing room between topbar, cards and history. */
 .data-grid {margin:16px 0 22px}
 .pt-center h3 {margin-top:18px}
-.table-wrap {margin-top:10px}
+.table-wrap {margin-top:10px; max-height:50vh; overflow-x:auto; overflow-y:auto} .table-wrap th {position:sticky; top:0; z-index:1; background:var(--ptc-surface-subtle)}
 .topline {margin-bottom:4px}

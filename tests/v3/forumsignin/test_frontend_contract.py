@@ -29,7 +29,7 @@ def test_forum_page_contract():
     assert "history-group" not in source and "<details" not in source
     assert "site-icon site-initial" in source and "can_sync" in source
     assert "site-totals" not in source and "next_schedule" in source
-    assert "连续签到" in source and "fengchao_user_info?.currentStreak" in source
+    assert "连续签到" in source and "data?.attributes" in source and "totalContinuousCheckIn" in source
 
 
 def test_theme_and_site_registry_contract():
@@ -50,5 +50,5 @@ def test_page_renders_fengchao_sync_data_and_status():
     source = (FRONTEND / "src" / "Page.vue").read_text(encoding="utf-8")
     assert "stats.value?.fengchao_user_info" in source
     assert "stats.value?.fengchao_sync" in source
-    assert "syncInfo().displayName" in source and "syncInfo().points" in source
+    assert "syncInfo().displayName" in source and "syncInfo().money" in source and "syncInfo().maxCheckInStreak" in source
     assert "上次同步：" in source and "同步失败：" in source

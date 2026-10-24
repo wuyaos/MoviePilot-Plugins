@@ -8,7 +8,7 @@ from forum_under_test.core.credentials import Credential, resolve
 from forum_under_test.core.registry import get_site, get_registry
 from forum_under_test.core.models import Evidence, SignStatus, SignResult
 from forum_under_test.core.verification import normalize_evidence
-from forum_under_test.core.runner import run_page
+from forum_under_test.core.runner import run_page, sanitize_sample
 from forum_under_test.core.history import HistoryStore
 from forum_under_test.integrations.ssdforum import SSDForum
 from forum_under_test.integrations.yaowan import Yaowan
@@ -178,10 +178,10 @@ def test_sync_invalid_business_data_preserves_cache(monkeypatch, status):
     client = Client([TimeoutError(), api(status)])
     monkeypatch.setattr(plugin, "_client", lambda site: client)
     response = asyncio.run(plugin.api_update_info())
-    assert response["success"] is False and response["message"] == "sync_unconfirmed"
+    assert response["success"] is False and response["message"].startswith("ValueError: sync_unconfirmed")
     assert plugin._get("fengchao_user_info") == previous
     assert plugin._get("fengchao_user_info_updated_at") == "previous"
-    assert plugin._get("fengchao_sync_status")["message"] == "sync_unconfirmed"
+    assert plugin._get("fengchao_sync_status")["message"].startswith("ValueError: sync_unconfirmed")
     assert plugin._history.list()["total"] == 0
     assert client.closed and not plugin._locks["fengchao"].locked()
 
@@ -385,3 +385,21 @@ def test_sync_api_notifies_result(monkeypatch, success, state):
     assert "时间：" in posted[0]["text"]
     if not success:
         assert "说明：synthetic-result" in posted[0]["text"]
+
+
+def test_readback_sample_is_sanitized_and_latest_callback():
+    raw = '<html><head><title>签到页</title><script>cookie="secret-cookie"</script></head><body><input name="formhash" value="secret-formhash"><div>签到</div></body></html>'
+    sample = sanitize_sample(raw)
+    assert '<script' not in sample and 'secret-cookie' not in sample
+    assert 'secret-formhash' not in sample and '[redacted]' in sample
+    assert '<title>签到页</title>' in sample
+
+
+def test_fengchao_sync_reads_identity_then_status():
+    client = Client([api({'userId': '42', 'account': {'uid': '42'}}),
+                     api({'account': {'uid': '42', 'displayName': 'synthetic-user', 'points': 18},
+                          'checkIn': {'currentStreak': 4}})])
+    info, identity = Fengchao(client).sync()
+    assert [call[1] for call in client.calls] == ['/api/integrations/moviepilot/v1/me', '/api/integrations/moviepilot/v1/status']
+    assert info['uid'] == '42' and info['points'] == 18 and info['currentStreak'] == 4
+    assert identity['userId'] == '42'
