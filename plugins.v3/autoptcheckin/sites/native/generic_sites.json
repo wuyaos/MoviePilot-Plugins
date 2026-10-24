@@ -405,8 +405,7 @@
     "id": "hdwing",
     "name": "HDWing",
     "url": "https://hdwing.org/",
-    "attendance_path": "/attendance.php",
-    "signin_capable": false
+    "attendance_path": "/"
   },
   {
     "id": "nexushd",

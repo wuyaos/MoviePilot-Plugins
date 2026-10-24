@@ -21,7 +21,7 @@ def test_generic_declarations_unique_and_credential_free():
     assert len({row['url'] for row in rows}) == 102
     assert all({'id', 'name', 'url'} <= set(row) for row in rows)
     base_rows = sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows)
-    assert base_rows == 49  # cspt 补 signed_marker、hdwing 404 禁签（均进 extras）  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
+    assert base_rows == 50  # hdwing 转专属 AJAX 模块（恢复签到），cspt signed_marker 进 extras  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
     extras = [row for row in rows if set(row) != {'id', 'name', 'url', 'attendance_path'}]
     assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path', 'browser_login', 'slow', 'slow_timeout', 'headful', 'impersonate'} for row in extras)
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'iptorrents'} & {row['id'] for row in rows}  # jpopsuki/nebulance/filelist 已转正为仅登录声明
@@ -31,7 +31,7 @@ def test_generic_dynamic_registry_and_default_message_chain():
     rows = registry.discover_sites()['sites']
     native = [row for row in rows if row['native']]
     # Baseline includes GTK and LP-Bits in addition to the original 46 declarations.
-    assert len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2 == 29
+    assert len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2 == 30  # +hdwing 专属 AJAX 模块
     assert len(native) == 128  # Native package discovery includes all declarations.
     assert len({row['id'] for row in rows}) == len(rows)
     for cls in generic.build_generic_sites():
