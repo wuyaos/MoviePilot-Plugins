@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.1.5"
+    plugin_version = "3.1.6"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -335,6 +335,42 @@ class Hhanclubrescueseed(_PluginBase):
         """API Endpoint: Returns download records with auto-delete switch state."""
         records = self.get_data("download_records") or []
         records.reverse()
+        # 聚合下载器实时状态（状态/上传量/做种时长），按种子 hash 匹配记录
+        aggregated = False
+        live = {}
+        try:
+            if self._downloader and self._custom_tag:
+                svc = self.downloader_helper.get_service(self._downloader)
+                if svc and svc.instance:
+                    reward_tag = self._reward_tag or ""
+                    for t in (svc.instance.get_torrents(tags=self._custom_tag) or []):
+                        s = self._get_torrent_stats(t)
+                        if not s or not s.get("hash"):
+                            continue
+                        if s["progress"] < 1:
+                            status = "下载中"
+                        elif reward_tag and reward_tag in s["tags"]:
+                            status = "已达标"
+                        else:
+                            status = "做种中"
+                        live[s["hash"].lower()] = {
+                            "status": status,
+                            "uploaded": s["uploaded"],
+                            "seeding_time_hours": s["seeding_hours"],
+                        }
+                    aggregated = True
+        except Exception as e:
+            logger.warning(f"聚合下载器实时状态失败: {str(e)}")
+        if aggregated:
+            for r in records:
+                info = live.get(str(r.get("torrent_hash") or "").lower())
+                if info:
+                    r.update(info)
+                else:
+                    # 下载器中已不存在该 hash（被删除或标签不符）
+                    r["status"] = "已删除"
+                    r["uploaded"] = 0
+                    r["seeding_time_hours"] = 0
         return Response(success=True, data={
             "records": records,
             "auto_delete_enabled": bool(self._auto_delete_enabled),
@@ -545,11 +581,14 @@ class Hhanclubrescueseed(_PluginBase):
                 logger.error("未配置下载器，无法执行保种任务")
                 return
             downloaded_count = 0
+            limit_reached = False
             success_downloaded_count = 0
             failed_downloaded_count = 0
             # 先获取现有的下载记录列表
             download_records = self.get_data("download_records") or []
             for page in range(0, self._max_pages):
+                if limit_reached:
+                    break
                 if self._event.is_set():
                     logger.info("检测到停止事件，终止本轮页面下载")
                     break
@@ -577,6 +616,7 @@ class Hhanclubrescueseed(_PluginBase):
                         # 检查下载数量限制
                         if self._download_limit > 0 and downloaded_count >= self._download_limit:
                             logger.info(f"已达到单次下载数量限制 ({self._download_limit})，停止下载")
+                            limit_reached = True
                             break
                         download_element = elem.xpath('div[4]/div/a')
                         if download_element:
@@ -668,7 +708,8 @@ class Hhanclubrescueseed(_PluginBase):
                                             # 使用self.save_data保存数据，以列表形式保存所有下载记录
                                             # 将新记录添加到列表中
                                             download_records.append(download_record)
-                                            # 保存更新后的列表
+                                            # 保存更新后的列表（上限 500 条，裁最旧）
+                                            download_records = download_records[-500:]
                                             self.save_data(key="download_records", value=download_records)
 
 
@@ -1105,7 +1146,7 @@ class Hhanclubrescueseed(_PluginBase):
                     self._event.clear()
                 self._scheduler = None
         except Exception as e:
-            print(str(e))
+            logger.error(f"停止服务异常: {str(e)}")
 
     def _check_history_seeding(self):
         """
@@ -1361,7 +1402,8 @@ class Hhanclubrescueseed(_PluginBase):
                                     download_records = self.get_data("download_records") or []
                                     # 将新记录添加到列表中
                                     download_records.append(download_record)
-                                    # 保存更新后的列表
+                                    # 保存更新后的列表（上限 500 条，裁最旧）
+                                    download_records = download_records[-500:]
                                     self.save_data(key="download_records", value=download_records)
 
                                 else:
