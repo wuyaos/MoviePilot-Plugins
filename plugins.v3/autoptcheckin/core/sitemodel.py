@@ -178,6 +178,7 @@ class SiteModule(ABC):
     login_capable: bool = True
     cf: bool | None = None
     record_spec: RecordSpec
+    impersonate: bool = False
 
     @abstractmethod
     def signin(self, ctx: SignContext) -> SignResult:

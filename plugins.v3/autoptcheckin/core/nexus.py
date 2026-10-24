@@ -171,6 +171,10 @@ class NexusSignin(SiteModule):
                                       evidence=before.evidence)
                 form = self.discover_form(ctx, page)
                 if form is None:
+                    # CF JS 挑战页可达但返回 200：挑战页无表单，归不可达而非协议待适配。
+                    low = (page.text or '')[:20000].lower()
+                    if 'just a moment' in low or 'challenge-platform' in low or '__cf_chl' in low:
+                        return ctx.result(status=SignStatus.NETWORK_ERROR, message="CF 盾拦截：页面为浏览器挑战页")
                     return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="未发现唯一签到表单",
                                       evidence=before.evidence)
                 if not self.solve_captcha(ctx, page, form):

@@ -122,7 +122,7 @@
   {
     "id": "hddolby",
     "name": "高清杜比",
-    "url": "https://www.hddolby.com/",
+    "url": "https://www.uhddolby.com/",
     "attendance_path": "/attendance.php",
     "login_notice": "站点规则：严禁 Cookies/伪造 UA 模拟登录，请定期浏览器人工登录"
   },
@@ -760,14 +760,7 @@
     "action_get": "/attendance.php",
     "safe_read_path": "/attendance.php",
     "referer": true,
-    "signed_marker": "//*[contains(concat(' ', normalize-space(@class), ' '), ' register-now-info ')]",
-    "record_spec": {
-      "message": "//*[contains(concat(' ', normalize-space(@class), ' '), ' register-now-info ')]",
-      "status_map": {
-        "本次签到获得": "signed",
-        "这是您的第": "signed"
-      }
-    }
+    "signed_marker": "//*[contains(concat(' ', normalize-space(@class), ' '), ' register-now-info ')]"
   },
   {
     "id": "hdcity",

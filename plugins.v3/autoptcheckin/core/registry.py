@@ -88,7 +88,7 @@ def discover_sites(package_name: str | None = None) -> dict:
                     sites.append({'id': cls.id, 'name': cls.name, 'native': True,
                                   'verified': bool(getattr(cls, 'verified', False)),
                                   'login_capable': cls.login_capable, 'url': cls.url or '', 'credential': credential(cls.credential),
-                                  'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'hook_implemented': bool(getattr(cls, 'hook_implemented', True)),
+                                  'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'impersonate': bool(getattr(cls, 'impersonate', False)), 'hook_implemented': bool(getattr(cls, 'hook_implemented', True)),
                                   'emulate': bool(getattr(cls, 'emulate', False)), 'notice': getattr(cls, 'login_notice', '') or '',
                                   'shield': shield_of(cls)})
             except Exception as exc:
