@@ -86,7 +86,7 @@ cp -r $S/dist/assets $J/dist/
 - `AUDIENCES_UID/PASSKEY` 报「未设置」= env 没进进程（直启没 source），不是文件里没写。
 - **前端是独立 Node 服务**（`public/service.js`，静态 `public/` + 反代 API，监听 NGINX_PORT 17431）。它启动时探测后端 `/health/ready`，后端未就绪达 `MOVIEPILOT_FRONTEND_MAX_FAILURES`（默认 4 次×15s）即退出并记 `Backend is unavailable, skip starting frontend service`——后端冷启动慢会连锁导致前端不启，表现「登录失败，请检查网络连接」。mp.ps1 已把该值调到 40（10 分钟容忍窗口）。前端日志 `config/logs/moviepilot.frontend.log`。
 - 删 junction 必须用 `python -c "os.rmdir(...)"` 或资源管理器；**bash 里内嵌 PowerShell 转义会静默失败**（`\\'$p'` 类转义错后 2>/dev/null 吞错），导致「删了其实没删」，后续 cp 还会写穿 junction 污染源目录。删后务必用 resolve() 相对性校验（见「部署形态」）。
-- qnap 生产实例的 `app.env` 可作本地合并基线（2025-10 已合并：GITHUB_TOKEN、PLUGIN_MARKET、LLM、DOH 等），但本地运行时键（PORT/NGINX_PORT/HOST/SUPERUSER/API_TOKEN）保留本地值；qnap 的 compose 级 env（AUTH_SITE/AUDIENCES_*）不在其 app.env 里，需单独补。
+- qnap 生产实例的 `app.env` 可作本地合并基线（2025-10 已合并：GITHUB_TOKEN、PLUGIN_MARKET、LLM、DOH 等），但本地运行时键（PORT/NGINX_PORT/HOST/SUPERUSER/API_TOKEN）保留本地值；qnap 的 compose 级 env（AUTH_SITE/AUDIENCES_*、**PROXY_HOST**）不在其 app.env 里，需单独补——PROXY_HOST 漏配实证：GITHUB_TOKEN 在手仍全部「策略：直连 ConnectTimeout」，插件市场永远加载中，补 `PROXY_HOST='http://127.0.0.1:7890'` 后即愈。
 
 ## 红线
 
