@@ -1,10 +1,12 @@
 """Custom consumer path using synthetic attendance pages, never live sites."""
 import importlib
+import json
 from contextlib import contextmanager
 
 import pytest
 
 from test_custom_verify import probe
+from test_cookiecloud_credentials import cloud
 from autoptcheckin.core.models import LoginPage
 from autoptcheckin.core.registry import get_registry
 
@@ -198,3 +200,36 @@ def test_custom_entry_matching_adapter_domain_dedupes():
     assert any(row['id'] == 'hdwing' and row['source'] == '插件适配' for row in sites)
     independent = get_registry([{'id': 'custom-x', 'name': 'X', 'url': 'https://unregistered.invalid/'}])['sites']
     assert any(row['id'] == 'custom-x' for row in independent)
+
+
+def test_custom_empty_cookie_falls_back_to_cookiecloud_and_persists(probe, cloud, monkeypatch):
+    """条目 Cookie 为空：候选链落到 CookieCloud，成功后回写统一 Cookie 表。"""
+    plugin, _, _ = probe
+    plugin._config['custom_sites_data'][0]['cookie'] = ''
+    store = {}
+    plugin.get_data = store.get
+    plugin.save_data = lambda key, value: store.update({key: value})
+    cloud.decrypt.return_value = json.dumps({'cookie_data': {'group': [
+        {'domain': '.custom.invalid', 'name': 'session', 'value': 'synthetic-cloud'}]}}).encode()
+
+    class Http:
+        def __init__(self, credential, info):
+            assert credential.source == 'cookiecloud'
+            assert 'session=synthetic-cloud' in credential.value
+            self.cookies = {}
+            self.pages = [FORM, '<h1>今天已经签到</h1>']
+
+        def get(self, url):
+            text = self.pages.pop(0) if self.pages else '<h1>今天已经签到</h1>'
+            return LoginPage(text, url)
+
+        def post(self, url, **kwargs):
+            self.cookies['session'] = 'synthetic-cloud'
+            return LoginPage('<h1>签到成功</h1>', url)
+
+    monkeypatch.setattr(custom, 'NativeHttpClient', Http)
+    result = plugin._execute_site('custom-60005')
+    assert result['status'] == 'success'
+    entry = store['cookies.table']['custom-60005']
+    assert entry['source'] == 'cookiecloud'
+    assert 'session=synthetic-cloud' in entry['cookie']

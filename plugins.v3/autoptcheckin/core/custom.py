@@ -7,7 +7,7 @@ from lxml import html
 
 from .credentials import Credential
 from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
-from .native import NativeHttpClient, read_login_twice
+from .native import NativeHttpClient, cookie_candidates, persist_cookie_result, read_login_twice
 from .nexus import NexusSignin
 from .sitemodel import RecordSpec, SignContext, login_redirect, page_available
 
@@ -87,6 +87,13 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
         cookie = info.get('cookie') or ''
+        credential_source = 'local_cookie'
+        if not cookie.strip():
+            # 条目 Cookie 为空时走统一候选链：Cookie 表 → CookieCloud（按站点域名取同域 Cookie）。
+            for candidate in cookie_candidates(site_id, info, '', getattr(runner, 'get_data', None),
+                                               info.get('url') or ''):
+                cookie, credential_source = candidate.value, candidate.source
+                break
         if not cookie.strip():
             return finish(SignResult(SignStatus.AUTH_FAILED, '缺少 Cookie'))
         try:
@@ -94,7 +101,7 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
             info["id"] = site_id
             if urlsplit(url).scheme not in {'http', 'https'} or not urlsplit(url).netloc:
                 return finish(SignResult(SignStatus.UNCONFIRMED, '自定义站点地址无效'))
-            credential = Credential('local_cookie', cookie)
+            credential = Credential(credential_source, cookie)
             client_info = {**info, "emulate": bool(info.get("emulate") and action != "login")}
             with custom_client(credential, client_info, config) as client:
                 if not read_only and action == 'sign':
@@ -113,6 +120,9 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
                         result = LoginResult(LoginStatus.AUTH_FAILED, '页面包含登录表单')
                     else:
                         result = LoginResult(LoginStatus.LOGIN_OK, '已登录')
+                # 成功路径把会话 Cookie 回写统一 Cookie 表（下次优先于 CookieCloud）。
+                persist_cookie_result(result, client, site_id, credential.source,
+                                      getattr(runner, 'get_data', None), getattr(runner, 'save_data', None))
         except Exception as exc:
             result = SignResult(SignStatus.UNCONFIRMED,
                                 f'自定义站点执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])

@@ -35,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.9"
+    plugin_version = "4.0.10"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -140,6 +140,7 @@ class AutoPtCheckin(_PluginBase):
             {"path": "/stats", "endpoint": self.api_stats, "methods": ["GET"]},
             {"path": "/history", "endpoint": self.api_history, "methods": ["GET"]},
             {"path": "/notify_test", "endpoint": self.api_notify_test, "methods": ["POST"]},
+            {"path": "/site_track", "endpoint": self.api_site_track, "methods": ["POST"]},
         ]
 
         for route in routes:
@@ -257,9 +258,8 @@ class AutoPtCheckin(_PluginBase):
             changed = False
             for sid, url in pending_icons:
                 icon = await asyncio.to_thread(self._resolve_favicon, url)
-                if icon:
-                    icon_cache[sid] = icon
-                    changed = True
+                icon_cache[sid] = icon or ''
+                changed = True
             if changed and hasattr(self, "save_data"):
                 self.save_data("icon.cache", icon_cache)
                 for site in sites:
@@ -292,7 +292,9 @@ class AutoPtCheckin(_PluginBase):
                     buckets["unconfirmed" if raw == "unconfirmed" else "failed"] += 1
             latest[track] = buckets
         return {"success": True, "data": {"latest": latest,
-                "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": rows}}
+                "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": rows,
+                "sign_sites": [str(v) for v in self._config.get("sign_sites", [])],
+                "login_sites": [str(v) for v in self._config.get("login_sites", [])]}}
 
     def _site_rows(self) -> list[dict]:
         """数据页站点行：状态表提供轨道状态，registry 提供元数据与控制位。"""
@@ -422,6 +424,8 @@ class AutoPtCheckin(_PluginBase):
 
 
     def _execute_site(self, site_id, read_only=False, trigger="manual", action="sign"):
+        for callback in ('get_data', 'save_data', 'del_data'):
+            setattr(self._runner, callback, getattr(self, callback, None))
         registry = {site['id']: site for site in get_registry(self._config.get('custom_sites_data', []))['sites']}
         # “今日已签”由状态表 success 态承担：成功站不进队列，这里不再重复拦截。
         custom = next((item for item in self._config.get('custom_sites_data', [])
@@ -480,8 +484,6 @@ class AutoPtCheckin(_PluginBase):
             self._record_result(result)
             return asdict(result)
         info["uid"] = self._bound_uids.get(site_id, "")
-        for callback in ('get_data', 'save_data', 'del_data'):
-            setattr(self._runner, callback, getattr(self, callback, None))
         if site_id in ('rousi', 'sunnypt'):
             result = run_integration(self._runner, site_id, site.get('name', site_id), info, self._config, action=action, trigger=trigger)
             return asdict(result)
@@ -663,6 +665,20 @@ class AutoPtCheckin(_PluginBase):
         except Exception:
             from app.runtime.log import logger
             logger.error("【PT 签到中心】轮次通知发送失败", exc_info=True)
+
+    async def api_site_track(self, domain: str = '', track: str = '', on: int = 0) -> dict:
+        """数据页快捷开关：增删站点在 sign_sites/login_sites 的轨道选择（站点保持启用）。"""
+        site_id = site_id_for_domain(domain) or (domain or '').strip()
+        enabled = {str(v) for v in self._config.get('enabled_sites', [])}
+        if track not in ('sign', 'login') or site_id not in enabled:
+            return {"success": False, "message": "站点未启用或参数无效", "data": None}
+        key = f"{track}_sites"
+        ids = [str(v) for v in self._config.get(key, [])]
+        if bool(on) == (site_id in ids):
+            return {"success": True, "data": {"track": track, "on": bool(on)}}
+        ids = [*ids, site_id] if bool(on) else [v for v in ids if v != site_id]
+        await asyncio.to_thread(self._save_config, {**deepcopy(self._config), key: ids})
+        return {"success": True, "data": {"track": track, "on": bool(on)}}
 
     async def api_notify_test(self) -> dict:
         """发送测试通知（不受「发送通知」开关限制，验证渠道连通）。"""
