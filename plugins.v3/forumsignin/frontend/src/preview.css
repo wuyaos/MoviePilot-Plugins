@@ -142,6 +142,7 @@
 .site-filters .chip[aria-pressed=true] {border-color:currentColor; outline:2px solid var(--ptc-focus); outline-offset:2px}
 
 .site-label {display:inline-flex; align-items:center; gap:6px; min-width:0}
+.site-head .badges {margin:0; flex-shrink:0; justify-content:flex-end}
 .site-icon {width:20px; height:20px; flex:0 0 20px; object-fit:contain; border-radius:4px}
 .site-initial {display:inline-flex; align-items:center; justify-content:center; background:var(--ptc-surface-muted); color:var(--ptc-text-muted); font-size:12px}
 .picker-selection .chip {border:1px solid var(--ptc-danger); color:var(--ptc-danger)}

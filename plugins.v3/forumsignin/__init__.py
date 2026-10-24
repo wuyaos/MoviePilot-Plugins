@@ -16,6 +16,7 @@ from .core.models import SignResult, SignStatus
 from .core.registry import ADAPTERS, get_registry, get_site
 from .core.runner import run_page
 from .http_client import HttpClient
+from .integrations.pt_life import StatsNotReady, collect_site_statistics, push_snapshot
 
 try:
     from app.core.event import eventmanager
@@ -37,7 +38,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.17"
+    plugin_version = "3.1.18"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -552,6 +553,15 @@ class ForumSignin(_PluginBase):
         for site in get_registry():
             if site["id"] in self._config.get("enabled_sites", []):
                 results.append(self._execute_with_retry(site["domain"]))
+        fengchao_result = next((r for r in results
+                                if isinstance(r, dict) and r.get("site_id") == "fengchao"), None)
+        if fengchao_result and fengchao_result.get("status") in ("success", "already", "signed"):
+            try:
+                ok, _detail = self._push_pt_life(retries=0)
+                if not ok:
+                    self._schedule_pt_life_retry()
+            except Exception as exc:
+                logger.warning("PT 人生快照推送异常：%s", type(exc).__name__)
         self._flush_notify()
         return self._response(results)
 
@@ -560,7 +570,7 @@ class ForumSignin(_PluginBase):
 
     def clean_cache(self):
         keys = ("identity.yaowan", "identity.ssdforum", "_fengchao_identity", "fengchao_user_info",
-                "fengchao_user_info_updated_at", "fengchao_sync_status")
+                "fengchao_user_info_updated_at", "fengchao_sync_status", "last_pt_life_push")
         keys = keys + ("icon.cache", "sample.yaowan.html", "sample.ssdforum.html")
         for key in keys:
             self._save(key, None)
@@ -576,6 +586,69 @@ class ForumSignin(_PluginBase):
             # 蜂巢是纯 API 站：核验走同步路径，不产生页面 verify 的 unconfirmed 记录。
             return await self.api_update_info(domain)
         return await asyncio.to_thread(self._execute, domain, True)
+
+    def _push_pt_life(self, retries=0):
+        """推送蜂巢 PT 人生快照（对齐 madrays pt-life/snapshot 契约）。返回 (ok, detail)。
+
+        同一轮重试共用 clientBatchId（幂等）；retries>0 时按 retry_interval 分钟指数
+        退避（单次上限 15 分钟），手动/挂接路径 retries=0 立即返回、失败交给补推调度。
+        """
+        instance_id = self._get("fengchao_instance_id") or ""
+        if not instance_id or not self._config.get("fengchao_api_key"):
+            return False, "missing_api_key"
+        try:
+            from app.sdk.config import settings
+            mp_version = str(getattr(settings, "VERSION_FLAG", "") or "")
+        except ImportError:
+            mp_version = ""
+        interval = max(1, int(self._config.get("retry_interval", 10) or 10))
+        batch_id = f"{instance_id}-{datetime.now().astimezone().isoformat()[:19]}"
+        attempts = max(1, int(retries or 0) + 1)
+        client, detail = None, ""
+        try:
+            for attempt in range(attempts):
+                try:
+                    sites = collect_site_statistics()
+                    site = get_site("fengchao")
+                    client = self._client(site)
+                    if client is None:
+                        return False, "missing_api_key"
+                    push_snapshot(site["adapter"](client).request,
+                                  instance_id=instance_id, plugin_version=self.plugin_version,
+                                  sites=sites, movie_pilot_version=mp_version, batch_id=batch_id)
+                    self._save("last_pt_life_push", {"success": True, "sites": len(sites),
+                                                     "time": datetime.now().astimezone().isoformat()})
+                    return True, ""
+                except StatsNotReady as exc:
+                    detail = str(exc)  # 统计未就绪：退避重试有意义
+                except Exception as exc:
+                    detail = self._safe_sync_error(exc)
+                    break  # 请求/协议异常不做 sleep 重试，交给下一轮周期或补推
+                if attempt + 1 < attempts:
+                    time.sleep(min(interval * (2 ** attempt), 15) * 60)
+            self._save("last_pt_life_push", {"success": False, "message": detail,
+                                             "time": datetime.now().astimezone().isoformat()})
+            return False, detail
+        finally:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass  # 清理不覆盖推送结果
+
+    def _schedule_pt_life_retry(self):
+        """快照推送失败后安排一次延迟补推（MP 统计启动期常未就绪）。"""
+        if self._stopped:
+            return
+        if any(s.get("id") == "ForumSigninPtLifeRetry" for s in self._services):
+            return
+        try:
+            from apscheduler.triggers.date import DateTrigger
+            self._services.append({"id": "ForumSigninPtLifeRetry", "name": "蜂巢PT人生快照补推",
+                                   "trigger": DateTrigger(run_date=datetime.now() + timedelta(minutes=10)),
+                                   "func": self._push_pt_life, "kwargs": {"retries": 2}})
+        except Exception as exc:
+            logger.warning("快照补推调度失败：%s", type(exc).__name__)
 
     def update_info(self):
         lock = self._locks["fengchao"]
@@ -596,6 +669,12 @@ class ForumSignin(_PluginBase):
             self._save("fengchao_user_info", info)
             self._save("fengchao_user_info_updated_at", now)
             self._save("fengchao_sync_status", {"success": True, "time": now})
+            try:
+                ok, _detail = self._push_pt_life(retries=0)
+                if not ok:
+                    self._schedule_pt_life_retry()
+            except Exception as exc:
+                logger.warning("PT 人生快照推送异常：%s", type(exc).__name__)
             return self._response(info)
         except Exception as exc:
             # 保留可诊断的异常类型/HTTP 状态；不记录 API key 或响应凭据。
