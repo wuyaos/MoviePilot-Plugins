@@ -637,14 +637,22 @@ class AutoPtCheckin(_PluginBase):
             pass
 
     async def api_run_once(self) -> dict:
-        """从数据页注册一次性 DateTrigger；不受常规调度门控影响。"""
-        with self._migration.lock:
-            self._config["onlyonce"] = True
-            if hasattr(self, "update_config"):
-                self.update_config(deepcopy(self._config))
-            self._scheduler.clear()
-            self._scheduler.build(self._config, self._scheduled_once)
-        return {"success": True, "data": {"scheduled": True}}
+        """立即运行：参考 V2，直接以独立线程执行一轮，不经宿主调度器
+        （qnap 等环境宿主 APScheduler 回调可能静默不触发）。"""
+        if getattr(self, "_round_active", False):
+            return {"success": False, "message": "已有轮次在运行"}
+        import threading
+
+        def _worker():
+            try:
+                self._config["onlyonce"] = True
+                self._scheduled_once()
+            except Exception:
+                from app.runtime.log import logger
+                logger.error("【PT 签到中心】立即运行异常", exc_info=True)
+
+        threading.Thread(target=_worker, daemon=True, name="autoptcheckin-run-once").start()
+        return {"success": True, "data": {"started": True}}
 
     async def api_clean_today(self) -> dict:
         """清理本日缓存：清当日历史，并把状态表非禁用轨道重置为 pending（强制今天重跑）。"""
