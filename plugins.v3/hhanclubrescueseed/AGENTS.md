@@ -26,7 +26,7 @@ Fork 自 [Seed680/MoviePilot-Plugins](https://github.com/Seed680/MoviePilot-Plug
 
 ## 关键契约（踩坑记录）
 
-- 插件 API 路由前缀 = 插件类名（PascalCase）。前端 `$pluginApi` 相对路径用**下划线**命名（`download_records`），与 `get_api()` 注册一致；路由参数是 FastAPI 直注（`titles: List[str]` 收**裸数组 body**，不是 query/包装对象）
+- 插件 API 路由前缀 = 插件类名（PascalCase）。**宿主 `$pluginApi` 是裸 axios 实例（baseURL `api/v1/`，不自动拼插件段）**：相对路径必须写 `` `plugin/${props.pluginId}/<name>` ``（下划线命名，如 `download_records`）；路由参数是 FastAPI 直注（`titles: List[str]` 收**裸数组 body**），漏前缀会打到宿主全局同名接口（405）或宿主配置接口（假成功）
 - 前端按 `response.success/response.data` envelope 读取；`GET /config`、`GET /download_records` 必须返回 `Response(success=True, data=...)`，返回裸 dict/裸数组会导致前端恒报「获取配置失败/获取下载记录失败」（原版 bug）
 - 重建后的 `remoteEntry.js` federation scope 为 `hhanclubrescueseed__`（与 `frontend/vite.config.js` 的 `name` 自洽），与插件 id 无关、无需与类名一致
 - 保种区列表页为 Tailwind div 布局（无 table.torrents）：行容器 `//*[@id="mainContent"]/div[1]/div[2]/div[3]/div`；做种 `div[3]/div/div[3]/a`、下载 `div[3]/div/div[4]/a`、完成 `div[3]/div/div[5]/a`、体积 `div[3]/div/div[1]`、发布时间 `div[3]/div/div[2]/span/@title`（精确时间）、免费标记 `div[2]/div/div[2]/div` 含「免费」文本。站点改版需同步 `_prefilter_row`
