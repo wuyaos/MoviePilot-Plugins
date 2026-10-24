@@ -4,7 +4,7 @@
         "description": "PT 站点自动签到与模拟登录",
         "labels": "签到,PT,V3",
         "version": "4.0.0",
-        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/autoptcheckin.png",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
         "level": 1,
         "system_version": ">=3.0.0",
