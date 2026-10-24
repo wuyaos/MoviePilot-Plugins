@@ -14,20 +14,25 @@
 
 ## 启动 / 停止
 
+本机 `moviepilot` CLI 依赖工程 `.venv`（未建，报「未找到项目虚拟环境」），实际用 mp3 editable 环境直连：
+
 ```bash
-cd /d/test/MoviePilot-v3 && moviepilot start     # 启动（前台）
-moviepilot stop                                   # 停止
+cd /d/test/MoviePilot-v3
+export CONFIG_DIR='D:\test\MoviePilot-v3\config'
+alias mp3cli="micromamba run -n mp3 python -m app.cli"
+
+mp3cli start     # 后台启动（daemon 化：CLI 拉起前后端子进程后即返回）
+mp3cli status    # 状态（running + PID）
+mp3cli stop      # 停止
+mp3cli restart   # 重启
 ```
 
-会话内验证用后台运行（pi `bg_task`，勿用前台阻塞）：
+**注意：`start` 是后台守护化启动，CLI wrapper 退出 ≠ 实例停止**——pi `bg_task` 里跑它，「任务 finished」是正常现象，服务存活以 `status` 或探活为准。stdio 日志由 `MOVIEPILOT_STDIO_LOG_*` 系列环境变量控制落文件（见下），运行日志在 `config/logs/`：
 
 ```bash
 export MOVIEPILOT_DISABLE_CONSOLE_LOG=1 MOVIEPILOT_STDIO_LOG_BACKUP_COUNT=10 \
        "MOVIEPILOT_STDIO_LOG_FILE=D:\test\MoviePilot-v3\config\logs\moviepilot.stdout.log"
-moviepilot start
 ```
-
-stdio 日志落文件而非终端，避免后台任务日志膨胀；运行日志在 `config/logs/`。
 
 ## 探活与鉴权
 
@@ -63,6 +68,12 @@ curl -sS -X POST "http://127.0.0.1:17430/api/v1/plugin/reload/AutoPtCheckin" \
 
 改 `frontend/src` 后先 `npm run build`（产物在插件目录 `dist/`）再部署；只改后端 `.py` 可直接部署。
 
+
+## 排障备忘
+
+- `/api/v1/plugin/file/<plugin_id>/<path>` 用登录后的**资源 Cookie** 鉴权（`resource_token_cookie`），不带 `X-API-KEY`；curl 带 API key 得 401 属正常，不代表文件缺失。文件服务从 `app/plugins/<lower(id)>/` 直读，验证存在性直接 `ls` 即可。
+- 本地 repo 首装新插件出现过「插件加载失败，请查看插件日志」但插件日志为空：安装流程 reload 时启用位/身份行尚未对装载判据生效，直接重试一次安装即成功（日志出现「加载插件：X 版本：Y」）。装载成功判据看 `moviepilot.log` 的这行 INFO，不要只看 install 接口返回。
+- 插件装载全程无 `config/logs/plugins/<id>.log` 不代表失败：该日志由插件业务代码写出，未启用的插件没有内容。
 ## 红线
 
 - API Key、CookieCloud 凭据等敏感值只从文件/环境读，不写入文档、日志、提交或子代理提示。
