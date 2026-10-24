@@ -56,24 +56,44 @@ def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[
             f"下次{verb}数量: {data.get('next', 0)}（本轮后仍待办）",
         ]
         if track == "sign":
-            ordered = sorted(entries, key=lambda item: _sign_text(item[1])[0])
-            for site, entry in ordered:
-                _, text = _sign_text(entry)
-                lines.append(f"【{site}】{text}")
+            rendered = []
+            for site, entry in entries:
+                bucket, text = _sign_text(entry)
+                rendered.append((bucket, site, text))
+            # 分组排序：成功(0) → 已签(1) → 未确认/待办(3) → 失败(2)
+            rendered.sort(key=lambda item: (0 if item[0] == 0 else 2 if item[0] == 1 else 3 if item[0] == 3 else 4, item[1]))
+            for bucket, site, text in rendered:
+                if fmt == "html":
+                    color = {0: "#28a745", 1: "#6c757d", 2: "#dc3545", 3: "#fd7e14"}.get(bucket, "#6c757d")
+                    lines.append(f'<div style="color:{color}">【{site}】{text}</div>')
+                else:
+                    lines.append(f"【{site}】{text}")
         else:
+            rendered = []
             for site, entry in entries:
                 status = entry.get("status", "")
                 message = (entry.get("message") or "").strip()
                 if status == "login_ok":
-                    text = "模拟登录成功"
+                    rendered.append((0, site, "模拟登录成功" + (f"，{message}" if message else "")))
                 elif status == "unconfirmed":
-                    text = "模拟登录结果未确认，请人工核验"
+                    rendered.append((3, site, "模拟登录结果未确认，请人工核验"))
                 else:
-                    text = "模拟登录失败"
-                if message:
-                    text += f"，{message}"
-                lines.append(f"【{site}】{text}")
-        if fmt != "plain":
-            lines = [_bold(lines[0], fmt), *lines[1:]]
+                    rendered.append((2, site, "模拟登录失败" + (f"，{message}" if message else "")))
+            rendered.sort(key=lambda item: (item[0], item[1]))
+            for bucket, site, text in rendered:
+                if fmt == "html":
+                    color = {0: "#28a745", 2: "#dc3545", 3: "#fd7e14"}.get(bucket, "#6c757d")
+                    lines.append(f'<div style="color:{color}">【{site}】{text}</div>')
+                else:
+                    lines.append(f"【{site}】{text}")
+        if fmt == "html":
+            lines = [_bold_html(lines[i]) if i < 3 else lines[i] for i in range(len(lines))]
+        elif fmt == "markdown":
+            lines = [_bold(lines[i]) if i < 3 else lines[i] for i in range(len(lines))]
         result.append((title, "\n".join(lines)))
     return result
+
+
+def _bold_html(text: str) -> str:
+    import re
+    return re.sub(r"^(\S+):", r"<b>\1</b>:", text)

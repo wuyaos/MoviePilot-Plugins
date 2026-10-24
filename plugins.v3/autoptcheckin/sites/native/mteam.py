@@ -54,13 +54,26 @@ class MTorrent(SiteModule):
                     "() => /\u96d9\u91cd\u8a8d\u8b49|\u9a8c\u8bc1\u78bc|\u90f5\u7bb1/.test(document.body.innerText) &&"
                     " !!document.querySelector('input[name*=code i], input[name*=otp i], input[type=text][name*=auth i]')"
                 )
-                if email_code or two_fa:
-                    return False, "M-Team 要求邮箱双重认证，自动化无法完成；请在浏览器人工登录一次（40 天内有效）"
+                if two_fa:
+                    # 站点提示页含「帳號被禁用?」等通用文案，仅为提示非封禁；要求 6 位验证码，TOTP 可自动填。
+                    pass  # 落到下方 #otp-code 分支处理
                 browser.click('button[type="submit"]')
                 try:
                     browser.page.wait_for_url("**/index**", timeout=15000)
                 except Exception:
                     pass
+                if "/index" not in browser.page.url:
+                    # 双重认证页：#otp-code（6 位验证码，TOTP 密钥可算）——填入后二次提交。
+                    otp = browser.page.locator('#otp-code').first
+                    if otp.count() and info.get("mteam_totp"):
+                        import pyotp
+                        otp.fill(pyotp.TOTP(info["mteam_totp"]).now())
+                        browser.page.wait_for_timeout(500)
+                        browser.click('button:has-text("登 錄"), button:has-text("登录"), button[type="submit"]')
+                        try:
+                            browser.page.wait_for_url("**/index**", timeout=15000)
+                        except Exception:
+                            pass
                 if "/index" not in browser.page.url:
                     feature = browser.evaluate("() => document.body.innerText.slice(0,300)")
                     return False, "登录未到达 /index：" + str(feature)
@@ -84,4 +97,4 @@ class MTorrent(SiteModule):
                 LoginStatus.UNCONFIRMED if "邮箱验证码" in message else LoginStatus.AUTH_FAILED)
             return LoginResult(status, message)
         except Exception as exc:
-            return LoginResult(LoginStatus.UNCONFIRMED, "M-Team CloakBrowser 登录异常：" + type(exc).__name__)
+            return LoginResult(LoginStatus.UNCONFIRMED, "M-Team CloakBrowser 登录异常：" + type(exc).__name__ + "：" + str(exc)[:200])
