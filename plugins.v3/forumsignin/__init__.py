@@ -18,10 +18,16 @@ from .core.runner import run_page
 from .http_client import HttpClient
 
 try:
+    from app.core.event import eventmanager
     from app.sdk.plugin import _PluginBase
-except ImportError:
+    from app.schemas.types import EventType
+except ImportError:  # 离线契约测试无宿主
+    eventmanager = None
+
     class _PluginBase:
         pass
+
+    EventType = None
 
 
 logger = logging.getLogger("ForumSignin")
@@ -31,7 +37,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.9"
+    plugin_version = "3.1.10"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -67,6 +73,7 @@ class ForumSignin(_PluginBase):
         self._migrate_legacy_data()
         self._stopped = False
         self._schedule_error = None
+        self._register_commands()
         if not self._get("fengchao_instance_id"):
             self._save("fengchao_instance_id", str(uuid4()))
         if self._config["enabled"] and self._config.get("onlyonce"):
@@ -150,6 +157,42 @@ class ForumSignin(_PluginBase):
 
     def get_page(self):
         return None
+
+
+    @staticmethod
+    def get_command() -> list:
+        """远程命令：论坛签到（立即执行一轮已启用站点）。"""
+        if EventType is None:
+            return []
+        return [{"cmd": "/forum_signin", "event": EventType.PluginAction,
+                 "desc": "论坛签到", "category": "签到",
+                 "data": {"action": "signin_once"}}]
+
+    def _handle_remote_command(self, event) -> None:
+        """PluginAction：signin_once=立即运行一轮论坛签到。"""
+        if not event or EventType is None:
+            return
+        data = getattr(event, "event_data", None) or {}
+        if data.get("action") != "signin_once":
+            return
+        import threading
+
+        def _worker():
+            try:
+                self.run_once()
+            except Exception:
+                logger.error("论坛签到：远程命令执行异常", exc_info=True)
+
+        threading.Thread(target=_worker, daemon=True, name="forumsignin-remote-command").start()
+
+    def _register_commands(self) -> None:
+        """init_plugin 时注册远程命令监听（幂等）。"""
+        if eventmanager is None or EventType is None:
+            return
+        if getattr(self.__class__, "_command_registered", False):
+            return
+        eventmanager.register(EventType.PluginAction)(self._handle_remote_command)
+        self.__class__._command_registered = True
 
     def get_api(self):
         specs = [("/config", self.api_config, "GET"), ("/config", self.api_save_config, "PUT"),

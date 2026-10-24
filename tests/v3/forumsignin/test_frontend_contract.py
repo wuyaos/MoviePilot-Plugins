@@ -29,7 +29,8 @@ def test_forum_page_contract():
     assert "history-group" not in source and "<details" not in source
     assert "site-icon site-initial" in source and "can_sync" in source
     assert "site-totals" not in source and "next_schedule" in source
-    assert "连续签到" in source and "points" in source and "currentStreak" in source and "maxStreak" in source and "lastCheckInDate" in source and "checkedInToday" in source
+    assert "连续签到" in source and "currentStreak" in source and "points" not in source and "maxStreak" not in source and "lastCheckInDate" not in source and "checkedInToday" not in source
+    assert 'v-if="site.message" class="meta"' in source and 'v-else class="meta">连续签到' in source
     assert "data?.attributes" not in source and "totalContinuousCheckIn" not in source
 
 
@@ -47,9 +48,10 @@ def test_stats_exposes_sync_capability():
     assert '"can_sync": site["id"] == "fengchao"' in source
 
 
-def test_page_renders_fengchao_sync_data_and_status():
+def test_page_renders_fengchao_sync_badge():
     source = (FRONTEND / "src" / "Page.vue").read_text(encoding="utf-8")
     assert "stats.value?.fengchao_user_info" in source
     assert "stats.value?.fengchao_sync" in source
-    assert "syncInfo().displayName" in source and "syncInfo().points" in source and "syncInfo().currentStreak" in source and "syncInfo().maxStreak" in source and "totalContinuousCheckIn" not in source and "lastCheckinMoney" not in source
-    assert "上次同步：" in source and "同步失败：" in source
+    assert "function syncChip" in source and "未同步" in source and "同步失败 · " in source
+    assert "totalContinuousCheckIn" not in source and "lastCheckinMoney" not in source
+    assert "syncInfo" not in source and "上次同步：" not in source
