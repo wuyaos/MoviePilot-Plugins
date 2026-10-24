@@ -22,7 +22,7 @@ const defaults = {
   custom_tag: '',
   reward_tag: '',
   reward_hours: 18,
-  enable_notification: true,
+  enable_notification: false,
   notify_on_zero_torrents: false,
   force_resume: false,
   auto_delete_enabled: false,
@@ -31,6 +31,8 @@ const defaults = {
   stuck_days: 7,
   min_seeders: 1,
   min_downloaders: 1,
+  seeding_count: '1-3',
+  torrent_size: '',
   max_torrent_size_gb: '',
   download_limit: 5,
   max_downloading: 3,
@@ -85,10 +87,9 @@ async function saveConfig() {
   loading.value = true
   error.value = ''
   try {
-    const response = unwrap(await pluginApi.post(`plugin/${props.pluginId}/config`, { ...form }))
-    if (!response?.success) throw new Error(response?.message || '保存配置失败')
+    // V3 契约：保存由宿主接 save 事件后 PUT /plugin/{id} 完成（对齐 autoptcheckin），不自 POST
     savedForm.value = { ...form }
-    emit('save', { ...form })
+    emit('save', JSON.parse(JSON.stringify(form)))
     notify('success', '配置已保存')
   } catch (err) {
     error.value = err.message || '保存配置失败'
@@ -157,6 +158,8 @@ onMounted(loadConfig)
             <v-col cols="6" md="3"><v-text-field v-model.number="form.min_seeders" label="最小做种数" type="number" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="6" md="3"><v-text-field v-model.number="form.min_downloaders" label="最小下载数" type="number" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="6" md="3"><v-text-field v-model="form.max_torrent_size_gb" label="最大种子体积（GB）" type="number" variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="6" md="3"><v-text-field v-model="form.seeding_count" label="做种数区间" hint="如 1-3，逗号分隔多档" persistent-hint variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="6" md="3"><v-text-field v-model="form.torrent_size" label="体积区间（GB）" hint="如 1-100，留空不限" persistent-hint variant="outlined" density="comfortable" /></v-col>
           </v-row></div>
           <div class="filter-block"><div class="filter-label">列表页预筛</div><v-row dense>
             <v-col cols="12" md="4"><v-text-field v-model="form.completion_ratio_max" label="完成率上限（%）" placeholder="留空不筛" type="number" variant="outlined" density="comfortable" /></v-col>
@@ -175,8 +178,8 @@ onMounted(loadConfig)
             <v-col cols="12" md="4"><v-text-field v-model.number="form.stuck_days" label="卡死清理（天）" hint="未完成超 N 天清理；0 = 禁用" persistent-hint type="number" variant="outlined" density="comfortable" /></v-col>
           </v-row>
           <div class="danger-block">
-            <div class="danger-title"><v-icon color="deep-orange">mdi-alert-circle-outline</v-icon><strong>危险操作</strong><span>默认关闭，只触碰本插件标签</span></div>
-            <v-row dense><v-col cols="12" md="6"><v-switch v-model="form.auto_delete_enabled" color="deep-orange" label="自动删除种子" hint="总开关：关闭时仅打标" persistent-hint /></v-col><v-col cols="12" md="6"><v-switch v-model="form.delete_files" color="deep-orange" label="删种时同时删除文件" hint="关闭则保留磁盘文件" persistent-hint /></v-col></v-row>
+            <div class="danger-title"><v-icon color="error">mdi-alert-circle-outline</v-icon><strong>危险操作</strong><span>默认关闭，只触碰本插件标签</span></div>
+            <v-row dense><v-col cols="12" md="6"><v-switch v-model="form.auto_delete_enabled" color="error" label="自动删除种子" hint="总开关：关闭时仅打标" persistent-hint /></v-col><v-col cols="12" md="6"><v-switch v-model="form.delete_files" color="error" label="删种时同时删除文件" hint="关闭则保留磁盘文件" persistent-hint /></v-col></v-row>
           </div>
         </section>
 

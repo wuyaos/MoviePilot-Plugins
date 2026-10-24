@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.1.3"
+    plugin_version = "3.1.4"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -90,6 +90,8 @@ class Hhanclubrescueseed(_PluginBase):
     def init_plugin(self, config: dict = None):
         try:
 
+            # 保留完整配置快照，供历史任务回调安全复位 history_rescue_enabled 用
+            self._full_config = dict(config or {})
             self.downloader_helper = DownloaderHelper()
             # 获取站点信息
             self.site = SiteOper().get_by_domain(self.domain)
@@ -513,7 +515,6 @@ class Hhanclubrescueseed(_PluginBase):
         }]
         """
         services = []
-        services = []
         # 任务一：保种区获取（抓列表→粗筛→精筛→下载）
         if self._enable and self._cron:
             services.append({
@@ -776,6 +777,9 @@ class Hhanclubrescueseed(_PluginBase):
         """
         根据hash删除下载器中的种子
         """
+        if not self._custom_tag:
+            logger.error("未配置自定义标签，拒绝删除种子（防止误删非本插件种子）")
+            return False
         if not self._downloader:
             logger.error("未配置下载器")
             return False
@@ -1388,7 +1392,7 @@ class Hhanclubrescueseed(_PluginBase):
                     text=f"历史保种任务执行异常，请查看日志了解详情"
                 )
 
-        # 任务完成后将history_rescue_enabled设为false
-        config = self.get_data("config") or {}
+        # 任务完成后将history_rescue_enabled设为false（用 init_plugin 保存的完整配置，避免覆盖丢配置）
+        config = dict(getattr(self, "_full_config", {}) or {})
         config["history_rescue_enabled"] = False
         self.update_config(config=config)
