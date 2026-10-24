@@ -167,19 +167,6 @@
 - 正文四行计数（全部/本次/成功/失败下次）+ 逐站行；逐站行分「—— ✅ 成功 ——」「—— ❌ 失败（未确认）——」两节，空节不显示；节内排序沿用 bucket 顺序（签到轨：成功→已签→未确认→失败；登录轨：登录成功→失败→未确认）。
 - POST /notify_test（auth: bear）绕过「发送通知」开关直接推送当前轮数据，用于渠道连通验证；封套与其余端点一致（success/message/data），无数据或发送异常返回 success=false 并附错误消息。
 
-## 批次 3 完成（3.15.0，2026-10-22）
-- D1 下沉：20 专属模块（CAPTCHA 12/GET 6/POST 2）并入 generic_sites.json 行为字段（captcha/action_get/safe_read_path/referer/form_data/form_path/response_json/action_path/use_default_message/signin_capable；typed status_map pairs），native 守恒 108。
-- D3：CookieCloud 为独立数据源，候选链第一环（本地文件优先/远端单次 20s/严格域边界/CF-only 子集拒绝/静默降级），不回写。
-- D4：custom 站标准 NexusPHP 签到+emulate 混合路径（未启用 Browserless 不降级）；verify 保持 login_ok。
-- D5：模拟登录全原生（native parse_login/custom/已配置域名通用双 GET），已移除旧桥回退。
-- D6：凭证枚举 api→api_key（credentials/integrations/registry/前端徽标/测试）。
-- D7：移除旧适配器副本与旧桥代码。
-- D9：Luna 审查 8 项 6 过，P2 CF-only 过滤补全（_CF_ONLY_COOKIES）、P3 文档过期描述修正。
-- 52pt 已滑块化并接入页面动作签到，yema 恢复 signin_capable=True；答题类 chdbits/tjupt 仅模拟登录。
-
-## 批次 3 计划（已实施，见上；保留原文备查）
-- 统一凭证枚举 api → api_key，连同配置、registry、UI 与测试同步迁移；当前版本不改名。
-- cookiecloud 原生候选已于 3.12.0 接入；原生模拟登录同样按 cookiecloud → managed_site → local_cookie 选择；custom 保持本条目 Cookie。本轮仅离线 mock 验证，真实服务器与站点验证仍需授权。
 
 ## Custom 签到契约（3.13.0）
 - custom_sites_data 的已启用且勾选签到条目（含数字 ID）直接使用 NexusSignin 默认 attendance 表单流程，不要求 native verified；unlock_all_sites 不能绕过启用与动作选择。registry 将 custom 注册为可执行站点；signin_applicable=True，仿真能力由站点声明与 `site_browserless` 名单决定。
