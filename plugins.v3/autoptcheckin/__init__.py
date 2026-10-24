@@ -256,9 +256,15 @@ class AutoPtCheckin(_PluginBase):
         if pending_icons:
             import asyncio
             changed = False
-            for sid, url in pending_icons:
-                icon = await asyncio.to_thread(self._resolve_favicon, url)
-                icon_cache[sid] = icon or ''
+            # 并发解析（16 路）：MP 重启后缓存全空时串行会累计到分钟级，并发后首轮≈最慢单站。
+            import asyncio
+            changed = False
+
+            async def _resolve_one(sid: str, url: str):
+                return sid, (await asyncio.to_thread(self._resolve_favicon, url)) or ''
+
+            for sid, icon in await asyncio.gather(*(_resolve_one(sid, url) for sid, url in pending_icons)):
+                icon_cache[sid] = icon
                 changed = True
             if changed and hasattr(self, "save_data"):
                 self.save_data("icon.cache", icon_cache)
