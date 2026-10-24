@@ -19,7 +19,9 @@ def test_notify_round_separates_tracks_and_orders_sign_results():
     assert len(rendered) == 2
     title, text = rendered[0]
     assert title == '【站点自动签到】'
-    assert text.splitlines()[:3] == ['全部签到数量: 4（启用且已勾选签到）', '本次签到数量: 3（本轮实际执行）', '下次签到数量: 2（本轮后仍待办）']
+    assert text.splitlines()[:4] == ['全部签到: 4', '本次签到: 3', '成功: 2', '失败（下次签到）: 2']
+    # 逐站行只显示本轮实际执行的站点，未执行的（今日已签）不出现
+    assert '【已签站】' not in text
     assert text.index('【Done】') < text.index('【Already】') < text.index('【Failed】')
     assert '【Failed】签到失败，Cookie 已失效' in text
     assert rendered[1][0] == '【站点自动登录】'

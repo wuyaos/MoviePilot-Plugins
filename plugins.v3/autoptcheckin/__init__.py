@@ -545,9 +545,11 @@ class AutoPtCheckin(_PluginBase):
             data["total"] = len(enabled & selected)
             data["next"] = len(enabled & selected & due)
             data["executed"] = sum(1 for site, action in executed if action == track)
-            for site in enabled & selected:
+            # 逐站行只显示本轮实际执行的站点（executed），非当日历史结论。
+            for site, action in (row for row in executed if row[1] == track):
                 entry = snapshot.get(site, {}).get(track, {})
                 if entry and str(entry.get("time", "")).startswith(datetime.now().date().isoformat()):
+                    entry = dict(entry)
                     entry["credential"] = credential_kinds.get(site, "cookie")
                     data["entries"].append((labels.get(site, site), entry))
         for track in summary:

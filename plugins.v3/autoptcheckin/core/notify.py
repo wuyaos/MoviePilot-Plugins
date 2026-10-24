@@ -50,10 +50,13 @@ def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[
         entries = list(data.get("entries", []))
         if not data.get("total") and not entries:
             continue
+        success = sum(1 for _, e in entries if e.get("status") in ("success", "signed", "already", "login_ok"))
+        failed_next = sum(1 for _, e in entries if e.get("status") not in ("success", "signed", "already", "login_ok"))
         lines = [
-            f"全部{verb}数量: {data.get('total', 0)}（启用且已勾选{verb}）",
-            f"本次{verb}数量: {data.get('executed', 0)}（本轮实际执行）",
-            f"下次{verb}数量: {data.get('next', 0)}（本轮后仍待办）",
+            f"全部{verb}: {data.get('total', 0)}",
+            f"本次{verb}: {data.get('executed', 0)}",
+            f"成功: {success}",
+            f"失败（下次{verb}）: {max(data.get('next', 0), failed_next)}",
         ]
         if track == "sign":
             rendered = []
@@ -89,7 +92,7 @@ def format_round_notifications(summary: dict, fmt: str = "plain") -> list[tuple[
         if fmt == "html":
             lines = [_bold_html(lines[i]) if i < 3 else lines[i] for i in range(len(lines))]
         elif fmt == "markdown":
-            lines = [_bold(lines[i]) if i < 3 else lines[i] for i in range(len(lines))]
+            lines = [_bold(lines[i], fmt) if i < 3 else lines[i] for i in range(len(lines))]
         result.append((title, "\n".join(lines)))
     return result
 
