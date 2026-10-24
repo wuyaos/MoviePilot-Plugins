@@ -100,6 +100,7 @@ def test_shared_cloak_close_keeps_round_session_open_for_next_site(monkeypatch):
         def __init__(self):
             self.added = []
             self.closed = False
+        def cookies(self, url): return []
         def add_cookies(self, cookies): self.added.extend(cookies)
         def close(self): self.closed = True
 
@@ -137,3 +138,21 @@ def test_piggo_round_site_opens_headful_cloak_without_vclib(monkeypatch):
     plugin._notify_round = lambda *args: None
     plugin._execute_all()
     assert opened and opened[0]['headless'] is False
+
+
+def test_shared_cloak_replaces_candidate_cookies_without_clearing_other_sites():
+    from types import SimpleNamespace
+    class CookieContext:
+        def __init__(self):
+            self.jar = [{'name': 'unrelated', 'value': 'keep', 'domain': 'other.invalid', 'path': '/'}]
+        def cookies(self, url):
+            return [dict(row) for row in self.jar if row['domain'] == 'fixture.invalid']
+        def clear_cookies(self, **match):
+            self.jar = [row for row in self.jar if not all(row[key] == value for key, value in match.items())]
+        def add_cookies(self, rows): self.jar.extend(rows)
+    context = CookieContext()
+    shared = SimpleNamespace(context=context)
+    site = SimpleNamespace(id='fixture', url='https://fixture.invalid/')
+    cloak.CloakHttpClient(SimpleNamespace(cookies={'old_session': 'rejected'}), {}, site, shared=shared)
+    cloak.CloakHttpClient(SimpleNamespace(cookies={'new_session': 'candidate'}), {}, site, shared=shared)
+    assert {row['name'] for row in context.jar} == {'unrelated', 'new_session'}

@@ -121,7 +121,7 @@ def test_human_verify_timeout_is_per_site_even_in_shared_session(monkeypatch):
         def __enter__(self): return self
     monkeypatch.setattr(cloak, 'CloakSession', Session)
     http = SimpleNamespace(cookies={})
-    shared = SimpleNamespace()
+    shared = SimpleNamespace(context=SimpleNamespace(cookies=lambda url: []))
     for sid, timeout in [('vclib', 90000), ('mua_xloli', 60000), ('audiences', 60000)]:
         site = get_native_module(sid)
         for session in (None, shared):

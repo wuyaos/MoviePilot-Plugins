@@ -197,9 +197,15 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                 result = SignResult(SignStatus.UNCONFIRMED, '原生签到执行未确认')
             finally:
                 if ctx is not None and isinstance(ctx.http, CloakHttpClient):
-                    ctx.http.close()
+                    try:
+                        ctx.http.close()
+                    except Exception:
+                        pass  # Cleanup must not discard an already determined result.
                 if session is not None:
-                    session.close()
+                    try:
+                        session.close()
+                    except Exception:
+                        pass
             # Never replay an uncertain submission or switch on a network failure.
             if result.status != SignStatus.AUTH_FAILED:
                 break
@@ -223,7 +229,10 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                 result = SignResult(SignStatus.UNCONFIRMED, '原生签到执行未确认')
             finally:
                 if session is not None:
-                    session.close()
+                    try:
+                        session.close()
+                    except Exception:
+                        pass
         result.metadata['cookie_sources'] = attempted_cookie_sources
         return finish(result)
 
@@ -359,17 +368,10 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             # 会话绑定浏览器指纹的站点（如 FileList）：HTTP 重放 Cookie 必失败，
             # 用 CloakBrowser 真实浏览器带站点管理 Cookie 访问首页，以 logout 标记判定登录态。
             from .cloak import CloakSession
-            from urllib.parse import urlsplit as _usp
             url = info.get('url') or site.url
-            host = (_usp(url).hostname or '').lstrip('.')
             raw = info.get('cookie') or custom_cookie or ''
-            pairs = []
-            for part in raw.split(';'):
-                k, sep, v = part.strip().partition('=')
-                if sep:
-                    pairs.append({'name': k, 'value': v, 'domain': host, 'path': '/'})
             try:
-                with CloakSession(url=url, cookies=pairs) as browser:
+                with CloakSession(url=url, cookie=raw) as browser:
                     browser.goto(url)
                     body = browser.page.locator('body').inner_text()
                     if 'logout' in body.lower() or 'log out' in body.lower():
@@ -453,18 +455,15 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
         credentials = {**info, **config}
         result = LoginResult(LoginStatus.AUTH_FAILED, '缺少可用 Cookie')
         try:
-            candidates = cookie_candidates(site_id, info, '', get_data, getattr(integration, 'BASE', getattr(integration, 'API', '')))
             if site_id == 'sunnypt':
                 # SunnyPT authenticates with JWT, not Cookies; retain its protocol.
-                credential = next(candidates, Credential('password_login', ''))
-                http = NativeHttpClient(credential, info)
-                attempted_cookie_sources.append(credential.source)
+                http = NativeHttpClient(Credential('password_login', ''), info)
                 result = integration.login(http, credentials) if action == 'login' else integration.signin(http, credentials)
-                cookie_source = getattr(http, 'cookie_source', credential.source)
-                if cookie_source != credential.source:
-                    attempted_cookie_sources.append(cookie_source)
-                persist_cookie_result(result, http, site_id, cookie_source, get_data, save_data)
+                if http.cookies:
+                    attempted_cookie_sources.append('password_login')
+                persist_cookie_result(result, http, site_id, 'password_login', get_data, save_data)
             else:
+                candidates = cookie_candidates(site_id, info, '', get_data, getattr(integration, 'BASE', getattr(integration, 'API', '')))
                 for credential in candidates:
                     attempted_cookie_sources.append(credential.source)
                     http = NativeHttpClient(credential, info)

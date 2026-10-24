@@ -175,7 +175,7 @@ def test_sunnypt_actual_cookie_records_password_source(storage, monkeypatch, act
         return LoginResult('login_ok') if action == 'login' else SignResult('success')
     monkeypatch.setattr(sunnypt, 'login' if action == 'login' else 'signin', operation)
     result = native.run_integration(runner, 'sunnypt', 'sunnypt', {'cookie': 'session=managed'}, {}, action=action)
-    assert result.metadata['cookie_sources'] == ['managed_site', 'password_login']
+    assert result.metadata['cookie_sources'] == ['password_login']
     assert data['cookies.table']['sunnypt']['source'] == 'password_login'
     assert data['cookies.table']['sunnypt']['cookie'] == 'session=new-cookie'
 
@@ -234,3 +234,55 @@ def test_empty_or_corrupt_legacy_is_migrated_once(storage, monkeypatch, legacy, 
         return original_get(key)
     runner.get_data = get
     assert native.run_integration(runner, 'rousi', 'rousi', {}, {}, action='login').status == 'unconfirmed'
+
+
+@pytest.mark.parametrize('action', ['login', 'sign'])
+def test_sunnypt_jwt_does_not_consume_or_persist_input_cookie(storage, monkeypatch, action):
+    runner, data = storage
+    monkeypatch.setattr(native, 'cookie_candidates', lambda *args: pytest.fail('JWT consumed Cookie candidates'))
+    def operation(http, info):
+        assert http.cookies == {}
+        return LoginResult('login_ok') if action == 'login' else SignResult('success')
+    monkeypatch.setattr(sunnypt, 'login' if action == 'login' else 'signin', operation)
+    result = native.run_integration(runner, 'sunnypt', 'sunnypt', {'cookie': 'session=unproven'}, {}, action=action)
+    assert result.status in ('login_ok', 'success')
+    assert result.metadata['cookie_sources'] == []
+    assert 'sunnypt' not in data['cookies.table']
+
+
+@pytest.mark.parametrize('body,expected', [('Log out', 'login_ok'), ('Please login', 'auth_failed')])
+def test_browser_login_uses_real_session_signature(storage, monkeypatch, body, expected):
+    from autoptcheckin.core import cloak
+    runner, data = storage
+    calls = []
+    class Context:
+        def new_page(self):
+            return SimpleNamespace(goto=lambda *a, **k: None,
+                                   locator=lambda selector: SimpleNamespace(inner_text=lambda: body))
+        def add_cookies(self, cookies): calls.extend(cookies)
+        def close(self): calls.append('closed')
+    monkeypatch.setattr(cloak, 'launch_context', lambda **kwargs: Context())
+    site = login_site()
+    site.browser_login = True
+    runner.get_data = lambda key: pytest.fail('browser login read Cookie table')
+    assert native.run_native_login(runner, site, {'cookie': 'session=synthetic'}).status == expected
+    assert calls[0]['name'] == 'session'
+    assert calls[-1] == 'closed'
+
+
+def test_cloak_cleanup_error_preserves_sign_result_and_history(storage, monkeypatch):
+    runner, data = storage
+    results = []
+    runner.history = results.append
+    class BrokenClose(native.CloakHttpClient):
+        def __init__(self, http): self.http = http
+        def close(self): raise RuntimeError('synthetic close failure')
+    monkeypatch.setattr(native, 'native_cloak_client', lambda site, http, *args, **kwargs: BrokenClose(http))
+    site = login_site()
+    site.signin = lambda ctx: SignResult('success')
+    result = native.run_native(runner, site, {})
+    assert result.status == 'success'
+    assert results == [result]
+    assert data['cookies.table']['fixture']['source'] == 'stored_cookie'
+    with runner.locks.acquire(('fixture', '')) as acquired:
+        assert acquired

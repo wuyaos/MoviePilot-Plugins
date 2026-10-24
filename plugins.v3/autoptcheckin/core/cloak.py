@@ -92,6 +92,9 @@ class CloakHttpClient:
             self.session = shared
             self.shared = True
             self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
+            # Remove the previous candidate's visible cookies, preserving other sites.
+            for previous in self.session.context.cookies(self.url):
+                self.session.context.clear_cookies(name=previous['name'], domain=previous['domain'], path=previous['path'])
             host = urlsplit(self.url).hostname
             cookies = []
             for pair in cookie.split(";"):
