@@ -362,8 +362,8 @@ class ForumSignin(_PluginBase):
                       SignStatus.FAILED: "签到失败", SignStatus.UNCONFIRMED: "结果未确认",
                       SignStatus.AUTH_FAILED: "认证失败", SignStatus.NETWORK_ERROR: "网络异常"}
             state = labels.get(result.status, "签到完成")
-            self.post_message(title=f"【论坛签到】{name}：{state}",
-                              text=f"时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}\n状态：{state}\n说明：{result.message or '—'}")
+            self.post_message(title="【论坛签到】",
+                              text=f"论坛：{name}\n状态：{state}\n说明：{result.message or '—'}\n时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}")
         except Exception as exc:
             logger.warning("通知发送失败（不影响签到结果）：%s", exc)
 
@@ -433,10 +433,9 @@ class ForumSignin(_PluginBase):
         result = await asyncio.to_thread(self.update_info)
         try:
             if self._config.get("notify"):
-                name = "蜂巢"
                 state = "同步完成" if result and result.get("success", True) else "同步失败"
-                self.post_message(title=f"【论坛签到】{name}：{state}",
-                                  text=f"时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}\n状态：{state}\n说明：{(result or {}).get('message') or '—'}")
+                self.post_message(title="【论坛签到】",
+                                  text=f"论坛：蜂巢\n状态：{state}\n说明：{(result or {}).get('message') or '—'}\n时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')}")
         except Exception as exc:
             logger.warning("同步通知发送失败：%s", exc)
         return result
