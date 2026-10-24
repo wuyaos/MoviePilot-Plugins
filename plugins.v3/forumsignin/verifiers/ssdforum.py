@@ -33,8 +33,8 @@ class SSDForumVerifier:
         return evidence
     def _streak_note(self, text):
         """已签视图口径：本月累计天数 + 上次签到日期。"""
-        month = re.search(r"本月已累计签到[:：]\s*(\d+)\s*天", text or "")
-        last = re.search(r"上次签到时间[:：]\s*(\d{4}-\d{2}-\d{2})", text or "")
+        month = re.search(r"本月已累计签到[:：]\s*(?:<b>)?\s*(\d+)\s*(?:</b>)?\s*天", text or "")
+        last = re.search(r"上次签到时间[:：]\s*(?:<font[^>]*>)?\s*(\d{4}-\d{2}-\d{2})(?:</font>)?", text or "")
         if not month and not last:
             return ""
         note = f"已累计签到{month.group(1)}天" if month else ""
