@@ -26,6 +26,7 @@ const _sfc_main = {
   __name: 'Config',
   props: {
   api: { type: Object, default: () => ({}) },
+  pluginId: { type: String, default: 'Hhanclubrescueseed' },
   initialConfig: { type: Object, default: () => ({}) },
 },
   emits: ['save', 'close'],
@@ -86,7 +87,7 @@ async function loadConfig() {
   loadingConfig.value = true;
   error.value = '';
   try {
-    const response = unwrap(await pluginApi.get('config'));
+    const response = unwrap(await pluginApi.get(`plugin/${props.pluginId}/config`));
     if (!response?.success) throw new Error(response?.message || '获取配置失败')
     const data = response.data || {};
     const serverConfig = data.config || data;
@@ -111,7 +112,7 @@ async function saveConfig() {
   loading.value = true;
   error.value = '';
   try {
-    const response = unwrap(await pluginApi.post('config', { ...form }));
+    const response = unwrap(await pluginApi.post(`plugin/${props.pluginId}/config`, { ...form }));
     if (!response?.success) throw new Error(response?.message || '保存配置失败')
     savedForm.value = { ...form };
     emit('save', { ...form });
@@ -817,6 +818,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-43260f9d"]]);
+const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-4642364a"]]);
 
 export { ConfigComponent as default };

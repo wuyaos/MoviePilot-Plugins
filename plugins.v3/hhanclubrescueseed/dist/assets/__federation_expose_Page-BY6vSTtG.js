@@ -126,7 +126,7 @@ async function refreshData() {
   loading.value = true;
   error.value = '';
   try {
-    const response = unwrap(await pluginApi.get('download_records'));
+    const response = unwrap(await pluginApi.get(`plugin/${props.pluginId}/download_records`));
     if (!response?.success) throw new Error(response?.message || '获取下载记录失败')
     const data = response.data || {};
     records.value = Array.isArray(data.records) ? data.records : [];
@@ -146,7 +146,7 @@ async function deleteRecord(record) {
   if (!title) return
   deleting.value = title;
   try {
-    const response = unwrap(await pluginApi.post('delete_download_records', [title]));
+    const response = unwrap(await pluginApi.post(`plugin/${props.pluginId}/delete_download_records`, [title]));
     records.value = records.value.filter(item => item.title !== title);
     notify('success', '记录已删除');
     emit('action');
@@ -425,6 +425,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-92def0ec"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-7a8177a6"]]);
 
 export { PageComponent as default };

@@ -3,6 +3,7 @@ import { getCurrentInstance, inject, onMounted, reactive, ref } from 'vue'
 
 const props = defineProps({
   api: { type: Object, default: () => ({}) },
+  pluginId: { type: String, default: 'Hhanclubrescueseed' },
   initialConfig: { type: Object, default: () => ({}) },
 })
 const emit = defineEmits(['save', 'close'])
@@ -59,7 +60,7 @@ async function loadConfig() {
   loadingConfig.value = true
   error.value = ''
   try {
-    const response = unwrap(await pluginApi.get('config'))
+    const response = unwrap(await pluginApi.get(`plugin/${props.pluginId}/config`))
     if (!response?.success) throw new Error(response?.message || '获取配置失败')
     const data = response.data || {}
     const serverConfig = data.config || data
@@ -84,7 +85,7 @@ async function saveConfig() {
   loading.value = true
   error.value = ''
   try {
-    const response = unwrap(await pluginApi.post('config', { ...form }))
+    const response = unwrap(await pluginApi.post(`plugin/${props.pluginId}/config`, { ...form }))
     if (!response?.success) throw new Error(response?.message || '保存配置失败')
     savedForm.value = { ...form }
     emit('save', { ...form })
