@@ -1,11 +1,13 @@
 <script setup>
-import { reactive, ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { reactive, ref, computed, watch, inject, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { sourceBadge, credentialBadge } from './badges.js'
 import defaults from '../../config_defaults.json'
 import { watchHostTheme } from './theme.js'
 const props = defineProps({ initialConfig: Object, api: Object, pluginId: {type:String,default:'AutoPtCheckin'} })
 const brokenIcons = ref({})
 const emit = defineEmits(['save', 'switch', 'close', 'layout'])
+// 规范 5.8：复用宿主统一 Toast；注入不存在时静默降级，保留页面内状态提示。
+const toast = inject('moviepilot:toast', null)
 const model = reactive({ ...structuredClone(defaults), ...JSON.parse(JSON.stringify(props.initialConfig || {})) })
 // API 与历史配置中的自定义 ID 可能是数字；表单内统一使用字符串关联站点。
 function normalizeSiteIds() {
@@ -102,8 +104,8 @@ function deleteCustomSite(id) {
 function saveCustomSite(site) {
   error.value = ''
   let url
-  try { url = new URL(site.url) } catch { error.value = '请填写有效的 HTTP(S) 地址'; return }
-  if (!site.name.trim() || !['http:', 'https:'].includes(url.protocol)) { error.value = '请填写名称及 HTTP(S) 地址'; return }
+  try { url = new URL(site.url) } catch { error.value = '请填写有效的 HTTP(S) 地址'; toast?.error(error.value); return }
+  if (!site.name.trim() || !['http:', 'https:'].includes(url.protocol)) { error.value = '请填写名称及 HTTP(S) 地址'; toast?.error(error.value); return }
   const updated = {...site, name:site.name.trim(), url:url.href, source:'自定义站点'}
   customOverlay.value = [...customOverlay.value.filter(item => item.id !== site.id), updated]
   const index = model.custom_sites_data.findIndex(item => item.id === site.id)
@@ -135,7 +137,7 @@ function toggleFilteredSelection() {
 }
 function remove(id) { model.enabled_sites = model.enabled_sites.filter(s => s !== id); openSites.value = openSites.value.filter(s => s !== id) }
 function save() { emit('save', JSON.parse(JSON.stringify(model))) }
-async function loadSites() { try { const response = await props.api?.get(`plugin/${props.pluginId || 'AutoPtCheckin'}/sites`); registrySites.value = (response?.data?.sites || response?.sites || []).map(site => ({...site, id: String(site.id), source: site.source, fields: credentialFields[site.id] || [], credential: site.credential && site.credential.kind ? site.credential.kind : 'cookie'})) } catch { registrySites.value = [] } }
+async function loadSites() { try { const response = await props.api?.get(`plugin/${props.pluginId || 'AutoPtCheckin'}/sites`); registrySites.value = (response?.data?.sites || response?.sites || []).map(site => ({...site, id: String(site.id), source: site.source, fields: credentialFields[site.id] || [], credential: site.credential && site.credential.kind ? site.credential.kind : 'cookie'})) } catch { registrySites.value = []; toast?.error('站点清单加载失败') } }
 let stopTheme
 onMounted(() => { stopTheme = watchHostTheme(); loadSites(); window.addEventListener('resize', positionPicker); window.addEventListener('scroll', positionPicker, true) })
 onBeforeUnmount(() => { stopTheme?.(); window.removeEventListener('resize', positionPicker); window.removeEventListener('scroll', positionPicker, true) })

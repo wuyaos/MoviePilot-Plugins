@@ -1,9 +1,11 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue'
 import { watchHostTheme } from './theme.js'
 const props = defineProps({ api: Object, pluginId: {type:String,default:'AutoPtCheckin'}, show_switch: {type:Boolean,default:true} })
 const brokenIcons = ref({})
-const emit = defineEmits(['close','switch','layout'])
+// 规范 5.8：复用宿主统一 Toast；注入不存在时静默降级，保留页面内状态提示。
+const toast = inject('moviepilot:toast', null)
+const emit = defineEmits(['close','switch','layout','action'])
 const stats = ref(null), history = ref({total:0,items:[]}), error = ref('')
 const showAllSites = ref(false), dayOverrides = ref({})
 const siteFilter = ref('')
@@ -131,7 +133,8 @@ async function load() {
   error.value = ''
   try {
     [stats.value, history.value] = await Promise.all([get('stats'), loadHistory()])
-  } catch (e) { error.value = e.message || '加载失败' }
+    emit('action')
+  } catch (e) { error.value = e.message || '加载失败'; toast?.error(error.value) }
 }
 async function toggleTrack(site, kind, on) {
   await execute(`site_track?domain=${encodeURIComponent(site.id)}&track=${kind}&on=${on ? 1 : 0}`)
@@ -143,7 +146,7 @@ async function execute(action, domain = '') {
     const response = await props.api.post(`plugin/${props.pluginId}/${action}${domain ? '?domain='+encodeURIComponent(domain) : ''}`)
     if (response?.success === false) throw new Error(response.message)
     await load()
-  } catch (e) { error.value = e.message || '执行请求失败' }
+  } catch (e) { error.value = e.message || '执行请求失败'; toast?.error(error.value) }
   finally { busy.value = false }
 }
 let stopTheme

@@ -18,6 +18,7 @@ def test_config_numeric_custom_site_ids():
 import assert from 'node:assert/strict';
 import {reactive, ref, computed, watch, nextTick} from 'vue';
 const onMounted = () => {}, onBeforeUnmount = () => {};
+const inject = () => null;
 const ids = [60005,60006,60012,60013,60018,60022,60023,60024];
 const rows = ids.map(id => ({id, name:`Site ${id}`, url:`https://site-${id}.invalid/`, source:'自定义站点'}));
 rows.push({id:'native', name:'Native'});
