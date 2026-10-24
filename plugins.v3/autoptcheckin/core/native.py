@@ -193,8 +193,8 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                 persist_cookie_result(result, ctx.http, site.id, credential.source, get_data, save_data)
                 if isinstance(ctx.http, CloakHttpClient):
                     result.metadata['transport'] = 'cloak'
-            except Exception:
-                result = SignResult(SignStatus.UNCONFIRMED, '原生签到执行未确认')
+            except Exception as exc:
+                result = SignResult(SignStatus.UNCONFIRMED, f'原生签到执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])
             finally:
                 if ctx is not None and isinstance(ctx.http, CloakHttpClient):
                     try:
@@ -225,8 +225,8 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                 if login.status == LoginStatus.LOGIN_OK:
                     result = site.signin(ctx)
                     persist_cookie_result(result, ctx.http, site.id, 'password_login', get_data, save_data)
-            except Exception:
-                result = SignResult(SignStatus.UNCONFIRMED, '原生签到执行未确认')
+            except Exception as exc:
+                result = SignResult(SignStatus.UNCONFIRMED, f'原生签到执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])
             finally:
                 if session is not None:
                     try:
