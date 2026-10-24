@@ -55,3 +55,4 @@ Todo 必须与实际进度同步，避免滞后或遗漏：
 - 启动 MP: `moviepilot start`
 - 重载插件: `curl -sS http://127.0.0.1:7300/api/v1/plugin/reload/<PluginId> -H "X-API-KEY: <key>"`
 - 触发签到: `moviepilot scheduler run <service_id>`
+- V3 插件中心安装位置：容器内 `/app/app/plugins/<lower(id)>`（qnap MP 为 `docker exec MP` 路径）；`/config/plugins/<id>` 不在加载路径，手工写入会被当孤儿目录，产生「安装成功但跑旧码」的混合状态——手工部署直接覆盖 `/app/app/plugins/<lower(id)>` 后 reload

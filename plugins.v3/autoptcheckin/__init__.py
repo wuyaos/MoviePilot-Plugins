@@ -35,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.5"
+    plugin_version = "4.0.6"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -320,6 +320,7 @@ class AutoPtCheckin(_PluginBase):
                                 'sign_state': sign.get('state', 'disabled' if sid not in enabled else 'pending'),
                 'sign_status': sign.get('status', ''), 'sign_time': sign.get('time', ''),
                 'sign_message': sign.get('message', ''),
+                'page_action': (sign.get('metadata') or {}).get('page_action'),
                 'login_state': login.get('state', 'disabled' if sid not in enabled else 'pending'),
                 'login_status': login.get('status', ''), 'login_time': login.get('time', ''),
                 'login_message': login.get('message', ''),
@@ -348,9 +349,11 @@ class AutoPtCheckin(_PluginBase):
         reason = metadata.get("reason")
         gate_skip = status in ("skipped", "cancelled") and (reason or "") in GATE_SKIPS
         if not metadata.get("read_only") and (status not in ("skipped", "cancelled") or gate_skip):
+            diag = {k: metadata[k] for k in ("page_action", "steps", "error") if k in metadata}
             self._track_store().apply_result(
                 str(result.site_id), metadata.get("action", "sign"), status,
-                message=getattr(result, "message", "") or "", reason=reason)
+                message=getattr(result, "message", "") or "", reason=reason,
+                metadata=diag or None)
         if result.account and result.site_id not in self._bound_uids:
             self._bound_uids[result.site_id] = result.account
             if hasattr(self, "save_data"):

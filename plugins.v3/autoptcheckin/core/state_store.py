@@ -1,4 +1,5 @@
 """轨道状态表：每站×动作的规范化当前状态；历史只做流水，状态表供收集与展示。"""
+import json
 from copy import deepcopy
 from datetime import datetime
 from threading import Lock
@@ -25,7 +26,28 @@ GATE_SKIPS = frozenset({
 TRANSIENT_SKIPS = frozenset({"skipped", "cancelled"})
 NON_FAILURE = frozenset({"maintenance", "network_error", "protocol_pending"})
 KNOWN_FAILURES = frozenset({"failed", "auth_failed", "unconfirmed"})
+KNOWN_FAILURES = frozenset({"failed", "auth_failed", "unconfirmed"})
 
+_METADATA_BUDGET = 2048
+
+
+def _clip_metadata(meta: dict) -> dict:
+    """metadata 落表前压缩：steps 截尾、超预算丢 steps 只留摘要，防止状态表膨胀。"""
+    clipped = dict(meta)
+    steps = clipped.get("steps")
+    if isinstance(steps, list) and len(steps) > 5:
+        clipped["steps"] = steps[:5] + [{"step": "...", "dropped": len(steps) - 5}]
+    try:
+        raw = json.dumps(clipped, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return {"error": "metadata not serializable"}
+    if len(raw) <= _METADATA_BUDGET:
+        return clipped
+    keep = {k: v for k, v in clipped.items() if k != "steps"}
+    keep["steps_clipped"] = True
+    if len(json.dumps(keep, ensure_ascii=False, default=str)) > _METADATA_BUDGET:
+        return {"error": "metadata oversized"}
+    return keep
 
 def normalize(track: str, status: str, reason: str | None = None) -> str:
     """唯一映射点：运行/历史结果值 → 轨道四值状态（success/failed/pending/disabled）。"""
@@ -92,7 +114,8 @@ class TrackStateStore:
 
     # -- 写入 ---------------------------------------------------------------
     def apply_result(self, site: str, track: str, status: str, *, message: str = "",
-                     reason: str | None = None, time: str | None = None) -> str:
+                     reason: str | None = None, time: str | None = None,
+                     metadata: dict | None = None) -> str:
         """执行结果 UPSERT；锁忙/取消只写历史不改表（调用方约定），此处再兜底跳过。"""
         self.ensure()
         if status in TRANSIENT_SKIPS and not (reason or "") in GATE_SKIPS:
@@ -104,6 +127,11 @@ class TrackStateStore:
             entry["status"] = status or ""
             entry["message"] = message or ""
             entry["time"] = time or self._clock().isoformat()
+            # 诊断元数据（steps/page_action）随结果落表；空值清除残留避免陈旧误导。
+            if metadata:
+                entry["metadata"] = _clip_metadata(metadata)
+            else:
+                entry.pop("metadata", None)
             if reason:
                 entry["reason"] = reason
             else:
