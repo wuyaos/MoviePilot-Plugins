@@ -26,7 +26,8 @@
     "status_map": {
       "今天已签到": "signed"
     },
-    "emulate": true
+    "emulate": true,
+    "slow": true
   },
   {
     "id": "bilibili",
@@ -193,7 +194,11 @@
     "name": "萝莉",
     "url": "https://mua.xloli.cc/",
     "attendance_path": "/attendance.php",
-    "emulate": true
+    "emulate": true,
+    "cloak_steps": [
+      "human_verify",
+      "sign_button"
+    ]
   },
   {
     "id": "musopia",
@@ -844,6 +849,7 @@
     "attendance_path": "/torrents.php",
     "emulate": true,
     "cloak_steps": [
+      "attendance_link",
       "slider",
       "sign_button"
     ],
@@ -980,6 +986,7 @@
     "name": "FileList",
     "url": "https://filelist.io/",
     "attendance_path": null,
-    "signin_capable": false
+    "signin_capable": false,
+    "impersonate": true
   }
 ]

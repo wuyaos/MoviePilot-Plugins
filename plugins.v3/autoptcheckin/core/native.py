@@ -56,6 +56,21 @@ class NativeHttpClient:
     def _request(self, method, url, **kwargs):
         from app.sdk.config import settings
         from app.sdk.network import RequestUtils
+        # 浏览器指纹绑定站（如 FileList）：普通 requests 的 TLS 指纹会被判非法会话，
+        # 与 MP 站点连通性测试同口径走 curl_cffi chrome 仿真。
+        use_cffi = getattr(self.credential, 'impersonate', None) or self.info.get('impersonate')
+        if use_cffi:
+            try:
+                from curl_cffi import requests as cffi_requests
+                m = {'get': cffi_requests.get, 'post': cffi_requests.post}[method]
+                resp = m(url, headers={'User-Agent': self.info.get('ua') or 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36',
+                                       'Referer': kwargs.pop('referer', self.info.get('url') or '')},
+                         cookies=self.cookies, timeout=20, impersonate='chrome',
+                         allow_redirects=True, proxies=({'https': settings.PROXY, 'http': settings.PROXY} if self.info.get('proxy') and settings.PROXY else None))
+                self.cookies.update(resp.cookies.get_dict())
+                return LoginPage(decode_response(resp), str(resp.url), resp.status_code)
+            except Exception:
+                pass  # cffi 失败退回普通通道
         session_args = {"session": self.session} if self.session is not None else {}
         request = RequestUtils(**session_args, cookies=self.cookies, ua=self.info.get('ua'),
                                referer=kwargs.pop('referer', self.info.get('url')), timeout=20,

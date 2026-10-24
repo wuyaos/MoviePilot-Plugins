@@ -66,12 +66,20 @@ class MTorrent(SiteModule):
 
     def keepalive_login(self, info):
         """登录 M-Team 并持久化浏览器 storage_state，不执行签到或保活动作。"""
+        import time as _time
+        from pathlib import Path as _Path
         from ...core.cloak import CloakSession, state_path
         base = info.get("url") or "https://kp.m-team.cc/"
         username, password = info.get("mteam_username", ""), info.get("mteam_password", "")
         if not username or not password:
             return LoginResult(LoginStatus.AUTH_FAILED, "缺少 M-Team 账号或密码")
         state = state_path(self.id)
+        cooldown = _Path(str(state) + ".cooldown")
+        if cooldown.exists():
+            age = _time.time() - cooldown.stat().st_mtime
+            if age < 86400:
+                return LoginResult(LoginStatus.AUTH_FAILED,
+                                   f"M-Team 需邮箱双重认证，自动化无法完成；{int((86400-age)//3600)} 小时后重试，或浏览器人工登录（40 天有效）")
 
         def launch(state_file):
             with CloakSession(state=state_file, url=base) as browser:
@@ -87,6 +95,11 @@ class MTorrent(SiteModule):
                     import pyotp
                     browser.fill('input[autocomplete="one-time-code"], input[name*="totp" i], input[name*="otp" i]',
                                  pyotp.TOTP(info["mteam_totp"]).now())
+                two_fa_page = "/login" in browser.page.url and ("雙重認證碼" in browser.page.locator('body').inner_text())
+                if two_fa_page:
+                    cooldown.parent.mkdir(parents=True, exist_ok=True)
+                    cooldown.write_text("2fa", encoding="utf-8")
+                    return False, "M-Team 要求邮箱双重认证，自动化无法完成；请浏览器人工登录（成功后 40 天内插件自动核验登录态）"
                 two_fa = browser.evaluate(
                     "() => /\u96d9\u91cd\u8a8d\u8b49|\u9a8c\u8b49\u78bc|\u90f5\u7bb1/.test(document.body.innerText) &&"
                     " !!document.querySelector('input[name*=code i], input[name*=otp i], input[type=text][name*=auth i]')"
