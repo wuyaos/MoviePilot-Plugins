@@ -236,6 +236,28 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
         uid = str(info.get('uid') or '')
+        if getattr(site, 'browser_login', False):
+            # 会话绑定浏览器指纹的站点（如 FileList）：HTTP 重放 Cookie 必失败，
+            # 用 CloakBrowser 真实浏览器带 Cookie 访问首页，以 logout 标记判定登录态。
+            from .cloak import CloakSession
+            base = info.get('url') or site.url
+            pairs = []
+            from urllib.parse import urlsplit as _urlsplit
+            for part in (info.get('cookie') or '').split(';'):
+                k, sep, v = part.strip().partition('=')
+                if sep:
+                    pairs.append({'name': k, 'value': v, 'domain': (_urlsplit(base).hostname or '').lstrip('.'), 'path': '/'})
+            try:
+                with CloakSession(url=base, cookies=pairs) as browser:
+                    browser.goto(base)
+                    body = browser.page.locator('body').inner_text()
+                    if 'logout' in body.lower() or 'log out' in body.lower():
+                        result = LoginResult(LoginStatus.LOGIN_OK, '浏览器核验：已登录')
+                    else:
+                        result = LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效（浏览器核验跳转登录页）')
+            except Exception as exc:
+                result = LoginResult(LoginStatus.UNCONFIRMED, f'浏览器登录核验异常：{type(exc).__name__}')
+            return finish(result)
         if site.id == "mteam":
             try:
                 result = site.keepalive_login({**(config or {}), **info})

@@ -975,6 +975,7 @@
     "name": "FileList",
     "url": "https://filelist.io/",
     "attendance_path": null,
-    "signin_capable": false
+    "signin_capable": false,
+    "browser_login": true
   }
 ]
