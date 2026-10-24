@@ -22,16 +22,19 @@ from typing import Any
 
 try:
     from app.sdk.plugin import _PluginBase
+    from app.core.event import eventmanager
+    from app.schemas.types import EventType
 except ImportError:  # 离线契约测试无宿主
     class _PluginBase:
         pass
-
+    eventmanager = None
+    EventType = None
 
 class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.2"
+    plugin_version = "4.0.3"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -59,7 +62,7 @@ class AutoPtCheckin(_PluginBase):
         # 否则 _init_config 默认的 stop_service 会打断运行中的队列（reviewer 3b24554a P1-2）。
         with self._migration.lock:
             self._init_config(config, preserve_round=self._round_active)
-
+        self._register_commands()
     def _init_config(self, config: dict | None = None, preserve_round: bool = False) -> None:
         if not preserve_round:
             self.stop_service()
@@ -658,6 +661,54 @@ class AutoPtCheckin(_PluginBase):
         threading.Thread(target=_worker, daemon=True, name="autoptcheckin-run-once").start()
         return {"success": True, "data": {"started": True}}
 
+
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        """远程命令：立即签到 / 强制签到（清理本日缓存后全量重跑）。"""
+        if EventType is None:
+            return []
+        return [
+            {"cmd": "/checkin_now", "event": EventType.PluginAction,
+             "desc": "立即签到", "category": "签到",
+             "data": {"action": "checkin_now"}},
+            {"cmd": "/checkin_force", "event": EventType.PluginAction,
+             "desc": "强制签到", "category": "签到",
+             "data": {"action": "checkin_force"}},
+        ]
+
+    def _handle_remote_command(self, event: Any) -> None:
+        """PluginAction：checkin_now=立即运行；checkin_force=先清本日缓存再全量运行。"""
+        if not event or EventType is None:
+            return
+        data = getattr(event, "event_data", None) or {}
+        action = data.get("action")
+        if action not in ("checkin_now", "checkin_force"):
+            return
+        if getattr(self, "_round_active", False):
+            return
+        import threading
+
+        def _worker():
+            try:
+                if action == "checkin_force":
+                    self._history.clear_today()
+                    self._track_store().clear_transient()
+                self._config["onlyonce"] = True
+                self._scheduled_once()
+            except Exception:
+                from app.runtime.log import logger
+                logger.error(f"【PT 签到中心】远程命令 {action} 执行异常", exc_info=True)
+
+        threading.Thread(target=_worker, daemon=True, name="autoptcheckin-remote-command").start()
+
+    def _register_commands(self) -> None:
+        """init_plugin 时注册远程命令监听（幂等）。"""
+        if eventmanager is None or EventType is None:
+            return
+        if getattr(self.__class__, "_command_registered", False):
+            return
+        eventmanager.register(EventType.PluginAction)(self._handle_remote_command)
+        self.__class__._command_registered = True
     async def api_clean_today(self) -> dict:
         """清理本日缓存：清当日历史，并把状态表非禁用轨道重置为 pending（强制今天重跑）。"""
         removed = await asyncio.to_thread(self._history.clear_today)
