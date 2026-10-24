@@ -72,7 +72,8 @@ def test_config_summary_actions_and_emulate_contract():
     assert 'v-if="site.login_capable"' not in summary  # 3.37 用户裁决：登录开关所有站点可见
     assert 'credentialBadge' in summary
     assert 'v-if="site.cf === true"' in summary and 'CF 盾' in summary
-    assert 'v-if="site.emulate === true || siteEmulated(site)"' in summary and '仿真' in summary
+    assert 'v-else-if="site.emulate === true || siteEmulated(site)"' in summary and '仿真' in summary  # 4.1 云签徽标互斥：shield=cloud 显示云签，否则回退仿真
+    assert 'v-if="site.shield === \'cloud\'"' in summary and '云签' in summary
     assert summary.index('site.source') < summary.index('credentialBadge') < summary.index('CF 盾') < summary.index('仿真') < summary.index('model.sign_sites') < summary.index('model.login_sites')
     assert summary.index('model.login_sites') < summary.index('expand-icon')
     detail = source.split('<div class="site-detail">', 1)[1]

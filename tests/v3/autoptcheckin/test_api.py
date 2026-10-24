@@ -86,7 +86,10 @@ def test_frontend_defaults_and_distribution():
     defaults = json.loads((PKG / 'config_defaults.json').read_text(encoding='utf8'))
     assert defaults['enabled_sites'] == []
     assert {'mteam_username', 'mteam_password', 'mteam_totp'} <= defaults.keys()
-    assert not {'browserless_enabled', 'browserless_url', 'browserless_token'} & defaults.keys()
+    # 云签（4.1.0）：全局 Browserless 服务地址/令牌取代旧的「无全局地址令牌」契约
+    assert 'browserless_enabled' not in defaults
+    assert defaults['browserless_url'] == 'https://production-sfo.browserless.io'
+    assert defaults['browserless_token'] == ''
     assert defaults['site_browserless'] == []
     assert {'rousi_username', 'rousi_password', 'sunnypt_username', 'sunnypt_password', 'sunnypt_token'} <= defaults.keys()
     remote = (PKG / 'dist/assets/remoteEntry.js').read_text(encoding='utf8')

@@ -35,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.4"
+    plugin_version = "4.0.5"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -278,7 +278,18 @@ class AutoPtCheckin(_PluginBase):
         # 站点行与三卡统计全部来自状态表；历史仅作流水审计。
         self._track_store().rollover()
         rows = self._site_rows()
-        latest = self._track_store().counts()
+        # 三卡统计与站点列表同源：直接按启用站点行汇总，状态表残留条目不再进数字。
+        latest = {}
+        for track in ("sign", "login"):
+            buckets = {"success": 0, "failed": 0, "unconfirmed": 0}
+            for row in rows:
+                state = row.get(f"{track}_state")
+                if state == SUCCESS:
+                    buckets["success"] += 1
+                elif state == FAILED:
+                    raw = row.get(f"{track}_status", "")
+                    buckets["unconfirmed" if raw == "unconfirmed" else "failed"] += 1
+            latest[track] = buckets
         return {"success": True, "data": {"latest": latest,
                 "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": rows}}
 

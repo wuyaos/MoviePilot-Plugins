@@ -95,7 +95,8 @@ def test_human_verify_continues_to_sign_and_stashed_readback(sid, verify, monkey
     assert results == [('human_verify', expected), ('sign_button', 'clicked')]
     assert result.status == 'success'
     assert page.clicked == 1
-    assert page.waits.count(1500) == ((60 if sid == 'vclib' else 40) if verify == 'timeout' else 0)
+    # human_verify 重写后 absent/error 也走 CF iframe poke 轮询，每轮等 1500ms；token 直通不等待
+    assert page.waits.count(1500) == ((60 if sid == 'vclib' else 40) if verify != 'token' else 0)
 
 
 @pytest.mark.parametrize('navigate', [False, True])
