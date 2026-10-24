@@ -886,7 +886,8 @@
     "name": "Anthelion",
     "url": "https://anthelion.me/",
     "attendance_path": null,
-    "signin_capable": false
+    "signin_capable": false,
+    "emulate": true
   },
   {
     "id": "jpopsuki",
