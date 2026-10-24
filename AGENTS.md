@@ -32,7 +32,7 @@ MoviePilot V2 自用插件仓库。
 - 图标主体比例可按业务图形保留，不强制裁成正方形；窄图形应通过画布留白保持视觉居中，不得通过拉伸填满画布
 - 修改或新增图标后检查：文件尺寸为 `200×200`、模式为 `RGBA`、存在透明边距
 - 提交前 `python3 -c "import ast; ast.parse(open('<file>').read())"` 校验语法
-- MP 本地调试：`moviepilot` CLI，后端 http://127.0.0.1:7300
+- MP 本地调试：V3 调试实例后端 http://127.0.0.1:17430（前端 17431），启动/鉴权/部署/reload 的完整调用规范见 [docs/mp-local-debug.md](docs/mp-local-debug.md)
 
 ### `package.v2.json` 编辑规范
 - 向 history 插入新版本条目时，禁止用 `edit` 的 `oldText`/`newText` 做相邻行替换（如把 `"history": {\n  "v1.5.6":` 整体作为 oldText 替换），会吞掉旧行键名导致两个字符串相邻、JSON 破坏。

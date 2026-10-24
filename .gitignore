@@ -7,7 +7,8 @@ __pycache__/
 *.so
 .history/
 memory-bank/
-docs/
+docs/*
+!docs/mp-local-debug.md
 .codex/
 .omc/
 .omx/
