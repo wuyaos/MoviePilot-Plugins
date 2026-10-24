@@ -6,34 +6,31 @@
 
 | 项 | 值 |
 |---|---|
-| 实例根 | `D:\test\MoviePilot-v3`（V3 源码 checkout + `moviepilot` bash CLI） |
+| 实例根 | `D:\test\MoviePilot-v3`（V3 源码 checkout） |
 | 后端 API | `http://127.0.0.1:17430`（`config/app.env` 的 `PORT`） |
 | 前端 | `http://127.0.0.1:17431`（`config/app.env` 的 `NGINX_PORT`） |
 | API Key | 文件 `D:/tmp/.mp_local_key`（与 `app.env` 的 `API_TOKEN` 同值；**调用时从文件读，不硬编码**） |
+| 站点认证 | `AUTH_SITE=audiences` + `AUDIENCES_UID/PASSKEY`（在 `app.env`，**认证失败=插件系统整体不装载**，登录报「登录失败，请检查网络连接」同因） |
 | 插件仓库联动 | `app.env` 的 `PLUGIN_LOCAL_REPO_PATHS=D:\work\project\person\MoviePilot-Plugins`（实例直接感知本仓库） |
 
 ## 启动 / 停止
 
-本机 `moviepilot` CLI 依赖工程 `.venv`（未建，报「未找到项目虚拟环境」），实际用 mp3 editable 环境直连：
+**首选 `mp.ps1`**（实例根下，实测可用）：
 
-```bash
-cd /d/test/MoviePilot-v3
-export CONFIG_DIR='D:\test\MoviePilot-v3\config'
-alias mp3cli="micromamba run -n mp3 python -m app.cli"
-
-mp3cli start     # 后台启动（daemon 化：CLI 拉起前后端子进程后即返回）
-mp3cli status    # 状态（running + PID）
-mp3cli stop      # 停止
-mp3cli restart   # 重启
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\test\MoviePilot-v3\mp.ps1 start    # 加载 app.env 后最小化窗口启动
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\test\MoviePilot-v3\mp.ps1 stop     # 按 17430 端口找 pid 强杀
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\test\MoviePilot-v3\mp.ps1 restart
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\test\MoviePilot-v3\mp.ps1 status
 ```
 
-**注意：`start` 是后台守护化启动，CLI wrapper 退出 ≠ 实例停止**——pi `bg_task` 里跑它，「任务 finished」是正常现象，服务存活以 `status` 或探活为准。stdio 日志由 `MOVIEPILOT_STDIO_LOG_*` 系列环境变量控制落文件（见下），运行日志在 `config/logs/`：
+要点：
 
-```bash
-export MOVIEPILOT_DISABLE_CONSOLE_LOG=1 MOVIEPILOT_STDIO_LOG_BACKUP_COUNT=10 \
-       "MOVIEPILOT_STDIO_LOG_FILE=D:\test\MoviePilot-v3\config\logs\moviepilot.stdout.log"
-```
-
+- `python app/main.py` **直启不读 `app.env`**（读 env 是 CLI 的职责），mp.ps1 已内置解析（剥单引号）。手工 bash 启动必须 `set -a && source config/app.env && set +a`，否则认证/插件全挂。
+- `mp.ps1` 已加 UTF-8 BOM——PowerShell 5.1 读无 BOM 的中文脚本会乱码破坏语法。
+- 启动后插件异步装载，被 GitHub 索引请求超时拖慢，**约 1-2 分钟后插件才可用**；验证装载看 `GET /api/v1/plugin/remotes?token=moviepilot`。
+- 弃用 `moviepilot` CLI：依赖工程 `.venv`（未建），且残留前端进程时端口检测误判报「前端正在运行」。
+- mp3 editable 环境：`micromamba run -n mp3 python app/main.py`；运行日志 `config/logs/`。
 ## 探活与鉴权
 
 ```bash
@@ -66,7 +63,18 @@ curl -sS -X POST "http://127.0.0.1:17430/api/v1/plugin/reload/AutoPtCheckin" \
   -H "X-API-KEY: $(cat /d/tmp/.mp_local_key)"
 ```
 
-改 `frontend/src` 后先 `npm run build`（产物在插件目录 `dist/`）再部署；只改后端 `.py` 可直接部署。
+改 `frontend/src` 后先 `npm run build`（产物在插件目录 `frontend/dist/`）再同步插件 `dist/` 部署；只改后端 `.py` 可直接部署 `__init__.py`。
+
+**部署形态必须真目录，禁止 junction**：曾用 junction 指回本仓库，MP 恢复同步的 `.resolve()` 解引用后判「非法插件ID」，**junction 时代表例 `hhanclubrescueseed`/`autoptcheckin`/`ForumSignin` 全部装载失败**（日志：`sync.py - 创建插件安装快照失败：非法插件ID`）。统一真目录复制：
+
+```bash
+# hhanclubrescueseed 部署（本仓库 → 实例，运行产物仅 3 项）
+J=/d/test/MoviePilot-v3/app/plugins/hhanclubrescueseed
+S=/d/work/project/person/MoviePilot-Plugins/plugins.v3/hhanclubrescueseed
+rm -rf $J && mkdir -p $J/dist
+cp $S/__init__.py $S/AGENTS.md $J/
+cp -r $S/dist/assets $J/dist/
+```
 
 
 ## 排障备忘
@@ -74,6 +82,10 @@ curl -sS -X POST "http://127.0.0.1:17430/api/v1/plugin/reload/AutoPtCheckin" \
 - `/api/v1/plugin/file/<plugin_id>/<path>` 用登录后的**资源 Cookie** 鉴权（`resource_token_cookie`），不带 `X-API-KEY`；curl 带 API key 得 401 属正常，不代表文件缺失。文件服务从 `app/plugins/<lower(id)>/` 直读，验证存在性直接 `ls` 即可。
 - 本地 repo 首装新插件出现过「插件加载失败，请查看插件日志」但插件日志为空：安装流程 reload 时启用位/身份行尚未对装载判据生效，直接重试一次安装即成功（日志出现「加载插件：X 版本：Y」）。装载成功判据看 `moviepilot.log` 的这行 INFO，不要只看 install 接口返回。
 - 插件装载全程无 `config/logs/plugins/<id>.log` 不代表失败：该日志由插件业务代码写出，未启用的插件没有内容。
+- 启动日志反复刷 `raw.githubusercontent.com ... ReadTimeout` 后插件迟迟不可用：无代理环境下 GitHub 索引请求每次 15 秒超时阻塞装载线程，属慢而非死；`app.env` 配 `GITHUB_TOKEN` 后缓解。判定装载完成以 remotes API 为准，不看启动日志时间戳。
+- `AUDIENCES_UID/PASSKEY` 报「未设置」= env 没进进程（直启没 source），不是文件里没写。
+- qnap 生产实例的 `app.env` 可作本地合并基线（2025-10 已合并：GITHUB_TOKEN、PLUGIN_MARKET、LLM、DOH 等），但本地运行时键（PORT/NGINX_PORT/HOST/SUPERUSER/API_TOKEN）保留本地值；qnap 的 compose 级 env（AUTH_SITE/AUDIENCES_*）不在其 app.env 里，需单独补。
+
 ## 红线
 
 - API Key、CookieCloud 凭据等敏感值只从文件/环境读，不写入文档、日志、提交或子代理提示。
