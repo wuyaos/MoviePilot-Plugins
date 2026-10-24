@@ -23,7 +23,7 @@ def test_generic_declarations_unique_and_credential_free():
     base_rows = sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows)
     assert base_rows == 50  # qingwapt 恢复通用签到；cspt 财神补签到已得 signed_marker  # extras: emulate/cloak_steps/signin_capable/login_notice 声明站（含 pt_0ff/52pt/yema/piggo 等）
     extras = [row for row in rows if set(row) != {'id', 'name', 'url', 'attendance_path'}]
-    assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path', 'browser_login', 'slow'} for row in extras)
+    assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path', 'browser_login', 'slow', 'slow_timeout', 'headful'} for row in extras)
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'iptorrents'} & {row['id'] for row in rows}  # jpopsuki/nebulance/filelist 已转正为仅登录声明
 
 

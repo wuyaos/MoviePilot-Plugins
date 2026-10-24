@@ -550,8 +550,8 @@ class AutoPtCheckin(_PluginBase):
         shared = None
         if sum(1 for sid in round_sites if sid in emulated) >= 2:
             try:
-                from .core.cloak import CloakSession
-                shared = CloakSession(url='https://example.com/', headless=not bool({'vclib', 'piggo'} & set(round_sites)))
+                from .core.cloak import CloakSession, site_requires_headful
+                shared = CloakSession(url='https://example.com/', headless=not any(site_requires_headful(sid) for sid in round_sites))
                 shared.__enter__()
                 self._runner.shared_cloak = shared
             except Exception:

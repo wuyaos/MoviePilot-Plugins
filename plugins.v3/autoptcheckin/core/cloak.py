@@ -14,6 +14,18 @@ except ImportError:
 TURNSTILE_HEADFUL_SITES = {"vclib", "piggo"}
 
 
+def site_requires_headful(site_id):
+    """Resolve declaration-driven headful mode, retaining legacy Turnstile defaults."""
+    try:
+        from .registry import get_native_module
+        site = get_native_module(str(site_id))
+        if site is not None:
+            return bool(getattr(site, "headful", False))
+    except Exception:
+        pass
+    return str(site_id) in TURNSTILE_HEADFUL_SITES
+
+
 def state_path(site_id):
     """返回插件独立数据目录中的站点浏览器存档路径。"""
     from app.sdk.config import settings
@@ -26,6 +38,8 @@ class CloakSession:
         self.state, self.cookie, self.url = state, cookie, url
         self.headless, self.humanize, self.locale = headless, humanize, locale
         self.navigation_timeout = navigation_timeout
+        self.action_timeout = navigation_timeout
+        self.human_verify_timeout = navigation_timeout
         self.context = self.page = None
 
     def __enter__(self):
@@ -87,10 +101,13 @@ class CloakHttpClient:
                 self.session.context.add_cookies(cookies)
             return
         self.shared = False
+        timeout = int(getattr(site, "slow_timeout", 0) or (60000 if getattr(site, "slow", False) else 30000))
         self.session = CloakSession(cookie=cookie, url=self.url,
-                                    headless=site.id not in TURNSTILE_HEADFUL_SITES,
-                                    navigation_timeout=60000 if getattr(site, "slow", False) else 30000)
-        self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
+                                    headless=not (bool(getattr(site, "headful", False)) or
+                                                  site.id in TURNSTILE_HEADFUL_SITES),
+                                    navigation_timeout=timeout)
+        self.session.action_timeout = timeout
+        self.session.human_verify_timeout = timeout
         self.session.__enter__()
 
     def _sync_cookies(self):
@@ -179,13 +196,15 @@ def _wait_for_locator(page, selectors, timeout_ms=20000):
 def _enabled_sign_button(page):
     """只返回已完成滑块后可提交的按钮，不误点门页提示按钮。"""
     selectors = (
-        'button:has-text("提交签到")',
+        'button:not([disabled]):has-text("提交签到")',
         'input[type="submit"][value*="提交签到"]',
         '#sign-button', '#sign_btn', '[id*="sign"] button',
-        'button:has-text("立即签到")', 'button:has-text("点我签到")',
-        'button:has-text("签到")', 'a:has-text("立即签到")',
-        'a:has-text("签到")', 'input[type="submit"][value*="签到"]',
-        'button:has-text("打卡")', 'text=打卡',
+        'button:not([disabled]):has-text("立即签到")',
+        'button:not([disabled]):has-text("点我签到")',
+        'button:not([disabled]):has-text("签到")',
+        'a[href*="sign"]:has-text("立即签到")',
+        'input[type="submit"][value*="签到"]',
+        'button:not([disabled]):has-text("打卡")', 'text=打卡',
     )
     loc = _wait_for_locator(page, selectors)
     if loc is None:
@@ -245,7 +264,7 @@ def run_page_action(session, steps):
                     continue
                 wrap.locator('input').click()
                 verified = False
-                for _ in range(14):
+                for _ in range(max(1, int(getattr(session, "action_timeout", 21000) / 1500))):
                     page.wait_for_timeout(1500)
                     if '已验证' in wrap.inner_text():
                         verified = True

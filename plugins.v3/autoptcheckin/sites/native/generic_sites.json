@@ -457,6 +457,7 @@
       "human_verify",
       "sign_button"
     ],
+    "headful": true,
     "login_notice": "人工验证签到，需浏览器环境"
   },
   {
@@ -827,6 +828,7 @@
     "cloak_steps": [
       "sign_button"
     ],
+    "headful": true,
     "emulate": true
   },
   {
@@ -859,7 +861,8 @@
       "sign_button"
     ],
     "emulate": true,
-    "slow": true
+    "slow": true,
+    "slow_timeout": 90000
   },
   {
     "id": "hares",
@@ -977,7 +980,6 @@
     "name": "FileList",
     "url": "https://filelist.io/",
     "attendance_path": null,
-    "signin_capable": false,
-    "browser_login": true
+    "signin_capable": false
   }
 ]

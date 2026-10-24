@@ -82,6 +82,14 @@ def test_retrotoon_claim_ignores_timezone_form():
     assert site.discover_form(None, LoginPage(claim * 2 + timezone, page.url)) is None
 
 
+def test_slow_and_headful_cloak_declarations_are_preserved():
+    yema = get_native_module('yema')
+    piggo = get_native_module('piggo')
+    vclib = get_native_module('vclib')
+    assert yema.slow is True and yema.slow_timeout == 90000
+    assert piggo.headful is True and vclib.headful is True
+
+
 def test_yema_signin_capability_and_login_are_enabled():
     site = get_native_module('yema')
     assert site.signin_capable is True
