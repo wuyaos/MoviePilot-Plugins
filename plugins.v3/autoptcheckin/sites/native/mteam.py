@@ -68,7 +68,7 @@ class MTorrent(SiteModule):
         """登录 M-Team 并持久化浏览器 storage_state，不执行签到或保活动作。"""
         import time as _time
         from pathlib import Path as _Path
-        from ...core.cloak import CloakSession, state_path
+        from ...core.cloak import CloakSession, run_isolated, state_path
         base = info.get("url") or "https://kp.m-team.cc/"
         username, password = info.get("mteam_username", ""), info.get("mteam_password", "")
         if not username or not password:
@@ -117,7 +117,7 @@ class MTorrent(SiteModule):
         try:
             if state.exists():
                 try:
-                    ok, message = launch(state)
+                    ok, message = run_isolated(lambda: launch(state))
                 except Exception:
                     state.unlink(missing_ok=True)
                     ok, message = False, "存档恢复失败"
@@ -126,7 +126,7 @@ class MTorrent(SiteModule):
                 state.unlink(missing_ok=True)
                 if "邮箱验证码" in message:
                     return LoginResult(LoginStatus.UNCONFIRMED, message)
-            ok, message = launch(None)
+            ok, message = run_isolated(lambda: launch(None))
             status = LoginStatus.LOGIN_OK if ok else (
                 LoginStatus.UNCONFIRMED if "邮箱验证码" in message else LoginStatus.AUTH_FAILED)
             return LoginResult(status, message)

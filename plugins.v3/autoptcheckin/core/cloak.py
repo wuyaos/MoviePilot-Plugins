@@ -34,6 +34,25 @@ def state_path(site_id):
     return Path(settings.PLUGIN_DATA_PATH) / "AutoPtCheckin" / "cloak_state" / f"{site_id}.json"
 
 
+def run_isolated(fn):
+    """Run sync Playwright outside host threads with an asyncio loop.
+
+    Host scheduler thread models are outside plugin control; Playwright Sync
+    rejects use from a thread already running an asyncio event loop.
+    """
+    import threading
+    outcome = []
+    def invoke():
+        try: outcome.append((True, fn()))
+        except BaseException as exc: outcome.append((False, exc))
+    thread = threading.Thread(target=invoke, daemon=True)
+    thread.start()
+    thread.join()
+    succeeded, value = outcome[0]
+    if succeeded: return value
+    raise value
+
+
 class CloakSession:
     """封装一次同步 CloakBrowser 上下文，异常向执行层传播。"""
     def __init__(self, *, state=None, cookie="", url="", headless=True, humanize=True, locale="zh-CN", navigation_timeout=30000, proxy=None):

@@ -378,16 +378,18 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
         if getattr(site, 'browser_login', False):
             # 会话绑定浏览器指纹的站点（如 FileList）：HTTP 重放 Cookie 必失败，
             # 用 CloakBrowser 真实浏览器带站点管理 Cookie 访问首页，以 logout 标记判定登录态。
-            from .cloak import CloakSession
+            from .cloak import CloakSession, run_isolated
             url = info.get('url') or site.url
             raw = info.get('cookie') or custom_cookie or ''
             try:
-                with CloakSession(url=url, cookie=raw) as browser:
-                    browser.goto(url)
-                    body = browser.page.locator('body').inner_text()
-                    if 'logout' in body.lower() or 'log out' in body.lower():
-                        return finish(LoginResult(LoginStatus.LOGIN_OK, '浏览器核验：已登录'))
-                    return finish(LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效（浏览器核验跳转登录页）'))
+                def verify_browser_login():
+                    with CloakSession(url=url, cookie=raw) as browser:
+                        browser.goto(url)
+                        body = browser.page.locator('body').inner_text()
+                        return 'logout' in body.lower() or 'log out' in body.lower()
+                if run_isolated(verify_browser_login):
+                    return finish(LoginResult(LoginStatus.LOGIN_OK, '浏览器核验：已登录'))
+                return finish(LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效（浏览器核验跳转登录页）'))
             except Exception as exc:
                 return finish(LoginResult(LoginStatus.UNCONFIRMED, f'浏览器登录核验异常：{type(exc).__name__}'))
         get_data = getattr(runner, 'get_data', None)

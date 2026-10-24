@@ -73,6 +73,50 @@ def test_anchor_evidence_without_invented_unsigned(site_id, path, signed, unsign
     assert context(site, Http()).read_record(page, site.record_spec).status == 'unconfirmed'
 
 
+def test_u2_before_nine_missing_form_is_pending_without_form_error():
+    site = get_native_module('u2')
+    http = Http(['<main>未签到</main>'])
+    with patch('autoptcheckin.sites.native.u2.datetime') as fake_dt:
+        fake_dt.now.return_value.hour = 8
+        result = site.signin(context(site, http))
+    assert result.status == 'unconfirmed'
+    assert '9 点后刷新' in result.message
+    assert '未发现唯一签到表单' not in result.message
+    assert http.calls == [('get', site.url + 'showup.php')]
+
+
+def test_nexus_unconfirmed_defer_gate_does_not_change_default_flow():
+    site = get_native_module('u2')
+    ctx = context(site, Http(['<main>unknown</main>']))
+    deferred = ctx.result(status='unconfirmed', message='deferred')
+    deferred.metadata['defer_submission'] = True
+    with patch.object(site, 'read_before', return_value=deferred), \
+            patch.object(site, 'discover_form') as discover:
+        result = site.signin(ctx)
+    discover.assert_not_called()
+    assert result is deferred
+    assert ctx.http.calls == [('get', site.url + 'showup.php')]
+
+    ctx = context(site, Http(['<main>unknown</main>']))
+    ordinary = ctx.result(status='unconfirmed', message='ordinary')
+    with patch.object(site, 'read_before', return_value=ordinary), \
+            patch.object(site, 'discover_form', return_value=None) as discover:
+        result = site.signin(ctx)
+    discover.assert_called_once()
+    assert result.status == 'protocol_pending'
+    assert result.message == '未发现唯一签到表单'
+
+
+def test_u2_before_nine_already_message_is_unchanged():
+    site = get_native_module('u2')
+    http = Http(['<a href="showup.php">已签到</a>'])
+    with patch('autoptcheckin.sites.native.u2.datetime') as fake_dt:
+        fake_dt.now.return_value.hour = 8
+        result = site.signin(context(site, http))
+    assert result.status == 'unconfirmed'
+    assert result.message == '9 点前站点保留昨日签到状态，暂不判定'
+
+
 def test_ttg_safe_homepage_marker():
     site = get_native_module('ttg')
     http = Http(['<b style="color:green;">已签到</b>'])

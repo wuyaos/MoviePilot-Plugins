@@ -153,6 +153,41 @@ def test_sign_failed_definitive_after_submit(bql):
     assert '未确认签到' in result.message
 
 
+def test_sign_bql_step_error_does_not_abort_readback(bql):
+    # BQL 官方语义：失败步骤不中止 mutation，errors[] 与 data 并存。
+    # evaluate 撞导航（audiences 凌晨竞态）后 verifyPage 回读仍可仲裁出已签。
+    bql([
+        FakeResp({'data': {'solve': {'token': '0.tk'}, 'session': {}, 'after': {'html': '待签到'}}}),
+        FakeResp({'data': {'verifyPage': {'html': '<div>今日已签到，明天再来</div>'},
+                           'autoDiag': None, 'response': 'null', 'after': None},
+                 'errors': [{'message': 'Protocol error (Runtime.evaluate): Inspected target navigated or closed',
+                             'path': ['submit']}]}),
+    ])
+    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'success' and '已签到' in result.message
+
+
+def test_sign_bql_step_error_appended_to_failed_message(bql):
+    bql([
+        FakeResp({'data': {'solve': {'token': '0.tk'}, 'session': {}, 'after': {'html': '待签到'}}}),
+        FakeResp({'data': {'verifyPage': {'html': '<div>站点公告</div>'},
+                           'autoDiag': None, 'response': 'null', 'after': None},
+                 'errors': [{'message': 'Inspected target navigated or closed', 'path': ['submit']}]}),
+    ])
+    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'failed'
+    assert 'BQL步骤失败' in result.message and 'submit' in result.message
+
+
+def test_sign_solve_error_reported_in_pending_message(bql):
+    bql([FakeResp({'data': {'solve': None, 'after': {'html': '待签到'}},
+                   'errors': [{'message': 'solve timed out', 'path': ['solve']}]}),
+         ])
+    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'protocol_pending'
+    assert 'solve 失败' in result.message and 'solve timed out' in result.message
+
+
 def test_sign_http_errors_map_to_network_error_and_never_leak_token(monkeypatch):
     token = 'secret-token-xyz'
     urls = []
@@ -248,3 +283,12 @@ def test_registry_sites_carry_shield():
     assert rows['audiences']['shield'] == 'cloud'
     assert rows['52pt']['shield'] == 'emulate'
     assert rows['hdsky']['shield'] is None
+
+
+def test_vclib_pending_words_require_full_phrase():
+    # 2026-10-26 词表收紧回归：单「验证」/「人机」不再误判 pending（站点公告误伤实况），
+    # 仅完整人机验证引导短语命中。
+    rule = cloudsign.CLOUD_RULES['vclib']
+    assert cloudsign._classify('<div>邮箱验证帮助</div>', rule) == 'unknown'
+    assert cloudsign._classify('<div>安全验证设置</div>', rule) == 'unknown'
+    assert cloudsign._classify('<div>请完成人机验证后签到</div>', rule) == 'pending'

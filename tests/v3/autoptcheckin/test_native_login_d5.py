@@ -258,3 +258,36 @@ def test_mteam_otp_falls_back_to_enter():
     assert _submit_mteam_otp(page) is True
     assert page.clicked is None
     assert page.entered is True
+
+
+@pytest.mark.parametrize('payload,expected,part', [
+    ((True, 'M-Team 保活登录成功'), 'login_ok', '保活登录成功'),
+    ((False, '登录未到达 /index：检测到邮箱验证码'), 'unconfirmed', '邮箱验证码'),
+    ((False, '登录未到达 /index：未知页面'), 'auth_failed', '未知页面'),
+])
+def test_mteam_keepalive_login_classification(offline, monkeypatch, tmp_path, payload, expected, part):
+    # 线程隔离修复后的分类语义不变：run_isolated 透传 launch 结果，三分支照旧。
+    from autoptcheckin.core import cloak
+    site = registry.get_native_module('mteam')
+    monkeypatch.setattr(cloak, 'state_path', lambda sid: tmp_path / f'{sid}.json')
+    monkeypatch.setattr(cloak, 'run_isolated', lambda fn: payload)
+    result = native.run_native_login(SignRunner(), site,
+                                     {'mteam_username': 'u', 'mteam_password': 'p'}, config={})
+    assert result.status == expected
+    assert part in result.message
+
+
+def test_mteam_launch_exception_maps_to_unconfirmed(offline, monkeypatch, tmp_path):
+    # qnap 00:46 实况：宿主线程带 running loop 时 Sync Playwright 抛错——
+    # 异常经 run_isolated 透传，归类 UNCONFIRMED（下轮重试）而非整轨崩溃。
+    from autoptcheckin.core import cloak
+    site = registry.get_native_module('mteam')
+    monkeypatch.setattr(cloak, 'state_path', lambda sid: tmp_path / f'{sid}.json')
+
+    def boom(fn):
+        raise RuntimeError('It looks like you are using Playwright Sync API inside the asyncio loop.')
+    monkeypatch.setattr(cloak, 'run_isolated', boom)
+    result = native.run_native_login(SignRunner(), site,
+                                     {'mteam_username': 'u', 'mteam_password': 'p'}, config={})
+    assert result.status == 'unconfirmed'
+    assert 'CloakBrowser 登录异常' in result.message
