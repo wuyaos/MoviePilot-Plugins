@@ -63,15 +63,38 @@ def test_unconditional_readback(adapter_type, submission):
         assert client.calls[1][1] == "/api/checkin"
         assert client.calls[1][2]["headers"]["x-csrf-token"] == "synthetic"
 
-@pytest.mark.parametrize("after", ["<html>签到成功</html>", TimeoutError(), page("已签到", day="2026-10-19"), page("已签到", uid="43")])
-def test_readback_unconfirmed(after):
-    expected = "network_error" if isinstance(after, TimeoutError) else "unconfirmed"
-    assert run_page(SSDForum(Client([page(), "ok", after])), business_date=DAY).status == expected
+@pytest.mark.parametrize("after,expected", [
+    ("<html>签到成功</html>", "unconfirmed"),
+    (TimeoutError(), "network_error"),
+    (page("已签到", day="2026-10-19"), "failed"),
+    (page("已签到", uid="43"), "failed"),
+])
+def test_readback_states(after, expected):
+    item = after if isinstance(after, Exception) else after
+    result = run_page(SSDForum(Client([page(), "ok", item])), business_date=DAY)
+    assert result.status == expected
 
 def test_ambiguous_ssd_message_not_already():
     client = Client(["<html>您今天已经签到过了或者签到时间还未开始</html>"])
     assert run_page(SSDForum(client), business_date=DAY).status == "unconfirmed"
     assert len(client.calls) == 1
+
+def test_ssd_signed_message_without_row_confirms_already():
+    signed_page = ('<html><a title="访问我的空间" href="home.php?mod=space&amp;uid=42">test</a>'
+                   "<p>您今天已经签到过了</p></html>")
+    client = Client([signed_page])
+    result = run_page(SSDForum(client), business_date=DAY)
+    assert result.status == "already"
+    assert result.evidence.uid == "42" and result.evidence.date == DAY
+    assert len(client.calls) == 1
+
+def test_ssd_form_without_today_row_submits_once():
+    fresh_page = ('<html><a title="访问我的空间" href="home.php?mod=space&amp;uid=42">test</a>'
+                  '<input name="formhash" value="synthetic"><button>今日签到</button></html>')
+    client = Client([fresh_page, "ok", page("已签到")])
+    result = run_page(SSDForum(client), business_date=DAY)
+    assert result.status == "success"
+    assert [call[0] for call in client.calls] == ["GET", "POST", "GET"]
 
 def test_readonly_and_already_do_not_submit():
     for readonly, state in [(True, "未签到"), (False, "已签到")]:
