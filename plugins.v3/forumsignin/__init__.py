@@ -31,7 +31,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.2"
+    plugin_version = "3.1.3"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -311,22 +311,28 @@ class ForumSignin(_PluginBase):
 
     def _execute_with_retry(self, domain, readonly=False):
         # V2 语义：失败/网络异常按 retry_count/retry_interval 分钟退避重试；成功/已签/未确认/认证失败不重试（未确认重放有重复提交风险）。
-        result = self._execute(domain, readonly=readonly)
+        result = self._execute_result(domain, readonly=readonly)
         if readonly:
-            return result
+            return asdict(result)
         attempts = max(0, int(self._config.get('retry_count', 0) or 0))
         interval = max(1, int(self._config.get('retry_interval', 10) or 10))
         for _ in range(attempts):
             if result.status not in (SignStatus.FAILED, SignStatus.NETWORK_ERROR):
                 break
             time.sleep(interval * 60)
-            result = self._execute(domain, readonly=readonly)
-        return result
+            result = self._execute_result(domain, readonly=readonly)
+        return asdict(result)
 
     def _execute(self, domain, readonly=False):
+        return self._response(asdict(self._execute_result(domain, readonly=readonly)))
+
+    def _execute_result(self, domain, readonly=False):
         site = get_site(domain)
         if not site:
-            return self._response(success=False, message="unknown_site")
+            result = SignResult.skipped("站点未注册")
+            result.site_id = str(domain)
+            self._history.append(result)
+            return result
         site_id = site["id"]
         lock = self._locks[site_id]
         acquired = lock.acquire(blocking=False)
@@ -380,7 +386,7 @@ class ForumSignin(_PluginBase):
         self._history.append(result)
         if not readonly and self._config.get("notify"):
             self._notify_buffer.append((site_id, result))
-        return self._response(asdict(result))
+        return result
 
     def _flush_notify(self):
         """一轮结果合并为一条通知；空缓冲不发送。"""

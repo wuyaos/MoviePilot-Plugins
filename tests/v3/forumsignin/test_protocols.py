@@ -322,3 +322,33 @@ def test_cookiecloud_unavailable_keeps_auth_failed():
     site = get_site("ssdforum")
     with patch("forum_under_test.cookiecloud_cookie", return_value=""):
         assert plugin._client(site) is None
+
+
+def test_run_once_aggregates_results_and_flushes_notify():
+    """立即运行：全链路跑通（_execute_with_retry 操作 SignResult），一轮一条聚合通知。"""
+    from forum_under_test import ForumSignin
+    from forum_under_test.core.models import SignResult, SignStatus
+    from unittest.mock import patch
+
+    plugin = ForumSignin()
+    plugin.get_data = lambda key=None: {}
+    plugin.save_data = lambda key, value: None
+    plugin.update_config = lambda config: None
+    posted = []
+    plugin.post_message = lambda **kwargs: posted.append(kwargs)
+    plugin._config["enabled_sites"] = ["ssdforum"]
+    plugin._config["notify"] = True
+
+    def fake_result(domain, readonly=False):
+        r = SignResult(SignStatus.SUCCESS, "连续签到 5 天")
+        r.site_id = "ssdforum"
+        plugin._history.append(r)
+        # 真实 _execute_result 尾部会把结果放进通知缓冲（此处一并模拟）。
+        plugin._notify_buffer.append(("ssdforum", r))
+        return r
+
+    with patch.object(ForumSignin, "_execute_result", side_effect=fake_result):
+        response = plugin.run_once()
+    assert response["success"] and len(response["data"]) == 1
+    assert "论坛：SSD" in posted[0]["text"] and "✅ 签到成功" in posted[0]["text"]
+    assert len(posted) == 1  # 一轮一条
