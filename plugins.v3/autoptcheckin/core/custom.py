@@ -113,6 +113,7 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
                         result = LoginResult(LoginStatus.AUTH_FAILED, '页面包含登录表单')
                     else:
                         result = LoginResult(LoginStatus.LOGIN_OK, '已登录')
-        except Exception:
-            result = SignResult(SignStatus.UNCONFIRMED, '自定义站点执行未确认')
+        except Exception as exc:
+            result = SignResult(SignStatus.UNCONFIRMED,
+                                f'自定义站点执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])
         return finish(result)

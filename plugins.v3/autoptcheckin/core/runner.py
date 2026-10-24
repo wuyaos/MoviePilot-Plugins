@@ -98,15 +98,14 @@ class SignRunner:
                 return finish(before)
             if self.stop.is_set():
                 return finish(SignResult(SignStatus.CANCELLED, "已停止，未提交"))
-            old = None
             submit_exception = False
             try:
-                old = submit()
+                submit()
             except Exception:
                 submit_exception = True
             finally:
                 # 停止信号、超时和错误响应均不能取消本次提交后的回读。
-                result = verify_after_submit(fetch_page, verifier, uid, business_date, old)
+                result = verify_after_submit(fetch_page, verifier, uid, business_date)
             result.metadata.update({"phase": "verification", "submit_exception": submit_exception})
             return finish(result)
 

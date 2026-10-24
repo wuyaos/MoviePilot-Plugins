@@ -50,7 +50,7 @@ def _track_rows(track: str, entries: list) -> list[tuple[int, str, str]]:
     return rendered
 
 
-def _counts(data: dict, entries: list, verb: str) -> tuple[int, int, int, int]:
+def _counts(data: dict, entries: list) -> tuple[int, int, int, int]:
     """(全部, 本次, 成功, 失败[下次])。"""
     success = sum(1 for _, e in entries if e.get("status") in ("success", "signed", "already", "login_ok"))
     failed_next = sum(1 for _, e in entries if e.get("status") not in ("success", "signed", "already", "login_ok"))
@@ -70,7 +70,7 @@ def format_round_notifications(summary: dict) -> list[tuple[str, str, str]]:
         entries = list(data.get("entries", []))
         if not data.get("total") and not entries:
             continue
-        total, executed, success, failed_next = _counts(data, entries, verb)
+        total, executed, success, failed_next = _counts(data, entries)
         lines = [
             f"全部{verb}: {total}",
             f"本次{verb}: {executed}",

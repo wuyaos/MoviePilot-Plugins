@@ -22,9 +22,8 @@ def normalize_evidence(evidence: Evidence | None, uid: str, business_date: str,
         return SignResult(SignStatus.FAILED, "新页面本人当日记录确认尚未签到", evidence=evidence)
     return SignResult(SignStatus.UNCONFIRMED, "记录状态无法识别", evidence=evidence)
 
-def verify_after_submit(fetch_page: Callable[[], str], verifier, uid: str, business_date: str,
-                        old_result: tuple[bool, str] | None = None) -> SignResult:
-    # 无论旧结果 bool 值、提交超时或异常，调用方都必须进入本方法。
+def verify_after_submit(fetch_page: Callable[[], str], verifier, uid: str, business_date: str) -> SignResult:
+    # 提交超时或异常，调用方都必须进入本方法（无条件回读）。
     try:
         page = fetch_page()
         evidence = verifier.parse(page, uid, business_date) if page else None

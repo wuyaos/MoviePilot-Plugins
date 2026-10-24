@@ -41,7 +41,7 @@ def test_verification_always_reads_and_unconfirmed():
         def parse(self, page, uid, date):
             called.append(page)
             return None
-    result = v.verify_after_submit(lambda: "unparseable", Verifier(), "u1", "2026-01-01", (True, "成功"))
+    result = v.verify_after_submit(lambda: "unparseable", Verifier(), "u1", "2026-01-01")
     assert result.status.value == "unconfirmed" and called == ["unparseable"]
 
 
