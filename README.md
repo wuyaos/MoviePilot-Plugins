@@ -1,7 +1,7 @@
 # MoviePilot-Plugins
 MoviePilot官方插件市场：https://github.com/jxxghp/MoviePilot-Plugins
 
-本仓库收录 MoviePilot 插件：V2 插件 22 个、V3 插件 3 个，涵盖媒体库封面、识别增强、云盘存储、PT 站点运营与做种保活等场景。
+本仓库收录 MoviePilot 插件：V2 插件 22 个、V3 插件 4 个，涵盖媒体库封面、识别增强、云盘存储、PT 站点运营与做种保活等场景。
 
 > 说明：本仓库插件均为自用，基于参考项目进行部分场景增强；部分代码由 AI 辅助生成（vibe coding），可能存在未覆盖的边界情况，使用前请自行评估。
 
@@ -41,6 +41,7 @@ MoviePilot官方插件市场：https://github.com/jxxghp/MoviePilot-Plugins
 | AutoPtCheckin | [PT 签到中心](#v3-autoptcheckin) | 4.0.11 | PT 站点自动签到与模拟登录（V3 重构版） |
 | ForumSignin | [论坛签到](#v3-forumsignin) | 3.1.21 | 蜂巢、药丸与 SSDForum 论坛签到 |
 | RuntimePatchGuard | [运行时补丁守卫](#v3-runtimepatchguard) | 1.0.0 | 站点解析网络请求总时长守卫，防慢站挂起线程 |
+| Hhanclubrescueseed | [憨憨保种区](#v3-hhanclubrescueseed) | 3.0.0 | 憨憨 BT 保种区自动保种（fork 自 Seed680） |
 
 ---
 
@@ -253,3 +254,17 @@ PT 站点自动签到与模拟登录的 V3 重构版，面向 MoviePilot V3 插�
 > 版本 1.0.0 · 作者 wuyaos
 
 为站点解析网络请求增加总时长守卫，防止慢站挂起工作线程。内存补丁，插件升级免重打。
+
+<a id="v3-hhanclubrescueseed"></a>
+### [憨憨保种区 Hhanclubrescueseed (V3)](https://github.com/wuyaos/MoviePilot-Plugins/tree/main/plugins.v3/hhanclubrescueseed)
+> 版本 3.0.0 · 作者 Seed680, wuyaos
+
+> Fork from [Seed680/MoviePilot-Plugins](https://github.com/Seed680/MoviePilot-Plugins/tree/main/plugins.v3/hanhanrescueseeding)，原作者 Seed680；本仓库迁移为 V3 并增强。
+
+憨憨 BT（HhanClub）保种区自动保种插件：定时抓取站点保种区列表，按做种人数、种子大小等条件筛选，自动提交到下载器做种并打标签。
+
+相对原版的变更：
+
+- 修复「获取下载记录失败」：`/download_records`、`/config` 接口统一返回 V3 `success/message/data` envelope（前端按 envelope 读取，原版返回裸数组/裸 dict 导致前端恒报错）
+- 抓取页数可配置：原版固定抓取 11 页，新增「抓取页数」配置项，默认 5 页
+- 插件更名为 `Hhanclubrescueseed`，图标按本仓库规范重制（200×200 RGBA）

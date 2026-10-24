@@ -25,6 +25,7 @@ dist/
 !plugins.v2/farmauto/dist/
 !plugins.v3/autoptcheckin/dist/
 !plugins.v3/forumsignin/dist/
+!plugins.v3/hhanclubrescueseed/frontend/dist/
 downloads/
 eggs/
 .eggs/
