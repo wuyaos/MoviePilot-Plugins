@@ -15,8 +15,6 @@ class SSDForumVerifier:
         return values[0] if values else ""
 
     def parse(self, page, uid, business_date):
-        if self.identity(page) != uid:
-            return None
         evidence, row = parse_record(page, uid, business_date)
         if self.SIGNED_MESSAGE not in (page or ""):
             return evidence
@@ -24,6 +22,4 @@ class SSDForumVerifier:
                                   "已签到", evidence.source, evidence.raw_summary)
 
     def reward(self, page, uid, business_date):
-        if self.identity(page) != uid:
-            return None
         return reward_from_row(parse_record(page, uid, business_date)[1])

@@ -1,7 +1,11 @@
 import json
 import re
 from dataclasses import replace
+from datetime import datetime
 from ..core.credentials import CredentialSpec
+from ..core.models import SignResult, SignStatus
+from ..core.runner import sanitize_sample
+from ..core.verification import normalize_evidence
 from ..http_client import response_text
 from ..verifiers.yaowan import YaowanVerifier
 
@@ -82,7 +86,7 @@ class Yaowan:
             attrs = data.get("attributes") if isinstance(data, dict) else None
             if str(data.get("id")) != uid or not isinstance(attrs, dict):
                 return page
-            state = {"user_id": uid, "canCheckIn": attrs.get("canCheckIn"),
+            state = {"user_id": uid, "canCheckin": attrs.get("canCheckin", attrs.get("canCheckIn")),
                      "lastCheckinTime": attrs.get("lastCheckinTime") or "",
                      "totalContinuousCheckIn": attrs.get("totalContinuousCheckIn")}
             return page + "\n<!-- forum-signin-api-state " + json.dumps(state, ensure_ascii=False) + " -->"
@@ -95,7 +99,7 @@ class Yaowan:
         if self.verifier.identity(self._text(response) or ""):
             return self._attach_api_state(response)
         refreshed = self._refresh_remember()
-        if refreshed and self.verifier.identity(refreshed.text or ""):
+        if refreshed and self.verifier.identity(self._text(refreshed) or ""):
             return self._attach_api_state(refreshed)
         logged_in = self._login()
         return self._attach_api_state(logged_in) if logged_in else self._text(response)
@@ -104,6 +108,61 @@ class Yaowan:
         token = self.verifier.token(page)
         return self.client.request("POST", "/api/checkin", headers={
             "x-csrf-token": token, "Origin": self.base, "Referer": self.base + "/"})
+
+    def run(self, readonly=False, bound_uid="", bind=None, business_date=None, sample_sink=None):
+        """API 驱动签到：判定只信 /api/users/{uid} 状态；单次提交后无条件复核。"""
+        day = business_date or datetime.now().astimezone().date().isoformat()
+
+        def save_sample(page, result):
+            if sample_sink and result.status in (SignStatus.UNCONFIRMED, SignStatus.AUTH_FAILED):
+                try:
+                    sample_sink(sanitize_sample(page), result.status)
+                except Exception:
+                    pass
+        try:
+            page = self.fetch_page()
+        except PermissionError:
+            return SignResult(SignStatus.AUTH_FAILED, "凭证已失效或无权限，未提交")
+        except (ConnectionError, TimeoutError, OSError):
+            return SignResult(SignStatus.NETWORK_ERROR, "药丸页面网络连接失败")
+        except Exception:
+            return SignResult(SignStatus.UNCONFIRMED, "药丸页面获取失败")
+        uid = self.verifier.identity(page)
+        if not uid:
+            result = SignResult(SignStatus.AUTH_FAILED, "药丸身份未确认，凭证可能已失效")
+            save_sample(page, result)
+            return result
+        if bound_uid and uid != bound_uid:
+            result = SignResult(SignStatus.UNCONFIRMED, "药丸身份与绑定不一致")
+            save_sample(page, result)
+            return result
+        if bind and not bound_uid:
+            bind(uid)
+        evidence = self.verifier.judge(page, uid, day)
+        result = normalize_evidence(evidence, uid, day, before_submit=True)
+        if readonly or result.confirmed:
+            return result
+        if result.status != SignStatus.FAILED:
+            result = SignResult(SignStatus.UNCONFIRMED, "未确认本人当日未签到，不提交", evidence=evidence)
+            save_sample(page, result)
+            return result
+        try:
+            self.submit(page)
+        except Exception:
+            pass  # Never retry a possibly committed submission.
+        finally:
+            try:
+                after = self.fetch_page()
+                evidence = self.verifier.judge(after, uid, day)
+                result = normalize_evidence(evidence, uid, day)
+                save_sample(after, result)
+            except PermissionError:
+                result = SignResult(SignStatus.AUTH_FAILED, "凭证已失效或无权限，需只读复核")
+            except (ConnectionError, TimeoutError, OSError):
+                result = SignResult(SignStatus.NETWORK_ERROR, "复核时网络连接失败，需只读复核")
+            except Exception:
+                result = SignResult(SignStatus.UNCONFIRMED, "复核页面不可达或解析异常，需只读复核")
+        return result
 
 
 SITE = {"id":"yaowan", "name":"药丸", "domain":"invites.fun", "source":"插件适配",

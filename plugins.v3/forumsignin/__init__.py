@@ -404,8 +404,12 @@ class ForumSignin(_PluginBase):
                     result = SignResult(SignStatus.AUTH_FAILED, "缺少凭证，未提交")
                 else:
                     adapter = site["adapter"](client)
-                    if site_id == "fengchao":
-                        result = adapter.run(readonly=readonly)
+                    if hasattr(adapter, "run"):
+                        bound = self._get("identity." + site_id) or ""
+                        result = adapter.run(readonly=readonly, bound_uid=bound,
+                                             bind=lambda uid: self._save("identity." + site_id, uid),
+                                             sample_sink=(lambda html, status: self._save("sample." + site_id + ".html", html))
+                                             if site_id in ("yaowan", "ssdforum") else None)
                     else:
                         bound = self._get("identity." + site_id) or ""
                         result = run_page(adapter, bound, readonly,

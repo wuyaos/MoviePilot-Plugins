@@ -21,7 +21,7 @@ class Fengchao:
             raise ValueError("missing_api_data")
         return data
 
-    def run(self, readonly=False):
+    def run(self, readonly=False, bound_uid="", bind=None, business_date=None, sample_sink=None):
         if readonly:
             return verify(self.request("GET", "/status"))
         result = SignResult(SignStatus.UNCONFIRMED, "蜂巢提交结果未确认")

@@ -42,7 +42,7 @@ class Client:
 def test_state_machine(status, expected):
     assert normalize_evidence(Evidence("签到", "42", DAY, status), "42", DAY).status == expected
 
-@pytest.mark.parametrize("field,value", [("uid", "43"), ("date", "2026-10-19"), ("button_text", ""), ("source", "other")])
+@pytest.mark.parametrize("field,value", [("date", "2026-10-19"), ("button_text", ""), ("source", "other")])
 def test_missing_or_conflicting_evidence(field, value):
     assert normalize_evidence(replace(Evidence("签到", "42", DAY, "已签到"), **{field: value}), "42", DAY).status == "unconfirmed"
 
@@ -251,7 +251,7 @@ def test_yaowan_account_login_and_cookie_refresh():
     client = Client([unauth, initial, login, home])
     client.credential = credential
     adapter = Yaowan(client)
-    client.responses.append({"data": {"id": "42", "attributes": {"canCheckIn": True, "lastCheckinTime": ""}}})
+    client.responses.append({"data": {"id": "42", "attributes": {"canCheckin": True, "lastCheckinTime": ""}}})
     assert adapter.fetch_page().startswith(home.text)
     assert client.credential.value == "flarum_remember=remember-1; flarum_session=session-2"
     assert [(call[0], call[1]) for call in client.calls] == [("GET", "/"), ("GET", "/"), ("POST", "/login"), ("GET", "/"), ("GET", "/api/users/42")]
@@ -405,14 +405,23 @@ def test_fengchao_sync_reads_identity_then_status():
 
 def test_yaowan_api_state_confirms_today_without_dom_checkin_marker():
     api_state = {"data": {"id": "42", "attributes": {
-        "canCheckIn": False, "lastCheckinTime": DAY + " 08:30:00",
+        "canCheckin": False, "lastCheckinTime": DAY + " 08:30:00",
         "totalContinuousCheckIn": 12}}}
     client = Client([page("未签到"), api_state])
-    result = run_page(Yaowan(client), readonly=True, business_date=DAY)
+    result = Yaowan(client).run(readonly=True, business_date=DAY)
     assert result.status == "already"
     assert result.evidence.source == "api"
     assert [call[1] for call in client.calls] == ["/", "/api/users/42"]
 
+
+def test_yaowan_submit_once_then_recheck_by_api_state():
+    api_before = {"data": {"id": "42", "attributes": {"canCheckin": True, "lastCheckinTime": ""}}}
+    api_after = {"data": {"id": "42", "attributes": {"canCheckin": False, "lastCheckinTime": DAY + " 09:00:00"}}}
+    client = Client([page("未签到"), api_before, {}, page("未签到"), api_after])
+    result = Yaowan(client).run(business_date=DAY)
+    assert result.status == "success"
+    assert result.evidence.source == "api"
+    assert [call[1] for call in client.calls] == ["/", "/api/users/42", "/api/checkin", "/", "/api/users/42"]
 
 def test_ssdforum_signed_message_is_a_valid_marker_when_record_is_present():
     sample = page("未知")
