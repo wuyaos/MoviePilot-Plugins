@@ -145,7 +145,7 @@ onMounted(refreshData)
 <template>
   <v-card class="plugin-page">
     <v-card-item>
-      <template #prepend><v-icon color="teal-darken-1">mdi-chart-box-outline</v-icon></template>
+      <template #prepend><v-icon color="primary">mdi-chart-box-outline</v-icon></template>
       <v-card-title>憨憨保种区</v-card-title>
       <v-card-subtitle>本地下载记录与下载器实时状态</v-card-subtitle>
       <template #append>
@@ -168,7 +168,7 @@ onMounted(refreshData)
         <v-col cols="12" sm="6" md="3"><v-card class="stat-card" variant="tonal"><div class="stat-label">下载记录数</div><div class="stat-value">{{ records.length }}<small> 条</small></div><div class="stat-meta">本地保存的记录</div></v-card></v-col>
       </v-row>
 
-      <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。</p></div><v-btn color="teal-darken-1" variant="outlined" :loading="loading" prepend-icon="mdi-refresh" @click="refreshData">刷新</v-btn></div>
+      <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。</p></div><v-btn color="primary" variant="outlined" :loading="loading" prepend-icon="mdi-refresh" @click="refreshData">刷新</v-btn></div>
       <v-data-table v-if="records.length" :headers="headers" :items="records" item-value="title" class="records-table" :items-per-page="10">
         <template #item.title="{ item }"><div class="title-cell"><strong>{{ item.title || '-' }}</strong><span v-if="item.site">{{ item.site }}</span><span v-else-if="item.zh_title">{{ item.zh_title }}</span></div></template>
         <template #item.size="{ item }">{{ formatSize(item.size) }}</template>
@@ -187,15 +187,15 @@ onMounted(refreshData)
 .plugin-page { max-width: 1280px; margin: 0 auto; }
 .stats-row { margin-inline: -6px; }
 .stat-card { height: 100%; padding: 16px; border-radius: 10px; }
-.stat-label { color: rgba(0, 0, 0, .62); font-size: .85rem; }
-.stat-value { margin-top: 6px; color: #00695c; font-size: 1.35rem; font-weight: 700; }
+.stat-label { color: rgba(var(--v-theme-on-surface), .62); font-size: .85rem; }
+.stat-value { margin-top: 6px; color: rgb(var(--v-theme-primary)); font-size: 1.35rem; font-weight: 700; }
 .stat-value small { font-size: .75rem; font-weight: 500; }
-.stat-meta { margin-top: 4px; color: rgba(0, 0, 0, .5); font-size: .78rem; }
+.stat-meta { margin-top: 4px; color: rgba(var(--v-theme-on-surface), .5); font-size: .78rem; }
 .table-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 22px 0 12px; }
 .table-heading h2 { margin: 0; font-size: 1.2rem; }
-.table-heading p { margin: 4px 0 0; color: rgba(0, 0, 0, .58); font-size: .86rem; }
+.table-heading p { margin: 4px 0 0; color: rgba(var(--v-theme-on-surface), .58); font-size: .86rem; }
 .title-cell { display: grid; gap: 3px; max-width: 420px; white-space: normal; }
-.title-cell span { color: rgba(0, 0, 0, .58); font-size: .8rem; }
-.records-table { border: 1px solid rgba(0, 0, 0, .08); border-radius: 8px; }
+.title-cell span { color: rgba(var(--v-theme-on-surface), .58); font-size: .8rem; }
+.records-table { border: 1px solid rgba(var(--v-theme-on-surface), .12); border-radius: 8px; }
 @media (max-width: 600px) { .table-heading { align-items: flex-start; flex-direction: column; } }
 </style>

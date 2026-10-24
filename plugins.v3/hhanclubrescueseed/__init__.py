@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.1.2"
+    plugin_version = "3.1.3"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页

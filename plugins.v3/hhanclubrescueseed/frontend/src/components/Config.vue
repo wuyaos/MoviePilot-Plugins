@@ -113,7 +113,7 @@ onMounted(loadConfig)
 <template>
   <v-card class="plugin-config" :loading="loadingConfig">
     <v-card-item>
-      <template #prepend><v-icon color="teal-darken-1">mdi-shield-check-outline</v-icon></template>
+      <template #prepend><v-icon color="primary">mdi-shield-check-outline</v-icon></template>
       <v-card-title>憨憨保种区配置</v-card-title>
       <v-card-subtitle>按列表页预筛和下载器并发控制保种任务</v-card-subtitle>
       <template #append><v-btn icon="mdi-close" variant="text" aria-label="关闭" @click="close" /></template>
@@ -123,20 +123,20 @@ onMounted(loadConfig)
       <v-alert v-if="error" type="error" variant="tonal" class="mb-4">{{ error }}</v-alert>
       <v-form @submit.prevent="saveConfig">
         <section class="config-section">
-          <div class="section-heading"><v-icon color="teal-darken-1">mdi-power</v-icon><div><h3>运行开关</h3><p>控制插件是否运行，以及是否立即执行一次任务。</p></div></div>
+          <div class="section-heading"><v-icon color="primary">mdi-power</v-icon><div><h3>运行开关</h3><p>控制插件是否运行，以及是否立即执行一次任务。</p></div></div>
           <v-row dense>
-            <v-col cols="12" md="4"><v-switch v-model="form.enable" color="teal-darken-1" label="启用插件" hint="按获取任务调度自动获取保种种子" persistent-hint /></v-col>
-            <v-col cols="12" md="4"><v-switch v-model="form.run_once" color="teal-darken-1" label="立即运行普通保种" hint="保存后执行一次普通保种任务" persistent-hint /></v-col>
-            <v-col cols="12" md="4"><v-switch v-model="form.history_rescue_enabled" color="teal-darken-1" label="立即运行历史保种" hint="保存后执行一次下载历史保种任务" persistent-hint /></v-col>
+            <v-col cols="12" md="4"><v-switch v-model="form.enable" color="primary" label="启用插件" hint="按获取任务调度自动获取保种种子" persistent-hint /></v-col>
+            <v-col cols="12" md="4"><v-switch v-model="form.run_once" color="primary" label="立即运行普通保种" hint="保存后执行一次普通保种任务" persistent-hint /></v-col>
+            <v-col cols="12" md="4"><v-switch v-model="form.history_rescue_enabled" color="primary" label="立即运行历史保种" hint="保存后执行一次下载历史保种任务" persistent-hint /></v-col>
           </v-row>
         </section>
 
         <section class="config-section">
-          <div class="section-heading"><v-icon color="teal-darken-1">mdi-tune</v-icon><div><h3>基础配置</h3><p>定义下载器、路径、标签和通知策略。</p></div></div>
+          <div class="section-heading"><v-icon color="primary">mdi-tune</v-icon><div><h3>基础配置</h3><p>定义下载器、路径、标签和通知策略。</p></div></div>
           <v-row dense>
-            <v-col cols="12" md="4"><v-switch v-model="form.force_resume" color="teal-darken-1" label="qb 强制作种" hint="仅 qBittorrent 支持" persistent-hint /></v-col>
-            <v-col cols="12" md="4"><v-switch v-model="form.enable_notification" color="teal-darken-1" label="发送通知" hide-details /></v-col>
-            <v-col cols="12" md="4"><v-switch v-model="form.notify_on_zero_torrents" color="teal-darken-1" label="无新种子时也通知" hide-details /></v-col>
+            <v-col cols="12" md="4"><v-switch v-model="form.force_resume" color="primary" label="qb 强制作种" hint="仅 qBittorrent 支持" persistent-hint /></v-col>
+            <v-col cols="12" md="4"><v-switch v-model="form.enable_notification" color="primary" label="发送通知" hide-details /></v-col>
+            <v-col cols="12" md="4"><v-switch v-model="form.notify_on_zero_torrents" color="primary" label="无新种子时也通知" hide-details /></v-col>
           </v-row>
           <v-row dense>
             <v-col cols="12" md="4"><v-select v-model="form.downloader" :items="downloaders" item-title="title" item-value="value" label="全局下载器" placeholder="请选择下载器" :rules="[value => !!value || '请选择下载器']" variant="outlined" density="comfortable" /></v-col>
@@ -146,7 +146,7 @@ onMounted(loadConfig)
         </section>
 
         <section class="config-section">
-          <div class="section-heading"><v-icon color="teal-darken-1">mdi-download-box-outline</v-icon><div><h3>获取规则</h3><p>列表页预筛 → 推送下载器。</p></div></div>
+          <div class="section-heading"><v-icon color="primary">mdi-download-box-outline</v-icon><div><h3>获取规则</h3><p>列表页预筛 → 推送下载器。</p></div></div>
           <v-row dense>
             <v-col cols="12" md="4"><VCronField v-model="form.cron" label="获取任务调度" hint="保种区每天 14:00 更新种子" persistent-hint /></v-col>
             <v-col cols="6" md="2"><v-text-field v-model.number="form.max_pages" label="翻页数" type="number" variant="outlined" density="comfortable" /></v-col>
@@ -166,7 +166,7 @@ onMounted(loadConfig)
         </section>
 
         <section class="config-section">
-          <div class="section-heading"><v-icon color="indigo">mdi-radar</v-icon><div><h3>监控与清理</h3><p>达标打标、体积配额清理和卡死清理。</p></div></div>
+          <div class="section-heading"><v-icon color="primary">mdi-radar</v-icon><div><h3>监控与清理</h3><p>达标打标、体积配额清理和卡死清理。</p></div></div>
           <v-row dense><v-col cols="12" md="6"><VCronField v-model="form.monitor_cron" label="监控任务调度" hint="留空禁用监控任务" persistent-hint /></v-col></v-row>
           <v-row dense>
             <v-col cols="12" md="4"><v-text-field v-model="form.reward_tag" label="达标标签" hint="达标后添加，需与下载标签不同" persistent-hint variant="outlined" density="comfortable" /></v-col>
@@ -186,7 +186,7 @@ onMounted(loadConfig)
           <div><strong>删除链路</strong><span>开启自动清理后，按无奖励标签优先、上传量低优先、做种时间短优先清理超出配额的任务，并处理卡死任务。</span></div>
         </section>
 
-        <div class="actions"><v-btn variant="text" @click="resetForm">重置</v-btn><v-btn color="teal-darken-1" type="submit" :loading="loading">保存配置</v-btn></div>
+        <div class="actions"><v-btn variant="text" @click="resetForm">重置</v-btn><v-btn color="primary" type="submit" :loading="loading">保存配置</v-btn></div>
       </v-form>
     </v-card-text>
   </v-card>
@@ -194,17 +194,17 @@ onMounted(loadConfig)
 
 <style scoped>
 .plugin-config { max-width: 1100px; margin: 0 auto; }
-.config-section { padding: 18px 0 10px; border-bottom: 1px solid rgba(0, 0, 0, .08); }
+.config-section { padding: 18px 0 10px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), .12); }
 .section-heading { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
 .section-heading h3 { margin: 0; font-size: 1.05rem; }
-.section-heading p { margin: 3px 0 0; color: rgba(0, 0, 0, .6); font-size: .88rem; }
-.filter-block { padding: 12px 14px 2px; margin: 10px 0; border: 1px solid rgba(0, 0, 0, .08); border-radius: 8px; background: rgba(0, 128, 128, .025); }
-.filter-label { margin-bottom: 10px; color: #00695c; font-weight: 600; }
-.danger-block { padding: 12px 14px 2px; border: 1px solid #f2c8c2; border-radius: 8px; background: #fff8f7; }
-.danger-title { display: flex; gap: 8px; align-items: center; color: #8a3c31; }
+.section-heading p { margin: 3px 0 0; color: rgba(var(--v-theme-on-surface), .6); font-size: .88rem; }
+.filter-block { padding: 12px 14px 2px; margin: 10px 0; border: 1px solid rgba(var(--v-theme-on-surface), .12); border-radius: 8px; background: rgba(var(--v-theme-primary), .05); }
+.filter-label { margin-bottom: 10px; color: rgb(var(--v-theme-primary)); font-weight: 600; }
+.danger-block { padding: 12px 14px 2px; border: 1px solid rgba(var(--v-theme-error), .35); border-radius: 8px; background: rgba(var(--v-theme-error), .06); }
+.danger-title { display: flex; gap: 8px; align-items: center; color: rgb(var(--v-theme-error)); }
 .danger-title span { font-size: .85rem; font-weight: 400; }
-.logic-notes { display: grid; gap: 10px; margin-top: 18px; padding: 14px; border-radius: 8px; background: #f4f8f8; color: rgba(0, 0, 0, .72); font-size: .9rem; line-height: 1.65; }
+.logic-notes { display: grid; gap: 10px; margin-top: 18px; padding: 14px; border-radius: 8px; background: rgba(var(--v-theme-on-surface), .04); color: rgba(var(--v-theme-on-surface), .72); font-size: .9rem; line-height: 1.65; }
 .logic-notes div { display: grid; grid-template-columns: 72px 1fr; gap: 8px; }
-.logic-notes strong { color: #00695c; }
+.logic-notes strong { color: rgb(var(--v-theme-primary)); }
 .actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 20px; }
 </style>
