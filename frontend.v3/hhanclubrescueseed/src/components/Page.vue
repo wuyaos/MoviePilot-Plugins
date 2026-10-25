@@ -23,6 +23,7 @@ const headers = [
   { title: '下载时间', key: 'added_on', width: '170px' },
   { title: '做种时长', key: 'seeding_time', width: '130px' },
   { title: '状态', key: 'status', width: '120px' },
+  { title: '进度', key: 'progress', width: '90px' },
   { title: '上传体积', key: 'uploaded', width: '130px' },
   { title: '操作', key: 'actions', sortable: false, align: 'end', width: '90px' },
 ]
@@ -87,14 +88,16 @@ function formatSeedingTime(value) {
 function statusText(value) {
   const status = String(value || '').toLowerCase()
   if (status.includes('deleted') || status.includes('删除')) return '已删除'
+  if (status.includes('deleted') || status.includes('删除')) return '已删除'
   if (status.includes('paused') || status.includes('pause') || status.includes('暂停')) return '已暂停'
+  if (status.includes('queued') || status.includes('排队')) return '排队'
   if (status.includes('complete') || status.includes('达标')) return '已达标'
   if (status.includes('download') || status.includes('下载')) return '下载中'
   return '做种中'
 }
 
 function statusColor(value) {
-  return { 做种中: 'success', 下载中: 'info', 已达标: 'primary', 已暂停: 'warning', 已删除: 'grey' }[statusText(value)]
+  return { 做种中: 'success', 下载中: 'info', 排队: 'secondary', 已达标: 'primary', 已暂停: 'warning', 已删除: 'grey' }[statusText(value)]
 }
 
 const totalSize = computed(() => `${records.value.reduce((total, record) => total + toGb(record.size), 0).toFixed(2)} GB`)
@@ -214,6 +217,7 @@ onMounted(refreshData)
         <template #item.added_on="{ item }">{{ formatAddedOn(item) }}</template>
         <template #item.seeding_time="{ item }">{{ formatSeedingTime(valueOf(item, 'seeding_time', 'seeding_time_hours')) }}</template>
         <template #item.status="{ item }"><v-chip size="small" :color="statusColor(item.status)" label>{{ statusText(item.status) }}</v-chip></template>
+        <template #item.progress="{ item }">{{ typeof item.progress === 'number' && Number.isFinite(item.progress) ? `${(item.progress * 100).toFixed(1)}%` : '—' }}</template>
         <template #item.uploaded="{ item }">{{ formatSize(item.uploaded) }}</template>
         <template #item.actions="{ item }"><v-btn v-if="!item.discovered" icon="mdi-delete-outline" size="small" variant="text" color="error" :loading="deleting === item.title" :aria-label="`删除 ${item.title}`" @click="deleteRecord(item)" /></template>
       </v-data-table>

@@ -44,6 +44,7 @@ const headers = [
   { title: '下载时间', key: 'added_on', width: '170px' },
   { title: '做种时长', key: 'seeding_time', width: '130px' },
   { title: '状态', key: 'status', width: '120px' },
+  { title: '进度', key: 'progress', width: '90px' },
   { title: '上传体积', key: 'uploaded', width: '130px' },
   { title: '操作', key: 'actions', sortable: false, align: 'end', width: '90px' },
 ];
@@ -108,14 +109,16 @@ function formatSeedingTime(value) {
 function statusText(value) {
   const status = String(value || '').toLowerCase();
   if (status.includes('deleted') || status.includes('删除')) return '已删除'
+  if (status.includes('deleted') || status.includes('删除')) return '已删除'
   if (status.includes('paused') || status.includes('pause') || status.includes('暂停')) return '已暂停'
+  if (status.includes('queued') || status.includes('排队')) return '排队'
   if (status.includes('complete') || status.includes('达标')) return '已达标'
   if (status.includes('download') || status.includes('下载')) return '下载中'
   return '做种中'
 }
 
 function statusColor(value) {
-  return { 做种中: 'success', 下载中: 'info', 已达标: 'primary', 已暂停: 'warning', 已删除: 'grey' }[statusText(value)]
+  return { 做种中: 'success', 下载中: 'info', 排队: 'secondary', 已达标: 'primary', 已暂停: 'warning', 已删除: 'grey' }[statusText(value)]
 }
 
 const totalSize = computed(() => `${records.value.reduce((total, record) => total + toGb(record.size), 0).toFixed(2)} GB`);
@@ -446,6 +449,9 @@ return (_ctx, _cache) => {
                     _: 2
                   }, 1032, ["color"])
                 ]),
+                "item.progress": _withCtx(({ item }) => [
+                  _createTextVNode(_toDisplayString(typeof item.progress === 'number' && Number.isFinite(item.progress) ? `${(item.progress * 100).toFixed(1)}%` : '—'), 1)
+                ]),
                 "item.uploaded": _withCtx(({ item }) => [
                   _createTextVNode(_toDisplayString(formatSize(item.uploaded)), 1)
                 ]),
@@ -485,6 +491,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-975b54c6"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-4d313ec8"]]);
 
 export { PageComponent as default };

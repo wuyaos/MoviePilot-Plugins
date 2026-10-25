@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.8"
+    plugin_version = "3.3.9"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -287,7 +287,10 @@ class Hhanclubrescueseed(_PluginBase):
                         s = self._get_torrent_stats(t)
                         if not s or not s.get("hash"):
                             continue
-                        if s["progress"] < 1:
+                        state_l = (s.get("state") or "").lower()
+                        if "queued" in state_l or "排队" in state_l:
+                            status = "排队"
+                        elif s["progress"] < 1:
                             status = "下载中"
                         elif reward_tag and reward_tag in s["tags"]:
                             status = "已达标"
@@ -297,6 +300,7 @@ class Hhanclubrescueseed(_PluginBase):
                             "status": status,
                             "uploaded": s["uploaded"],
                             "seeding_time_hours": s["seeding_hours"],
+                            "progress": s["progress"],
                         }
                         live_source[s["hash"].lower()] = s
                     aggregated = True
@@ -1210,6 +1214,8 @@ class Hhanclubrescueseed(_PluginBase):
             uploaded = val("uploaded", "uploadedEver") or 0
             # 活动时长(秒)：qb time_active / tr secondsSeeding
             active_seconds = val("time_active", "secondsSeeding") or 0
+            # 做种时长(秒)：仅做种阶段 qb seeding_time / tr secondsSeeding，下载中为 0
+            seeding_seconds = val("seeding_time", "secondsSeeding") or 0
             progress = val("progress", "percent_done") or 0
             added = val("added_on", "date_added")
             tags = val("tags", "labels") or []
@@ -1243,7 +1249,7 @@ class Hhanclubrescueseed(_PluginBase):
                 "uploaded": float(uploaded),
                 "avg_upspeed": (float(uploaded) / float(active_seconds)) if float(active_seconds) > 0 else 0.0,
                 "progress": progress,
-                "seeding_hours": float(active_seconds) / 3600.0,
+                "seeding_hours": float(seeding_seconds) / 3600.0,
                 "added_days": added_days,
                 "tags": [str(x) for x in tags],
                 "state": str(val("state", "status") or "")
