@@ -157,6 +157,23 @@ async function deleteRecord(record) {
   }
 }
 
+const adopting = ref(false);
+
+async function adoptTorrents() {
+  adopting.value = true;
+  try {
+    const response = unwrap(await pluginApi.post(`plugin/Hhanclubrescueseed/adopt_torrents`));
+    if (!response?.success) throw new Error(response?.message || '接管失败')
+    const { adopted, total } = response.data || {};
+    notify('success', adopted ? `已接管 ${adopted} 个历史种子，共 ${total} 条记录` : `没有需要接管的历史种子（共 ${total} 条记录）`);
+    await refreshData();
+  } catch (err) {
+    notify('error', err.message || '接管失败');
+  } finally {
+    adopting.value = false;
+  }
+}
+
 const cleaning = ref(false);
 
 async function cleanupStale() {
@@ -215,6 +232,14 @@ return (_ctx, _cache) => {
               title: "配置插件",
               onClick: _cache[0] || (_cache[0] = $event => (emit('switch')))
             }),
+            _createVNode(_component_v_btn, {
+              icon: "mdi-tag-plus-outline",
+              variant: "text",
+              "aria-label": "刷新接管",
+              title: "刷新接管：把下载器中带标签但无记录的种子入库",
+              loading: adopting.value,
+              onClick: adoptTorrents
+            }, null, 8, ["loading"]),
             _createVNode(_component_v_btn, {
               icon: "mdi-broom",
               variant: "text",
@@ -460,6 +485,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b5eda249"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-975b54c6"]]);
 
 export { PageComponent as default };

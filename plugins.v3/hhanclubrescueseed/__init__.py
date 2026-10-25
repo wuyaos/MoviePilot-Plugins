@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.4"
+    plugin_version = "3.3.5"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -337,6 +337,7 @@ class Hhanclubrescueseed(_PluginBase):
             "disk_quota_gb": self._disk_quota_gb
         })
 
+
     def _cleanup_stale_records(self) -> Response:
         """API Endpoint: 清理失效下载记录（下载器中已不存在对应种子的记录）。
 
@@ -363,6 +364,45 @@ class Hhanclubrescueseed(_PluginBase):
             self.save_data(key="download_records", value=kept[-100:])
             logger.info(f"【憨憨保种区】清理失效下载记录 {removed} 条（剩余 {len(kept)} 条）")
         return Response(success=True, data={"removed": removed, "total": len(kept)})
+
+    def _adopt_torrents(self) -> Response:
+        """API Endpoint: 刷新接管——把下载器中带插件标签但本地无记录的种子入库。
+
+        入库后参与删除/清理管理；score/download_link 不可回补，显示为空。
+        """
+        records = self.get_data("download_records") or []
+        known = {str(r.get("torrent_hash") or "").lower() for r in records}
+        known.discard("")
+        adopted = 0
+        now = datetime.datetime.now()
+        try:
+            if not (self._downloader and self._custom_tag):
+                return Response(success=False, message="未配置下载器或自定义标签")
+            svc = self.downloader_helper.get_service(self._downloader)
+            if not svc or not svc.instance:
+                return Response(success=False, message=f"下载器 {self._downloader} 未连接")
+            for t in self._get_scoped_torrents(self._downloader):
+                s = self._get_torrent_stats(t)
+                if not s or not s.get("hash") or s["hash"].lower() in known:
+                    continue
+                h = s["hash"].lower()
+                added_dt = now - datetime.timedelta(days=s.get("added_days") or 0)
+                records.append({
+                    "title": s["name"], "zh_title": "", "score": None,
+                    "size": f"{s['size_gb']:.2f} GB", "seeders": None,
+                    "download_link": None, "torrent_hash": h,
+                    "download_time": added_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "adopted": True,
+                })
+                known.add(h)
+                adopted += 1
+        except Exception as e:
+            logger.warning(f"刷新接管失败: {str(e)}")
+            return Response(success=False, message=f"接管失败：{str(e)}")
+        if adopted:
+            self.save_data(key="download_records", value=records[-100:])
+            logger.info(f"【憨憨保种区】刷新接管：入库 {adopted} 个历史种子（共 {len(records)} 条记录）")
+        return Response(success=True, data={"adopted": adopted, "total": len(records)})
 
     @property
     def service_infos(self) -> Optional[Dict[str, ServiceInfo]]:
@@ -485,6 +525,13 @@ class Hhanclubrescueseed(_PluginBase):
                 "methods": ["POST"],
                 "auth": "bear",
                 "summary": "清理失效下载记录"
+            },
+            {
+                "path": "/adopt_torrents",
+                "endpoint": self._adopt_torrents,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "刷新接管下载器历史种子"
             }
         ]
 

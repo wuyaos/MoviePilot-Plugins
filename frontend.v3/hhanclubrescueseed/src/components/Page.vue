@@ -136,6 +136,23 @@ async function deleteRecord(record) {
   }
 }
 
+const adopting = ref(false)
+
+async function adoptTorrents() {
+  adopting.value = true
+  try {
+    const response = unwrap(await pluginApi.post(`plugin/Hhanclubrescueseed/adopt_torrents`))
+    if (!response?.success) throw new Error(response?.message || '接管失败')
+    const { adopted, total } = response.data || {}
+    notify('success', adopted ? `已接管 ${adopted} 个历史种子，共 ${total} 条记录` : `没有需要接管的历史种子（共 ${total} 条记录）`)
+    await refreshData()
+  } catch (err) {
+    notify('error', err.message || '接管失败')
+  } finally {
+    adopting.value = false
+  }
+}
+
 const cleaning = ref(false)
 
 async function cleanupStale() {
@@ -170,6 +187,7 @@ onMounted(refreshData)
       <template #append>
         <div class="d-flex align-center ga-1">
           <v-btn icon="mdi-cog-outline" variant="text" aria-label="配置插件" title="配置插件" @click="emit('switch')" />
+      <v-btn icon="mdi-tag-plus-outline" variant="text" aria-label="刷新接管" title="刷新接管：把下载器中带标签但无记录的种子入库" :loading="adopting" @click="adoptTorrents" />
       <v-btn icon="mdi-broom" variant="text" aria-label="清理失效记录" title="清理失效记录（下载器中已不存在的）" :loading="cleaning" @click="cleanupStale" />
           <v-btn icon="mdi-refresh" variant="text" aria-label="刷新" title="刷新" @click="refreshData" />
           <v-btn icon="mdi-close" variant="text" aria-label="关闭" @click="close" />
