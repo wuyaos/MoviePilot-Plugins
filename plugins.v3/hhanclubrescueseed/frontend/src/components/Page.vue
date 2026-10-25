@@ -104,7 +104,7 @@ async function refreshData() {
   loading.value = true
   error.value = ''
   try {
-    const response = unwrap(await pluginApi.get(`plugin/${props.pluginId}/download_records`))
+    const response = unwrap(await pluginApi.get(`plugin/Hhanclubrescueseed/download_records`))
     if (!response?.success) throw new Error(response?.message || '获取下载记录失败')
     const data = response.data || {}
     records.value = Array.isArray(data.records) ? data.records : []
@@ -124,7 +124,7 @@ async function deleteRecord(record) {
   if (!title) return
   deleting.value = title
   try {
-    const response = unwrap(await pluginApi.post(`plugin/${props.pluginId}/delete_download_records`, [title]))
+    const response = unwrap(await pluginApi.post(`plugin/Hhanclubrescueseed/delete_download_records`, [title]))
     records.value = records.value.filter(item => item.title !== title)
     notify('success', '记录已删除')
     emit('action')
@@ -168,7 +168,7 @@ onMounted(refreshData)
         <v-col cols="12" sm="6" md="3"><v-card class="stat-card" variant="tonal"><div class="stat-label">下载记录数</div><div class="stat-value">{{ records.length }}<small> 条</small></div><div class="stat-meta">本地保存的记录</div></v-card></v-col>
       </v-row>
 
-      <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。</p></div><v-btn color="primary" variant="outlined" :loading="loading" prepend-icon="mdi-refresh" @click="refreshData">刷新</v-btn></div>
+      <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。</p></div></div>
       <v-data-table v-if="records.length" :headers="headers" :items="records" item-value="title" class="records-table" :items-per-page="10">
         <template #item.title="{ item }"><div class="title-cell"><strong>{{ item.title || '-' }}</strong><span v-if="item.zh_title">{{ item.zh_title }}</span></div></template>
         <template #item.size="{ item }">{{ formatSize(item.size) }}</template>

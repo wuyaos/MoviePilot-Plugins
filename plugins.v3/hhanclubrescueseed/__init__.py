@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.1.9"
+    plugin_version = "3.2.0"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -43,230 +43,201 @@ class Hhanclubrescueseed(_PluginBase):
 
     domain = "hhanclub.net"
     # —— 内置治理常数（不做成配置，改动需发版）——
-    # 配额清理目标水位：触发删除后删回到 配额 * DISK_QUOTA_TARGET_RATIO
     DISK_QUOTA_TARGET_RATIO = 0.9
-    # 平均上传速度低于此值(B/s)视为无贡献，配额删除时优先移除
     NO_UPLOAD_AVG_SPEED = 1024
-    # 单轮每类清理（配额删除/卡死清理）最多删除的种子数
     MAX_REMOVE_PER_RUN = 5
-    # 默认达标做种时长(小时) / 默认卡死判定天数
     DEFAULT_REWARD_HOURS = 18
     DEFAULT_STUCK_DAYS = 7
-    # 私有属性
-    downloader_helper = None
+    DETAIL_REQUEST_BUDGET = 15
+    CONFIG_KEYS = (
+        "enable", "run_once", "history_rescue_enabled", "cron", "monitor_cron",
+        "downloader", "save_path", "custom_tag", "reward_tag", "reward_hours",
+        "enable_notification", "notify_on_zero_torrents", "force_resume",
+        "auto_delete_enabled", "delete_files", "disk_quota_gb", "stuck_days",
+        "seeding_count", "torrent_size", "download_limit", "max_downloading",
+        "max_pages", "min_downloaders", "completion_ratio_max",
+        "connect_time_max_hours", "free",
+    )
+    _event = threading.Event()
     _scheduler = None
     _enable = False
     _run_once = False
-    _cron = None
+    _cron = "*/20 14-15 * * *"
+    _monitor_cron = "*/10 * * * *"
     _downloader = None
-    _seeding_count = None
+    _seeding_count = "1-3"
     _torrent_size = None
-    _download_limit = None
+    _download_limit = 5
     _save_path = None
     _custom_tag = None
-    _enable_notification = None
-    _notify_on_zero_torrents = None
-    _history_rescue_enabled = None
+    _enable_notification = False
+    _notify_on_zero_torrents = False
+    _history_rescue_enabled = False
     _user_id = None
-    _force_resume = None
-    # 退出事件
-    _event = threading.Event()
+    _force_resume = False
     _max_pages = 5
-    _monitor_cron = None
     _reward_tag = None
     _reward_hours = 18
     _disk_quota_gb = None
     _stuck_days = 7
-    _min_seeders = None
-    _min_downloaders = None
-    _max_torrent_size_gb = None
-    _completion_ratio_max = None
+    _min_downloaders = 1
+    _completion_ratio_max = 20.0
     _connect_time_max_hours = None
     _free = False
     _auto_delete_enabled = False
     _delete_files = True
     _max_downloading = 3
 
+    def _normalize_config(self, config: dict) -> dict:
+        """Normalize the 26 persisted keys without retaining stale instance values."""
+        raw = dict(config or {})
+        defaults = {
+            "enable": False, "run_once": False, "history_rescue_enabled": False,
+            "cron": "*/20 14-15 * * *", "monitor_cron": "*/10 * * * *",
+            "downloader": None, "save_path": None, "custom_tag": None,
+            "reward_tag": None, "reward_hours": 18, "enable_notification": False,
+            "notify_on_zero_torrents": False, "force_resume": False,
+            "auto_delete_enabled": False, "delete_files": True, "disk_quota_gb": None,
+            "stuck_days": 7, "seeding_count": "1-3", "torrent_size": None,
+            "download_limit": 5, "max_downloading": 3, "max_pages": 5,
+            "min_downloaders": 1, "completion_ratio_max": 20.0,
+            "connect_time_max_hours": None, "free": False,
+        }
+        result = {}
+        bool_keys = {"enable", "run_once", "history_rescue_enabled", "enable_notification",
+                     "notify_on_zero_torrents", "force_resume", "auto_delete_enabled", "delete_files", "free"}
+        for key, default in defaults.items():
+            value = raw[key] if key in raw else default
+            if key in bool_keys:
+                result[key] = value if isinstance(value, bool) else default
+            elif key == "monitor_cron":
+                result[key] = default if value is None else str(value).strip()
+            elif key == "cron":
+                result[key] = default if value in (None, "") else str(value).strip()
+            elif key in {"downloader", "save_path", "custom_tag", "reward_tag"}:
+                result[key] = None if value is None else str(value)
+            elif key == "seeding_count":
+                result[key] = default if value is None else str(value).strip()
+            elif key == "torrent_size":
+                result[key] = None if value in (None, "") else str(value).strip()
+            elif key in {"disk_quota_gb", "min_downloaders", "completion_ratio_max", "connect_time_max_hours"}:
+                result[key] = self._coerce_number(value, default, allow_none=True)
+            elif key in {"reward_hours", "stuck_days", "download_limit", "max_downloading", "max_pages"}:
+                result[key] = self._coerce_int(value, default)
+            else:
+                result[key] = value
+        if result["disk_quota_gb"] is not None and result["disk_quota_gb"] < 0:
+            result["disk_quota_gb"] = None
+        if result["stuck_days"] is not None and result["stuck_days"] < 0:
+            result["stuck_days"] = 7
+        if result["completion_ratio_max"] is not None and not 0 <= result["completion_ratio_max"] <= 100:
+            result["completion_ratio_max"] = None
+        if result["connect_time_max_hours"] is not None and result["connect_time_max_hours"] < 0:
+            result["connect_time_max_hours"] = None
+        result["max_pages"] = max(1, result["max_pages"])
+        return result
+
+    @staticmethod
+    def _coerce_number(value, default=None, allow_none=False):
+        if value is None:
+            return None if allow_none else default
+        if value == "":
+            return None if allow_none else default
+        try:
+            value = float(value)
+            return value if value == value and value not in (float("inf"), float("-inf")) else default
+        except (TypeError, ValueError):
+            return default
+
+    @classmethod
+    def _coerce_int(cls, value, default=None):
+        number = cls._coerce_number(value, default)
+        try:
+            return int(number)
+        except (TypeError, ValueError):
+            return default
+
+    def _apply_config(self, config: dict):
+        normalized = self._normalize_config(config)
+        for key in self.CONFIG_KEYS:
+            setattr(self, f"_{key}", normalized[key])
+        self._full_config = dict(normalized)
+        return normalized
+
     def init_plugin(self, config: dict = None):
         try:
-
-            # 保留完整配置快照，供历史任务回调安全复位 history_rescue_enabled 用
-            self._full_config = dict(config or {})
             self.downloader_helper = DownloaderHelper()
-            # 获取站点信息
             self.site = SiteOper().get_by_domain(self.domain)
             if not self.site:
                 self.domain = "hhanclub.top"
                 self.site = SiteOper().get_by_domain(self.domain)
-                if not self.site:
-                    self.domain = "hhan.club"
-                    self.site = SiteOper().get_by_domain(self.domain)
-                    if not self.site:
-                        logger.error(f"憨憨站点未配置，请先在系统配置中添加站点")
-                        return
-
-            # 读取配置
-            if config:
-                logger.debug(f"读取配置：{config}")
-                self._enable = config.get("enable", False)
-                self._run_once = config.get("run_once", False)
-                self._cron = config.get("cron")
-                self._downloader = config.get("downloader", None)
-                self._seeding_count = config.get("seeding_count", "1-3")
-                self._torrent_size = config.get("torrent_size", "")
-                self._download_limit = config.get("download_limit", 5)
-                self._save_path = config.get("save_path")
-                self._custom_tag = config.get("custom_tag")
-                self._enable_notification = config.get("enable_notification", False)
-                self._notify_on_zero_torrents = config.get("notify_on_zero_torrents", False)
-                # 仅下载免费种子开关
-                self._free = config.get("free", False)
-                self._history_rescue_enabled = config.get("history_rescue_enabled", False)
-                self._user_id = config.get("user_id", "")
-                self._force_resume = config.get("force_resume", False)
-                # 抓取页数，默认5页
-                try:
-                    self._max_pages = max(1, int(config.get("max_pages", 5)))
-                except (TypeError, ValueError):
-                    self._max_pages = 5
-                # 监控任务
-                self._monitor_cron = config.get("monitor_cron")
-                # 奖励标签与达标时长
-                self._reward_tag = config.get("reward_tag")
-                self._reward_hours = self._cfg_float(config, "reward_hours", self.DEFAULT_REWARD_HOURS)
-                # 配额与卡死清理
-                self._disk_quota_gb = self._cfg_float(config, "disk_quota_gb", None)
-                self._stuck_days = self._cfg_float(config, "stuck_days", self.DEFAULT_STUCK_DAYS)
-                self._auto_delete_enabled = config.get("auto_delete_enabled", False)
-                self._delete_files = config.get("delete_files", True)
-                # 详情页精筛条件
-                self._min_seeders = self._cfg_int(config, "min_seeders", None)
-                self._min_downloaders = self._cfg_int(config, "min_downloaders", None)
-                self._max_torrent_size_gb = self._cfg_float(config, "max_torrent_size_gb", None)
-                self._completion_ratio_max = self._cfg_float(config, "completion_ratio_max", None)
-                self._connect_time_max_hours = self._cfg_float(config, "connect_time_max_hours", None)
-                self._max_downloading = self._cfg_int(config, "max_downloading", 3)
-            # 停止现有任务
+            if not self.site:
+                self.domain = "hhan.club"
+                self.site = SiteOper().get_by_domain(self.domain)
+            if not self.site:
+                logger.error("憨憨站点未配置，请先在系统配置中添加站点")
+                return
+            normalized = self._apply_config(config)
+            self._user_id = None
+            if self._history_rescue_enabled:
+                self._user_id = self._resolve_user_id()
+                if not self._user_id:
+                    logger.warning("无法解析当前憨憨站用户 UID，跳过历史保种任务")
+                    if self._enable_notification:
+                        self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区】", text="无法解析当前站点用户 UID，历史保种任务未执行")
             self.stop_service()
-
-            # 检查是否需要立即运行一次性任务
-            need_run_once = self._run_once or (self._history_rescue_enabled and self._user_id)
-
-            if need_run_once:
-                # 更新配置，将run_once和history_rescue_enabled设为false
-                updated = False
-                if self._run_once:
-                    config.update({"run_once": False})
-                    updated = True
-                if self._history_rescue_enabled:
-                    config.update({"history_rescue_enabled": False})
-                    updated = True
-
-                if updated:
-                    self.update_config(config=config)
-
-                self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-
-                # 添加普通保种任务
-                if self._run_once:
-                    self._run_once = False
-                    logger.info("立即运行拯救憨憨保种区")
-                    self._scheduler.add_job(self._check_seeding, 'date',
-                                            run_date=datetime.datetime.now(
-                                                tz=pytz.timezone(settings.TZ)
-                                            ) + datetime.timedelta(seconds=3),
-                                            name="拯救憨憨保种区")
-
-                # 添加历史保种任务
-                if self._history_rescue_enabled and self._user_id:
-                    self._history_rescue_enabled = False
-                    logger.info(f"立即运行历史保种任务，用户ID: {self._user_id}")
-                    self._scheduler.add_job(self._check_history_seeding, 'date',
-                                            run_date=datetime.datetime.now(
-                                                tz=pytz.timezone(settings.TZ)
-                                            ) + datetime.timedelta(seconds=3),
-                                            name="拯救憨憨保种区历史任务")
-
-                if self._scheduler.get_jobs():
-                    # 启动服务
-                    self._scheduler.print_jobs()
-                    self._scheduler.start()
+            self._event.clear()
+            need_run_once = self._run_once or bool(self._history_rescue_enabled and self._user_id)
+            if not need_run_once:
+                return
+            saved = dict(normalized)
+            if self._run_once:
+                saved["run_once"] = False
+            if self._history_rescue_enabled:
+                saved["history_rescue_enabled"] = False
+            self.update_config(config=saved)
+            self._scheduler = BackgroundScheduler(timezone=settings.TZ)
+            if self._run_once:
+                self._run_once = False
+                self._scheduler.add_job(self._check_seeding, "date", run_date=datetime.datetime.now(tz=pytz.timezone(settings.TZ)) + datetime.timedelta(seconds=3), name="拯救憨憨保种区")
+            if self._history_rescue_enabled and self._user_id:
+                self._history_rescue_enabled = False
+                logger.info(f"立即运行历史保种任务，用户ID: {self._user_id}")
+                self._scheduler.add_job(self._check_history_seeding, "date", run_date=datetime.datetime.now(tz=pytz.timezone(settings.TZ)) + datetime.timedelta(seconds=3), name="拯救憨憨保种区历史任务")
+            if self._scheduler.get_jobs():
+                self._scheduler.start()
         except Exception as e:
             logger.error(f"初始化失败：{str(e)}", exc_info=True)
+
+    def _resolve_user_id(self):
+        """Resolve the authenticated site's UID only for the history task."""
+        def field(obj, name):
+            try:
+                value = obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
+            except Exception:
+                value = None
+            return str(value).strip() if value is not None else ""
+        for name in ("userid", "user_id"):
+            value = field(self.site, name)
+            if value.isdigit() and int(value) > 0:
+                return value
+        source = self._get_page_source(f"https://{self.domain}/", self.site)
+        candidates = set(re.findall(r"(?:[?&]uid=|userdetails\.php\?(?:[^'\"#]*&)?id=)(\d+)", source or "", re.I))
+        if len(candidates) == 1:
+            return candidates.pop()
+        return None
 
     def get_form(self) -> Tuple[Optional[List[dict]], Dict[str, Any]]:
         """
         拼装插件配置页面，需要返回两块数据：1、页面配置；2、数据结构
         """
-        return None, {
-            "enable": self._enable,
-            "run_once": self._run_once,
-            "history_rescue_enabled": self._history_rescue_enabled,
-            "cron": self._cron,
-            "monitor_cron": self._monitor_cron,
-            "downloader": self._downloader,
-            "seeding_count": self._seeding_count,
-            "torrent_size": self._torrent_size,
-            "download_limit": self._download_limit,
-            "max_downloading": self._max_downloading,
-            "max_pages": self._max_pages,
-            "min_seeders": self._min_seeders,
-            "min_downloaders": self._min_downloaders,
-            "max_torrent_size_gb": self._max_torrent_size_gb,
-            "completion_ratio_max": self._completion_ratio_max,
-            "connect_time_max_hours": self._connect_time_max_hours,
-            "free": self._free,
+        return None, {key: getattr(self, f"_{key}") for key in self.CONFIG_KEYS} | {
             "all_downloaders": self._all_downloaders,
-            "save_path": self._save_path,
-            "custom_tag": self._custom_tag,
-            "reward_tag": self._reward_tag,
-            "reward_hours": self._reward_hours,
-            "enable_notification": self._enable_notification,
-            "notify_on_zero_torrents": self._notify_on_zero_torrents,
-            "user_id": self._user_id,
-            "force_resume": self._force_resume,
-            "auto_delete_enabled": self._auto_delete_enabled,
-            "delete_files": self._delete_files,
-            "disk_quota_gb": self._disk_quota_gb,
-            "stuck_days": self._stuck_days
         }
 
     def load_config(self, config: dict):
         """加载配置"""
-        if config:
-            # 遍历配置中的键并设置相应的属性
-            for key in (
-                    "enable",
-                    "run_once",
-                    "history_rescue_enabled",
-                    "cron",
-                    "monitor_cron",
-                    "downloader",
-                    "save_path",
-                    "custom_tag",
-                    "reward_tag",
-                    "reward_hours",
-                    "enable_notification",
-                    "notify_on_zero_torrents",
-                    "force_resume",
-                    "user_id",
-                    "auto_delete_enabled",
-                    "delete_files",
-                    "disk_quota_gb",
-                    "stuck_days",
-                    "seeding_count",
-                    "torrent_size",
-                    "download_limit",
-                    "max_downloading",
-                    "max_pages",
-                    "min_seeders",
-                    "min_downloaders",
-                    "max_torrent_size_gb",
-                    "completion_ratio_max",
-                    "connect_time_max_hours",
-                    "free"
-                ):
-                setattr(self, f"_{key}", config.get(key, getattr(self, f"_{key}")))
+        self._apply_config(config)
 
 
     @staticmethod
@@ -300,36 +271,8 @@ class Hhanclubrescueseed(_PluginBase):
         """API Endpoint: Returns current plugin configuration."""
 
         return Response(success=True, data={
-            "enable": self._enable,
-            "run_once": self._run_once,
-            "history_rescue_enabled": self._history_rescue_enabled,
-            "cron": self._cron,
-            "monitor_cron": self._monitor_cron,
-            "downloader": self._downloader,
-            "seeding_count": self._seeding_count,
-            "torrent_size": self._torrent_size,
-            "download_limit": self._download_limit,
-            "max_downloading": self._max_downloading,
-            "max_pages": self._max_pages,
-            "min_seeders": self._min_seeders,
-            "min_downloaders": self._min_downloaders,
-            "max_torrent_size_gb": self._max_torrent_size_gb,
-            "completion_ratio_max": self._completion_ratio_max,
-            "connect_time_max_hours": self._connect_time_max_hours,
-            "free": self._free,
+            **{key: getattr(self, f"_{key}") for key in self.CONFIG_KEYS},
             "all_downloaders": self._all_downloaders,
-            "save_path": self._save_path,
-            "custom_tag": self._custom_tag,
-            "reward_tag": self._reward_tag,
-            "reward_hours": self._reward_hours,
-            "enable_notification": self._enable_notification,
-            "notify_on_zero_torrents": self._notify_on_zero_torrents,
-            "user_id": self._user_id,
-            "force_resume": self._force_resume,
-            "auto_delete_enabled": self._auto_delete_enabled,
-            "delete_files": self._delete_files,
-            "disk_quota_gb": self._disk_quota_gb,
-            "stuck_days": self._stuck_days
         })
 
 
@@ -345,7 +288,7 @@ class Hhanclubrescueseed(_PluginBase):
                 svc = self.downloader_helper.get_service(self._downloader)
                 if svc and svc.instance:
                     reward_tag = self._reward_tag or ""
-                    for t in (svc.instance.get_torrents(tags=self._custom_tag) or []):
+                    for t in self._get_scoped_torrents(self._downloader):
                         s = self._get_torrent_stats(t)
                         if not s or not s.get("hash"):
                             continue
@@ -578,191 +521,210 @@ class Hhanclubrescueseed(_PluginBase):
             if not self._enable:
                 logger.info("憨憨保种区插件未启用，跳过检查")
                 return
-
             if not self._downloader:
                 logger.error("未配置下载器，无法执行保种任务")
                 return
+            records = self.get_data("download_records") or []
+            candidates = []
+            budget = {"used": 0, "limit": self.DETAIL_REQUEST_BUDGET}
             downloaded_count = 0
-            limit_reached = False
-            success_downloaded_count = 0
-            failed_downloaded_count = 0
-            # 先获取现有的下载记录列表
-            download_records = self.get_data("download_records") or []
-            for page in range(0, self._max_pages):
-                if limit_reached:
-                    break
+            success_count = 0
+            failed_count = 0
+            for page in range(self._max_pages):
                 if self._event.is_set():
                     logger.info("检测到停止事件，终止本轮页面下载")
                     break
-                url = "https://" + self.domain + f"/rescue.php?page={page}"
-                logger.info(f"憨憨保种区第{page + 1}页:{url}")
-                torrent_detail_source = self._get_page_source(url=url, site=self.site)
-                if not torrent_detail_source:
-                    logger.error(f"请求憨憨保种区第{page}页失败")
+                url = f"https://{self.domain}/rescue.php?page={page}"
+                logger.info(f"憨憨保种区第{page + 1}页: {url}")
+                source = self._get_page_source(url=url, site=self.site)
+                if not source:
+                    logger.error(f"请求憨憨保种区第{page + 1}页失败")
                     break
-                # logger.debug(f"憨憨保种区第{page + 1}页详情：" +torrent_detail_source)
-                html = etree.HTML(torrent_detail_source)
+                html = etree.HTML(source)
                 if html is None:
-                    logger.error(f"憨憨保种区第{page}页页面解析失败")
+                    logger.error(f"憨憨保种区第{page + 1}页页面解析失败")
                     break
                 elements = html.xpath('//*[@id="mainContent"]/div[1]/div[2]/div[3]/div')
                 logger.info(f"第{page + 1}页数据获取{len(elements)}条数据")
-                if len(elements) == 0:
+                if not elements:
                     break
                 for elem in elements:
+                    if self._event.is_set():
+                        break
                     try:
-                        # 列表页预筛：提取字段并按条件过滤（免费/做种/下载/大小/完成率/发布时间）
                         record = self._prefilter_row(elem)
-                        if record is None:
-                            continue
-                        # 检查下载数量限制
-                        if self._download_limit > 0 and downloaded_count >= self._download_limit:
-                            logger.info(f"已达到单次下载数量限制 ({self._download_limit})，停止下载")
-                            limit_reached = True
+                        if record is not None:
+                            candidates.append(record)
+                    except Exception as exc:
+                        logger.error(f"处理列表种子时出错: {exc}")
+                if self._event.is_set():
+                    break
+            if not candidates:
+                logger.debug("本轮无粗筛候选")
+            refined = self._refine_by_detail(candidates, budget)
+            for record in refined:
+                if self._event.is_set():
+                    logger.info("详情精筛后检测到停止事件，终止下载")
+                    break
+                if self._download_limit > 0 and downloaded_count >= self._download_limit:
+                    logger.info(f"已达到单次下载数量限制 ({self._download_limit})，停止下载")
+                    break
+                if self._max_downloading:
+                    try:
+                        scoped = self._get_scoped_torrents(self._downloader)
+                        unfinished = sum(1 for torrent in scoped if (self._get_torrent_stats(torrent) or {}).get("progress", 1) < 1)
+                        if unfinished >= self._max_downloading:
+                            logger.info(f"下载器未完成种子 {unfinished} 个，已达上限 {self._max_downloading}，停止本轮")
                             break
-                        download_element = elem.xpath('div[4]/div/a')
-                        if download_element:
-                            # 下载链接
-                            download_link = "https://" + self.domain + "/" + download_element[0].get('href')
-                            if download_link:
-                                logger.info(f"下载种子链接: {download_link}")
-                                # 未完成种子数上限检查（max_downloading）
-                                if self._max_downloading:
-                                    try:
-                                        svc = self.downloader_helper.get_service(self._downloader)
-                                        unfinished = 0
-                                        if svc and svc.instance:
-                                            for t in (svc.instance.get_torrents(tags=self._custom_tag) or []):
-                                                try:
-                                                    p = t.get("progress")
-                                                except Exception:
-                                                    p = getattr(t, "percent_done", None)
-                                                if p is not None and float(p) < 1:
-                                                    unfinished += 1
-                                        if unfinished >= int(self._max_downloading):
-                                            logger.info(f"下载器未完成种子 {unfinished} 个，已达上限 {self._max_downloading}，停止本轮页面下载")
-                                            limit_reached = True
-                                            break
-                                    except Exception as e:
-                                        logger.warning(f"检查未完成种子数失败: {str(e)}")
-                                # 先下载种子文件获取hash
-                                torrent_content, torrent_hash = self._download_torrent(download_link, self.site)
-                                if not torrent_content:
-                                    logger.error(f"下载种子文件失败: {download_link}")
-                                    failed_downloaded_count += 1
-                                    continue
-
-                                # 调用下载器下载种子
-                                downloader = self._downloader
-                                service_info = self.downloader_helper.get_service(downloader)
-                                if service_info and service_info.instance:
-                                    try:
-                                        logger.debug(f"获取下载器实例成功: {downloader}")
-                                        # 准备下载参数
-                                        download_kwargs = {
-                                            "content": torrent_content,  # 使用下载的种子内容而不是URL
-                                            "cookie": self.site.cookie
-                                        }
-                                        if self._save_path:
-                                            download_kwargs["download_dir"] = self._save_path
-                                        # 如果有自定义标签，则添加标签参数
-                                        if self._custom_tag:
-                                            if service_info.type == "qbittorrent":
-                                                download_kwargs["tag"] = self._custom_tag.split(',')
-                                            elif service_info.type == "transmission":
-                                                download_kwargs["labels"] = self._custom_tag.split(',')
-                                        logger.debug(f"下载种子参数: {download_kwargs}")
-                                        # 下载种子文件
-                                        result = service_info.instance.add_torrent(**download_kwargs)
-                                        logger.debug(f"下载结果: {result}")
-                                        if result:
-                                            logger.info(f"成功下载种子: {download_link}")
-                                            downloaded_count += 1
-                                            success_downloaded_count += 1
-
-                                            # 如果启用了强制继续且是qbittorrent，设置强制作种
-                                            if self._force_resume and service_info.type == "qbittorrent":
-                                                try:
-                                                    # 等待一下让种子添加到下载器
-                                                    import time
-                                                    time.sleep(1)
-                                                    service_info.instance.torrents_set_force_start(ids=torrent_hash)
-                                                    logger.info(f"已设置种子强制作种: {torrent_hash}")
-                                                except Exception as e:
-                                                    logger.error(f"设置强制作种失败: {str(e)}")
-
-                                            # 获取种子信息
-                                            # 获取种子信息
-                                            title_text = record["title"]
-                                            zh_title_text = record["zh_title"]
-                                            size_text = record["size"]
-                                            seed_count = record["seeders"]
-                                            # 保存下载记录
-                                            download_record = {
-                                                "title": title_text,
-                                                "zh_title": zh_title_text,
-                                                "size": size_text,
-                                                "seeders": seed_count,
-                                                "download_link": download_link,
-                                                "torrent_hash": torrent_hash,  # 使用下载时计算的种子hash
-                                                "download_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                            }
-
-                                            # 使用self.save_data保存数据，以列表形式保存所有下载记录
-                                            # 将新记录添加到列表中
-                                            download_records.append(download_record)
-                                            # 保存更新后的列表（上限 500 条，裁最旧）
-                                            download_records = download_records[-500:]
-                                            self.save_data(key="download_records", value=download_records)
-
-
-                                        else:
-                                            logger.error(f"下载种子失败: {download_link}")
-                                            failed_downloaded_count += 1
-
-                                    except Exception as e:
-                                        logger.error(f"下载种子失败: {str(e)}")
-                                        failed_downloaded_count += 1
-                                else:
-                                    logger.error(f"下载器 {downloader} 未连接或不可用")
-                                    failed_downloaded_count += 1
-                    except Exception as e:
-                        logger.error(f"处理种子时出错: {str(e)}\n{traceback.format_exc()}")
+                    except Exception as exc:
+                        logger.warning(f"检查未完成种子数失败: {exc}")
+                link = record.get("download_link")
+                if not link:
+                    failed_count += 1
+                    continue
+                content, torrent_hash = self._download_torrent(link, self.site)
+                if not content:
+                    failed_count += 1
+                    continue
+                service_info = self.downloader_helper.get_service(self._downloader)
+                if not service_info or not service_info.instance:
+                    logger.error(f"下载器 {self._downloader} 未连接或不可用")
+                    failed_count += 1
+                    continue
+                try:
+                    kwargs = {"content": content, "cookie": self.site.cookie}
+                    if self._save_path:
+                        kwargs["download_dir"] = self._save_path
+                    logger.debug(f"下载种子参数键: {sorted(kwargs.keys())}")
+                    result = service_info.instance.add_torrent(**kwargs)
+                    if not result:
+                        failed_count += 1
+                        logger.error("下载种子失败")
                         continue
-
-            # 发送通知
-            # 发送通知（获取任务：有收获 / 全部失败 / 空白轮）
+                    downloaded_count += 1
+                    success_count += 1
+                    if self._custom_tag and torrent_hash:
+                        self._add_torrent_tag(service_info, torrent_hash, self._custom_tag)
+                    if self._force_resume and service_info.type == "qbittorrent" and torrent_hash:
+                        service_info.instance.torrents_set_force_start(ids=torrent_hash)
+                    records.append({
+                        "title": record["title"], "zh_title": record["zh_title"],
+                        "size": record["size"], "seeders": record["seeders"],
+                        "download_link": link, "torrent_hash": torrent_hash,
+                        "download_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    })
+                    self.save_data(key="download_records", value=records[-500:])
+                except Exception as exc:
+                    failed_count += 1
+                    logger.error(f"下载种子失败: {exc}")
             if self._enable_notification:
-                if success_downloaded_count > 0:
-                    text = f"本轮成功拯救 {success_downloaded_count} 个种子"
-                    if failed_downloaded_count > 0:
-                        text += f"，失败 {failed_downloaded_count} 个"
-                    self.post_message(
-                        mtype=NotificationType.Plugin,
-                        title="【憨憨保种区获取】",
-                        text=text
-                    )
-                elif failed_downloaded_count > 0:
-                    self.post_message(
-                        mtype=NotificationType.Plugin,
-                        title="【憨憨保种区获取】",
-                        text=f"本轮下载全部失败（{failed_downloaded_count} 个），请检查站点与下载器状态"
-                    )
+                if success_count:
+                    text = f"本轮成功拯救 {success_count} 个种子"
+                    if failed_count:
+                        text += f"，失败 {failed_count} 个"
+                    self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text=text)
+                elif failed_count:
+                    self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text=f"本轮下载全部失败（{failed_count} 个），请检查站点与下载器状态")
                 elif self._notify_on_zero_torrents:
-                    self.post_message(
-                        mtype=NotificationType.Plugin,
-                        title="【憨憨保种区获取】",
-                        text="本轮未找到符合条件的新种子"
-                    )
-        except Exception as e:
-            logger.error(f"检查保种区异常: {str(e)}\n{traceback.format_exc()}")
-            # 发送异常通知
+                    self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text="本轮未找到符合条件的新种子")
+        except Exception as exc:
+            logger.error(f"检查保种区异常: {exc}\\n{traceback.format_exc()}")
             if self._enable_notification:
-                self.post_message(
-                    mtype=NotificationType.Plugin,
-                    title="【憨憨保种区获取】",
-                    text="保种任务执行异常，请查看日志了解详情"
-                )
+                self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text="保种任务执行异常，请查看日志了解详情")
+
+    def _refine_by_detail(self, candidates, budget=None):
+        """Apply peer-level thresholds once per candidate with one shared round budget."""
+        if self._completion_ratio_max is None and self._connect_time_max_hours is None:
+            logger.debug("详情精筛跳过: config_empty")
+            return [c for c in candidates if self._min_downloaders is None or c.get("leechers") is not None and c["leechers"] >= self._min_downloaders]
+        budget = budget or {"used": 0, "limit": self.DETAIL_REQUEST_BUDGET}
+        passed, unknown_ids, structure_ids = [], [], []
+        detail_requests = 0
+        for candidate in candidates:
+            if self._event.is_set():
+                break
+            if budget["used"] >= budget["limit"]:
+                logger.debug("详情精筛预算耗尽，候选延期: %s", candidate.get("torrent_id"))
+                continue
+            result = None
+            for attempt, backoff in enumerate((0, 2, 4)):
+                if attempt and self._event.wait(backoff):
+                    break
+                if self._event.is_set() or budget["used"] >= budget["limit"]:
+                    break
+                if detail_requests and self._event.wait(2):
+                    break
+                budget["used"] += 1
+                detail_requests += 1
+                try:
+                    response = RequestUtils(cookies=self.site.cookie, timeout=30).get_res(
+                        f"https://{self.domain}/viewpeerlist.php?id={candidate['torrent_id']}&json=1",
+                        allow_redirects=True)
+                    status = getattr(response, "status_code", 200) if response is not None else 0
+                    if status != 200 or response is None:
+                        raise ValueError(f"HTTP {status}")
+                    payload = response.json() if hasattr(response, "json") else None
+                    if not isinstance(payload, dict) or "leechers" not in payload:
+                        raise ValueError("缺少 leechers")
+                    leechers = payload.get("leechers")
+                    if not isinstance(leechers, dict) or not isinstance(leechers.get("data"), list):
+                        structure_ids.append(str(candidate.get("torrent_id")))
+                        result = ("unknown", None)
+                        break
+                    peers = leechers["data"]
+                    count = payload.get("leecher_count", leechers.get("count", len(peers)))
+                    try:
+                        count = int(count)
+                    except (TypeError, ValueError):
+                        count = len(peers)
+                    if self._min_downloaders is not None and count < self._min_downloaders:
+                        result = ("reject", None)
+                        break
+                    if len(peers) < count:
+                        logger.debug("详情数据可能 partial: id=%s returned=%s count=%s", candidate.get("torrent_id"), len(peers), count)
+                    bad = False
+                    for peer in peers:
+                        if self._completion_ratio_max is not None:
+                            raw_complete = peer.get("complete") if isinstance(peer, dict) else None
+                            try:
+                                complete = float(str(raw_complete).strip().rstrip("%"))
+                            except (TypeError, ValueError):
+                                logger.debug("下载者完成率解析失败: id=%s", candidate.get("torrent_id"))
+                                result = ("unknown", None)
+                                break
+                            if complete >= self._completion_ratio_max:
+                                bad = True
+                        if self._connect_time_max_hours is not None:
+                            raw_connected = peer.get("connected") if isinstance(peer, dict) else None
+                            match = re.fullmatch(r"(?:(\d+)天)?(\d+):(\d+):(\d+)", str(raw_connected or "").strip())
+                            if not match:
+                                logger.debug("下载者连接时间解析失败: id=%s", candidate.get("torrent_id"))
+                                result = ("unknown", None)
+                                break
+                            hours = int(match.group(1) or 0) * 24 + int(match.group(2)) + int(match.group(3)) / 60 + int(match.group(4)) / 3600
+                            if hours >= self._connect_time_max_hours:
+                                bad = True
+                    else:
+                        result = ("reject" if bad else "pass", None)
+                    if result and result[0] == "unknown":
+                        break
+                except Exception as exc:
+                    logger.debug("详情精筛请求失败 id=%s attempt=%s: %s", candidate.get("torrent_id"), attempt + 1, exc)
+                    if attempt == 2:
+                        result = ("unknown", None)
+            if not result or result[0] == "unknown":
+                unknown_ids.append(str(candidate.get("torrent_id")))
+            elif result[0] == "pass":
+                passed.append(candidate)
+        if unknown_ids or structure_ids:
+            ids = (unknown_ids + structure_ids)[:5]
+            if self._enable_notification:
+                if structure_ids:
+                    text = f"详情页表结构变化，需要适配，失败种子ID: {', '.join(ids)}"
+                else:
+                    text = f"详情页解析失败，本轮跳过下载，种子ID: {', '.join(ids)}"
+                self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text=text)
+        return passed
 
     def _get_page_source(self, url: str, site):
         """
@@ -814,7 +776,7 @@ class Hhanclubrescueseed(_PluginBase):
                 # 如果解析失败，仍然返回内容但hash为None
                 return ret.content, None
         else:
-            logger.error(f"下载种子失败: {url}")
+            logger.error("下载种子失败")
             return None, None
 
     def _delete_torrent_by_hash(self, torrent_hash: str) -> bool:
@@ -834,10 +796,13 @@ class Hhanclubrescueseed(_PluginBase):
             return False
 
         try:
-            # 圈定复核：仅允许删除带本插件标签的种子（防止 API 绕过标签承诺误删用户种子）
-            guard = service_info.instance.get_torrents(ids=torrent_hash, tags=self._custom_tag)
-            if not guard:
-                logger.warning(f"种子 {torrent_hash} 不带标签 {self._custom_tag}，拒绝删除")
+            # 应用层复核标签与 hash，不能信任下载器 tags 过滤参数。
+            guard = service_info.instance.get_torrents(ids=torrent_hash, tags=self._custom_tag) or []
+            expected_hash = str(torrent_hash).lower()
+            matched = [t for t in guard if self._torrent_has_managed_tag(t)
+                       and str((self._get_torrent_stats(t) or {}).get("hash", "")).lower() == expected_hash]
+            if not matched:
+                logger.warning(f"种子 {torrent_hash} 不带插件标签或 hash 不匹配，拒绝删除")
                 return False
             # 根据下载器类型调用相应的删除方法
             if service_info.type == "qbittorrent":
@@ -881,7 +846,8 @@ class Hhanclubrescueseed(_PluginBase):
             tagged_count = 0
 
             for name, info in infos.items():
-                torrents = info.instance.get_torrents(tags=self._custom_tag) or []
+                torrents = [t for t in info.instance.get_torrents(tags=self._custom_tag) or []
+                            if self._torrent_has_managed_tag(t)]
                 stats = []
                 for t in torrents:
                     s = self._get_torrent_stats(t)
@@ -891,7 +857,7 @@ class Hhanclubrescueseed(_PluginBase):
 
                 # ① 达标打标：做种满 reward_hours 小时且下载完成
                 for _, s in stats:
-                    if s["seeding_hours"] >= self._reward_hours and reward_tag not in s["tags"]:
+                    if s["progress"] >= 1 and s["seeding_hours"] >= self._reward_hours and reward_tag not in s["tags"]:
                         if self._add_torrent_tag(info, s["hash"], reward_tag, org_tags=s["tags"]):
                             tagged_count += 1
                             s["tags"].append(reward_tag)
@@ -947,6 +913,26 @@ class Hhanclubrescueseed(_PluginBase):
                 )
         except Exception as e:
             logger.error(f"种子监控异常: {str(e)}\n{traceback.format_exc()}")
+
+    def _torrent_has_managed_tag(self, torrent):
+        stats = self._get_torrent_stats(torrent)
+        expected = {tag.strip() for tag in str(self._custom_tag or "").split(",") if tag.strip()}
+        return bool(stats and expected.intersection(set(stats["tags"])))
+
+    def _get_scoped_torrents(self, downloader):
+        """Downloader tag queries are only a hint; enforce exact application-layer tag matching."""
+        if not self._custom_tag or not self.downloader_helper:
+            return []
+        service = self.downloader_helper.get_service(downloader)
+        if not service or not service.instance:
+            return []
+        expected = {tag.strip() for tag in str(self._custom_tag).split(",") if tag.strip()}
+        result = []
+        for torrent in service.instance.get_torrents(tags=self._custom_tag) or []:
+            stats = self._get_torrent_stats(torrent)
+            if stats and expected.intersection(set(stats["tags"])):
+                result.append(torrent)
+        return result
 
     def _get_torrent_stats(self, torrent) -> Optional[dict]:
         """
@@ -1015,123 +1001,85 @@ class Hhanclubrescueseed(_PluginBase):
             return None
 
     def _add_torrent_tag(self, service_info, torrent_hash: str, tag: str, org_tags: list = None) -> bool:
-        """为种子添加标签（qb 走库原生追加；tr 走 MP 统一实例 set_torrent_tag 并保留原标签）"""
+        """qb/tr 统一使用 MP set_torrent_tag，并保留原标签。"""
         if not torrent_hash or not tag:
             return False
         try:
-            if service_info.type == "qbittorrent":
-                service_info.instance.torrents_add_tags(ids=torrent_hash, tags=tag)
-                return True
-            elif service_info.type == "transmission":
-                # MP tr 统一实例无 add_torrent_tag；set_torrent_tag 默认覆盖标签，
-                # 必须传 org_tags 保留原有标签（如自定义下载标签）
-                service_info.instance.set_torrent_tag(
-                    ids=[torrent_hash], tags=[tag], org_tags=list(org_tags or []))
-                return True
-            else:
-                logger.warning(f"不支持的下载器类型，无法打标: {service_info.type}")
-                return False
+            service_info.instance.set_torrent_tag(
+                ids=[torrent_hash], tags=[tag], org_tags=list(org_tags or []))
+            return True
         except Exception as e:
             logger.warning(f"添加标签失败 (hash: {torrent_hash}, tag: {tag}): {str(e)}")
             return False
 
     def _prefilter_row(self, elem) -> dict | None:
-        """
-        列表页预筛：从保种区行元素提取字段并按配置过滤。
-        免费标签、做种/下载/完成人数、大小、发布精确时间均可从列表页直接获取，
-        无需打开详情页。未配置的条件不判定；字段解析失败的条件自动放行（fail-open）；
-        做种人数解析失败视为无效行。返回字段 dict 供下载段使用，None 表示该行被过滤。
-        """
-        def _num(nodes):
-            if not nodes:
+        """List-only coarse filter. Peer thresholds are handled by _refine_by_detail."""
+        def text_num(nodes):
+            if not nodes or nodes[0].text is None:
                 return None
             try:
                 return int(nodes[0].text.strip())
-            except (ValueError, AttributeError, IndexError):
+            except (ValueError, AttributeError):
                 return None
-
-        seeders_count = _num(elem.xpath('div[3]/div/div[3]/a'))
-        if seeders_count is None:
+        seeders = text_num(elem.xpath("div[3]/div/div[3]/a"))
+        if seeders is None:
             logger.warning("未找到做种人数或格式错误，跳过该种子")
             return None
-
-        # 做种人数区间（seeding_count 支持 "3-8" 或单值上限）
-        seeding_count_str = str(self._seeding_count or "").strip()
-        if seeding_count_str:
-            try:
-                if '-' in seeding_count_str:
-                    lower_bound, upper_bound = (int(x) for x in seeding_count_str.split('-', 1))
-                    if not (lower_bound <= seeders_count <= upper_bound):
-                        return None
-                elif seeders_count > int(seeding_count_str):
-                    return None
-            except ValueError:
-                logger.error(f"无效的做种人数格式: {seeding_count_str}")
-                return None
-
-        title_nodes = elem.xpath('div[2]/div/a')
-        zh_title_nodes = elem.xpath('div[2]/div/div[1]/div')
-        size_nodes = elem.xpath('div[3]/div/div[1]')
-        size_text = size_nodes[0].text.strip() if size_nodes and size_nodes[0].text else None
-        added_titles = elem.xpath('div[3]/div/div[2]/span/@title')
-        leechers = _num(elem.xpath('div[3]/div/div[4]/a'))
-        finished = _num(elem.xpath('div[3]/div/div[5]/a'))
-        free_tags = elem.xpath('div[2]/div/div[2]/div[contains(., "免费")]')
-
-        title_text = title_nodes[0].text.strip() if title_nodes and title_nodes[0].text else "未知标题"
-        zh_title_text = zh_title_nodes[0].text.strip() if zh_title_nodes and zh_title_nodes[0].text else "无中文标题"
-
-        def _skip(reason):
-            logger.info(f"预筛: {reason}，跳过 {title_text}")
+        seeding = str(self._seeding_count or "").strip()
+        if seeding and not self._value_in_specs(seeders, seeding):
             return None
-
-        # 仅下载免费种子
+        free_tags = elem.xpath('div[2]/div/div[2]/div[contains(., "免费")]')
         if self._free and not free_tags:
-            return _skip("非免费种子")
-        # 做种人数下限
-        if self._min_seeders and seeders_count < int(self._min_seeders):
-            return _skip(f"做种 {seeders_count} < {self._min_seeders}")
-        # 下载人数下限（解析失败放行）
-        if self._min_downloaders and leechers is not None and leechers < int(self._min_downloaders):
-            return _skip(f"下载 {leechers} < {self._min_downloaders}")
-        # 种子大小范围（torrent_size 支持 "1-5" 或单值上限）
-        if size_text and self._torrent_size:
+            return None
+        leechers = text_num(elem.xpath("div[3]/div/div[4]/a"))
+        if self._min_downloaders is not None and leechers is not None and leechers < self._min_downloaders:
+            return None
+        if self._min_downloaders is not None and leechers is None and self._completion_ratio_max is None and self._connect_time_max_hours is None:
+            logger.debug("列表下载数未知且未启用详情精筛，跳过")
+            return None
+        size_nodes = elem.xpath("div[3]/div/div[1]")
+        size_text = size_nodes[0].text.strip() if size_nodes and size_nodes[0].text else None
+        if self._torrent_size and size_text:
             size_gb = self._parse_size_to_gb(size_text)
-            if size_gb is not None:
-                torrent_size_str = str(self._torrent_size).strip()
-                try:
-                    if '-' in torrent_size_str:
-                        lower_bound, upper_bound = (float(x) for x in torrent_size_str.split('-', 1))
-                        if not (lower_bound <= size_gb <= upper_bound):
-                            return _skip(f"大小 {size_gb:.2f}GB 不在 {torrent_size_str}GB 内")
-                    elif size_gb > float(torrent_size_str):
-                        return _skip(f"大小 {size_gb:.2f}GB > {torrent_size_str}GB")
-                except ValueError:
-                    logger.error(f"无效的种子大小格式: {torrent_size_str}")
-                    return None
-            else:
-                logger.warning(f"无法解析种子大小: {size_text}，跳过大小检查")
-        # 完成率上限（完成数/(完成数+下载数)，两者都解析到才判定）
-        if self._completion_ratio_max and finished is not None and leechers is not None:
-            ratio = finished / max(finished + leechers, 1)
-            if ratio * 100 > float(self._completion_ratio_max):
-                return _skip(f"完成率 {ratio * 100:.1f}% > {self._completion_ratio_max}%")
-        # 发布时间上限（列表页精确时间，发布距今小时数；解析失败放行）
-        if self._connect_time_max_hours and added_titles:
-            try:
-                published = datetime.datetime.strptime(added_titles[0].strip(), "%Y-%m-%d %H:%M:%S")
-                hours = (datetime.datetime.now() - published).total_seconds() / 3600.0
-                if hours > float(self._connect_time_max_hours):
-                    return _skip(f"发布 {hours:.1f}h > {self._connect_time_max_hours}h")
-            except ValueError:
-                logger.debug(f"发布时间解析失败，放行: {added_titles[0]}")
-
+            if size_gb is not None and not self._value_in_specs(size_gb, str(self._torrent_size), numeric=True):
+                return None
+        title_nodes = elem.xpath("div[2]/div/a")
+        zh_nodes = elem.xpath("div[2]/div/div[1]/div")
+        detail_nodes = elem.xpath("div[2]/div/a/@href")
+        download_nodes = elem.xpath("div[4]/div/a/@href")
+        detail_link = detail_nodes[0] if detail_nodes else ""
+        match = re.search(r"id=(\d+)", detail_link)
+        download_link = ""
+        if download_nodes:
+            download_link = f"https://{self.domain}/{download_nodes[0].lstrip('/')}"
         return {
-            "title": title_text,
-            "zh_title": zh_title_text,
+            "title": title_nodes[0].text.strip() if title_nodes and title_nodes[0].text else "未知标题",
+            "zh_title": zh_nodes[0].text.strip() if zh_nodes and zh_nodes[0].text else "无中文标题",
             "size": size_text or "未知大小",
-            "seeders": str(seeders_count),
+            "seeders": str(seeders),
+            "leechers": leechers,
+            "torrent_id": match.group(1) if match else None,
+            "download_link": download_link,
         }
+
+    @staticmethod
+    def _value_in_specs(value, spec, numeric=False):
+        try:
+            for item in str(spec).split(","):
+                item = item.strip()
+                if not item:
+                    continue
+                if "-" in item:
+                    low, high = item.split("-", 1)
+                    low, high = (float(low) if numeric else int(low), float(high) if numeric else int(high))
+                    if low <= value <= high:
+                        return True
+                elif value <= (float(item) if numeric else int(item)):
+                    return True
+        except (TypeError, ValueError):
+            logger.error(f"无效的筛选格式: {spec}")
+            return False
+        return False
 
     def get_page(self) -> List[dict]:
         return None
@@ -1141,13 +1089,13 @@ class Hhanclubrescueseed(_PluginBase):
         停止服务
         """
         try:
+            self._event.set()
             if self._scheduler:
                 self._scheduler.remove_all_jobs()
                 if self._scheduler.running:
-                    self._event.set()
-                    self._scheduler.shutdown()
-                    self._event.clear()
+                    self._scheduler.shutdown(wait=False)
                 self._scheduler = None
+            # 保持置位，直到下一次 init_plugin 明确开启新一轮
         except Exception as e:
             logger.error(f"停止服务异常: {str(e)}")
 
@@ -1170,6 +1118,9 @@ class Hhanclubrescueseed(_PluginBase):
             # 遍历页面，从page=0开始
             page = 0
             while True:
+                if self._event.is_set():
+                    logger.info("检测到停止事件，终止历史保种任务")
+                    break
                 user_details_url = f"https://{self.domain}/userdetails.php?id={self._user_id}&action=7&page={page}"
                 logger.debug(f"正在访问用户历史页面第{page + 1}页: {user_details_url}")
 
@@ -1244,31 +1195,8 @@ class Hhanclubrescueseed(_PluginBase):
                         logger.info(f"种子 {torrent_id}: {title}, 大小: {size}, 做种人数: {seeders}")
 
                         # 检查做种人数是否在设定区间内
-                        seeding_count_str = str(self._seeding_count)
-                        is_in_range = False
-
-                        if '-' in seeding_count_str:
-                            # 范围格式，如 1-3
-                            range_parts = seeding_count_str.split('-')
-                            if len(range_parts) == 2:
-                                try:
-                                    lower_bound = int(range_parts[0])
-                                    upper_bound = int(range_parts[1])
-                                    if lower_bound <= seeders <= upper_bound:
-                                        is_in_range = True
-                                except ValueError:
-                                    logger.error(f"无效的范围格式: {seeding_count_str}")
-                                    continue
-                        else:
-                            # 单个数字格式，检查做种人数是否小于该数字
-                            try:
-                                if seeders <= int(seeding_count_str):
-                                    is_in_range = True
-                            except ValueError:
-                                logger.error(f"无效的数字格式: {seeding_count_str}")
-                                continue
-
-                        if not is_in_range:
+                        seeding_count_str = str(self._seeding_count or "").strip()
+                        if seeding_count_str and not self._value_in_specs(seeders, seeding_count_str):
                             logger.info(f"种子 {torrent_id} 做种人数 {seeders} 不在设定范围内 {seeding_count_str}，跳过")
                             continue
 
@@ -1338,12 +1266,12 @@ class Hhanclubrescueseed(_PluginBase):
 
                         # 构造下载链接
                         download_link = f"https://{self.domain}/download.php?id={torrent_id}&passkey={passkey}"
-                        logger.info(f"开始下载种子: {download_link}")
+                        logger.info(f"开始下载种子: id={torrent_id}")
 
                         # 下载种子文件
                         torrent_content, torrent_hash = self._download_torrent(download_link, self.site)
                         if not torrent_content:
-                            logger.error(f"下载种子文件失败: {download_link}")
+                            logger.error(f"下载种子文件失败: id={torrent_id}")
                             failed_downloaded_count += 1
                             continue
 
@@ -1354,24 +1282,17 @@ class Hhanclubrescueseed(_PluginBase):
                             try:
                                 logger.debug(f"获取下载器实例成功: {downloader}")
                                 # 准备下载参数
-                                download_kwargs = {
-                                    "content": torrent_content,  # 使用下载的种子内容而不是URL
-                                    "cookie": self.site.cookie
-                                }
+                                download_kwargs = {"content": torrent_content, "cookie": self.site.cookie}
                                 if self._save_path:
                                     download_kwargs["download_dir"] = self._save_path
-                                # 如果有自定义标签，则添加标签参数
-                                if self._custom_tag:
-                                    if service_info.type == "qbittorrent":
-                                        download_kwargs["tag"] = self._custom_tag.split(',')
-                                    elif service_info.type == "transmission":
-                                        download_kwargs["labels"] = self._custom_tag.split(',')
-                                logger.debug(f"下载种子参数: {download_kwargs}")
+                                logger.debug(f"下载种子参数键: {sorted(download_kwargs.keys())}")
                                 # 下载种子文件
                                 result = service_info.instance.add_torrent(**download_kwargs)
                                 logger.debug(f"下载结果: {result}")
                                 if result:
-                                    logger.info(f"成功下载种子: {download_link}")
+                                    logger.info(f"成功下载种子: id={torrent_id}")
+                                    if self._custom_tag and torrent_hash:
+                                        self._add_torrent_tag(service_info, torrent_hash, self._custom_tag)
                                     downloaded_count += 1
                                     success_downloaded_count += 1
 

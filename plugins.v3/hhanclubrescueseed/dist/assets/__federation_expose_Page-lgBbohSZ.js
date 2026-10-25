@@ -9,9 +9,8 @@ const _hoisted_2 = { class: "stat-value" };
 const _hoisted_3 = { class: "stat-value" };
 const _hoisted_4 = { class: "stat-value" };
 const _hoisted_5 = { class: "stat-value" };
-const _hoisted_6 = { class: "table-heading" };
-const _hoisted_7 = { class: "title-cell" };
-const _hoisted_8 = { key: 0 };
+const _hoisted_6 = { class: "title-cell" };
+const _hoisted_7 = { key: 0 };
 
 const {computed,getCurrentInstance,inject,onMounted,ref} = await importShared('vue');
 
@@ -126,7 +125,7 @@ async function refreshData() {
   loading.value = true;
   error.value = '';
   try {
-    const response = unwrap(await pluginApi.get(`plugin/${props.pluginId}/download_records`));
+    const response = unwrap(await pluginApi.get(`plugin/Hhanclubrescueseed/download_records`));
     if (!response?.success) throw new Error(response?.message || '获取下载记录失败')
     const data = response.data || {};
     records.value = Array.isArray(data.records) ? data.records : [];
@@ -146,7 +145,7 @@ async function deleteRecord(record) {
   if (!title) return
   deleting.value = title;
   try {
-    const response = unwrap(await pluginApi.post(`plugin/${props.pluginId}/delete_download_records`, [title]));
+    const response = unwrap(await pluginApi.post(`plugin/Hhanclubrescueseed/delete_download_records`, [title]));
     records.value = records.value.filter(item => item.title !== title);
     notify('success', '记录已删除');
     emit('action');
@@ -347,24 +346,12 @@ return (_ctx, _cache) => {
             ]),
             _: 1
           }),
-          _createElementVNode("div", _hoisted_6, [
-            _cache[16] || (_cache[16] = _createElementVNode("div", null, [
+          _cache[16] || (_cache[16] = _createElementVNode("div", { class: "table-heading" }, [
+            _createElementVNode("div", null, [
               _createElementVNode("h2", null, "下载记录"),
               _createElementVNode("p", null, "名称、体积和下载时间来自本地记录，状态数据按记录字段展示。")
-            ], -1)),
-            _createVNode(_component_v_btn, {
-              color: "primary",
-              variant: "outlined",
-              loading: loading.value,
-              "prepend-icon": "mdi-refresh",
-              onClick: refreshData
-            }, {
-              default: _withCtx(() => [...(_cache[15] || (_cache[15] = [
-                _createTextVNode("刷新", -1)
-              ]))]),
-              _: 1
-            }, 8, ["loading"])
-          ]),
+            ])
+          ], -1)),
           (records.value.length)
             ? (_openBlock(), _createBlock(_component_v_data_table, {
                 key: 2,
@@ -375,10 +362,10 @@ return (_ctx, _cache) => {
                 "items-per-page": 10
               }, {
                 "item.title": _withCtx(({ item }) => [
-                  _createElementVNode("div", _hoisted_7, [
+                  _createElementVNode("div", _hoisted_6, [
                     _createElementVNode("strong", null, _toDisplayString(item.title || '-'), 1),
                     (item.zh_title)
-                      ? (_openBlock(), _createElementBlock("span", _hoisted_8, _toDisplayString(item.zh_title), 1))
+                      ? (_openBlock(), _createElementBlock("span", _hoisted_7, _toDisplayString(item.zh_title), 1))
                       : _createCommentVNode("", true)
                   ])
                 ]),
@@ -424,7 +411,7 @@ return (_ctx, _cache) => {
                 type: "info",
                 variant: "tonal"
               }, {
-                default: _withCtx(() => [...(_cache[17] || (_cache[17] = [
+                default: _withCtx(() => [...(_cache[15] || (_cache[15] = [
                   _createTextVNode("暂无下载记录", -1)
                 ]))]),
                 _: 1
@@ -439,6 +426,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-305d04a8"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-c78b2ad7"]]);
 
 export { PageComponent as default };
