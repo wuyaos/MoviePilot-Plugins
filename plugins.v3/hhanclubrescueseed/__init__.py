@@ -1,4 +1,5 @@
 import re
+import json
 import datetime
 import threading
 import traceback
@@ -29,7 +30,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.2.5"
+    plugin_version = "3.2.6"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -514,6 +515,7 @@ class Hhanclubrescueseed(_PluginBase):
                 return
             records = self.get_data("download_records") or []
             candidates = []
+            stats = {}
             budget = {"used": 0, "limit": self.DETAIL_REQUEST_BUDGET}
             downloaded_count = 0
             success_count = 0
@@ -540,13 +542,15 @@ class Hhanclubrescueseed(_PluginBase):
                     if self._event.is_set():
                         break
                     try:
-                        record = self._prefilter_row(elem)
+                        record = self._prefilter_row(elem, stats)
                         if record is not None:
                             candidates.append(record)
                     except Exception as exc:
                         logger.error(f"处理列表种子时出错: {exc}")
                 if self._event.is_set():
                     break
+            if stats:
+                logger.info(f"【憨憨保种区】本轮粗筛淘汰分布: {json.dumps(stats, ensure_ascii=False)}")
             if not candidates:
                 logger.debug("本轮无粗筛候选")
             refined = self._refine_by_detail(candidates, budget)
@@ -1009,8 +1013,12 @@ class Hhanclubrescueseed(_PluginBase):
             logger.warning(f"添加标签失败 (hash: {torrent_hash}, tag: {tag}): {str(e)}")
             return False
 
-    def _prefilter_row(self, elem) -> dict | None:
+    def _prefilter_row(self, elem, stats=None) -> dict | None:
         """List-only coarse filter. Peer thresholds are handled by _refine_by_detail."""
+        def bump(key):
+            if stats is not None:
+                stats[key] = stats.get(key, 0) + 1
+
         def text_num(nodes):
             if not nodes:
                 return None
@@ -1022,27 +1030,33 @@ class Hhanclubrescueseed(_PluginBase):
             # '0' 等数字可能直接在单元格文本层而非 <a> 内（qnap 真实页面实证）
             seeders = text_num(elem.xpath("div[3]/div/div[3]"))
         if seeders is None:
+            bump("做种数解析失败")
             logger.warning(f"未找到做种人数或格式错误，跳过该种子（单元格文本: {(elem.xpath('string(div[3]/div/div[3])') or '').strip()!r}）")
             return None
         seeding = str(self._seeding_count or "").strip()
         if seeding and not self._value_in_specs(seeders, seeding):
+            bump("做种人数不在范围内")
             return None
         free_tags = elem.xpath('div[2]/div/div[2]/div[contains(., "免费")]')
         if self._free and not free_tags:
+            bump("非免费种子")
             return None
         leechers = text_num(elem.xpath("div[3]/div/div[4]/a"))
         if leechers is None:
             leechers = text_num(elem.xpath("div[3]/div/div[4]"))
         if self._min_downloaders is not None and leechers is not None and leechers < self._min_downloaders:
+            bump("下载数不在范围内")
             return None
         if self._min_downloaders is not None and leechers is None and self._completion_ratio_max is None and self._connect_time_max_hours is None:
             logger.debug("列表下载数未知且未启用详情精筛，跳过")
+            bump("下载数未知")
             return None
         size_nodes = elem.xpath("div[3]/div/div[1]")
         size_text = size_nodes[0].text.strip() if size_nodes and size_nodes[0].text else None
         if self._torrent_size and size_text:
             size_gb = self._parse_size_to_gb(size_text)
             if size_gb is not None and not self._value_in_specs(size_gb, str(self._torrent_size), numeric=True):
+                bump("种子大小不在范围内")
                 return None
         title_nodes = elem.xpath("div[2]/div/a")
         zh_nodes = elem.xpath("div[2]/div/div[1]/div")
