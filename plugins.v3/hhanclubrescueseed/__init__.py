@@ -30,7 +30,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.2.7"
+    plugin_version = "3.2.8"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -819,6 +819,33 @@ class Hhanclubrescueseed(_PluginBase):
             return False
 
 
+    def _retag_existing(self, info) -> None:
+        """存量补标：下载记录中的种子若因历史打标失败缺本插件标签，补打（幂等）。
+        老版 MP 的 qb 模块没有 set_torrent_tag，v3.2.8 前下载的种子会全部缺标签，
+        导致监控圈定 0 个、max_downloading 失明、数据页状态聚合匹配不到。"""
+        if not self._custom_tag:
+            return
+        try:
+            records = self.get_data("download_records") or []
+            if not records:
+                return
+            by_hash = {}
+            for torrent in info.instance.get_torrents() or []:
+                h = (torrent.get("hash") or "").lower()
+                if h:
+                    by_hash[h] = torrent
+            retagged = 0
+            for record in records:
+                h = (record.get("hash") or "").lower()
+                match = by_hash.get(h)
+                if match is not None and not self._torrent_has_managed_tag(match):
+                    if self._add_torrent_tag(info, h, self._custom_tag):
+                        retagged += 1
+            if retagged:
+                logger.info(f"下载器 {info.name} 存量补标 {retagged} 个（历史打标失败补救）")
+        except Exception as exc:
+            logger.warning(f"存量补标检查失败: {exc}")
+
     def _maintenance(self):
         """
         种子监控任务：达标打标 → 配额删除 → 卡死清理
@@ -845,6 +872,7 @@ class Hhanclubrescueseed(_PluginBase):
             tagged_count = 0
 
             for name, info in infos.items():
+                self._retag_existing(info)
                 torrents = [t for t in info.instance.get_torrents(tags=self._custom_tag) or []
                             if self._torrent_has_managed_tag(t)]
                 stats = []
@@ -1001,12 +1029,23 @@ class Hhanclubrescueseed(_PluginBase):
             return None
 
     def _add_torrent_tag(self, service_info, torrent_hash: str, tag: str, org_tags: list = None) -> bool:
-        """qb/tr 统一使用 MP set_torrent_tag，并保留原标签。"""
+        """打标兼容层：优先 MP 统一接口 set_torrent_tag（tr 及新版 qb 模块），
+        回退 qbittorrent-api 底层 torrents_add_tags（老版 MP 的 qb 模块没有
+        set_torrent_tag；该接口语义为追加标签，天然保留原标签）。"""
         if not torrent_hash or not tag:
             return False
+        instance = service_info.instance
         try:
-            service_info.instance.set_torrent_tag(
-                ids=[torrent_hash], tags=[tag], org_tags=list(org_tags or []))
+            if hasattr(instance, "set_torrent_tag"):
+                instance.set_torrent_tag(
+                    ids=[torrent_hash], tags=[tag], org_tags=list(org_tags or []))
+            elif hasattr(instance, "torrents_add_tags"):
+                instance.torrents_add_tags(tags=[tag], hashes=[torrent_hash])
+            else:
+                logger.warning(
+                    f"添加标签失败 (hash: {torrent_hash}, tag: {tag}): "
+                    f"下载器实例不支持标签接口（无 set_torrent_tag/torrents_add_tags）")
+                return False
             return True
         except Exception as e:
             logger.warning(f"添加标签失败 (hash: {torrent_hash}, tag: {tag}): {str(e)}")
