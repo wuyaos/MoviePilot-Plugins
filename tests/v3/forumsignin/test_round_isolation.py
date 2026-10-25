@@ -21,7 +21,7 @@ def test_run_once_continues_after_site_exception():
     plugin._config["enabled_sites"] = ["fengchao", "yaowan"]
     calls = []
 
-    def fake_result(domain, readonly=False, trigger=None):
+    def fake_result(domain, readonly=False, trigger=None, record=True):
         calls.append(domain)
         if "fengchao" in domain:
             raise TypeError("synthetic boom")
@@ -103,3 +103,32 @@ def test_update_info_rejects_non_fengchao_domain():
     plugin = _plugin()
     response = asyncio.run(plugin.api_update_info("pting.club"))
     assert response["success"] is False and response["message"] == "unknown_site"
+
+
+def test_retry_chain_records_only_final_result():
+    """重试链只在终态落一次历史与通知：中途失败不产生多条记录。"""
+    from unittest.mock import patch
+    from forum_under_test.core.registry import get_registry
+    import time as _time
+
+    plugin = _plugin()
+    store: dict = {}
+    plugin.save_data = lambda key, value: store.update({key: value})
+    plugin.get_data = lambda key=None: store.get(key) if key in store else {}
+    plugin._config["retry_count"] = 1
+    plugin._config["retry_interval"] = 1
+    real_sleep = _time.sleep
+    _time.sleep = lambda seconds: None  # 退避不真等
+    try:
+        first = SignResult(SignStatus.FAILED, "首次失败")
+        first.site_id = "ssdforum"
+        final = SignResult(SignStatus.ALREADY, "已签到")
+        final.site_id = "ssdforum"
+        results = iter([first, final])
+        with patch.object(ForumSignin, "_execute_result", side_effect=lambda *a, **k: next(results)):
+            domain = next(s["domain"] for s in get_registry() if s["id"] == "ssdforum")
+            plugin._execute_with_retry(domain, trigger="manual")
+    finally:
+        _time.sleep = real_sleep
+    assert [r["status"] for r in plugin._history.list(1, 10)["items"]] == ["signed"]
+    assert [(sid, r.status) for sid, r in plugin._notify_buffer] == [("ssdforum", SignStatus.ALREADY)]

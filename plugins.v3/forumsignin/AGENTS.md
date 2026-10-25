@@ -4,8 +4,7 @@
 - V3 插件只用 `app.sdk.*` 宿主接口；所有自有 API 显式 `auth: bear`、使用相对路径和 `success/message/data` envelope。
 - Vue 联邦入口 `remoteEntry.js` 暴露 `./Config` 与 `./Page`，共享宿主 Vue；配置由宿主 `save(model)` 保存。
 - 站点凭据只经鉴权配置 API 读写；不得进入统计、历史或日志。历史保留 90 天，清运行缓存不得清历史。
-- 药丸和 SSDForum 每次提交后无条件重新 GET 页面；身份、按钮文本、本人行 UID/日期/明确状态缺一即 `unconfirmed`。只读核验不得 POST。
-- 蜂巢 API 提交不自动重试可能已落地的请求；提交后仍 GET status。API 与页面证据保持区分。
+- 药丸为 Flarum API 驱动：GET `/api/users/{uid}` 判 canCheckIn，POST `/api/checkin` 后回读 api_state 复核；服务器轮换的 `flarum_session` 经 `_sync_session` 吸收进凭据（csrf 配对），提交失败的响应原文透出为 failed message。SSDForum 以本人签到行为基础、已签文案确认状态，无行但表单可交互按未签提交并回读复核。蜂巢 API 提交不自动重试可能已落地的请求。只读核验不得 POST。
 - 离线测试只使用合成数据，不代表真实 DOM 或站点验证；不得在测试或发布验证中触发真实签到。
 
 ## core/ 子包与运行时结构
@@ -16,6 +15,9 @@
 - 远程命令：`EventType.PluginAction` action=`signin_once`（cmd `/forum_signin`），轮内用 `_round_lock` 去重并发。
 - PT 人生快照：`integrations/pt_life.py` 在蜂巢确认后向 `/pt-life/snapshot` 推送全站列表；一次失败退避重试至多 3 次。
 - `already` 与 `signed` 在统计口径归一为已签；SKIPPED 不进入通知缓冲。
+- 失败/网络错误按 retry_count/retry_interval 分钟退避重试，重试链只在终态落一次历史与通知（中途失败不出多条记录）；成功/已签/未确认/认证失败不重试。
+- 前端操作按钮的成败反馈走 Toast 轻提示（新宿主），旧宿主无 Toast 时静默降级。
+
 ## 新增论坛站点
 1. 在 `integrations/` 添加模块，声明 `SITE`（唯一 `id`、`name`、`domain`、能力、`fields`）并导出 `ADAPTER`。
 2. `ADAPTER` 提供 `credential_spec`、`base`、页面站点提供 `fetch_page`/`submit`/`verifier`；站点凭据字段需使用 flat config key，Cookie/Token 字段标为 `type: password`。

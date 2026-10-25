@@ -52,6 +52,22 @@ class Yaowan:
             return response
         return None
 
+    def _sync_session(self, response):
+        """吸收服务器轮换的 flarum_session：失效 session 的 GET 会收到新 session，
+        页面 csrfToken 与新 session 配对；不同步会让提交拿到 400 csrf_token_mismatch。"""
+        cookies = getattr(response, "cookies", None) if response is not None else None
+        fresh = cookies.get("flarum_session") if cookies else None
+        credential = self._credential()
+        if not fresh or credential is None:
+            return
+        raw = credential.value or ""
+        if any(p.strip() == f"flarum_session={fresh}" for p in raw.split(";")):
+            return
+        parts = [p.strip() for p in raw.split(";")
+                 if p.strip() and not p.strip().startswith("flarum_session=")]
+        parts.append(f"flarum_session={fresh}")
+        self._set_cookie("; ".join(parts))
+
     def _login(self):
         credential = self._credential()
         if credential is None or not credential.username or not credential.password:
@@ -96,6 +112,7 @@ class Yaowan:
     def fetch_page(self, allow_login=True):
         credential = self._credential()
         response = self._homepage(credential.value if credential else "")
+        self._sync_session(response)
         if self.verifier.identity(self._text(response) or ""):
             return self._attach_api_state(response)
         refreshed = self._refresh_remember()
@@ -148,15 +165,18 @@ class Yaowan:
             result = SignResult(SignStatus.UNCONFIRMED, "未确认本人当日未签到，不提交", evidence=evidence)
             save_sample(page, result)
             return result
+        submit_error = ""
         try:
             self.submit(page)
-        except Exception:
-            pass  # Never retry a possibly committed submission.
+        except Exception as exc:
+            submit_error = str(exc)  # Never retry a possibly committed submission.
         finally:
             try:
                 after = self.fetch_page()
                 evidence = self.verifier.judge(after, uid, day)
                 result = normalize_evidence(evidence, uid, day)
+                if result.status == SignStatus.FAILED and submit_error:
+                    result.message = f"{result.message}（提交响应：{submit_error}）"
                 save_sample(after, result)
             except PermissionError:
                 result = SignResult(SignStatus.AUTH_FAILED, "凭证已失效或无权限，需只读复核")

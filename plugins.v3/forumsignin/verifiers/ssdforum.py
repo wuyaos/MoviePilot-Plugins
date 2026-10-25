@@ -27,8 +27,12 @@ class SSDForumVerifier:
         if signed and row is None:
             return evidence.__class__("已签文案", uid, business_date, "已签到", "page",
                                       "站点返回已签提示", note)
-        if row is None and evidence.button_text and self.token(text):
-            return evidence.__class__(evidence.button_text, uid, business_date, "未签到",
+        if row is None and self.token(text) and (
+                evidence.button_text
+                or re.search(r'dsu_paulsign[^"\']*operation=qiandao', text)
+                or re.search(r'<a[^>]+href="[^"]*operation=qiandao', text)):
+            # dsu_paulsign 未签视图的提交入口是浮窗链接而非 <button>，formhash+可定位的签到入口在场才可提交
+            return evidence.__class__(evidence.button_text or "签到表单", uid, business_date, "未签到",
                                       evidence.source, "无本人当日行，表单可提交")
         return evidence
     def _streak_note(self, text):

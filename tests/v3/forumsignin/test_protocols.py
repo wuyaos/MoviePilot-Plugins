@@ -367,7 +367,7 @@ def test_run_once_aggregates_results_and_flushes_notify():
     plugin._config["enabled_sites"] = ["ssdforum"]
     plugin._config["notify"] = True
 
-    def fake_result(domain, readonly=False, trigger=None):
+    def fake_result(domain, readonly=False, trigger=None, record=True):
         r = SignResult(SignStatus.SUCCESS, "连续签到 5 天")
         r.site_id = "ssdforum"
         plugin._history.append(r)
@@ -452,6 +452,33 @@ def test_yaowan_submit_once_then_recheck_by_api_state():
     assert result.status == "success"
     assert result.evidence.source == "api"
     assert [call[1] for call in client.calls] == ["/", "/api/users/42", "/api/checkin", "/", "/api/users/42"]
+
+
+def test_yaowan_session_rotation_is_absorbed_before_submit():
+    """服务器轮换 flarum_session 后，提交请求必须带新 session（csrf 配对）。"""
+    rotated = page("未签到")
+    home = SimpleNamespace(text=rotated, cookies={"flarum_session": "session-rotated"})
+    api_state = {"data": {"id": "42", "attributes": {"canCheckin": True, "lastCheckinTime": ""}}}
+    api_after = {"data": {"id": "42", "attributes": {"canCheckin": False, "lastCheckinTime": DAY + " 09:00:00"}}}
+    client = Client([home, api_state, {}, page("已签到"), api_after])
+    adapter = Yaowan(client)
+    client.credential = Credential(source="local_cookie", value="flarum_remember=r1; flarum_session=stale")
+    result = adapter.run(business_date=DAY)
+    assert result.status == "success"
+    # 提交时 HttpClient 用 credential.value 作 Cookie 头；轮换 session 必须在提交前同步进 credential
+    assert "flarum_remember=r1" in adapter._credential().value
+    assert "flarum_session=session-rotated" in adapter._credential().value
+    # 合并语义：其它键保留，仅替换 flarum_session；重复同步幂等
+    adapter._sync_session(SimpleNamespace(text="", cookies={"flarum_session": "session-rotated"}))
+    assert adapter._credential().value == "flarum_remember=r1; flarum_session=session-rotated"
+
+
+def test_yaowan_submit_error_is_surfaced_when_recheck_still_unsigned():
+    api_state = {"data": {"id": "42", "attributes": {"canCheckin": True, "lastCheckinTime": ""}}}
+    client = Client([page("未签到"), api_state, RuntimeError("HTTP 400: csrf_token_mismatch"), page("未签到"), api_state])
+    result = Yaowan(client).run(business_date=DAY)
+    assert result.status == "failed"
+    assert "提交响应" in result.message and "csrf_token_mismatch" in result.message
 
 def test_ssdforum_signed_message_is_a_valid_marker_when_record_is_present():
     sample = page("未知")

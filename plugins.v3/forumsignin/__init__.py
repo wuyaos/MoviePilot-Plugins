@@ -38,7 +38,7 @@ class ForumSignin(_PluginBase):
     plugin_id = "ForumSignin"
     plugin_name = "论坛签到"
     plugin_desc = "蜂巢、药丸与 SSDForum 论坛签到"
-    plugin_version = "3.1.22"
+    plugin_version = "3.1.23"
     plugin_author = "wuyaos"
     plugin_icon = "Moviepilot_A.png"
     plugin_config_prefix = "forumsignin_"
@@ -378,8 +378,9 @@ class ForumSignin(_PluginBase):
 
     def _execute_with_retry(self, domain, readonly=False, trigger=None):
         # V2 语义：失败/网络异常按 retry_count/retry_interval 分钟退避重试；成功/已签/未确认/认证失败不重试（未确认重放有重复提交风险）。
-        result = self._execute_result(domain, readonly=readonly, trigger=trigger)
+        result = self._execute_result(domain, readonly=readonly, trigger=trigger, record=False)
         if readonly:
+            # 只读核验的落历史由调用方 _execute → _execute_result(record=True) 负责，这里不重复记录
             return asdict(result)
         attempts = max(0, int(self._config.get('retry_count', 0) or 0))
         interval = max(1, int(self._config.get('retry_interval', 10) or 10))
@@ -387,21 +388,24 @@ class ForumSignin(_PluginBase):
             if result.status not in (SignStatus.FAILED, SignStatus.NETWORK_ERROR):
                 break
             time.sleep(interval * 60)
-            result = self._execute_result(domain, readonly=readonly, trigger=trigger)
+            result = self._execute_result(domain, readonly=readonly, trigger=trigger, record=False)
+        # 重试链只在终态落一次历史与通知：用户只见最终一条结果
+        self._record_result(result, notify=not readonly)
         return asdict(result)
 
     def _execute(self, domain, readonly=False, trigger=None):
         return self._response(asdict(self._execute_result(domain, readonly=readonly, trigger=trigger)))
 
-    def _execute_result(self, domain, readonly=False, trigger=None):
+    def _execute_result(self, domain, readonly=False, trigger=None, record=True):
         site = get_site(domain)
         if not site:
             result = SignResult.skipped("站点未注册")
             result.site_id = str(domain)
-            try:
-                self._history.append(result)
-            except Exception:
-                logger.warning("论坛签到 %s：历史记录写入失败（不影响签到结果）", result.site_id, exc_info=True)
+            if record:
+                try:
+                    self._history.append(result)
+                except Exception:
+                    logger.warning("论坛签到 %s：历史记录写入失败（不影响签到结果）", result.site_id, exc_info=True)
             return result
         site_id = site["id"]
         lock = self._locks[site_id]
@@ -490,14 +494,18 @@ class ForumSignin(_PluginBase):
                     lock.release()
         result.site_id = site_id
         result.metadata["trigger"] = trigger or ("verify" if readonly else "manual")
+        if record:
+            self._record_result(result, notify=not readonly)
+        return result
+
+    def _record_result(self, result, notify=True):
         try:
             self._history.append(result)
         except Exception:
             logger.warning("论坛签到 %s：历史记录写入失败（不影响签到结果）", result.site_id, exc_info=True)
-        if (not readonly and result.status != SignStatus.SKIPPED
+        if (notify and result.status != SignStatus.SKIPPED
                 and self._config.get("notify")):
-            self._notify_buffer.append((site_id, result))
-        return result
+            self._notify_buffer.append((result.site_id, result))
 
     def _flush_notify(self):
         """一轮结果合并为一条通知；空缓冲不发送。"""
