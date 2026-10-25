@@ -30,9 +30,13 @@ Fork 自 [Seed680/MoviePilot-Plugins](https://github.com/Seed680/MoviePilot-Plug
 - 前端按 `response.success/response.data` envelope 读取；`GET /config`、`GET /download_records` 必须返回 `Response(success=True, data=...)`，返回裸 dict/裸数组会导致前端恒报「获取配置失败/获取下载记录失败」（原版 bug）
 - 重建后的 `remoteEntry.js` federation scope 为 `hhanclubrescueseed__`（与 `frontend/vite.config.js` 的 `name` 自洽），与插件 id 无关、无需与类名一致
 - 保种区列表页为 Tailwind div 布局（无 table.torrents）：行容器 `//*[@id="mainContent"]/div[1]/div[2]/div[3]/div`；做种 `div[3]/div/div[3]/a`、下载 `div[3]/div/div[4]/a`、完成 `div[3]/div/div[5]/a`、体积 `div[3]/div/div[1]`、发布时间 `div[3]/div/div[2]/span/@title`（精确时间）、免费标记 `div[2]/div/div[2]/div` 含「免费」文本。站点改版需同步 `_prefilter_row`
-- MP 本地实例 `app/plugins/<id>` 若是指向本仓库的 junction，MP 安装 API 会因 `.resolve()` 解引用报「非法插件ID」——运行代码已生效，reload/重启即可，不走安装流程
+- MP 本地实例 `app/plugins/<id>` 可能是拷贝目录而非 junction（某次复制部署会打断 junction），改仓库后必须手动同步 `dist/assets` + `__init__.py` 并 reload，勿假设自动生效
+- **`dist/assets` 必须是同一次构建的完整白名单 7 文件**：`remoteEntry.js`、`__federation_fn_import-*.js`、`_plugin-vue_export-helper-*.js`、`__federation_expose_{Page,Config}-*.js` + 两个同名 `.css`。缺 fn_import/export_helper 会「组件加载错误 无法加载组件」（expose js 相对 import 404）
+- **`frontend/dist` 是 vite outDir 在 root 外的多构建堆积场**（vite 不清空 root 外 outDir）：同步前先 `rm -rf frontend/dist` 全新构建，再从 `frontend/dist/assets` 整体复制白名单 7 文件；从堆积目录挑单文件会拿到互不配套的组合（remoteEntry 引 A 批 expose、文件却是 B 批）
+- 浏览器对 `remoteEntry.js` 的 HTTP 启发式缓存极顽固（旧文件 mtime 老时 reload 也不 revalidate），验证修复用 `fetch(url, {cache:'reload'})` 全部 7 文件后 `location.reload()`，或浏览器硬刷新
+- `dist/` 被 `.gitignore` 的 `dist/` 全局规则忽略、**不入库**——部署必须从工作区文件打包；工作区 `dist/assets` 一旦损坏，git 恢复不了
 - 改前端一律走 `frontend/` 源码后重新构建，不再手工编辑 `dist/`
 
 ## 配置项
 
-enable / run_once / cron / monitor_cron / downloader / save_path / custom_tag / enable_notification / notify_on_zero_torrents / force_resume / history_rescue_enabled / user_id / reward_tag / reward_hours（默认 18）/ disk_quota_gb / stuck_days（默认 7）/ seeding_count（如 `1-3`）/ torrent_size（GB 范围）/ min_seeders / min_downloaders / max_torrent_size_gb / completion_ratio_max（%，0-100）/ connect_time_max_hours（小时）/ download_limit（0 不限）/ max_downloading（默认 3）/ **max_pages（默认 5）**；`free` 为只读展示项（当前站点免费规则说明）
+enable / run_once / cron / monitor_cron / downloader / save_path / custom_tag / enable_notification / notify_on_zero_torrents / force_resume / history_rescue_enabled / user_id / reward_tag / reward_hours（默认 18）/ disk_quota_gb / stuck_days（默认 7）/ seeding_count（如 `1-3`）/ torrent_size（GB 范围）/ min_seeders / min_downloaders / max_torrent_size_gb / completion_ratio_max（%，0-100）/ connect_time_max_hours（小时）/ download_limit（0 不限）/ max_downloading（默认 3）/ **max_pages（默认 5）**；`free` 为「仅下载免费种子」开关（默认关，开启后预筛仅保留免费种子）
