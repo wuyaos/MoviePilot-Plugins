@@ -159,7 +159,7 @@ onMounted(refreshData)
 
     <v-card-text>
       <v-alert v-if="error" type="error" variant="tonal" class="mb-4">{{ error }}</v-alert>
-      <v-alert v-if="!autoDeleteEnabled" type="info" variant="tonal" class="mb-4">自动清理未启用</v-alert>
+      <v-alert v-if="!autoDeleteEnabled" type="info" variant="tonal" class="mb-4">自动清理未启用：磁盘配额清理与卡死清理均不会执行</v-alert>
 
       <v-row class="stats-row mb-2">
         <v-col cols="12" sm="6" md="3"><v-card class="stat-card" variant="tonal"><div class="stat-label">保种总体积</div><div class="stat-value">{{ totalSize }}</div><div class="stat-meta">当前记录汇总</div></v-card></v-col>

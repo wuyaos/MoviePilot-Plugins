@@ -250,7 +250,7 @@ return (_ctx, _cache) => {
                 class: "mb-4"
               }, {
                 default: _withCtx(() => [...(_cache[4] || (_cache[4] = [
-                  _createTextVNode("自动清理未启用", -1)
+                  _createTextVNode("自动清理未启用：磁盘配额清理与卡死清理均不会执行", -1)
                 ]))]),
                 _: 1
               }))
@@ -426,6 +426,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-c78b2ad7"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-9f6aeef3"]]);
 
 export { PageComponent as default };

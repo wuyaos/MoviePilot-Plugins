@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.2.3"
+    plugin_version = "3.2.4"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -183,7 +183,7 @@ class Hhanclubrescueseed(_PluginBase):
             if self._history_rescue_enabled:
                 self._user_id = self._resolve_user_id()
                 if not self._user_id:
-                    logger.warning("无法解析当前憨憨站用户 UID，跳过历史保种任务")
+                    logger.warning("无法解析当前憨憨站用户 UID（请检查站点 Cookie 是否有效），跳过历史保种任务")
                     if self._enable_notification:
                         self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区】", text="无法解析当前站点用户 UID，历史保种任务未执行")
             self.stop_service()
@@ -312,12 +312,15 @@ class Hhanclubrescueseed(_PluginBase):
         服务信息
         """
         if not self._downloader:
-            logger.warning("尚未配置下载器，请检查配置")
+            logger.warning("尚未配置下载器（配置项「下载器实例」为空），无法执行下载与监控")
             return None
 
-        services = self.downloader_helper.get_services(name_filters=self._downloader)
+        services = self.downloader_helper.get_services(name_filters=[self._downloader])
         if not services:
-            logger.warning("获取下载器实例失败，请检查配置")
+            all_names = list(self.downloader_helper.get_services().keys())
+            logger.warning(
+                f"获取下载器实例失败：配置的「{self._downloader}」不存在或未启用，"
+                f"当前可用：{all_names or '（无）'}，请检查配置")
             return None
 
         active_services = {}
@@ -328,7 +331,7 @@ class Hhanclubrescueseed(_PluginBase):
                 active_services[service_name] = service_info
 
         if not active_services:
-            logger.warning("没有已连接的下载器，请检查配置")
+            logger.warning(f"配置的下载器「{self._downloader}」未连接，请检查下载器状态")
             return None
 
         return active_services
@@ -1011,7 +1014,7 @@ class Hhanclubrescueseed(_PluginBase):
                 return None
         seeders = text_num(elem.xpath("div[3]/div/div[3]/a"))
         if seeders is None:
-            logger.warning("未找到做种人数或格式错误，跳过该种子")
+            logger.warning(f"未找到做种人数或格式错误，跳过该种子（单元格文本: {(elem.xpath('string(div[3]/div/div[3])') or '').strip()!r}）")
             return None
         seeding = str(self._seeding_count or "").strip()
         if seeding and not self._value_in_specs(seeders, seeding):
@@ -1240,13 +1243,13 @@ class Hhanclubrescueseed(_PluginBase):
                                             passkey = passkey_match.group(1)
                                             logger.info("已从详情页获取 passkey")
                                         else:
-                                            logger.warning("无法从详情页获取passkey")
+                                            logger.warning(f"无法从详情页获取passkey: {first_detail_url}")
                                     else:
-                                        logger.warning("在详情页未找到下载链接")
+                                        logger.warning(f"在详情页未找到下载链接: {first_detail_url}")
                                 else:
-                                    logger.warning("种子详情页解析失败")
+                                    logger.warning(f"种子详情页解析失败: {first_detail_url}")
                             else:
-                                logger.warning("访问种子详情页失败")
+                                logger.warning(f"访问种子详情页失败: {first_detail_url}")
 
                             if not passkey:
                                 logger.error("无法获取passkey，终止任务")

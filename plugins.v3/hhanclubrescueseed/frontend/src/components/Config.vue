@@ -24,7 +24,7 @@ const defaults = {
 const CONFIG_KEYS = Object.keys(defaults)
 function projectInitialConfig(source) {
   return CONFIG_KEYS.reduce((result, key) => {
-    if (Object.prototype.hasOwnProperty.call(source || {}, key)) result[key] = source[key]
+    if (Object.prototype.hasOwnProperty.call(source || {}, key) && source[key] != null) result[key] = source[key]
     return result
   }, {})
 }
@@ -72,7 +72,7 @@ async function loadConfig() {
 }
 function projectServerConfig(source) {
   return CONFIG_KEYS.reduce((result, key) => {
-    if (Object.prototype.hasOwnProperty.call(source || {}, key)) result[key] = source[key]
+    if (Object.prototype.hasOwnProperty.call(source || {}, key) && source[key] != null) result[key] = source[key]
     return result
   }, {})
 }
@@ -164,7 +164,7 @@ onMounted(loadConfig)
         <section class="config-section">
           <div class="section-heading monitor-heading"><v-icon color="primary">mdi-radar</v-icon><div><h3>监控与清理</h3><p>达标打标、体积配额清理和卡死清理。</p></div><span class="section-note">默认关闭，只触碰本插件标签</span></div>
           <v-row dense class="monitor-row">
-            <v-col cols="12" md="4"><VCronField v-model="form.monitor_cron" label="监控任务调度" hint="留空禁用监控任务" persistent-hint /></v-col>
+            <v-col cols="12" md="4"><VCronField v-model="form.monitor_cron" label="监控任务调度" hint="留空禁用监控任务；启用自动删除后建议保持足够监控频率（如 */10）以便及时清理" persistent-hint /></v-col>
             <v-col cols="12" md="4"><v-text-field v-model="form.reward_tag" label="达标标签" hint="达标后添加，需与下载标签不同" persistent-hint variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" md="4"><v-text-field v-model.number="form.reward_hours" label="达标做种时长（小时）" hint="已完成且做种满时长后达标" persistent-hint type="number" variant="outlined" density="comfortable" /></v-col>
           </v-row>

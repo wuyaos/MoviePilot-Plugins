@@ -51,7 +51,7 @@ const defaults = {
 const CONFIG_KEYS = Object.keys(defaults);
 function projectInitialConfig(source) {
   return CONFIG_KEYS.reduce((result, key) => {
-    if (Object.prototype.hasOwnProperty.call(source || {}, key)) result[key] = source[key];
+    if (Object.prototype.hasOwnProperty.call(source || {}, key) && source[key] != null) result[key] = source[key];
     return result
   }, {})
 }
@@ -99,7 +99,7 @@ async function loadConfig() {
 }
 function projectServerConfig(source) {
   return CONFIG_KEYS.reduce((result, key) => {
-    if (Object.prototype.hasOwnProperty.call(source || {}, key)) result[key] = source[key];
+    if (Object.prototype.hasOwnProperty.call(source || {}, key) && source[key] != null) result[key] = source[key];
     return result
   }, {})
 }
@@ -632,7 +632,7 @@ return (_ctx, _cache) => {
                           modelValue: form.monitor_cron,
                           "onUpdate:modelValue": _cache[19] || (_cache[19] = $event => ((form.monitor_cron) = $event)),
                           label: "监控任务调度",
-                          hint: "留空禁用监控任务",
+                          hint: "留空禁用监控任务；启用自动删除后建议保持足够监控频率（如 */10）以便及时清理",
                           "persistent-hint": ""
                         }, null, 8, ["modelValue"])
                       ]),
@@ -818,6 +818,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-61bd1cc5"]]);
+const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-a46139a1"]]);
 
 export { ConfigComponent as default };
