@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.2.2"
+    plugin_version = "3.2.3"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -178,6 +178,7 @@ class Hhanclubrescueseed(_PluginBase):
                 logger.error("憨憨站点未配置，请先在系统配置中添加站点")
                 return
             normalized = self._apply_config(config)
+            logger.info(f"【憨憨保种区】插件初始化 v{self.plugin_version}，状态：{'启用' if self._enable else '未启用'}，获取调度：{self._cron or '未设置'}，监控调度：{self._monitor_cron or '未设置'}")
             self._user_id = None
             if self._history_rescue_enabled:
                 self._user_id = self._resolve_user_id()
@@ -501,6 +502,7 @@ class Hhanclubrescueseed(_PluginBase):
         return services
     def _check_seeding(self):
         try:
+            logger.info("【憨憨保种区】开始执行保种区获取任务")
             if not self._enable:
                 logger.info("憨憨保种区插件未启用，跳过检查")
                 return
@@ -600,6 +602,7 @@ class Hhanclubrescueseed(_PluginBase):
                 except Exception as exc:
                     failed_count += 1
                     logger.error(f"下载种子失败: {exc}")
+            logger.info(f"【憨憨保种区】获取任务完成：精筛通过 {len(refined)} 个，成功下载 {success_count} 个，失败 {failed_count} 个")
             if self._enable_notification:
                 if success_count:
                     text = f"本轮成功拯救 {success_count} 个种子"
@@ -810,6 +813,7 @@ class Hhanclubrescueseed(_PluginBase):
         仅依赖下载器状态，不访问保种区站点
         """
         try:
+            logger.info("【憨憨保种区】开始执行种子监控")
             if not self._enable:
                 logger.info("憨憨保种区插件未启用，跳过监控")
                 return
@@ -884,6 +888,7 @@ class Hhanclubrescueseed(_PluginBase):
                             removed_names.append(s["name"])
                             stuck_removed += 1
 
+            logger.info(f"【憨憨保种区】监控完成：达标打标 {tagged_count} 个，配额清理 {quota_removed} 个，卡死清理 {stuck_removed} 个")
             # 通知：仅在发生删除时发送
             if self._enable_notification and removed_names:
                 text = f"已清理做种 {len(removed_names)} 个:\n" + "\n".join(f"· {n}" for n in removed_names[:10])
@@ -1233,7 +1238,7 @@ class Hhanclubrescueseed(_PluginBase):
                                         passkey_match = re.search(r'passkey=([^&]*)', download_link_elements[0])
                                         if passkey_match:
                                             passkey = passkey_match.group(1)
-                                            logger.info(f"获取到passkey: {passkey[:8]}...")
+                                            logger.info("已从详情页获取 passkey")
                                         else:
                                             logger.warning("无法从详情页获取passkey")
                                     else:
