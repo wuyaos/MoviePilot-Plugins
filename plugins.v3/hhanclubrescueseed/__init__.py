@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.10"
+    plugin_version = "3.3.11"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -298,7 +298,7 @@ class Hhanclubrescueseed(_PluginBase):
                             status = "做种中"
                         live[s["hash"].lower()] = {
                             "status": status,
-                            "uploaded": s["uploaded"],
+                            "uploaded": round(s["uploaded"] / (1024 ** 3), 3),
                             "seeding_time_hours": s["seeding_hours"],
                             "progress": s["progress"],
                         }

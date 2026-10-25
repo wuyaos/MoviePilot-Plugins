@@ -43,7 +43,7 @@ function valueOf(record, ...keys) {
 }
 
 function toGb(value) {
-  if (typeof value === 'number') return value / (1024 * 1024 * 1024)
+  if (typeof value === 'number') return value
   const text = String(value || '').trim().toUpperCase()
   const amount = Number.parseFloat(text)
   if (!Number.isFinite(amount)) return 0
