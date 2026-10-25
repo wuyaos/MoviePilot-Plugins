@@ -136,6 +136,24 @@ async function deleteRecord(record) {
   }
 }
 
+const cleaning = ref(false)
+
+async function cleanupStale() {
+  cleaning.value = true
+  try {
+    const response = unwrap(await pluginApi.post(`plugin/Hhanclubrescueseed/cleanup_records`))
+    if (!response?.success) throw new Error(response?.message || '清理失败')
+    const { removed, total } = response.data || {}
+    notify('success', `已清理 ${removed} 条失效记录，剩余 ${total} 条`)
+    emit('action')
+    await refreshData()
+  } catch (err) {
+    notify('error', err.message || '清理失败')
+  } finally {
+    cleaning.value = false
+  }
+}
+
 function close() {
   emit('close')
 }
@@ -152,6 +170,7 @@ onMounted(refreshData)
       <template #append>
         <div class="d-flex align-center ga-1">
           <v-btn icon="mdi-cog-outline" variant="text" aria-label="配置插件" title="配置插件" @click="emit('switch')" />
+      <v-btn icon="mdi-broom" variant="text" aria-label="清理失效记录" title="清理失效记录（下载器中已不存在的）" :loading="cleaning" @click="cleanupStale" />
           <v-btn icon="mdi-refresh" variant="text" aria-label="刷新" title="刷新" @click="refreshData" />
           <v-btn icon="mdi-close" variant="text" aria-label="关闭" @click="close" />
         </div>
@@ -173,7 +192,7 @@ onMounted(refreshData)
       <v-data-table v-if="records.length" height="520" :headers="headers" :items="records" item-value="title" class="records-table" :items-per-page="10">
         <template #item.title="{ item }"><div class="title-cell"><strong>{{ item.title || '-' }}</strong><span v-if="item.zh_title">{{ item.zh_title }}</span></div></template>
         <template #item.size="{ item }">{{ formatSize(item.size) }}</template>
-        <template #item.score="{ item }">{{ item.score != null ? item.score.toFixed(1) : '—' }}</template>
+        <template #item.score="{ item }">{{ typeof item.score === 'number' && Number.isFinite(item.score) ? item.score.toFixed(1) : '—' }}</template>
         <template #item.added_on="{ item }">{{ formatAddedOn(item) }}</template>
         <template #item.seeding_time="{ item }">{{ formatSeedingTime(valueOf(item, 'seeding_time', 'seeding_time_hours')) }}</template>
         <template #item.status="{ item }"><v-chip size="small" :color="statusColor(item.status)" label>{{ statusText(item.status) }}</v-chip></template>

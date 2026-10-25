@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.0"
+    plugin_version = "3.3.1"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -316,6 +316,33 @@ class Hhanclubrescueseed(_PluginBase):
             "disk_quota_gb": self._disk_quota_gb
         })
 
+    def _cleanup_stale_records(self) -> Response:
+        """API Endpoint: 清理失效下载记录（下载器中已不存在对应种子的记录）。
+
+        守卫：下载器状态聚合失败时不删除任何记录，避免误清。
+        """
+        records = self.get_data("download_records") or []
+        if not records:
+            return Response(success=True, data={"removed": 0, "total": 0})
+        live_hashes = set()
+        try:
+            if self._downloader and self._custom_tag:
+                svc = self.downloader_helper.get_service(self._downloader)
+                if svc and svc.instance:
+                    for t in self._get_scoped_torrents(self._downloader):
+                        s = self._get_torrent_stats(t)
+                        if s and s.get("hash"):
+                            live_hashes.add(s["hash"].lower())
+        except Exception as e:
+            logger.warning(f"清理失效记录时聚合下载器状态失败: {str(e)}")
+            return Response(success=False, message=f"聚合下载器状态失败，未删除任何记录：{str(e)}")
+        kept = [r for r in records if str(r.get("torrent_hash") or "").lower() in live_hashes]
+        removed = len(records) - len(kept)
+        if removed:
+            self.save_data(key="download_records", value=kept[-100:])
+            logger.info(f"【憨憨保种区】清理失效下载记录 {removed} 条（剩余 {len(kept)} 条）")
+        return Response(success=True, data={"removed": removed, "total": len(kept)})
+
     @property
     def service_infos(self) -> Optional[Dict[str, ServiceInfo]]:
         """
@@ -430,6 +457,13 @@ class Hhanclubrescueseed(_PluginBase):
                 "methods": ["POST"],
                 "auth": "bear",
                 "summary": "批量删除下载记录"
+            },
+            {
+                "path": "/cleanup_records",
+                "endpoint": self._cleanup_stale_records,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "清理失效下载记录"
             }
         ]
 
@@ -590,8 +624,8 @@ class Hhanclubrescueseed(_PluginBase):
                 link = record.get("download_link")
                 if not link:
                     failed_count += 1
-                    continue
                     failed_details.append(f"- {record['title'][:30]}（无下载链接）")
+                    continue
                 content, torrent_hash = self._download_torrent(link, self.site)
                 if not content:
                     failed_count += 1
@@ -627,7 +661,7 @@ class Hhanclubrescueseed(_PluginBase):
                         "download_link": link, "torrent_hash": torrent_hash,
                         "download_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     })
-                    self.save_data(key="download_records", value=records[-500:])
+                    self.save_data(key="download_records", value=records[-100:])
                 except Exception as exc:
                     failed_count += 1
                     logger.error(f"下载种子失败: {exc}")
@@ -643,8 +677,6 @@ class Hhanclubrescueseed(_PluginBase):
                     if failed_details:
                         text += "\n\n❌ 失败明细:\n" + self._fmt_details(failed_details)
                     self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text=text)
-                elif failed_count:
-                    self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text=f"本轮下载全部失败（{failed_count} 个），请检查站点与下载器状态")
                 elif self._notify_on_zero_torrents:
                     self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text="本轮未找到符合条件的新种子")
         except Exception as exc:
@@ -742,6 +774,7 @@ class Hhanclubrescueseed(_PluginBase):
                     else:
                         ratio = None
                         if complete_values and len(peers) >= count:
+                        # 策略：准入不受坏行影响；评分对成功解析子集求均值（部分样本降级），partial 响应不外推
                             ratio = sum(complete_values) / len(complete_values) / 100.0
                         result = ("reject" if bad else "pass", ratio)
                     if result and result[0] == "unknown":
@@ -1102,23 +1135,29 @@ class Hhanclubrescueseed(_PluginBase):
         size_gb = record.get("size_gb")
         if size_gb is None:
             size_gb = self._parse_size_to_gb(record.get("size"))
-        if size_gb is not None:
+        try:
+            size_gb = float(size_gb) if size_gb is not None else None
+        except (TypeError, ValueError):
+            size_gb = None
+        if size_gb is not None and size_gb > 0:
             size_score = self.SCORE_SIZE_WEIGHT * math.log2(1 + min(size_gb, self.SCORE_SIZE_CAP_GB)) / math.log2(1 + self.SCORE_SIZE_CAP_GB)
         else:
             size_score = 0.0
         remaining = record.get("completion_ratio")
         remaining = (1.0 - remaining) if remaining is not None else self.SCORE_UNKNOWN_REMAINING
         leechers = record.get("leechers")
-        if isinstance(leechers, (int, float)) and leechers >= 0:
+        if isinstance(leechers, (int, float)) and not isinstance(leechers, bool) and leechers >= 0:
             heat = math.log2(1 + min(leechers, self.SCORE_LEECHER_CAP)) / math.log2(1 + self.SCORE_LEECHER_CAP)
             demand_score = self.SCORE_DEMAND_WEIGHT * heat * remaining
         else:
             demand_score = 0.0
         try:
             seeders = int(str(record.get("seeders") or 0))
+            if seeders < 0:
+                seeders = None
         except ValueError:
-            seeders = 0
-        scarcity_score = self.SCORE_SCARCITY_WEIGHT / max(1, seeders)
+            seeders = None
+        scarcity_score = self.SCORE_SCARCITY_WEIGHT / max(1, seeders) if seeders is not None else 0.0
         return size_score + demand_score + scarcity_score
 
     @staticmethod
@@ -1457,8 +1496,8 @@ class Hhanclubrescueseed(_PluginBase):
                                     download_records = self.get_data("download_records") or []
                                     # 将新记录添加到列表中
                                     download_records.append(download_record)
-                                    # 保存更新后的列表（上限 500 条，裁最旧）
-                                    download_records = download_records[-500:]
+                                    # 保存更新后的列表（上限 100 条，裁最旧）
+                                    download_records = download_records[-100:]
                                     self.save_data(key="download_records", value=download_records)
 
                                 else:

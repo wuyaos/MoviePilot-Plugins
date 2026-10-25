@@ -157,6 +157,24 @@ async function deleteRecord(record) {
   }
 }
 
+const cleaning = ref(false);
+
+async function cleanupStale() {
+  cleaning.value = true;
+  try {
+    const response = unwrap(await pluginApi.post(`plugin/Hhanclubrescueseed/cleanup_records`));
+    if (!response?.success) throw new Error(response?.message || '清理失败')
+    const { removed, total } = response.data || {};
+    notify('success', `已清理 ${removed} 条失效记录，剩余 ${total} 条`);
+    emit('action');
+    await refreshData();
+  } catch (err) {
+    notify('error', err.message || '清理失败');
+  } finally {
+    cleaning.value = false;
+  }
+}
+
 function close() {
   emit('close');
 }
@@ -197,6 +215,14 @@ return (_ctx, _cache) => {
               title: "配置插件",
               onClick: _cache[0] || (_cache[0] = $event => (emit('switch')))
             }),
+            _createVNode(_component_v_btn, {
+              icon: "mdi-broom",
+              variant: "text",
+              "aria-label": "清理失效记录",
+              title: "清理失效记录（下载器中已不存在的）",
+              loading: cleaning.value,
+              onClick: cleanupStale
+            }, null, 8, ["loading"]),
             _createVNode(_component_v_btn, {
               icon: "mdi-refresh",
               variant: "text",
@@ -375,7 +401,7 @@ return (_ctx, _cache) => {
                   _createTextVNode(_toDisplayString(formatSize(item.size)), 1)
                 ]),
                 "item.score": _withCtx(({ item }) => [
-                  _createTextVNode(_toDisplayString(item.score != null ? item.score.toFixed(1) : '—'), 1)
+                  _createTextVNode(_toDisplayString(typeof item.score === 'number' && Number.isFinite(item.score) ? item.score.toFixed(1) : '—'), 1)
                 ]),
                 "item.added_on": _withCtx(({ item }) => [
                   _createTextVNode(_toDisplayString(formatAddedOn(item)), 1)
@@ -431,6 +457,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-d9bad696"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-41283029"]]);
 
 export { PageComponent as default };
