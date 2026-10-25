@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.2.4"
+    plugin_version = "3.2.5"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -685,12 +685,18 @@ class Hhanclubrescueseed(_PluginBase):
                                 bad = True
                         if self._connect_time_max_hours is not None:
                             raw_connected = peer.get("connected") if isinstance(peer, dict) else None
-                            match = re.fullmatch(r"(?:(\d+)天)?(\d+):(\d+):(\d+)", str(raw_connected or "").strip())
-                            if not match:
+                            text = str(raw_connected or "").strip()
+                            # NexusPHP 递进格式（qnap 真实 peerlist 实证）：MM:SS（<1h）/ H:MM:SS（<1d）/ X天H:MM:SS
+                            match = re.fullmatch(r"(?:(\d+)天)?(\d+):(\d+):(\d+)", text)
+                            match_short = re.fullmatch(r"(\d+):(\d+)", text)
+                            if not match and not match_short:
                                 logger.debug("下载者连接时间解析失败: id=%s", candidate.get("torrent_id"))
                                 result = ("unknown", None)
                                 break
-                            hours = int(match.group(1) or 0) * 24 + int(match.group(2)) + int(match.group(3)) / 60 + int(match.group(4)) / 3600
+                            if match:
+                                hours = int(match.group(1) or 0) * 24 + int(match.group(2)) + int(match.group(3)) / 60 + int(match.group(4)) / 3600
+                            else:
+                                hours = int(match_short.group(1)) / 60 + int(match_short.group(2)) / 3600
                             if hours >= self._connect_time_max_hours:
                                 bad = True
                     else:
@@ -1006,13 +1012,15 @@ class Hhanclubrescueseed(_PluginBase):
     def _prefilter_row(self, elem) -> dict | None:
         """List-only coarse filter. Peer thresholds are handled by _refine_by_detail."""
         def text_num(nodes):
-            if not nodes or nodes[0].text is None:
+            if not nodes:
                 return None
-            try:
-                return int(nodes[0].text.strip())
-            except (ValueError, AttributeError):
-                return None
+            # itertext 递归取全部文本（数字可能在 <span>/<font> 子元素里），正则提取首个整数
+            match = re.search(r"\d+", "".join(nodes[0].itertext()))
+            return int(match.group()) if match else None
         seeders = text_num(elem.xpath("div[3]/div/div[3]/a"))
+        if seeders is None:
+            # '0' 等数字可能直接在单元格文本层而非 <a> 内（qnap 真实页面实证）
+            seeders = text_num(elem.xpath("div[3]/div/div[3]"))
         if seeders is None:
             logger.warning(f"未找到做种人数或格式错误，跳过该种子（单元格文本: {(elem.xpath('string(div[3]/div/div[3])') or '').strip()!r}）")
             return None
@@ -1023,6 +1031,8 @@ class Hhanclubrescueseed(_PluginBase):
         if self._free and not free_tags:
             return None
         leechers = text_num(elem.xpath("div[3]/div/div[4]/a"))
+        if leechers is None:
+            leechers = text_num(elem.xpath("div[3]/div/div[4]"))
         if self._min_downloaders is not None and leechers is not None and leechers < self._min_downloaders:
             return None
         if self._min_downloaders is not None and leechers is None and self._completion_ratio_max is None and self._connect_time_max_hours is None:
