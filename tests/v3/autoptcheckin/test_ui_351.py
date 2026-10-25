@@ -2,7 +2,7 @@
 from pathlib import Path
 import subprocess
 
-SRC = Path(__file__).parents[3] / 'plugins.v3/autoptcheckin/frontend/src'
+SRC = Path(__file__).parents[3] / 'frontend.v3/autoptcheckin/src'
 
 
 def test_config_expand_collapse_and_batch_confirmation():

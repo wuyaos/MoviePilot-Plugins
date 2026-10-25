@@ -33,6 +33,8 @@ export default defineConfig({
   ],
   build: {
     target: 'esnext',   // 必须设置为esnext以支持顶层await
+    outDir: '../../plugins.v3/hhanclubrescueseed/dist',
+    emptyOutDir: true,
     minify: false,      // 开发阶段建议关闭混淆
     cssCodeSplit: true, // 改为true以便能分离样式文件
   },

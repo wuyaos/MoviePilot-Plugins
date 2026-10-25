@@ -60,32 +60,21 @@ MoviePilot V2「农场自动化 Pro」多站点插件。
 
 ## 前端构建规范
 
-- 禁止在仓库目录 `plugins.v2/farmauto/` 内执行 `npm install`、`npm ci` 或生成 `node_modules/`、锁文件、缓存等构建依赖产物。
-- 前端构建必须在 `/tmp` 下创建临时副本，在副本中安装依赖并执行 `npm run build`。
-- 构建成功后只将临时副本生成的 `dist/` 覆盖回 `plugins.v2/farmauto/dist/`；无论成功或失败，都要清理临时目录。
-- 构建前后检查仓库内不存在 `node_modules/`、意外新增的 `package-lock.json` 或其他安装缓存。
-- `dist/` 是插件运行所需产物；修改 `src/` 后必须同步构建并核对产物包含新文案或逻辑。
+- 前端源码位于 `frontend.v2/farmauto/`；构建依赖可使用源码目录下被 `.gitignore` 忽略的 `node_modules/`，禁止提交依赖和缓存。
+- 构建直接输出到 `plugins.v2/farmauto/dist/`；`distbak/` 保留迁移前备份，禁止手工编辑运行产物。
+- 修改 `frontend.v2/farmauto/src/` 后必须执行构建并核对 `plugins.v2/farmauto/dist/` 包含新文案或逻辑。
 
-推荐命令：
+推荐流程：
 
 ```bash
-tmp=$(mktemp -d /tmp/farmauto-build.XXXXXX)
-trap 'rm -rf "$tmp"' EXIT
-cp -a plugins.v2/farmauto/. "$tmp/"
-(
-  cd "$tmp"
-  npm install --no-save --package-lock=false --ignore-scripts
-  npm run build
-)
-rm -rf plugins.v2/farmauto/dist
-cp -a "$tmp/dist" plugins.v2/farmauto/dist
+cd frontend.v2/farmauto
+npm install --no-save --package-lock=false --ignore-scripts
+npm run build
 ```
-
 ## 校验
 
 ```bash
 find plugins.v2/farmauto -name '*.py' -print0 | xargs -0 -n1 python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())'
 python3 -m pytest plugins.v2/farmauto/tests/ -q
-test ! -e plugins.v2/farmauto/node_modules
 test ! -e plugins.v2/farmauto/package-lock.json
 ```

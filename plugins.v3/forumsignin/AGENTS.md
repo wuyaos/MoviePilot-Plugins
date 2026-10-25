@@ -23,10 +23,10 @@
 2. `ADAPTER` 提供 `credential_spec`、`base`、页面站点提供 `fetch_page`/`submit`/`verifier`；站点凭据字段需使用 flat config key，Cookie/Token 字段标为 `type: password`。
 3. 在 `verifiers/` 实现该站的身份、提交前/后状态和奖励证据解析。页面型站点优先复用 `core/runner.py`：身份绑定、保守预检、提交后无条件回读由核心统一控制。
 4. 只在确有不同认证协议时加专属 adapter；Cookie 型 Discuz 页面实现应复用通用页面签到协议，不能把站点判定分支写入核心 runner。
-5. 给 adapter/verifier 添加无真实凭据的离线合成测试；为 `SITE.fields` 补 UI/API 契约断言。确认 registry 自动发现后再构建 `frontend`。
+5. 给 adapter/verifier 添加无真实凭据的离线合成测试；为 `SITE.fields` 补 UI/API 契约断言。确认 registry 自动发现后再构建 `frontend.v3/forumsignin/`。
 
 ## 前端与验证
 - 配置页为单页滚动布局（基础设置 → 执行调度 → 论坛站点区），站点少不拆 Tab；站点卡与凭据输入由 `/stats` 返回的注册表和 `credential.fields` 驱动；新增站点不得在 Vue 中增加站点 ID 分支。
-- 复用 `frontend/src/preview.css` 的 `--ptc-*` 变量、深浅色和玻璃主题观察器，不添加另一套样式/渲染路径。
-- 构建：`cd plugins.v3/forumsignin/frontend && npm run build`。
+- 复用 `frontend.v3/forumsignin/src/preview.css` 的 `--ptc-*` 变量、深浅色和玻璃主题观察器，不添加另一套样式/渲染路径。
+- 构建：在 `frontend.v3/forumsignin/` 执行 `npm ci --ignore-scripts && npm run build`，直接输出到 `plugins.v3/forumsignin/dist/`；`distbak/` 保留迁移前备份。
 - 离线测试：`PYTHONIOENCODING=utf-8 micromamba run -n base python -m pytest tests/v3/forumsignin`。

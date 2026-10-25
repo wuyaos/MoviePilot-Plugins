@@ -36,6 +36,8 @@ export default defineConfig({
   ],
   build: {
     target: 'esnext',
+    outDir: '../../plugins.v2/farmauto/dist',
+    emptyOutDir: true,
     minify: false,
     cssCodeSplit: true,
   },

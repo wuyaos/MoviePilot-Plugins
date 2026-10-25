@@ -42,7 +42,7 @@
 - `/site_config` 使用既有 flat keys（enabled_sites/sign_sites/login_sites/custom_sites_data 及专属凭据）；与完整 config 同源，get_data/save_data 保存站点子集。
 - UI 执行按钮按站点启用状态、动作选择与能力门控；后端 unlock_all_sites 不自动修改 verified。
 - 仿真由站点声明与 `site_browserless` 名单共同门控；Browserless 云签是仅有的全局服务配置，仅对声明 `human_verify` 的 CF 盾站生效，未配置 token 时回退本地仿真；M-Team 保活登录是独立的真实浏览器登录，不属于仿真签到。
-- 在 `frontend/` 执行 `npm ci --ignore-scripts && npm run build`；同步提交 dist，node_modules 不入库。
+- 在 `frontend.v3/autoptcheckin/` 执行 `npm ci --ignore-scripts && npm run build`，构建直接输出到 `plugins.v3/autoptcheckin/dist/`；`distbak/` 保留迁移前备份，node_modules 不入库。
 - 用宿主页面核验 Tab、条件字段、选移站点、卡片折叠、凭据显隐、证据展开；离线测试不能代替渲染验收。
 
 ### 数据页
@@ -65,7 +65,7 @@
 | 停用 | `off` | `#eef0f3` | `#626b78` |
 - 统计卡、结果徽标、历史状态和图例共用上表，不将未确认合并为失败；能力「可签到」沿用 success，CF 有盾沿用 unknown。
 - 配置和数据视图都不绘制根 card 边框、圆角或阴影，外框交给宿主弹窗。
-- 主题跟随宿主 `html.v-theme--dark` / `html.v-theme--light`（MutationObserver 实时监听）；无宿主主题 class 时回退 `prefers-color-scheme`。颜色变量集中定义于 `frontend/src/preview.css` 的 `--ptc-*` 清单，组件样式不得使用主题硬编码色。
+- 主题跟随宿主 `html.v-theme--dark` / `html.v-theme--light`（MutationObserver 实时监听）；无宿主主题 class 时回退 `prefers-color-scheme`。颜色变量集中定义于 `frontend.v3/autoptcheckin/src/preview.css` 的 `--ptc-*` 清单，组件样式不得使用主题硬编码色。
 
 ### 结果枚举（3.21.0）
 | 值 | 中文 | 产生条件 | 今日四卡归类 |
@@ -123,7 +123,7 @@
 - 轨道状态表（3.35.0）：`save_data("track.state")` 持久化每站×轨道（sign/login）的规范化状态，`core/state_store.py` 唯一实现。四值：success/failed/pending/disabled；映射唯一入口 `normalize(track,status,reason)`——sign 成功族={success,signed}（already 已在 `_record_result` 入口归一为 signed，状态表不出现）、login 成功={login_ok}；门控类 skip（reason ∈ 登记清单）→ disabled(reason)；其余失败族与无记录 → failed/pending；maintenance/network_error/protocol_pending 与未知/空状态 → pending；锁忙 skipped 与 cancelled 只写历史不改表。写入点：`_record_result`（read_only 结果跳过）；`init_plugin`/每轮 `_execute_all` 前全量重算 pending/disabled（`_recompute_track_states`，success/failed 结论保留）；日切（state.time 非今日的 success → pending）；清理缓存联动 `clear_transient`（非禁用→pending）。
 - 双队列执行（3.35.0）：`_execute_all` 先签到后登录串行；队列=启用∧勾选∧状态∈{failed,pending}；单站结果 failed 当场重试 ≤ `retry_count`；收尾把 failed/pending 清单写日志留给下一轮。`skip_signed_today`/`_signed_today`/`_site_tracks`/`_counts`/`_bucket`/`_site_results` 退役：`/stats` 的站点行与三卡统计直接读状态表（字段 sign_state/sign_status/sign_time/sign_message、login_*；latest 按 success/failed/unconfirmed 当日计数）。
 - `/stats` 返回 `latest:{sign:{success,failed,unconfirmed}, login:{...}}` 与 `next_schedule`；`/history` 返回 `{total,items}`。签到 action 的 auth_failed 计入失败卡；maintenance/network_error/protocol_pending 仅保留历史及站点卡，不计入四张统计卡，也不增统计键，避免把未执行当签到失败；保留原始历史状态；空态仅表示实际存储为空。
-- 配置页以 `/sites` 为主数据源；仅在 registry 整包导入失败时使用 `frontend/src/sites.json` 作为静态兜底，不把静态清单当生产主数据源。
+- 配置页以 `/sites` 为主数据源；仅在 registry 整包导入失败时使用 `frontend.v3/autoptcheckin/src/sites.json` 作为静态兜底，不把静态清单当生产主数据源。
 
 ## 执行边界
 - 账号锁忙立即 skipped；站点锁在身份解析前获取，避免首次绑定与后续执行交错。Cookie 按 cookiecloud → managed_site → local_cookie 选择，并按请求 host 与 Cookie domain 边界匹配。

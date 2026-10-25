@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).parents[3] / "plugins.v3" / "forumsignin"
-FRONTEND = ROOT / "frontend"
+FRONTEND = Path(__file__).parents[3] / "frontend.v3" / "forumsignin"
 
 
 def test_remote_contract_and_views():

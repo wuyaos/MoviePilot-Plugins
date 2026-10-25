@@ -10,7 +10,7 @@ PLUGIN = ROOT / "plugins.v3/autoptcheckin"
 
 
 def test_config_numeric_custom_site_ids():
-    source = (PLUGIN / "frontend/src/Config.vue").read_text(encoding="utf-8")
+    source = (ROOT / "frontend.v3/autoptcheckin/src/Config.vue").read_text(encoding="utf-8")
     setup = source.split("<script setup>", 1)[1].split("</script>", 1)[0]
     setup = re.sub(r"^import .*\n", "", setup, flags=re.MULTILINE)
     defaults = json.loads((PLUGIN / "config_defaults.json").read_text(encoding="utf-8"))
@@ -65,6 +65,6 @@ console.log('Config site ID regression: passed');
 """
     result = subprocess.run(
         ["node", "--input-type=module", "-e", harness + "\nconst defaults = " + json.dumps(defaults) + ";\n" + setup + checks],
-        cwd=PLUGIN / "frontend", capture_output=True, text=True, encoding="utf-8", timeout=30,
+        cwd=Path(__file__).parents[3] / "frontend.v3" / "autoptcheckin", capture_output=True, text=True, encoding="utf-8", timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr

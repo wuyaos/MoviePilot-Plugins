@@ -1,4 +1,4 @@
-"""ForumSignin V3 backend skeleton; frontend delivered in the next iteration."""
+"""ForumSignin V3 backend plugin; Vue frontend is maintained under frontend.v3/forumsignin."""
 import asyncio
 import logging
 import json

@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, ref, computed, watch, inject, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { sourceBadge, credentialBadge } from './badges.js'
-import defaults from '../../config_defaults.json'
+import defaults from '../../../plugins.v3/autoptcheckin/config_defaults.json'
 import { watchHostTheme } from './theme.js'
 const props = defineProps({ initialConfig: Object, api: Object, pluginId: {type:String,default:'AutoPtCheckin'} })
 const brokenIcons = ref({})

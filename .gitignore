@@ -208,6 +208,7 @@ Thumbs.db
 node_modules/
 .npm/
 .pnpm-store/
+.frontend-build/
 
 # Python 运行时
 *.egg-info/

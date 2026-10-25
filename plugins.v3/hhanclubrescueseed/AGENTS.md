@@ -19,4 +19,6 @@ MoviePilot V3 插件，站点强耦合 hhanclub.net 憨憨 BT。
 
 ## 前端构建
 
-从 `frontend/` 源码构建，禁止手工编辑 `dist/`。构建前删除 `frontend/dist`，再将同一次构建的完整 7 文件同步到插件根 `dist/assets/`：`remoteEntry.js`、`__federation_fn_import-*.js`、`_plugin-vue_export-helper-*.js`、`__federation_expose_Page-*.js` 及其 CSS、`__federation_expose_Config-*.js` 及其 CSS。不要混入开发壳产物。
+- 从 `frontend.v3/hhanclubrescueseed/` 源码构建，禁止手工编辑 `plugins.v3/hhanclubrescueseed/dist/`。
+- 构建依赖可使用源码目录下被 `.gitignore` 忽略的 `node_modules/`，不入库。
+- 构建直接输出到 `plugins.v3/hhanclubrescueseed/dist/`；`distbak/` 保留迁移前备份，必须使用同一次构建生成的完整产物，不要混入开发壳文件。

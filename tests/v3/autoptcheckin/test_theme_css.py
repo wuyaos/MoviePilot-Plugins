@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).parents[3]
-SRC = ROOT / "plugins.v3" / "autoptcheckin" / "frontend" / "src"
+SRC = ROOT / "frontend.v3" / "autoptcheckin" / "src"
 
 
 def test_theme_css_defines_status_and_surface_tokens():

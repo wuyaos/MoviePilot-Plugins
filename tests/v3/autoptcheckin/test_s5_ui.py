@@ -4,11 +4,12 @@ import importlib
 import sys
 
 PLUGIN = Path(__file__).parents[3] / 'plugins.v3/autoptcheckin'
+FRONTEND = Path(__file__).parents[3] / 'frontend.v3/autoptcheckin'
 sys.path.insert(0, str(PLUGIN.parent))
 
 
 def test_compact_site_management_contract():
-    source = (PLUGIN / 'frontend/src/Config.vue').read_text(encoding='utf8')
+    source = (FRONTEND / 'src/Config.vue').read_text(encoding='utf8')
     assert '筛选已启用站点' in source
     assert 'filteredSelected' in source and 'selectedGroups' not in source
     assert '全部展开' in source and '全部收起' in source
@@ -22,8 +23,8 @@ def test_compact_site_management_contract():
 
 def test_embedded_views_do_not_render_second_frame():
     for name in ('Config', 'Page'):
-        assert 'card embedded-card' in (PLUGIN / f'frontend/src/{name}.vue').read_text(encoding='utf8')
-    css = (PLUGIN / 'frontend/src/preview.css').read_text(encoding='utf8')
+        assert 'card embedded-card' in (FRONTEND / f'src/{name}.vue').read_text(encoding='utf8')
+    css = (FRONTEND / 'src/preview.css').read_text(encoding='utf8')
     assert '.card.embedded-card {border:0; border-radius:0; box-shadow:none;' in css
     assert 'height:36px' in css and 'max-height:68vh; overflow:auto' in css
 
@@ -35,7 +36,7 @@ def test_hdsky_can_emulate_login():
 
 
 def test_data_page_has_live_execution_and_loading():
-    source = (PLUGIN / 'frontend/src/Page.vue').read_text(encoding='utf8')
+    source = (FRONTEND / 'src/Page.vue').read_text(encoding='utf8')
     assert "execute('signin_by_domain',site.id)" in source
     assert "execute('verify_site',site.id)" in source
     assert 'v-if="site.sign_selected && !site.sign_disabled_struct"' in source

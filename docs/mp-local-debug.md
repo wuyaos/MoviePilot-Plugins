@@ -63,7 +63,7 @@ curl -sS -X POST "http://127.0.0.1:17430/api/v1/plugin/reload/AutoPtCheckin" \
   -H "X-API-KEY: $(cat /d/tmp/.mp_local_key)"
 ```
 
-改 `frontend/src` 后先 `npm run build`（产物在插件目录 `frontend/dist/`）再同步插件 `dist/` 部署；只改后端 `.py` 可直接部署 `__init__.py`。
+改 `frontend.v2/<插件>/src` 或 `frontend.v3/<插件>/src` 后，在对应前端目录执行 `npm run build`，产物会直接写入 `plugins.vX/<插件>/dist/`；只改后端 `.py` 可直接部署 `__init__.py`。
 
 **部署形态必须真目录，禁止 junction**：曾用 junction 指回本仓库，MP 恢复同步的 `.resolve()` 解引用后判「非法插件ID」，**junction 时代表例 `hhanclubrescueseed`/`autoptcheckin`/`ForumSignin` 全部装载失败**（日志：`sync.py - 创建插件安装快照失败：非法插件ID`）。统一真目录复制：
 

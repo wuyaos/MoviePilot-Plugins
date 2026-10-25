@@ -5,6 +5,8 @@ MoviePilot V2 自用插件仓库。
 ## 仓库结构
 - `plugins.v2/`: V2 插件目录，每个子目录一个插件
 - `package.v2.json`: 插件元数据登记（name/version/history/level/icon）
+- `frontend.v2/`: V2 插件前端源码目录；按插件名存放已组件化的 Vue 工程
+- `frontend.v3/`: V3 插件前端源码目录；按插件名存放 Vue 联邦组件工程
 - 每个插件目录应有 `AGENTS.md` 描述结构
 
 ## 插件列表
