@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.7"
+    plugin_version = "3.3.8"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -952,13 +952,22 @@ class Hhanclubrescueseed(_PluginBase):
             page_source = ""
         return page_source
 
+    def _fetch_torrents(self, instance, **kwargs) -> list:
+        """统一解包下载器模块 get_torrents 返回值：qb 模块返回 (list, err) 元组，
+        transmission 模块返回裸 list。此前直接迭代元组导致圈定恒 0、记录被误清。"""
+        result = instance.get_torrents(**kwargs)
+        if isinstance(result, tuple):
+            torrents, _err = result
+            return list(torrents or [])
+        return list(result or [])
+
     def _downloader_hashes(self) -> set:
         """获取下载器中全部种子的 hash 集合（小写），不经标签过滤。"""
         service_info = self.downloader_helper.get_service(self._downloader)
         if not service_info or not service_info.instance:
             return set()
         hashes = set()
-        for t in service_info.instance.get_torrents():
+        for t in self._fetch_torrents(service_info.instance):
             h = getattr(t, "hash", None)
             if h:
                 hashes.add(str(h).lower())
@@ -1005,7 +1014,7 @@ class Hhanclubrescueseed(_PluginBase):
 
         try:
             # 应用层复核标签与 hash，不能信任下载器 tags 过滤参数。
-            guard = service_info.instance.get_torrents(ids=torrent_hash, tags=self._custom_tag) or []
+            guard = self._fetch_torrents(service_info.instance, ids=torrent_hash, tags=self._custom_tag)
             expected_hash = str(torrent_hash).lower()
             matched = [t for t in guard if self._torrent_has_managed_tag(t)
                        and str((self._get_torrent_stats(t) or {}).get("hash", "")).lower() == expected_hash]
@@ -1040,7 +1049,7 @@ class Hhanclubrescueseed(_PluginBase):
             if not records:
                 return
             by_hash = {}
-            for torrent in info.instance.get_torrents() or []:
+            for torrent in self._fetch_torrents(info.instance):
                 h = (getattr(torrent, "hash", "") or "").lower()
                 if h:
                     by_hash[h] = torrent
@@ -1083,7 +1092,7 @@ class Hhanclubrescueseed(_PluginBase):
 
             for name, info in infos.items():
                 self._retag_existing(info)
-                torrents = [t for t in info.instance.get_torrents(tags=self._custom_tag) or []
+                torrents = [t for t in self._fetch_torrents(info.instance, tags=self._custom_tag)
                             if self._torrent_has_managed_tag(t)]
                 # 监控任务开头顺带接管：复用本轮已拉取的 scoped torrents，避免重复请求下载器
                 if name == self._downloader:
@@ -1171,7 +1180,7 @@ class Hhanclubrescueseed(_PluginBase):
             return []
         expected = {tag.strip() for tag in str(self._custom_tag).split(",") if tag.strip()}
         result = []
-        for torrent in service.instance.get_torrents(tags=self._custom_tag) or []:
+        for torrent in self._fetch_torrents(service.instance, tags=self._custom_tag):
             stats = self._get_torrent_stats(torrent)
             if stats and expected.intersection(set(stats["tags"])):
                 result.append(torrent)
