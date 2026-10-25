@@ -68,8 +68,8 @@ class AutoPtCheckin(_PluginBase):
         if not preserve_round:
             self.stop_service()
             self._runner.stop.clear()
+        # 全量替换（迁移恢复要求精确回滚）；partial 保护由 _save_config 合并承担。
         self._config = deepcopy(config or {})
-        # 迁移/前端多次确认可能累积重复站点 ID：保序去重，避免队列重复执行。
         for key in ("enabled_sites", "sign_sites", "login_sites", "site_browserless"):
             values = self._config.get(key)
             if isinstance(values, list):
@@ -91,6 +91,12 @@ class AutoPtCheckin(_PluginBase):
         except ImportError:
             timezone = None
         self._scheduler = Scheduler(getattr(self, "get_data", None), getattr(self, "save_data", None), timezone)
+        if not self._config.get("scheduler_enabled", False):
+            try:
+                from app.runtime.log import logger as _mp_logger
+                _mp_logger.warning('【PT 签到中心】调度开关未启用（scheduler_enabled=False），不注册定时服务')
+            except ImportError:
+                pass
 
         store = self._track_store()
         if not store.snapshot()["sites"]:
@@ -179,10 +185,12 @@ class AutoPtCheckin(_PluginBase):
     def _save_config(self, config: dict) -> None:
         with self._migration.lock:
             round_active = self._round_active
-            self.update_config(config)
+            # 合并语义：partial body 不得静默重置既有键（对齐 forumsignin 惯例）。
+            merged = {**deepcopy(getattr(self, "_config", {})), **deepcopy(config or {})}
+            self.update_config(merged)
             if round_active:
                 self._runner.stop.clear()
-            self._init_config(config, preserve_round=round_active)
+            self._init_config(merged, preserve_round=round_active)
             try:
                 from app.sdk.scheduler import update_plugin_job
             except ImportError:

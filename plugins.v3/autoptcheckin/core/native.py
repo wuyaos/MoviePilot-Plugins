@@ -408,7 +408,6 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             for credential in cookie_candidates(site.id, info, custom_cookie, get_data, url):
                 attempted_cookie_sources.append(credential.source)
                 client = NativeHttpClient(credential, info)
-                client = NativeHttpClient(credential, info)
                 client = native_cloak_client(site, client, info, config or {}, shared=getattr(runner, 'shared_cloak', None))
                 try:
                     if site.id == 'yzyy':
@@ -418,7 +417,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
                         result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid, site.credential)
                     persist_cookie_result(result, client, site.id, credential.source, get_data, save_data)
                 finally:
-                    if isinstance(client, CloakHttpClient) and client is not getattr(runner, 'shared_cloak', None):
+                    if isinstance(client, CloakHttpClient):
                         try:
                             client.close()
                         except Exception:

@@ -302,3 +302,47 @@ def test_login_unexpected_error_carries_exception_detail(storage, monkeypatch):
     assert len(result.message) <= 100
     assert result.metadata['cookie_sources'] == ['stored_cookie']
     assert data['cookies.table']['fixture']['updated'] == 'old'
+
+
+def test_login_cloak_client_closed_even_on_close_error(storage, monkeypatch):
+    # 登录路径 finally 资源回收：非共享 CloakHttpClient 必须被关闭，close 抛错不影响结果。
+    runner, data = storage
+    closed = []
+
+    class BrokenClose(native.CloakHttpClient):
+        def __init__(self, http):
+            self.http = http
+            self.shared = False
+
+        def get(self, url, **kwargs):
+            return LoginPage('login_ok', url)
+
+        def close(self):
+            closed.append('attempted')
+            raise RuntimeError('synthetic close failure')
+
+    monkeypatch.setattr(native, 'native_cloak_client', lambda site, http, *args, **kwargs: BrokenClose(http))
+    result = native.run_native_login(runner, login_site(), {'cookie': 'session=managed'})
+    assert result.status == 'login_ok'
+    assert closed == ['attempted']
+
+
+def test_login_shared_cloak_client_not_closed(storage, monkeypatch):
+    # 共享轮次会话（shared=True）归轮次生命周期所有，登录轨不得关闭。
+    runner, data = storage
+    closed = []
+
+    class SharedClient(native.CloakHttpClient):
+        # 不覆盖 close：走真实 close 的 shared 自保分支（shared=True 直接 return）。
+        def __init__(self, http):
+            self.http = http
+            self.shared = True
+            self.session = SimpleNamespace(close=lambda: closed.append('browser-closed'))
+
+        def get(self, url, **kwargs):
+            return LoginPage('login_ok', url)
+
+    monkeypatch.setattr(native, 'native_cloak_client', lambda site, http, *args, **kwargs: SharedClient(http))
+    result = native.run_native_login(runner, login_site(), {'cookie': 'session=managed'})
+    assert result.status == 'login_ok'
+    assert closed == []
