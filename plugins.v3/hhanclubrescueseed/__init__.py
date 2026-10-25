@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.5"
+    plugin_version = "3.3.6"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -365,23 +365,23 @@ class Hhanclubrescueseed(_PluginBase):
             logger.info(f"【憨憨保种区】清理失效下载记录 {removed} 条（剩余 {len(kept)} 条）")
         return Response(success=True, data={"removed": removed, "total": len(kept)})
 
-    def _adopt_torrents(self) -> Response:
-        """API Endpoint: 刷新接管——把下载器中带插件标签但本地无记录的种子入库。
+    def _adopt_missing_records(self, scoped_torrents=None) -> int:
+        """接管入库核心：把下载器中带插件标签但本地无记录的种子写入 download_records。
 
-        入库后参与删除/清理管理；score/download_link 不可回补，显示为空。
+        scoped_torrents 为空时自行调用 _get_scoped_torrents(self._downloader) 拉取；
+        调用方已持有同一下载器的 scoped 种子列表时可传入复用，避免重复请求下载器。
+        不构造 Response；异常自行 log 并返回 0，由调用方决定如何呈现/是否通知。
         """
-        records = self.get_data("download_records") or []
-        known = {str(r.get("torrent_hash") or "").lower() for r in records}
-        known.discard("")
-        adopted = 0
-        now = datetime.datetime.now()
+        if not (self._downloader and self._custom_tag):
+            return 0
         try:
-            if not (self._downloader and self._custom_tag):
-                return Response(success=False, message="未配置下载器或自定义标签")
-            svc = self.downloader_helper.get_service(self._downloader)
-            if not svc or not svc.instance:
-                return Response(success=False, message=f"下载器 {self._downloader} 未连接")
-            for t in self._get_scoped_torrents(self._downloader):
+            torrents = scoped_torrents if scoped_torrents is not None else self._get_scoped_torrents(self._downloader)
+            records = self.get_data("download_records") or []
+            known = {str(r.get("torrent_hash") or "").lower() for r in records}
+            known.discard("")
+            adopted = 0
+            now = datetime.datetime.now()
+            for t in torrents:
                 s = self._get_torrent_stats(t)
                 if not s or not s.get("hash") or s["hash"].lower() in known:
                     continue
@@ -396,11 +396,30 @@ class Hhanclubrescueseed(_PluginBase):
                 })
                 known.add(h)
                 adopted += 1
+            if adopted:
+                self.save_data(key="download_records", value=records[-100:])
+            return adopted
+        except Exception as e:
+            logger.warning(f"接管入库失败: {str(e)}")
+            return 0
+
+    def _adopt_torrents(self) -> Response:
+        """API Endpoint: 刷新接管——把下载器中带插件标签但本地无记录的种子入库。
+
+        入库后参与删除/清理管理；score/download_link 不可回补，显示为空。
+        """
+        if not (self._downloader and self._custom_tag):
+            return Response(success=False, message="未配置下载器或自定义标签")
+        try:
+            svc = self.downloader_helper.get_service(self._downloader)
+            if not svc or not svc.instance:
+                return Response(success=False, message=f"下载器 {self._downloader} 未连接")
+            adopted = self._adopt_missing_records()
         except Exception as e:
             logger.warning(f"刷新接管失败: {str(e)}")
             return Response(success=False, message=f"接管失败：{str(e)}")
+        records = self.get_data("download_records") or []
         if adopted:
-            self.save_data(key="download_records", value=records[-100:])
             logger.info(f"【憨憨保种区】刷新接管：入库 {adopted} 个历史种子（共 {len(records)} 条记录）")
         return Response(success=True, data={"adopted": adopted, "total": len(records)})
 
@@ -624,6 +643,23 @@ class Hhanclubrescueseed(_PluginBase):
             if not self._downloader:
                 logger.error("未配置下载器，无法执行保种任务")
                 return
+            # —— 容量前置：任务开始先算本轮候选上限（本轮固定），避免达上限仍抓取/精筛 ——
+            max_downloading = self._max_downloading or 0
+            download_limit = self._download_limit or 0
+            unfinished = None
+            if max_downloading > 0:
+                try:
+                    scoped = self._get_scoped_torrents(self._downloader)
+                except Exception as exc:
+                    logger.error(f"检查下载器未完成种子数失败，无法计算本轮容量，终止本轮: {exc}")
+                    return
+                unfinished = sum(1 for torrent in scoped if (self._get_torrent_stats(torrent) or {}).get("progress", 1) < 1)
+                available_slots = max(0, max_downloading - unfinished)
+            else:
+                available_slots = math.inf
+            round_capacity = min(available_slots, download_limit) if download_limit > 0 else available_slots
+            if round_capacity <= 0:
+                logger.info(f"【憨憨保种区】本轮容量为0：下载器未完成种子 {unfinished} 个，已达 max_downloading={max_downloading} 上限（download_limit={self._download_limit}），本轮不抓取列表，跳过精筛与下载")
             records = self.get_data("download_records") or []
             candidates = []
             stats = {}
@@ -633,127 +669,127 @@ class Hhanclubrescueseed(_PluginBase):
             failed_count = 0
             success_details = []
             failed_details = []
-            for page in range(self._max_pages):
-                if self._event.is_set():
-                    logger.info("检测到停止事件，终止本轮页面下载")
-                    break
-                url = f"https://{self.domain}/rescue.php?page={page}"
-                logger.info(f"憨憨保种区第{page + 1}页: {url}")
-                source = self._get_page_source(url=url, site=self.site)
-                if not source:
-                    logger.error(f"请求憨憨保种区第{page + 1}页失败")
-                    break
-                html = etree.HTML(source)
-                if html is None:
-                    logger.error(f"憨憨保种区第{page + 1}页页面解析失败")
-                    break
-                elements = html.xpath('//*[@id="mainContent"]/div[1]/div[2]/div[3]/div')
-                logger.info(f"第{page + 1}页数据获取{len(elements)}条数据")
-                if not elements:
-                    break
-                for elem in elements:
+            refined = []
+            if round_capacity > 0:
+                for page in range(self._max_pages):
+                    if self._event.is_set():
+                        logger.info("检测到停止事件，终止本轮页面下载")
+                        break
+                    url = f"https://{self.domain}/rescue.php?page={page}"
+                    logger.info(f"憨憨保种区第{page + 1}页: {url}")
+                    source = self._get_page_source(url=url, site=self.site)
+                    if not source:
+                        logger.error(f"请求憨憨保种区第{page + 1}页失败")
+                        break
+                    html = etree.HTML(source)
+                    if html is None:
+                        logger.error(f"憨憨保种区第{page + 1}页页面解析失败")
+                        break
+                    elements = html.xpath('//*[@id="mainContent"]/div[1]/div[2]/div[3]/div')
+                    logger.info(f"第{page + 1}页数据获取{len(elements)}条数据")
+                    if not elements:
+                        break
+                    for elem in elements:
+                        if self._event.is_set():
+                            break
+                        try:
+                            record = self._prefilter_row(elem, stats)
+                            if record is not None:
+                                candidates.append(record)
+                        except Exception as exc:
+                            logger.error(f"处理列表种子时出错: {exc}")
                     if self._event.is_set():
                         break
-                    try:
-                        record = self._prefilter_row(elem, stats)
-                        if record is not None:
-                            candidates.append(record)
-                    except Exception as exc:
-                        logger.error(f"处理列表种子时出错: {exc}")
-                if self._event.is_set():
-                    break
-            logger.info(f"【憨憨保种区】本轮粗筛淘汰分布: {json.dumps(stats, ensure_ascii=False)}")
-            if not candidates:
-                logger.debug("本轮无粗筛候选")
-            refined = self._refine_by_detail(candidates, budget)
-            for record in refined:
-                record["score"] = round(self._compute_push_score(record), 2)
-            refined.sort(key=lambda r: r.get("score") or 0, reverse=True)
-            if refined:
-                board = ", ".join(f"{r['title'][:24]}={r['score']:.1f}" for r in refined[:20])
-                suffix = f" 等共{len(refined)}个" if len(refined) > 20 else ""
-                logger.info(f"【憨憨保种区】本轮候选得分({self.SCORE_VERSION}): {board}{suffix}")
-            for record in refined:
-                if self._event.is_set():
-                    logger.info("详情精筛后检测到停止事件，终止下载")
-                    break
-                if self._download_limit > 0 and downloaded_count >= self._download_limit:
-                    logger.info(f"已达到单次下载数量限制 ({self._download_limit})，停止下载")
-                    break
-                if self._max_downloading:
-                    try:
-                        scoped = self._get_scoped_torrents(self._downloader)
-                        unfinished = sum(1 for torrent in scoped if (self._get_torrent_stats(torrent) or {}).get("progress", 1) < 1)
-                        if unfinished >= self._max_downloading:
-                            logger.info(f"下载器未完成种子 {unfinished} 个，已达上限 {self._max_downloading}，停止本轮")
-                            break
-                    except Exception as exc:
-                        logger.warning(f"检查未完成种子数失败: {exc}")
-                link = record.get("download_link")
-                if not link:
-                    failed_count += 1
-                    failed_details.append(f"- {record['title'][:30]}（无下载链接）")
-                    continue
-                content, torrent_hash = self._download_torrent(link, self.site)
-                if not content:
-                    failed_count += 1
-                    failed_details.append(f"- {record['title'][:30]}（种子下载失败）")
-                    continue
-                service_info = self.downloader_helper.get_service(self._downloader)
-                if not service_info or not service_info.instance:
-                    logger.error(f"下载器 {self._downloader} 未连接或不可用")
-                    failed_count += 1
-                    failed_details.append(f"- {record['title'][:30]}（下载器不可用）")
-                    continue
-                try:
-                    kwargs = {"content": content, "cookie": self.site.cookie}
-                    if self._save_path:
-                        kwargs["download_dir"] = self._save_path
-                    kwargs = {"content": content, "cookie": self.site.cookie}
-                    if self._save_path:
-                        kwargs["download_dir"] = self._save_path
-                    # 添加前后对下载器做 hash 快照：torrentool 解析的是 v1 infohash，
-                    # v1+v2 混合种子在下载器（libtorrent 2.x）中的真实 hash 可能是 v2，
-                    # 唯一新增的 hash 才是可信的 torrent_hash。
-                    try:
-                        hashes_before = self._downloader_hashes()
-                    except Exception:
-                        hashes_before = set()
-                    logger.debug(f"下载种子参数键: {sorted(kwargs.keys())}")
-                    result = service_info.instance.add_torrent(**kwargs)
-                    result = service_info.instance.add_torrent(**kwargs)
-                    if not result:
+                logger.info(f"【憨憨保种区】本轮粗筛淘汰分布: {json.dumps(stats, ensure_ascii=False)}")
+                if not candidates:
+                    logger.debug("本轮无粗筛候选")
+                refined = self._refine_by_detail(candidates, budget)
+                for record in refined:
+                    record["score"] = round(self._compute_push_score(record), 2)
+                refined.sort(key=lambda r: r.get("score") or 0, reverse=True)
+                if refined:
+                    board = ", ".join(f"{r['title'][:24]}={r['score']:.1f}" for r in refined[:20])
+                    suffix = f" 等共{len(refined)}个" if len(refined) > 20 else ""
+                    logger.info(f"【憨憨保种区】本轮候选得分({self.SCORE_VERSION}): {board}{suffix}")
+                # 只取排序后前 N 个（N=本轮候选上限），上限为无穷时等同原有全量下载
+                download_targets = refined if round_capacity == math.inf else refined[:int(round_capacity)]
+                for record in download_targets:
+                    if self._event.is_set():
+                        logger.info("详情精筛后检测到停止事件，终止下载")
+                        break
+                    if self._download_limit > 0 and downloaded_count >= self._download_limit:
+                        logger.info(f"已达到单次下载数量限制 ({self._download_limit})，停止下载")
+                        break
+                    if self._max_downloading:
+                        try:
+                            scoped = self._get_scoped_torrents(self._downloader)
+                            unfinished = sum(1 for torrent in scoped if (self._get_torrent_stats(torrent) or {}).get("progress", 1) < 1)
+                            if unfinished >= self._max_downloading:
+                                logger.info(f"下载器未完成种子 {unfinished} 个，已达上限 {self._max_downloading}，停止本轮")
+                                break
+                        except Exception as exc:
+                            logger.warning(f"检查未完成种子数失败: {exc}")
+                    link = record.get("download_link")
+                    if not link:
                         failed_count += 1
-                        failed_details.append(f"- {record['title'][:30]}（下载器拒绝）")
-                        logger.error("下载种子失败")
+                        failed_details.append(f"- {record['title'][:30]}（无下载链接）")
                         continue
-                    downloaded_count += 1
-                    success_count += 1
-                    # 差集修正：唯一新增的 hash 才是下载器中的真实 hash（v2 混合种子场景）
+                    content, torrent_hash = self._download_torrent(link, self.site)
+                    if not content:
+                        failed_count += 1
+                        failed_details.append(f"- {record['title'][:30]}（种子下载失败）")
+                        continue
+                    service_info = self.downloader_helper.get_service(self._downloader)
+                    if not service_info or not service_info.instance:
+                        logger.error(f"下载器 {self._downloader} 未连接或不可用")
+                        failed_count += 1
+                        failed_details.append(f"- {record['title'][:30]}（下载器不可用）")
+                        continue
                     try:
-                        new_hashes = self._downloader_hashes() - hashes_before
-                        if len(new_hashes) == 1:
-                            torrent_hash = new_hashes.pop()
-                        elif len(new_hashes) > 1:
-                            logger.warning(f"添加后发现 {len(new_hashes)} 个新种子，无法唯一确定 hash，保留解析值")
+                        kwargs = {"content": content, "cookie": self.site.cookie}
+                        if self._save_path:
+                            kwargs["download_dir"] = self._save_path
+                        # 添加前后对下载器做 hash 快照：torrentool 解析的是 v1 infohash，
+                        # v1+v2 混合种子在下载器（libtorrent 2.x）中的真实 hash 可能是 v2，
+                        # 唯一新增的 hash 才是可信的 torrent_hash。
+                        try:
+                            hashes_before = self._downloader_hashes()
+                        except Exception:
+                            hashes_before = set()
+                        logger.debug(f"下载种子参数键: {sorted(kwargs.keys())}")
+                        result = service_info.instance.add_torrent(**kwargs)
+                        if not result:
+                            failed_count += 1
+                            failed_details.append(f"- {record['title'][:30]}（下载器拒绝）")
+                            logger.error("下载种子失败")
+                            continue
+                        downloaded_count += 1
+                        success_count += 1
+                        # 差集修正：唯一新增的 hash 才是下载器中的真实 hash（v2 混合种子场景）
+                        try:
+                            new_hashes = self._downloader_hashes() - hashes_before
+                            if len(new_hashes) == 1:
+                                torrent_hash = new_hashes.pop()
+                            elif len(new_hashes) > 1:
+                                logger.warning(f"添加后发现 {len(new_hashes)} 个新种子，无法唯一确定 hash，保留解析值")
+                        except Exception as exc:
+                            logger.warning(f"下载器 hash 快照失败，保留解析值: {exc}")
+                        success_details.append(f"{success_count}. [{record.get('score', 0):.1f}分] {record['size']} {record['title'][:30]}")
+                        if self._custom_tag and torrent_hash:
+                            self._add_torrent_tag(service_info, torrent_hash, self._custom_tag)
+                        if self._force_resume and service_info.type == "qbittorrent" and torrent_hash:
+                            service_info.instance.torrents_set_force_start(ids=torrent_hash)
+                        records.append({
+                            "title": record["title"], "zh_title": record["zh_title"], "score": record.get("score"),
+                            "size": record["size"], "seeders": record["seeders"],
+                            "download_link": link, "torrent_hash": torrent_hash,
+                            "download_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        })
+                        self.save_data(key="download_records", value=records[-100:])
                     except Exception as exc:
-                        logger.warning(f"下载器 hash 快照失败，保留解析值: {exc}")
-                    success_details.append(f"{success_count}. [{record.get('score', 0):.1f}分] {record['size']} {record['title'][:30]}")
-                    if self._custom_tag and torrent_hash:
-                        self._add_torrent_tag(service_info, torrent_hash, self._custom_tag)
-                    if self._force_resume and service_info.type == "qbittorrent" and torrent_hash:
-                        service_info.instance.torrents_set_force_start(ids=torrent_hash)
-                    records.append({
-                        "title": record["title"], "zh_title": record["zh_title"], "score": record.get("score"),
-                        "size": record["size"], "seeders": record["seeders"],
-                        "download_link": link, "torrent_hash": torrent_hash,
-                        "download_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    })
-                    self.save_data(key="download_records", value=records[-100:])
-                except Exception as exc:
-                    failed_count += 1
-                    logger.error(f"下载种子失败: {exc}")
-                    failed_details.append(f"- {record.get('title', '?')[:30]}（异常）")
+                        failed_count += 1
+                        logger.error(f"下载种子失败: {exc}")
+                        failed_details.append(f"- {record.get('title', '?')[:30]}（异常）")
             logger.info(f"【憨憨保种区】获取任务完成：精筛通过 {len(refined)} 个，成功下载 {success_count} 个，失败 {failed_count} 个")
             if self._enable_notification:
                 if success_count or failed_count:
@@ -1049,6 +1085,11 @@ class Hhanclubrescueseed(_PluginBase):
                 self._retag_existing(info)
                 torrents = [t for t in info.instance.get_torrents(tags=self._custom_tag) or []
                             if self._torrent_has_managed_tag(t)]
+                # 监控任务开头顺带接管：复用本轮已拉取的 scoped torrents，避免重复请求下载器
+                if name == self._downloader:
+                    adopted = self._adopt_missing_records(scoped_torrents=torrents)
+                    if adopted:
+                        logger.info(f"【憨憨保种区】监控接管：入库 {adopted} 个历史种子")
                 stats = []
                 for t in torrents:
                     s = self._get_torrent_stats(t)
