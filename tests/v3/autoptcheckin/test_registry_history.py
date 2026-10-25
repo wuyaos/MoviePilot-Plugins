@@ -37,7 +37,7 @@ def test_history_persistence_pagination_retention():
     now = datetime(2026, 10, 20, 12, tzinfo=timezone.utc)
     data = {}
     store = HistoryStore(data.get, lambda key, value: data.update({key:value}), clock=lambda:now)
-    for days, status in ((91,'success'),(90,'success'),(1,'failed'),(0,'success'),(0,'signed'),(0,'unconfirmed')):
+    for days, status in ((15,'success'),(14,'success'),(1,'failed'),(0,'success'),(0,'signed'),(0,'unconfirmed')):
         store.append({'time': (now-timedelta(days=days)).isoformat(), 'site':'fixture', 'status':status})
     assert store.list()['total'] == 5
     assert len(store.list(page=2,size=2)['items']) == 2

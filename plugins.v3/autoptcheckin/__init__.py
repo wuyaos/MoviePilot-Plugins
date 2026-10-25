@@ -11,7 +11,7 @@ from .core.models import SignResult, SignStatus
 from .core.registry import managed_site, site_id_for_domain, hostname
 from pathlib import Path
 from copy import deepcopy
-from .core.history import HistoryStore
+from .core.history import HistoryStore, IconCacheDB
 from .core.migration import Migration, MigrationError
 from .core.registry import get_registry, get_native_module
 from .core.native import run_native, run_native_login, run_integration
@@ -35,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.19"
+    plugin_version = "4.0.20"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -53,7 +53,10 @@ class AutoPtCheckin(_PluginBase):
         self._config: dict[str, Any] = {}
         self._site_config: dict[str, Any] = {}
         self._runner = SignRunner(history=self._record_result)
-        self._history = HistoryStore(getattr(self, "get_data", None), getattr(self, "save_data", None))
+        data_dir = getattr(self, "get_data_path", None)
+        db_path = data_dir() / "autoptcheckin.db" if data_dir else None
+        self._history = HistoryStore(getattr(self, "get_data", None), getattr(self, "save_data", None), db_path=db_path)
+        self._icons = IconCacheDB(db_path)
         self._state = None
         self._last_round = []
         self._round_active = False
@@ -64,6 +67,49 @@ class AutoPtCheckin(_PluginBase):
         with self._migration.lock:
             self._init_config(config, preserve_round=self._round_active)
         self._register_commands()
+        self._migrate_local_store()
+
+    def _migrate_local_store(self) -> None:
+        """一次性迁移：宿主 plugindata 的 history/icon JSON 与 V2 时代按日 key → 本地 SQLite。
+
+        幂等：源 key 不存在即跳过；日期 key 候选枚举（宿主无 list API）逐个探删。
+        """
+        if self._icons.get_flag("migrated:localstore"):
+            return
+        get_dp = getattr(self, "get_data_path", None)
+        if not get_dp:
+            return
+        try:
+            migrated = []
+            records = self.get_data("history.records")
+            if records:
+                migrated.append(f"history.records:{self._history.import_json(get_dp() / 'autoptcheckin.db', records)}")
+                self.del_data("history.records")
+            icons = self.get_data("icon.cache")
+            if icons:
+                migrated.append(f"icon.cache:{self._icons.import_json(get_dp() / 'autoptcheckin.db', icons)}")
+                self.del_data("icon.cache")
+            purged = 0
+            for month in range(1, 13):
+                for day in range(1, 32):
+                    key = f"{month}月{day}日"
+                    if self.get_data(key) is not None:
+                        self.del_data(key)
+                        purged += 1
+            self._icons.set_flag("migrated:localstore")
+            if migrated or purged:
+                try:
+                    from app.runtime.log import logger as _mp_logger
+                    _mp_logger.info(f'【PT 签到中心】本地库迁移完成：{", ".join(migrated) or "无"}，清理遗留按日 key {purged} 个')
+                except ImportError:
+                    pass
+        except Exception as exc:  # 迁移失败不阻塞插件启动，下次启动重试
+            try:
+                from app.runtime.log import logger as _mp_logger
+                _mp_logger.warning(f'【PT 签到中心】本地库迁移跳过：{type(exc).__name__}: {exc}')
+            except ImportError:
+                pass
+
     def _init_config(self, config: dict | None = None, preserve_round: bool = False) -> None:
         if not preserve_round:
             self.stop_service()
@@ -250,7 +296,7 @@ class AutoPtCheckin(_PluginBase):
         registry = get_registry(self._config.get('custom_sites_data', []))
         sites = deepcopy(registry["sites"])
         emulate_ids = {str(v) for v in self._config.get('site_browserless', [])}
-        icon_cache = self.get_data("icon.cache") or {} if hasattr(self, "get_data") else {}
+        icon_cache = self._icons.all()
         pending_icons = []
         for site in sites:
             site.setdefault('cf', 'unknown')
@@ -269,12 +315,12 @@ class AutoPtCheckin(_PluginBase):
             def _resolve_batch(cache: dict, pairs: list, plugin):
                 for sid, url in pairs:
                     cache[sid] = plugin._resolve_favicon(url) or ''
-                if hasattr(plugin, "save_data"):
-                    plugin.save_data("icon.cache", cache)
+                plugin._icons.put_many({sid: cache[sid] for sid, _ in pairs})
 
             threading.Thread(target=_resolve_batch, args=(icon_cache, pending_icons, self), daemon=True).start()
             for sid, _ in pending_icons:
                 icon_cache[sid] = ''
+
         return {"success": True, "data": {"sites": sites, "sources": deepcopy(registry["sources"])}}
 
     async def api_stats(self) -> dict:
@@ -313,7 +359,7 @@ class AutoPtCheckin(_PluginBase):
         sign_sel = {str(v) for v in self._config.get('sign_sites', [])}
         login_sel = {str(v) for v in self._config.get('login_sites', [])}
         rows = []
-        icon_cache = self.get_data("icon.cache") or {} if hasattr(self, "get_data") else {}
+        icon_cache = self._icons.all()
         for site in registry:
             sid = str(site['id'])
             # 卡片严格随配置：仅显示启用站点。
