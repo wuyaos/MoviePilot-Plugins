@@ -167,10 +167,11 @@ def test_all_unimplemented_hooks_double_gate(monkeypatch, read_only, verified):
         assert result["metadata"]["reason"] == ("hook_not_implemented" if verified else "native_unverified")
 
 
-def test_new_registry_unverified_and_record_spec_validation():
+def test_new_registry_verification_and_record_spec_validation():
     rows = {r["id"]: r for r in discover_sites()["sites"]}
     for cls in NEW:
-        assert rows[cls.id]["native"] and not rows[cls.id]["verified"]
+        assert rows[cls.id]["native"]
+        assert rows[cls.id]["verified"] is (cls is not PhoenixPT)
     for kwargs in [dict(source="response_json"), dict(source="api_key"),
                    dict(source="response_json", response_field="code", status_map={0.5: "signed"})]:
         with pytest.raises(ValueError):

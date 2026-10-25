@@ -4,6 +4,7 @@ from ...core.sitemodel import RecordSpec
 
 
 class Muxuege(NexusSignin):
+    verified = True
     id = "muxuege"
     name = "慕雪阁"
     url = "https://pt.muxuege.org/"

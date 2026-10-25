@@ -35,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.16"
+    plugin_version = "4.0.17"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -337,6 +337,8 @@ class AutoPtCheckin(_PluginBase):
                 'login_disabled_struct': login.get('state') == DISABLED and login.get('reason') in (
                     'login_not_supported', 'login_not_selected', 'site_disabled'),
                 'can_verify': sid in enabled,
+                'sign_track_available': site.get('signin_applicable') is not False,
+                'login_track_available': site.get('login_capable') is not False,
                 'sign_selected': sid in sign_sel, 'login_selected': sid in login_sel})
         return rows
     async def api_history(self, page: int = 1, size: int = 20) -> dict:

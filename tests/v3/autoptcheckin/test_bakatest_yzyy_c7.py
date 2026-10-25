@@ -185,9 +185,10 @@ def test_c7_inventory_all_b18_ids_are_accounted_for():
     ids = set('chdbits baozi dongying kelu naturept novahd oshen phoenixpt playlet shaobaoyuan soulvoice tu88 vclib lajidui siqi btschool haidan hdarea hdcity hdupt hhanclub nexushd pttime tjupt ttg u2 yzyy darkland digitalcore mteam yema hdchina opencd pterclub zhuque'.split())
     rows = {row['id']: row for row in discover_sites()['sites']}
     assert len(ids) == 35 and ids <= rows.keys()
+    unverified = set('baozi dongying kelu naturept novahd oshen phoenixpt playlet shaobaoyuan soulvoice tu88 vclib haidan hdarea hdcity hdupt hhanclub nexushd'.split())
     for site_id in ids:
         assert rows[site_id]['hook_implemented'] is (site_id != 'mteam')
-        assert rows[site_id]['verified'] is False
+        assert rows[site_id]['verified'] is (site_id not in unverified)
     for site_id in ['darkland', 'digitalcore']:
         assert get_native_module(site_id).signin_capable is False
     site = get_native_module('mteam')

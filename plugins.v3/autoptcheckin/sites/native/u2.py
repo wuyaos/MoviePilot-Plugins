@@ -10,6 +10,7 @@ from ...core.sitemodel import RecordSpec
 
 
 class U2(NexusSignin):
+    verified = True
     id = 'u2'
     name = 'U2'
     url = 'https://u2.dmhy.org/'

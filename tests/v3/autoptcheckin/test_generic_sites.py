@@ -38,7 +38,10 @@ def test_generic_dynamic_registry_and_default_message_chain():
         row = next(row for row in rows if row['id'] == cls.id)
         assert cls.__module__ == generic.__name__
         assert issubclass(cls, NexusSignin)
-        assert row['native'] and not row['verified'] and row['hook_implemented']
+        assert row['native'] and row['hook_implemented']
+        # Dedicated modules override these generic declarations in discovery.
+        assert row['verified'] is (cls.id in {'hdwing', 'ptzone', '52pt', 'yema'})
+        assert cls.verified is False
         assert row['credential']['kind'] == 'cookie'
         if cls.id not in {'haidan', 'audiences', 'discfan', 'ptfans', 'hhanclub'}:
             assert cls().message_spec().message == NexusSignin.DEFAULT_MESSAGE_XPATHS

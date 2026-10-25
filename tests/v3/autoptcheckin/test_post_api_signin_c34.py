@@ -223,10 +223,11 @@ def test_record_spec_bool_exact_type(value, state):
         assert ctx.read_record(LoginPage(json.dumps({'success': value}), site.url), numeric).status == 'unconfirmed'
 
 
-def test_c34_registry_remains_unverified():
+def test_c34_registry_verification_by_site():
     rows = {row['id']: row for row in discover_sites()['sites']}
     for sid in IDS:
-        assert rows[sid]['hook_implemented'] and not rows[sid]['verified']
+        assert rows[sid]['hook_implemented']
+        assert rows[sid]['verified'] is (sid not in {'hdarea', 'nexushd'})
 
 
 def test_native_http_cookie_refresh_json_headers(monkeypatch):

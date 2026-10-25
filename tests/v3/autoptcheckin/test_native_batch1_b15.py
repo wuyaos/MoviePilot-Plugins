@@ -87,10 +87,11 @@ def test_b15_special_pre_read_is_homepage(site_cls):
     assert len(http.calls) == (3 if site_cls is NexusHD else 2)
 
 
-def test_b15_registry_declares_all_unverified():
+def test_b15_registry_declares_verification_by_site():
     rows = {row["id"]: row for row in discover_sites()["sites"]}
     for cls in SITES:
-        assert rows[cls.id]["native"] and not rows[cls.id]["verified"]
+        assert rows[cls.id]["native"]
+        assert rows[cls.id]["verified"] is (cls is OpenCD)
         assert rows[cls.id]["hook_implemented"] is True
 
 
@@ -100,9 +101,8 @@ def test_b15_registry_declares_all_unverified():
 def test_b15_double_gate_before_credentials_or_network(monkeypatch, site_cls, read_only, verified):
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
-    if verified:
-        monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
-            dict(id=site_cls.id, native=True, verified=True, hook_implemented=False)]})
+    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+        dict(id=site_cls.id, native=True, verified=verified, hook_implemented=False)]})
     def forbidden(*args, **kwargs):
         pytest.fail("gate must run before credentials or network resources")
     monkeypatch.setattr(module, "managed_site", forbidden)

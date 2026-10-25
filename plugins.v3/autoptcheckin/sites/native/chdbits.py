@@ -4,6 +4,7 @@ from ...core.sitemodel import RecordSpec
 
 
 class CHDBits(BakatestSignin):
+    verified = True
     id = 'chdbits'
     name = 'CHDBits'
     url = 'https://ptchdbits.co/'

@@ -4,6 +4,7 @@ from ...core.sitemodel import RecordSpec
 
 
 class GtK(NexusSignin):
+    verified = True
     id = "gtk"
     name = "GTK"
     url = "https://t.myaltbox.com/"

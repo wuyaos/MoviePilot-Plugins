@@ -11,6 +11,7 @@ from ...core.sitemodel import RecordSpec, page_available
 
 
 class Yzyy(NexusSignin):
+    verified = True
     id = 'yzyy'
     name = 'yzyy'
     url = 'https://yzyy.org/'

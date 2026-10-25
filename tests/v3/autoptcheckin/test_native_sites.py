@@ -116,13 +116,30 @@ def test_registry_native_overrides_legacy_without_duplicate_ids():
     expected_native = {path.stem for path in (Path(__file__).parents[3] / 'plugins.v3' / 'autoptcheckin' / 'sites' / 'native').glob('*.py') if path.stem != '__init__'}
     from autoptcheckin.sites.native.generic import build_generic_sites
     expected_native.discard('generic')
+    expected_verified = (expected_native - {'pt52'}) | {'52pt'}
     expected_native.update(cls.id for cls in build_generic_sites())
     assert expected_native >= batch1
-    assert all(row['native'] and not row['verified'] for row in result['sites'] if row['id'] in expected_native - {'hdsky', 'haitang'})
-    assert all(row['native'] and not row['verified'] for row in result['sites'] if row['id'] in batch1)
+    assert all(row['native'] and row['verified'] is (row['id'] in expected_verified)
+               for row in result['sites'] if row['id'] in expected_native)
+    assert all(row['native'] and row['verified'] is (row['id'] != 'baozi')
+               for row in result['sites'] if row['id'] in batch1)
     assert all(not row['native'] and not row['verified'] for row in result['sites']
                if row['id'] not in {'hdsky', 'haitang', *expected_native})
     assert sum(row['native'] for row in result['sites']) >= 7
+
+
+def test_discover_sites_repeated_calls_preserve_verification():
+    first = discover_sites()
+    second = discover_sites()
+    assert first == second
+    assert first is not second
+    rows = {row['id']: row for row in first['sites']}
+    for sid in ('btschool', 'hdbao', 'hdchina'):
+        assert rows[sid]['verified'] is True
+    for sid in ('hdcity', 'hdupt', 'hhanclub'):
+        assert rows[sid]['verified'] is False
+    rows['btschool']['verified'] = False
+    assert next(row for row in discover_sites()['sites'] if row['id'] == 'btschool')['verified'] is True
 
 
 def test_native_discovery_default_unverified_and_import_isolation(tmp_path, monkeypatch):

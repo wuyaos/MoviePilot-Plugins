@@ -9,6 +9,7 @@ from ...core.sitemodel import RecordSpec
 
 
 class ZhuQue(ApiSignin):
+    verified = True
     id = 'zhuque'
     name = '朱雀'
     url = 'https://zhuque.in/'

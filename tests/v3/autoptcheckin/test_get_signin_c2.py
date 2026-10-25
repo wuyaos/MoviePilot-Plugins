@@ -154,10 +154,11 @@ def test_c2_marker_class_is_not_text_or_substring():
         assert site.signin(context(site, Http(site, text))).status == 'unconfirmed'
 
 
-def test_c2_registry_still_gated_and_optional_get_referer(monkeypatch):
+def test_c2_registry_verification_and_optional_get_referer(monkeypatch):
     rows = {row['id']: row for row in discover_sites()['sites']}
     for sid in IDS:
-        assert rows[sid]['hook_implemented'] and not rows[sid]['verified']
+        assert rows[sid]['hook_implemented']
+        assert rows[sid]['verified'] is (sid in {'btschool', 'pttime', 'lajidui', 'siqi'})
     client = NativeHttpClient(Credential('managed_site', 'synthetic'), {})
     request = Mock()
     monkeypatch.setattr(client, '_request', request)

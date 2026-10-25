@@ -6,6 +6,7 @@ from ...core.sitemodel import RecordSpec
 
 
 class RetroToon(NexusSignin):
+    verified = True
     id = 'retrotoon'
     name = 'RetroToon'
     url = 'https://retrotoon.world/'

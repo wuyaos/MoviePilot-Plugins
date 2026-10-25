@@ -96,10 +96,11 @@ def test_b13_special_pre_read_and_readback_use_safe_page(site_cls, safe_path):
     assert http.calls[1][1] == urljoin(site.url, site.action_path)
 
 
-def test_b13_registry_declares_all_unverified():
+def test_b13_registry_declares_verification_by_site():
     rows = {row["id"]: row for row in discover_sites()["sites"]}
     for cls in SITES:
-        assert rows[cls.id]["native"] and not rows[cls.id]["verified"]
+        assert rows[cls.id]["native"]
+        assert rows[cls.id]["verified"] is (cls in (HDBao, HDChina))
     for cls in SPECIAL:
         assert rows[cls.id]["hook_implemented"] is True
 
@@ -109,6 +110,8 @@ def test_b13_registry_declares_all_unverified():
 def test_b13_unverified_execution_never_reads_credentials(monkeypatch, site_cls, read_only):
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
+    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+        dict(id=site_cls.id, native=True, verified=False, hook_implemented=True)]})
     def forbidden(*args, **kwargs):
         pytest.fail("gate must run before credentials or network resources")
     monkeypatch.setattr(module, "managed_site", forbidden)

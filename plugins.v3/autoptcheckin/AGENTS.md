@@ -1,6 +1,7 @@
 # PT 签到中心 V3
 
 ## 边界
+- native 模块需 `verified = True` 类属性，否则 recompute 门控标 `DISABLED(native_unverified)`，数据页按钮禁用。
 - 站点由 `sites/native/` 原生声明、generic 声明与 integrations 组成；不接管 `plugins.v2` 入口，默认不激活自动调度。
 - 站点语义（2026-10-23 用户裁决）：zhuque 的 fireGenshinCharacterMagic「释放技能」动作即其签到能力（signin_capable=True，按技能动作回执判定）；vclib 人工验证、52pt 内联滑块均走 CloakBrowser 页面动作签到。
 - 站点规则（2026-10-24）：HDDolby 公告「API 访问不计有效登录；严禁 Cookies/伪造 UA 模拟登录，违者警告或封号」——hddolby 声明 `login_notice`，配置/数据卡显示 ⚠ 徽标（title 全文）提醒用户定期浏览器人工登录，登录轨不强行关闭（用户裁决）。同类站点规则按此先例加 notice 徽标。
@@ -100,6 +101,7 @@
 - 不加入蜂巢、药丸等已由论坛签到插件承接的站点；yzyy 为本插件 V2 原有成员，保留迁移范围。
 
 ## 原生站点契约
+- generic 动态声明仍保持 verified=False；hdcity/hdupt/hhanclub 若要放行，须经用户确认逐站实测后再显式声明 verified=True。
 - 原生站点实现 `SiteModule`，通过类属性声明 `id/name/url/credential/login_capable/cf/record_spec`，仅实现 `signin(ctx)`；`sites/native/` 逐模块发现，导入失败隔离为 `skipped`，不阻断其他站点。
 - `RecordSpec` 默认 page_message，每个 XPath 必须选中唯一消息元素；多选择器遇空值、歧义或无效表达式继续扫描，首个非空文本停止，再按 status_map 声明顺序映射 signed/unsigned（无匹配仍 unconfirmed，不继续找成功词）。NexusSignin 的合成占位声明默认回退消息链，站点可关闭 use_default_message；response_json 仍按 response_field 的精确类型和值匹配。signed_marker 可确认安全前读 already 和提交后新页 success；UID/日期仅展示，不以缺失字段或整页文本补造结论。校准记录见 sites/native/AGENTS.md。
 - `NexusSignin` 提供 attendance 页面 GET、唯一 POST 表单发现、验证码钩子和提交后的无条件新页面 GET 回读；提交响应不能替代回读，超时或异常不得自动重试。

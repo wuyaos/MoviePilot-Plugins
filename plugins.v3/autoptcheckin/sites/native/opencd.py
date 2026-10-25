@@ -10,6 +10,7 @@ from ...core.sitemodel import RecordSpec
 
 
 class OpenCD(ApiSignin):
+    verified = True
     id = 'opencd'
     name = 'OpenCD'
     url = 'https://www.open.cd/'

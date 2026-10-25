@@ -4,6 +4,7 @@ from ...core.sitemodel import RecordSpec
 
 
 class PTerClub(ApiSignin):
+    verified = True
     id = 'pterclub'
     name = 'PTerClub'
     url = 'https://pterclub.net/'

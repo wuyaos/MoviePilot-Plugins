@@ -92,10 +92,11 @@ def test_mteam_three_state_inputs_never_imply_sign_state(message):
     assert site.url == "https://kp.m-team.cc/" and site.login_capable and not site.record_spec.status_map
 
 
-def test_b14_registry_declares_all_unverified():
+def test_b14_registry_declares_verification_by_site():
     rows = {row["id"]: row for row in discover_sites()["sites"]}
     for cls in SITES:
-        assert rows[cls.id]["native"] and not rows[cls.id]["verified"]
+        assert rows[cls.id]["native"]
+        assert rows[cls.id]["verified"] is (cls is not Kelu)
     for cls in SPECIAL:
         assert rows[cls.id]["hook_implemented"] == (cls in (Kelu, LaJiDui))
     assert rows["mteam"]["credential"] == {"kind": "password", "sources": [], "refresh": None}
@@ -106,6 +107,8 @@ def test_b14_registry_declares_all_unverified():
 def test_b14_unverified_execution_never_reads_credentials(monkeypatch, site_cls, read_only):
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
+    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+        dict(id=site_cls.id, native=True, verified=False, hook_implemented=True)]})
     def forbidden(*args, **kwargs):
         pytest.fail("gate must run before credentials or network resources")
     monkeypatch.setattr(module, "managed_site", forbidden)

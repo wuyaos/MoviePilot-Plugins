@@ -408,6 +408,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             for credential in cookie_candidates(site.id, info, custom_cookie, get_data, url):
                 attempted_cookie_sources.append(credential.source)
                 client = NativeHttpClient(credential, info)
+                client = native_cloak_client(site, client, info, config or {}, shared=getattr(runner, 'shared_cloak', None))
                 if site.id == 'yzyy':
                     from ..integrations import yzyy
                     result = yzyy.login(client, {})

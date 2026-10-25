@@ -14,6 +14,7 @@ from ...core.sitemodel import RecordSpec, page_available
 
 
 class Tjupt(NexusSignin):
+    verified = True
     id = 'tjupt'
     name = 'TJUPT'
     url = 'https://www.tjupt.org/'

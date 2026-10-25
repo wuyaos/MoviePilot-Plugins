@@ -7,6 +7,7 @@ from ...core.sitemodel import RecordSpec, page_available
 
 
 class BTSchool(GetSignin):
+    verified = True
     id = 'btschool'
     name = 'BTSchool'
     url = 'https://pt.btschool.club/'

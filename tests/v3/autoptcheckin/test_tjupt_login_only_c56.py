@@ -115,7 +115,7 @@ def test_login_only_gates_before_credentials(monkeypatch, site_id, read_only, ve
     module = importlib.import_module('autoptcheckin')
     plugin = module.AutoPtCheckin()
     row = next(row for row in discover_sites()['sites'] if row['id'] == site_id)
-    assert row['hook_implemented'] and not row['verified']
+    assert row['hook_implemented'] and row['verified']
     monkeypatch.setattr(module, 'get_registry', lambda *a: {'sites': [dict(row, verified=verified)]})
     monkeypatch.setattr(module, 'managed_site', lambda *a: pytest.fail('must not resolve credentials'))
     result = plugin._execute_site(site_id, read_only=read_only)

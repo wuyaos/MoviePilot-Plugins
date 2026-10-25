@@ -4,6 +4,7 @@ from ...core.sitemodel import RecordSpec, SignContext, SiteModule
 
 
 class DarkLand(SiteModule):
+    verified = True
     id = 'darkland'
     name = 'DarkLand'
     url = 'https://darkland.top/'

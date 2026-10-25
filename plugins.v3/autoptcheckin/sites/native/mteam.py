@@ -43,6 +43,7 @@ def _submit_mteam_otp(page):
 
 
 class MTorrent(SiteModule):
+    verified = True
     id = "mteam"
     name = "M-Team"
     url = "https://kp.m-team.cc/"
