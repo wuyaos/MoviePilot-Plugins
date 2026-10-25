@@ -138,6 +138,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+scripts/season_subscribe.config.example.json
 env/
 venv/
 ENV/
