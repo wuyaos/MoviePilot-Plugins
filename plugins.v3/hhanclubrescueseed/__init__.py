@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.6"
+    plugin_version = "3.3.7"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -1041,7 +1041,7 @@ class Hhanclubrescueseed(_PluginBase):
                 return
             by_hash = {}
             for torrent in info.instance.get_torrents() or []:
-                h = (torrent.get("hash") or "").lower()
+                h = (getattr(torrent, "hash", "") or "").lower()
                 if h:
                     by_hash[h] = torrent
             retagged = 0
