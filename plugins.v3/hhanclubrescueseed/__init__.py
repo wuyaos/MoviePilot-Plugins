@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.2"
+    plugin_version = "3.3.3"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -662,7 +662,18 @@ class Hhanclubrescueseed(_PluginBase):
                     kwargs = {"content": content, "cookie": self.site.cookie}
                     if self._save_path:
                         kwargs["download_dir"] = self._save_path
+                    kwargs = {"content": content, "cookie": self.site.cookie}
+                    if self._save_path:
+                        kwargs["download_dir"] = self._save_path
+                    # 添加前后对下载器做 hash 快照：torrentool 解析的是 v1 infohash，
+                    # v1+v2 混合种子在下载器（libtorrent 2.x）中的真实 hash 可能是 v2，
+                    # 唯一新增的 hash 才是可信的 torrent_hash。
+                    try:
+                        hashes_before = self._downloader_hashes()
+                    except Exception:
+                        hashes_before = set()
                     logger.debug(f"下载种子参数键: {sorted(kwargs.keys())}")
+                    result = service_info.instance.add_torrent(**kwargs)
                     result = service_info.instance.add_torrent(**kwargs)
                     if not result:
                         failed_count += 1
@@ -671,6 +682,15 @@ class Hhanclubrescueseed(_PluginBase):
                         continue
                     downloaded_count += 1
                     success_count += 1
+                    # 差集修正：唯一新增的 hash 才是下载器中的真实 hash（v2 混合种子场景）
+                    try:
+                        new_hashes = self._downloader_hashes() - hashes_before
+                        if len(new_hashes) == 1:
+                            torrent_hash = new_hashes.pop()
+                        elif len(new_hashes) > 1:
+                            logger.warning(f"添加后发现 {len(new_hashes)} 个新种子，无法唯一确定 hash，保留解析值")
+                    except Exception as exc:
+                        logger.warning(f"下载器 hash 快照失败，保留解析值: {exc}")
                     success_details.append(f"{success_count}. [{record.get('score', 0):.1f}分] {record['size']} {record['title'][:30]}")
                     if self._custom_tag and torrent_hash:
                         self._add_torrent_tag(service_info, torrent_hash, self._custom_tag)
@@ -848,6 +868,18 @@ class Hhanclubrescueseed(_PluginBase):
         else:
             page_source = ""
         return page_source
+
+    def _downloader_hashes(self) -> set:
+        """获取下载器中全部种子的 hash 集合（小写），不经标签过滤。"""
+        service_info = self.downloader_helper.get_service(self._downloader)
+        if not service_info or not service_info.instance:
+            return set()
+        hashes = set()
+        for t in service_info.instance.get_torrents():
+            h = getattr(t, "hash", None)
+            if h:
+                hashes.add(str(h).lower())
+        return hashes
 
     def _download_torrent(self, url: str, site) -> Tuple[Optional[bytes], Optional[str]]:
         """
@@ -1476,11 +1508,25 @@ class Hhanclubrescueseed(_PluginBase):
                                 download_kwargs = {"content": torrent_content, "cookie": self.site.cookie}
                                 if self._save_path:
                                     download_kwargs["download_dir"] = self._save_path
+                                # v2 混合种子 hash 修正：添加前快照
+                                try:
+                                    hashes_before = self._downloader_hashes()
+                                except Exception:
+                                    hashes_before = set()
                                 logger.debug(f"下载种子参数键: {sorted(download_kwargs.keys())}")
                                 # 下载种子文件
                                 result = service_info.instance.add_torrent(**download_kwargs)
                                 logger.debug(f"下载结果: {result}")
                                 if result:
+                                    # 差集修正：唯一新增的 hash 才是下载器真实 hash
+                                    try:
+                                        new_hashes = self._downloader_hashes() - hashes_before
+                                        if len(new_hashes) == 1:
+                                            torrent_hash = new_hashes.pop()
+                                        elif len(new_hashes) > 1:
+                                            logger.warning(f"添加后发现 {len(new_hashes)} 个新种子，无法唯一确定 hash，保留解析值")
+                                    except Exception as exc:
+                                        logger.warning(f"下载器 hash 快照失败，保留解析值: {exc}")
                                     logger.info(f"成功下载种子: id={torrent_id}")
                                     if self._custom_tag and torrent_hash:
                                         self._add_torrent_tag(service_info, torrent_hash, self._custom_tag)
