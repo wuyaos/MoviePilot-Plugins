@@ -5,7 +5,7 @@ from http.cookies import SimpleCookie
 from uuid import uuid4
 from threading import RLock
 
-from .cloak import native_cloak_client, CloakHttpClient
+from .cloak import native_cloak_client, CloakHttpClient, run_isolated
 from . import cloudsign
 from .credentials import Credential, cookiecloud_candidate
 from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
@@ -131,7 +131,26 @@ def native_context(site, credential, info, lock, cancel):
     return SignContext(site.id, credential, http,
                        page=None, ocr=ocr, site_lock=lock, cancel=cancel, public_get=public_get)
 
+def off_loop(fn):
+    """宿主可能在带事件循环的线程调用执行器；Playwright Sync 拒绝 loop 线程（探测复现）。
 
+    检测到 running loop 时把整个执行体挪进独立线程（playwright 全生命周期同线程，
+    mteam 先例 4.0.14 验证有效）；无 loop 的普通线程直接调用，零开销。
+    """
+    import asyncio
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return fn(*args, **kwargs)
+        return run_isolated(lambda: fn(*args, **kwargs))
+    return wrapper
+
+
+@off_loop
 def run_native(runner, site, info, *, read_only=False, trigger='manual', context_factory=native_context, get_data=None, save_data=None, custom_cookie='', config=None):
     """Same site-level lock as legacy/login; every outcome gets one history entry."""
     try:
@@ -347,7 +366,7 @@ def read_login_twice(fetch_page, site, uid="", credential=None):
     result.account = uid or (result.evidence.uid if result.evidence else '') or ''
     return result
 
-
+@off_loop
 def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', credential_check=None, config=None):
     try:
         from app.runtime.log import logger

@@ -56,3 +56,27 @@ def test_browser_login_launch_error_maps_to_unconfirmed(monkeypatch):
         result = native.run_native_login(runner, site, {"cookie": "session=synthetic"})
     assert result.status == "unconfirmed"
     assert "浏览器登录核验异常" in result.message
+
+
+def test_off_loop_wrapped_login_survives_loop_thread(monkeypatch):
+    # Anthelion qnap 实况：宿主在带 running loop 的线程调用 run_native_login
+    # （@off_loop 包装）→ 自动挪 run_isolated 线程执行，结果正常回传线程边界。
+    from types import SimpleNamespace
+    from autoptcheckin.core import native
+    from autoptcheckin.core.credentials import CredentialSpec
+    from autoptcheckin.core.models import LoginPage, LoginResult, LoginStatus
+    from autoptcheckin.core.runner import SignRunner
+    data = {}
+    runner = SignRunner()
+    runner.get_data = data.get
+    runner.save_data = data.__setitem__
+    site = SimpleNamespace(id='fixture', url='https://fixture.invalid/', credential=CredentialSpec(),
+                           parse_login=lambda *a, **k: LoginResult(LoginStatus.LOGIN_OK))
+    monkeypatch.setattr(native.NativeHttpClient, 'get',
+                        lambda self, url: LoginPage('success', url))
+
+    async def scenario():
+        asyncio.get_running_loop()  # 当前线程确有 running loop（宿主等价环境）
+        return native.run_native_login(runner, site, {'cookie': 'session=managed'})
+
+    assert asyncio.run(scenario()).status == 'login_ok'
