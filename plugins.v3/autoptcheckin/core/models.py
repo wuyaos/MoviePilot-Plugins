@@ -57,7 +57,7 @@ class SignResult:
     @property
     def confirmed(self) -> bool: return self.status in (SignStatus.SUCCESS, SignStatus.ALREADY)
     @classmethod
-    def skipped(cls, message: str = "任务忙，未排队") -> "SignResult": return cls(SignStatus.SKIPPED, message)
+    def skipped(cls, message: str = "该站点正在执行另一个动作，请稍后重试") -> "SignResult": return cls(SignStatus.SKIPPED, message)
 
 @dataclass
 class LoginResult(SignResult):
