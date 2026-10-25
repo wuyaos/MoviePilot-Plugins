@@ -62,12 +62,15 @@ class AutoPtCheckin(_PluginBase):
         self._round_active = False
 
     def init_plugin(self, config: dict | None = None) -> None:
+        # 本地库迁移必须先于 _init_config：track.state 为空/损坏时 _init_config 会
+        # rebuild_from_history 读本地库，若迁移未跑读到空表，已成功站点全部标 pending
+        # 下一轮被重复签到（reviewer fc08b8c1 P1-2）。迁移不依赖 _init_config 产物。
+        self._migrate_local_store()
         # 宿主配置保存走 init_plugin（PluginConfigCommand.update）；在途轮次同样保护，
         # 否则 _init_config 默认的 stop_service 会打断运行中的队列（reviewer 3b24554a P1-2）。
         with self._migration.lock:
             self._init_config(config, preserve_round=self._round_active)
         self._register_commands()
-        self._migrate_local_store()
 
     def _migrate_local_store(self) -> None:
         """一次性迁移：宿主 plugindata 的 history/icon JSON 与 V2 时代按日 key → 本地 SQLite。
@@ -883,6 +886,9 @@ class AutoPtCheckin(_PluginBase):
         self._runner.stop.set()
         if self._scheduler:
             self._scheduler.clear()
+        # 本地库连接不在此关闭（reviewer fc08b8c1 P2，评估后不修）：宿主没有独立的
+        # 卸载钩子，配置保存也走 init_plugin→stop_service，关闭后 append/list 会因
+        # _conn=None 静默失效，惰性重开的复杂度不值；句柄靠 GC 释放无正确性影响。
         try:
             from app.sdk.scheduler import remove_plugin_job
         except ImportError:

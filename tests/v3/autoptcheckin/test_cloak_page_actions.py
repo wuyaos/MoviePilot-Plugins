@@ -89,7 +89,11 @@ def test_human_verify_continues_to_sign_and_stashed_readback(sid, verify, monkey
     def action(session, steps):
         results.extend(real_action(session, steps))
     monkeypatch.setattr(cloak, 'run_page_action', action)
-    http = SimpleNamespace(session=session, get=lambda *a, **k: LoginPage('<main>待签到</main>', page.url, 200))
+    http = SimpleNamespace(
+        session=session,
+        run_page_action=lambda steps: cloak.run_page_action(session, list(steps)),
+        page_snapshot=lambda: (page.content(), page.url),
+        get=lambda *a, **k: LoginPage('<main>待签到</main>', page.url, 200))
     result = site.signin(context(site, http, None))
     expected = {'absent': 'absent', 'token': 'turnstile-ok', 'timeout': 'turnstile-timeout', 'error': 'error'}[verify]
     assert results == [('human_verify', expected), ('sign_button', 'clicked')]
@@ -108,7 +112,12 @@ def test_52pt_attendance_link_waits_for_delayed_slider_then_stashes(navigate, mo
     real_action = cloak.run_page_action
     def action(session, steps): results.extend(real_action(session, steps))
     monkeypatch.setattr(cloak, 'run_page_action', action)
-    http = SimpleNamespace(session=SimpleNamespace(page=page), get=lambda *a, **k: LoginPage('<a href="52bakatestdate.php">签到赚魔力</a>', page.url, 200))
+    session52 = SimpleNamespace(page=page)
+    http = SimpleNamespace(
+        session=session52,
+        run_page_action=lambda steps: cloak.run_page_action(session52, list(steps)),
+        page_snapshot=lambda: (page.content(), page.url),
+        get=lambda *a, **k: LoginPage('<a href="52bakatestdate.php">签到赚魔力</a>', page.url, 200))
     result = site.signin(context(site, http, None))
     assert results == [('attendance_link', 'clicked'), ('slider', 'dragged'), ('sign_button', 'clicked')]
     assert page.waits[:3] == [500, 500, 500]

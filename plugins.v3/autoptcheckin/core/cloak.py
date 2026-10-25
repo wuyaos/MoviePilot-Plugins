@@ -146,11 +146,31 @@ class CloakHttpClient:
             self.session.action_timeout = timeout
             self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
             self.session.__enter__()
-        self._pool.submit(_open).result()
+        try:
+            self._pool.submit(_open).result()
+        except BaseException:
+            # 构造失败时回收 actor 线程，否则每次浏览器启动失败泄漏一个非 daemon 线程
+            # （reviewer 7e8635a6 P2）；playwright 子进程由 CloakSession.__enter__ 自关。
+            self._pool.shutdown(wait=False)
+            raise
 
     def _run(self, fn):
-        """在 actor 线程串行执行并同步等待；异常在调用方线程原样重抛。"""
-        return self._pool.submit(fn).result()
+        """在 actor 线程串行执行并同步等待；异常在调用方线程原样重抛。
+
+        共享会话没有 _pool（生命周期归轮次线程，调用方即创建线程），直行——
+        否则共享客户端 get/post 直接 AttributeError（reviewer 7e8635a6 P1-1）。
+        """
+        pool = getattr(self, "_pool", None)
+        return fn() if pool is None else pool.submit(fn).result()
+
+    def run_page_action(self, steps):
+        """页面动作必须与 session 同线程（playwright greenlet 线程亲和），
+        独立会话经 actor 执行，共享会话经 _run 回退直行（7e8635a6 P1-2）。"""
+        return self._run(lambda: run_page_action(self.session, list(steps)))
+
+    def page_snapshot(self):
+        """动作后落点页快照（content+url），避免调用方线程摸 session.page。"""
+        return self._run(lambda: (self.session.page.content(), self.session.page.url))
 
     def _sync_cookies(self):
         for cookie in self.session.context.cookies(self.url):
@@ -185,7 +205,7 @@ class CloakHttpClient:
                          response.status if response else 0)
 
     def post(self, url, *, data=None, json=None, headers=None, referer=None):
-        return self._run(lambda: self._post_impl(url, data, json, headers, referer))
+        return self._run(lambda: self._post_impl(url, data=data, json=json, headers=headers, referer=referer))
 
     def _post_impl(self, url, *, data=None, json=None, headers=None, referer=None):
         import json as json_module

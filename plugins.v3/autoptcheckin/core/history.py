@@ -33,17 +33,22 @@ class IconCacheDB:
 
     def __init__(self, db_path):
         self._conn = open_local_db(db_path) if db_path else None
+        # 事件循环线程（/sites 读）、favicon 后台线程（put_many 写）、初始化线程（get_flag/
+        # set_flag）三路共用同一 check_same_thread=False 连接，必须串行化
+        # （reviewer fc08b8c1 P1-3：`with conn` 不显式 BEGIN，并发事务互相卷入）。
+        self._lock = RLock()
 
     def all(self) -> dict:
         if not self._conn:
             return {}
-        rows = self._conn.execute("SELECT key, value FROM kv WHERE key LIKE 'icon:%'").fetchall()
+        with self._lock:
+            rows = self._conn.execute("SELECT key, value FROM kv WHERE key LIKE 'icon:%'").fetchall()
         return {key.removeprefix("icon:"): value for key, value in rows}
 
     def put_many(self, mapping: dict) -> None:
         if not self._conn or not mapping:
             return
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.executemany(
                 "INSERT INTO kv (key, value) VALUES (?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -52,34 +57,34 @@ class IconCacheDB:
     def get_flag(self, key: str):
         if not self._conn:
             return None
-        row = self._conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        with self._lock:
+            row = self._conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
         return row[0] if row else None
 
     def set_flag(self, key: str, value: str = "1") -> None:
         if not self._conn:
             return
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 "INSERT INTO kv (key, value) VALUES (?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
 
-    def put_many(self, mapping: dict) -> None:
-        if not self._conn or not mapping:
-            return
-        with self._conn:
-            self._conn.executemany(
-                "INSERT INTO kv (key, value) VALUES (?, ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                [(f"icon:{sid}", value) for sid, value in mapping.items()])
 
     def import_json(self, db_path, cache: dict) -> int:
         """迁移导入旧 icon.cache JSON；返回导入条数。"""
         if not cache:
             return 0
-        if not self._conn:
-            self._conn = open_local_db(db_path)
-        self.put_many({str(sid): value for sid, value in cache.items()})
+        with self._lock:
+            if not self._conn:
+                self._conn = open_local_db(db_path)
+            self.put_many({str(sid): value for sid, value in cache.items()})
         return len(cache)
+
+    def close(self) -> None:
+        with self._lock:
+            if self._conn:
+                self._conn.close()
+                self._conn = None
 
 
 class HistoryStore:
@@ -114,6 +119,10 @@ class HistoryStore:
 
     def import_json(self, db_path, records: list) -> int:
         """迁移导入宿主 history.records JSON；返回导入条数（超出保留期的不导）。"""
+        with self._lock:
+            return self._import_json_locked(db_path, records)
+
+    def _import_json_locked(self, db_path, records: list) -> int:
         if not records:
             return 0
         cutoff = self._clock() - timedelta(days=self.RETENTION_DAYS)
@@ -133,9 +142,10 @@ class HistoryStore:
         return len(fresh)
 
     def close(self):
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        with self._lock:
+            if self._conn:
+                self._conn.close()
+                self._conn = None
 
     # ---- 记录组装（两后端共用） ----
 

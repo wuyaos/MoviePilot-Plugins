@@ -35,11 +35,10 @@ class Pt52(_base):
         return SigninForm(page.url, [])
 
     def submit(self, ctx, form):
-        from ...core.cloak import run_page_action
         from ...core.models import LoginPage
-        page = ctx.http.session.page
         # 内联滑块在 torrents.php 本页；不点击「签到赚魔力」入口（独立页已暂停）。
         steps = list(getattr(self, 'cloak_steps', ()) or ('slider', 'sign_button'))
-        run_page_action(ctx.http.session, steps)
-        # 动作后落点页即回读证据；二次 GET 可能重新拿到门页。
-        ctx.cloak_read = LoginPage(page.content(), page.url, 200)
+        # 页面动作与落点快照经客户端 actor 执行（session 线程亲和，7e8635a6 P1-2）。
+        ctx.http.run_page_action(steps)
+        content, url = ctx.http.page_snapshot()
+        ctx.cloak_read = LoginPage(content, url, 200)

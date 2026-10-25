@@ -167,6 +167,12 @@ def test_cloak_action_readback_prefers_stashed_landing_page(monkeypatch):
 
     class Http:
         session = Session()
+        def run_page_action(self, steps):
+            from autoptcheckin.core import cloak as _cloak
+            return _cloak.run_page_action(self.session, list(steps))
+
+        def page_snapshot(self):
+            return (self.session.page.content(), self.session.page.url)
         def get(self, *args, **kwargs):
             from autoptcheckin.core.models import LoginPage
             return LoginPage('<html>滑动认证 拖动滑块验证</html>', site.url, 200)
@@ -198,6 +204,12 @@ def test_vclib_cloak_human_verify_chain(monkeypatch):
 
     class Http:
         session = Session()
+        def run_page_action(self, steps):
+            from autoptcheckin.core import cloak as _cloak
+            return _cloak.run_page_action(self.session, list(steps))
+
+        def page_snapshot(self):
+            return (self.session.page.content(), self.session.page.url)
         def get(self, *a, **k):
             from autoptcheckin.core.models import LoginPage
             return LoginPage('<main>attendance 表单</main>', site.url + '/attendance.php', 200)
@@ -245,6 +257,13 @@ def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatc
 
         class Http:
             session = Session()
+            def run_page_action(self, steps):
+                from autoptcheckin.core import cloak as _cloak
+                return _cloak.run_page_action(self.session, list(steps))
+
+            def page_snapshot(self):
+                return (self.session.page.content(), self.session.page.url)
+
             def get(self, *args, **kwargs):
                 from autoptcheckin.core.models import LoginPage
                 # torrents 页含「签到赚魔力」入口（入口消失=已签）。

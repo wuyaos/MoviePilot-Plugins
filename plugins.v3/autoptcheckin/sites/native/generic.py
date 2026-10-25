@@ -111,16 +111,15 @@ def build_generic_sites() -> list[type[NexusSignin]]:
                 return SigninForm(urljoin(self.url, self.attendance_path), [])
 
             def submit(self, ctx, form, _steps=tuple(steps)):
-                from ...core.cloak import run_page_action
-                results = run_page_action(ctx.http.session, list(_steps)) or []
+                results = ctx.http.run_page_action(_steps) or []
                 # steps 明细暂存到 ctx，read_after 写进 result.metadata（MP 日志 INFO/WARNING 不落盘，
                 # qnap 诊断唯一可靠通道是 history/响应里的 metadata）。
                 ctx.cloak_steps_result = [list(r) for r in results]
                 # 动作后落点页即回读证据：站点每次进入都可能发新滑块门页，
                 # 二次 GET 会重新拿到门页导致证据丢失（自由农场实证）。
                 from ...core.models import LoginPage
-                page = ctx.http.session.page
-                ctx.cloak_read = LoginPage(page.content(), page.url, 200)
+                content, url = ctx.http.page_snapshot()
+                ctx.cloak_read = LoginPage(content, url, 200)
 
             def read_after(self, ctx, page, _base=base):
                 stashed = getattr(ctx, "cloak_read", None)

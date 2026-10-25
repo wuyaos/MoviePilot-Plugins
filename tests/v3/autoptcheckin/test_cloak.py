@@ -216,3 +216,89 @@ def test_cloak_http_client_actor_reraises_exception_from_browser_thread(monkeypa
         assert 'asyncio loop' in str(exc)
     finally:
         client.close()
+
+
+def test_shared_client_get_post_run_without_pool(monkeypatch):
+    """P1-1 回归：共享客户端没有 _pool，get/post 必须在调用方线程直行而非 AttributeError。"""
+    from types import SimpleNamespace
+    from autoptcheckin.core import cloak
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            self.context = SimpleNamespace(cookies=lambda url: [])
+            self.page = SimpleNamespace(content=lambda: '<html/>', url='https://fixture.invalid/',
+                                        wait_for_timeout=lambda ms: None,
+                                        evaluate=lambda *a, **k: {'text': '<html/>', 'url': 'https://fixture.invalid/', 'status': 200})
+        def __enter__(self): return self
+        def goto(self, url): return SimpleNamespace(status=200)
+        def evaluate(self, *a, **k): return None
+        def close(self): pass
+    monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
+    monkeypatch.setattr(cloak, '_resolve_cloak_proxy', lambda *a, **k: None)
+
+    shared_round = FakeSession()  # 共享分支 self.session = shared 本体（含 goto/page/close）
+    fake_http = SimpleNamespace(cookies={}, get=lambda *a, **k: SimpleNamespace(status_code=200, text='<html/>', url='https://fixture.invalid/'),
+                                post=lambda *a, **k: SimpleNamespace(status_code=200, text='<html/>', url='https://fixture.invalid/'))
+    client = cloak.CloakHttpClient(fake_http, {'url': 'https://fixture.invalid/'},
+                                   SimpleNamespace(id='anthelion', url='https://fixture.invalid/'),
+                                   shared=shared_round)
+    assert getattr(client, '_pool', None) is None, '共享客户端不应创建 actor 线程池'
+    page = client.get('https://fixture.invalid/')   # 回归前这里 AttributeError
+    assert page.status_code == 200
+    client.post('https://fixture.invalid/go', data={'x': '1'})
+    content, url = client.page_snapshot()
+    assert content == '<html/>'
+    client.close()  # 共享分支：不关轮次会话
+    assert client.session is not None
+
+
+def test_actor_run_page_action_and_open_failure_recover_pool(monkeypatch):
+    """P1-2/P2 回归：页面动作经 actor 线程执行；_open 失败回收 actor 线程。"""
+    import threading
+    from types import SimpleNamespace
+    from autoptcheckin.core import cloak
+
+    seen = []
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            self.context = SimpleNamespace(cookies=lambda url: [])
+            self.page = SimpleNamespace(content=lambda: '<html>ok</html>', url='https://fixture.invalid/',
+                                        wait_for_timeout=lambda ms: seen.append(('wait', threading.get_ident())))
+        def __enter__(self): return self
+        def goto(self, url): return SimpleNamespace(status=200)
+        def close(self): pass
+    monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
+    monkeypatch.setattr(cloak, '_resolve_cloak_proxy', lambda *a, **k: None)
+    monkeypatch.setattr(cloak, 'run_page_action', lambda session, steps: seen.append(('action', threading.get_ident())) or [['sign_button', 'clicked']])
+
+    caller = threading.get_ident()
+    client = cloak.CloakHttpClient(SimpleNamespace(cookies={}), {'url': 'https://fixture.invalid/'},
+                                   SimpleNamespace(id='yema', url='https://fixture.invalid/'))
+    try:
+        result = client.run_page_action(['sign_button'])
+        assert result == [['sign_button', 'clicked']]
+        content, url = client.page_snapshot()
+        assert content == '<html>ok</html>'
+        assert seen and {ident for _, ident in seen} == {seen[0][1]}, '动作与快照必须同线程'
+        assert seen[0][1] != caller, '页面动作不得在调用方线程执行'
+    finally:
+        client.close()
+
+    # _open 失败：actor 线程被回收（不泄漏非 daemon 线程）
+    before = threading.active_count()
+
+    class BoomSession:
+        def __init__(self, **kwargs): raise RuntimeError('browser launch failed')
+    monkeypatch.setattr(cloak, 'CloakSession', BoomSession)
+    try:
+        cloak.CloakHttpClient(SimpleNamespace(cookies={}), {'url': 'https://fixture.invalid/'},
+                              SimpleNamespace(id='yema', url='https://fixture.invalid/'))
+        raise AssertionError('应当重抛构造异常')
+    except RuntimeError as exc:
+        assert 'launch failed' in str(exc)
+    import time
+    deadline = time.time() + 2
+    while threading.active_count() > before and time.time() < deadline:
+        time.sleep(0.05)
+    assert threading.active_count() <= before, '构造失败后 actor 线程应被 shutdown 回收'

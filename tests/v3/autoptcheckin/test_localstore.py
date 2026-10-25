@@ -88,3 +88,38 @@ def test_migrate_local_store_moves_host_keys(tmp_path, monkeypatch):
     # 二次调用直接短路（不再删任何 key）
     plugin._migrate_local_store()
     assert deleted.count('history.records') == 1
+
+
+def test_icon_cache_concurrent_access(tmp_path):
+    """P1-3 回归：三线程并发读写同一连接不炸（锁串行化）。"""
+    import threading
+    db = tmp_path / 'autoptcheckin.db'
+    icons = IconCacheDB(db)
+    errors = []
+
+    def writer(n):
+        try:
+            for i in range(50):
+                icons.put_many({f'site{n}-{i}': f'v{n}-{i}'})
+                icons.set_flag(f'flag{n}-{i}')
+                icons.all()
+                icons.get_flag(f'flag{n}-{i}')
+        except Exception as exc:  # sqlite3.ProgrammingError/OperationalError 等
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(n,)) for n in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert len(icons.all()) == 150
+
+
+def test_icon_cache_close_returns_safe_defaults(tmp_path):
+    db = tmp_path / 'autoptcheckin.db'
+    icons = IconCacheDB(db)
+    icons.close()
+    assert icons.get_flag('x') is None and icons.all() == {} and icons.put_many({'a': 'b'}) is None
+    # close 幂等
+    icons.close()
