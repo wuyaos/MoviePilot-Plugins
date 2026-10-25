@@ -721,6 +721,8 @@ class AutoPtCheckin(_PluginBase):
             if not self._config.get("notify"):
                 return
             summary = self._round_summary()
+            if not any(data["executed"] for data in summary.values()):
+                return
             for track, title, text in format_round_notifications(summary):
                 self.post_message(title=title, text=text)
         except Exception:
