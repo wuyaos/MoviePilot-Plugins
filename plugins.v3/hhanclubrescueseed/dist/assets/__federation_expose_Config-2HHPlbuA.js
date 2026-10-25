@@ -41,7 +41,7 @@ const pluginApi = instance?.proxy?.$pluginApi || props.api;
 const defaults = {
   enable: false, run_once: false, history_rescue_enabled: false,
   cron: '*/20 14-15 * * *', monitor_cron: '*/10 * * * *',
-  downloader: null, save_path: null, custom_tag: null, reward_tag: null,
+  downloader: null, save_path: null, custom_tag: '憨憨保种', reward_tag: null,
   reward_hours: 18, enable_notification: false, notify_on_zero_torrents: false,
   force_resume: false, auto_delete_enabled: false, delete_files: true,
   disk_quota_gb: null, stuck_days: 7, seeding_count: '1-3', torrent_size: null,
@@ -818,6 +818,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-5786b929"]]);
+const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-61bd1cc5"]]);
 
 export { ConfigComponent as default };

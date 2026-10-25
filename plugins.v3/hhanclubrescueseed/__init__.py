@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.2.0"
+    plugin_version = "3.2.1"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -69,7 +69,7 @@ class Hhanclubrescueseed(_PluginBase):
     _torrent_size = None
     _download_limit = 5
     _save_path = None
-    _custom_tag = None
+    _custom_tag = "憨憨保种"
     _enable_notification = False
     _notify_on_zero_torrents = False
     _history_rescue_enabled = False
@@ -94,7 +94,7 @@ class Hhanclubrescueseed(_PluginBase):
         defaults = {
             "enable": False, "run_once": False, "history_rescue_enabled": False,
             "cron": "*/20 14-15 * * *", "monitor_cron": "*/10 * * * *",
-            "downloader": None, "save_path": None, "custom_tag": None,
+            "downloader": None, "save_path": None, "custom_tag": "憨憨保种",
             "reward_tag": None, "reward_hours": 18, "enable_notification": False,
             "notify_on_zero_torrents": False, "force_resume": False,
             "auto_delete_enabled": False, "delete_files": True, "disk_quota_gb": None,
