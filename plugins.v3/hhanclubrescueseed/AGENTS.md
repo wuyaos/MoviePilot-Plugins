@@ -15,7 +15,7 @@ MoviePilot V3 插件，站点强耦合 hhanclub.net 憨憨 BT。
 
 `enable` / `run_once` / `history_rescue_enabled` / `cron` / `monitor_cron` / `downloader` / `save_path` / `custom_tag` / `reward_tag` / `reward_hours` / `enable_notification` / `notify_on_zero_torrents` / `force_resume` / `auto_delete_enabled` / `delete_files` / `disk_quota_gb` / `stuck_days` / `seeding_count` / `torrent_size` / `download_limit` / `max_downloading` / `max_pages` / `min_downloaders` / `completion_ratio_max` / `connect_time_max_hours` / `free`。
 
-`user_id` 为内部运行态，不是可写配置；`min_seeders`、`max_torrent_size_gb` 已删除；`all_downloaders` 仅为 API 辅助数据，不是配置键。默认 `monitor_cron` 为 `*/10 * * * *`，缺省 `completion_ratio_max` 为 20，显式清空两个详情阈值表示不启用精筛。
+`user_id` 为内部运行态，不是可写配置；`min_seeders`、`max_torrent_size_gb` 已删除；`all_downloaders` 仅为 API 辅助数据，不是配置键。默认 `custom_tag` 为「憨憨保种」，`monitor_cron` 为 `*/10 * * * *`，缺省 `completion_ratio_max` 为 20，显式清空两个详情阈值表示不启用精筛。
 
 ## 前端构建
 

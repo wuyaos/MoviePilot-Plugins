@@ -29,7 +29,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.2.1"
+    plugin_version = "3.2.2"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -240,23 +240,6 @@ class Hhanclubrescueseed(_PluginBase):
         self._apply_config(config)
 
 
-    @staticmethod
-    def _cfg_float(config: dict, key: str, default=None):
-        """读取 float 配置，空值/非法值回退 default"""
-        try:
-            value = config.get(key)
-            return float(value) if value not in (None, "") else default
-        except (TypeError, ValueError):
-            return default
-
-    @staticmethod
-    def _cfg_int(config: dict, key: str, default=None):
-        """读取 int 配置，空值/非法值回退 default"""
-        try:
-            value = config.get(key)
-            return int(float(value)) if value not in (None, "") else default
-        except (TypeError, ValueError):
-            return default
     @staticmethod
     def get_render_mode() -> Tuple[str, str]:
         """
