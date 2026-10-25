@@ -35,7 +35,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.0.20"
+    plugin_version = "4.1.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -66,11 +66,40 @@ class AutoPtCheckin(_PluginBase):
         # rebuild_from_history 读本地库，若迁移未跑读到空表，已成功站点全部标 pending
         # 下一轮被重复签到（reviewer fc08b8c1 P1-2）。迁移不依赖 _init_config 产物。
         self._migrate_local_store()
+        # 宿主配置中心路径无法在保存前校验（PluginConfigService.update 先持久化再
+        # init，P1-1）：非法调度配置在此拒绝应用并保留现有配置继续运行，宿主存储中
+        # 的非法值由用户在配置页改正；插件不因非法保存进入 invalid_schedule 无任务态。
+        if config:
+            try:
+                self._validate_schedule({**deepcopy(getattr(self, "_config", {}) or {}), **deepcopy(config)})
+            except ValueError as exc:
+                try:
+                    from app.runtime.log import logger as _mp_logger
+                    _mp_logger.warning(f'【PT 签到中心】忽略非法调度配置，保留现有配置运行：{exc}')
+                except ImportError:
+                    pass
+                config = deepcopy(getattr(self, "_config", None))
+        # 宿主配置保存走 init_plugin（PluginConfigCommand.update）；在途轮次同样保护，
+        # 否则 _init_config 默认的 stop_service 会打断运行中的队列（reviewer 3b24554a P1-2）。
+        with self._migration.lock:
+            self._init_config(config, preserve_round=self._round_active)
         # 宿主配置保存走 init_plugin（PluginConfigCommand.update）；在途轮次同样保护，
         # 否则 _init_config 默认的 stop_service 会打断运行中的队列（reviewer 3b24554a P1-2）。
         with self._migration.lock:
             self._init_config(config, preserve_round=self._round_active)
         self._register_commands()
+        # 完整注册同步（4.1.0）：宿主 update_plugin_job 自带「detach 未触发 once →
+        # remove 全部 → 重新注册」（reconcile.py:418-428），任何路径 init 完成后
+        # 宿主任务必须等于当前配置；不在此显式 remove，避免绕过 live once 保留语义。
+        self._sync_jobs()
+
+    def _sync_jobs(self) -> None:
+        """按当前 get_service 重建宿主任务；仅在无宿主调度 SDK（单测/离线）时跳过。"""
+        try:
+            from app.sdk.scheduler import update_plugin_job
+        except ImportError:
+            return
+        update_plugin_job(self.plugin_id)
 
     def _migrate_local_store(self) -> None:
         """一次性迁移：宿主 plugindata 的 history/icon JSON 与 V2 时代按日 key → 本地 SQLite。
@@ -228,7 +257,10 @@ class AutoPtCheckin(_PluginBase):
 
     async def api_save_config(self, config: dict) -> dict:
         """与宿主保存使用同一配置存储；Vue 视图优先 emit save。"""
-        await asyncio.to_thread(self._save_config, config)
+        try:
+            await asyncio.to_thread(self._save_config, config)
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
         return {"success": True, "data": None}
 
     def _save_config(self, config: dict) -> None:
@@ -236,15 +268,33 @@ class AutoPtCheckin(_PluginBase):
             round_active = self._round_active
             # 合并语义：partial body 不得静默重置既有键（对齐 forumsignin 惯例）。
             merged = {**deepcopy(getattr(self, "_config", {})), **deepcopy(config or {})}
+            self._validate_schedule(merged)
             self.update_config(merged)
             if round_active:
                 self._runner.stop.clear()
             self._init_config(merged, preserve_round=round_active)
+            self._sync_jobs()
+
+    @staticmethod
+    def _validate_schedule(config: dict) -> None:
+        """保存前校验调度配置：非法 cron/interval 直接拒绝，避免保存成功但 build 全失败、宿主无任务。"""
+        mode = config.get("cron_mode", "interval")
+        if mode == "cron":
+            from apscheduler.triggers.cron import CronTrigger
+            expr = str(config.get("cron", "")).strip()
             try:
-                from app.sdk.scheduler import update_plugin_job
-            except ImportError:
-                return
-            update_plugin_job(self.plugin_id)
+                CronTrigger.from_crontab(expr)
+            except Exception as exc:
+                raise ValueError(f"cron 表达式非法：{expr!r}（{exc}）") from exc
+            return
+        if mode == "interval":
+            interval = float(config.get("interval_hours", 2))
+            begin, end = int(config.get("begin_hour", 8)), int(config.get("end_hour", 24))
+            import math
+            if not math.isfinite(interval) or interval < 0.5 or not 0 <= begin < end <= 24:
+                raise ValueError("interval 窗口非法：需 interval>=0.5 且 0<=开始<结束<=24")
+            return
+        raise ValueError(f"未知调度模式：{mode!r}")
 
     async def api_site_config(self) -> dict:
         return {"success": True, "data": deepcopy(self._site_config)}
@@ -854,9 +904,7 @@ class AutoPtCheckin(_PluginBase):
             try:
                 self._scheduler.clear()
                 self._scheduler.build(self._config, self._scheduled_signin)
-                if self._scheduler.services:
-                    from app.sdk.scheduler import update_plugin_job
-                    update_plugin_job(self.plugin_id)
+                self._sync_jobs()
             except Exception:
                 pass
 

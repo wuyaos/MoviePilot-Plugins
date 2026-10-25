@@ -150,7 +150,7 @@
 
 ## S7 调度契约
 - `scheduler_enabled` 默认 false，是生产切换门控，不随 S6 的 enabled 迁移；false 时包括 onlyonce 在内均不注册，并打一条 warning 日志。常规服务另需 enabled=true；未激活时 `/stats.next_schedule=null`，`schedule_status` 解释阶段限制。4.0.18 起插件自有配置保存（`_save_config`）做键级合并，partial PUT 不再静默重置未提交键；`init_plugin` 路径仍全量替换（迁移恢复要求精确回滚）。
-- cron 注册 `AutoSignIn / PT 签到中心`；interval 注册 `AutoSignIn.{index} / PT 签到中心 HH:mm`。服务由宿主拥有，不创建插件后台调度器；stop_service 经 SDK remove_plugin_job 清理，配置 API 保存后 update_plugin_job 重建，宿主保存走宿主重建流程。
+- cron 注册 `AutoSignIn / PT 签到中心`；interval 注册 `AutoSignIn.{index} / PT 签到中心 HH:mm`。服务由宿主拥有，不创建插件后台调度器；stop_service 经 SDK remove_plugin_job 清理。4.1.0 起注册完整同步：init_plugin 尾部/配置 API 保存/once 消费后统一 `_sync_jobs()`（单调 update_plugin_job，宿主 reconcile.py:418 自带「detach 未触发 once→remove 全部→重注册」，不显式 remove 以免绕过 live once 保留）；init_plugin 对传入配置先 `_validate_schedule`（cron/interval/mode，含 isfinite），非法拒绝应用并保留现有配置运行（宿主配置中心路径无法在保存前校验，非法值由用户在配置页改正），插件 API 保存路径同样校验并返回 success=false。
 - interval 对齐 V2 `__generate_schedule_crons` + TimerUtils.random_scheduler：次数 max(1, int((end-begin)/interval))，从 begin:00 累加 [max(30,interval*30),interval*60] 随机分钟，最小 interval=0.5，0<=begin<end<=23。schedule_crons/schedule_signature 用 get_data/save_data 保存，signature 相同复用，变化重排；不采用重载重新随机，以免调度漂移。
 - 数据页「立即运行一次」设置 onlyonce 并触发一次性操作；onlyonce 优先只返回 `AutoSignIn.once` DateTrigger（即使 scheduler_enabled=false），且 `_scheduled_once` 消费后直接全量执行，不受 scheduler_enabled/常规运行门控限制；回调先持久化 onlyonce=false 再执行，重载不重复消费。进程在消费写盘后崩溃不自动重试，避免重复签到；失败由人工核验后再决定。
 - 调度与立即运行共用全量 runner 路径、站点选择与账号锁，history 增加 trigger=scheduler/manual；调度不绕过站点门控。next_schedule 从已声明的真实 Trigger 计算，不从展示配置猜测。

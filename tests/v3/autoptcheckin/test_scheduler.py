@@ -141,7 +141,9 @@ def test_stop_and_config_reregistration(monkeypatch):
 def test_invalid_schedule_is_not_registered(overrides):
     p = plugin({**BASE, **overrides})
     assert p.get_service() == []
-    assert asyncio.run(p.api_stats())['data']['schedule_status'] == 'invalid_schedule'
+    # 4.1.0 起 init_plugin 拒绝应用非法调度配置（保留现有配置），不再进入 invalid_schedule 无任务态
+    assert asyncio.run(p.api_stats())['data']['schedule_status'] != 'invalid_schedule'
+    assert p.get_service() == []
 
 
 def test_host_timezone_once():
