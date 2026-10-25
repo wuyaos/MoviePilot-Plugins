@@ -130,22 +130,36 @@ class CloakHttpClient:
                 self.session.context.add_cookies(cookies)
             return
         self.shared = False
+        # Actor 线程：playwright 全生命周期（open/goto/evaluate/close）绑定本专属线程。
+        # 宿主线程池线程可能被 playwright 判定为 loop 污染（4.0.19 单站复现），
+        # 线程检测不可靠——构造即锁死线程身份，调用方线程不再重要。
+        from concurrent.futures import ThreadPoolExecutor
+        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ptc-cloak")
         timeout = int(getattr(site, "slow_timeout", 0) or (60000 if getattr(site, "slow", False) else 30000))
-        self.session = CloakSession(cookie=cookie, url=self.url,
-                                    headless=not (bool(getattr(site, "headful", False)) or
-                                                  site.id in TURNSTILE_HEADFUL_SITES),
-                                    navigation_timeout=timeout,
-                                    proxy=self.proxy or _resolve_cloak_proxy(self.site, self.info))
-        self.session.action_timeout = timeout
-        self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
-        self.session.__enter__()
+
+        def _open():
+            self.session = CloakSession(cookie=cookie, url=self.url,
+                                        headless=not (bool(getattr(site, "headful", False)) or
+                                                      site.id in TURNSTILE_HEADFUL_SITES),
+                                        navigation_timeout=timeout,
+                                        proxy=self.proxy or _resolve_cloak_proxy(self.site, self.info))
+            self.session.action_timeout = timeout
+            self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
+            self.session.__enter__()
+        self._pool.submit(_open).result()
+
+    def _run(self, fn):
+        """在 actor 线程串行执行并同步等待；异常在调用方线程原样重抛。"""
+        return self._pool.submit(fn).result()
 
     def _sync_cookies(self):
         for cookie in self.session.context.cookies(self.url):
             self.http.cookies[cookie["name"]] = cookie["value"]
 
     def get(self, url, *, referer=None):
-        # Piggo may issue its anti-bot cookie only on the site root.  Prime that
+        return self._run(lambda: self._get_impl(url, referer))
+
+    def _get_impl(self, url, referer=None):
         # page before the attendance request; the action page remains the
         # returned page and is still the sole pre-read evidence.
         entry_path = getattr(self.site, "cloak_entry_path", "")
@@ -171,6 +185,9 @@ class CloakHttpClient:
                          response.status if response else 0)
 
     def post(self, url, *, data=None, json=None, headers=None, referer=None):
+        return self._run(lambda: self._post_impl(url, data, json, headers, referer))
+
+    def _post_impl(self, url, *, data=None, json=None, headers=None, referer=None):
         import json as json_module
         body = json_module.dumps(json) if json is not None else urlencode(data or [])
         request_headers = {"Content-Type": "application/json; charset=UTF-8" if json is not None
@@ -189,7 +206,14 @@ class CloakHttpClient:
         # 共享会话生命周期归轮次（_execute_all finally 统一关闭），单站不关。
         if getattr(self, "shared", False):
             return
-        self.session.close()
+        pool = getattr(self, "_pool", None)
+        if not pool:
+            return
+        self._pool = None
+        try:
+            pool.submit(lambda: self.session.close()).result()
+        finally:
+            pool.shutdown(wait=False)
 
 
 def _wait_for_slider_page_exit(page):

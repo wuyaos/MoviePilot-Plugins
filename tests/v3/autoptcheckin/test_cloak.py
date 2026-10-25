@@ -156,3 +156,63 @@ def test_shared_cloak_replaces_candidate_cookies_without_clearing_other_sites():
     cloak.CloakHttpClient(SimpleNamespace(cookies={'old_session': 'rejected'}), {}, site, shared=shared)
     cloak.CloakHttpClient(SimpleNamespace(cookies={'new_session': 'candidate'}), {}, site, shared=shared)
     assert {row['name'] for row in context.jar} == {'unrelated', 'new_session'}
+
+
+def test_cloak_http_client_actor_binds_browser_to_dedicated_thread(monkeypatch):
+    """独立会话的 playwright 操作全部在专属 actor 线程执行，调用方线程身份无关。"""
+    import threading
+    from types import SimpleNamespace
+    from autoptcheckin.core import cloak
+
+    seen_threads = []
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            seen_threads.append(('open', threading.get_ident()))
+            self.closed = False
+            self.context = SimpleNamespace(cookies=lambda url: [])
+            self.page = SimpleNamespace(content=lambda: '<html/>', url='https://fixture.invalid/',
+                                         wait_for_timeout=lambda ms: seen_threads.append(('wait', threading.get_ident())))
+        def __enter__(self): return self
+        def goto(self, url):
+            seen_threads.append(('goto', threading.get_ident()))
+            return SimpleNamespace(status=200)
+        def close(self):
+            seen_threads.append(('close', threading.get_ident()))
+            self.closed = True
+    fake_context = SimpleNamespace(cookies=lambda url: [])
+    monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
+    monkeypatch.setattr(cloak, '_resolve_cloak_proxy', lambda *a, **k: None)
+
+    caller = threading.get_ident()
+    client = cloak.CloakHttpClient(SimpleNamespace(cookies={}), {'url': 'https://fixture.invalid/'},
+                                   SimpleNamespace(id='anthelion', url='https://fixture.invalid/'))
+    page = client.get('https://fixture.invalid/')
+    client.close()
+    assert page.status_code == 200 and client.session.closed
+    browser_ops = [ident for op, ident in seen_threads]
+    assert browser_ops and set(browser_ops) == {browser_ops[0]}, '所有浏览器操作必须同一线程'
+    assert browser_ops[0] != caller, '浏览器操作不得在调用方线程执行'
+
+
+def test_cloak_http_client_actor_reraises_exception_from_browser_thread(monkeypatch):
+    """actor 线程内的异常在调用方线程原样重抛（类型与消息保留）。"""
+    from types import SimpleNamespace
+    from autoptcheckin.core import cloak
+
+    class FakeSession:
+        def __init__(self, **kwargs): self.page = SimpleNamespace(content=lambda: '', url='', wait_for_timeout=lambda ms: None)
+        def __enter__(self): return self
+        def goto(self, url): raise RuntimeError('It looks like you are using Playwright Sync API inside the asyncio loop')
+        def close(self): pass
+    monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
+    monkeypatch.setattr(cloak, '_resolve_cloak_proxy', lambda *a, **k: None)
+    client = cloak.CloakHttpClient(SimpleNamespace(cookies={}), {'url': 'https://fixture.invalid/'},
+                                   SimpleNamespace(id='anthelion', url='https://fixture.invalid/'))
+    try:
+        client.get('https://fixture.invalid/')
+        raise AssertionError('应当重抛异常')
+    except RuntimeError as exc:
+        assert 'asyncio loop' in str(exc)
+    finally:
+        client.close()
