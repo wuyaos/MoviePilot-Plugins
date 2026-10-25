@@ -1,5 +1,6 @@
 import re
 import json
+import math
 import datetime
 import threading
 import traceback
@@ -30,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.2.8"
+    plugin_version = "3.3.0"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -88,6 +89,14 @@ class Hhanclubrescueseed(_PluginBase):
     _auto_delete_enabled = False
     _delete_files = True
     _max_downloading = 3
+    # 推送评分常数（SCORE_VERSION=v1；改动需发版并同步文档）
+    SCORE_VERSION = "v1"
+    SCORE_SIZE_WEIGHT = 50.0       # 体积分满分（300GB 封顶）
+    SCORE_DEMAND_WEIGHT = 40.0     # 需求分满分（人数热度×剩余比例）
+    SCORE_SCARCITY_WEIGHT = 10.0   # 稀缺分满分（10/做种数）
+    SCORE_SIZE_CAP_GB = 300.0      # 体积分封顶体积
+    SCORE_LEECHER_CAP = 20         # 下载人数热度封顶（站点典型范围 0-20）
+    SCORE_UNKNOWN_REMAINING = 0.5  # 完成率未知时的中性剩余比例
 
     def _normalize_config(self, config: dict) -> dict:
         """Normalize the 26 persisted keys without retaining stale instance values."""
@@ -520,6 +529,8 @@ class Hhanclubrescueseed(_PluginBase):
             downloaded_count = 0
             success_count = 0
             failed_count = 0
+            success_details = []
+            failed_details = []
             for page in range(self._max_pages):
                 if self._event.is_set():
                     logger.info("检测到停止事件，终止本轮页面下载")
@@ -554,6 +565,13 @@ class Hhanclubrescueseed(_PluginBase):
                 logger.debug("本轮无粗筛候选")
             refined = self._refine_by_detail(candidates, budget)
             for record in refined:
+                record["score"] = round(self._compute_push_score(record), 2)
+            refined.sort(key=lambda r: r.get("score") or 0, reverse=True)
+            if refined:
+                board = ", ".join(f"{r['title'][:24]}={r['score']:.1f}" for r in refined[:20])
+                suffix = f" 等共{len(refined)}个" if len(refined) > 20 else ""
+                logger.info(f"【憨憨保种区】本轮候选得分({self.SCORE_VERSION}): {board}{suffix}")
+            for record in refined:
                 if self._event.is_set():
                     logger.info("详情精筛后检测到停止事件，终止下载")
                     break
@@ -573,14 +591,17 @@ class Hhanclubrescueseed(_PluginBase):
                 if not link:
                     failed_count += 1
                     continue
+                    failed_details.append(f"- {record['title'][:30]}（无下载链接）")
                 content, torrent_hash = self._download_torrent(link, self.site)
                 if not content:
                     failed_count += 1
+                    failed_details.append(f"- {record['title'][:30]}（种子下载失败）")
                     continue
                 service_info = self.downloader_helper.get_service(self._downloader)
                 if not service_info or not service_info.instance:
                     logger.error(f"下载器 {self._downloader} 未连接或不可用")
                     failed_count += 1
+                    failed_details.append(f"- {record['title'][:30]}（下载器不可用）")
                     continue
                 try:
                     kwargs = {"content": content, "cookie": self.site.cookie}
@@ -590,16 +611,18 @@ class Hhanclubrescueseed(_PluginBase):
                     result = service_info.instance.add_torrent(**kwargs)
                     if not result:
                         failed_count += 1
+                        failed_details.append(f"- {record['title'][:30]}（下载器拒绝）")
                         logger.error("下载种子失败")
                         continue
                     downloaded_count += 1
                     success_count += 1
+                    success_details.append(f"{success_count}. [{record.get('score', 0):.1f}分] {record['size']} {record['title'][:30]}")
                     if self._custom_tag and torrent_hash:
                         self._add_torrent_tag(service_info, torrent_hash, self._custom_tag)
                     if self._force_resume and service_info.type == "qbittorrent" and torrent_hash:
                         service_info.instance.torrents_set_force_start(ids=torrent_hash)
                     records.append({
-                        "title": record["title"], "zh_title": record["zh_title"],
+                        "title": record["title"], "zh_title": record["zh_title"], "score": record.get("score"),
                         "size": record["size"], "seeders": record["seeders"],
                         "download_link": link, "torrent_hash": torrent_hash,
                         "download_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -608,12 +631,17 @@ class Hhanclubrescueseed(_PluginBase):
                 except Exception as exc:
                     failed_count += 1
                     logger.error(f"下载种子失败: {exc}")
+                    failed_details.append(f"- {record.get('title', '?')[:30]}（异常）")
             logger.info(f"【憨憨保种区】获取任务完成：精筛通过 {len(refined)} 个，成功下载 {success_count} 个，失败 {failed_count} 个")
             if self._enable_notification:
-                if success_count:
+                if success_count or failed_count:
                     text = f"本轮成功拯救 {success_count} 个种子"
                     if failed_count:
                         text += f"，失败 {failed_count} 个"
+                    if success_details:
+                        text += "\n\n✅ 成功明细:\n" + self._fmt_details(success_details)
+                    if failed_details:
+                        text += "\n\n❌ 失败明细:\n" + self._fmt_details(failed_details)
                     self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text=text)
                 elif failed_count:
                     self.post_message(mtype=NotificationType.Plugin, title="【憨憨保种区获取】", text=f"本轮下载全部失败（{failed_count} 个），请检查站点与下载器状态")
@@ -675,6 +703,7 @@ class Hhanclubrescueseed(_PluginBase):
                     if len(peers) < count:
                         logger.debug("详情数据可能 partial: id=%s returned=%s count=%s", candidate.get("torrent_id"), len(peers), count)
                     bad = False
+                    complete_values = []
                     for peer in peers:
                         if self._completion_ratio_max is not None:
                             raw_complete = peer.get("complete") if isinstance(peer, dict) else None
@@ -686,6 +715,14 @@ class Hhanclubrescueseed(_PluginBase):
                                 break
                             if complete >= self._completion_ratio_max:
                                 bad = True
+                            complete_values.append(complete)
+                        else:
+                            # 未启用精筛阈值时也收集完成率，供评分使用；解析失败不影响准入
+                            _raw = peer.get("complete") if isinstance(peer, dict) else None
+                            try:
+                                complete_values.append(float(str(_raw).strip().rstrip("%")))
+                            except (TypeError, ValueError):
+                                pass
                         if self._connect_time_max_hours is not None:
                             raw_connected = peer.get("connected") if isinstance(peer, dict) else None
                             text = str(raw_connected or "").strip()
@@ -703,7 +740,10 @@ class Hhanclubrescueseed(_PluginBase):
                             if hours >= self._connect_time_max_hours:
                                 bad = True
                     else:
-                        result = ("reject" if bad else "pass", None)
+                        ratio = None
+                        if complete_values and len(peers) >= count:
+                            ratio = sum(complete_values) / len(complete_values) / 100.0
+                        result = ("reject" if bad else "pass", ratio)
                     if result and result[0] == "unknown":
                         break
                 except Exception as exc:
@@ -713,6 +753,7 @@ class Hhanclubrescueseed(_PluginBase):
             if not result or result[0] == "unknown":
                 unknown_ids.append(str(candidate.get("torrent_id")))
             elif result[0] == "pass":
+                candidate["completion_ratio"] = result[1]
                 passed.append(candidate)
         if unknown_ids or structure_ids:
             ids = (unknown_ids + structure_ids)[:5]
@@ -1051,6 +1092,42 @@ class Hhanclubrescueseed(_PluginBase):
             logger.warning(f"添加标签失败 (hash: {torrent_hash}, tag: {tag}): {str(e)}")
             return False
 
+    def _compute_push_score(self, record: dict) -> float:
+        """推送评分 v1：体积分(50) + 需求分(40) + 稀缺分(10)。
+
+        量纲按站点经验校准：下载人数典型范围 0-20（SCORE_LEECHER_CAP 封顶），
+        300GB 与 0.7GB 的体积分差(约 45 分)与需求+稀缺满分(50 分)接近，
+        极端满热度小体积可逼近大体积；需求可反转 40 分以内的体积差(如 30GB vs 300GB)。
+        """
+        size_gb = record.get("size_gb")
+        if size_gb is None:
+            size_gb = self._parse_size_to_gb(record.get("size"))
+        if size_gb is not None:
+            size_score = self.SCORE_SIZE_WEIGHT * math.log2(1 + min(size_gb, self.SCORE_SIZE_CAP_GB)) / math.log2(1 + self.SCORE_SIZE_CAP_GB)
+        else:
+            size_score = 0.0
+        remaining = record.get("completion_ratio")
+        remaining = (1.0 - remaining) if remaining is not None else self.SCORE_UNKNOWN_REMAINING
+        leechers = record.get("leechers")
+        if isinstance(leechers, (int, float)) and leechers >= 0:
+            heat = math.log2(1 + min(leechers, self.SCORE_LEECHER_CAP)) / math.log2(1 + self.SCORE_LEECHER_CAP)
+            demand_score = self.SCORE_DEMAND_WEIGHT * heat * remaining
+        else:
+            demand_score = 0.0
+        try:
+            seeders = int(str(record.get("seeders") or 0))
+        except ValueError:
+            seeders = 0
+        scarcity_score = self.SCORE_SCARCITY_WEIGHT / max(1, seeders)
+        return size_score + demand_score + scarcity_score
+
+    @staticmethod
+    def _fmt_details(lines: List[str], limit: int = 10) -> str:
+        """通知明细列表：超 limit 条折叠为摘要行。"""
+        text = "\n".join(lines[:limit])
+        if len(lines) > limit:
+            text += f"\n...等 {len(lines)} 条"
+        return text
     def _prefilter_row(self, elem, stats=None) -> dict | None:
         """List-only coarse filter. Peer thresholds are handled by _refine_by_detail."""
         def bump(key):
@@ -1109,6 +1186,7 @@ class Hhanclubrescueseed(_PluginBase):
             "title": title_nodes[0].text.strip() if title_nodes and title_nodes[0].text else "未知标题",
             "zh_title": zh_nodes[0].text.strip() if zh_nodes and zh_nodes[0].text else "无中文标题",
             "size": size_text or "未知大小",
+            "size_gb": self._parse_size_to_gb(size_text) if size_text else None,
             "seeders": str(seeders),
             "leechers": leechers,
             "torrent_id": match.group(1) if match else None,

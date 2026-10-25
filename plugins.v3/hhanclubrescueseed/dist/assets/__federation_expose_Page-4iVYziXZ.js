@@ -40,6 +40,7 @@ const error = ref('');
 const headers = [
   { title: '名称', key: 'title', minWidth: '260px' },
   { title: '体积', key: 'size', width: '120px' },
+  { title: '得分', key: 'score', width: '90px' },
   { title: '下载时间', key: 'added_on', width: '170px' },
   { title: '做种时长', key: 'seeding_time', width: '130px' },
   { title: '状态', key: 'status', width: '120px' },
@@ -349,12 +350,13 @@ return (_ctx, _cache) => {
           _cache[16] || (_cache[16] = _createElementVNode("div", { class: "table-heading" }, [
             _createElementVNode("div", null, [
               _createElementVNode("h2", null, "下载记录"),
-              _createElementVNode("p", null, "名称、体积和下载时间来自本地记录，状态数据按记录字段展示。")
+              _createElementVNode("p", null, "名称、体积和下载时间来自本地记录，状态数据按记录字段展示。得分为推送评分（体积50+需求40+稀缺10，人数热度 20 封顶），旧记录无得分显示 —。")
             ])
           ], -1)),
           (records.value.length)
             ? (_openBlock(), _createBlock(_component_v_data_table, {
                 key: 2,
+                height: "520",
                 headers: headers,
                 items: records.value,
                 "item-value": "title",
@@ -371,6 +373,9 @@ return (_ctx, _cache) => {
                 ]),
                 "item.size": _withCtx(({ item }) => [
                   _createTextVNode(_toDisplayString(formatSize(item.size)), 1)
+                ]),
+                "item.score": _withCtx(({ item }) => [
+                  _createTextVNode(_toDisplayString(item.score != null ? item.score.toFixed(1) : '—'), 1)
                 ]),
                 "item.added_on": _withCtx(({ item }) => [
                   _createTextVNode(_toDisplayString(formatAddedOn(item)), 1)
@@ -426,6 +431,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-9f6aeef3"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-d9bad696"]]);
 
 export { PageComponent as default };

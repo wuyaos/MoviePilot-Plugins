@@ -19,6 +19,7 @@ const error = ref('')
 const headers = [
   { title: '名称', key: 'title', minWidth: '260px' },
   { title: '体积', key: 'size', width: '120px' },
+  { title: '得分', key: 'score', width: '90px' },
   { title: '下载时间', key: 'added_on', width: '170px' },
   { title: '做种时长', key: 'seeding_time', width: '130px' },
   { title: '状态', key: 'status', width: '120px' },
@@ -168,10 +169,11 @@ onMounted(refreshData)
         <v-col cols="12" sm="6" md="3"><v-card class="stat-card" variant="tonal"><div class="stat-label">下载记录数</div><div class="stat-value">{{ records.length }}<small> 条</small></div><div class="stat-meta">本地保存的记录</div></v-card></v-col>
       </v-row>
 
-      <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。</p></div></div>
-      <v-data-table v-if="records.length" :headers="headers" :items="records" item-value="title" class="records-table" :items-per-page="10">
+      <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。得分为推送评分（体积50+需求40+稀缺10，人数热度 20 封顶），旧记录无得分显示 —。</p></div></div>
+      <v-data-table v-if="records.length" height="520" :headers="headers" :items="records" item-value="title" class="records-table" :items-per-page="10">
         <template #item.title="{ item }"><div class="title-cell"><strong>{{ item.title || '-' }}</strong><span v-if="item.zh_title">{{ item.zh_title }}</span></div></template>
         <template #item.size="{ item }">{{ formatSize(item.size) }}</template>
+        <template #item.score="{ item }">{{ item.score != null ? item.score.toFixed(1) : '—' }}</template>
         <template #item.added_on="{ item }">{{ formatAddedOn(item) }}</template>
         <template #item.seeding_time="{ item }">{{ formatSeedingTime(valueOf(item, 'seeding_time', 'seeding_time_hours')) }}</template>
         <template #item.status="{ item }"><v-chip size="small" :color="statusColor(item.status)" label>{{ statusText(item.status) }}</v-chip></template>

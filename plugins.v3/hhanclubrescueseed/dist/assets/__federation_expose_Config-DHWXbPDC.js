@@ -115,7 +115,6 @@ async function saveConfig() {
     const payload = projectConfig();
     savedForm.value = { ...form };
     emit('save', JSON.parse(JSON.stringify(payload)));
-    notify('success', '配置已保存');
   } catch (err) {
     error.value = err.message || '保存配置失败';
     notify('error', error.value);
@@ -818,6 +817,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-a46139a1"]]);
+const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-23d33957"]]);
 
 export { ConfigComponent as default };
