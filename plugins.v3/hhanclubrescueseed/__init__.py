@@ -30,7 +30,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.2.6"
+    plugin_version = "3.2.7"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -549,8 +549,7 @@ class Hhanclubrescueseed(_PluginBase):
                         logger.error(f"处理列表种子时出错: {exc}")
                 if self._event.is_set():
                     break
-            if stats:
-                logger.info(f"【憨憨保种区】本轮粗筛淘汰分布: {json.dumps(stats, ensure_ascii=False)}")
+            logger.info(f"【憨憨保种区】本轮粗筛淘汰分布: {json.dumps(stats, ensure_ascii=False)}")
             if not candidates:
                 logger.debug("本轮无粗筛候选")
             refined = self._refine_by_detail(candidates, budget)
