@@ -109,7 +109,7 @@
 - native 站点签到/只读核验走原生模块，登录使用独立登录路径；custom 与 integrations 各走专属执行器。unlock_all_sites 默认 false，仅影响 native verified/hook 门控；不绕过启用、动作选择、凭据与站点锁。DarkLand/DigitalCore 签到不适用；M-Team 不提供签到。signin_applicable 是 registry 展示适用性，后端仍执行对应能力检查。
 
 ### 仿真通道（CloakBrowser）
-- 仿真名单（`site_browserless`）：ourbits、audiences、hdkyl、mua_xloli、pt_0ff、vclib、yema、52pt、piggo、kamept；生效条件为站点声明且 ID 在名单中，无全局开关。native 与 custom 仿真使用 CloakBrowser，结果 `transport=cloak`。一般模拟登录不走仿真；M-Team 保活登录是专门的真实浏览器账密登录例外，不执行签到。
+- 仿真名单（`site_browserless`）：audiences、hdkyl、mua_xloli、pt_0ff、vclib、ourbits、piggo、52pt、yema、anthelion；生效条件为站点声明且 ID 在名单中，无全局开关。native 与 custom 签到仿真使用 CloakBrowser，结果 `transport=cloak`。native 模拟登录按站点声明与名单同样走仿真（4.0.17）；custom 模拟登录不走仿真；M-Team 保活登录是专门的真实浏览器账密登录例外，不执行签到。
 - 复用 Nexus 前读→动作→无条件回读，结论一律来自回读证据。Cookie 双向同步仅限本次执行；不得重放动作。页面动作后的落点页 stash 即为回读证据；站点每次进入可能发放新的滑块门页，不能用二次 GET 替代动作回读。
 - **页面动作站（`cloak_steps`）**：pt_0ff=[slider,sign_button]（滑块有时不出现，出现才拖动）、52pt=[slider,sign_button]、yema=[altcha,sign_button]（ALTCHA 方框勾选→PoW 验证通过（文案「已验证/Verified」）→点「立即签到」，# /user/growth，slow 90s）、vclib=[human_verify,sign_button]（Cloudflare Turnstile，headful CloakBrowser 等待 token 最多 60 秒）、piggo/kamept=[sign_button]。`run_page_action` 步骤缺失不阻断（absent 继续下一步），点击后等 5s，最终以回读消息链判定成功/已签/未确认，不猜测按钮结果。 pt_0ff 拖到底松开后门页先显示「验证通过」，约 8 秒自动跳转真实签到页；回读出现「签到已得N」才是成功证据，默认消息链已覆盖。slider 拖动后轮询等待标题/正文离开「滑动认证/拖动滑块验证」门页（每 1.5s，最多 25s），离开后再稳定等待 2s，超时如实保留未确认。
 - **轮内共享会话**：一轮 ≥2 个仿真站到期时共用一个 CloakSession（`_runner.shared_cloak`），按站注入 Cookie，不重复开关浏览器；会话生命周期归轮次，异常降级为逐站独立会话。
@@ -149,7 +149,7 @@
 - 回滚不是公开 API：运维在维护窗口读取备份，将完整 config 用 update_config 恢复，将 site_config 用 save_data 恢复，重新 init_plugin；核对恢复成功后清理 migration.v2.state，再重新预览。快照包含原凭据，只保留于宿主插件数据，不输出日志；回滚前另备份迁移后新配置，避免覆盖后续人工修改。
 
 ## S7 调度契约
-- `scheduler_enabled` 默认 false，是生产切换门控，不随 S6 的 enabled 迁移；false 时包括 onlyonce 在内均不注册。常规服务另需 enabled=true；未激活时 `/stats.next_schedule=null`，`schedule_status` 解释阶段限制。
+- `scheduler_enabled` 默认 false，是生产切换门控，不随 S6 的 enabled 迁移；false 时包括 onlyonce 在内均不注册，并打一条 warning 日志。常规服务另需 enabled=true；未激活时 `/stats.next_schedule=null`，`schedule_status` 解释阶段限制。4.0.18 起插件自有配置保存（`_save_config`）做键级合并，partial PUT 不再静默重置未提交键；`init_plugin` 路径仍全量替换（迁移恢复要求精确回滚）。
 - cron 注册 `AutoSignIn / PT 签到中心`；interval 注册 `AutoSignIn.{index} / PT 签到中心 HH:mm`。服务由宿主拥有，不创建插件后台调度器；stop_service 经 SDK remove_plugin_job 清理，配置 API 保存后 update_plugin_job 重建，宿主保存走宿主重建流程。
 - interval 对齐 V2 `__generate_schedule_crons` + TimerUtils.random_scheduler：次数 max(1, int((end-begin)/interval))，从 begin:00 累加 [max(30,interval*30),interval*60] 随机分钟，最小 interval=0.5，0<=begin<end<=23。schedule_crons/schedule_signature 用 get_data/save_data 保存，signature 相同复用，变化重排；不采用重载重新随机，以免调度漂移。
 - 数据页「立即运行一次」设置 onlyonce 并触发一次性操作；onlyonce 优先只返回 `AutoSignIn.once` DateTrigger（即使 scheduler_enabled=false），且 `_scheduled_once` 消费后直接全量执行，不受 scheduler_enabled/常规运行门控限制；回调先持久化 onlyonce=false 再执行，重载不重复消费。进程在消费写盘后崩溃不自动重试，避免重复签到；失败由人工核验后再决定。
