@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.3"
+    plugin_version = "3.3.4"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -1166,6 +1166,9 @@ class Hhanclubrescueseed(_PluginBase):
             if hasattr(instance, "set_torrent_tag"):
                 instance.set_torrent_tag(
                     ids=[torrent_hash], tags=[tag], org_tags=list(org_tags or []))
+            elif hasattr(instance, "set_torrents_tag"):
+                # 老版 MP qb 模块接口（追加语义，保留原有标签）
+                instance.set_torrents_tag(ids=[torrent_hash], tags=[tag])
             elif hasattr(instance, "torrents_add_tags"):
                 instance.torrents_add_tags(tags=[tag], hashes=[torrent_hash])
             else:
