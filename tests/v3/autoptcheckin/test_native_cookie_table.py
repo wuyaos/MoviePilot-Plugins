@@ -286,3 +286,19 @@ def test_cloak_cleanup_error_preserves_sign_result_and_history(storage, monkeypa
     assert data['cookies.table']['fixture']['source'] == 'stored_cookie'
     with runner.locks.acquire(('fixture', '')) as acquired:
         assert acquired
+
+
+def test_login_unexpected_error_carries_exception_detail(storage, monkeypatch):
+    # 登录路径异常透传（与签到路径同格式），不再是无详情固定文案。
+    runner, data = storage
+
+    def boom(_fn, _site, _uid, _credential):
+        raise ConnectionError('mock network down')
+
+    monkeypatch.setattr(native, 'read_login_twice', boom)
+    result = native.run_native_login(runner, login_site(), {'cookie': 'session=managed'})
+    assert result.status == 'unconfirmed'
+    assert 'ConnectionError' in result.message and 'mock network down' in result.message
+    assert len(result.message) <= 100
+    assert result.metadata['cookie_sources'] == ['stored_cookie']
+    assert data['cookies.table']['fixture']['updated'] == 'old'

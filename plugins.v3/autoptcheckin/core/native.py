@@ -408,13 +408,21 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             for credential in cookie_candidates(site.id, info, custom_cookie, get_data, url):
                 attempted_cookie_sources.append(credential.source)
                 client = NativeHttpClient(credential, info)
+                client = NativeHttpClient(credential, info)
                 client = native_cloak_client(site, client, info, config or {}, shared=getattr(runner, 'shared_cloak', None))
-                if site.id == 'yzyy':
-                    from ..integrations import yzyy
-                    result = yzyy.login(client, {})
-                else:
-                    result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid, site.credential)
-                persist_cookie_result(result, client, site.id, credential.source, get_data, save_data)
+                try:
+                    if site.id == 'yzyy':
+                        from ..integrations import yzyy
+                        result = yzyy.login(client, {})
+                    else:
+                        result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid, site.credential)
+                    persist_cookie_result(result, client, site.id, credential.source, get_data, save_data)
+                finally:
+                    if isinstance(client, CloakHttpClient) and client is not getattr(runner, 'shared_cloak', None):
+                        try:
+                            client.close()
+                        except Exception:
+                            pass
                 if result.status != LoginStatus.AUTH_FAILED:
                     break
             if site.id == 'yzyy' and result.status == LoginStatus.AUTH_FAILED:
@@ -423,8 +431,8 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
                 client = NativeHttpClient(Credential('password_login', ''), info)
                 result = yzyy.login(client, {**info, **(config or {})})
                 persist_cookie_result(result, client, site.id, 'password_login', get_data, save_data)
-        except Exception:
-            result = LoginResult(LoginStatus.UNCONFIRMED, '原生登录执行未确认')
+        except Exception as exc:
+            result = LoginResult(LoginStatus.UNCONFIRMED, f'原生登录执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])
         result.metadata['cookie_sources'] = attempted_cookie_sources
         return finish(result)
 
