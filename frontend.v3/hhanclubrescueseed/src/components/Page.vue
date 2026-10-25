@@ -188,7 +188,7 @@ onMounted(refreshData)
         <v-col cols="12" sm="6" md="3"><v-card class="stat-card" variant="tonal"><div class="stat-label">下载记录数</div><div class="stat-value">{{ records.length }}<small> 条</small></div><div class="stat-meta">本地保存的记录</div></v-card></v-col>
       </v-row>
 
-      <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。得分为推送评分（体积50+需求40+稀缺10，人数热度 20 封顶），旧记录无得分显示 —。</p></div></div>
+      <div class="table-heading"><div><h2>下载记录</h2><p>名称、体积和下载时间来自本地记录，状态数据按记录字段展示。得分为推送评分（体积50+需求40+稀缺10，人数热度 20 封顶），旧记录无得分显示 —；下载器中带标签但无本地记录的历史种子会以「发现」合入展示（无删除按钮）。</p></div></div>
       <v-data-table v-if="records.length" height="520" :headers="headers" :items="records" item-value="title" class="records-table" :items-per-page="10">
         <template #item.title="{ item }"><div class="title-cell"><strong>{{ item.title || '-' }}</strong><span v-if="item.zh_title">{{ item.zh_title }}</span></div></template>
         <template #item.size="{ item }">{{ formatSize(item.size) }}</template>
@@ -197,7 +197,7 @@ onMounted(refreshData)
         <template #item.seeding_time="{ item }">{{ formatSeedingTime(valueOf(item, 'seeding_time', 'seeding_time_hours')) }}</template>
         <template #item.status="{ item }"><v-chip size="small" :color="statusColor(item.status)" label>{{ statusText(item.status) }}</v-chip></template>
         <template #item.uploaded="{ item }">{{ formatSize(item.uploaded) }}</template>
-        <template #item.actions="{ item }"><v-btn icon="mdi-delete-outline" size="small" variant="text" color="error" :loading="deleting === item.title" :aria-label="`删除 ${item.title}`" @click="deleteRecord(item)" /></template>
+        <template #item.actions="{ item }"><v-btn v-if="!item.discovered" icon="mdi-delete-outline" size="small" variant="text" color="error" :loading="deleting === item.title" :aria-label="`删除 ${item.title}`" @click="deleteRecord(item)" /></template>
       </v-data-table>
       <v-alert v-else type="info" variant="tonal">暂无下载记录</v-alert>
     </v-card-text>

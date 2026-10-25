@@ -376,7 +376,7 @@ return (_ctx, _cache) => {
           _cache[16] || (_cache[16] = _createElementVNode("div", { class: "table-heading" }, [
             _createElementVNode("div", null, [
               _createElementVNode("h2", null, "下载记录"),
-              _createElementVNode("p", null, "名称、体积和下载时间来自本地记录，状态数据按记录字段展示。得分为推送评分（体积50+需求40+稀缺10，人数热度 20 封顶），旧记录无得分显示 —。")
+              _createElementVNode("p", null, "名称、体积和下载时间来自本地记录，状态数据按记录字段展示。得分为推送评分（体积50+需求40+稀缺10，人数热度 20 封顶），旧记录无得分显示 —；下载器中带标签但无本地记录的历史种子会以「发现」合入展示（无删除按钮）。")
             ])
           ], -1)),
           (records.value.length)
@@ -425,15 +425,18 @@ return (_ctx, _cache) => {
                   _createTextVNode(_toDisplayString(formatSize(item.uploaded)), 1)
                 ]),
                 "item.actions": _withCtx(({ item }) => [
-                  _createVNode(_component_v_btn, {
-                    icon: "mdi-delete-outline",
-                    size: "small",
-                    variant: "text",
-                    color: "error",
-                    loading: deleting.value === item.title,
-                    "aria-label": `删除 ${item.title}`,
-                    onClick: $event => (deleteRecord(item))
-                  }, null, 8, ["loading", "aria-label", "onClick"])
+                  (!item.discovered)
+                    ? (_openBlock(), _createBlock(_component_v_btn, {
+                        key: 0,
+                        icon: "mdi-delete-outline",
+                        size: "small",
+                        variant: "text",
+                        color: "error",
+                        loading: deleting.value === item.title,
+                        "aria-label": `删除 ${item.title}`,
+                        onClick: $event => (deleteRecord(item))
+                      }, null, 8, ["loading", "aria-label", "onClick"]))
+                    : _createCommentVNode("", true)
                 ]),
                 _: 1
               }, 8, ["items"]))
@@ -457,6 +460,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-41283029"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b5eda249"]]);
 
 export { PageComponent as default };

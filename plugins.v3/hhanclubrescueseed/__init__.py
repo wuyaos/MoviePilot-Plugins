@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.1"
+    plugin_version = "3.3.2"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -277,6 +277,7 @@ class Hhanclubrescueseed(_PluginBase):
         # 聚合下载器实时状态（状态/上传量/做种时长），按种子 hash 匹配记录
         aggregated = False
         live = {}
+        live_source = {}
         try:
             if self._downloader and self._custom_tag:
                 svc = self.downloader_helper.get_service(self._downloader)
@@ -297,12 +298,15 @@ class Hhanclubrescueseed(_PluginBase):
                             "uploaded": s["uploaded"],
                             "seeding_time_hours": s["seeding_hours"],
                         }
+                        live_source[s["hash"].lower()] = s
                     aggregated = True
         except Exception as e:
             logger.warning(f"聚合下载器实时状态失败: {str(e)}")
         if aggregated:
+            known = set()
             for r in records:
                 info = live.get(str(r.get("torrent_hash") or "").lower())
+                known.add(str(r.get("torrent_hash") or "").lower())
                 if info:
                     r.update(info)
                 else:
@@ -310,6 +314,23 @@ class Hhanclubrescueseed(_PluginBase):
                     r["status"] = "已删除"
                     r["uploaded"] = 0
                     r["seeding_time_hours"] = 0
+            # 下载器中存在但本地无记录的历史种子（早期版本/手动下载），合成展示记录（不入库）
+            known.discard("")
+            now = datetime.datetime.now()
+            for h, info in live.items():
+                if h in known:
+                    continue
+                s = live_source.get(h)
+                if not s:
+                    continue
+                added_dt = now - datetime.timedelta(days=s.get("added_days") or 0)
+                records.append({
+                    "title": s["name"], "zh_title": "", "score": None,
+                    "size": f"{s['size_gb']:.2f} GB", "seeders": None,
+                    "download_link": None, "torrent_hash": h,
+                    "download_time": added_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "discovered": True, **info,
+                })
         return Response(success=True, data={
             "records": records,
             "auto_delete_enabled": bool(self._auto_delete_enabled),
