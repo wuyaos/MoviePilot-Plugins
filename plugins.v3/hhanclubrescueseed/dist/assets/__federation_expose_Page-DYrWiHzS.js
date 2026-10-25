@@ -64,7 +64,7 @@ function valueOf(record, ...keys) {
 }
 
 function toGb(value) {
-  if (typeof value === 'number') return value
+  if (typeof value === 'number') return value / (1024 * 1024 * 1024)
   const text = String(value || '').trim().toUpperCase();
   const amount = Number.parseFloat(text);
   if (!Number.isFinite(amount)) return 0
@@ -109,9 +109,8 @@ function formatSeedingTime(value) {
 function statusText(value) {
   const status = String(value || '').toLowerCase();
   if (status.includes('deleted') || status.includes('删除')) return '已删除'
-  if (status.includes('deleted') || status.includes('删除')) return '已删除'
   if (status.includes('paused') || status.includes('pause') || status.includes('暂停')) return '已暂停'
-  if (status.includes('queued') || status.includes('排队')) return '排队'
+  if (status.includes('queued') || status.includes('pending') || status.includes('排队')) return '排队'
   if (status.includes('complete') || status.includes('达标')) return '已达标'
   if (status.includes('download') || status.includes('下载')) return '下载中'
   return '做种中'
@@ -491,6 +490,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-4d313ec8"]]);
+const PageComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-bcfdb41c"]]);
 
 export { PageComponent as default };

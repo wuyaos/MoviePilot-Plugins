@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.9"
+    plugin_version = "3.3.10"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -288,7 +288,7 @@ class Hhanclubrescueseed(_PluginBase):
                         if not s or not s.get("hash"):
                             continue
                         state_l = (s.get("state") or "").lower()
-                        if "queued" in state_l or "排队" in state_l:
+                        if "queued" in state_l or "pending" in state_l or "排队" in state_l:
                             status = "排队"
                         elif s["progress"] < 1:
                             status = "下载中"
@@ -1221,13 +1221,15 @@ class Hhanclubrescueseed(_PluginBase):
             tags = val("tags", "labels") or []
             if isinstance(tags, str):
                 tags = [x.strip() for x in tags.split(",") if x.strip()]
-            # 进度归一到 0-1：qb progress 为 0-1，transmission-rpc progress 为 0-100
+            # 进度归一到 0-1：qb progress 0-1；tr percent_done 0-100（可能小于 1，按字段来源分支而非阈值猜测）
+            pd = val("percent_done")
             try:
-                progress = float(progress)
+                if pd is not None:
+                    progress = float(pd) / 100.0
+                else:
+                    progress = float(val("progress") or 0)
             except (TypeError, ValueError):
                 progress = 0.0
-            if progress > 1:
-                progress = progress / 100.0
             now = datetime.datetime.now()
             added_days = 0.0
             if added:
