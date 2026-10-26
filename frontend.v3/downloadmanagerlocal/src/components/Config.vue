@@ -129,6 +129,38 @@ const defaults = {
   upload_limit_grace_minutes: 30,
 }
 
+// 各设置页签的「恢复默认」键集：transfer 为显式列表（含无前缀共享键），其余按模块前缀从 defaults 提取
+const PANE_RESET_KEYS = {
+  transfer: ['transfer_enabled', 'delay_minutes', 'onlyonce', 'notify',
+    'transfer_fallback_enabled', 'transfer_fallback_interval_minutes',
+    'fromdownloader', 'todownloader', 'frompath', 'topath', 'fromtorrentpath',
+    'nopaths', 'nolabels', 'includelabels', 'includecategory', 'transferemptylabel',
+    'add_torrent_tags', 'deletesource', 'deleteduplicate', 'remainoldcat', 'remainoldtag',
+    'seed_autostart', 'seed_skipverify', 'seed_check_interval', 'seed_max_wait_minutes'],
+  hr: Object.keys(defaults).filter(k => k.startsWith('hr_')),
+  remover: Object.keys(defaults).filter(k => k.startsWith('remover_')),
+  failclean: Object.keys(defaults).filter(k => k.startsWith('failcleanup_')),
+  rename: Object.keys(defaults).filter(k => k.startsWith('rename_')),
+  tag: Object.keys(defaults).filter(k => k.startsWith('tag_')),
+  upload: Object.keys(defaults).filter(k => k.startsWith('upload_limit_')),
+}
+const paneResetDialog = ref(false)
+const paneResetTarget = ref('')
+const paneResetCount = computed(() => (PANE_RESET_KEYS[paneResetTarget.value] || []).length)
+const paneResetTitle = computed(() => mainTabs.find(i => i.key === paneResetTarget.value)?.title || '')
+
+function askPaneReset(key) {
+  paneResetTarget.value = key
+  paneResetDialog.value = true
+}
+
+function confirmPaneReset() {
+  for (const k of PANE_RESET_KEYS[paneResetTarget.value] || []) {
+    form[k] = JSON.parse(JSON.stringify(defaults[k]))
+  }
+  paneResetDialog.value = false
+}
+
 const mainTabs = [
   { key: 'overview', title: '运行总览', icon: 'mdi-view-dashboard-outline', desc: '查看下载中心各模块的完整运行链路。' },
   { key: 'transfer', title: '转移做种', icon: 'mdi-transfer', desc: '监听下载完成事件，延迟后自动转移做种到目标下载器。' },
@@ -1308,6 +1340,10 @@ function serializeHrSiteConfigYaml(rules) {
               class="dm-subtab" :class="{ 'dm-subtab--active': activeSub === sub.key }" @click="activeSub = sub.key">
               <VIcon :icon="sub.icon" size="18" class="mr-1" />{{ sub.title }}
             </button>
+            <VBtn v-if="PANE_RESET_KEYS[activeMain]" variant="text" size="small" color="warning"
+              prepend-icon="mdi-restore" class="ml-auto" @click="askPaneReset(activeMain)">
+              恢复默认
+            </VBtn>
           </div>
           <VDivider />
           <div class="dm-window" :class="{ 'dm-window--overview': activeMain === 'overview' }">
@@ -2277,6 +2313,28 @@ function serializeHrSiteConfigYaml(rules) {
           <VSpacer />
           <VBtn variant="text" @click="hrAddDialog = false">取消</VBtn>
           <VBtn color="primary" variant="flat" prepend-icon="mdi-plus" @click="hrConfirmAddSite">添加</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <VDialog v-model="paneResetDialog" max-width="560">
+      <VCard>
+        <VCardItem>
+          <template #prepend>
+            <VAvatar color="warning" variant="tonal" size="40" rounded="lg"><VIcon icon="mdi-restore" /></VAvatar>
+          </template>
+          <VCardTitle class="text-subtitle-1">恢复「{{ paneResetTitle }}」默认设置</VCardTitle>
+          <VCardSubtitle>仅重置本页签的 {{ paneResetCount }} 项，不影响其他页签</VCardSubtitle>
+        </VCardItem>
+        <VDivider />
+        <VCardText class="text-body-2">
+          将把本页签全部设置恢复为插件默认值。改动先作用于表单，点击下方「保存配置」后才会真正生效。<template v-if="paneResetTarget === 'hr'">H&R 站点独立规则也会一并清空回全局基准。</template>
+        </VCardText>
+        <VDivider />
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="paneResetDialog = false">取消</VBtn>
+          <VBtn color="warning" variant="flat" prepend-icon="mdi-restore" @click="confirmPaneReset">恢复默认</VBtn>
         </VCardActions>
       </VCard>
     </VDialog>
