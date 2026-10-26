@@ -166,8 +166,8 @@ class HrService:
         if snapshot is None:
             logger.warning(f"{HR_LOG_PREFIX}下载器中未找到种子 {target_hash}")
             return False
-        site_id, site_name = resolve_site(self._tracker_mappings(), snapshot.trackers)
-        if site_id is None or site_id not in self._config.sites:
+        site_id, site_name = resolve_site(self._tracker_mappings(), snapshot.trackers, self._config.site_rules)
+        if not self._config.site_in_scope(site_id, site_name):
             logger.info(f"{HR_LOG_PREFIX}站点 {site_name or site_id} 不在 H&R 站点白名单，跳过纳管 {target_hash}")
             return False
         excluded, reason = is_excluded(snapshot, self._config.exclude_tags, self._config.exclude_categories)
@@ -321,8 +321,8 @@ class HrService:
                 if hr_task_key(name, snapshot.torrent_hash) in self._tasks:
                     result["known"] += 1
                     continue
-                site_id, site_name = resolve_site(self._tracker_mappings(), snapshot.trackers)
-                if site_id is None or site_id not in self._config.sites:
+                site_id, site_name = resolve_site(self._tracker_mappings(), snapshot.trackers, self._config.site_rules)
+                if not self._config.site_in_scope(site_id, site_name):
                     result["outside_sites"] += 1
                     continue
                 excluded, reason = is_excluded(snapshot, self._config.exclude_tags, self._config.exclude_categories)

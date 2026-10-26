@@ -33,6 +33,18 @@ const uploadActionRunning = ref('')
 const uploadMessage = ref('')
 const uploadMessageStatus = ref('info')
 const uploadRestoreDialog = ref(false)
+const hrPresets = ref([])
+const hrPresetsLoading = ref(false)
+const hrPresetsLoaded = ref(false)
+const hrPresetsMessage = ref('')
+const hrCustomRules = ref([])
+const hrExpandedSites = ref([])
+const hrRawOpen = ref(false)
+const hrRawError = ref('')
+const hrAddDialog = ref(false)
+const hrNewSiteName = ref('')
+const hrAddError = ref('')
+let hrSyncedSiteConfigText = ''
 const UPLOAD_STATUS_REFRESH_INTERVAL_MS = 30_000
 let uploadStatusRefreshTimer = null
 let uploadStatusRefreshPending = false
@@ -53,6 +65,7 @@ onMounted(async () => {
       getApi('downloaders', { feedback: 'silent' }),
       getApi('sites', { feedback: 'silent' }),
       getApi('overview', { feedback: 'silent' }),
+      loadHrPresets(),
     ])
     if (dlResp) {
       downloaderItems.value = dlResp
@@ -249,6 +262,7 @@ watch(() => props.initialConfig, v => {
   form.tag_downloaders = [...(v?.tag_downloaders || [])]
   form.tag_all_cat = [...(v?.tag_all_cat || [])]
   form.tag_all_cat_rename = [...(v?.tag_all_cat_rename || [])]
+  syncHrSiteRulesFromForm()
 }, { immediate: true, deep: true })
 watch(() => props.pluginId, () => {
   configDraftRevision++
@@ -588,6 +602,674 @@ async function executeCleanupTags() {
     cleanupExecuting.value = false
   }
 }
+// ═══ H&R 站点规则：内置预设 + 自定义 YAML 双层合并视图（v3.6.0）═══
+
+/** 站点规则可编辑字段，键名与后端 HrSiteRule 一致。 */
+const hrNumberFields = [
+  { key: 'hr_duration', label: '做种时长（小时）' },
+  { key: 'additional_seed_time', label: '额外做种时间（小时）' },
+  { key: 'hr_deadline_days', label: '考核期（天）' },
+  { key: 'hr_ratio', label: '分享率' },
+  { key: 'hr_upload_multiplier', label: '上传倍数' },
+]
+const hrFlagFields = [
+  { key: 'hr_upload_gte_download', label: '上传量≥下载量' },
+  { key: 'hr_active', label: '站点规则生效' },
+]
+const hrTierFields = [
+  { key: 'max_size_gib', label: '上限（GiB，0=不限）' },
+  { key: 'hr_duration', label: '做种时长（小时）' },
+  { key: 'hr_deadline_days', label: '考核期（天）' },
+]
+/** 生效值摘要列；布尔与分档字段单独格式化。 */
+const hrSummaryFields = [
+  { key: 'hr_duration', label: '做种时长', unit: ' 小时' },
+  { key: 'additional_seed_time', label: '额外做种', unit: ' 小时' },
+  { key: 'hr_deadline_days', label: '考核期', unit: ' 天' },
+  { key: 'hr_ratio', label: '分享率', unit: '' },
+  { key: 'hr_upload_multiplier', label: '上传倍数', unit: '' },
+  { key: 'hr_upload_gte_download', label: '上传≥下载', unit: '', boolean: true },
+  { key: 'hr_active', label: '规则生效', unit: '', boolean: true },
+  { key: 'hr_size_tiers', label: '体积分档', unit: '', tiers: true },
+]
+const hrTriStateItems = [
+  { title: '继承全局', value: 'inherit' },
+  { title: '是', value: 'true' },
+  { title: '否', value: 'false' },
+]
+const hrSiteRuleKeys = ['hr_duration', 'additional_seed_time', 'hr_deadline_days', 'hr_ratio', 'hr_upload_multiplier', 'hr_upload_gte_download', 'hr_active']
+const hrListRuleKeys = ['trackers']
+const hrTierValueKeys = ['hr_duration', 'hr_deadline_days']
+
+/** 全局规则当前值（config 表单的 hr_* 全局字段），供「继承」显示与 tooltip 使用。 */
+const hrGlobalRule = computed(() => ({
+  hr_duration: form.hr_duration,
+  additional_seed_time: form.hr_additional_seed_time,
+  hr_deadline_days: form.hr_deadline_days,
+  hr_ratio: form.hr_ratio,
+  hr_upload_multiplier: form.hr_upload_multiplier,
+  hr_upload_gte_download: form.hr_upload_gte_download,
+  hr_active: form.hr_active,
+  hr_size_tiers: form.hr_size_tiers,
+}))
+
+function hrIsYamlFalse(value) {
+  if (value === false) return true
+  if (typeof value !== 'string') return false
+  return ['false', '0', 'no', 'off'].includes(value.trim().toLowerCase())
+}
+
+function hrIsYamlTrue(value) {
+  if (value === true) return true
+  if (typeof value !== 'string') return false
+  return ['true', '1', 'yes', 'on'].includes(value.trim().toLowerCase())
+}
+
+function hrFormatSummary(field, value) {
+  if (field.tiers) return Array.isArray(value) ? `${value.length} 档` : '已配置'
+  if (field.boolean) return hrIsYamlTrue(value) ? '是' : '否'
+  const numeric = Number(value)
+  return `${Number.isFinite(numeric) ? String(numeric) : String(value)}${field.unit || ''}`
+}
+
+function hrGlobalText(key) {
+  const field = hrSummaryFields.find(item => item.key === key) || { key }
+  const value = hrGlobalRule.value[key]
+  if (value === undefined || value === null || value === '') return '未设置'
+  return hrFormatSummary(field, value)
+}
+
+function hrHasRuleValues(rule) {
+  if (!rule) return false
+  if (Array.isArray(rule.hr_size_tiers)) return true
+  if (Array.isArray(rule.trackers) && rule.trackers.length) return true
+  return hrSiteRuleKeys.some(key => rule[key] !== undefined && rule[key] !== null)
+}
+
+function hrPresetRules() {
+  const map = new Map()
+  for (const preset of hrPresets.value) {
+    const name = String(preset?.site_name || '').trim()
+    if (name) map.set(name, preset?.rule || {})
+  }
+  return map
+}
+
+const hrSiteRows = computed(() => {
+  const presets = hrPresetRules()
+  const customMap = new Map()
+  for (const rule of hrCustomRules.value) customMap.set(rule.site_name, rule)
+  const extraNames = [...customMap.keys()].filter(name => !presets.has(name)).sort((left, right) => left.localeCompare(right, 'zh-CN'))
+  const names = [...presets.keys(), ...extraNames]
+  return names.map(name => {
+    const preset = presets.get(name) || null
+    const entry = customMap.get(name) || null
+    const blocked = !!entry && hrIsYamlFalse(entry.enabled)
+    // enabled 的自定义条目整条覆写预设；内置站的纯影子条目（仅 enabled:false）仍按内置行展示
+    const customRow = !!entry && (!preset || !(blocked && !hrHasRuleValues(entry)))
+    const sourceRule = blocked ? null : (customRow ? entry : preset)
+    const sourceLabel = customRow ? (preset ? '自定义·覆写' : '自定义') : '内置'
+    const sourceColor = sourceLabel === '内置' ? 'default' : (sourceLabel === '自定义·覆写' ? 'primary' : 'info')
+    const cells = hrSummaryFields.map(field => {
+      const value = sourceRule ? sourceRule[field.key] : undefined
+      const inherited = value === undefined || value === null || value === ''
+      return {
+        key: field.key,
+        inherited,
+        text: inherited ? '继承' : hrFormatSummary(field, value),
+        tooltip: inherited
+          ? `${field.label}：继承全局（${hrGlobalText(field.key)}）`
+          : `${field.label}：${hrFormatSummary(field, value)}（${sourceLabel}）`,
+      }
+    })
+    return {
+      name,
+      entry,
+      preset: !!preset,
+      enabled: !blocked,
+      blocked,
+      custom: customRow,
+      expanded: hrExpandedSites.value.includes(name),
+      cells,
+      sourceLabel,
+      sourceColor,
+    }
+  })
+})
+
+function hrFindCustomRule(name) {
+  return hrCustomRules.value.find(rule => rule.site_name === name) || null
+}
+
+function hrReplaceCustomRule(name, rule) {
+  hrCommitCustomRules(hrCustomRules.value.map(item => (item.site_name === name ? rule : item)))
+}
+
+function hrCommitCustomRules(rules) {
+  hrCustomRules.value = rules
+  const text = serializeHrSiteConfigYaml(rules)
+  hrSyncedSiteConfigText = text
+  hrRawError.value = ''
+  form.hr_site_config_str = text
+}
+
+function hrSetSiteEnabled(name, enabled) {
+  const entry = hrFindCustomRule(name)
+  const nextEnabled = enabled !== false
+  if (!entry) {
+    if (!nextEnabled) hrCommitCustomRules([...hrCustomRules.value, { site_name: name, enabled: false }])
+    return
+  }
+  // 内置站的纯影子条目：开启开关即删除条目，该站回到内置预设
+  if (nextEnabled && hrIsYamlFalse(entry.enabled) && !hrHasRuleValues(entry) && hrPresetRules().has(name)) {
+    hrRemoveCustomSite(name)
+    return
+  }
+  hrReplaceCustomRule(name, { ...entry, enabled: nextEnabled })
+}
+
+function hrRemoveCustomSite(name) {
+  hrCommitCustomRules(hrCustomRules.value.filter(rule => rule.site_name !== name))
+}
+
+function hrCopyPresetToCustom(name) {
+  const preset = hrPresetRules().get(name) || {}
+  const entry = hrFindCustomRule(name)
+  const rule = { site_name: name, enabled: entry ? !hrIsYamlFalse(entry.enabled) : true }
+  for (const field of [...hrNumberFields, ...hrFlagFields]) {
+    const value = preset[field.key]
+    if (value !== undefined && value !== null) rule[field.key] = value
+  }
+  if (Array.isArray(preset.hr_size_tiers)) rule.hr_size_tiers = preset.hr_size_tiers.map(tier => ({ ...tier }))
+  hrCommitCustomRules([...hrCustomRules.value.filter(item => item.site_name !== name), rule])
+  if (!hrExpandedSites.value.includes(name)) hrExpandedSites.value = [...hrExpandedSites.value, name]
+}
+
+function hrToggleExpanded(name) {
+  hrExpandedSites.value = hrExpandedSites.value.includes(name)
+    ? hrExpandedSites.value.filter(item => item !== name)
+    : [...hrExpandedSites.value, name]
+}
+
+function hrRuleNumber(rule, key) {
+  const value = rule?.[key]
+  return value === undefined || value === null ? '' : value
+}
+
+function hrRuleFlag(rule, key) {
+  const value = rule?.[key]
+  if (value === undefined || value === null) return 'inherit'
+  return hrIsYamlTrue(value) ? 'true' : 'false'
+}
+
+function hrRuleTrackers(rule) {
+  return Array.isArray(rule?.trackers) ? [...rule.trackers] : []
+}
+
+function hrNormalizeTrackers(value) {
+  const items = Array.isArray(value) ? value : [value]
+  const result = []
+  for (const item of items) {
+    const text = String(item ?? '').trim()
+    if (text && !result.includes(text)) result.push(text)
+  }
+  return result
+}
+
+function hrSetRuleTrackers(name, value) {
+  const entry = hrFindCustomRule(name)
+  if (!entry) return
+  const next = { ...entry }
+  const trackers = hrNormalizeTrackers(value)
+  if (trackers.length) next.trackers = trackers
+  else delete next.trackers
+  hrReplaceCustomRule(name, next)
+}
+
+function hrTierNumber(tier, key) {
+  const value = tier?.[key]
+  return value === undefined || value === null ? 0 : value
+}
+
+function hrSetRuleNumber(name, key, value) {
+  const entry = hrFindCustomRule(name)
+  if (!entry) return
+  const next = { ...entry }
+  const text = String(value ?? '').trim()
+  if (!text) {
+    delete next[key]
+  } else {
+    const numeric = Number(text)
+    if (!Number.isFinite(numeric)) return
+    next[key] = numeric
+  }
+  hrReplaceCustomRule(name, next)
+}
+
+function hrSetRuleFlag(name, key, value) {
+  const entry = hrFindCustomRule(name)
+  if (!entry) return
+  const next = { ...entry }
+  if (value === 'inherit') delete next[key]
+  else next[key] = value === 'true'
+  hrReplaceCustomRule(name, next)
+}
+
+function hrAddTier(name) {
+  const entry = hrFindCustomRule(name)
+  if (!entry) return
+  const tiers = (entry.hr_size_tiers || []).map(tier => ({ ...tier }))
+  tiers.push({ max_size_gib: 0, hr_duration: 0, hr_deadline_days: 0 })
+  hrReplaceCustomRule(name, { ...entry, hr_size_tiers: tiers })
+}
+
+function hrRemoveTier(name, index) {
+  const entry = hrFindCustomRule(name)
+  if (!entry) return
+  const tiers = (entry.hr_size_tiers || []).filter((_, position) => position !== index)
+  const next = { ...entry }
+  if (tiers.length) next.hr_size_tiers = tiers
+  else delete next.hr_size_tiers
+  hrReplaceCustomRule(name, next)
+}
+
+function hrSetTierNumber(name, index, key, value) {
+  const entry = hrFindCustomRule(name)
+  if (!entry) return
+  const tiers = (entry.hr_size_tiers || []).map(tier => ({ ...tier }))
+  if (!tiers[index]) return
+  const text = String(value ?? '').trim()
+  const numeric = text ? Number(text) : 0
+  tiers[index] = { ...tiers[index], [key]: Number.isFinite(numeric) ? numeric : 0 }
+  hrReplaceCustomRule(name, { ...entry, hr_size_tiers: tiers })
+}
+
+function hrOpenAddDialog() {
+  hrNewSiteName.value = ''
+  hrAddError.value = ''
+  hrAddDialog.value = true
+}
+
+function hrConfirmAddSite() {
+  hrAddError.value = ''
+  const name = hrNewSiteName.value.trim()
+  if (!name) {
+    hrAddError.value = '请输入站点名'
+    return
+  }
+  if (hrPresetRules().has(name)) {
+    hrAddError.value = '该站点是内置预设，请用「复制为自定义」创建覆写'
+    return
+  }
+  if (hrCustomRules.value.some(rule => rule.site_name === name)) {
+    hrAddError.value = '该站点已存在自定义条目'
+    return
+  }
+  hrCommitCustomRules([...hrCustomRules.value, { site_name: name, enabled: true }])
+  hrExpandedSites.value = [...hrExpandedSites.value, name]
+  hrAddDialog.value = false
+}
+
+async function loadHrPresets(force = false) {
+  if (hrPresetsLoading.value || (hrPresetsLoaded.value && !force)) return
+  hrPresetsLoading.value = true
+  hrPresetsMessage.value = ''
+  try {
+    const response = await getApi('hr_presets', { feedback: 'silent' })
+    const presets = Array.isArray(response?.presets) ? response.presets : []
+    hrPresets.value = presets.filter(preset => String(preset?.site_name || '').trim())
+    hrPresetsLoaded.value = true
+    if (!hrPresets.value.length) hrPresetsMessage.value = '未返回内置预设，可继续使用自定义站点规则'
+  } catch (error) {
+    hrPresetsMessage.value = error?.message || '内置预设获取失败'
+  } finally {
+    hrPresetsLoading.value = false
+  }
+}
+
+function hrApplySiteConfigText(text) {
+  const parsed = parseHrSiteConfigYaml(text)
+  if (parsed.error) {
+    hrRawError.value = `站点规则 YAML 解析失败：${parsed.error}`
+    hrRawOpen.value = true
+    return
+  }
+  hrRawError.value = ''
+  hrCustomRules.value = parsed.rules
+}
+
+function syncHrSiteRulesFromForm() {
+  const text = String(form.hr_site_config_str ?? '')
+  hrSyncedSiteConfigText = text
+  hrApplySiteConfigText(text)
+}
+
+watch(() => form.hr_site_config_str, raw => {
+  const text = String(raw ?? '')
+  if (text === hrSyncedSiteConfigText) return
+  hrSyncedSiteConfigText = text
+  hrApplySiteConfigText(text)
+})
+
+// ── hr_site_config_str 的最小 YAML 列表读写（只覆盖后端接受的字段结构）──
+
+function hrStripComment(line) {
+  let quote = ''
+  for (let index = 0; index < line.length; index++) {
+    const char = line.charAt(index)
+    if (quote) {
+      if (char === quote) quote = ''
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+    if (char === '#') {
+      const previous = index === 0 ? '' : line.charAt(index - 1)
+      if (index === 0 || previous === ' ' || previous === '\t') return line.slice(0, index)
+    }
+  }
+  return line
+}
+
+function hrSplitKeyValue(text) {
+  let quote = ''
+  for (let index = 0; index < text.length; index++) {
+    const char = text.charAt(index)
+    if (quote) {
+      if (char === quote) quote = ''
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+    if (char === ':') {
+      const next = index + 1 < text.length ? text.charAt(index + 1) : ''
+      if (!next || next === ' ' || next === '\t') {
+        const key = text.slice(0, index).trim()
+        return key ? { key, valueText: text.slice(index + 1).trim() } : null
+      }
+    }
+  }
+  return null
+}
+
+function hrParseScalar(text) {
+  const trimmed = String(text ?? '').trim()
+  if (!trimmed) return { value: null }
+  const lower = trimmed.toLowerCase()
+  if (trimmed === '~' || lower === 'null') return { value: null }
+  if (['true', 'yes', 'on'].includes(lower)) return { value: true }
+  if (['false', 'no', 'off'].includes(lower)) return { value: false }
+  if (trimmed === '[]') return { value: [] }
+  if (trimmed.startsWith('[') || trimmed.startsWith('{')) return { error: `${trimmed} 为行内列表/映射，暂不支持` }
+  if (trimmed === '|' || trimmed === '>') return { error: '暂不支持块标量文本' }
+  if (trimmed.length > 1 && trimmed.startsWith("'") && trimmed.endsWith("'")) return { value: trimmed.slice(1, -1).replaceAll("''", "'") }
+  if (trimmed.length > 1 && trimmed.startsWith('"') && trimmed.endsWith('"')) return { value: trimmed.slice(1, -1).replaceAll('\\"', '"') }
+  if (/^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/.test(trimmed)) return { value: Number(trimmed) }
+  return { value: trimmed }
+}
+
+function hrSplitFlowItems(text) {
+  const items = []
+  let buffer = ''
+  let quote = ''
+  for (let index = 0; index < text.length; index++) {
+    const char = text.charAt(index)
+    if (quote) {
+      buffer += char
+      if (char === quote) quote = ''
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      buffer += char
+      continue
+    }
+    if (char === ',') {
+      items.push(buffer.trim())
+      buffer = ''
+      continue
+    }
+    buffer += char
+  }
+  items.push(buffer.trim())
+  return items.filter(item => item !== '')
+}
+
+function hrParseFlowList(valueText) {
+  const text = String(valueText ?? '').trim()
+  if (!text.endsWith(']')) return { error: `${text} 行内列表未闭合` }
+  const inner = text.slice(1, -1).trim()
+  if (!inner) return { value: [] }
+  const values = []
+  for (const item of hrSplitFlowItems(inner)) {
+    const parsed = hrParseScalar(item)
+    if (parsed.error) return { error: parsed.error }
+    if (Array.isArray(parsed.value)) return { error: `列表项 ${item} 不是标量` }
+    if (parsed.value === null || parsed.value === '') continue
+    values.push(typeof parsed.value === 'string' ? parsed.value : String(parsed.value))
+  }
+  return { value: values }
+}
+
+function hrAssignScalar(target, key, valueText) {
+  const text = String(valueText ?? '').trim()
+  if (hrListRuleKeys.includes(key) && text.startsWith('[')) {
+    const parsedList = hrParseFlowList(text)
+    if (parsedList.error) return `字段 ${key}：${parsedList.error}`
+    target[key] = parsedList.value
+    return ''
+  }
+  const parsed = hrParseScalar(valueText)
+  if (parsed.error) return `字段 ${key}：${parsed.error}`
+  if (Array.isArray(parsed.value)) {
+    if (key !== 'hr_size_tiers') return `字段 ${key} 不接受列表值`
+    target.hr_size_tiers = []
+    return ''
+  }
+  target[key] = parsed.value
+  return ''
+}
+
+function parseHrSiteConfigYaml(raw) {
+  const lines = String(raw ?? '').replace(/\r\n?/g, '\n').split('\n')
+  const items = []
+  let entry = null
+  let tier = null
+  let itemIndent = null
+  let entryIndent = null
+  let tiersIndent = null
+  let tierIndent = null
+  let inTiers = false
+  let inTrackers = false
+  let trackersIndent = null
+  for (let index = 0; index < lines.length; index++) {
+    const content = hrStripComment(lines[index])
+    const body = content.trim()
+    if (!body || body === '---' || body === '...') continue
+    const indent = content.length - content.trimStart().length
+    const second = body.charAt(1)
+    const isItem = body.startsWith('-') && (body.length === 1 || second === ' ' || second === '\t')
+    const rest = body.length === 1 ? '' : body.slice(2).trim()
+    if (isItem) {
+      if (inTiers && (tierIndent === null || indent >= tierIndent)) {
+        if (tierIndent === null) tierIndent = indent
+        tier = {}
+        if (!Array.isArray(entry.hr_size_tiers)) entry.hr_size_tiers = []
+        entry.hr_size_tiers.push(tier)
+        if (rest) {
+          const pair = hrSplitKeyValue(rest)
+          if (!pair) return { error: `第 ${index + 1} 行无法解析「${rest}」` }
+          const failure = hrAssignScalar(tier, pair.key, pair.valueText)
+          if (failure) return { error: `第 ${index + 1} 行 ${failure}` }
+        }
+        continue
+      }
+      if (inTrackers && (trackersIndent === null || indent >= trackersIndent)) {
+        if (trackersIndent === null) trackersIndent = indent
+        if (!Array.isArray(entry.trackers)) entry.trackers = []
+        const scalar = hrParseScalar(rest)
+        if (scalar.error) return { error: `第 ${index + 1} 行 ${scalar.error}` }
+        if (!Array.isArray(scalar.value) && scalar.value !== null && scalar.value !== '') {
+          entry.trackers.push(String(scalar.value))
+        }
+        continue
+      }
+      inTiers = false
+      inTrackers = false
+      tier = null
+      if (itemIndent === null) itemIndent = indent
+      if (indent !== itemIndent) return { error: `第 ${index + 1} 行列表项缩进与首项不一致` }
+      entry = {}
+      entryIndent = null
+      tiersIndent = null
+      tierIndent = null
+      trackersIndent = null
+      items.push(entry)
+      if (rest) {
+        const pair = hrSplitKeyValue(rest)
+        if (!pair) return { error: `第 ${index + 1} 行无法解析「${rest}」` }
+        const failure = hrAssignScalar(entry, pair.key, pair.valueText)
+        if (failure) return { error: `第 ${index + 1} 行 ${failure}` }
+      }
+      continue
+    }
+    const pair = hrSplitKeyValue(body)
+    if (!pair) return { error: `第 ${index + 1} 行无法解析「${body}」` }
+    if (inTiers && tiersIndent !== null && indent <= tiersIndent) {
+      inTiers = false
+      tier = null
+    }
+    if (inTrackers && trackersIndent !== null && indent <= trackersIndent) inTrackers = false
+    if (inTrackers) return { error: `第 ${index + 1} 行 ${pair.key} 不是列表项（trackers 只接受「- 值」形式）` }
+    if (inTiers) {
+      if (!tier) return { error: `第 ${index + 1} 行分档字段缺少所属分档项` }
+      const failure = hrAssignScalar(tier, pair.key, pair.valueText)
+      if (failure) return { error: `第 ${index + 1} 行 ${failure}` }
+      continue
+    }
+    if (!entry) return { error: `第 ${index + 1} 行：顶层必须是列表，每项以「- site_name: 站点名」开头` }
+    if (entryIndent === null) entryIndent = indent
+    else if (indent !== entryIndent) return { error: `第 ${index + 1} 行缩进与首字段不一致` }
+    if (!pair.valueText) {
+      if (pair.key === 'hr_size_tiers') {
+        inTiers = true
+        tiersIndent = indent
+        tierIndent = null
+        tier = null
+        entry.hr_size_tiers = []
+        continue
+      }
+      if (hrListRuleKeys.includes(pair.key)) {
+        inTrackers = true
+        trackersIndent = indent
+        entry[pair.key] = []
+        continue
+      }
+      return { error: `第 ${index + 1} 行 ${pair.key} 缺少值（仅 hr_size_tiers 与 trackers 支持列表）` }
+    }
+    const failure = hrAssignScalar(entry, pair.key, pair.valueText)
+    if (failure) return { error: `第 ${index + 1} 行 ${failure}` }
+  }
+  const merged = []
+  const positionByName = new Map()
+  for (const item of items) {
+    const name = String(item.site_name ?? '').trim()
+    if (!name) return { error: '存在缺少 site_name 的站点条目' }
+    const rule = { site_name: name }
+    const extra = {}
+    for (const [key, value] of Object.entries(item)) {
+      if (key === 'site_name' || key === 'hr_size_tiers') continue
+      if (key === 'enabled') {
+        rule.enabled = !hrIsYamlFalse(value)
+        continue
+      }
+      if (hrSiteRuleKeys.includes(key)) rule[key] = value
+      else if (hrListRuleKeys.includes(key)) rule[key] = hrNormalizeTrackers(Array.isArray(value) ? value : [value])
+      else extra[key] = value
+    }
+    if (Object.keys(extra).length) rule._extra = extra
+    if (rule.enabled === undefined) rule.enabled = true
+    if (Array.isArray(item.hr_size_tiers)) {
+      rule.hr_size_tiers = item.hr_size_tiers.map(item => {
+        const values = {}
+        for (const field of hrTierFields) {
+          const numeric = Number(item?.[field.key])
+          if (Number.isFinite(numeric)) values[field.key] = numeric
+        }
+        return values
+      })
+    }
+    // 与后端一致：同名后项覆盖前项
+    const existing = positionByName.get(name)
+    if (existing === undefined) {
+      positionByName.set(name, merged.length)
+      merged.push(rule)
+    } else {
+      merged[existing] = rule
+    }
+  }
+  return { rules: merged }
+}
+
+function hrQuoteYaml(value) {
+  return `'${String(value).replaceAll("'", "''")}'`
+}
+
+function hrYamlScalar(value) {
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (value === null || value === undefined) return 'null'
+  if (Array.isArray(value)) return '[]'
+  if (typeof value === 'object') return hrQuoteYaml(JSON.stringify(value))
+  return hrQuoteYaml(value)
+}
+
+function serializeHrSiteConfigYaml(rules) {
+  const blocks = []
+  for (const rule of rules || []) {
+    const name = String(rule?.site_name || '').trim()
+    if (!name) continue
+    const lines = [`- site_name: ${hrQuoteYaml(name)}`]
+    for (const key of hrSiteRuleKeys) {
+      const value = rule[key]
+      if (value === undefined || value === null) continue
+      lines.push(`  ${key}: ${hrYamlScalar(value)}`)
+    }
+    if (Array.isArray(rule.trackers) && rule.trackers.length) {
+      lines.push('  trackers:')
+      for (const tracker of rule.trackers) {
+        const text = String(tracker ?? '').trim()
+        if (text) lines.push(`    - ${hrQuoteYaml(text)}`)
+      }
+    }
+    if (Array.isArray(rule.hr_size_tiers)) {
+      if (!rule.hr_size_tiers.length) {
+        lines.push('  hr_size_tiers: []')
+      } else {
+        lines.push('  hr_size_tiers:')
+        for (const tier of rule.hr_size_tiers) {
+          const limit = Number(tier?.max_size_gib)
+          lines.push(`    - max_size_gib: ${Number.isFinite(limit) ? limit : 0}`)
+          for (const key of hrTierValueKeys) {
+            const numeric = Number(tier?.[key])
+            if (Number.isFinite(numeric)) lines.push(`      ${key}: ${numeric}`)
+          }
+        }
+      }
+    }
+    for (const [key, value] of Object.entries(rule._extra || {})) {
+      lines.push(`  ${key}: ${hrYamlScalar(value)}`)
+    }
+    lines.push(`  enabled: ${rule.enabled === false ? 'false' : 'true'}`)
+    blocks.push(lines.join('\n'))
+  }
+  return blocks.join('\n\n')
+}
+
 </script>
 <template>
   <div class="dm-config">
@@ -1025,10 +1707,117 @@ async function executeCleanupTags() {
                   <VSwitch v-model="form.hr_active" color="success" inset hide-details label="启用全局规则" />
                 </VCol>
               </VRow>
-              <VRow class="mt-2">
+              <VRow class="mt-3">
                 <VCol cols="12">
-                  <VTextarea v-model="form.hr_site_config_str" label="站点独立规则（YAML）" density="compact" variant="outlined" hide-details rows="10" />
-                  <div class="dm-hint">顶层为列表，每项含 site_name 及 hr_duration / hr_deadline_days / hr_ratio / hr_upload_multiplier / hr_upload_gte_download / hr_size_tiers / hr_active；未设置字段回退全局规则。</div>
+                  <div class="dm-hr-toolbar">
+                    <div>
+                      <div class="dm-section-title mb-1">站点规则（内置预设 + 自定义）</div>
+                      <div class="text-caption text-medium-emphasis">
+                        内置预设为底，自定义站点同名整条覆写；关闭站点开关会写入 enabled: false 影子条目，该站回退全局规则。
+                      </div>
+                    </div>
+                    <div class="d-flex align-center ga-2 flex-wrap">
+                      <VBtn size="small" variant="text" prepend-icon="mdi-refresh" :loading="hrPresetsLoading"
+                        @click="loadHrPresets(true)">重载预设</VBtn>
+                      <VBtn size="small" color="primary" variant="tonal" prepend-icon="mdi-home-plus-outline"
+                        @click="hrOpenAddDialog">新增自定义站点</VBtn>
+                    </div>
+                  </div>
+                  <VAlert v-if="!form.hr_enable_site_config" type="info" variant="tonal" density="compact" class="mt-3">
+                    「启用站点独立规则」当前关闭：内置预设与自定义规则都不生效，全部站点回退全局规则。
+                  </VAlert>
+                  <VAlert v-if="hrPresetsMessage" type="warning" variant="tonal" density="compact" closable class="mt-3"
+                    @click:close="hrPresetsMessage = ''">{{ hrPresetsMessage }}</VAlert>
+                  <VAlert v-if="hrRawError" type="error" variant="tonal" density="compact" class="mt-3">
+                    {{ hrRawError }}；合并视图仍显示上一次可解析的站点规则。
+                  </VAlert>
+
+                  <div class="dm-hr-table mt-3">
+                    <div class="dm-hr-row dm-hr-row--head">
+                      <span>站点</span>
+                      <span>生效值</span>
+                      <span>来源</span>
+                      <span>启用</span>
+                      <span>操作</span>
+                    </div>
+                    <template v-for="row in hrSiteRows" :key="row.name">
+                      <div class="dm-hr-row" :class="{ 'dm-hr-row--blocked': row.blocked }">
+                        <div class="dm-hr-site">
+                          <strong class="text-body-2 dm-break-text">{{ row.name }}</strong>
+                          <div v-if="row.blocked" class="text-caption text-medium-emphasis">已屏蔽，回退全局</div>
+                        </div>
+                        <div class="dm-hr-values">
+                          <span v-for="cell in row.cells" :key="cell.key" class="dm-hr-value"
+                            :class="{ 'dm-hr-value--inherit': cell.inherited }" :title="cell.tooltip">{{ cell.text }}</span>
+                        </div>
+                        <div>
+                          <VChip size="x-small" variant="tonal" :color="row.sourceColor">{{ row.sourceLabel }}</VChip>
+                        </div>
+                        <div>
+                          <VSwitch :model-value="row.enabled" color="success" inset hide-details density="compact"
+                            @update:model-value="hrSetSiteEnabled(row.name, $event)" />
+                        </div>
+                        <div class="dm-hr-actions">
+                          <template v-if="row.custom">
+                            <VBtn size="small" variant="text" :prepend-icon="row.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                              @click="hrToggleExpanded(row.name)">{{ row.expanded ? '收起' : '编辑' }}</VBtn>
+                            <VBtn size="small" variant="text" color="error" prepend-icon="mdi-delete-outline"
+                              :title="row.preset ? '删除自定义条目后该站回退内置预设' : '删除该自定义站点'"
+                              @click="hrRemoveCustomSite(row.name)">删除</VBtn>
+                          </template>
+                          <VBtn v-else size="small" variant="text" prepend-icon="mdi-content-copy"
+                            title="把内置预设值复制为自定义条目后逐字段调整" @click="hrCopyPresetToCustom(row.name)">复制为自定义</VBtn>
+                        </div>
+                      </div>
+                      <div v-if="row.custom && row.expanded" class="dm-hr-editor">
+                        <div class="dm-hr-editor-grid">
+                          <VTextField v-for="field in hrNumberFields" :key="field.key" :model-value="hrRuleNumber(row.entry, field.key)"
+                            @update:model-value="hrSetRuleNumber(row.name, field.key, $event)" :label="field.label" type="number"
+                            density="compact" variant="outlined" hide-details :hint="`留空表示继承全局（${hrGlobalText(field.key)}）`"
+                            persistent-hint />
+                          <VSelect v-for="field in hrFlagFields" :key="field.key" :model-value="hrRuleFlag(row.entry, field.key)"
+                            @update:model-value="hrSetRuleFlag(row.name, field.key, $event)" :items="hrTriStateItems" :label="field.label"
+                            density="compact" variant="outlined" hide-details />
+                        </div>
+                        <div class="dm-hr-trackers">
+                          <VCombobox :model-value="hrRuleTrackers(row.entry)" @update:model-value="hrSetRuleTrackers(row.name, $event)"
+                            label="Tracker 域名（可选）" density="compact" variant="outlined" hide-details multiple chips
+                            closable-chips clearable placeholder="完整 URL 或裸域名，如 https://tracker.example.com/announce"
+                            hint="MP 站点库识别不出站点时，按这里的域名兜底匹配该自定义站点" persistent-hint />
+                        </div>
+                        <div class="dm-hr-tiers">
+                          <div class="dm-hr-tiers-head">
+                            <span>体积分档（按种子 GiB 匹配，max_size_gib 0 表示无上限并置于末位）</span>
+                            <VBtn size="small" variant="text" prepend-icon="mdi-plus" @click="hrAddTier(row.name)">添加分档</VBtn>
+                          </div>
+                          <div v-for="(tier, tierIndex) in row.entry.hr_size_tiers || []" :key="`${row.name}-${tierIndex}`"
+                            class="dm-hr-tier-row">
+                            <VTextField v-for="field in hrTierFields" :key="field.key" :model-value="hrTierNumber(tier, field.key)"
+                              @update:model-value="hrSetTierNumber(row.name, tierIndex, field.key, $event)" :label="field.label"
+                              type="number" density="compact" variant="outlined" hide-details />
+                            <VBtn icon="mdi-delete-outline" size="small" variant="text" color="error" title="删除该分档"
+                              @click="hrRemoveTier(row.name, tierIndex)" />
+                          </div>
+                          <div v-if="!(row.entry.hr_size_tiers || []).length" class="text-caption text-medium-emphasis">
+                            未设置分档：命中分档时以分档的做种时长/考核期为准，未命中时用站点值。
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                    <div v-if="!hrSiteRows.length" class="dm-monitor-empty">没有可显示的站点规则；可重载预设或新增自定义站点。</div>
+                  </div>
+
+                  <div class="mt-3">
+                    <VBtn size="small" variant="text" :prepend-icon="hrRawOpen ? 'mdi-chevron-up' : 'mdi-code-json'"
+                      @click="hrRawOpen = !hrRawOpen">{{ hrRawOpen ? '收起原始 YAML' : '编辑原始 YAML（hr_site_config_str）' }}</VBtn>
+                    <template v-if="hrRawOpen">
+                      <VTextarea v-model="form.hr_site_config_str" label="站点独立规则（YAML）" density="compact" variant="outlined"
+                        hide-details rows="8" class="mt-1" />
+                      <div class="dm-hint">
+                        顶层为列表，每项含 site_name 与 hr_duration / additional_seed_time / hr_deadline_days / hr_ratio / hr_upload_multiplier / hr_upload_gte_download / hr_active / hr_size_tiers / enabled；未设置字段回退全局规则，enabled: false 为影子条目。
+                      </div>
+                    </template>
+                  </div>
                 </VCol>
               </VRow>
             </div>
@@ -1433,6 +2222,30 @@ async function executeCleanupTags() {
         </VCardActions>
       </VCard>
     </VDialog>
+
+    <VDialog v-model="hrAddDialog" max-width="520">
+      <VCard>
+        <VCardItem>
+          <template #prepend>
+            <VAvatar color="primary" variant="tonal" size="40" rounded="lg"><VIcon icon="mdi-home-plus-outline" /></VAvatar>
+          </template>
+          <VCardTitle class="text-subtitle-1">新增自定义站点</VCardTitle>
+          <VCardSubtitle>站点名需与站点标签识别出的站点名一致</VCardSubtitle>
+        </VCardItem>
+        <VDivider />
+        <VCardText>
+          <VTextField v-model="hrNewSiteName" label="站点名" density="compact" variant="outlined" hide-details
+            hint="先写入 site_name，字段留空表示继承全局规则" persistent-hint @keyup.enter="hrConfirmAddSite" />
+          <div v-if="hrAddError" class="text-caption text-error mt-2">{{ hrAddError }}</div>
+        </VCardText>
+        <VDivider />
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="hrAddDialog = false">取消</VBtn>
+          <VBtn color="primary" variant="flat" prepend-icon="mdi-plus" @click="hrConfirmAddSite">添加</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 <style scoped>
@@ -1530,6 +2343,9 @@ async function executeCleanupTags() {
   .dm-subtabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding: 6px 12px; }
   .dm-subtabs::-webkit-scrollbar { display: none; }
   .dm-subtab { flex: 0 0 auto; padding: 6px 12px; }
+  .dm-hr-row { grid-template-columns: 1fr; }
+  .dm-hr-tier-row { grid-template-columns: 1fr 40px; }
+  .dm-hr-toolbar { align-items: stretch; }
   .dm-flow { grid-template-columns: 1fr; }
   .dm-flow-block:first-child { grid-column: auto; }
   .dm-monitor-summary, .dm-upload-summary { grid-template-columns: 1fr; }
@@ -1556,4 +2372,21 @@ async function executeCleanupTags() {
 @media (max-height: 760px) {
   .dm-window--overview { overflow-y: auto; }
 }
+.dm-hr-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dm-hr-table { display: flex; flex-direction: column; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow: hidden; }
+.dm-hr-row { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(280px, 2.2fr) minmax(92px, .5fr) 64px minmax(196px, auto); gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }
+.dm-hr-row:last-child { border-bottom: none; }
+.dm-hr-row--head { font-size: 12px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); background: rgba(var(--v-theme-on-surface), 0.03); }
+.dm-hr-row--blocked { background: rgba(var(--v-theme-on-surface), 0.02); }
+.dm-hr-site { min-width: 0; }
+.dm-hr-values { display: flex; flex-wrap: wrap; gap: 3px 10px; min-width: 0; font-size: 12px; }
+.dm-hr-value { white-space: nowrap; }
+.dm-hr-value--inherit { color: rgba(var(--v-theme-on-surface), 0.42); font-style: italic; }
+.dm-hr-actions { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.dm-hr-editor { padding: 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); background: rgba(var(--v-theme-on-surface), 0.03); }
+.dm-hr-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(184px, 1fr)); gap: 12px; }
+.dm-hr-trackers { margin-top: 14px; }
+.dm-hr-tiers { margin-top: 14px; }
+.dm-hr-tiers-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; font-size: 12px; font-weight: 600; }
+.dm-hr-tier-row { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)) 40px; gap: 8px; align-items: center; margin-bottom: 8px; }
 </style>

@@ -209,6 +209,13 @@ class HrSkipStatsResult(ApiBusinessModel):
     skip_stats: dict[str, int] = Field(default_factory=dict)
 
 
+class HrPresetsResult(ApiBusinessModel):
+    """内置 H&R 站点验证预设（只读，随代码发布）。"""
+
+    code: int = 0
+    presets: list[dict[str, JsonData]] = Field(default_factory=list)
+
+
 class HrActionResult(ActionResult):
     """H&R 操作执行结果。"""
 

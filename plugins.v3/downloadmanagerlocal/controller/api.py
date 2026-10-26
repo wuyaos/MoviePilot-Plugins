@@ -9,6 +9,7 @@ from ..model.api import (
     DiagnosticsResult,
     HashActionResult,
     HrActionResult,
+    HrPresetsResult,
     HrSkipStatsResult,
     HrTasksResult,
     OverviewResult,
@@ -217,7 +218,14 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
             "auth": "bear",
             "methods": ["GET"],
             "summary": "获取 H&R 保护跳过计数",
-            "response_model": HrSkipStatsResult,
+        },
+        {
+            "path": "/hr_presets",
+            "endpoint": plugin.api_hr_presets,
+            "auth": "bear",
+            "methods": ["GET"],
+            "summary": "获取内置 H&R 站点验证预设",
+            "response_model": HrPresetsResult,
         },
         {
             "path": "/hr_check",

@@ -1,5 +1,6 @@
 """下载管理插件 - API 路由实现"""
 
+import json
 from datetime import datetime
 from typing import TypeVar
 
@@ -16,6 +17,7 @@ from ..model.api import (
     HashActionResult,
     HrActionResult,
     HrClearTaskRequest,
+    HrPresetsResult,
     HrSkipStatsResult,
     HrTasksResult,
     ModuleActionResult,
@@ -44,6 +46,7 @@ from ..model.state import (
 )
 from ..service.archive import serialized_rename_state
 from ..service.hr.guard import HrGuard
+from ..service.hr.rules import load_preset_rules
 from ..service.site_tag import execute_tag_cleanup, scan_and_clean_tags
 from ..service.upload_limit_worker import stop_upload_limit_worker
 from ..service.upload_limiter import (
@@ -477,6 +480,17 @@ def api_hr_skip_stats(plugin):
     except Exception as e:
         _raise_query_error("H&R 跳过计数查询失败", e)
 
+
+def api_hr_presets(plugin):
+    """返回内置 H&R 站点验证预设（只读，未设置字段已剔除，供前端显示继承值）。"""
+    try:
+        presets = [
+            {"site_name": name, "rule": json.loads(rule.model_dump_json(exclude_none=True))}
+            for name, rule in load_preset_rules().items()
+        ]
+        return HrPresetsResult.model_validate({"presets": presets})
+    except Exception as e:
+        _raise_query_error("H&R 预设查询失败", e)
 
 def api_hr_check(plugin):
     """立即执行一轮 H&R 状态检查。"""

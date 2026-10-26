@@ -45,7 +45,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.5.1"
+    plugin_version = "3.6.0"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页
@@ -266,7 +266,12 @@ class DownloadManagerLocal(_PluginBase):
         """返回 H&R 任务列表与汇总。"""; return _api_hr_tasks(self)
 
     def api_hr_skip_stats(self):
-        """返回 H&R 保护在四条破坏性路径上的跳过计数。"""; return _api_hr_skip_stats(self)
+        """返回 H&R 保护在四条破坏性路径上的跳过计数。"""
+        return _controller_handlers.api_hr_skip_stats(self)
+
+    def api_hr_presets(self):
+        """返回内置 H&R 站点验证预设。"""
+        return _controller_handlers.api_hr_presets(self)
 
     def api_autoremove_status(self):
         """返回自动删种模块状态。"""

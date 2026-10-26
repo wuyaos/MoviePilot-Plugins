@@ -141,8 +141,11 @@ def apply_snapshot(task: HrTask, snapshot: HrTorrentSnapshot) -> None:
 def resolve_site(
     tracker_mappings: Optional[dict],
     trackers: Iterable[str],
+    site_rules: Optional[dict] = None,
 ) -> tuple[Optional[int], Optional[str]]:
-    """按 tracker 解析站点 ID 与名称：用户域名映射优先，其次匹配 MoviePilot 站点库与索引模板。"""
+    """按 tracker 解析站点 ID 与名称：用户域名映射优先，其次 MoviePilot 站点库，
+    最后按站点规则条目的 trackers 字段兜底（覆盖 MP 站点库未收录的自定义站点）。"""
+    rule_trackers = _rule_domain_map(site_rules)
     mappings = tracker_mappings if isinstance(tracker_mappings, dict) else {}
     for tracker in trackers or []:
         if not tracker:
@@ -156,6 +159,9 @@ def resolve_site(
             domain = get_url_domain(tracker)
         if not domain:
             continue
+        rule_name = rule_trackers.get(domain)
+        if rule_name:
+            return None, rule_name
         try:
             indexer = get_site_indexer(domain) or {}
         except Exception as error:
@@ -166,6 +172,19 @@ def resolve_site(
         if site_id or site_name:
             return (int(site_id) if site_id else None), (str(site_name) if site_name else None)
     return None, None
+
+
+def _rule_domain_map(site_rules: Optional[dict]) -> dict[str, str]:
+    """把站点规则条目的 trackers 字段归一化为 域名→站点名 映射（仅启用条目参与）。"""
+    result: dict[str, str] = {}
+    for name, rule in (site_rules or {}).items():
+        if not getattr(rule, "enabled", True):
+            continue
+        for item in getattr(rule, "trackers", None) or []:
+            domain = get_url_domain(str(item or "").strip())
+            if domain and domain not in result:
+                result[domain] = str(name)
+    return result
 
 
 def is_excluded(

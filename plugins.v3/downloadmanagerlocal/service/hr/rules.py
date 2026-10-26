@@ -1,7 +1,15 @@
-"""H&R 规则解析：插件配置、站点独立 YAML 与按种子大小分档。"""
+"""H&R 规则解析：插件配置、内置预设、站点独立 YAML 与按种子大小分档。
+
+规则分层（v3.6.0）：自定义（启用中）> 内置预设 > 全局默认。
+- 内置预设：`service/hr/presets.json`（只读，随代码发布）；
+- 自定义层：`hr_site_config_str` YAML，同名站点整条覆写预设；
+- 条目 `enabled: false` 为影子条目：屏蔽该站的预设与自定义，回退全局规则。
+"""
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, Optional
 
 from app.sdk.logging import logger
@@ -12,6 +20,28 @@ from .constants import HR_CONFIG_DEFAULTS, HR_LOG_PREFIX, HR_NOTIFY_MODES
 from .models import HrConfig, HrSiteRule, HrSizeTier
 
 _MISSING = object()
+_PRESETS_PATH = Path(__file__).resolve().parent / "presets.json"
+
+
+def load_preset_rules() -> dict[str, HrSiteRule]:
+    """加载内置验证预设（只读）；文件缺失或损坏时返回空表，不阻断运行。"""
+    try:
+        raw = json.loads(_PRESETS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        logger.error(f"{HR_LOG_PREFIX}内置预设加载失败，忽略：{error}")
+        return {}
+    rules: dict[str, HrSiteRule] = {}
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("site_name") or "").strip()
+        if not name:
+            continue
+        try:
+            rules[name] = HrSiteRule.model_validate(dict(item.get("rule") or {}))
+        except ValidationError as error:
+            logger.error(f"{HR_LOG_PREFIX}内置预设 {name} 无效，已跳过：{error}")
+    return rules
 
 
 def parse_hr_config(config: Optional[dict] = None) -> HrConfig:
@@ -53,17 +83,26 @@ def parse_hr_config(config: Optional[dict] = None) -> HrConfig:
 
 
 def build_site_rules(site_config_str: Optional[str], global_rule: HrSiteRule) -> dict[str, HrSiteRule]:
-    """解析站点独立配置 YAML（顶层列表，每项含 site_name），并按全局规则回填未设置字段。"""
+    """合并内置预设与站点独立配置 YAML，并按全局规则回填未设置字段。
+
+    合并语义（v3.6.0）：以内置预设为底，自定义 YAML 同名整条覆写；
+    条目 `enabled: false` 为影子条目，屏蔽该站全部站点规则（回退全局）。
+    """
+    presets = load_preset_rules()
+    rules: dict[str, HrSiteRule] = {
+        name: apply_global_defaults(rule, global_rule)
+        for name, rule in presets.items()
+    }
     raw = str(site_config_str or "").strip()
     if not raw:
-        logger.warning(f"{HR_LOG_PREFIX}未提供站点独立配置，站点规则回退全局规则")
-        return {}
+        if not rules:
+            logger.warning(f"{HR_LOG_PREFIX}无内置预设且未提供站点独立配置，站点规则回退全局规则")
+        return rules
     items = _load_yaml_list(raw)
     if items is None:
-        logger.error(f"{HR_LOG_PREFIX}站点独立配置不可用，站点规则回退全局规则")
-        return {}
+        logger.error(f"{HR_LOG_PREFIX}站点独立配置不可用，仅保留内置预设")
+        return rules
 
-    rules: dict[str, HrSiteRule] = {}
     for item in items:
         if not isinstance(item, dict):
             logger.error(f"{HR_LOG_PREFIX}站点配置条目必须是键值对象，已跳过：{item!r}")
@@ -76,6 +115,10 @@ def build_site_rules(site_config_str: Optional[str], global_rule: HrSiteRule) ->
             rule = HrSiteRule.model_validate(dict(item))
         except ValidationError as error:
             logger.error(f"{HR_LOG_PREFIX}站点 {name} 配置无效，已跳过：{error}")
+            continue
+        if not rule.enabled:
+            # 影子条目：无论内置是否存在，该站回退全局规则。
+            rules.pop(name, None)
             continue
         rules[name] = apply_global_defaults(rule, global_rule)
     return rules

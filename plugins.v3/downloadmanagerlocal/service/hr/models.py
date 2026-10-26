@@ -80,6 +80,12 @@ class HrSiteRule(BaseModel):
     hr_upload_gte_download: Optional[bool] = None
     hr_active: Optional[bool] = None
     hr_size_tiers: Optional[list[HrSizeTier]] = None
+    trackers: Optional[list[str]] = None
+    enabled: bool = True
+    """条目级启用开关（v3.6.0）：False 为影子条目，屏蔽该站的内置预设与自定义规则（回退全局）。"""
+    trackers: Optional[list[str]] = None
+    """Tracker 域名/地址列表（v3.6.0，自定义站点用）：种子 tracker 在 MP 站点库识别不出时，按此列表兜底识别站点名。
+    支持完整 URL 或裸域名，匹配时按域名精确比对；MP 站点库能识别的站点无需填写。"""
 
 
 class HrTask(BaseModel):
@@ -191,6 +197,16 @@ class HrConfig(BaseModel):
         name = str(site_name or "").strip()
         rule = self.site_rules.get(name) if name else None
         return rule if rule is not None else self.global_rule
+
+    def site_in_scope(self, site_id: Optional[int], site_name: Optional[str]) -> bool:
+        """站点白名单判定：MP 站点 ID 命中白名单，或站点名存在自定义规则条目。
+
+        trackers 兜底识别的自定义站点没有 MP site_id，以“该站点名配了规则条目”作为纳管意向。
+        """
+        if site_id is not None and site_id in self.sites:
+            return True
+        name = str(site_name or "").strip()
+        return bool(name) and name in self.site_rules
 
 
 __all__ = (

@@ -34,7 +34,7 @@ plugins.v3/downloadmanagerlocal/
 ├── AGENTS.md                       # 本文件（AI 交接 + 结构说明）
 ├── controller/
 │   ├── api.py                      # build_api_routes(plugin)：API route metadata
-│   └── handlers.py                 # 33 个 api_* handler 与响应 shape
+│   └── handlers.py                 # 34 个 api_* handler 与响应 shape
 ├── model/
 │   ├── api.py                      # Pydantic 请求/业务/响应模型
 │   ├── state.py                    # 持久化 key 常量与 dict 读写 helper
@@ -60,7 +60,7 @@ plugins.v3/downloadmanagerlocal/
 │   ├── upload_limiter.py           # 上传限速扫描/分配/持久化/恢复
 │   ├── upload_allocator.py         # 纯逻辑额度分配器
 │   ├── upload_limit_worker.py      # 30 秒常驻协调 worker
-│   ├── hr/                         # H&R 模块子包
+│   ├── hr/                         # H&R 模块子包（presets.json 内置站点验证预设）
 │   ├── autoremove/                 # 自动删种子包
 │   └── failclean/                  # 失败清理子包
 ├── utils/
@@ -112,8 +112,10 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 - 职责：按站点规则跟踪 H&R 做种时长/比例，达标清除标签，超期告警，支持体积分档与每日汇总通知；并作为所有破坏性删除路径的保护闸门。
 - 关键文件：`service/hr/service.py`（`HrService`）、`service/hr/scanner.py`、`service/hr/evaluator.py`、`service/hr/rules.py`（站点 YAML 规则与体积分档）、`service/hr/guard.py`（`HrGuard`）、`service/hr/cleanup.py`、`service/hr/notify.py`、`service/hr/models.py`、`service/hr/constants.py`。
-- 关键配置：`hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_onlyonce`、`hr_downloader`、`hr_sites`、`hr_notify`（none/on_error/always）、`hr_check_period`（分钟）、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str`（YAML）。
-- 端点：`GET /hr/tasks`、`GET /hr/skip_stats`、`POST /hr_check`、`POST /hr_scan`、`POST /hr_clear_task`、`POST /hr_clear_compliant`、`POST /hr_clear_missing`。
+- 端点：`GET /hr/tasks`、`GET /hr/skip_stats`、`GET /hr_presets`（内置站点验证预设，只读）、`POST /hr_check`、`POST /hr_scan`、`POST /hr_clear_task`、`POST /hr_clear_compliant`、`POST /hr_clear_missing`。
+- 关键配置：`hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_onlyonce`、`hr_downloader`、`hr_sites`、`hr_notify`（none/on_error/always）、`hr_check_period`（分钟）、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str`（YAML；条目支持 `enabled` 与 `trackers`）。
+- 双层站点规则（v3.6.0）：`service/hr/presets.json` 为随代码发布的内置站点验证预设（11 站，只读）；`hr_site_config_str` 为自定义层。`rules.build_site_rules` 合并语义：内置为底 → 自定义同名**整条覆写**（不做字段级合并）→ 条目 `enabled: false` 为影子条目（屏蔽该站全部站点规则，含内置，回退全局规则）→ 最后 `apply_global_defaults` 回填全局未设置字段。`HrSiteRule.enabled` 默认 `true`，旧 YAML 无此字段 = 启用，完全向后兼容。前端 H&R 设置页以合并视图展示（来源列 + 行启用 switch）。
+- 自定义站点 tracker 兜底（v3.6.0）：`HrSiteRule.trackers`（域名或完整 URL 列表）。`scanner.resolve_site` 顺序 = 用户 `tag_tracker_mappings` → MP 站点库 → 规则条目 `trackers` 兜底（域名精确比对，`_rule_domain_map` 归一化，仅启用条目参与）。trackers 识别出的站点无 MP site_id，白名单判定走 `HrConfig.site_in_scope`：`site_id ∈ hr_sites` **或** 站点名存在自定义规则条目（配了规则 = 纳管意向）。MP 站点库能识别的站点无需填 trackers。
 - 调度：`HitAndRunCheck`（interval，`hr_check_period`）、`HitAndRunDiscover`（interval，`hr_check_period × 2`，需 `hr_auto_discover`）、`HitAndRunSummary`（cron `hr_notify_summary_cron`）。
 - 事件：`DownloadAdded`（普通/RSS 来源纳管）、`PluginTriggered`（刷流 `brushflow_download_added` 纳管）、`PluginAction`（`hnr_check`/`hnr_scan`/`hnr_clear_compliant`/`hnr_clear_missing` 命令）。
 
@@ -185,9 +187,9 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 ## 5. API 端点表
 
-`controller/api.py::build_api_routes` 目前声明 33 条路由（13 GET + 20 POST），全部 `auth="bear"`，均为 Vue 前端调用。GET 查询返回声明的裸业务模型，POST 操作返回 `schemas.Response[T]`。
+`controller/api.py::build_api_routes` 目前声明 34 条路由（14 GET + 20 POST），全部 `auth="bear"`，均为 Vue 前端调用。GET 查询返回声明的裸业务模型，POST 操作返回 `schemas.Response[T]`。
 
-### GET（13）
+### GET（14）
 
 | path | summary | handler |
 | --- | --- | --- |
@@ -200,6 +202,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 | `/sites` | 获取站点列表（用于辅种站点选择） | `api_sites` |
 | `/hr/tasks` | 获取 H&R 任务列表与汇总 | `api_hr_tasks` |
 | `/hr/skip_stats` | 获取 H&R 保护跳过计数 | `api_hr_skip_stats` |
+| `/hr_presets` | 获取内置 H&R 站点验证预设（只读） | `api_hr_presets` |
 | `/autoremove_status` | 获取自动删种模块状态 | `api_autoremove_status` |
 | `/failclean_status` | 获取整理失败清理模块状态 | `api_failclean_status` |
 | `/tag_status` | 获取站点标签模块状态 | `api_tag_status` |
