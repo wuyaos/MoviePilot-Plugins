@@ -196,5 +196,19 @@
             "v3.0.0": "V3 迁移：基于 Seed680/憨憨保种区 v2.0.0；修复下载记录与配置接口响应格式（统一 envelope）；抓取页数可配置（默认 5 页）"
         },
         "release": true
+    },
+    "DownloadManagerLocal": {
+        "name": "下载中心",
+        "description": "转移做种、命名补刀、站点标签、H&R 保护、自动删种、失败清理与上传限速，一站式下载管理。",
+        "labels": "下载管理,做种,H&R,V3",
+        "version": "3.5.0",
+        "icon": "downloadmanagerlocal.png",
+        "author": "Kurisu, wuyaos",
+        "level": 1,
+        "system_version": ">=3.0.0",
+        "history": {
+            "3.5.0": "移除速度监控；命名补刀事件开关收敛为 rename_on_download_added（默认开启）；删种/H&R 页补齐手动执行、候选预览、残留巡检、立即核查与清除按钮；各模块发布默认值统一为来源表单默认值",
+            "3.4.0": "六合一整合基线：转移做种（含做种校验子页）、命名补刀（事件+cron+来源过滤）、站点标签（二级分类/剧名标签/历史补全）、H&R 助手、自动删种、失败清理、速度监控、上传限速；移除 IYUU 辅种"
+        }
     }
 }
