@@ -170,11 +170,43 @@ def normalize_upload_limit_config(config: dict | None) -> dict:
     }
 
 
+# ---- 模块开关注册表（唯一真源）----
+# module -> (配置页扁平开关键, plugin 运行时属性名)
+# 运行时属性统一存「门控值」：enabled AND 模块开关；裸开关用 _module_switches 快照。
+MODULE_SWITCHES = {
+    "transfer": ("transfer_enabled", "_transfer_enabled"),
+    "rename": ("rename_enabled", "_rename_enabled"),
+    "tag": ("tag_enabled", "_tag_enabled"),
+    "hr": ("hr_enabled", "_hr_enabled"),
+    "autoremove": ("remover_enabled", "_remover_enabled"),
+    "failclean": ("failcleanup_enabled", "_failcleanup_enabled"),
+    "upload_limit": ("upload_limit_enabled", "_upload_limit_enabled"),
+}
+
+
+def module_switch_on(config: dict, module: str) -> bool:
+    """读模块裸开关（不含总开关；展示层区分「插件停用」与「模块停用」时用）。"""
+    flat_key = MODULE_SWITCHES[module][0]
+    default = PLUGIN_CONFIG_DEFAULTS.get(flat_key, False)
+    return bool(config.get(flat_key, default))
+
+
+def module_active(config: dict, module: str) -> bool:
+    """模块生效的唯一门控口径：插件总开关 AND 模块开关。"""
+    if not config.get("enabled", False):
+        return False
+    return module_switch_on(config, module)
+
+
+def build_module_switches(config: dict) -> dict:
+    """返回 {module: 裸开关布尔} 快照，供展示层与诊断使用。"""
+    return {module: module_switch_on(config, module) for module in MODULE_SWITCHES}
+
+
 def is_transfer_active(plugin) -> bool:
-    """判断转移做种能力是否处于可运行状态。"""
+    """判断转移做种能力是否处于可运行状态（开关已由门控属性承载）。"""
     return bool(
-        getattr(plugin, "_enabled", False)
-        and getattr(plugin, "_transfer_enabled", False)
+        getattr(plugin, "_transfer_enabled", False)
         and getattr(plugin, "_fromdownloader", "")
         and getattr(plugin, "_todownloader", "")
         and getattr(plugin, "_fromtorrentpath", "")
@@ -193,16 +225,15 @@ def is_upload_limit_active(plugin) -> bool:
     if not isinstance(limits, dict):
         return False
     return bool(
-        getattr(plugin, "_enabled", False)
-        and getattr(plugin, "_upload_limit_enabled", False)
+        getattr(plugin, "_upload_limit_enabled", False)
         and selected_names
         and all(safe_int(limits.get(name), 0, 0) > 0 for name in selected_names)
     )
 
 
 def is_plugin_active(plugin) -> bool:
-    """判断插件是否至少有一个主要能力处于可运行状态。"""
-    return (
-        is_transfer_active(plugin)
-        or is_upload_limit_active(plugin)
+    """判断插件是否至少有一个模块处于生效状态（门控属性已含总开关）。"""
+    return any(
+        bool(getattr(plugin, attr, False))
+        for _, attr in MODULE_SWITCHES.values()
     )

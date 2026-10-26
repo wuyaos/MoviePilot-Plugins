@@ -124,6 +124,11 @@ def build_diagnostics(plugin):
             "配置完整" if transfer_ready else "未启用或配置不完整",
         ),
         _check(
+            "插件总开关",
+            "ok" if getattr(plugin, "_enabled", False) else "off",
+            _bool_text(getattr(plugin, "_enabled", False)),
+        ),
+        _check(
             "种子重命名",
             "warn" if to_service.get("type") == "transmission" else ("ok" if plugin._rename_enabled else "off"),
             "不支持 Transmission" if to_service.get("type") == "transmission" else _bool_text(plugin._rename_enabled),

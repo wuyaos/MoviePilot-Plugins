@@ -83,10 +83,18 @@ def _raise_query_error(summary: str, error: Exception) -> None:
     """把查询端点异常转换为明确的 HTTP 500。"""
     logger.error(f"{summary}: {error}")
     raise HTTPException(status_code=500, detail=str(error)) from error
+def _require_module(plugin, module: str, label: str) -> None:
+    """模块核心执行端点的统一门控：总开关与模块开关任一关闭即拒绝（utils/config.py 注册表口径）。"""
+    from ..utils.config import MODULE_SWITCHES
+    attr = MODULE_SWITCHES[module][1]
+    if not getattr(plugin, attr, False):
+        raise HTTPException(status_code=400, detail=f"「{label}」未启用（检查插件总开关与模块开关）")
+
 
 
 def api_retry_renames(plugin):
     """手动触发失败历史和脏名称种子的批量补刮。"""
+    _require_module(plugin, "rename", "命名补刀")
     try:
         return _operation_response(plugin._retry_pending_renames(), RetryRenamesResult)
     except Exception as e:
@@ -99,6 +107,7 @@ def api_retry_renames(plugin):
 
 def api_retry_rename(plugin, hash: str = ""):
     """对指定种子 hash 手动重试重命名和站点标签。"""
+    _require_module(plugin, "rename", "命名补刀")
     try:
         return _operation_response(plugin._retry_rename(hash), HashActionResult)
     except Exception as e:
@@ -186,6 +195,7 @@ def api_upload_limit_status(plugin):
 
 def api_upload_limit_reallocate(plugin, payload: EmptyRequest | None = None):
     """立即执行一轮上传额度重新分配。"""
+    _require_module(plugin, "upload_limit", "上传限速")
     try:
         result = run_upload_limit_cycle(plugin, reason="manual")
         return _operation_response(
@@ -314,6 +324,7 @@ def api_tag_cleanup_scan(plugin, payload: TagCleanupScanRequest):
 
 def api_tag_cleanup_execute(plugin, payload: TagCleanupExecuteRequest):
     """按用户确认的扫描快照清理其余标签。"""
+    _require_module(plugin, "tag", "站点标签")
     try:
         request = _request_dict(payload)
         result = execute_tag_cleanup(plugin, request.get("removals") or [])
@@ -394,6 +405,7 @@ def api_delete_rename_archive(plugin, hash: str = ""):
 @serialized_rename_state
 def api_recovery_torrent(plugin, hash: str = ""):
     """恢复种子原始名称"""
+    _require_module(plugin, "rename", "命名补刀")
     if not hash:
         return _operation_response(
             {"code": 1, "msg": "缺少 hash 参数", "hash": ""},
@@ -466,6 +478,7 @@ def api_hr_skip_stats(plugin):
 
 def api_hr_check(plugin):
     """立即执行一轮 H&R 状态检查。"""
+    _require_module(plugin, "hr", "H&R 助手")
     try:
         result = plugin._hr_service.check_tasks("手动")
     except Exception as e:
@@ -480,6 +493,7 @@ def api_hr_check(plugin):
 
 def api_hr_scan(plugin):
     """立即执行一轮 H&R 自动发现与状态检查。"""
+    _require_module(plugin, "hr", "H&R 助手")
     try:
         result = plugin._hr_service.run_scan("手动")
     except Exception as e:
@@ -551,6 +565,7 @@ def api_autoremove_status(plugin):
 
 def api_autoremove_run(plugin, payload: EmptyRequest | None = None):
     """手动执行一轮自动删种。"""
+    _require_module(plugin, "autoremove", "自动删种")
     service = getattr(plugin, "_autoremove_service", None)
     if service is None:
         raise HTTPException(status_code=500, detail="自动删种服务未初始化")
@@ -576,6 +591,7 @@ def api_failclean_status(plugin):
 
 def api_failclean_scan(plugin, payload: EmptyRequest | None = None):
     """手动执行一轮重复下载残留巡检清理。"""
+    _require_module(plugin, "failclean", "失败清理")
     service = getattr(plugin, "_failclean_service", None)
     if service is None:
         raise HTTPException(status_code=500, detail="整理失败清理服务未初始化")

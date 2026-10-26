@@ -7,7 +7,6 @@
 `DownloadManagerLocal`（展示名「下载中心」）是 MoviePilot V3 原生插件，把七个模块聚合在一个插件里，后端是 Python 服务层，前端是 Vue 联邦组件（`__init__.py::get_render_mode()` 返回 `("vue", "dist/assets")`）。
 
 - 源码目录：`plugins.v3/downloadmanagerlocal/`
-- 随包元数据：`plugins.v3/downloadmanagerlocal/plugin.json`
 - 市场元数据：仓库根 `package.v3.json` 的 `DownloadManagerLocal` 条目
 - 插件身份：`plugin_name="下载中心"`、`plugin_config_prefix="downloadmanagerlocal_"`、`plugin_order=18`、`auth_level=2`
 - 渲染产物：`plugins.v3/downloadmanagerlocal/dist/`（联邦入口 `dist/assets/remoteEntry.js`）
@@ -31,7 +30,6 @@
 ```
 plugins.v3/downloadmanagerlocal/
 ├── __init__.py                     # 插件入口：身份/生命周期/事件注册/薄委托
-├── plugin.json                     # 随包元数据（name/description/version/history/...）
 ├── README.md                       # 面向用户的模块与生效条件说明
 ├── AGENTS.md                       # 本文件（AI 交接 + 结构说明）
 ├── controller/
@@ -158,6 +156,17 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 `utils/config.py::PLUGIN_CONFIG_DEFAULTS` 是单次合并构造的扁平默认值，`__init__.py::get_form()` 返回它的 deepcopy；各模块复用同一批 `*_CONFIG_DEFAULTS` 常量，没有第二份实现。
 
+### 4.1 开关体系（v3.5.1 规范化）
+
+- **单一真源**：`utils/config.py::MODULE_SWITCHES`——`{module: (扁平开关键, plugin 属性名)}`，七模块 transfer/rename/tag/hr/autoremove/failclean/upload_limit 全部登记。
+- **唯一门控口径**：`module_active(config, module)` = 插件总开关 `enabled` AND 模块开关。总开关关闭时，无论模块开关状态，模块一律视为关闭。
+- **属性层**：`service/config.py` 把 7 个 `plugin._*_enabled` 属性统一赋门控值；`plugin._module_switches` 存裸开关快照（展示层区分「插件停用」vs「模块停用」用）。
+- **服务配置层**：hr/autoremove/failclean 的 `init_module` 中 `self._config.enabled = module_active(...)`，因此 `service/scheduler.py` 各 `_build_*_services` 的注册条件（读 `service.config.enabled` / `_site_tag_config["enable"]` / `_rename_config["enabled"]`）天然走门控值，调度注册无需重复判断总开关。
+- **嵌套视图对齐**：`_site_tag_config["enable"]` 与 `_rename_config["enabled"]` 在构造后对齐门控属性；`tag_enabled → enable` 已纳入 `_TAG_FLAT_PREFIX_MAP`。
+- **API 层**：`controller/handlers.py::_require_module(plugin, module, label)` 拦截 9 个模块核心执行端点（retry_renames/retry_rename/recovery_torrent/tag_cleanup_execute/hr_check/hr_scan/autoremove_run/failclean_scan/upload_limit_reallocate）。数据管理类端点（清历史、恢复/删除归档、hr_clear_*、upload_limit_disable_restore）不受门控——停用模块后仍允许管理自己的数据。
+- **组合函数**：`is_transfer_active`/`is_upload_limit_active` 基于门控属性，只追加配置完整性条件（下载器/路径/额度）；`is_plugin_active` = 七模块门控属性任一为真。
+- **新增模块时**：先在 `MODULE_SWITCHES` 登记，再让属性/服务/端点走注册表口径，禁止散落手写 `enabled and xxx_enabled`。
+
 **总键数：113**（不是 114；分组见下，`utils/config.py` 显式键 + 7 处 spread 合并去重后）。
 
 | 分组 | 键数 | 键 |
@@ -172,7 +181,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 各模块默认值来源：`utils/config.py::TRANSFER_DEFAULTS`、`service/rename.py::DEFAULT_RENAME_CONFIG`（配 `RENAME_FLAT_CONFIG_KEYS` 映射）、`service/site_tag.py::DEFAULT_TAG_CONFIG`、`service/hr/constants.py::HR_FORM_DEFAULTS`、`service/autoremove/constants.py::REMOVER_FORM_DEFAULTS`、`service/failclean/constants.py::FAILCLEAN_FORM_DEFAULTS`。
 
-配置读取：`controller/handlers.py` 通过 `plugin.get_config()` 读当前实例配置；站点标签扁平键→嵌套键映射在 `service/config.py::_TAG_FLAT_PREFIX_MAP` / `_flat_tag_module_config`。
+配置读取：`controller/handlers.py` 通过 `plugin.get_config()` 读当前实例配置；站点标签扁平键→嵌套键映射在 `service/config.py::_TAG_FLAT_PREFIX_MAP` / `_flat_tag_module_config`（`tag_enabled → enable` 已登记，见 §4.1）。
 
 ## 5. API 端点表
 
@@ -282,11 +291,11 @@ Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布�
 - **dev reload 用类名 id**：V3 本地调试实例 reload 路径是 `POST /api/v1/plugin/reload/DownloadManagerLocal`（类名，不是小写目录名）。
 - **单仓库口径**：本仓库 `D:/work/project/person/MoviePilot-Plugins` 是唯一维护点；z2561221 克隆仅作整合期基底，已弃。前端源码在仓库级 `frontend.v3/downloadmanagerlocal/`，构建产物回到插件目录 `dist/`。
 - **前端只保留一份源码**：插件目录内不再有 `frontend/`，源码统一在仓库级 `frontend.v3/downloadmanagerlocal/`（`Config.vue`/`Page.vue`/`api.js`）。
-- **`package.v3.json` 编辑规范**：向 `history` 插新版本条目时禁止用相邻行替换（会吞掉旧键名导致 JSON 破坏）；优先单行整行替换或全量重写，改完立即 `python -m json.tool package.v3.json` 校验。V3 发布需三处同步：`__init__.py::plugin_version`、`plugin.json`、`package.v3.json`。
+- **`package.v3.json` 编辑规范**：向 `history` 插新版本条目时禁止用相邻行替换（会吞掉旧键名导致 JSON 破坏）；优先单行整行替换或全量重写，改完立即 `python -m json.tool package.v3.json` 校验。V3 发布版本两处同步：`__init__.py::plugin_version` 与 `package.v3.json`（version + history 顶部新条目）；插件目录内无 `plugin.json`（MP V3 不读取，已删除）。
 - **速度监控已整体移除**：`service/speed_*`、`speed_monitor_*` 配置键、监控会话与告警链路在本版本代码中 0 残留；历史 changelog 中出现的「速度监控」字样只作追溯。
 - **IYUU 辅种已移除**：`iyuu_helper.py`、`service/iyuu.py`、`modules/iyuu.py`、`iyuu_*` 配置键均已删除（v3.4.0 六合一整合基线时移除）。
 - **命名补刀事件开关**：唯一键是 `rename_on_download_added`（默认 true）；旧名 `rename_event_enabled` 已删除，勿再引用。
-- **站点标签历史补全注册判据**：`_build_site_tag_services` 要求模块配置 `config["enable"]` 为真，而 `service/config.py::_TAG_FLAT_PREFIX_MAP` 只映射 `tag_*` 键、不含 `enable`，`DEFAULT_TAG_CONFIG["enable"]` 默认 False——按当前代码路径，该 cron 服务在正常配置下不会注册。改动该模块时需先确认这是有意行为还是缺口。
+- **站点标签历史补全注册判据（v3.5.1 已修）**：`_TAG_FLAT_PREFIX_MAP` 历史上缺 `tag_enabled → enable` 映射，导致 `_site_tag_config["enable"]` 恒为默认 False、补全 cron 服务永不注册；现已登记映射并随门控值对齐，开关 `tag_enabled` 即可注册。
 - **H&R 保护闸门**：`service/hr/guard.py::HrGuard().should_skip(path, downloader, hash)` 是转移删源、自动删种、失败清理、同步删除四条破坏性路径的统一入口，未达标任务不会被连带删除；`/hr/skip_stats` 读各路径跳过计数。
 - **做种校验后台线程**：改动 `service/recheck.py` 必须保持退出事件与锁语义，否则出现重复 worker 或无法停止。
 - **上传限速语义**：`upload_limit_grace_minutes` 内不写站点/单种额度但仍受下载器总上传上限；`allocated_kib` 是分配额度，不是实际吞吐或 Peer 能力证明；停用恢复走 compare-and-set。

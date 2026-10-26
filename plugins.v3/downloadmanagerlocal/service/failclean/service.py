@@ -12,6 +12,8 @@ from typing import Any, Optional
 
 from app.sdk.logging import logger
 
+from dataclasses import replace
+from ...utils.config import module_active
 from ..hr.guard import SKIP_PATH_TRANSFER_FAILURE, HrGuard
 from . import hostapi
 from .config import FailCleanConfig, parse_failclean_config
@@ -95,7 +97,10 @@ class FailCleanService:
 
     def init_module(self, config: Optional[dict] = None) -> None:
         """按插件配置初始化模块并恢复持久化计数。"""
-        self._config = parse_failclean_config(config)
+        parsed = parse_failclean_config(config)
+        # 门控对齐：服务配置 enabled = 总开关 AND failcleanup_enabled（utils/config.py::module_active）。
+        # FailCleanConfig 是 frozen dataclass，用 dataclasses.replace 构造新实例。
+        self._config = replace(parsed, enabled=module_active(config or {}, "failclean"))
         self._status = self._load_status()
         self._recent_deletes.clear()
         self._stopped = False

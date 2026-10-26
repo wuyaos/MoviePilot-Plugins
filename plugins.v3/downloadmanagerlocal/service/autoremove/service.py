@@ -10,6 +10,7 @@ from typing import Any, Optional
 from app.schemas.types import MessageType
 from app.sdk.logging import logger
 
+from ...utils.config import module_active
 from ...utils.torrent_adapter import delete_torrent_with_files
 from ..hr.guard import SKIP_PATH_AUTO_REMOVE, HrGuard
 from .constants import (
@@ -80,6 +81,8 @@ class AutoRemoveService:
     def init_module(self, config: Optional[dict] = None) -> None:
         """按插件配置初始化模块：解析 remover_* 配置、读取观察闸门、校验条件并恢复运行状态。"""
         self._config = parse_remover_config(config)
+        # 门控对齐：服务配置 enabled = 总开关 AND remover_enabled（utils/config.py::module_active）。
+        self._config.enabled = module_active(config or {}, "autoremove")
         source = config if isinstance(config, dict) else {}
         self._observe_only = as_bool(source.get(MIGRATION_OBSERVE_ONLY_KEY), True)
         self._conditions = None

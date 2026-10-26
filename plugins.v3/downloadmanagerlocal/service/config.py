@@ -5,6 +5,8 @@ from app.sdk.logging import logger
 from ..adapter.moviepilot import create_downloader_helper
 from ..utils.config import (
     PLUGIN_CONFIG_DEFAULTS,
+    build_module_switches,
+    module_active,
     normalize_upload_limit_config,
     safe_int,
 )
@@ -40,7 +42,7 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     defaults = PLUGIN_CONFIG_DEFAULTS
 
     plugin._enabled = config.get("enabled", defaults["enabled"])
-    plugin._transfer_enabled = config.get("transfer_enabled", defaults["transfer_enabled"])
+    plugin._transfer_enabled = module_active(config, "transfer")
     plugin._onlyonce = config.get("onlyonce", defaults["onlyonce"])
     plugin._delay_minutes = config.get("delay_minutes", defaults["delay_minutes"])
     plugin._transfer_fallback_enabled = config.get(
@@ -95,12 +97,34 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
         defaults["rename_tv_format"],
     )
     plugin._rename_exclude_dirs = config.get("rename_exclude_dirs", defaults["rename_exclude_dirs"])
+    plugin._rename_enabled = module_active(config, "rename")
+    plugin._rename_movie_format = config.get(
+        "rename_movie_format",
+        defaults["rename_movie_format"],
+    )
+    plugin._rename_tv_format = config.get(
+        "rename_tv_format",
+        defaults["rename_tv_format"],
+    )
+    plugin._rename_exclude_dirs = config.get("rename_exclude_dirs", defaults["rename_exclude_dirs"])
+    # 嵌套视图与门控属性对齐：调度注册、状态展示读嵌套键时口径一致。
+    plugin._rename_config["enabled"] = plugin._rename_enabled
 
-    plugin._tag_enabled = config.get("tag_enabled", defaults["tag_enabled"])
+    plugin._tag_enabled = module_active(config, "tag")
     plugin._tag_siteprefix = config.get("tag_siteprefix", defaults["tag_siteprefix"])
     plugin._tag_tracker_mappings_str = config.get("tag_tracker_mappings_str", defaults["tag_tracker_mappings_str"])
     if plugin._tag_tracker_mappings_str:
         plugin._tracker_mappings.update(parse_tracker_mappings(plugin._tag_tracker_mappings_str))
+    plugin._site_tag_config["enable"] = plugin._tag_enabled
+
+    # hr/autoremove/failclean/upload_limit 的门控属性（transfer/rename/tag 已在上方按注册表口径赋值）；
+    # upload_limit 此前由 normalize 循环写入裸值，此处统一覆盖为门控值。
+    plugin._hr_enabled = module_active(config, "hr")
+    plugin._remover_enabled = module_active(config, "autoremove")
+    plugin._failcleanup_enabled = module_active(config, "failclean")
+    plugin._upload_limit_enabled = module_active(config, "upload_limit")
+    # 裸开关快照：展示层区分「插件停用」与「模块停用」。
+    plugin._module_switches = build_module_switches(config)
 
     return config
 

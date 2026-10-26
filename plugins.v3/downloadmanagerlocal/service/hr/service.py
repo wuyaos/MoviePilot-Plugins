@@ -9,6 +9,7 @@ from typing import Any, Optional
 from app.sdk.logging import logger
 from pydantic import ValidationError
 
+from ...utils.config import module_active
 from .cleanup import auto_cleanup
 from .constants import HR_LOG_PREFIX, HR_TASKS_DATA_KEY
 from .evaluator import evaluate_task, initialize_requirements, seeding_progress
@@ -67,7 +68,10 @@ class HrService:
 
     def init_module(self, config: Optional[dict] = None) -> None:
         """按插件配置初始化 H&R 模块，恢复持久化任务并刷新 H&R 保护快照。"""
+        """按插件配置初始化 H&R 模块，恢复持久化任务并刷新 H&R 保护快照。"""
         self._config = parse_hr_config(config)
+        # 门控对齐：服务配置 enabled = 总开关 AND hr_enabled（utils/config.py::module_active）。
+        self._config.enabled = module_active(config or {}, "hr")
         self._tasks = self._load_tasks()
         self._stopped = False
         self._refresh_guard()
