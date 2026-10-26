@@ -1547,7 +1547,15 @@ function serializeHrSiteConfigYaml(rules) {
             <!-- ═══ 命名补刀 · 模板与过滤 ═══ -->
             <div v-show="activeSub === 'rename_format'" class="dm-pane">
               <div class="dm-section-title">模板与过滤</div>
-              <VRow>
+              <VRow class="mt-2">
+                <VCol cols="12" md="6">
+                  <VTextField v-model="form.rename_include_tags" label="包含标签（逗号分隔）" density="compact" variant="outlined" hide-details hint="留空表示不限制" persistent-hint />
+                </VCol>
+                <VCol cols="12" md="6">
+                  <VTextField v-model="form.rename_exclude_tags" label="排除标签（逗号分隔）" density="compact" variant="outlined" hide-details hint="默认排除已重命名" persistent-hint />
+                </VCol>
+              </VRow>
+              <VRow class="mt-2">
                 <VCol cols="12">
                   <VTextarea v-model="form.rename_movie_format" label="电影命名格式 (Jinja2)" density="compact" variant="outlined" hide-details rows="2" />
                   <div class="dm-hint">可用变量: {{ title }}, {{ year }}, {{ original_name }}</div>
@@ -1562,14 +1570,6 @@ function serializeHrSiteConfigYaml(rules) {
               <VRow class="mt-2">
                 <VCol cols="12">
                   <VTextarea v-model="form.rename_exclude_dirs" label="排除目录（每行一个）" density="compact" variant="outlined" hide-details rows="2" />
-                </VCol>
-              </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12" md="6">
-                  <VTextField v-model="form.rename_include_tags" label="包含标签（逗号分隔）" density="compact" variant="outlined" hide-details hint="留空表示不限制" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="6">
-                  <VTextField v-model="form.rename_exclude_tags" label="排除标签（逗号分隔）" density="compact" variant="outlined" hide-details hint="默认排除已重命名" persistent-hint />
                 </VCol>
               </VRow>
               <VRow class="mt-2">

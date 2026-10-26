@@ -68,9 +68,12 @@ class HrService:
 
     def init_module(self, config: Optional[dict] = None) -> None:
         """按插件配置初始化 H&R 模块，恢复持久化任务并刷新 H&R 保护快照。"""
-        self._config = parse_hr_config(config)
+        id_to_name = self._site_id_to_name()
+        source = config if isinstance(config, dict) else {}
+        self._config = parse_hr_config(source, id_to_name)
         # 门控对齐：服务配置 enabled = 总开关 AND hr_enabled（utils/config.py::module_active）。
-        self._config.enabled = module_active(config or {}, "hr")
+        self._config.enabled = module_active(source, "hr")
+        self._migrate_legacy_site_ids(source, id_to_name)
         self._tasks = self._load_tasks()
         self._stopped = False
         self._refresh_guard()
@@ -81,6 +84,39 @@ class HrService:
             f"纳管任务={len(self._tasks)}条"
         )
 
+    @staticmethod
+    def _site_id_to_name() -> dict[str, str]:
+        """当前站点库 id→站点名映射；站点库不可用时返回空（旧数字 ID 走丢弃路径）。"""
+        try:
+            from ...adapter.moviepilot import list_builtin_sites
+
+            return {
+                str(site.id): (site.name or "").strip()
+                for site in (list_builtin_sites() or [])
+                if getattr(site, "id", None) is not None
+            }
+        except Exception as e:
+            logger.warning(f"{HR_LOG_PREFIX}读取站点库失败，旧站点 ID 白名单无法迁移：{e}")
+            return {}
+
+    def _migrate_legacy_site_ids(self, source: dict, id_to_name: dict[str, str]) -> None:
+        """存储里的 hr_sites 仍含数字站点 ID 时，把迁移后的站点名一次性回写插件配置。"""
+        raw = source.get("hr_sites")
+        if not raw or not id_to_name:
+            return
+        if not any(str(item).strip().replace(".", "", 1).isdigit() for item in raw):
+            return
+        try:
+            new_config = dict(source)
+            new_config["hr_sites"] = list(self._config.sites)
+            if self._plugin.update_config(config=new_config) is False:
+                logger.warning(f"{HR_LOG_PREFIX}站点白名单迁移写回失败，保留旧值（运行时按站点名生效）")
+                return
+            logger.info(
+                f"{HR_LOG_PREFIX}站点白名单已由站点 ID 迁移为站点名并回写：{new_config['hr_sites']}"
+            )
+        except Exception as e:
+            logger.warning(f"{HR_LOG_PREFIX}站点白名单迁移回写异常，保留旧值：{e}")
     def get_service_infos(self) -> dict[str, Any]:
         """返回 H&R 任务列表与汇总，任务字段含 downloader_id/torrent_hash/name/site/status/
         progress/remain_seconds/deadline/type，deadline 为截止时间戳（0 表示未设考核期）。"""

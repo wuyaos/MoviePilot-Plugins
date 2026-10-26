@@ -44,8 +44,12 @@ def load_preset_rules() -> dict[str, HrSiteRule]:
     return rules
 
 
-def parse_hr_config(config: Optional[dict] = None) -> HrConfig:
-    """把插件配置字典解析为 H&R 运行时配置，缺省键取 HR_CONFIG_DEFAULTS。"""
+def parse_hr_config(config: Optional[dict] = None,
+                    site_id_to_name: Optional[dict[str, str]] = None) -> HrConfig:
+    """把插件配置字典解析为 H&R 运行时配置，缺省键取 HR_CONFIG_DEFAULTS。
+
+    site_id_to_name：当前站点库 id→站点名映射，用于把旧数字站点 ID 白名单迁移为站点名。
+    """
     source = config if isinstance(config, dict) else {}
     global_rule = HrSiteRule(
         hr_duration=_as_float_or_none(_pick(source, "hr_duration")),
@@ -68,7 +72,7 @@ def parse_hr_config(config: Optional[dict] = None) -> HrConfig:
         check_period=_as_positive_int(_pick(source, "hr_check_period"), 10),
         notify=_as_notify_mode(_pick(source, "hr_notify")),
         downloaders=_as_str_list(_pick(source, "hr_downloader")),
-        sites=_as_site_names(_pick(source, "hr_sites")),
+        sites=_as_site_names(_pick(source, "hr_sites"), site_id_to_name),
         hit_and_run_tag=str(_pick(source, "hr_hit_and_run_tag") or "H&R").strip(),
         auto_cleanup_days=_as_float(_pick(source, "hr_auto_cleanup_days"), 15.0),
         auto_discover=_as_bool(_pick(source, "hr_auto_discover"), False),
@@ -230,10 +234,11 @@ def _as_str_list(value: Any) -> list[str]:
     return result
 
 
-def _as_site_names(value: Any) -> list[str]:
+def _as_site_names(value: Any, id_to_name: Optional[dict[str, str]] = None) -> list[str]:
     """把站点白名单规范为站点名称列表。
 
-    数字项是旧格式站点 ID（站点库自增主键，站点重建/迁移后会漂移失效），丢弃并提示改用站点名。
+    数字项是旧格式站点 ID（站点库自增主键，站点重建/迁移后会漂移失效）：
+    提供 id_to_name 映射时按当前站点库转换成站点名；转不出则丢弃并提示。
     """
     raw_values = value if isinstance(value, (list, tuple, set)) else [value]
     result: list[str] = []
@@ -243,15 +248,22 @@ def _as_site_names(value: Any) -> list[str]:
             if not text:
                 continue
             if text.replace(".", "", 1).isdigit():
-                logger.warning(
-                    f"{HR_LOG_PREFIX}站点白名单项 {text!r} 是旧格式站点 ID（站点库主键，跨库会失效），"
-                    "请改用站点名称，已忽略"
-                )
+                mapped = (id_to_name or {}).get(text, "").strip()
+                if mapped:
+                    if mapped not in result:
+                        result.append(mapped)
+                    logger.info(
+                        f"{HR_LOG_PREFIX}站点白名单旧站点 ID {text} 已按当前站点库迁移为 {mapped!r}"
+                    )
+                else:
+                    logger.warning(
+                        f"{HR_LOG_PREFIX}站点白名单项 {text!r} 是旧格式站点 ID（站点库主键，跨库会失效），"
+                        "且当前站点库中不存在，已忽略，请改用站点名称"
+                    )
                 continue
             if text not in result:
                 result.append(text)
     return result
-
 
 def _as_notify_mode(value: Any) -> str:
     """规范通知模式，非法值回退 always。"""

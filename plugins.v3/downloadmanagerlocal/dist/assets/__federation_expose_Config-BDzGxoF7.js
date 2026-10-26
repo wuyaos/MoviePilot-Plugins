@@ -3224,13 +3224,54 @@ return (_ctx, _cache) => {
               ]),
               _withDirectives(_createElementVNode("div", _hoisted_53, [
                 _cache[143] || (_cache[143] = _createElementVNode("div", { class: "dm-section-title" }, "模板与过滤", -1)),
-                _createVNode(_component_VRow, null, {
+                _createVNode(_component_VRow, { class: "mt-2" }, {
+                  default: _withCtx(() => [
+                    _createVNode(_component_VCol, {
+                      cols: "12",
+                      md: "6"
+                    }, {
+                      default: _withCtx(() => [
+                        _createVNode(_component_VTextField, {
+                          modelValue: form.rename_include_tags,
+                          "onUpdate:modelValue": _cache[79] || (_cache[79] = $event => ((form.rename_include_tags) = $event)),
+                          label: "包含标签（逗号分隔）",
+                          density: "compact",
+                          variant: "outlined",
+                          "hide-details": "",
+                          hint: "留空表示不限制",
+                          "persistent-hint": ""
+                        }, null, 8, ["modelValue"])
+                      ]),
+                      _: 1
+                    }),
+                    _createVNode(_component_VCol, {
+                      cols: "12",
+                      md: "6"
+                    }, {
+                      default: _withCtx(() => [
+                        _createVNode(_component_VTextField, {
+                          modelValue: form.rename_exclude_tags,
+                          "onUpdate:modelValue": _cache[80] || (_cache[80] = $event => ((form.rename_exclude_tags) = $event)),
+                          label: "排除标签（逗号分隔）",
+                          density: "compact",
+                          variant: "outlined",
+                          "hide-details": "",
+                          hint: "默认排除已重命名",
+                          "persistent-hint": ""
+                        }, null, 8, ["modelValue"])
+                      ]),
+                      _: 1
+                    })
+                  ]),
+                  _: 1
+                }),
+                _createVNode(_component_VRow, { class: "mt-2" }, {
                   default: _withCtx(() => [
                     _createVNode(_component_VCol, { cols: "12" }, {
                       default: _withCtx(() => [
                         _createVNode(_component_VTextarea, {
                           modelValue: form.rename_movie_format,
-                          "onUpdate:modelValue": _cache[79] || (_cache[79] = $event => ((form.rename_movie_format) = $event)),
+                          "onUpdate:modelValue": _cache[81] || (_cache[81] = $event => ((form.rename_movie_format) = $event)),
                           label: "电影命名格式 (Jinja2)",
                           density: "compact",
                           variant: "outlined",
@@ -3250,7 +3291,7 @@ return (_ctx, _cache) => {
                       default: _withCtx(() => [
                         _createVNode(_component_VTextarea, {
                           modelValue: form.rename_tv_format,
-                          "onUpdate:modelValue": _cache[80] || (_cache[80] = $event => ((form.rename_tv_format) = $event)),
+                          "onUpdate:modelValue": _cache[82] || (_cache[82] = $event => ((form.rename_tv_format) = $event)),
                           label: "电视剧命名格式 (Jinja2)",
                           density: "compact",
                           variant: "outlined",
@@ -3270,53 +3311,12 @@ return (_ctx, _cache) => {
                       default: _withCtx(() => [
                         _createVNode(_component_VTextarea, {
                           modelValue: form.rename_exclude_dirs,
-                          "onUpdate:modelValue": _cache[81] || (_cache[81] = $event => ((form.rename_exclude_dirs) = $event)),
+                          "onUpdate:modelValue": _cache[83] || (_cache[83] = $event => ((form.rename_exclude_dirs) = $event)),
                           label: "排除目录（每行一个）",
                           density: "compact",
                           variant: "outlined",
                           "hide-details": "",
                           rows: "2"
-                        }, null, 8, ["modelValue"])
-                      ]),
-                      _: 1
-                    })
-                  ]),
-                  _: 1
-                }),
-                _createVNode(_component_VRow, { class: "mt-2" }, {
-                  default: _withCtx(() => [
-                    _createVNode(_component_VCol, {
-                      cols: "12",
-                      md: "6"
-                    }, {
-                      default: _withCtx(() => [
-                        _createVNode(_component_VTextField, {
-                          modelValue: form.rename_include_tags,
-                          "onUpdate:modelValue": _cache[82] || (_cache[82] = $event => ((form.rename_include_tags) = $event)),
-                          label: "包含标签（逗号分隔）",
-                          density: "compact",
-                          variant: "outlined",
-                          "hide-details": "",
-                          hint: "留空表示不限制",
-                          "persistent-hint": ""
-                        }, null, 8, ["modelValue"])
-                      ]),
-                      _: 1
-                    }),
-                    _createVNode(_component_VCol, {
-                      cols: "12",
-                      md: "6"
-                    }, {
-                      default: _withCtx(() => [
-                        _createVNode(_component_VTextField, {
-                          modelValue: form.rename_exclude_tags,
-                          "onUpdate:modelValue": _cache[83] || (_cache[83] = $event => ((form.rename_exclude_tags) = $event)),
-                          label: "排除标签（逗号分隔）",
-                          density: "compact",
-                          variant: "outlined",
-                          "hide-details": "",
-                          hint: "默认排除已重命名",
-                          "persistent-hint": ""
                         }, null, 8, ["modelValue"])
                       ]),
                       _: 1
@@ -3960,6 +3960,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-0d833f32"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-3c21e2d6"]]);
 
 export { Config as default };
