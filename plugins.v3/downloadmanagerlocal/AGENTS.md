@@ -294,6 +294,7 @@ Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布�
 - **dev reload 用类名 id**：V3 本地调试实例 reload 路径是 `POST /api/v1/plugin/reload/DownloadManagerLocal`（类名，不是小写目录名）。
 - **单仓库口径**：本仓库 `D:/work/project/person/MoviePilot-Plugins` 是唯一维护点；z2561221 克隆仅作整合期基底，已弃。前端源码在仓库级 `frontend.v3/downloadmanagerlocal/`，构建产物回到插件目录 `dist/`。
 - **前端只保留一份源码**：插件目录内不再有 `frontend/`，源码统一在仓库级 `frontend.v3/downloadmanagerlocal/`（`Config.vue`/`Page.vue`/`api.js`）。
+- **设置页「恢复默认」（v3.6.3）**：`Config.vue` 顶部 `PANE_RESET_KEYS` 是页签→键集的第二份分组真源（78 个前缀键自动归组 + transfer 25 键显式列表 + 全局 `enabled` 不归组）；新增配置键时必须在 `defaults` 常量登记且确认前缀能落入对应页签，否则该键永不被重置。重置只改表单，点「保存配置」才落库；H&R 页签重置会清空 `hr_site_config_str` 回全局基准。
 - **`package.v3.json` 编辑规范**：向 `history` 插新版本条目时禁止用相邻行替换（会吞掉旧键名导致 JSON 破坏）；优先单行整行替换或全量重写，改完立即 `python -m json.tool package.v3.json` 校验。V3 发布版本两处同步：`__init__.py::plugin_version` 与 `package.v3.json`（version + history 顶部新条目）；插件目录内无 `plugin.json`（MP V3 不读取，已删除）。
 - **速度监控已整体移除**：`service/speed_*`、`speed_monitor_*` 配置键、监控会话与告警链路在本版本代码中 0 残留；历史 changelog 中出现的「速度监控」字样只作追溯。
 - **IYUU 辅种已移除**：`iyuu_helper.py`、`service/iyuu.py`、`modules/iyuu.py`、`iyuu_*` 配置键均已删除（v3.4.0 六合一整合基线时移除）。
