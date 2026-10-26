@@ -2068,7 +2068,7 @@ function serializeHrSiteConfigYaml(rules) {
                   <VTextField v-model="form.tag_catprefix" label="分类前缀" density="compact" variant="outlined" hide-details hint="写入分类名前的前缀，留空不加" persistent-hint />
                 </VCol>
               </VRow>
-              <VRow class="mt-2">
+              <VRow v-if="!form.tag_rename_type" class="mt-2">
                 <VCol cols="12" md="6">
                   <VCombobox v-model="form.tag_all_cat" label="站点分类（回车输入）" density="compact" variant="outlined" hide-details
                     multiple chips closable-chips hint="TMDB 分类名列表" persistent-hint />
@@ -2078,21 +2078,27 @@ function serializeHrSiteConfigYaml(rules) {
                     multiple chips closable-chips hint="与左侧按顺序一一对应" persistent-hint />
                 </VCol>
               </VRow>
-              <div class="dm-hint">两个分类列表按顺序一一对应，数量需保持一致。</div>
+              <div v-if="!form.tag_rename_type" class="dm-hint">
+                当前模式：按 TMDB 识别结果设置分类，两个分类列表按顺序一一对应，数量需保持一致；改为路径判断后此表不生效。
+              </div>
               <VRow class="mt-2">
                 <VCol cols="12" md="4">
                   <VSwitch v-model="form.tag_enable_del_tags" color="warning" inset hide-details label="允许删除标签" />
                 </VCol>
                 <VCol cols="12" md="4">
-                  <VSwitch v-model="form.tag_rename_type" color="info" inset hide-details label="目录重命名映射" />
+                  <VSwitch v-model="form.tag_rename_type" color="info" inset hide-details
+                    title="开：按下载路径关键词判断分类（下方路径映射规则生效）；关：按 TMDB 识别结果判断分类（上方分类映射表生效）"
+                    label="分类按路径关键词判断" />
                 </VCol>
               </VRow>
-              <VRow class="mt-2">
+              <VRow v-if="form.tag_rename_type" class="mt-2">
                 <VCol cols="12">
-                  <VTextarea v-model="form.tag_path_rename" label="路径映射规则（每行: 关键词#分类）" density="compact" variant="outlined" hide-details rows="3"
-                    :disabled="!form.tag_rename_type" />
+                  <VTextarea v-model="form.tag_path_rename" label="路径映射规则（每行: 关键词#分类）" density="compact" variant="outlined" hide-details rows="3" />
                 </VCol>
               </VRow>
+              <div v-if="form.tag_rename_type" class="dm-hint">
+                当前模式：按下载保存路径包含的关键词判断分类（如 /anime/#动漫），一行不命中则不设分类；关闭上方开关则改按 TMDB 识别设置分类。
+              </div>
             </div>
 
             <!-- ═══ 站点标签 · 标签清理 ═══ -->
