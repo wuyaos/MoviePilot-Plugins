@@ -39,6 +39,7 @@ const hrPresetsLoaded = ref(false)
 const hrPresetsMessage = ref('')
 const hrCustomRules = ref([])
 const hrExpandedSites = ref([])
+const hrShowInherited = ref(false)
 const hrRawOpen = ref(false)
 const hrRawError = ref('')
 const hrAddDialog = ref(false)
@@ -715,13 +716,15 @@ const hrSiteRows = computed(() => {
       const inherited = value === undefined || value === null || value === ''
       return {
         key: field.key,
+        label: field.label,
         inherited,
-        text: inherited ? '继承' : hrFormatSummary(field, value),
+        text: inherited ? `继承 · ${hrGlobalText(field.key)}` : hrFormatSummary(field, value),
         tooltip: inherited
-          ? `${field.label}：继承全局（${hrGlobalText(field.key)}）`
+          ? `${field.label}：站点未设置，继承全局（${hrGlobalText(field.key)}）`
           : `${field.label}：${hrFormatSummary(field, value)}（${sourceLabel}）`,
       }
     })
+    const visibleCells = hrShowInherited.value ? cells : cells.filter(cell => !cell.inherited)
     return {
       name,
       entry,
@@ -731,6 +734,8 @@ const hrSiteRows = computed(() => {
       custom: customRow,
       expanded: hrExpandedSites.value.includes(name),
       cells,
+      visibleCells,
+      inheritedCount: cells.length - visibleCells.length,
       sourceLabel,
       sourceColor,
     }
@@ -1682,31 +1687,37 @@ function serializeHrSiteConfigYaml(rules) {
                     :items="siteItems" multiple chips closable-chips clearable hint="只跟踪这些站点的种子；留空表示全部站点" persistent-hint />
                 </VCol>
               </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12" md="4">
-                  <VTextField v-model.number="form.hr_duration" label="全局做种时长（小时）" type="number" density="compact" variant="outlined" hide-details hint="默认 48" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="4">
-                  <VTextField v-model.number="form.hr_deadline_days" label="全局考核期（天）" type="number" density="compact" variant="outlined" hide-details hint="默认 14" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="4">
-                  <VTextField v-model.number="form.hr_additional_seed_time" label="额外做种时间（小时）" type="number" density="compact" variant="outlined" hide-details hint="默认 24" persistent-hint />
-                </VCol>
-              </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12" md="3">
-                  <VTextField v-model.number="form.hr_ratio" label="全局分享率" type="number" density="compact" variant="outlined" hide-details hint="留空表示不校验分享率" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="3">
-                  <VTextField v-model.number="form.hr_upload_multiplier" label="全局上传倍数" type="number" density="compact" variant="outlined" hide-details hint="留空表示不校验上传倍数" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="3">
-                  <VSwitch v-model="form.hr_upload_gte_download" color="info" inset hide-details label="要求上传量≥下载量" />
-                </VCol>
-                <VCol cols="12" md="3">
-                  <VSwitch v-model="form.hr_active" color="success" inset hide-details label="启用全局规则" />
-                </VCol>
-              </VRow>
+              <div class="dm-hr-global-card mt-2">
+                <div class="dm-hr-global-head">
+                  <span class="dm-section-title mb-0">全局规则基准</span>
+                  <span class="text-caption text-medium-emphasis">站点规则未设置的字段回退到这里；下方表格灰字即为此处的值</span>
+                </div>
+                <VRow class="mt-1">
+                  <VCol cols="12" md="4">
+                    <VTextField v-model.number="form.hr_duration" label="全局做种时长（小时）" type="number" density="compact" variant="outlined" hide-details hint="默认 48" persistent-hint />
+                  </VCol>
+                  <VCol cols="12" md="4">
+                    <VTextField v-model.number="form.hr_deadline_days" label="全局考核期（天）" type="number" density="compact" variant="outlined" hide-details hint="默认 14" persistent-hint />
+                  </VCol>
+                  <VCol cols="12" md="4">
+                    <VTextField v-model.number="form.hr_additional_seed_time" label="额外做种时间（小时）" type="number" density="compact" variant="outlined" hide-details hint="默认 24" persistent-hint />
+                  </VCol>
+                </VRow>
+                <VRow class="mt-2">
+                  <VCol cols="12" md="3">
+                    <VTextField v-model.number="form.hr_ratio" label="全局分享率" type="number" density="compact" variant="outlined" hide-details hint="留空表示不校验分享率" persistent-hint />
+                  </VCol>
+                  <VCol cols="12" md="3">
+                    <VTextField v-model.number="form.hr_upload_multiplier" label="全局上传倍数" type="number" density="compact" variant="outlined" hide-details hint="留空表示不校验上传倍数" persistent-hint />
+                  </VCol>
+                  <VCol cols="12" md="3">
+                    <VSwitch v-model="form.hr_upload_gte_download" color="info" inset hide-details label="要求上传量≥下载量" />
+                  </VCol>
+                  <VCol cols="12" md="3">
+                    <VSwitch v-model="form.hr_active" color="success" inset hide-details label="启用全局规则" />
+                  </VCol>
+                </VRow>
+              </div>
               <VRow class="mt-3">
                 <VCol cols="12">
                   <div class="dm-hr-toolbar">
@@ -1714,9 +1725,15 @@ function serializeHrSiteConfigYaml(rules) {
                       <div class="dm-section-title mb-1">站点规则（内置预设 + 自定义）</div>
                       <div class="text-caption text-medium-emphasis">
                         内置预设为底，自定义站点同名整条覆写；关闭站点开关会写入 enabled: false 影子条目，该站回退全局规则。
+                        <span class="dm-hr-legend">
+                          <span class="dm-hr-chip dm-hr-chip--mini"><span class="dm-hr-chip-value">站点显式设置</span></span>
+                          <span class="dm-hr-chip dm-hr-chip--mini dm-hr-chip--inherit"><span class="dm-hr-chip-value">灰字 = 继承全局</span></span>
+                        </span>
                       </div>
                     </div>
                     <div class="d-flex align-center ga-2 flex-wrap">
+                      <VSwitch v-model="hrShowInherited" color="info" inset density="compact" hide-details
+                        label="显示继承字段" />
                       <VBtn size="small" variant="text" prepend-icon="mdi-refresh" :loading="hrPresetsLoading"
                         @click="loadHrPresets(true)">重载预设</VBtn>
                       <VBtn size="small" color="primary" variant="tonal" prepend-icon="mdi-home-plus-outline"
@@ -1747,16 +1764,27 @@ function serializeHrSiteConfigYaml(rules) {
                           <div v-if="row.blocked" class="text-caption text-medium-emphasis">已屏蔽，回退全局</div>
                         </div>
                         <div class="dm-hr-values">
-                          <span v-for="cell in row.cells" :key="cell.key" class="dm-hr-value"
-                            :class="{ 'dm-hr-value--inherit': cell.inherited }" :title="cell.tooltip">{{ cell.text }}</span>
+                          <template v-if="row.visibleCells.length">
+                            <span v-for="cell in row.visibleCells" :key="cell.key" class="dm-hr-chip"
+                              :class="{ 'dm-hr-chip--inherit': cell.inherited }" :title="cell.tooltip">
+                              <span class="dm-hr-chip-label">{{ cell.label }}</span>
+                              <span class="dm-hr-chip-value">{{ cell.text }}</span>
+                            </span>
+                          </template>
+                          <span v-else class="dm-hr-values-empty">全部字段继承全局规则</span>
+                          <span v-if="row.inheritedCount > 0 && !hrShowInherited" class="dm-hr-chip dm-hr-chip--more"
+                            :title="`还有 ${row.inheritedCount} 项继承全局，打开右上角「显示继承字段」查看`">
+                            +{{ row.inheritedCount }} 项继承
+                          </span>
                         </div>
                         <div>
                           <VChip size="x-small" variant="tonal" :color="row.sourceColor">{{ row.sourceLabel }}</VChip>
                         </div>
                         <div>
                           <VSwitch :model-value="row.enabled" color="success" inset hide-details density="compact"
+                            :title="row.blocked ? '已停用：该站规则不生效，回退全局规则' : '启用中；关闭会写入影子条目，该站回退全局规则'"
                             @update:model-value="hrSetSiteEnabled(row.name, $event)" />
-                        </div>
+                          </div>
                         <div class="dm-hr-actions">
                           <template v-if="row.custom">
                             <VBtn size="small" variant="text" :prepend-icon="row.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
@@ -2379,9 +2407,19 @@ function serializeHrSiteConfigYaml(rules) {
 .dm-hr-row--head { font-size: 12px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); background: rgba(var(--v-theme-on-surface), 0.03); }
 .dm-hr-row--blocked { background: rgba(var(--v-theme-on-surface), 0.02); }
 .dm-hr-site { min-width: 0; }
-.dm-hr-values { display: flex; flex-wrap: wrap; gap: 3px 10px; min-width: 0; font-size: 12px; }
-.dm-hr-value { white-space: nowrap; }
-.dm-hr-value--inherit { color: rgba(var(--v-theme-on-surface), 0.42); font-style: italic; }
+.dm-hr-values { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; align-items: center; }
+.dm-hr-chip { display: inline-flex; flex-direction: column; gap: 0; padding: 2px 8px 3px; border-radius: 6px; background: rgba(var(--v-theme-on-surface), 0.05); line-height: 1.25; white-space: nowrap; }
+.dm-hr-chip-label { font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.55); }
+.dm-hr-chip-value { font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.dm-hr-chip--inherit { background: transparent; border: 1px dashed rgba(var(--v-theme-on-surface), 0.18); }
+.dm-hr-chip--inherit .dm-hr-chip-value { color: rgba(var(--v-theme-on-surface), 0.45); font-style: italic; font-weight: 400; }
+.dm-hr-chip--more { justify-content: center; background: transparent; border: 1px dashed rgba(var(--v-theme-on-surface), 0.18); color: rgba(var(--v-theme-on-surface), 0.5); font-size: 11px; padding: 4px 8px; cursor: default; }
+.dm-hr-chip--mini { flex-direction: row; align-items: center; padding: 0 6px; background: rgba(var(--v-theme-on-surface), 0.05); }
+.dm-hr-chip--mini .dm-hr-chip-value { font-size: 10px; font-weight: 400; }
+.dm-hr-values-empty { color: rgba(var(--v-theme-on-surface), 0.45); font-style: italic; font-size: 12px; }
+.dm-hr-legend { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
+.dm-hr-global-card { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; padding: 10px 12px 4px; background: rgba(var(--v-theme-on-surface), 0.02); }
+.dm-hr-global-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .dm-hr-actions { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
 .dm-hr-editor { padding: 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); background: rgba(var(--v-theme-on-surface), 0.03); }
 .dm-hr-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(184px, 1fr)); gap: 12px; }
