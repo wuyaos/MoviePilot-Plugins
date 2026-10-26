@@ -43,7 +43,6 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
 
     plugin._enabled = config.get("enabled", defaults["enabled"])
     plugin._transfer_enabled = module_active(config, "transfer")
-    plugin._onlyonce = config.get("onlyonce", defaults["onlyonce"])
     plugin._delay_minutes = config.get("delay_minutes", defaults["delay_minutes"])
     plugin._transfer_fallback_enabled = config.get(
         "transfer_fallback_enabled", defaults["transfer_fallback_enabled"]

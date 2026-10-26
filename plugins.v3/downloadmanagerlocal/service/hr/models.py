@@ -178,7 +178,6 @@ class HrConfig(BaseModel):
     enabled: bool = False
     protection_enabled: bool = False
     check_period: int = 10
-    onlyonce: bool = False
     notify: str = "always"
     downloaders: list[str] = Field(default_factory=list)
     sites: list[int] = Field(default_factory=list)

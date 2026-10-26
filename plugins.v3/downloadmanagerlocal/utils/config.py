@@ -11,7 +11,6 @@ from ..service.site_tag import DEFAULT_TAG_CONFIG
 TRANSFER_DEFAULTS = {
     "transfer_enabled": False,
     "notify": False,
-    "onlyonce": False,
     "transfer_cron": "",
     "nolabels": "",
     "includelabels": "",

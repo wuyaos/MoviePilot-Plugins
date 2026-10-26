@@ -76,6 +76,8 @@ plugins.v3/downloadmanagerlocal/
 
 前端源码不在插件目录内，位于仓库级 `frontend.v3/downloadmanagerlocal/`（`src/components/Config.vue`、`Page.vue`、`api.js`），本工作树对应本地仓库 `D:/work/project/person/MoviePilot-Plugins/frontend.v3/downloadmanagerlocal/`；插件目录只保留 `dist/` 构建产物。
 
+**v3.7.0 结构口径**：`Config.vue` = 纯配置页（mainTabs 7 个：转移做种/H&R/自动删种/失败清理/命名补刀/站点标签/上传限速；做种校验为转移做种子页签；区块体系「基础设置/内容层/高级设置」；零操作按钮/零状态展示/零预览表格；站点限速表为纯表单，随保存提交）。`Page.vue` = 总览带（需要关注/功能状态）+ 运行链路图 + 模块卡×8（状态摘要+操作按钮+可展开详情，摘要复用现有轮询）+ 记录表平铺 + 运行详情 + 诊断；全部手动操作（含转移立即运行二次确认、扫描站点/清空策略、标签清理工具）在模块卡。
+
 V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 ## 3. 模块详解
@@ -84,17 +86,17 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 - 职责：把源下载器的种子按路径映射复制到目标下载器，支持删源、去重、转移后做种校验；`TransferComplete` 事件驱动 + 兜底 interval 扫描。
 - 关键文件：`service/transfer.py`（主流程 `transfer`、兜底 `fallback_transfer`、延迟 `delayed_transfer`、后处理）、`service/transfer_pipeline.py`（事务化：目标确认完整前保留源）、`service/recheck.py`（做种校验队列与 worker）、`service/events.py`（延迟批次调度）、`adapter/moviepilot.py`。
-- 关键配置：`transfer_enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`fromdownloader`/`todownloader`、`frompath`/`topath`、`fromtorrentpath`、`deletesource`、`deleteduplicate`、`nolabels`/`includelabels`/`includecategory`、`nopaths`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`/`remainoldtag`、`scan_limit`、`pause_source`、`onlyonce`、`notify`、`transfer_cron`、`transfer_event_enabled`、`seed_autostart`、`seed_skipverify`、`seed_check_interval`、`seed_max_wait_minutes`。
+- 关键配置：`transfer_enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`fromdownloader`/`todownloader`、`frompath`/`topath`、`fromtorrentpath`、`deletesource`、`deleteduplicate`、`nolabels`/`includelabels`/`includecategory`、`nopaths`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`/`remainoldtag`、`scan_limit`、`pause_source`、`notify`、`transfer_cron`、`transfer_event_enabled`、`seed_autostart`、`seed_skipverify`、`seed_check_interval`、`seed_max_wait_minutes`。
 - 端点：无专用 REST 路由；结果汇总进 `/overview`。
 - 调度：`TorrentTransferFallback`（interval，`transfer_fallback_interval_minutes`）。
 - 事件：`TransferComplete`（延迟调度）。
-- 生命周期：`_transfer_active`（`utils/config.py::is_transfer_active`）成立时才启用；配置校验失败会关闭 `enabled`/`onlyonce` 并写回配置。
+- 生命周期：`_transfer_active`（`utils/config.py::is_transfer_active`）成立时才启用；配置校验失败会关闭 `enabled` 并写回配置。
 
 ### 3.2 命名补刀
 
 - 职责：按 TMDB 识别结果与原始发布名模板重命名种子；支持事件防抖即时重命名与 cron 周期扫描；失败进入归档，可恢复、可单条补刀。
 - 关键文件：`service/rename.py`（`RENAME_FLAT_CONFIG_KEYS`、`DEFAULT_RENAME_CONFIG`、`build_rename_config`、`rename_candidate`、`retry_failed_renames`、`retry_rename_by_hash`）、`service/rename_events.py`（`handle_download_added_rename`）、`service/archive.py`、`utils/name_cleaner.py`。
-- 关键配置：`rename_enabled`、`rename_notify`、`rename_cron_enabled`、`rename_on_download_added`、`rename_downloaders`、`rename_cron`、`rename_onlyonce`、`rename_retry`、`rename_recovery`、`rename_add_tag_after_rename`、`rename_movie_format`、`rename_tv_format`、`rename_exclude_dirs`、`rename_exclude_tags`、`rename_include_tags`、`rename_hash_white_list`、`rename_event_debounce_seconds`。
+- 关键配置：`rename_enabled`、`rename_notify`、`rename_cron_enabled`、`rename_on_download_added`、`rename_downloaders`、`rename_cron`、`rename_add_tag_after_rename`、`rename_movie_format`、`rename_tv_format`、`rename_exclude_dirs`、`rename_exclude_tags`、`rename_include_tags`、`rename_hash_white_list`、`rename_event_debounce_seconds`。
 - 端点：`GET /rename_status`、`GET /rename_history`、`GET /rename_archive`、`POST /retry_renames`、`POST /retry_rename`、`POST /delete_rename_history`、`POST /restore_rename_archive`、`POST /delete_rename_archive`、`POST /recovery_torrent`。
 - 调度：`DownloadCenterRenameScan`（cron `rename_cron`，需 `rename_enabled` 且 `rename_cron_enabled` 且 cron 非空）。
 - 事件：`DownloadAdded`（`rename_on_download_added` 默认 true，按 `rename_downloaders` 过滤，`rename_event_debounce_seconds` 防抖）。
@@ -113,7 +115,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 - 职责：按站点规则跟踪 H&R 做种时长/比例，达标清除标签，超期告警，支持体积分档与每日汇总通知；并作为所有破坏性删除路径的保护闸门。
 - 关键文件：`service/hr/service.py`（`HrService`）、`service/hr/scanner.py`、`service/hr/evaluator.py`、`service/hr/rules.py`（站点 YAML 规则与体积分档）、`service/hr/guard.py`（`HrGuard`）、`service/hr/cleanup.py`、`service/hr/notify.py`、`service/hr/models.py`、`service/hr/constants.py`。
 - 端点：`GET /hr/tasks`、`GET /hr/skip_stats`、`GET /hr_presets`（内置站点验证预设，只读）、`POST /hr_check`、`POST /hr_scan`、`POST /hr_clear_task`、`POST /hr_clear_compliant`、`POST /hr_clear_missing`。
-- 关键配置：`hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_onlyonce`、`hr_downloader`、`hr_sites`、`hr_notify`（none/on_error/always）、`hr_check_period`（分钟）、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str`（YAML；条目支持 `enabled` 与 `trackers`）。
+- 关键配置：`hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_downloader`、`hr_sites`、`hr_notify`（none/on_error/always）、`hr_check_period`（分钟）、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str`（YAML；条目支持 `enabled` 与 `trackers`）。
 - 双层站点规则（v3.6.0）：`service/hr/presets.json` 为随代码发布的内置站点验证预设（11 站，只读）；`hr_site_config_str` 为自定义层。`rules.build_site_rules` 合并语义：内置为底 → 自定义同名**整条覆写**（不做字段级合并）→ 条目 `enabled: false` 为影子条目（屏蔽该站全部站点规则，含内置，回退全局规则）→ 最后 `apply_global_defaults` 回填全局未设置字段。`HrSiteRule.enabled` 默认 `true`，旧 YAML 无此字段 = 启用，完全向后兼容。前端 H&R 设置页以合并视图展示（来源列 + 行启用 switch）。
 - 自定义站点 tracker 兜底（v3.6.0）：`HrSiteRule.trackers`（域名或完整 URL 列表）。`scanner.resolve_site` 顺序 = 用户 `tag_tracker_mappings` → MP 站点库 → 规则条目 `trackers` 兜底（域名精确比对，`_rule_domain_map` 归一化，仅启用条目参与）。trackers 识别出的站点无 MP site_id，白名单判定走 `HrConfig.site_in_scope`：`site_id ∈ hr_sites` **或** 站点名存在自定义规则条目（配了规则 = 纳管意向）。MP 站点库能识别的站点无需填 trackers。
 - 调度：`HitAndRunCheck`（interval，`hr_check_period`）、`HitAndRunDiscover`（interval，`hr_check_period × 2`，需 `hr_auto_discover`）、`HitAndRunSummary`（cron `hr_notify_summary_cron`）。
@@ -123,7 +125,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 - 职责：按条件组（AND 语义）扫描候选并执行暂停 / 删除任务 / 删除任务及文件；执行前查询 H&R 保护闸门。
 - 关键文件：`service/autoremove/service.py`（`AutoRemoveService`、`collect_candidates`、`run_cycle`）、`service/autoremove/scanner.py`、`service/autoremove/criteria.py`、`service/autoremove/rules.py`、`service/autoremove/models.py`、`service/autoremove/constants.py`。
-- 关键配置：`remover_enabled`、`remover_notify`、`remover_onlyonce`、`remover_action`（`pause`/`delete`/`deletefile`）、`remover_downloaders`、`remover_cron`（默认 `0 */12 * * *`）、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys`。
+- 关键配置：`remover_enabled`、`remover_notify`、`remover_action`（`pause`/`delete`/`deletefile`）、`remover_downloaders`、`remover_cron`（默认 `0 */12 * * *`）、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys`。
 - 端点：`GET /autoremove_status`、`POST /autoremove_run`、`POST /autoremove_preview`（预览不执行）。
 - 调度：`AutoRemoveTorrents`（cron `remover_cron`，需 `remover_enabled` 且 cron 非空；`0`/空表示不注册）。
 
@@ -169,16 +171,16 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 - **组合函数**：`is_transfer_active`/`is_upload_limit_active` 基于门控属性，只追加配置完整性条件（下载器/路径/额度）；`is_plugin_active` = 七模块门控属性任一为真。
 - **新增模块时**：先在 `MODULE_SWITCHES` 登记，再让属性/服务/端点走注册表口径，禁止散落手写 `enabled and xxx_enabled`。
 
-**总键数：113**（不是 114；分组见下，`utils/config.py` 显式键 + 7 处 spread 合并去重后）。
+**总键数：107**（v3.7.0 删 6 键：`onlyonce`/`hr_onlyonce`/`remover_onlyonce`/`rename_onlyonce`/`rename_retry`/`rename_recovery`；分组见下，`utils/config.py` 显式键 + 7 处 spread 合并去重后）。
 
 | 分组 | 键数 | 键 |
 | --- | --- | --- |
-| 总开关 + 转移做种 | 30 | `enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`seed_check_interval`、`seed_max_wait_minutes`、`transfer_event_enabled`，加 `TRANSFER_DEFAULTS`：`transfer_enabled`、`notify`、`onlyonce`、`transfer_cron`、`nolabels`、`includelabels`、`includecategory`、`frompath`、`topath`、`fromdownloader`、`todownloader`、`deletesource`、`deleteduplicate`、`fromtorrentpath`、`nopaths`、`seed_autostart`、`seed_skipverify`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`、`remainoldtag`、`scan_limit`、`pause_source` |
-| 命名补刀 | 17 | `rename_enabled`、`rename_notify`、`rename_cron_enabled`、`rename_on_download_added`、`rename_downloaders`、`rename_exclude_dirs`、`rename_hash_white_list`、`rename_exclude_tags`、`rename_include_tags`、`rename_cron`、`rename_retry`、`rename_onlyonce`、`rename_recovery`、`rename_add_tag_after_rename`、`rename_movie_format`、`rename_tv_format`、`rename_event_debounce_seconds` |
+| 总开关 + 转移做种 | 29 | `enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`seed_check_interval`、`seed_max_wait_minutes`、`transfer_event_enabled`，加 `TRANSFER_DEFAULTS`：`transfer_enabled`、`notify`、`transfer_cron`、`nolabels`、`includelabels`、`includecategory`、`frompath`、`topath`、`fromdownloader`、`todownloader`、`deletesource`、`deleteduplicate`、`fromtorrentpath`、`nopaths`、`seed_autostart`、`seed_skipverify`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`、`remainoldtag`、`scan_limit`、`pause_source` |
+| 命名补刀 | 14 | `rename_enabled`、`rename_notify`、`rename_cron_enabled`、`rename_on_download_added`、`rename_downloaders`、`rename_exclude_dirs`、`rename_hash_white_list`、`rename_exclude_tags`、`rename_include_tags`、`rename_cron`、`rename_add_tag_after_rename`、`rename_movie_format`、`rename_tv_format`、`rename_event_debounce_seconds` |
 | 站点标签 | 14 | `tag_enabled`、`tag_siteprefix`、`tag_tracker_mappings_str`、`tag_interval_cron`、`tag_enable_media_tag`、`tag_enable_tag`、`tag_enable_category`、`tag_enable_del_tags`、`tag_downloaders`、`tag_all_cat`、`tag_all_cat_rename`、`tag_rename_type`、`tag_path_rename`、`tag_catprefix` |
 | 上传限速 | 5 | `upload_limit_enabled`、`upload_limit_downloaders`、`upload_limit_downloader_limits_kib`、`upload_limit_site_rules`、`upload_limit_grace_minutes` |
-| H&R | 24 | `hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_onlyonce`、`hr_downloader`、`hr_sites`、`hr_notify`、`hr_check_period`、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str` |
-| 自动删种 | 18 | `remover_enabled`、`remover_notify`、`remover_onlyonce`、`remover_action`、`remover_downloaders`、`remover_cron`、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys` |
+| H&R | 23 | `hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_downloader`、`hr_sites`、`hr_notify`、`hr_check_period`、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str` |
+| 自动删种 | 17 | `remover_enabled`、`remover_notify`、`remover_action`、`remover_downloaders`、`remover_cron`、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys` |
 | 失败清理 | 5 | `failcleanup_enabled`、`failcleanup_notify`、`failcleanup_cron`、`failcleanup_clean_repeat`、`failcleanup_retain_hours` |
 
 各模块默认值来源：`utils/config.py::TRANSFER_DEFAULTS`、`service/rename.py::DEFAULT_RENAME_CONFIG`（配 `RENAME_FLAT_CONFIG_KEYS` 映射）、`service/site_tag.py::DEFAULT_TAG_CONFIG`、`service/hr/constants.py::HR_FORM_DEFAULTS`、`service/autoremove/constants.py::REMOVER_FORM_DEFAULTS`、`service/failclean/constants.py::FAILCLEAN_FORM_DEFAULTS`。
@@ -250,7 +252,7 @@ Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布�
 | `DownloadCenterSiteHistory` | 站点标签历史补全 | cron `tag_interval_cron`（默认 `5 4 * * *`） | `complement_history` | 模块配置 `enable` 为真且 cron 非空（见 §9） |
 | `DownloadCenterRenameScan` | 命名补刀扫描 | cron `rename_cron` | `scan_renames` | `rename_enabled` 且 `rename_cron_enabled` 且 cron 非空 |
 
-无效 cron 只禁用对应服务并记 error 日志，不抛异常。`onlyonce` 类一次性任务在 `service/lifecycle.py` 中按身份用 `scheduler.add_job(..., "date", run_date=now+3s)` 登记，随后把开关写回 false。
+无效 cron 只禁用对应服务并记 error 日志，不抛异常。v3.7.0 起无 `onlyonce` 一次性任务：立即运行语义由数据页模块卡按钮走执行端点（`transfer_run`/`tag_complement`/`autoremove_run`/`failclean_scan` 等）。
 
 ## 7. 事件订阅表
 

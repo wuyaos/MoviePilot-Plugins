@@ -66,7 +66,6 @@ def parse_hr_config(config: Optional[dict] = None) -> HrConfig:
         enabled=_as_bool(_pick(source, "hr_enabled"), False),
         protection_enabled=_as_bool(_pick(source, "hr_protection_enabled"), True),
         check_period=_as_positive_int(_pick(source, "hr_check_period"), 10),
-        onlyonce=_as_bool(_pick(source, "hr_onlyonce"), False),
         notify=_as_notify_mode(_pick(source, "hr_notify")),
         downloaders=_as_str_list(_pick(source, "hr_downloader")),
         sites=_as_site_ids(_pick(source, "hr_sites")),

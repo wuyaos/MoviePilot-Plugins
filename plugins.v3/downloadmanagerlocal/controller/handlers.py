@@ -47,7 +47,7 @@ from ..model.state import (
 from ..service.archive import serialized_rename_state
 from ..service.hr.guard import HrGuard
 from ..service.hr.rules import load_preset_rules
-from ..service.site_tag import execute_tag_cleanup, scan_and_clean_tags
+from ..service.site_tag import complement_history, execute_tag_cleanup, scan_and_clean_tags
 from ..service.upload_limit_worker import stop_upload_limit_worker
 from ..service.upload_limiter import (
     get_upload_limit_status,
@@ -220,11 +220,11 @@ def api_upload_limit_site_tags(plugin, payload: UploadLimitSiteTagsRequest):
         result = scan_upload_limit_site_tags(
             plugin, request.get("downloaders")
         )
-        request_rules = request.get("rules")
+        # 请求体 rules 为空（前端未传或显式传空）时沿用已持久化站点策略：
+        # 站点扫描只负责补充站点名，不得清空既有站点上限。
         rules = dict(
-            request_rules
-            if isinstance(request_rules, dict)
-            else (getattr(plugin, "_upload_limit_site_rules", {}) or {})
+            request.get("rules")
+            or (getattr(plugin, "_upload_limit_site_rules", {}) or {})
         )
         for item in result.get("items") or []:
             name = str(item.get("name") or "").strip()
@@ -613,6 +613,38 @@ def api_failclean_scan(plugin, payload: EmptyRequest | None = None):
         raise HTTPException(status_code=500, detail="整理失败清理服务未初始化")
     result = service.cleanup_repeat_sources(trigger_source="手动")
     return _operation_response({"code": 0, "msg": "巡检完成", "result": result}, ModuleActionResult)
+
+
+def api_transfer_run(plugin, payload: EmptyRequest | None = None):
+    """手动执行一轮转移做种（替代已删除的 onlyonce 立即运行开关）。"""
+    _require_module(plugin, "transfer", "转移做种")
+    if not plugin._transfer_active:
+        return _operation_response(
+            {"code": 1, "msg": "转移做种未就绪：请检查源/目标下载器与种子文件路径"},
+            ModuleActionResult,
+        )
+    try:
+        plugin.transfer(trigger_source="手动")
+    except Exception as e:
+        logger.error(f"转移做种执行失败: {e}")
+        return _operation_response({"code": 1, "msg": f"转移做种失败: {e}"}, ModuleActionResult)
+    return _operation_response({"code": 0, "msg": "转移做种已执行"}, ModuleActionResult)
+
+
+def api_tag_complement(plugin, payload: EmptyRequest | None = None):
+    """手动执行一轮站点标签历史补全（与 tag_interval_cron 定时任务同一服务入口）。"""
+    _require_module(plugin, "tag", "站点标签")
+    try:
+        result = complement_history(plugin)
+    except Exception as e:
+        logger.error(f"站点标签历史补全失败: {e}")
+        return _operation_response(
+            {"code": 1, "msg": f"站点标签历史补全失败: {e}"}, ModuleActionResult
+        )
+    return _operation_response(
+        {"code": 0, "msg": "站点标签历史补全完成", "result": result},
+        ModuleActionResult,
+    )
 
 
 def api_tag_status(plugin):

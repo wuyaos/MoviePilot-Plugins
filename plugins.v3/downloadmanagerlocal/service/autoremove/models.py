@@ -25,7 +25,6 @@ class RemoverConfig(BaseModel):
 
     enabled: bool = False
     notify: bool = False
-    onlyonce: bool = False
     action: str = "pause"
     downloaders: list[str] = Field(default_factory=list)
     cron: str = "0 */12 * * *"

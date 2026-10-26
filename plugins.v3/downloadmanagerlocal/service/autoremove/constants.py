@@ -27,7 +27,6 @@ REMOVER_NOTIFY_ITEM_LIMIT = 20
 REMOVER_FORM_DEFAULTS = {
     "remover_enabled": False,
     "remover_notify": False,
-    "remover_onlyonce": False,
     "remover_action": "pause",
     "remover_downloaders": [],
     "remover_cron": "0 */12 * * *",

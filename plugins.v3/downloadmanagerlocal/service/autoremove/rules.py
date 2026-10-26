@@ -24,7 +24,6 @@ def parse_remover_config(config: Optional[dict] = None) -> RemoverConfig:
     return RemoverConfig(
         enabled=as_bool(value("remover_enabled"), False),
         notify=as_bool(value("remover_notify"), False),
-        onlyonce=as_bool(value("remover_onlyonce"), False),
         action=_as_text(value("remover_action")),
         downloaders=_as_str_list(value("remover_downloaders")),
         cron=_as_text(value("remover_cron")),

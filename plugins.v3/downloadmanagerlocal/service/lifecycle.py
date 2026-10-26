@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-
-import pytz
 from app.sdk.config import settings
 from app.sdk.logging import logger
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -29,7 +26,7 @@ from .upload_limiter import load_upload_limit_state, restore_upload_limits
 
 
 def initialize_plugin(plugin, config: dict = None) -> None:
-    """初始化插件运行时配置，并按当前配置登记一次性后台任务。"""
+    """初始化插件运行时配置，并按当前配置启动转移做种调度。"""
     plugin.stop_service()
     config = initialize_runtime_config(plugin, config)
     event = getattr(plugin, "_event", None)
@@ -43,24 +40,19 @@ def initialize_plugin(plugin, config: dict = None) -> None:
         restore_upload_limits(plugin)
 
     scheduler_needed = False
-    if plugin._transfer_active or plugin._onlyonce:
+    if plugin._transfer_active:
         if not validate_config(plugin):
             _disable_invalid_transfer_config(plugin, config)
         else:
             plugin._scheduler = BackgroundScheduler(timezone=settings.TZ)
             restore_transfer_schedule(plugin)
-            _schedule_transfer_once(plugin, config)
             scheduler_needed = True
 
     plugin._hr_service = HrService(plugin)
     plugin._hr_service.init_module(config)
-    if _schedule_hr_once(plugin, config):
-        scheduler_needed = True
 
     plugin._autoremove_service = AutoRemoveService(plugin)
     plugin._autoremove_service.init_module(config)
-    if _schedule_autoremove_once(plugin, config):
-        scheduler_needed = True
 
     plugin._failclean_service = FailCleanService(plugin)
     plugin._failclean_service.init_module(config)
@@ -74,70 +66,9 @@ def initialize_plugin(plugin, config: dict = None) -> None:
 def _disable_invalid_transfer_config(plugin, config: dict) -> None:
     """在转移配置无效时按旧逻辑关闭转移开关并持久化。"""
     plugin._enabled = False
-    plugin._onlyonce = False
     config["enabled"] = plugin._enabled
-    config["onlyonce"] = plugin._onlyonce
     plugin.update_config(config=config)
 
-
-def _schedule_transfer_once(plugin, config: dict) -> None:
-    """根据 onlyonce 配置登记立即执行一次的转移做种任务。"""
-    if not plugin._onlyonce:
-        return
-    # 门控统一：转移做种模块未生效（总开关关/模块关/配置不完整）时不再旁路执行。
-    if not plugin._transfer_active:
-        logger.info("转移做种模块未启用，跳过 onlyonce 立即执行")
-        plugin._onlyonce = False
-        config["onlyonce"] = plugin._onlyonce
-        plugin.update_config(config=config)
-        return
-    logger.info("转移做种服务启动，立即运行一次")
-    plugin._scheduler.add_job(
-        plugin.transfer,
-        "date",
-        run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-    )
-    plugin._onlyonce = False
-    config["onlyonce"] = plugin._onlyonce
-    plugin.update_config(config=config)
-
-
-def _schedule_hr_once(plugin, config: dict) -> bool:
-    """根据 H&R onlyonce 配置登记一次立即执行的全量扫描。"""
-    service = getattr(plugin, "_hr_service", None)
-    if service is None or not service.config.onlyonce:
-        return False
-    if not plugin._scheduler:
-        plugin._scheduler = BackgroundScheduler(timezone=settings.TZ)
-    logger.info("H&R 服务启动，立即运行一次")
-    plugin._scheduler.add_job(
-        service.run_scan,
-        "date",
-        run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-    )
-    config["hr_onlyonce"] = False
-    plugin.update_config(config=config)
-    return True
-
-
-
-def _schedule_autoremove_once(plugin, config: dict) -> bool:
-    """根据自动删种 onlyonce 配置登记一次立即执行的候选处理。"""
-    service = getattr(plugin, "_autoremove_service", None)
-    if service is None or not service.config.onlyonce:
-        return False
-    if not plugin._scheduler:
-        plugin._scheduler = BackgroundScheduler(timezone=settings.TZ)
-    logger.info("自动删种服务启动，立即运行一次")
-    plugin._scheduler.add_job(
-        service.run_cycle,
-        "date",
-        kwargs={"trigger_source": "启动"},
-        run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-    )
-    config["remover_onlyonce"] = False
-    plugin.update_config(config=config)
-    return True
 
 def _start_scheduler_if_needed(plugin, print_jobs: bool = False) -> None:
     """在 scheduler 已有任务且尚未运行时启动后台调度器。"""

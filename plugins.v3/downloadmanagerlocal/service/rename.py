@@ -604,9 +604,6 @@ RENAME_FLAT_CONFIG_KEYS = {
     "exclude_tags": "rename_exclude_tags",
     "include_tags": "rename_include_tags",
     "cron": "rename_cron",
-    "retry": "rename_retry",
-    "onlyonce": "rename_onlyonce",
-    "recovery": "rename_recovery",
     "add_tag_after_rename": "rename_add_tag_after_rename",
     "movie_format_torrent_name": "rename_movie_format",
     "tv_format_torrent_name": "rename_tv_format",
@@ -624,9 +621,6 @@ DEFAULT_RENAME_CONFIG = {
     "exclude_tags": "已重命名",
     "include_tags": "",
     "cron": "",
-    "retry": False,
-    "onlyonce": False,
-    "recovery": False,
     "add_tag_after_rename": False,
     "movie_format_torrent_name": (
         "{{ title }}{% if year %} ({{ year }}){% endif %} - {{original_name}}"
@@ -893,7 +887,9 @@ def scan_renames(plugin) -> dict:
         return result
 
     processed = _get_renamed_hashes(plugin)
-    pending = set() if rename_config["retry"] else get_failed_rename_hashes(plugin)
+    # 失败项重试开关（rename_retry）已移除：定时扫描沿用发布默认语义——不重试失败项，
+    # 重试走数据页「一键补刀」（POST /retry_renames）。
+    pending = get_failed_rename_hashes(plugin)
     is_archived = getattr(plugin, "is_rename_archived", None)
 
     for downloader_name in rename_config["downloader"]:

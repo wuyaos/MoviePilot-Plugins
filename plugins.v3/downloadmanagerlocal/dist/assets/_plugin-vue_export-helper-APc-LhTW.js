@@ -50,4 +50,4 @@ const _export_sfc = (sfc, props) => {
   return target;
 };
 
-export { _export_sfc as _, postPluginApi as a, getPluginApi as g, postPluginJsonApi as p };
+export { _export_sfc as _, postPluginJsonApi as a, getPluginApi as g, postPluginApi as p };

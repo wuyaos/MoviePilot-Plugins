@@ -45,7 +45,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.6.3"
+    plugin_version = "3.7.0"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页
@@ -75,7 +75,6 @@ class DownloadManagerLocal(_PluginBase):
     _delay_minutes = 25
     _transfer_fallback_enabled = True
     _transfer_fallback_interval_minutes = 60
-    _onlyonce = False
     _fromdownloader = None
     _todownloader = None
     _frompath = None
@@ -293,9 +292,17 @@ class DownloadManagerLocal(_PluginBase):
         """手动执行重复下载残留巡检。"""
         return _controller_handlers.api_failclean_scan(self, payload)
 
+    def api_transfer_run(self, payload=None):
+        """手动执行一轮转移做种。"""
+        return _controller_handlers.api_transfer_run(self, payload)
+
     def api_tag_status(self):
         """返回站点标签增强模块状态。"""
         return _controller_handlers.api_tag_status(self)
+
+    def api_tag_complement(self, payload=None):
+        """手动执行一轮站点标签历史补全。"""
+        return _controller_handlers.api_tag_complement(self, payload)
 
     def api_rename_status(self):
         """返回命名补刀模块状态。"""

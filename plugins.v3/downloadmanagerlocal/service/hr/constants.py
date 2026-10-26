@@ -25,7 +25,6 @@ HR_FORM_DEFAULTS = {
     "hr_protection_enabled": True,
     "hr_auto_discover": False,
     "hr_enable_site_config": False,
-    "hr_onlyonce": False,
     "hr_downloader": [],
     "hr_sites": [],
     "hr_notify": "always",
