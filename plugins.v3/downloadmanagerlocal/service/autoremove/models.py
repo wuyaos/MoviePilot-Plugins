@@ -40,7 +40,6 @@ class RemoverConfig(BaseModel):
     trackerkeywords: str = ""
     errorkeywords: str = ""
     torrentstates: str = ""
-    trtorrentstates: str = ""
     torrentcategorys: str = ""
 
 

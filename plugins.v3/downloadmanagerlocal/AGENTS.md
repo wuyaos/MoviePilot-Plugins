@@ -31,7 +31,6 @@
 ```
 plugins.v3/downloadmanagerlocal/
 ├── __init__.py                     # 插件入口：身份/生命周期/事件注册/薄委托
-├── api.py                          # 兼容导出：从 controller.handlers 重导出 16 个 handler
 ├── plugin.json                     # 随包元数据（name/description/version/history/...）
 ├── README.md                       # 面向用户的模块与生效条件说明
 ├── AGENTS.md                       # 本文件（AI 交接 + 结构说明）
@@ -53,7 +52,6 @@ plugins.v3/downloadmanagerlocal/
 │   ├── events.py                   # TransferComplete/DownloadAdded/PluginTriggered
 │   ├── cleanup.py                  # 同步删除与 PluginAction/WebhookMessage
 │   ├── diagnostics.py              # 只读诊断数据构建
-│   ├── boundaries.py               # 服务边界清单（旧 modules/ shim 映射）
 │   ├── transfer.py                 # 转移做种主流程
 │   ├── transfer_pipeline.py        # 转移事务：确认目标完整后才允许删源
 │   ├── recheck.py                  # 做种校验队列与后台 worker
@@ -125,7 +123,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 - 职责：按条件组（AND 语义）扫描候选并执行暂停 / 删除任务 / 删除任务及文件；执行前查询 H&R 保护闸门。
 - 关键文件：`service/autoremove/service.py`（`AutoRemoveService`、`collect_candidates`、`run_cycle`）、`service/autoremove/scanner.py`、`service/autoremove/criteria.py`、`service/autoremove/rules.py`、`service/autoremove/models.py`、`service/autoremove/constants.py`。
-- 关键配置：`remover_enabled`、`remover_notify`、`remover_onlyonce`、`remover_action`（`pause`/`delete`/`deletefile`）、`remover_downloaders`、`remover_cron`（默认 `0 */12 * * *`）、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys`、`remover_trtorrentstates`（遗留兼容键，非空时按配置错误阻止本轮）。
+- 关键配置：`remover_enabled`、`remover_notify`、`remover_onlyonce`、`remover_action`（`pause`/`delete`/`deletefile`）、`remover_downloaders`、`remover_cron`（默认 `0 */12 * * *`）、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys`。
 - 端点：`GET /autoremove_status`、`POST /autoremove_run`、`POST /autoremove_preview`（预览不执行）。
 - 调度：`AutoRemoveTorrents`（cron `remover_cron`，需 `remover_enabled` 且 cron 非空；`0`/空表示不注册）。
 
@@ -153,15 +151,14 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 - `service/scheduler.py`：`build_plugin_services(plugin)` 汇总全部定时服务声明。
 - `service/diagnostics.py`：`/diagnostics` 的只读诊断数据。
 - `service/cleanup.py`：同步删除（`DownloadFileDeleted`/`DownloadDeleted`/`WebhookMessage`/`PluginAction`）。
-- `service/boundaries.py`：服务边界清单，旧 `modules/` shim 的映射来源（当前工作树已无 `modules/` 目录）。
-- `controller/handlers.py`：全部 handler 与 `schemas.Response[T]` 包装；`controller/api.py` 只做 route metadata。
+- `controller/handlers.py`：全部 handler 与 `schemas.Response[T]` 包装；`controller/api.py` 只做 route metadata；`__init__.py` 从 `controller.handlers` 直接导入 14 个 handler 别名。
 - `model/api.py`：`ApiBusinessModel` / `ApiRequestModel` / `Response[T]` 家族。
 
 ## 4. 配置键清单
 
 `utils/config.py::PLUGIN_CONFIG_DEFAULTS` 是单次合并构造的扁平默认值，`__init__.py::get_form()` 返回它的 deepcopy；各模块复用同一批 `*_CONFIG_DEFAULTS` 常量，没有第二份实现。
 
-**总键数：114**（不是 115；分组见下，`utils/config.py` 显式键 + 7 处 spread 合并去重后）。
+**总键数：113**（不是 114；分组见下，`utils/config.py` 显式键 + 7 处 spread 合并去重后）。
 
 | 分组 | 键数 | 键 |
 | --- | --- | --- |
@@ -170,10 +167,10 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 | 站点标签 | 14 | `tag_enabled`、`tag_siteprefix`、`tag_tracker_mappings_str`、`tag_interval_cron`、`tag_enable_media_tag`、`tag_enable_tag`、`tag_enable_category`、`tag_enable_del_tags`、`tag_downloaders`、`tag_all_cat`、`tag_all_cat_rename`、`tag_rename_type`、`tag_path_rename`、`tag_catprefix` |
 | 上传限速 | 5 | `upload_limit_enabled`、`upload_limit_downloaders`、`upload_limit_downloader_limits_kib`、`upload_limit_site_rules`、`upload_limit_grace_minutes` |
 | H&R | 24 | `hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_onlyonce`、`hr_downloader`、`hr_sites`、`hr_notify`、`hr_check_period`、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str` |
-| 自动删种 | 19 | `remover_enabled`、`remover_notify`、`remover_onlyonce`、`remover_action`、`remover_downloaders`、`remover_cron`、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys`、`remover_trtorrentstates` |
+| 自动删种 | 18 | `remover_enabled`、`remover_notify`、`remover_onlyonce`、`remover_action`、`remover_downloaders`、`remover_cron`、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys` |
 | 失败清理 | 5 | `failcleanup_enabled`、`failcleanup_notify`、`failcleanup_cron`、`failcleanup_clean_repeat`、`failcleanup_retain_hours` |
 
-各模块默认值来源：`utils/config.py::TRANSFER_DEFAULTS`、`service/rename.py::DEFAULT_RENAME_CONFIG`（配 `RENAME_FLAT_CONFIG_KEYS` 映射）、`service/site_tag.py::DEFAULT_TAG_CONFIG`、`service/hr/constants.py::HR_FORM_DEFAULTS`、`service/autoremove/constants.py::REMOVER_FORM_DEFAULTS` + `REMOVER_COMPAT_DEFAULTS`、`service/failclean/constants.py::FAILCLEAN_FORM_DEFAULTS`。
+各模块默认值来源：`utils/config.py::TRANSFER_DEFAULTS`、`service/rename.py::DEFAULT_RENAME_CONFIG`（配 `RENAME_FLAT_CONFIG_KEYS` 映射）、`service/site_tag.py::DEFAULT_TAG_CONFIG`、`service/hr/constants.py::HR_FORM_DEFAULTS`、`service/autoremove/constants.py::REMOVER_FORM_DEFAULTS`、`service/failclean/constants.py::FAILCLEAN_FORM_DEFAULTS`。
 
 配置读取：`controller/handlers.py` 通过 `plugin.get_config()` 读当前实例配置；站点标签扁平键→嵌套键映射在 `service/config.py::_TAG_FLAT_PREFIX_MAP` / `_flat_tag_module_config`。
 
@@ -224,7 +221,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 | `/autoremove_preview` | 预览自动删种候选（不执行） | `api_autoremove_preview` |
 | `/failclean_scan` | 手动执行重复下载残留巡检 | `api_failclean_scan` |
 
-`api.py` 作为兼容层从 `controller.handlers` 重导出 16 个 handler，`__all__` 同步列出。Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布尔值时解包，裸业务模型原样返回。
+Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布尔值时解包，裸业务模型原样返回。旧根级 `api.py` 兼容导出层已删除，handler 唯一来源是 `controller/handlers.py`。
 
 ## 6. 调度任务表
 

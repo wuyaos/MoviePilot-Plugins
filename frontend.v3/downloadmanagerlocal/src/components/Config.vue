@@ -86,7 +86,7 @@ const defaults = {
   remover_samedata: false, remover_mponly: false, remover_size: '', remover_ratio: '',
   remover_time: '', remover_upspeed: '', remover_labels: '', remover_pathkeywords: '',
   remover_trackerkeywords: '', remover_errorkeywords: '', remover_torrentstates: '',
-  remover_torrentcategorys: '', remover_trtorrentstates: '',
+  remover_torrentcategorys: '',
   failcleanup_enabled: false, failcleanup_notify: true, failcleanup_cron: '0 */2 * * *',
   failcleanup_clean_repeat: true, failcleanup_retain_hours: 6,
   rename_notify: false, rename_cron_enabled: false, rename_on_download_added: true,
@@ -1120,12 +1120,6 @@ async function executeCleanupTags() {
                 </VCol>
                 <VCol cols="12" md="3">
                   <VSwitch v-model="form.remover_samedata" color="warning" inset hide-details label="连带同名同大小任务" />
-                </VCol>
-              </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12">
-                  <VTextField v-model="form.remover_trtorrentstates" label="Transmission 状态（兼容键，来源未实现）" density="compact" variant="outlined" hide-details
-                    hint="非空时按配置错误处理：本轮不执行删除" persistent-hint />
                 </VCol>
               </VRow>
             </div>

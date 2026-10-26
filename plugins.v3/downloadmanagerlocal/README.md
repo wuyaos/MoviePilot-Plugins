@@ -14,7 +14,7 @@
 - H&R 助手：按站点规则跟踪 H&R 做种时长/比例，达标移除标签，超期告警，支持体积分档与每日汇总通知。
 - 自动删种：按条件（做种时长、标签、下载器来源等 AND 组合）定期删种，动作支持暂停/删除/删文件。
 - 失败清理：整理失败（TransferFailed 事件）删除源文件与下载历史；定时巡检清理已成功整理的本地残留媒体文件。
-- 上传限速：按时段/站点对下载器上传限速做统一调控。
+- 上传限速：统一写入下载器全局上传上限；填正数的站点按站点合计上限跨下载器共享额度，停用时自动恢复原值。
 
 ## 生效条件（核心开关）
 
@@ -23,8 +23,8 @@
 | `enabled` | 插件总开关 |
 | `transfer_enabled` / `transfer_cron` / `transfer_event_enabled` | 转移做种：开关 / 兜底扫描周期 / 事件驱动 |
 | `rename_enabled` / `rename_cron` / `rename_on_download_added` | 命名补刀：开关 / 扫描周期 / 下载入列事件触发 |
-| `tag_enabled` / `tag_complement_cron` | 站点标签：开关 / 历史补全周期 |
-| `hr_enabled` / `hr_check_cron` / `hr_notify_summary_cron` | H&R：开关 / 检查周期 / 汇总通知周期 |
+| `tag_enabled` / `tag_interval_cron` | 站点标签：开关 / 历史补全周期 |
+| `hr_enabled` / `hr_check_period` / `hr_notify_summary_cron` | H&R：开关 / 检查间隔（分钟）/ 汇总通知周期 |
 | `remover_enabled` / `remover_cron` | 自动删种：开关 / 执行周期（0 表示不注册定时服务） |
 | `failcleanup_enabled` / `failcleanup_clean_repeat` / `failcleanup_cron` | 失败清理：总开关 / 重复残留巡检 / 巡检周期 |
 | `upload_limit_enabled` | 上传限速 |
@@ -33,7 +33,7 @@
 
 - H&R 站点规则：`hr_site_config_str`（YAML，按 site_name 或站点 id 生效）、`hr_size_tiers`（体积分档，None 表示不启用分档）。
 - 自动删种：`remover_conditions_*` 条件组（AND 语义），`remover_action`（pause/delete/deletefile），`remover_torrentstates` 限定任务状态。
-- 失败清理：事件删除无保留期；巡检删除要求"已有成功整理历史 + 目标文件仍存在 + 残留超过 `failcleanup_retain_hours`"三重条件。
+- 自动删种：条件项 AND 组合（做种时长/体积/比率、标签、tracker、路径关键词、错误关键词、任务状态等），`remover_action`（pause/delete/deletefile），`remover_mponly` 仅处理 MoviePilot 添加的任务。
 - 删除保护：转移删源、自动删种、失败清理路径统一经过 H&R guard（`HrGuard().should_skip`），未达标任务不会被连带删除；同步删除（源删除事件连带删除转种目标）当前不受 guard 保护。
 
 ## 测试与构建

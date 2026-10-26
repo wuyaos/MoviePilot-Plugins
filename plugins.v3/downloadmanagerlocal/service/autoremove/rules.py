@@ -39,7 +39,6 @@ def parse_remover_config(config: Optional[dict] = None) -> RemoverConfig:
         trackerkeywords=_as_text(value("remover_trackerkeywords")),
         errorkeywords=_as_text(value("remover_errorkeywords")),
         torrentstates=_as_text(value("remover_torrentstates")),
-        trtorrentstates=_as_text(value("remover_trtorrentstates")),
         torrentcategorys=_as_text(value("remover_torrentcategorys")),
     )
 

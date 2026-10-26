@@ -46,26 +46,10 @@ REMOVER_FORM_DEFAULTS = {
 }
 """TorrentRemover 源码 get_form 的表单默认值（配置键加 remover_ 前缀）。"""
 
-REMOVER_COMPAT_DEFAULTS = {
-    "remover_trtorrentstates": "",
-}
-"""qnap 现役版本遗留键；来源源码未实现 TR 状态过滤，非空时按配置错误阻止本轮。"""
 
-REMOVER_QNAP_CONFIG = {
-    "remover_enabled": True,
-    "remover_notify": True,
-    "remover_action": "deletefile",
-    "remover_downloaders": ["QB1"],
-    "remover_cron": "0 */4 * * *",
-    "remover_mponly": True,
-    "remover_time": "12",
-    "remover_labels": "MOVIEPILOT",
-    "undefined": True,
-}
-"""qnap 现役 TorrentRemover 配置中与表单默认不同的键；只作行为证据，不进入发布默认值。"""
 
-REMOVER_CONFIG_DEFAULTS = {**REMOVER_FORM_DEFAULTS, **REMOVER_COMPAT_DEFAULTS}
-"""插件发布默认值：来源 get_form 表单默认值，qnap 差异见 REMOVER_QNAP_CONFIG。"""
+REMOVER_CONFIG_DEFAULTS = {**REMOVER_FORM_DEFAULTS}
+"""插件发布默认值：来源 TorrentRemover get_form 表单默认值（remover_ 前缀）。"""
 
 
 def build_remover_config_defaults() -> dict:
@@ -80,13 +64,11 @@ __all__ = (
     "MIGRATION_OBSERVE_ONLY_KEY",
     "REMOVER_ACTIONS",
     "REMOVER_CANDIDATE_VIEW_LIMIT",
-    "REMOVER_COMPAT_DEFAULTS",
     "REMOVER_CONFIG_DEFAULTS",
     "REMOVER_FORM_DEFAULTS",
     "REMOVER_LOG_PREFIX",
     "REMOVER_NOTIFY_ITEM_LIMIT",
     "REMOVER_NOTIFY_TITLE",
-    "REMOVER_QNAP_CONFIG",
     "REMOVER_SERVICE_ID",
     "REMOVER_SERVICE_NAME",
     "REMOVER_STATE_DATA_KEY",

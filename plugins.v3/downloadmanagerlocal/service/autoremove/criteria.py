@@ -46,11 +46,6 @@ def compile_conditions(config: RemoverConfig) -> CompiledConditions:
         raise RemoverConfigError(
             f"动作 {action!r} 无效，可选 {'/'.join(REMOVER_ACTIONS)}"
         )
-    if config.trtorrentstates:
-        raise RemoverConfigError(
-            "该版本未实现 Transmission 状态过滤（remover_trtorrentstates），"
-            "请清空该配置后重试"
-        )
 
     size_limit = bool(config.size)
     min_size = max_size = 0
