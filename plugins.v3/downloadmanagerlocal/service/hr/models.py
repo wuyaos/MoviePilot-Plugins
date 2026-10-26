@@ -180,13 +180,13 @@ class HrConfig(BaseModel):
     check_period: int = 10
     notify: str = "always"
     downloaders: list[str] = Field(default_factory=list)
-    sites: list[int] = Field(default_factory=list)
     hit_and_run_tag: str = "H&R"
     auto_cleanup_days: float = 15
     auto_discover: bool = True
     brush_plugin: str = "BrushFlow"
     exclude_tags: list[str] = Field(default_factory=list)
     exclude_categories: list[str] = Field(default_factory=list)
+    sites: list[str] = Field(default_factory=list)
     notify_summary_cron: str = "0 8 * * *"
     global_rule: HrSiteRule = Field(default_factory=HrSiteRule)
     site_rules: dict[str, HrSiteRule] = Field(default_factory=dict)
@@ -197,16 +197,16 @@ class HrConfig(BaseModel):
         rule = self.site_rules.get(name) if name else None
         return rule if rule is not None else self.global_rule
 
-    def site_in_scope(self, site_id: Optional[int], site_name: Optional[str]) -> bool:
-        """站点白名单判定：MP 站点 ID 命中白名单，或站点名存在自定义规则条目。
+    def site_in_scope(self, site_name: Optional[str]) -> bool:
+        """站点白名单判定：站点名命中白名单，或站点名存在自定义规则条目。
 
-        trackers 兜底识别的自定义站点没有 MP site_id，以“该站点名配了规则条目”作为纳管意向。
+        白名单与规则一律按站点名匹配：站点 ID 是站点库自增主键，站点重建/迁移后会漂移，
+        不作判定依据；trackers 兜底识别的自定义站点没有 MP site_id，同样按站点名参与判定。
         """
-        if site_id is not None and site_id in self.sites:
-            return True
         name = str(site_name or "").strip()
-        return bool(name) and name in self.site_rules
-
+        if not name:
+            return False
+        return name in self.sites or name in self.site_rules
 
 __all__ = (
     "HrConfig",

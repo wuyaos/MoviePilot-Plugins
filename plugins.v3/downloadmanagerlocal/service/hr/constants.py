@@ -52,7 +52,7 @@ HR_QNAP_CONFIG = {
     "hr_auto_discover": True,
     "hr_enable_site_config": True,
     "hr_downloader": ["QB1", "QB2"],
-    "hr_sites": [24, 40, 53, 75, 8, 35, 123, 115, 126, 150],
+    "hr_sites": ["老师", "北洋园", "GGPT", "PTFans", "PTLGS", "1PTBA", "52pt"],
     "hr_additional_seed_time": 6.0,
     "hr_exclude_categories": ["seed"],
     "hr_auto_cleanup_days": 15.0,

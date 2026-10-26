@@ -1949,11 +1949,13 @@ return (_ctx, _cache) => {
                           variant: "outlined",
                           "hide-details": "",
                           items: siteItems.value,
+                          "item-title": "title",
+                          "item-value": "title",
                           multiple: "",
                           chips: "",
                           "closable-chips": "",
                           clearable: "",
-                          hint: "只跟踪这些站点的种子；留空表示全部站点",
+                          hint: "只跟踪这些站点的种子（按站点名）；留空表示全部站点",
                           "persistent-hint": ""
                         }, null, 8, ["modelValue", "items"])
                       ]),
@@ -3517,27 +3519,7 @@ return (_ctx, _cache) => {
                 [_vShow, activeSub.value === 'tag_basic']
               ]),
               _withDirectives(_createElementVNode("div", _hoisted_57, [
-                _cache[146] || (_cache[146] = _createElementVNode("div", { class: "dm-section-title" }, "映射规则", -1)),
-                _createVNode(_component_VRow, null, {
-                  default: _withCtx(() => [
-                    _createVNode(_component_VCol, { cols: "12" }, {
-                      default: _withCtx(() => [
-                        _createVNode(_component_VTextarea, {
-                          modelValue: form.tag_tracker_mappings_str,
-                          "onUpdate:modelValue": _cache[94] || (_cache[94] = $event => ((form.tag_tracker_mappings_str) = $event)),
-                          label: "Tracker 映射（每行: 域名 -> 映射域名）",
-                          density: "compact",
-                          variant: "outlined",
-                          "hide-details": "",
-                          rows: "4"
-                        }, null, 8, ["modelValue"]),
-                        _cache[145] || (_cache[145] = _createElementVNode("div", { class: "dm-hint" }, "例: tracker.example.com -> example", -1))
-                      ]),
-                      _: 1
-                    })
-                  ]),
-                  _: 1
-                }),
+                _cache[147] || (_cache[147] = _createElementVNode("div", { class: "dm-section-title" }, "映射规则", -1)),
                 _createVNode(_component_VRow, { class: "mt-2" }, {
                   default: _withCtx(() => [
                     _createVNode(_component_VCol, {
@@ -3547,7 +3529,7 @@ return (_ctx, _cache) => {
                       default: _withCtx(() => [
                         _createVNode(_component_VTextField, {
                           modelValue: form.tag_catprefix,
-                          "onUpdate:modelValue": _cache[95] || (_cache[95] = $event => ((form.tag_catprefix) = $event)),
+                          "onUpdate:modelValue": _cache[94] || (_cache[94] = $event => ((form.tag_catprefix) = $event)),
                           label: "分类前缀",
                           density: "compact",
                           variant: "outlined",
@@ -3574,7 +3556,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_VCombobox, {
                               modelValue: form.tag_all_cat,
-                              "onUpdate:modelValue": _cache[96] || (_cache[96] = $event => ((form.tag_all_cat) = $event)),
+                              "onUpdate:modelValue": _cache[95] || (_cache[95] = $event => ((form.tag_all_cat) = $event)),
                               label: "站点分类（回车输入）",
                               density: "compact",
                               variant: "outlined",
@@ -3595,7 +3577,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_VCombobox, {
                               modelValue: form.tag_all_cat_rename,
-                              "onUpdate:modelValue": _cache[97] || (_cache[97] = $event => ((form.tag_all_cat_rename) = $event)),
+                              "onUpdate:modelValue": _cache[96] || (_cache[96] = $event => ((form.tag_all_cat_rename) = $event)),
                               label: "映射目标分类（回车输入）",
                               density: "compact",
                               variant: "outlined",
@@ -3626,7 +3608,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_VTextarea, {
                               modelValue: form.tag_path_rename,
-                              "onUpdate:modelValue": _cache[98] || (_cache[98] = $event => ((form.tag_path_rename) = $event)),
+                              "onUpdate:modelValue": _cache[97] || (_cache[97] = $event => ((form.tag_path_rename) = $event)),
                               label: "路径映射规则（每行: 关键词#分类）",
                               density: "compact",
                               variant: "outlined",
@@ -3641,20 +3623,42 @@ return (_ctx, _cache) => {
                     }))
                   : _createCommentVNode("", true),
                 (form.tag_rename_type)
-                  ? (_openBlock(), _createElementBlock("div", _hoisted_59, " 当前模式：按下载保存路径包含的关键词判断分类（如 /anime/#动漫），一行不命中则不设分类；关闭上方开关则改按 TMDB 识别设置分类。 "))
+                  ? (_openBlock(), _createElementBlock("div", _hoisted_59, [
+                      _cache[146] || (_cache[146] = _createTextVNode(" 当前模式：按下载保存路径包含的关键词判断分类（如 /anime/#动漫），一行不命中则不设分类；关闭上方开关则改按 TMDB 识别设置分类。 ", -1)),
+                      _createVNode(_component_VRow, null, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_VCol, { cols: "12" }, {
+                            default: _withCtx(() => [
+                              _createVNode(_component_VTextarea, {
+                                modelValue: form.tag_tracker_mappings_str,
+                                "onUpdate:modelValue": _cache[98] || (_cache[98] = $event => ((form.tag_tracker_mappings_str) = $event)),
+                                label: "Tracker 映射（每行: 域名 -> 映射域名）",
+                                density: "compact",
+                                variant: "outlined",
+                                "hide-details": "",
+                                rows: "4"
+                              }, null, 8, ["modelValue"]),
+                              _cache[145] || (_cache[145] = _createElementVNode("div", { class: "dm-hint" }, "例: tracker.example.com -> example", -1))
+                            ]),
+                            _: 1
+                          })
+                        ]),
+                        _: 1
+                      })
+                    ]))
                   : _createCommentVNode("", true)
               ], 512), [
                 [_vShow, activeSub.value === 'mapping']
               ]),
               _withDirectives(_createElementVNode("div", _hoisted_60, [
-                _cache[148] || (_cache[148] = _createElementVNode("div", { class: "dm-section-title" }, "基础设置", -1)),
+                _cache[149] || (_cache[149] = _createElementVNode("div", { class: "dm-section-title" }, "基础设置", -1)),
                 _createVNode(_component_VAlert, {
                   type: "info",
                   variant: "tonal",
                   density: "compact",
                   class: "mb-4"
                 }, {
-                  default: _withCtx(() => [...(_cache[147] || (_cache[147] = [
+                  default: _withCtx(() => [...(_cache[148] || (_cache[148] = [
                     _createTextVNode("做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。", -1)
                   ]))]),
                   _: 1
@@ -3755,7 +3759,7 @@ return (_ctx, _cache) => {
               variant: "text",
               onClick: _cache[103] || (_cache[103] = $event => (emit('close')))
             }, {
-              default: _withCtx(() => [...(_cache[149] || (_cache[149] = [
+              default: _withCtx(() => [...(_cache[150] || (_cache[150] = [
                 _createTextVNode("取消", -1)
               ]))]),
               _: 1
@@ -3766,7 +3770,7 @@ return (_ctx, _cache) => {
               "prepend-icon": "mdi-content-save-outline",
               onClick: saveConfig
             }, {
-              default: _withCtx(() => [...(_cache[150] || (_cache[150] = [
+              default: _withCtx(() => [...(_cache[151] || (_cache[151] = [
                 _createTextVNode("保存配置", -1)
               ]))]),
               _: 1
@@ -3801,13 +3805,13 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
-                  default: _withCtx(() => [...(_cache[151] || (_cache[151] = [
+                  default: _withCtx(() => [...(_cache[152] || (_cache[152] = [
                     _createTextVNode("新增自定义站点", -1)
                   ]))]),
                   _: 1
                 }),
                 _createVNode(_component_VCardSubtitle, null, {
-                  default: _withCtx(() => [...(_cache[152] || (_cache[152] = [
+                  default: _withCtx(() => [...(_cache[153] || (_cache[153] = [
                     _createTextVNode("站点名需与站点标签识别出的站点名一致", -1)
                   ]))]),
                   _: 1
@@ -3843,7 +3847,7 @@ return (_ctx, _cache) => {
                   variant: "text",
                   onClick: _cache[105] || (_cache[105] = $event => (hrAddDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[153] || (_cache[153] = [
+                  default: _withCtx(() => [...(_cache[154] || (_cache[154] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3854,7 +3858,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-plus",
                   onClick: hrConfirmAddSite
                 }, {
-                  default: _withCtx(() => [...(_cache[154] || (_cache[154] = [
+                  default: _withCtx(() => [...(_cache[155] || (_cache[155] = [
                     _createTextVNode("添加", -1)
                   ]))]),
                   _: 1
@@ -3909,7 +3913,7 @@ return (_ctx, _cache) => {
             _createVNode(_component_VDivider),
             _createVNode(_component_VCardText, { class: "text-body-2" }, {
               default: _withCtx(() => [
-                _cache[155] || (_cache[155] = _createTextVNode(" 将把本页签全部设置恢复为插件默认值。改动先作用于表单，点击下方「保存配置」后才会真正生效。", -1)),
+                _cache[156] || (_cache[156] = _createTextVNode(" 将把本页签全部设置恢复为插件默认值。改动先作用于表单，点击下方「保存配置」后才会真正生效。", -1)),
                 (paneResetTarget.value === 'hr')
                   ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                       _createTextVNode("H&R 站点独立规则也会一并清空回全局基准。")
@@ -3926,7 +3930,7 @@ return (_ctx, _cache) => {
                   variant: "text",
                   onClick: _cache[107] || (_cache[107] = $event => (paneResetDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[156] || (_cache[156] = [
+                  default: _withCtx(() => [...(_cache[157] || (_cache[157] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3937,7 +3941,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-restore",
                   onClick: confirmPaneReset
                 }, {
-                  default: _withCtx(() => [...(_cache[157] || (_cache[157] = [
+                  default: _withCtx(() => [...(_cache[158] || (_cache[158] = [
                     _createTextVNode("恢复默认", -1)
                   ]))]),
                   _: 1
@@ -3956,6 +3960,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-36b18351"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-0d833f32"]]);
 
 export { Config as default };

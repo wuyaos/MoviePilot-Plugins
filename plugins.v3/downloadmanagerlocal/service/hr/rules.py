@@ -68,7 +68,7 @@ def parse_hr_config(config: Optional[dict] = None) -> HrConfig:
         check_period=_as_positive_int(_pick(source, "hr_check_period"), 10),
         notify=_as_notify_mode(_pick(source, "hr_notify")),
         downloaders=_as_str_list(_pick(source, "hr_downloader")),
-        sites=_as_site_ids(_pick(source, "hr_sites")),
+        sites=_as_site_names(_pick(source, "hr_sites")),
         hit_and_run_tag=str(_pick(source, "hr_hit_and_run_tag") or "H&R").strip(),
         auto_cleanup_days=_as_float(_pick(source, "hr_auto_cleanup_days"), 15.0),
         auto_discover=_as_bool(_pick(source, "hr_auto_discover"), False),
@@ -230,22 +230,26 @@ def _as_str_list(value: Any) -> list[str]:
     return result
 
 
-def _as_site_ids(value: Any) -> list[int]:
-    """把站点白名单规范为站点 ID 列表，非数字项丢弃。"""
+def _as_site_names(value: Any) -> list[str]:
+    """把站点白名单规范为站点名称列表。
+
+    数字项是旧格式站点 ID（站点库自增主键，站点重建/迁移后会漂移失效），丢弃并提示改用站点名。
+    """
     raw_values = value if isinstance(value, (list, tuple, set)) else [value]
-    result: list[int] = []
+    result: list[str] = []
     for raw_value in raw_values:
         for part in str(raw_value or "").replace("，", ",").split(","):
             text = part.strip()
             if not text:
                 continue
-            try:
-                site_id = int(float(text))
-            except (TypeError, ValueError):
-                logger.warning(f"{HR_LOG_PREFIX}站点白名单项 {text!r} 不是站点 ID，已忽略")
+            if text.replace(".", "", 1).isdigit():
+                logger.warning(
+                    f"{HR_LOG_PREFIX}站点白名单项 {text!r} 是旧格式站点 ID（站点库主键，跨库会失效），"
+                    "请改用站点名称，已忽略"
+                )
                 continue
-            if site_id not in result:
-                result.append(site_id)
+            if text not in result:
+                result.append(text)
     return result
 
 

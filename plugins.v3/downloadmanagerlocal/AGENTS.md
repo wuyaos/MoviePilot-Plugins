@@ -76,7 +76,7 @@ plugins.v3/downloadmanagerlocal/
 
 前端源码不在插件目录内，位于仓库级 `frontend.v3/downloadmanagerlocal/`（`src/components/Config.vue`、`Page.vue`、`api.js`），本工作树对应本地仓库 `D:/work/project/person/MoviePilot-Plugins/frontend.v3/downloadmanagerlocal/`；插件目录只保留 `dist/` 构建产物。
 
-**v3.7.0 结构口径**：`Config.vue` = 纯配置页（mainTabs 7 个：转移做种/H&R/自动删种/失败清理/命名补刀/站点标签/上传限速；做种校验为转移做种子页签；区块体系「基础设置/内容层/高级设置」；零操作按钮/零状态展示/零预览表格；站点限速表为纯表单，随保存提交）。`Page.vue` = 总览带（需要关注/功能状态）+ 运行链路图 + 模块卡×8（状态摘要+操作按钮+可展开详情，摘要复用现有轮询）+ 记录表平铺 + 运行详情 + 诊断；全部手动操作（含转移立即运行二次确认、扫描站点/清空策略、标签清理工具）在模块卡。
+**v3.8.0 结构口径**：`Config.vue` = 纯配置页（mainTabs 7 个：转移做种/H&R/自动删种/失败清理/命名补刀/站点标签/上传限速；做种校验为转移做种子页签；区块体系「基础设置/内容层/高级设置」；零操作按钮/零状态展示/零预览表格；站点限速表为纯表单，随保存提交；大输入控件下沉区块底）。`Page.vue` = **8 侧栏页签**（运行总览/命名历史/H&R 任务/删种记录/失败清理/站点标签/上传限速/运行诊断），`refreshActive()` 按页签分组取数；总览 = 总览带 + 运行链路图 + 需要关注 + 模块卡×8（单份 markup 按 tab 过滤：总览 8 张、模块页签 1 张自动展开、history/diagnostics 不渲染）；记录表按页签归位（历史+归档→命名历史、hr 任务→H&R、autoremove 预览→删种记录、清理统计→失败清理、标签清理工具→站点标签）；运行详情（速度观测/上传调控）与诊断归运行诊断页签；全部手动操作在各页签模块卡内。
 
 V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
@@ -115,9 +115,9 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 - 职责：按站点规则跟踪 H&R 做种时长/比例，达标清除标签，超期告警，支持体积分档与每日汇总通知；并作为所有破坏性删除路径的保护闸门。
 - 关键文件：`service/hr/service.py`（`HrService`）、`service/hr/scanner.py`、`service/hr/evaluator.py`、`service/hr/rules.py`（站点 YAML 规则与体积分档）、`service/hr/guard.py`（`HrGuard`）、`service/hr/cleanup.py`、`service/hr/notify.py`、`service/hr/models.py`、`service/hr/constants.py`。
 - 端点：`GET /hr/tasks`、`GET /hr/skip_stats`、`GET /hr_presets`（内置站点验证预设，只读）、`POST /hr_check`、`POST /hr_scan`、`POST /hr_clear_task`、`POST /hr_clear_compliant`、`POST /hr_clear_missing`。
-- 关键配置：`hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_downloader`、`hr_sites`、`hr_notify`（none/on_error/always）、`hr_check_period`（分钟）、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str`（YAML；条目支持 `enabled` 与 `trackers`）。
+- 关键配置：`hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_downloader`、`hr_sites`（站点名数组；v3.8.0 起存站点名非站点库 id，旧数字 id 加载时 warning 丢弃）、`hr_notify`（none/on_error/always）、`hr_check_period`（分钟）、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str`（YAML；条目支持 `enabled` 与 `trackers`）。
 - 双层站点规则（v3.6.0）：`service/hr/presets.json` 为随代码发布的内置站点验证预设（11 站，只读）；`hr_site_config_str` 为自定义层。`rules.build_site_rules` 合并语义：内置为底 → 自定义同名**整条覆写**（不做字段级合并）→ 条目 `enabled: false` 为影子条目（屏蔽该站全部站点规则，含内置，回退全局规则）→ 最后 `apply_global_defaults` 回填全局未设置字段。`HrSiteRule.enabled` 默认 `true`，旧 YAML 无此字段 = 启用，完全向后兼容。前端 H&R 设置页以合并视图展示（来源列 + 行启用 switch）。
-- 自定义站点 tracker 兜底（v3.6.0）：`HrSiteRule.trackers`（域名或完整 URL 列表）。`scanner.resolve_site` 顺序 = 用户 `tag_tracker_mappings` → MP 站点库 → 规则条目 `trackers` 兜底（域名精确比对，`_rule_domain_map` 归一化，仅启用条目参与）。trackers 识别出的站点无 MP site_id，白名单判定走 `HrConfig.site_in_scope`：`site_id ∈ hr_sites` **或** 站点名存在自定义规则条目（配了规则 = 纳管意向）。MP 站点库能识别的站点无需填 trackers。
+- 自定义站点 tracker 兜底（v3.6.0）：`HrSiteRule.trackers`（域名或完整 URL 列表）。`scanner.resolve_site` 顺序 = 用户 `tag_tracker_mappings` → MP 站点库 → 规则条目 `trackers` 兜底（域名精确比对，`_rule_domain_map` 归一化，仅启用条目参与）。trackers 识别出的站点无 MP site_id，白名单判定走 `HrConfig.site_in_scope`（一律按站点名）：站点名 ∈ `hr_sites` **或** 站点名存在自定义规则条目（配了规则 = 纳管意向）。MP 站点库能识别的站点无需填 trackers。
 - 调度：`HitAndRunCheck`（interval，`hr_check_period`）、`HitAndRunDiscover`（interval，`hr_check_period × 2`，需 `hr_auto_discover`）、`HitAndRunSummary`（cron `hr_notify_summary_cron`）。
 - 事件：`DownloadAdded`（普通/RSS 来源纳管）、`PluginTriggered`（刷流 `brushflow_download_added` 纳管）、`PluginAction`（`hnr_check`/`hnr_scan`/`hnr_clear_compliant`/`hnr_clear_missing` 命令）。
 

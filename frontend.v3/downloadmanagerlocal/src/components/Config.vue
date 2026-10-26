@@ -1190,7 +1190,8 @@ function serializeHrSiteConfigYaml(rules) {
                 </VCol>
                 <VCol cols="12" md="6">
                   <VSelect v-model="form.hr_sites" label="站点白名单" density="compact" variant="outlined" hide-details
-                    :items="siteItems" multiple chips closable-chips clearable hint="只跟踪这些站点的种子；留空表示全部站点" persistent-hint />
+                    :items="siteItems" item-title="title" item-value="title" multiple chips closable-chips clearable
+                    hint="只跟踪这些站点的种子（按站点名）；留空表示全部站点" persistent-hint />
                 </VCol>
               </VRow>
               <VRow class="mt-2">
@@ -1622,12 +1623,6 @@ function serializeHrSiteConfigYaml(rules) {
             <!-- ═══ 站点标签 · 映射规则 ═══ -->
             <div v-show="activeSub === 'mapping'" class="dm-pane">
               <div class="dm-section-title">映射规则</div>
-              <VRow>
-                <VCol cols="12">
-                  <VTextarea v-model="form.tag_tracker_mappings_str" label="Tracker 映射（每行: 域名 -> 映射域名）" density="compact" variant="outlined" hide-details rows="4" />
-                  <div class="dm-hint">例: tracker.example.com -> example</div>
-                </VCol>
-              </VRow>
               <VRow class="mt-2">
                 <VCol cols="12" md="4">
                   <VTextField v-model="form.tag_catprefix" label="分类前缀" density="compact" variant="outlined" hide-details hint="写入分类名前的前缀，留空不加" persistent-hint />
@@ -1653,6 +1648,12 @@ function serializeHrSiteConfigYaml(rules) {
               </VRow>
               <div v-if="form.tag_rename_type" class="dm-hint">
                 当前模式：按下载保存路径包含的关键词判断分类（如 /anime/#动漫），一行不命中则不设分类；关闭上方开关则改按 TMDB 识别设置分类。
+              <VRow>
+                <VCol cols="12">
+                  <VTextarea v-model="form.tag_tracker_mappings_str" label="Tracker 映射（每行: 域名 -> 映射域名）" density="compact" variant="outlined" hide-details rows="4" />
+                  <div class="dm-hint">例: tracker.example.com -> example</div>
+                </VCol>
+              </VRow>
               </div>
             </div>
 
