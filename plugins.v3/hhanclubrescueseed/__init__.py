@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.11"
+    plugin_version = "3.3.12"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -638,6 +638,11 @@ class Hhanclubrescueseed(_PluginBase):
             })
 
         return services
+    @staticmethod
+    def _norm_title(value) -> str:
+        """标题归一化：小写 + 分隔符折叠，用于种子去重比对"""
+        return re.sub(r"[._\[\]\s]+", " ", str(value or "").strip().lower())
+
     def _check_seeding(self):
         try:
             logger.info("【憨憨保种区】开始执行保种区获取任务")
@@ -665,6 +670,18 @@ class Hhanclubrescueseed(_PluginBase):
             if round_capacity <= 0:
                 logger.info(f"【憨憨保种区】本轮容量为0：下载器未完成种子 {unfinished} 个，已达 max_downloading={max_downloading} 上限（download_limit={self._download_limit}），本轮不抓取列表，跳过精筛与下载")
             records = self.get_data("download_records") or []
+            # 去重集合：历史记录标题 + 下载器现有带标签种子的名称（归一化后比对）
+            existing_titles = set()
+            if round_capacity > 0:
+                existing_titles = {self._norm_title(r.get("title")) for r in records if r.get("title")}
+                try:
+                    for t in (self._get_scoped_torrents(self._downloader) or []):
+                        s = self._get_torrent_stats(t)
+                        if s and s.get("name"):
+                            existing_titles.add(self._norm_title(s["name"]))
+                except Exception:
+                    pass
+            skipped_dup_count = 0
             candidates = []
             stats = {}
             budget = {"used": 0, "limit": self.DETAIL_REQUEST_BUDGET}
@@ -733,6 +750,11 @@ class Hhanclubrescueseed(_PluginBase):
                                 break
                         except Exception as exc:
                             logger.warning(f"检查未完成种子数失败: {exc}")
+                    norm_title = self._norm_title(record.get("title"))
+                    if norm_title and norm_title in existing_titles:
+                        logger.info(f"跳过重复种子（已在下载器或历史记录中）: {record['title'][:40]}")
+                        skipped_dup_count += 1
+                        continue
                     link = record.get("download_link")
                     if not link:
                         failed_count += 1
@@ -779,6 +801,8 @@ class Hhanclubrescueseed(_PluginBase):
                         except Exception as exc:
                             logger.warning(f"下载器 hash 快照失败，保留解析值: {exc}")
                         success_details.append(f"{success_count}. [{record.get('score', 0):.1f}分] {record['size']} {record['title'][:30]}")
+                        if norm_title:
+                            existing_titles.add(norm_title)
                         if self._custom_tag and torrent_hash:
                             self._add_torrent_tag(service_info, torrent_hash, self._custom_tag)
                         if self._force_resume and service_info.type == "qbittorrent" and torrent_hash:
@@ -794,10 +818,12 @@ class Hhanclubrescueseed(_PluginBase):
                         failed_count += 1
                         logger.error(f"下载种子失败: {exc}")
                         failed_details.append(f"- {record.get('title', '?')[:30]}（异常）")
-            logger.info(f"【憨憨保种区】获取任务完成：精筛通过 {len(refined)} 个，成功下载 {success_count} 个，失败 {failed_count} 个")
+            logger.info(f"【憨憨保种区】获取任务完成：精筛通过 {len(refined)} 个，成功下载 {success_count} 个，失败 {failed_count} 个，重复跳过 {skipped_dup_count} 个")
             if self._enable_notification:
                 if success_count or failed_count:
                     text = f"本轮成功拯救 {success_count} 个种子"
+                    if skipped_dup_count:
+                        text += f"，重复跳过 {skipped_dup_count} 个"
                     if failed_count:
                         text += f"，失败 {failed_count} 个"
                     if success_details:
