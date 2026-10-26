@@ -4,7 +4,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class LpBits(NexusSignin):
-    verified = True
     id = "lpbits"
     name = "LP-Bits"
     url = "https://lp-bits.com/"

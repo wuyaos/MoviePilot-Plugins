@@ -7,7 +7,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class HDChina(ApiSignin):
-    verified = True
     id = 'hdchina'
     name = '瓷器'
     url = 'https://hdchina.org/'

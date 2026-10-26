@@ -12,12 +12,6 @@
     "attendance_path": "/attendance.php"
   },
   {
-    "id": "52movie",
-    "name": "52Movie",
-    "url": "https://www.52movie.top/",
-    "attendance_path": "/attendance.php"
-  },
-  {
     "id": "audiences",
     "name": "观众",
     "url": "https://audiences.me/",
@@ -866,13 +860,6 @@
     "emulate": true,
     "slow": true,
     "slow_timeout": 90000
-  },
-  {
-    "id": "hares",
-    "name": "白兔",
-    "url": "https://club.hares.top/",
-    "attendance_path": "/attendance.php",
-    "signin_capable": false
   },
   {
     "id": "dicmusic",

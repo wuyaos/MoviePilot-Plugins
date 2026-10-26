@@ -8,7 +8,6 @@ _base = next(site for site in build_generic_sites() if site.id == "52pt")
 
 
 class Pt52(_base):
-    verified = True
     name = "52PT"
     url = "https://52pt.site/"
     # 内联滑块在 torrents.php（独立 52bakatestdate 页面已暂停，2026-10-23 采样）。

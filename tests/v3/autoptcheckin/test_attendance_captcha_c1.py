@@ -110,7 +110,8 @@ def test_c1_invalid_inputs_do_not_call_ocr_or_submit(sid, mode):
 def test_c1_registry_still_unverified():
     rows = {row['id']: row for row in discover_sites()['sites']}
     for sid in IDS:
-        assert rows[sid]['hook_implemented'] and not rows[sid]['verified']
+        # verified 审批元数据已移除：仅断言提交协议声明存在。
+        assert rows[sid]['hook_implemented']
 
 
 def test_native_post_optional_referer_forwarding(monkeypatch):

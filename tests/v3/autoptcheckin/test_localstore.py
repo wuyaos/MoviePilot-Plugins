@@ -16,7 +16,7 @@ def test_db_backend_append_list_and_retention(tmp_path):
         store.append({'time': (now - timedelta(days=days)).isoformat(), 'site': 'fixture', 'status': status})
     # append 顺手清理：15 天前的行已删，14 天边界保留
     assert store.list()['total'] == 3
-    assert [item['status'] for item in store.list(page=1, size=2)['items']] == ['success', 'failed']
+    assert [item['status'] for item in store.list(page=1, size=2)['items']] == ['signed', 'failed']
     assert store.list(page=99)['items'] == []
     store.close()
     # 重开连接数据仍在（持久性）
@@ -29,7 +29,7 @@ def test_db_backend_today_counts_and_clear_today(tmp_path):
     store = HistoryStore(db_path=tmp_path / 'autoptcheckin.db', clock=lambda: now)
     store.append({'time': (now - timedelta(hours=1)).isoformat(), 'site': 'fixture', 'status': 'success'})
     store.append({'time': (now - timedelta(days=1)).isoformat(), 'site': 'fixture', 'status': 'failed'})
-    assert store.today_counts() == dict(success=1, signed=0, failed=0, unconfirmed=0)
+    assert store.today_counts() == dict(signed=1, failed=0, pending=0)
     assert store.clear_today() == 1
     assert store.list()['total'] == 1
 

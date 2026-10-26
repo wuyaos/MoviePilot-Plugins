@@ -14,22 +14,20 @@ def test_config_expand_collapse_and_batch_confirmation():
     script = """
 const assert = require('node:assert/strict');
 const ref = value => ({value});
-const selected = ref([{id:'alpha', browserless:true}, {id:'hotel'}, {id:'tango', fields:[{key:'rousi_username'}]}]);
-const groupKey = site => site.id[0];
-const openGroups = ref([]), openSites = ref([]);
-const model = {enabled_sites:['alpha'], site_browserless:['alpha']};
-const hasExtraSettings = site => (site.fields || []).length > 0 || site.emulate === true || site.browserless === true || site.source === '自定义站点';
+const selected = ref([{id:'alpha'}, {id:'hotel'}, {id:'tango', fields:[{key:'rousi_username'}]}]);
+const openSites = ref([]);
+const model = {enabled_sites:['alpha'], site_proxy:{}, site_emulate:{}, site_cloudsign:[]};
 """ + functions + """
 expandSites();
-assert.deepEqual(openSites.value, ['alpha','tango']);
+assert.deepEqual(openSites.value, ['alpha','hotel','tango'], 'R4: 每站都有代理/仿真开关，全部展开打开所有已启用站点');
 
 toggleSite('tango');
-assert.deepEqual(openSites.value, ['alpha']);
+assert.deepEqual(openSites.value, ['alpha','hotel']);
 collapseSites();
 assert.deepEqual(openSites.value, []);
 
 expandSites();
-assert.equal(openSites.value.length, 2);
+assert.equal(openSites.value.length, 3);
 togglePicker();
 pendingSites.value.push('hotel','tango');
 assert.deepEqual(model.enabled_sites, ['alpha']);
@@ -46,7 +44,7 @@ assert.deepEqual(pendingSites.value, model.enabled_sites);
     assert ':open="openSites.includes(site.id)"' in source
     assert '<summary @click.prevent>' in source
     assert 'class="btn ghost mini expand-icon"' in source
-    assert 'v-if="hasExtraSettings(site)"' in source
+    assert 'hasExtraSettings' not in source  # R4: 每站都有代理/仿真开关，展开按钮不再按 extra 门控
     assert '@click.prevent="toggleSite(site.id)"' in source
     assert 'site-metadata' not in source  # 3.37 用户裁决：展开态不再显示站点类型/凭证/URL 行
     assert '@click="expandSites"' in source and '@click="collapseSites"' in source
@@ -72,8 +70,8 @@ def test_config_summary_actions_and_emulate_contract():
     assert 'v-if="site.login_capable"' not in summary  # 3.37 用户裁决：登录开关所有站点可见
     assert 'credentialBadge' in summary
     assert 'v-if="site.cf === true"' in summary and 'CF 盾' in summary
-    assert 'v-else-if="site.emulate === true || siteEmulated(site)"' in summary and '仿真' in summary  # 4.1 云签徽标互斥：shield=cloud 显示云签，否则回退仿真
-    assert 'v-if="site.shield === \'cloud\'"' in summary and '云签' in summary
+    assert 'v-if="cloudsignSelected(site)"' in summary and '云签' in summary  # R4: 云签徽标按草稿 site_cloudsign 选择
+    assert 'v-else-if="siteEmulated(site)"' in summary and '仿真' in summary  # R4: 云签关闭回退有效仿真徽标（显式 false 压声明值）
     assert summary.index('site.source') < summary.index('credentialBadge') < summary.index('CF 盾') < summary.index('仿真') < summary.index('model.sign_sites') < summary.index('model.login_sites')
     assert summary.index('model.login_sites') < summary.index('expand-icon')
     detail = source.split('<div class="site-detail">', 1)[1]
@@ -203,6 +201,8 @@ assert.deepEqual(visibleSites.value.slice(0,2).map(s=>s.id),[10,11]);
 showAllSites.value=true; assert.equal(visibleSites.value.length,12);
 toggleSiteFilter('sign_failed'); assert.equal(showAllSites.value,false); assert.deepEqual(visibleSites.value.map(s=>s.id),[10]);
 toggleSiteFilter('sign_failed'); assert.equal(visibleSites.value.length,8);
+toggleSiteFilter('sign_unknown'); assert.deepEqual(visibleSites.value.map(s=>s.id),[11]);
+toggleSiteFilter('sign_unknown');
 toggleSiteFilter('off'); assert.equal(visibleSites.value.length,0);
 toggleSiteFilter('off');
 const today=historyDay(new Date());

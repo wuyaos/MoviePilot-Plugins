@@ -7,15 +7,18 @@ from datetime import datetime
 from dataclasses import asdict
 from .core.scheduler import Scheduler
 from .core.runner import SignRunner
-from .core.models import SignResult, SignStatus
+from .core.models import SignResult, SignStatus, unify_result
+from .core.state_store import RAW_RESULT_STATUSES
 from .core.registry import managed_site, site_id_for_domain, hostname
 from pathlib import Path
 from copy import deepcopy
 from .core.history import HistoryStore, IconCacheDB
 from .core.migration import Migration, MigrationError
-from .core.registry import get_registry, get_native_module
-from .core.native import run_native, run_native_login, run_integration
+from .core.registry import get_registry, get_native_module, builtin_site_ids
 from .core import cloudsign
+from .core.cloudsign import CLOUD_SITES
+from .core.siteconf import resolve as resolve_site_flags
+from .core.native import run_native, run_native_login, run_integration
 from .core.custom import run_custom, CustomNexusSignin
 from .core.state_store import DISABLED, FAILED, GATE_SKIPS, PENDING, SUCCESS, TrackStateStore
 from .core.notify import format_round_notifications
@@ -35,11 +38,12 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.1.0"
+    plugin_version = "4.2.0"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
-    SITE_KEYS = ("enabled_sites", "sign_sites", "login_sites", "site_browserless", "custom_sites_data",
+    SITE_KEYS = ("enabled_sites", "sign_sites", "login_sites", "site_proxy", "site_emulate",
+                 "site_cloudsign", "custom_sites_data",
                  "rousi_username", "rousi_password", "sunnypt_username",
                  "sunnypt_password", "sunnypt_token", "mteam_username", "mteam_password", "mteam_totp",
                  "yzyy_username", "yzyy_password")
@@ -58,8 +62,9 @@ class AutoPtCheckin(_PluginBase):
         self._history = HistoryStore(getattr(self, "get_data", None), getattr(self, "save_data", None), db_path=db_path)
         self._icons = IconCacheDB(db_path)
         self._state = None
-        self._last_round = []
+        self._last_round_results = {}
         self._round_active = False
+        self._round_lock = threading.Lock()
 
     def init_plugin(self, config: dict | None = None) -> None:
         # 本地库迁移必须先于 _init_config：track.state 为空/损坏时 _init_config 会
@@ -79,10 +84,6 @@ class AutoPtCheckin(_PluginBase):
                 except ImportError:
                     pass
                 config = deepcopy(getattr(self, "_config", None))
-        # 宿主配置保存走 init_plugin（PluginConfigCommand.update）；在途轮次同样保护，
-        # 否则 _init_config 默认的 stop_service 会打断运行中的队列（reviewer 3b24554a P1-2）。
-        with self._migration.lock:
-            self._init_config(config, preserve_round=self._round_active)
         # 宿主配置保存走 init_plugin（PluginConfigCommand.update）；在途轮次同样保护，
         # 否则 _init_config 默认的 stop_service 会打断运行中的队列（reviewer 3b24554a P1-2）。
         with self._migration.lock:
@@ -143,21 +144,23 @@ class AutoPtCheckin(_PluginBase):
                 pass
 
     def _init_config(self, config: dict | None = None, preserve_round: bool = False) -> None:
-        if not preserve_round:
+        disabling = bool(self._config.get("enabled")) and not bool((config or {}).get("enabled"))
+        if preserve_round:
+            if disabling:
+                self.stop_service()
+        else:
             self.stop_service()
             self._runner.stop.clear()
         # 全量替换（迁移恢复要求精确回滚）；partial 保护由 _save_config 合并承担。
         self._config = deepcopy(config or {})
-        for key in ("enabled_sites", "sign_sites", "login_sites", "site_browserless"):
-            values = self._config.get(key)
-            if isinstance(values, list):
-                self._config[key] = list(dict.fromkeys(str(v) for v in values))
+        self._normalize_site_keys(self._config)
         self._running = bool(self._config.get("enabled", False))
-        if preserve_round:
-            self._runner.stop.clear()
         if hasattr(self, "get_data"):
             self._site_config = self.get_data("site_config") or {}
             self._bound_uids = self.get_data("identity.bindings") or {}
+        # 旧 site_browserless 名单迁移必须先于 SITE_KEYS 合并：以键存在性判断一次性转换，
+        # 避免持久化 site_config 残留经合并链路复活。
+        self._migrate_per_site_config()
         self._site_config.update({key: deepcopy(self._config[key]) for key in self.SITE_KEYS if key in self._config})
         self._config.update(deepcopy(self._site_config))
         if hasattr(self, "save_data"):
@@ -182,8 +185,91 @@ class AutoPtCheckin(_PluginBase):
             store.rebuild_from_history(self._recent_records())
         store.rollover()
         self._recompute_track_states()
+
+    @staticmethod
+    def _normalize_site_keys(config: dict) -> None:
+        """站点级键就地归一化：列表键 str+去重（site_cloudsign 仅保留有实现的能力站），
+        覆盖表键转 str、值转 bool。未配置的键不凭空创建。"""
+        config.pop("onlyonce", None)
+        for key in ("enabled_sites", "sign_sites", "login_sites", "site_cloudsign"):
+            values = config.get(key)
+            if isinstance(values, list):
+                config[key] = list(dict.fromkeys(str(v) for v in values))
+        if isinstance(config.get("site_cloudsign"), list):
+            # 云签仅有三站实现：塞入任意其他 ID 的脏项静默忽略，不保留。
+            config["site_cloudsign"] = [v for v in config["site_cloudsign"] if v in CLOUD_SITES]
+        for key in ("site_proxy", "site_emulate"):
+            values = config.get(key)
+            if isinstance(values, dict):
+                config[key] = {str(k): bool(v) for k, v in values.items()}
+
+    def _migrate_per_site_config(self) -> None:
+        """旧 site_browserless 名单 → site_emulate/site_cloudsign 的一次性键级迁移。
+
+        - 键读取优先级：incoming（宿主 config）键存在性优先，缺键才回持久化 site_config；
+          显式空值（site_browserless=[]、site_emulate={}、site_cloudsign=[]、custom_sites_data=[]）
+          与显式非空同样有效，绝不做 falsy `or` 回退。
+        - emulate 转换逐键独立：仅当 site_emulate 新键缺失且旧 site_browserless 键存在时做一次；
+          与 site_proxy/site_cloudsign 是否已存在无关（部分升级不得删旧键丢状态）。旧名单成员
+          物化 site_emulate[id]=true，声明仿真但不在旧名单的站显式 false（不给其他站盲填 false）。
+        - 云签播种逐键独立：仅当 site_cloudsign 新键缺失且旧配置满足原 configured 口径
+          （token 非空或真正非默认自定义 BQL URL）时播种三站；新键已存在（含显式 []）永不播种。
+        - site_browserless 从 config 与 site_config 双清；site_config 立即持久化，
+          残留不得经合并链路复活。
+        """
+        config, site_config = self._config, self._site_config
+
+        def _pick(key):
+            """incoming（宿主 config）键存在性优先；缺键才回持久化 site_config，显式空值有效。"""
+            if key in config:
+                return config[key]
+            return site_config.get(key)
+
+        legacy_raw = _pick("site_browserless")
+        legacy_ids = {str(v) for v in legacy_raw} if isinstance(legacy_raw, list) else set()
+        custom_raw = _pick("custom_sites_data")
+        custom_data = custom_raw if isinstance(custom_raw, list) else []
+        if (("site_browserless" in config or "site_browserless" in site_config)
+                and "site_emulate" not in config and "site_emulate" not in site_config):
+            overrides = {}
+            for site in get_registry(custom_data)["sites"]:
+                if site.get("emulate"):
+                    overrides[str(site["id"])] = str(site["id"]) in legacy_ids
+            if overrides:
+                config["site_emulate"] = dict(overrides)
+                site_config["site_emulate"] = dict(overrides)
+        # 旧有效云签独立于旧名单判定（D1）：只配过 token/自定义 BQL URL 的用户同样保留选择。
+        if ("site_cloudsign" not in config and "site_cloudsign" not in site_config
+                and cloudsign.configured(config)):
+            selected = list(CLOUD_SITES)
+            config["site_cloudsign"] = selected
+            site_config["site_cloudsign"] = list(selected)
+        changed = False
+        for store in (config, site_config):
+            if store.pop("site_browserless", None) is not None:
+                changed = True
+        if changed and hasattr(self, "save_data"):
+            self.save_data("site_config", deepcopy(site_config))
+
+    def _apply_effective_flags(self, site: dict) -> None:
+        """把有效执行配置写入站点响应副本：proxy/emulate 有效 bool、云签能力与实际选择。
+
+        声明 emulate 只作缺键继承来源（不反写注册表声明）；云签徽标（shield=cloud）
+        仅在用户实际选择时显示，未选中但有仿真时回退仿真徽标。
+        """
+        flags = resolve_site_flags(site.get("id"), self._config,
+                                   declared_emulate=bool(site.get("emulate")),
+                                   mp_proxy=bool(site.get("mp_proxy")),
+                                   mp_render=bool(site.get("mp_render")),
+                                   cloudsign_capable=site.get("cloudsign_capable"))
+        site["proxy"] = flags["proxy"]
+        site["emulate"] = flags["emulate"]
+        site["cloudsign_capable"] = flags["cloudsign_capable"]
+        site["cloudsign_selected"] = flags["cloudsign_selected"]
+        site["shield"] = "cloud" if flags["cloudsign_selected"] else ("emulate" if flags["emulate"] else None)
+
     def get_state(self) -> bool:
-        return self._running or (not self._runner.stop.is_set() and bool(self._config.get("scheduler_enabled", False)) and bool(self._config.get("onlyonce", False)))
+        return self._running
 
     def get_service(self) -> list:
         # 不以 stop 门控注册：宿主任何 stop_service（重建/重载）都会置位 stop，
@@ -193,8 +279,7 @@ class AutoPtCheckin(_PluginBase):
             return []
         if self._scheduler.services:
             return list(self._scheduler.services)
-        callback = self._scheduled_once if self._config.get("onlyonce") else self._scheduled_signin
-        return self._scheduler.build(self._config, callback)
+        return self._scheduler.build(self._config, self._scheduled_signin)
 
     def get_render_mode(self) -> tuple[str, str]:
         return "vue", "dist/assets"
@@ -268,12 +353,34 @@ class AutoPtCheckin(_PluginBase):
             round_active = self._round_active
             # 合并语义：partial body 不得静默重置既有键（对齐 forumsignin 惯例）。
             merged = {**deepcopy(getattr(self, "_config", {})), **deepcopy(config or {})}
+            merged.pop("onlyonce", None)
+            self._purge_custom_overrides(merged)
             self._validate_schedule(merged)
             self.update_config(merged)
-            if round_active:
-                self._runner.stop.clear()
+            # SDK update_config 仅持久化；不可清除写入期间到达的真实取消信号。
             self._init_config(merged, preserve_round=round_active)
             self._sync_jobs()
+
+    def _purge_custom_overrides(self, merged: dict) -> None:
+        """删除 custom 条目时同步清理 site_emulate/site_proxy 的对应覆盖脏项，
+        防止 ID 复用后脏项静默为新站开启仿真/代理；内置与未知 ID 一律不清。"""
+        if "custom_sites_data" not in merged:
+            return
+        old_ids = {str(item.get("id")) for item in (getattr(self, "_config", {}) or {}).get("custom_sites_data", [])
+                   if isinstance(item, dict) and item.get("id")}
+        new_ids = {str(item.get("id")) for item in merged.get("custom_sites_data", [])
+                   if isinstance(item, dict) and item.get("id")}
+        removed = old_ids - new_ids
+        if not removed:
+            return
+        builtin = builtin_site_ids()
+        for key in ("site_emulate", "site_proxy"):
+            overrides = merged.get(key)
+            if not isinstance(overrides, dict):
+                continue
+            cleaned = {k: v for k, v in overrides.items() if not (k in removed and k not in builtin)}
+            if cleaned != overrides:
+                merged[key] = cleaned
 
     @staticmethod
     def _validate_schedule(config: dict) -> None:
@@ -348,12 +455,11 @@ class AutoPtCheckin(_PluginBase):
     async def api_sites(self) -> dict:
         registry = get_registry(self._config.get('custom_sites_data', []))
         sites = deepcopy(registry["sites"])
-        emulate_ids = {str(v) for v in self._config.get('site_browserless', [])}
         icon_cache = self._icons.all()
         pending_icons = []
         for site in sites:
             site.setdefault('cf', 'unknown')
-            site['emulate'] = str(site.get('id')) in emulate_ids or bool(site.get('emulate', False))
+            self._apply_effective_flags(site)
             sid = str(site.get('id', ''))
             if not site.get('icon') and icon_cache.get(sid):
                 site['icon'] = icon_cache[sid]
@@ -389,16 +495,21 @@ class AutoPtCheckin(_PluginBase):
         self._track_store().rollover()
         rows = self._site_rows()
         # 三卡统计与站点列表同源：直接按启用站点行汇总，状态表残留条目不再进数字。
+        # 三卡：成功/失败=启用勾选轨道的今日结论；待处理=有效队列 pending（含未执行）。
+        today = datetime.now().date().isoformat()
         latest = {}
         for track in ("sign", "login"):
-            buckets = {"success": 0, "failed": 0, "unconfirmed": 0}
+            buckets = {"success": 0, "failed": 0, "pending": 0}
             for row in rows:
+                if not row.get(f"{track}_selected"):
+                    continue
                 state = row.get(f"{track}_state")
-                if state == SUCCESS:
-                    buckets["success"] += 1
-                elif state == FAILED:
-                    raw = row.get(f"{track}_status", "")
-                    buckets["unconfirmed" if raw == "unconfirmed" else "failed"] += 1
+                if state == PENDING:
+                    # 未执行或 pending 结论均为有效队列待办；无能力/门控站不会处于 pending。
+                    if row.get(f"{track}_track_available", True):
+                        buckets["pending"] += 1
+                elif state in (SUCCESS, FAILED) and str(row.get(f"{track}_time", "")).startswith(today):
+                    buckets["success" if state == SUCCESS else "failed"] += 1
             latest[track] = buckets
         return {"success": True, "data": {"latest": latest,
                 "next_schedule": self._next_schedule(), "schedule_status": self._schedule_status(), "schedule": schedule, "sites": rows,
@@ -418,6 +529,7 @@ class AutoPtCheckin(_PluginBase):
             # 卡片严格随配置：仅显示启用站点。
             if sid not in enabled:
                 continue
+            self._apply_effective_flags(site)
             sign = self._track_store().entry_of(sid, 'sign')
             login = self._track_store().entry_of(sid, 'login')
             cf_markers = ('cf-chl', 'cloudflare', 'just a moment', 'verify you are human', 'challenge-platform')
@@ -427,14 +539,18 @@ class AutoPtCheckin(_PluginBase):
             rows.append({'id': sid, 'name': site.get('name', sid), 'url': site.get('url', ''),
                 'icon': icon, 'source': site.get('source', ''),
                 'cf': True if cf_hit else site.get('cf', 'unknown'),
-                'emulate': sid in {str(v) for v in self._config.get('site_browserless', [])} or bool(site.get('emulate', False)),
-                'shield': site.get('shield'),
+                'emulate': site['emulate'], 'proxy': site['proxy'],
+                'cloudsign_capable': site['cloudsign_capable'],
+                'cloudsign_selected': site['cloudsign_selected'],
+                'shield': site['shield'],
                                 'sign_state': sign.get('state', 'disabled' if sid not in enabled else 'pending'),
-                'sign_status': sign.get('status', ''), 'sign_time': sign.get('time', ''),
+                'sign_status': sign.get('status', ''), 'sign_reason': sign.get('reason', ''),
+                'sign_time': sign.get('time', ''),
                 'sign_message': sign.get('message', ''),
                 'page_action': (sign.get('metadata') or {}).get('page_action'),
                 'login_state': login.get('state', 'disabled' if sid not in enabled else 'pending'),
-                'login_status': login.get('status', ''), 'login_time': login.get('time', ''),
+                'login_status': login.get('status', ''), 'login_reason': login.get('reason', ''),
+                'login_time': login.get('time', ''),
                 'login_message': login.get('message', ''),
                 'enabled': sid in enabled,
                 'can_signin': sid in enabled and sid in sign_sel and sign.get('state') != DISABLED,
@@ -452,21 +568,23 @@ class AutoPtCheckin(_PluginBase):
         return {"success": True, "data": self._history.list(page, size)}
 
     def _record_result(self, result):
+        """记录边界：history 与状态表共用同一 unify_result 映射（与 API 载荷一致，
+        不会出现 API 已归一而记录/重试仍看旧值）。原细分 reason 保留在 metadata。"""
         self._history.append(result)
         metadata = getattr(result, "metadata", None) or {}
-        status = getattr(getattr(result, "status", None), "value", "")
-        # already 在入口统一归一为 signed：状态表与任何下游都不再出现 already。
-        if status == "already":
-            status = "signed"
+        raw_status = getattr(getattr(result, "status", None), "value", "")
+        status, reason = unify_result(raw_status, metadata.get("reason"))
+        if raw_status not in RAW_RESULT_STATUSES and raw_status != status and raw_status:
+            # 未知原始值归 pending：原值保留在 metadata，不进入状态/统计口径。
+            metadata.setdefault("raw_status", raw_status)
         # read_only 核验不改表；纯空转（锁忙/取消）只写历史；门控类 skip（带 reason）写 disabled，
         # 否则门控站停留 FAILED 会被当场重试并在每轮重复执行。
-        reason = metadata.get("reason")
         gate_skip = status in ("skipped", "cancelled") and (reason or "") in GATE_SKIPS
         if not metadata.get("read_only") and (status not in ("skipped", "cancelled") or gate_skip):
-            diag = {k: metadata[k] for k in ("page_action", "steps", "error") if k in metadata}
+            diag = {k: metadata[k] for k in ("page_action", "steps", "error", "raw_status") if k in metadata}
             self._track_store().apply_result(
                 str(result.site_id), metadata.get("action", "sign"), status,
-                message=getattr(result, "message", "") or "", reason=reason,
+                message=getattr(result, "message", "") or "", reason=reason or None,
                 metadata=diag or None)
         if result.account and result.site_id not in self._bound_uids:
             self._bound_uids[result.site_id] = result.account
@@ -485,7 +603,6 @@ class AutoPtCheckin(_PluginBase):
         enabled = {str(v) for v in self._config.get("enabled_sites", [])}
         sign_sel = {str(v) for v in self._config.get("sign_sites", [])}
         login_sel = {str(v) for v in self._config.get("login_sites", [])}
-        unlock = bool(self._config.get("unlock_all_sites", False))
         for site in get_registry(self._config.get("custom_sites_data", []))["sites"]:
             sid = str(site["id"])
             if sid not in enabled and not self._track_store().entry_of(sid, "sign") and not self._track_store().entry_of(sid, "login"):
@@ -501,24 +618,12 @@ class AutoPtCheckin(_PluginBase):
                 decisions[sid]["sign"] = (DISABLED, "signin_not_supported")
             elif not site.get("signin_applicable", False):
                 decisions[sid]["sign"] = (DISABLED, "signin_not_applicable")
-            elif not unlock and site.get("native") and not site.get("verified"):
-                decisions[sid]["sign"] = (DISABLED, "native_unverified")
-            elif not unlock and site.get("native") and not site.get("hook_implemented", True):
-                decisions[sid]["sign"] = (DISABLED, "hook_not_implemented")
-            elif site.get("source") == "自定义站点":
-                # 自定义站在 _execute_site 的 custom 分支执行，不受非原生站点门控。
-                decisions[sid]["sign"] = (PENDING, None)
-            elif not unlock and not site.get("native") and sid not in ("rousi", "sunnypt", "mteam"):
-                decisions[sid]["sign"] = (DISABLED, "pilot_not_enabled")
             else:
+                # 启用并勾选即允许执行：verified/hook/legacy 审批门控已移除，
+                # 旧审批 reason 仍由 state_store 兼容（历史记录不重写）。
                 decisions[sid]["sign"] = (PENDING, None)
             if sid not in login_sel or site.get("login_capable") is False:
                 decisions[sid]["login"] = (DISABLED, "login_not_selected" if sid not in login_sel else "login_not_supported")
-            elif site.get("source") == "自定义站点":
-                # 自定义站在 _execute_site 的 custom 分支执行，不受非原生站点门控。
-                decisions[sid]["login"] = (PENDING, None)
-            elif not unlock and not site.get("native") and sid not in ("rousi", "sunnypt", "mteam"):
-                decisions[sid]["login"] = (DISABLED, "pilot_not_enabled")
             else:
                 decisions[sid]["login"] = (PENDING, None)
         self._track_store().reconfigure(decisions)
@@ -535,6 +640,28 @@ class AutoPtCheckin(_PluginBase):
 
 
     def _execute_site(self, site_id, read_only=False, trigger="manual", action="sign"):
+        """执行与返回的统一边界：API/轮次载荷在此归一（status 统一值 + reason 精确值），
+        适配器内部原始值不动。"""
+        return self._unify_payload(
+            self._execute_site_raw(site_id, read_only=read_only, trigger=trigger, action=action))
+
+    @staticmethod
+    def _unify_payload(result):
+        if not isinstance(result, dict):
+            return result
+        raw = result.get("status")
+        status, reason = unify_result(raw, result.get("reason",
+                                      (result.get("metadata") or {}).get("reason")))
+        result["status"] = status
+        if reason:
+            result["reason"] = reason
+        metadata = result.setdefault("metadata", {})
+        if raw not in RAW_RESULT_STATUSES and raw != status and raw:
+            # 未知原始值归 pending 时保留原值供排障。
+            metadata.setdefault("raw_status", raw)
+        return result
+
+    def _execute_site_raw(self, site_id, read_only=False, trigger="manual", action="sign"):
         for callback in ('get_data', 'save_data', 'del_data'):
             setattr(self._runner, callback, getattr(self, callback, None))
         registry = {site['id']: site for site in get_registry(self._config.get('custom_sites_data', []))['sites']}
@@ -548,20 +675,9 @@ class AutoPtCheckin(_PluginBase):
                                 selected=str(site_id) in {str(value) for value in self._config.get('login_sites' if action == 'login' else 'sign_sites', [])})
             return asdict(result)
         reason = None
-        unlock = bool(self._config.get('unlock_all_sites', False))
-        # 手动签到绕过 native verified/hook 门控（调度轮仍门控）。
-        manual_bypass = trigger == 'manual' and action == 'sign'
         site = registry.get(site_id, {})
         if action == 'sign' and site_id in ('darkland', 'digitalcore'):
             reason = 'signin_not_applicable'
-        elif action == 'sign' and not unlock and not manual_bypass and site.get('native') and not site.get('verified'):
-            reason = 'native_unverified'
-        elif action == 'sign' and not unlock and not manual_bypass and site.get('native') and not site.get('hook_implemented', True):
-            reason = 'hook_not_implemented'
-        elif not unlock and not manual_bypass and not site.get('native') and site.get('source') != '自定义站点' and site_id not in ('rousi', 'sunnypt', 'mteam'):
-            reason = 'pilot_not_enabled'
-        elif not unlock and not manual_bypass and action == 'login' and not site.get('native') and site.get('source') != '自定义站点' and site_id not in ('rousi', 'sunnypt', 'mteam'):
-            reason = 'pilot_not_enabled'
         elif site_id not in self._config.get('enabled_sites', []):
             reason = 'site_disabled'
         elif action == 'login' and not site.get('login_capable', True):
@@ -626,7 +742,7 @@ class AutoPtCheckin(_PluginBase):
         if not site_id:
             site_id = next((str(item.get('id')) for item in self._config.get('custom_sites_data', [])
                             if isinstance(item, dict) and str(item.get('id')) == str(domain)), None)
-        if not site_id and self._config.get('unlock_all_sites', False) and domain:
+        if not site_id and domain:
             registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
             if domain in registry_ids:
                 site_id = domain
@@ -643,7 +759,7 @@ class AutoPtCheckin(_PluginBase):
         if not site_id:
             site_id = next((str(value) for value in self._config.get('enabled_sites', [])
                             if hostname(str(value)) == hostname(domain)), None)
-        if not site_id and self._config.get('unlock_all_sites', False) and domain:
+        if not site_id and domain:
             registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
             if domain in registry_ids:
                 site_id = domain
@@ -657,7 +773,7 @@ class AutoPtCheckin(_PluginBase):
         if not site_id:
             site_id = next((str(item.get('id')) for item in self._config.get('custom_sites_data', [])
                             if isinstance(item, dict) and str(item.get('id')) == str(domain)), None)
-        if not site_id and self._config.get('unlock_all_sites', False) and domain:
+        if not site_id and domain:
             registry_ids = {s['id'] for s in get_registry(self._config.get('custom_sites_data', []))['sites']}
             if domain in registry_ids:
                 site_id = domain
@@ -666,60 +782,47 @@ class AutoPtCheckin(_PluginBase):
         result = await asyncio.to_thread(self._execute_site, site_id, True)
         return {'success': True, 'data': result}
 
-    def _execute_all(self, trigger="manual"):
+    def _execute_all(self, trigger="manual", _lock_held=False):
         """执行完整轮次；配置保存不会终止在途轮次。"""
+        if not _lock_held and not self._round_lock.acquire(blocking=False):
+            return None
         self._round_active = True
-        self._last_round = []
         try:
             return self._execute_all_round(trigger)
         finally:
             self._round_active = False
+            if not _lock_held:
+                self._round_lock.release()
 
     def _execute_all_round(self, trigger="manual"):
         """双队列串行：先签到后登录；队列=状态表 failed/pending；单站失败当场重试 ≤ retry_count。"""
+        self._last_round_results = {}
         self._recompute_track_states()
         self._track_store().rollover()
-        # 仿真名单站点共用一个 CloakBrowser 会话（轮内挨个执行，省去逐站开关）。
-        # 已配 token 的云签站整条走 Browserless，不占本地浏览器，不计入共享基数。
-        emulated = {str(v) for v in self._config.get('site_browserless', [])
-                    if not (cloudsign.enabled(str(v)) and cloudsign.configured(self._config))}
-        round_sites = [str(sid) for action in ("sign", "login") for sid in self._due_for(action)]
-        shared = None
-        if sum(1 for sid in round_sites if sid in emulated) >= 2:
-            try:
-                from .core.cloak import CloakSession, _resolve_cloak_proxy, site_requires_headful
-                shared = CloakSession(url='https://example.com/', headless=not any(site_requires_headful(sid) for sid in round_sites),
-                                      proxy=_resolve_cloak_proxy(None, None, self._config))
-                shared.__enter__()
-                self._runner.shared_cloak = shared
-            except Exception:
-                shared = None
-        try:
-            results = []
-            executed = []
-            for action in ("sign", "login"):
-                for site_id in self._due_for(action):
-                    if self._runner.stop.is_set():
-                        break
-                    executed.append((str(site_id), action))
-                    results.append(self._run_with_retry(site_id, action, trigger))
-            self._last_round = executed
-        finally:
-            self._runner.shared_cloak = None
-            if shared is not None:
-                try:
-                    shared.close()
-                except Exception:
-                    pass
+        # 每站客户端由独立 actor 创建、操作和关闭浏览器；不跨线程共享上下文。
+        results = []
+        for action in ("sign", "login"):
+            for site_id in self._due_for(action):
+                if self._runner.stop.is_set():
+                    break
+                result = self._run_with_retry(site_id, action, trigger)
+                results.append(result)
+                # 锁忙/取消等空转不算实际执行，通知不得把旧成功快照当本轮结论。
+                if (result or {}).get("status") not in ("skipped", "cancelled"):
+                    self._last_round_results[(str(site_id), action)] = deepcopy(result)
         self._notify_round(trigger)
         return results
 
     def _due_for(self, action: str) -> list[str]:
-        enabled = {str(v) for v in self._config.get('enabled_sites', [])}
         selected = {str(v) for v in self._config.get('sign_sites' if action == 'sign' else 'login_sites', [])}
-        due = set(self._track_store().due_sites(action))
-        return [sid for sid in dict.fromkeys(self._config.get('enabled_sites', []))
-                if str(sid) in enabled and str(sid) in selected and str(sid) in due]
+        sites = get_registry(self._config.get('custom_sites_data', []))['sites']
+        if action == 'sign':
+            capable = {str(site['id']) for site in sites
+                       if site.get('signin_capable') is not False and site.get('signin_applicable', False)}
+        else:
+            capable = {str(site['id']) for site in sites if site.get('login_capable') is not False}
+        due = set(self._track_store().due_sites(action)) & selected & capable
+        return [sid for sid in dict.fromkeys(self._config.get('enabled_sites', [])) if str(sid) in due]
 
     def _run_with_retry(self, site_id, action, trigger):
         result = self._execute_site(site_id, trigger=trigger, action=action)
@@ -733,36 +836,31 @@ class AutoPtCheckin(_PluginBase):
         return result
 
     def _round_summary(self) -> dict:
-        """状态表当日快照与本轮实际执行集合合并为逐站通知数据。"""
+        """本轮结果固定快照；当日待办仅补明细，下轮数直接复用执行队列。"""
         snapshot = self._track_store().snapshot()["sites"]
         enabled = {str(v) for v in self._config.get("enabled_sites", [])}
-        site_rows = get_registry(self._config.get("custom_sites_data", []))["sites"]
-        labels = {str(row["id"]): row.get("name", str(row["id"])) for row in site_rows}
-        credential_kinds = {str(row["id"]): (row.get("credential") or {}).get("kind", "cookie")
-                            for row in site_rows}
-        summary = {track: {"total": 0, "executed": 0, "next": 0, "entries": []}
-                   for track in ("sign", "login")}
-        executed = set(self._last_round)
-        for track, key in (("sign", "sign_sites"), ("login", "login_sites")):
-            selected = {str(v) for v in self._config.get(key, [])}
-            due = set(self._track_store().due_sites(track))
-            data = summary[track]
-            data["total"] = len(enabled & selected)
-            data["next"] = len(enabled & selected & due)
-            data["executed"] = sum(1 for site, action in executed if action == track)
-            # 逐站行：本轮实际执行的站点 + 当日有待办结论的站点（failed 与 pending 均显示明细）。
-            today = datetime.now().date().isoformat()
-            due_today = {site for site in enabled & selected & due
-                         if str(snapshot.get(site, {}).get(track, {}).get("time", "")).startswith(today)}
-            shown = {site for site, action in executed if action == track} | due_today
-            for site in shown:
-                entry = snapshot.get(site, {}).get(track, {})
-                if entry and str(entry.get("time", "")).startswith(today):
-                    entry = dict(entry)
-                    entry["credential"] = credential_kinds.get(site, "cookie")
-                    data["entries"].append((labels.get(site, site), entry))
-        for track in summary:
-            summary[track]["entries"].sort(key=lambda row: row[0].casefold())
+        sites = get_registry(self._config.get("custom_sites_data", []))["sites"]
+        labels = {str(row["id"]): row.get("name", str(row["id"])) for row in sites}
+        credentials = {str(row["id"]): (row.get("credential") or {}).get("kind", "cookie") for row in sites}
+        today = datetime.now().date().isoformat()
+        summary = {}
+        for track in ("sign", "login"):
+            selected = {str(v) for v in self._config.get(f"{track}_sites", [])}
+            due = set(self._due_for(track))
+            current = {sid: dict(result) for (sid, action), result in self._last_round_results.items() if action == track}
+            shown = {sid: dict(snapshot.get(sid, {}).get(track, {})) for sid in due
+                     if str(snapshot.get(sid, {}).get(track, {}).get("time", "")).startswith(today)}
+            shown.update(current)
+            entries = []
+            round_entries = []
+            for sid, result in sorted(shown.items(), key=lambda item: labels.get(item[0], item[0]).casefold()):
+                result["credential"] = credentials.get(sid, "cookie")
+                row = (labels.get(sid, sid), result)
+                entries.append(row)
+                if sid in current:
+                    round_entries.append(row)
+            summary[track] = {"total": len(enabled & selected), "executed": len(current),
+                              "next": len(due), "entries": entries, "round_entries": round_entries}
         return summary
 
     def _notify_round(self, trigger: str) -> None:
@@ -813,19 +911,30 @@ class AutoPtCheckin(_PluginBase):
     async def api_run_once(self) -> dict:
         """立即运行：参考 V2，直接以独立线程执行一轮，不经宿主调度器
         （qnap 等环境宿主 APScheduler 回调可能静默不触发）。"""
-        if getattr(self, "_round_active", False):
+        if not self._round_lock.acquire(blocking=False):
             return {"success": False, "message": "已有轮次在运行"}
+        if self._runner.stop.is_set():
+            self._round_lock.release()
+            return {"success": False, "message": "任务已停止，请重新启用或保存配置后再运行"}
+        self._round_active = True
         import threading
 
         def _worker():
             try:
-                self._config["onlyonce"] = True
-                self._scheduled_once()
+                self._execute_all("manual", _lock_held=True)
             except Exception:
                 from app.runtime.log import logger
                 logger.error("【PT 签到中心】立即运行异常", exc_info=True)
+            finally:
+                self._round_active = False
+                self._round_lock.release()
 
-        threading.Thread(target=_worker, daemon=True, name="autoptcheckin-run-once").start()
+        try:
+            threading.Thread(target=_worker, daemon=True, name="autoptcheckin-run-once").start()
+        except Exception:
+            self._round_active = False
+            self._round_lock.release()
+            raise
         return {"success": True, "data": {"started": True}}
 
 
@@ -851,23 +960,32 @@ class AutoPtCheckin(_PluginBase):
         action = data.get("action")
         if action not in ("checkin_now", "checkin_force"):
             return
-        if getattr(self, "_round_active", False):
+        if not self._round_lock.acquire(blocking=False):
             return
+        self._round_active = True
         import threading
 
         def _worker():
             try:
+                if self._runner.stop.is_set():
+                    return
                 if action == "checkin_force":
                     self._history.clear_today()
                     self._track_store().clear_transient()
-                self._config["onlyonce"] = True
-                self._scheduled_once()
+                self._execute_all("manual", _lock_held=True)
             except Exception:
                 from app.runtime.log import logger
                 logger.error(f"【PT 签到中心】远程命令 {action} 执行异常", exc_info=True)
+            finally:
+                self._round_active = False
+                self._round_lock.release()
 
-        threading.Thread(target=_worker, daemon=True, name="autoptcheckin-remote-command").start()
-
+        try:
+            threading.Thread(target=_worker, daemon=True, name="autoptcheckin-remote-command").start()
+        except Exception:
+            self._round_active = False
+            self._round_lock.release()
+            raise
     def _register_commands(self) -> None:
         """init_plugin 时注册远程命令监听（幂等）。"""
         if eventmanager is None or EventType is None:
@@ -882,42 +1000,12 @@ class AutoPtCheckin(_PluginBase):
         self._track_store().clear_transient()
         return {"success": True, "data": {"removed": removed}}
 
-    def _scheduled_once(self):
-        """一次性执行（立即签到/立即运行一次）不受 scheduler_enabled 门控，直接全量执行。"""
-        stop_before = self._runner.stop.is_set()
-        with self._migration.lock:
-            if not self._config.get("onlyonce", False):
-                return
-            self._config["onlyonce"] = False
-            if hasattr(self, "update_config"):
-                self.update_config(deepcopy(self._config))
-            self._scheduler.clear()
-        # update_config 触发宿主任务重建时会回调 stop_service 置位 stop；
-        # 这不是真实取消（round 尚未开始），恢复进入前状态，否则一次性执行必被拦。
-        if not stop_before and self._runner.stop.is_set():
-            self._runner.stop.clear()
-        try:
-            return self._execute_all("scheduler")
-        finally:
-            # once 消费后宿主已移除该服务且 reconcile 不会重召零任务插件：
-            # 主动重建 interval 服务并通知宿主重注册（否则次日 9:00 槽丢失）。
-            try:
-                self._scheduler.clear()
-                self._scheduler.build(self._config, self._scheduled_signin)
-                self._sync_jobs()
-            except Exception:
-                pass
 
     def _scheduled_signin(self):
         with self._migration.lock:
             if self._runner.stop.is_set() or not self._config.get("scheduler_enabled", False):
                 return
-            if self._config.get("onlyonce", False):
-                self._config["onlyonce"] = False
-                if hasattr(self, "update_config"):
-                    self.update_config(deepcopy(self._config))
-                self._scheduler.clear()
-            elif not self._running:
+            if not self._running:
                 return
         return self._execute_all("scheduler")
 

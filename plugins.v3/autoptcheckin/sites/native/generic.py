@@ -66,7 +66,6 @@ def build_generic_sites() -> list[type[NexusSignin]]:
                 item.get("status_map", {"未签到": "unsigned"}),
             ),
             "hook_implemented": True,
-            "verified": False,
         }
         for key in ("signed_marker", "use_default_message", "signin_capable", "emulate", "slow", "protocol_pending", "login_notice", "cloak_steps", "cloak_entry_path", "browser_login", "headful", "slow_timeout", "impersonate"):
             if key in item:

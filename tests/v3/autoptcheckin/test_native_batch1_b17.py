@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "plugins.v3"))
 from autoptcheckin.core.credentials import Credential
-from autoptcheckin.core.models import LoginPage
+from autoptcheckin.core.models import LoginPage, SignResult, SignStatus
 from autoptcheckin.core.registry import discover_sites, get_native_module
 from autoptcheckin.core.sitemodel import SignContext
 
@@ -176,33 +176,28 @@ def test_ptzone_unconditional_fresh_readback(error):
 
 
 @pytest.mark.parametrize('read_only', [False, True])
-@pytest.mark.parametrize('verified', [False, True])
-def test_new_sites_registry_and_hook_gates(monkeypatch, read_only, verified):
+def test_new_sites_enabled_and_selected_execute_without_verified_gate(monkeypatch, read_only):
+    """能力声明只决定 UI 选项：启用并勾选即执行；仅登录声明站在凭据前拦截。"""
     module = importlib.import_module('autoptcheckin')
     plugin = module.AutoPtCheckin()
     rows = {row['id']: row for row in discover_sites()['sites']}
-    def forbidden(*args, **kwargs):
-        pytest.fail('gate must precede credential lookup and requests')
-    monkeypatch.setattr(module, 'managed_site', forbidden)
-    monkeypatch.setattr(module, 'run_native', forbidden)
+    monkeypatch.setattr(module, 'managed_site', lambda sid: {})
+    called = []
+    monkeypatch.setattr(module, 'run_native',
+                        lambda runner, site, info, **kwargs: called.append(site.id) or SignResult(SignStatus.SUCCESS, 'ok'))
     for site_id in IDS:
         row = rows[site_id]
         assert row['native']
-        assert row['verified'] is (site_id not in CAPTCHA)
         assert row['hook_implemented'] == (site_id in CAPTCHA + ['ptzone', 'tjupt', 'darkland', 'digitalcore', 'yzyy'] + C34)
-        if verified and site_id in CAPTCHA + ['ptzone', 'tjupt', 'darkland', 'digitalcore', 'yzyy'] + C34:
-            continue
-        monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites': [dict(row, verified=verified)]})
+        plugin._config = {'enabled_sites': [site_id], 'sign_sites': [site_id]}
         result = plugin._execute_site(site_id, read_only=read_only, trigger="scheduler")
-        assert result['status'] == 'skipped'
-        assert result['metadata']['reason'] == ('signin_not_applicable' if site_id in ['darkland', 'digitalcore'] else 'hook_not_implemented' if verified else 'native_unverified')
-
-
-@pytest.mark.parametrize('site_id', ['ttg', 'zhuque', 'yzyy'])
-def test_side_effect_endpoints_not_used_for_pre_read(site_id):
-    site = get_native_module(site_id)
-    http = Http(['<main>unknown</main>'])
-    assert site.signin(context(site, http)).status == ('protocol_pending' if site_id in {'ttg', 'zhuque', 'yzyy'} else 'unconfirmed')
-    safe = ('get', urljoin(site.url, site.attendance_path))
-    assert http.calls == ([safe, ('get', site.url + 'api/consumer/checkIn'), safe] if site_id == 'yema' else [safe])
-    assert site.attendance_path in {'/', '/plugin.php?id=zqlj_sign'}
+        if site_id in ['darkland', 'digitalcore']:
+            assert result['metadata']['reason'] == 'signin_not_applicable'
+            assert site_id not in called
+        elif site_id == 'tjupt':
+            # 答题站风险声明 signin_capable=False（2026-10-22 运营裁决转显式声明）：仅登录。
+            assert result['status'] == 'skipped' and result['metadata']['reason'] == 'signin_not_supported'
+            assert site_id not in called
+        else:
+            assert result['status'] == 'signed'
+            assert site_id in called

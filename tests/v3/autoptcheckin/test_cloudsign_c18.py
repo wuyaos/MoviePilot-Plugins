@@ -242,6 +242,20 @@ def cloud_site(site_id='audiences'):
     return module_namespace(site_id, signin=lambda ctx: pytest.fail('本地仿真不应被执行'))
 
 
+@pytest.mark.parametrize('url', ['http://cb.local:3000', 'https://bql.internal.invalid/stealth/bql'])
+def test_native_self_hosted_without_token_executes_cloud(storage, monkeypatch, url):
+    runner, _ = storage
+    calls = []
+    def sign(*args):
+        calls.append(args)
+        return CloudResult('success', 'ok')
+    monkeypatch.setattr(native.cloudsign, 'sign', sign)
+    result = native.run_native(runner, cloud_site(), {'cookie': 'session=stored'},
+                               config={'site_cloudsign': ['audiences'], 'browserless_url': url})
+    assert result.status == SignStatus.SUCCESS
+    assert len(calls) == 1
+
+
 def test_run_native_routes_to_cloudsign_when_configured(storage, monkeypatch):
     runner, data = storage
     site = cloud_site()
@@ -252,18 +266,51 @@ def test_run_native_routes_to_cloudsign_when_configured(storage, monkeypatch):
         return CloudResult('success', '云签成功')
     monkeypatch.setattr(native.cloudsign, 'sign', fake_sign)
     result = native.run_native(runner, site, {'cookie': 'session=managed'},
-                               config={'browserless_token': 'tk'})
+                               config={'browserless_token': 'tk', 'site_cloudsign': ['audiences']})
     assert result.status == SignStatus.SUCCESS
     assert result.metadata['transport'] == 'cloud'
     assert seen['id'] == 'audiences' and seen['cookie'] == 'session=stored' and seen['config']['browserless_token'] == 'tk'
+
+
+def test_run_native_fails_explicitly_when_selected_without_token(storage, monkeypatch):
+    """用户已选云签但缺配置：待处理，不计失败且不回退本地仿真。"""
+    runner, data = storage
+    site = cloud_site()
+    monkeypatch.setattr(native.cloudsign, 'sign', lambda *a, **k: pytest.fail('缺 token 不应发起云签'))
+    monkeypatch.setattr(native, 'native_cloak_client', lambda site, http, info, config: http)
+    result = native.run_native(runner, site, {'cookie': 'session=stored'},
+                               config={'site_cloudsign': ['audiences']})
+    assert result.status == SignStatus.PROTOCOL_PENDING
+    assert 'browserless_token' in result.message
+    assert result.metadata['transport'] == 'cloud'
+
+def test_missing_cloud_config_is_pending_without_same_round_retry(storage, monkeypatch):
+    from autoptcheckin import AutoPtCheckin
+    from autoptcheckin.core.state_store import PENDING
+    plugin = AutoPtCheckin()
+    plugin.init_plugin({'enabled_sites': ['audiences'], 'sign_sites': ['audiences'],
+                        'site_cloudsign': ['audiences'], 'retry_count': 3})
+    runner, _ = storage
+    runner.history = plugin._record_result
+    calls = []
+    monkeypatch.setattr(native.cloudsign, 'sign', lambda *a, **kw: pytest.fail('must not request BQL'))
+    def execute(*args, **kwargs):
+        calls.append(1)
+        result = native.run_native(runner, cloud_site(), {}, config=plugin._config)
+        return {'status': result.status}
+    monkeypatch.setattr(plugin, '_execute_site', execute)
+    plugin._run_with_retry('audiences', 'sign', 'manual')
+    assert calls == [1]
+    assert plugin._track_store().state_of('audiences', 'sign') == PENDING
+
 
 
 def test_run_native_keeps_local_emulation_without_token(storage, monkeypatch):
     runner, data = storage
     calls = []
     site = module_namespace('audiences', signin=lambda ctx: calls.append(1) or SignResult('success'))
-    monkeypatch.setattr(native.cloudsign, 'sign', lambda *a, **k: pytest.fail('未配 token 不应走云签'))
-    monkeypatch.setattr(native, 'native_cloak_client', lambda site, http, info, config, shared=None: http)
+    monkeypatch.setattr(native.cloudsign, 'sign', lambda *a, **k: pytest.fail('未选云签不应走云签'))
+    monkeypatch.setattr(native, 'native_cloak_client', lambda site, http, info, config: http)
     result = native.run_native(runner, site, {'cookie': 'session=stored'}, config={})
     assert result.status == SignStatus.SUCCESS and calls
 

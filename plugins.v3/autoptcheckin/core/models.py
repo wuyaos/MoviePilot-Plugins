@@ -20,6 +20,49 @@ class LoginStatus(StrEnum):
     AUTH_FAILED = "auth_failed"
     UNCONFIRMED = "unconfirmed"
 
+
+# ---- 统一结果值（执行/记录边界唯一出口）----
+# 统一 status：signed/login_ok/failed/pending/skipped/cancelled；reason 精确值见下。
+# 适配器内部保留 SignStatus/LoginStatus 原始值；仅历史、状态表与 API 载荷在边界归一。
+UNIFIED_REASON_ALREADY = "already_signed"
+UNIFIED_REASON_UNKNOWN = "result_unknown"
+
+
+def unify_result(status, reason: str | None = None) -> tuple[str, str]:
+    """原始执行值 → (统一 status, reason)。
+
+    - success → signed（无 reason，代表本次成功）；already → signed+already_signed；signed 保持幂等。
+    - auth_failed → failed+auth_failed；unconfirmed → pending+result_unknown；
+      network_error/maintenance/protocol_pending → pending+同名 reason。
+    - skipped/cancelled 透传（门控 reason 保留）；未知值封闭为 pending，原值由调用方保留。
+    - 原细分 reason 不丢弃：调用方在 metadata 中保留。
+    """
+    status = getattr(status, "value", None) or status or ""
+    reason = reason or ""
+    if status == "success":
+        return "signed", ""
+    if status == "already":
+        return "signed", UNIFIED_REASON_ALREADY
+    if status == "signed":
+        # 新归一产物（本次成功无 reason）保持幂等；legacy 旧值的 already 解释
+        # 只发生在旧读边界（状态表 version==1 兼容 / 旧 history 无 reason 字段）。
+        return "signed", (UNIFIED_REASON_ALREADY if reason == UNIFIED_REASON_ALREADY else reason)
+    if status == "failed":
+        return "failed", reason
+    if status == "auth_failed":
+        return "failed", "auth_failed"
+    if status == "login_ok":
+        return "login_ok", reason
+    if status == "unconfirmed":
+        return "pending", UNIFIED_REASON_UNKNOWN
+    if status in ("network_error", "maintenance", "protocol_pending"):
+        return "pending", status
+    if status == "skipped" or status == "cancelled":
+        return status, reason
+    # 未知值封闭到统一六值：pending 兜底，原始值由调用方保留在 metadata.raw_status。
+    return "pending", reason or UNIFIED_REASON_UNKNOWN
+
+
 @dataclass(frozen=True)
 class LoginPage:
     text: str

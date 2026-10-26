@@ -110,13 +110,13 @@ def test_tjupt_receipt_cannot_replace_unavailable_readback():
 
 @pytest.mark.parametrize('site_id', ['darkland', 'digitalcore'])
 @pytest.mark.parametrize('read_only', [False, True])
-@pytest.mark.parametrize('verified', [False, True])
-def test_login_only_gates_before_credentials(monkeypatch, site_id, read_only, verified):
+def test_login_only_gates_before_credentials(monkeypatch, site_id, read_only):
+    """仅登录站能力声明（signin_capable=False）在凭据与网络资源之前拦截。"""
     module = importlib.import_module('autoptcheckin')
     plugin = module.AutoPtCheckin()
     row = next(row for row in discover_sites()['sites'] if row['id'] == site_id)
-    assert row['hook_implemented'] and row['verified']
-    monkeypatch.setattr(module, 'get_registry', lambda *a: {'sites': [dict(row, verified=verified)]})
+    assert row['hook_implemented'] and row['signin_capable'] is False
+    monkeypatch.setattr(module, 'get_registry', lambda *a: {'sites': [dict(row)]})
     monkeypatch.setattr(module, 'managed_site', lambda *a: pytest.fail('must not resolve credentials'))
     result = plugin._execute_site(site_id, read_only=read_only)
     assert result['status'] == 'skipped' and result['metadata']['reason'] == 'signin_not_applicable'

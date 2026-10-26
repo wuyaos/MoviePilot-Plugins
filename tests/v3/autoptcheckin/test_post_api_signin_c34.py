@@ -227,7 +227,6 @@ def test_c34_registry_verification_by_site():
     rows = {row['id']: row for row in discover_sites()['sites']}
     for sid in IDS:
         assert rows[sid]['hook_implemented']
-        assert rows[sid]['verified'] is (sid not in {'hdarea', 'nexushd'})
 
 
 def test_native_http_cookie_refresh_json_headers(monkeypatch):

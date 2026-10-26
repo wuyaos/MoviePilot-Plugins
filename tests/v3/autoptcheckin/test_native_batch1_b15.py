@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "plugins.v3"))
 from autoptcheckin.core.credentials import Credential
-from autoptcheckin.core.models import LoginPage
+from autoptcheckin.core.models import LoginPage, SignResult, SignStatus
 from autoptcheckin.core.registry import discover_sites
 from autoptcheckin.core.sitemodel import SignContext
 from autoptcheckin.sites.native.generic import GenericNaturept as NaturePT
@@ -91,22 +91,24 @@ def test_b15_registry_declares_verification_by_site():
     rows = {row["id"]: row for row in discover_sites()["sites"]}
     for cls in SITES:
         assert rows[cls.id]["native"]
-        assert rows[cls.id]["verified"] is (cls is OpenCD)
         assert rows[cls.id]["hook_implemented"] is True
 
 
 @pytest.mark.parametrize("site_cls", SITES)
 @pytest.mark.parametrize("read_only", [False, True])
 @pytest.mark.parametrize("verified", [False, True])
-def test_b15_double_gate_before_credentials_or_network(monkeypatch, site_cls, read_only, verified):
+def test_b15_verified_and_hook_no_longer_gate_execution(monkeypatch, site_cls, read_only, verified):
+    """verified/hook 声明不再构成运行时门控：启用并勾选即执行。"""
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
+    plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
     monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
-        dict(id=site_cls.id, native=True, verified=verified, hook_implemented=False)]})
-    def forbidden(*args, **kwargs):
-        pytest.fail("gate must run before credentials or network resources")
-    monkeypatch.setattr(module, "managed_site", forbidden)
-    monkeypatch.setattr(module, "run_native", forbidden)
+        dict(id=site_cls.id, native=True, verified=verified, hook_implemented=False,
+             signin_capable=True, signin_applicable=True)]})
+    monkeypatch.setattr(module, "managed_site", lambda sid: {})
+    called = []
+    monkeypatch.setattr(module, "run_native",
+                        lambda runner, site, info, **kwargs: called.append(site.id) or SignResult(SignStatus.SUCCESS, "ok"))
     result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
-    assert result["status"] == "skipped"
-    assert result["metadata"]["reason"] == ("hook_not_implemented" if verified else "native_unverified")
+    assert result["status"] == "signed"
+    assert called == [site_cls.id]

@@ -92,31 +92,6 @@ def test_turnstile_timeout_is_reported_without_submission():
     assert page.waits == [1500] * 40 + [8000]
 
 
-def test_shared_cloak_close_keeps_round_session_open_for_next_site(monkeypatch):
-    from types import SimpleNamespace
-    from autoptcheckin.core.cloak import CloakHttpClient
-
-    class SharedContext:
-        def __init__(self):
-            self.added = []
-            self.closed = False
-        def cookies(self, url): return []
-        def add_cookies(self, cookies): self.added.extend(cookies)
-        def close(self): self.closed = True
-
-    session = SimpleNamespace(context=SharedContext())
-    first = CloakHttpClient(SimpleNamespace(cookies={'first': 'one'}),
-                            {'url': 'https://vclib.example/'},
-                            SimpleNamespace(id='vclib', url='https://vclib.example/'), shared=session)
-    first.close()
-    assert not session.context.closed
-
-    CloakHttpClient(SimpleNamespace(cookies={'second': 'two'}),
-                    {'url': 'https://piggo.example/'}, SimpleNamespace(id='piggo', url=''), shared=session)
-    assert any(cookie['name'] == 'second' and cookie['domain'] == 'piggo.example'
-               for cookie in session.context.added)
-
-
 def test_piggo_round_site_opens_headful_cloak_without_vclib(monkeypatch):
     from types import SimpleNamespace
     from autoptcheckin import AutoPtCheckin
@@ -134,28 +109,15 @@ def test_piggo_round_site_opens_headful_cloak_without_vclib(monkeypatch):
     plugin._recompute_track_states = lambda: None
     plugin._track_store = lambda: SimpleNamespace(rollover=lambda: None)
     plugin._due_for = lambda action: ['piggo', 'yema'] if action == 'sign' else []
-    plugin._run_with_retry = lambda *args: None
+    def execute(site_id, *args):
+        client = cloak.CloakHttpClient(
+            SimpleNamespace(cookies={}), {},
+            SimpleNamespace(id=site_id, url='https://fixture.invalid/'))
+        client.close()
+    plugin._run_with_retry = execute
     plugin._notify_round = lambda *args: None
     plugin._execute_all()
-    assert opened and opened[0]['headless'] is False
-
-
-def test_shared_cloak_replaces_candidate_cookies_without_clearing_other_sites():
-    from types import SimpleNamespace
-    class CookieContext:
-        def __init__(self):
-            self.jar = [{'name': 'unrelated', 'value': 'keep', 'domain': 'other.invalid', 'path': '/'}]
-        def cookies(self, url):
-            return [dict(row) for row in self.jar if row['domain'] == 'fixture.invalid']
-        def clear_cookies(self, **match):
-            self.jar = [row for row in self.jar if not all(row[key] == value for key, value in match.items())]
-        def add_cookies(self, rows): self.jar.extend(rows)
-    context = CookieContext()
-    shared = SimpleNamespace(context=context)
-    site = SimpleNamespace(id='fixture', url='https://fixture.invalid/')
-    cloak.CloakHttpClient(SimpleNamespace(cookies={'old_session': 'rejected'}), {}, site, shared=shared)
-    cloak.CloakHttpClient(SimpleNamespace(cookies={'new_session': 'candidate'}), {}, site, shared=shared)
-    assert {row['name'] for row in context.jar} == {'unrelated', 'new_session'}
+    assert [options['headless'] for options in opened] == [False, True]
 
 
 def test_cloak_http_client_actor_binds_browser_to_dedicated_thread(monkeypatch):
@@ -182,7 +144,6 @@ def test_cloak_http_client_actor_binds_browser_to_dedicated_thread(monkeypatch):
             self.closed = True
     fake_context = SimpleNamespace(cookies=lambda url: [])
     monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
-    monkeypatch.setattr(cloak, '_resolve_cloak_proxy', lambda *a, **k: None)
 
     caller = threading.get_ident()
     client = cloak.CloakHttpClient(SimpleNamespace(cookies={}), {'url': 'https://fixture.invalid/'},
@@ -206,7 +167,6 @@ def test_cloak_http_client_actor_reraises_exception_from_browser_thread(monkeypa
         def goto(self, url): raise RuntimeError('It looks like you are using Playwright Sync API inside the asyncio loop')
         def close(self): pass
     monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
-    monkeypatch.setattr(cloak, '_resolve_cloak_proxy', lambda *a, **k: None)
     client = cloak.CloakHttpClient(SimpleNamespace(cookies={}), {'url': 'https://fixture.invalid/'},
                                    SimpleNamespace(id='anthelion', url='https://fixture.invalid/'))
     try:
@@ -216,40 +176,6 @@ def test_cloak_http_client_actor_reraises_exception_from_browser_thread(monkeypa
         assert 'asyncio loop' in str(exc)
     finally:
         client.close()
-
-
-def test_shared_client_get_post_run_without_pool(monkeypatch):
-    """P1-1 回归：共享客户端没有 _pool，get/post 必须在调用方线程直行而非 AttributeError。"""
-    from types import SimpleNamespace
-    from autoptcheckin.core import cloak
-
-    class FakeSession:
-        def __init__(self, **kwargs):
-            self.context = SimpleNamespace(cookies=lambda url: [])
-            self.page = SimpleNamespace(content=lambda: '<html/>', url='https://fixture.invalid/',
-                                        wait_for_timeout=lambda ms: None,
-                                        evaluate=lambda *a, **k: {'text': '<html/>', 'url': 'https://fixture.invalid/', 'status': 200})
-        def __enter__(self): return self
-        def goto(self, url): return SimpleNamespace(status=200)
-        def evaluate(self, *a, **k): return None
-        def close(self): pass
-    monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
-    monkeypatch.setattr(cloak, '_resolve_cloak_proxy', lambda *a, **k: None)
-
-    shared_round = FakeSession()  # 共享分支 self.session = shared 本体（含 goto/page/close）
-    fake_http = SimpleNamespace(cookies={}, get=lambda *a, **k: SimpleNamespace(status_code=200, text='<html/>', url='https://fixture.invalid/'),
-                                post=lambda *a, **k: SimpleNamespace(status_code=200, text='<html/>', url='https://fixture.invalid/'))
-    client = cloak.CloakHttpClient(fake_http, {'url': 'https://fixture.invalid/'},
-                                   SimpleNamespace(id='anthelion', url='https://fixture.invalid/'),
-                                   shared=shared_round)
-    assert getattr(client, '_pool', None) is None, '共享客户端不应创建 actor 线程池'
-    page = client.get('https://fixture.invalid/')   # 回归前这里 AttributeError
-    assert page.status_code == 200
-    client.post('https://fixture.invalid/go', data={'x': '1'})
-    content, url = client.page_snapshot()
-    assert content == '<html/>'
-    client.close()  # 共享分支：不关轮次会话
-    assert client.session is not None
 
 
 def test_actor_run_page_action_and_open_failure_recover_pool(monkeypatch):
@@ -269,7 +195,6 @@ def test_actor_run_page_action_and_open_failure_recover_pool(monkeypatch):
         def goto(self, url): return SimpleNamespace(status=200)
         def close(self): pass
     monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
-    monkeypatch.setattr(cloak, '_resolve_cloak_proxy', lambda *a, **k: None)
     monkeypatch.setattr(cloak, 'run_page_action', lambda session, steps: seen.append(('action', threading.get_ident())) or [['sign_button', 'clicked']])
 
     caller = threading.get_ident()

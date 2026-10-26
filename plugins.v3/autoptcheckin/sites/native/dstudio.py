@@ -4,7 +4,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class DStudio(NexusSignin):
-    verified = True
     id = "dstudio"
     name = "DStudio"
     url = "https://dstudio.me/"

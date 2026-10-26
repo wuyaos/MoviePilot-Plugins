@@ -188,7 +188,10 @@ def test_c7_inventory_all_b18_ids_are_accounted_for():
     unverified = set('baozi dongying kelu naturept novahd oshen phoenixpt playlet shaobaoyuan soulvoice tu88 vclib haidan hdarea hdcity hdupt hhanclub nexushd'.split())
     for site_id in ids:
         assert rows[site_id]['hook_implemented'] is (site_id != 'mteam')
-        assert rows[site_id]['verified'] is (site_id not in unverified)
+    # verified 审批元数据已移除；mteam 保活/答题站仅登录改为显式能力声明。
+    assert rows['mteam']['signin_capable'] is False
+    assert rows['chdbits']['signin_capable'] is False and rows['tjupt']['signin_capable'] is False
+    assert rows['chdbits']['signin_applicable'] is False
     for site_id in ['darkland', 'digitalcore']:
         assert get_native_module(site_id).signin_capable is False
     site = get_native_module('mteam')

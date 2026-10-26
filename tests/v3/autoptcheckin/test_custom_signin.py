@@ -45,40 +45,40 @@ def attendance(probe, monkeypatch):
     return plugin, calls, pages, error
 
 
-@pytest.mark.parametrize('before,after,status,methods', [
-    (FORM, SIGNED, 'success', ['GET', 'POST', 'GET']),
-    (SIGNED, None, 'already', ['GET']),
-    (FORM, '<main>unknown</main>', 'unconfirmed', ['GET', 'POST', 'GET']),
-    (FORM, None, 'unconfirmed', ['GET', 'POST', 'GET']),
-    ('<main>not Nexus</main>', None, 'protocol_pending', ['GET']),
+@pytest.mark.parametrize('before,after,status,reason,methods', [
+    (FORM, SIGNED, 'signed', None, ['GET', 'POST', 'GET']),
+    (SIGNED, None, 'signed', 'already_signed', ['GET']),
+    (FORM, '<main>unknown</main>', 'pending', 'result_unknown', ['GET', 'POST', 'GET']),
+    (FORM, None, 'pending', 'result_unknown', ['GET', 'POST', 'GET']),
+    ('<main>not Nexus</main>', None, 'pending', 'protocol_pending', ['GET']),
 ])
-def test_custom_signin_three_states(attendance, before, after, status, methods):
+def test_custom_signin_three_states(attendance, before, after, status, reason, methods):
     plugin, calls, pages, _ = attendance
     pages[:] = [before, after]
     result = plugin._execute_site('custom-60005')
     assert result['status'] == status
+    assert result.get('reason') == reason
     assert calls == [(method, URL) for method in methods]
     assert result['metadata']['action'] == 'sign'
     records = plugin._history.list(1, 10)['items']
     assert len(records) == 1 and records[0]['action'] == 'sign'
 
 
-@pytest.mark.parametrize('after,status', [(SIGNED, 'success'), (TimeoutError(), 'unconfirmed')])
-def test_custom_submit_exception_always_reads_again(attendance, after, status):
+@pytest.mark.parametrize('after,status,reason', [(SIGNED, 'signed', None), (TimeoutError(), 'pending', 'result_unknown')])
+def test_custom_submit_exception_always_reads_again(attendance, after, status, reason):
     plugin, calls, pages, error = attendance
     error.append(TimeoutError())
     pages[:] = [FORM, after]
-    assert plugin._execute_site('custom-60005')['status'] == status
+    result = plugin._execute_site('custom-60005')
+    assert result['status'] == status and result.get('reason') == reason
     assert calls == [('GET', URL), ('POST', URL), ('GET', URL)]
 
 
-@pytest.mark.parametrize('unlock', [False, True])
 @pytest.mark.parametrize('selected', [False, True])
-def test_custom_selection_gate_even_with_unlock(attendance, unlock, selected):
+def test_custom_selection_gate(attendance, selected):
     plugin, calls, _, _ = attendance
-    plugin._config['unlock_all_sites'] = unlock
     plugin._config['sign_sites'] = ['custom-60005'] if selected else []
-    assert plugin._execute_site('custom-60005')['status'] == ('success' if selected else 'skipped')
+    assert plugin._execute_site('custom-60005')['status'] == ('signed' if selected else 'skipped')
     assert bool(calls) == selected
 
 
@@ -88,35 +88,49 @@ def test_custom_signin_id_types(attendance, site_id):
     plugin._config['custom_sites_data'][0]['id'] = site_id
     plugin._config['enabled_sites'] = [site_id]
     plugin._config['sign_sites'] = [site_id]
-    assert plugin._execute_site(site_id)['status'] == 'success'
+    assert plugin._execute_site(site_id)['status'] == 'signed'
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_custom_emulate_gate_and_registry(attendance, enabled):
+@pytest.mark.parametrize('entry_emulate,override,expected', [
+    (True, None, True), (False, None, False), (True, False, False), (False, True, True),
+])
+def test_custom_emulate_map_overrides_entry(attendance, monkeypatch, entry_emulate, override, expected):
+    """custom 条目 emulate 填写值为无覆盖时的默认；site_emulate 覆盖表显式 bool 最高优先。"""
     plugin, calls, _, _ = attendance
-    plugin._config['custom_sites_data'][0]['emulate'] = True
-    plugin._config['site_browserless'] = ['custom-60005'] if enabled else []
+    plugin._config['custom_sites_data'][0]['emulate'] = entry_emulate
+    if override is not None:
+        plugin._config['site_emulate'] = {'custom-60005': override}
+    seen = {}
+
+    @contextmanager
+    def client(credential, info, config, proxy=None):
+        seen['emulate'] = info['emulate']
+        seen['proxy'] = proxy
+        yield custom.NativeHttpClient(credential, info)
+
+    monkeypatch.setattr(custom, 'custom_client', client)
     result = plugin._execute_site('custom-60005')
-    if enabled:
-        assert result['status'] == 'unconfirmed'
-    else:
-        assert result['metadata']['reason'] == 'emulation_not_selected'
-    assert not calls
+    assert seen['emulate'] is expected
+    assert (result['metadata'].get('transport') == 'cloak') is expected
+    # HTTP 轨照常走 Nexus 三段调用；仿真轨由 stub 承载。
+    assert result['status'] == 'signed'
     row = next(row for row in get_registry(plugin._config['custom_sites_data'])['sites']
                if row['id'] == 'custom-60005')
     assert row['signin_applicable'] is True
-    assert row['signin_applicable'] is True
+    # 注册表声明不被有效值反写污染（响应副本才携带有效 emulate）。
+    assert row['emulate'] is entry_emulate
 
 
 def test_custom_emulate_hybrid_get_post_get(attendance, monkeypatch):
     plugin, calls, _, _ = attendance
-    plugin._config['site_browserless'] = ['custom-60005']
+    plugin._config['site_emulate'] = {'custom-60005': True}
     plugin._config['custom_sites_data'][0]['emulate'] = True
     events = []
 
     @contextmanager
-    def client(credential, info, config):
-        assert info['emulate'] and 'custom-60005' in config['site_browserless']
+    def client(credential, info, config, proxy=None):
+        assert info['emulate'] and config['site_emulate'] == {'custom-60005': True}
+        assert proxy is None  # 显式覆盖表只开仿真，未开代理：无 PROXY_HOST 兜底
         events.append('open')
         try:
             yield custom.NativeHttpClient(credential, info)
@@ -125,7 +139,7 @@ def test_custom_emulate_hybrid_get_post_get(attendance, monkeypatch):
 
     monkeypatch.setattr(custom, 'custom_client', client)
     result = plugin._execute_site('custom-60005')
-    assert result['status'] == 'success'
+    assert result['status'] == 'signed'
     assert result['metadata']['transport'] == 'cloak'
     assert calls == [('GET', URL), ('POST', URL), ('GET', URL)]
     assert events == ['open', 'close']
@@ -156,12 +170,12 @@ def test_cloak_custom_client_lifecycle(probe, monkeypatch):
     monkeypatch.setattr(custom, "NativeHttpClient", Http)
     info = {"url": URL, "id": "custom-60005", "emulate": True}
     with custom.custom_client(Credential("local_cookie", "synthetic-cookie"), info,
-                              {"site_browserless": ["custom-60005"]}) as client:
+                              {"site_emulate": {}}) as client:
         assert client.get(URL).text == SIGNED
     assert events == ["cookies", "goto", "close"]
 
 
-@pytest.mark.parametrize('condition,status', [('disabled', 'skipped'), ('cookie', 'auth_failed'),
+@pytest.mark.parametrize('condition,status', [('disabled', 'skipped'), ('cookie', 'failed'),
                                              ('cancel', 'cancelled'), ('busy', 'skipped')])
 def test_custom_sign_guards(attendance, condition, status):
     plugin, calls, _, _ = attendance
@@ -188,7 +202,7 @@ def test_custom_sign_api_without_global_unlock(attendance, site_id):
     plugin._config['enabled_sites'] = [site_id]
     plugin._config['sign_sites'] = [site_id]
     result = asyncio.run(plugin.api_signin_by_domain(domain=str(site_id)))
-    assert result['success'] and result['data']['status'] == 'success'
+    assert result['success'] and result['data']['status'] == 'signed'
     assert calls == [('GET', URL), ('POST', URL), ('GET', URL)]
 
 
@@ -229,7 +243,7 @@ def test_custom_empty_cookie_falls_back_to_cookiecloud_and_persists(probe, cloud
 
     monkeypatch.setattr(custom, 'NativeHttpClient', Http)
     result = plugin._execute_site('custom-60005')
-    assert result['status'] == 'success'
+    assert result['status'] == 'signed'
     entry = store['cookies.table']['custom-60005']
     assert entry['source'] == 'cookiecloud'
     assert 'session=synthetic-cloud' in entry['cookie']

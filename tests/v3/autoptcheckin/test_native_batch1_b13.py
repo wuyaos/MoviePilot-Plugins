@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "plugins.v3"))
 from autoptcheckin.core.credentials import Credential
-from autoptcheckin.core.models import LoginPage
+from autoptcheckin.core.models import LoginPage, SignResult, SignStatus
 from autoptcheckin.core.registry import discover_sites
 from autoptcheckin.core.sitemodel import SignContext
 from autoptcheckin.sites.native.hdbao import HDBao
@@ -100,41 +100,63 @@ def test_b13_registry_declares_verification_by_site():
     rows = {row["id"]: row for row in discover_sites()["sites"]}
     for cls in SITES:
         assert rows[cls.id]["native"]
-        assert rows[cls.id]["verified"] is (cls in (HDBao, HDChina))
     for cls in SPECIAL:
         assert rows[cls.id]["hook_implemented"] is True
 
 
 @pytest.mark.parametrize("site_cls", [HDBao, HDCity])
 @pytest.mark.parametrize("read_only", [False, True])
-def test_b13_unverified_execution_never_reads_credentials(monkeypatch, site_cls, read_only):
+def test_b13_unverified_enabled_and_selected_executes(monkeypatch, site_cls, read_only):
+    """verified 不再是运行时门控：启用并勾选即执行（调度与手动同一契约）。"""
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
+    plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
     monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
-        dict(id=site_cls.id, native=True, verified=False, hook_implemented=True)]})
-    def forbidden(*args, **kwargs):
-        pytest.fail("gate must run before credentials or network resources")
-    monkeypatch.setattr(module, "managed_site", forbidden)
-    monkeypatch.setattr(module, "run_native", forbidden)
+        dict(id=site_cls.id, native=True, verified=False, hook_implemented=True,
+             signin_capable=True, signin_applicable=True)]})
+    monkeypatch.setattr(module, "managed_site", lambda sid: {})
+    called = []
+    monkeypatch.setattr(module, "run_native",
+                        lambda runner, site, info, **kwargs: called.append(site.id) or SignResult(SignStatus.SUCCESS, "ok"))
     result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
-    assert result["status"] == "skipped"
-    assert result["metadata"]["reason"] == "native_unverified"
+    assert result["status"] == "signed"
+    assert called == [site_cls.id]
 
 
 @pytest.mark.parametrize("site_cls", SPECIAL)
 @pytest.mark.parametrize("read_only", [False, True])
-def test_b13_verified_without_hook_is_still_blocked(monkeypatch, site_cls, read_only):
+def test_b13_hook_attribute_no_longer_blocks_execution(monkeypatch, site_cls, read_only):
+    """hook_not_implemented 运行时门控已移除；无提交协议的站点由模块 signin 自守（mteam 先例）。"""
+    module = importlib.import_module("autoptcheckin")
+    plugin = module.AutoPtCheckin()
+    plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
+    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+        dict(id=site_cls.id, native=True, verified=True, hook_implemented=False,
+             signin_capable=True, signin_applicable=False)]})
+    monkeypatch.setattr(module, "managed_site", lambda sid: {})
+    called = []
+    monkeypatch.setattr(module, "run_native",
+                        lambda runner, site, info, **kwargs: called.append(site.id) or SignResult(SignStatus.SUCCESS, "ok"))
+    result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
+    assert result["status"] == "signed"
+    assert called == [site_cls.id]
+
+
+@pytest.mark.parametrize("site_cls", [HDBao, HDCity])
+def test_b13_not_enabled_still_skipped_before_credentials(monkeypatch, site_cls):
+    """站点开关未启用仍跳过，且发生在凭据与网络资源之前。"""
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
     monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
-        dict(id=site_cls.id, native=True, verified=True, hook_implemented=False)]})
+        dict(id=site_cls.id, native=True, verified=False, hook_implemented=True,
+             signin_capable=True, signin_applicable=True)]})
     def forbidden(*args, **kwargs):
-        pytest.fail("unimplemented hook must never create requests")
+        pytest.fail("site_disabled gate must run before credentials or network resources")
     monkeypatch.setattr(module, "managed_site", forbidden)
     monkeypatch.setattr(module, "run_native", forbidden)
-    result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
+    result = plugin._execute_site(site_cls.id, read_only=False, trigger="scheduler")
     assert result["status"] == "skipped"
-    assert result["metadata"]["reason"] == "hook_not_implemented"
+    assert result["metadata"]["reason"] == "site_disabled"
 
 
 def test_hdchina_only_v2_proven_message_is_mapped():

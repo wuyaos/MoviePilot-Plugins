@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "plugins.v3"))
 from autoptcheckin.core.credentials import Credential
-from autoptcheckin.core.models import LoginPage
+from autoptcheckin.core.models import LoginPage, SignResult, SignStatus
 from autoptcheckin.core.registry import discover_sites
 from autoptcheckin.core.sitemodel import RecordSpec, SignContext
 from autoptcheckin.sites.native.opencd import OpenCD
@@ -149,29 +149,30 @@ def test_action_endpoints_never_used_for_pre_read(cls):
 
 
 @pytest.mark.parametrize("read_only", [False, True])
-@pytest.mark.parametrize("verified", [False, True])
-def test_all_unimplemented_hooks_double_gate(monkeypatch, read_only, verified):
+def test_unimplemented_hook_sites_execute_without_runtime_gate(monkeypatch, read_only):
+    """hook 属性不再是运行时门控；无提交协议站点由模块 signin 自守（mteam 先例）。"""
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
     rows = discover_sites()["sites"]
     special = [row for row in rows if row.get("native") and row.get("hook_implemented") is False]
     assert {"chdbits"}.isdisjoint({r["id"] for r in special})  # 52pt 已改滑块、hook=False 归入 special
-    def forbidden(*args, **kwargs):
-        pytest.fail("gate must precede credentials and network")
-    monkeypatch.setattr(module, "managed_site", forbidden)
-    monkeypatch.setattr(module, "run_native", forbidden)
+    assert special and all(row["id"] == "mteam" for row in special)
+    monkeypatch.setattr(module, "managed_site", lambda sid: {})
+    called = []
+    monkeypatch.setattr(module, "run_native",
+                        lambda runner, site, info, **kwargs: called.append(site.id) or SignResult(SignStatus.SUCCESS, "ok"))
     for row in special:
-        monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [dict(row, verified=verified)]})
+        plugin._config = {"enabled_sites": [row["id"]], "sign_sites": [row["id"]]}
         result = plugin._execute_site(row["id"], read_only=read_only, trigger="scheduler")
-        assert result["status"] == "skipped"
-        assert result["metadata"]["reason"] == ("hook_not_implemented" if verified else "native_unverified")
+        # mteam 保活语义已是显式能力声明（signin_capable=False）：凭据前拦截，不再靠 hook 门控。
+        assert result["status"] == "skipped" and result["metadata"]["reason"] == "signin_not_supported"
+    assert not called
 
 
 def test_new_registry_verification_and_record_spec_validation():
     rows = {r["id"]: r for r in discover_sites()["sites"]}
     for cls in NEW:
         assert rows[cls.id]["native"]
-        assert rows[cls.id]["verified"] is (cls is not PhoenixPT)
     for kwargs in [dict(source="response_json"), dict(source="api_key"),
                    dict(source="response_json", response_field="code", status_map={0.5: "signed"})]:
         with pytest.raises(ValueError):

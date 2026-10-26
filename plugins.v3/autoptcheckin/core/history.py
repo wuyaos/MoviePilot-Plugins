@@ -10,7 +10,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import RLock
-from .models import SignResult
+from .models import SignResult, unify_result
 
 
 def open_local_db(path) -> sqlite3.Connection:
@@ -150,6 +150,8 @@ class HistoryStore:
     # ---- 记录组装（两后端共用） ----
 
     def _normalize(self, result: SignResult | dict) -> dict:
+        """新记录统一边界：status 归一（signed/login_ok/failed/pending/skipped/cancelled）、
+        reason 精确值落字段；message/reward/evidence 原样保留。旧记录兼容读取不重写。"""
         if isinstance(result, SignResult):
             evidence = asdict(result.evidence) if result.evidence else {}
             record = {"time": self._clock().isoformat(), "site": result.site_id,
@@ -161,9 +163,12 @@ class HistoryStore:
         else:
             record = deepcopy(result)
         record["time"] = self._time(record.get("time") or self._clock().isoformat()).isoformat()
-        record["status"] = "signed" if record["status"] == "already" else record["status"]
+        status, reason = unify_result(record.get("status"), record.get("reason"))
+        record["status"] = status
+        record["reason"] = reason or None
         evidence = record.get("evidence") or {}
         return {"time": record["time"], "site": record["site"], "status": record["status"],
+                "reason": record.get("reason"),
                 "trigger": record.get("trigger", "manual"),
                 "action": record.get("action", "sign"),
                 "message": record.get("message", ""), "reward": record.get("reward"),
@@ -220,9 +225,9 @@ class HistoryStore:
             return len(records) - len(kept)
 
     def today_counts(self) -> dict[str, int]:
+        """今日三卡口径（统一 status）：signed/failed/pending；旧原始值经 unify_result 兼容读取。"""
         now = self._clock()
-        # Network/protocol outcomes remain in history, outside the four result cards.
-        counts = dict(success=0, signed=0, failed=0, unconfirmed=0)
+        counts = dict(signed=0, failed=0, pending=0)
         with self._lock:
             if self._conn:
                 rows = self._conn.execute("SELECT data FROM records").fetchall()
@@ -231,7 +236,7 @@ class HistoryStore:
                 items = self._load()
             for item in items:
                 if item.get("action", "sign") == "sign" and self._time(item["time"]).astimezone(now.tzinfo).date() == now.date():
-                    status = "failed" if item["status"] == "auth_failed" else item["status"]
+                    status, _ = unify_result(item.get("status"), item.get("reason"))
                     if status in counts:
                         counts[status] += 1
         return counts

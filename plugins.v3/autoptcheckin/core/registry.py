@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
 from .sitemodel import SiteModule
+from . import cloudsign
 from .credentials import CredentialSpec
 from ..integrations.rousi import ROUSI_CREDENTIALS
 from ..integrations.sunnypt import SUNNYPT_CREDENTIALS
@@ -29,7 +30,7 @@ def managed_site(site_id):
     match = _MATCHERS.get(site_id)
     for site in SiteOper().list_order_by_pri():
         if (match and match(site.url)) or (not match and hostname(site.url) == hostname(site_id)):
-            return {key: getattr(site, key, None) for key in ('name', 'url', 'cookie', 'ua', 'proxy')}
+            return {key: getattr(site, key, None) for key in ('name', 'url', 'cookie', 'ua', 'proxy', 'render')}
     return {}
 
 
@@ -86,10 +87,10 @@ def discover_sites(package_name: str | None = None) -> dict:
                         _MATCHERS[cls.id] = matcher
                     sites = [item for item in sites if item['id'] != cls.id]
                     sites.append({'id': cls.id, 'name': cls.name, 'native': True,
-                                  'verified': bool(getattr(cls, 'verified', False)),
                                   'login_capable': cls.login_capable, 'url': cls.url or '', 'credential': credential(cls.credential),
                                   'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'impersonate': bool(getattr(cls, 'impersonate', False)), 'hook_implemented': bool(getattr(cls, 'hook_implemented', True)),
                                   'emulate': bool(getattr(cls, 'emulate', False)), 'notice': getattr(cls, 'login_notice', '') or '',
+                                  'cloudsign_capable': cloudsign.enabled(cls.id),
                                   'shield': shield_of(cls)})
             except Exception as exc:
                 skipped.append({'module': module_name, 'error': type(exc).__name__})
@@ -98,18 +99,19 @@ def discover_sites(package_name: str | None = None) -> dict:
     _MATCHERS['sunnypt'] = lambda url: hostname(url) in {hostname(SUNNYPT_API), 'sunnypt.top'}
     for site_id, name, spec in (("rousi", "肉丝 PeerGo", ROUSI_CREDENTIALS),
                                 ("sunnypt", "SunnyPT", SUNNYPT_CREDENTIALS)):
-        sites.append({"id": site_id, "name": name, "native": False, "verified": False, "login_capable": True,
-                      "credential": credential(spec), "cf": "unknown", "source": "插件适配"})
+        sites.append({"id": site_id, "name": name, "native": False, "login_capable": True,
+                      "credential": credential(spec), "cf": "unknown", "source": "插件适配",
+                      "cloudsign_capable": False})
     for item in sites:
+        # 能力即声明：mteam 保活语义、chdbits/tjupt 答题风险（仅登录）由各模块显式声明
+        # signin_capable=False/signin_note，registry 不再做复合规则推断。
         item['signin_capable'] = (getattr(_NATIVE_MODULES[item['id']], 'signin_capable', True)
-                                  if item.get('native') else item['id'] not in ('darkland', 'digitalcore'))
-        # 签到不适用：登录专用站、mteam（保活语义）、答题/滑块类（chdbits/tjupt 答题误答风险；
-        # 52pt 使用 CloakBrowser 滑块动作；答题站仍仅保留模拟登录）
-        quiz = {'chdbits', 'tjupt'}
-        item['signin_applicable'] = item['signin_capable'] and item['id'] != 'mteam' and item['id'] not in quiz and (
-            not item.get('native') or item.get('hook_implemented', True) or item.get('verified', False))
-        if item['id'] in quiz:
-            item['signin_note'] = '答题类签到不建议使用（误答有账号风险），仅保留模拟登录'
+                                  if item.get('native') else True)
+        if item.get('native'):
+            note = getattr(_NATIVE_MODULES[item['id']], 'signin_note', '')
+            if note:
+                item['signin_note'] = note
+        item['signin_applicable'] = item['signin_capable']
     for item in skipped:
         logging.getLogger(__name__).warning("跳过原生站点模块 %s (%s)", item["module"], item["error"])
     return {"sites": sorted(sites, key=lambda item: item["id"]), "skipped": skipped,
@@ -131,10 +133,17 @@ def managed_sites():
             icon = oper.get_icon_by_domain(site.domain)
             cached = getattr(icon, 'base64', '') or ''
             rows.append({'url': site.url, 'name': site.name,
-                         'icon': cached if cached.startswith('data:image/') else ''})
+                         'icon': cached if cached.startswith('data:image/') else '',
+                         'proxy': bool(getattr(site, 'proxy', 0)), 'render': bool(getattr(site, 'render', 0))})
         return rows
     except ImportError:
         return []
+
+
+def builtin_site_ids() -> set:
+    """内置站点 ID（native 模块 + 集成站）；清 custom 覆盖脏项时不得误清这些 ID。"""
+    _discovery()
+    return set(_NATIVE_MODULES) | {'rousi', 'sunnypt'}
 
 
 def get_native_module(site_id):
@@ -160,6 +169,8 @@ def get_registry(custom_sites_data=None) -> dict:
                 site['source'] = 'MP 站点'
                 site['name'] = registered['name'] or site['name']
                 site['icon'] = registered['icon']
+                site['mp_proxy'] = bool(registered.get('proxy'))
+                site['mp_render'] = bool(registered.get('render'))
         except Exception:
             logging.getLogger(__name__).warning('站点来源匹配失败：%s', site['id'])
     known = {site['id'] for site in registry['sites']}
@@ -180,9 +191,9 @@ def get_registry(custom_sites_data=None) -> dict:
             continue
         registry['sites'].append({'id': item['id'], 'name': item.get('name', ''),
             'url': item.get('url', ''), 'emulate': bool(item.get('emulate', False)),
-            'source': '自定义站点', 'icon': '', 'native': False, 'verified': False,
+            'source': '自定义站点', 'icon': '', 'native': False,
             'login_capable': True, 'signin_capable': True,
-            'signin_applicable': True,
+            'signin_applicable': True, 'cloudsign_capable': False,
             'credential': credential(CredentialSpec()), 'cf': 'unknown',
             'shield': 'emulate' if bool(item.get('emulate', False)) else None})
         known.add(item['id'])

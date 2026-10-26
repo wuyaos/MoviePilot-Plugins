@@ -7,7 +7,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class PTTime(GetSignin):
-    verified = True
     id = 'pttime'
     name = 'PTTime'
     url = 'https://www.pttime.org/'

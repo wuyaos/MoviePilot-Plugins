@@ -4,7 +4,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class PTzone(NexusSignin):
-    verified = True
     id = 'ptzone'
     name = 'PTzone'
     url = 'https://ptzone.xyz/'

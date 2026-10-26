@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "plugins.v3"))
 from autoptcheckin.core.credentials import Credential
-from autoptcheckin.core.models import LoginPage
+from autoptcheckin.core.models import LoginPage, SignResult, SignStatus
 from autoptcheckin.core.registry import discover_sites
 from autoptcheckin.core.sitemodel import SignContext, SiteModule
 from autoptcheckin.core.nexus import NexusSignin
@@ -96,7 +96,6 @@ def test_b14_registry_declares_verification_by_site():
     rows = {row["id"]: row for row in discover_sites()["sites"]}
     for cls in SITES:
         assert rows[cls.id]["native"]
-        assert rows[cls.id]["verified"] is (cls is not Kelu)
     for cls in SPECIAL:
         assert rows[cls.id]["hook_implemented"] == (cls in (Kelu, LaJiDui))
     assert rows["mteam"]["credential"] == {"kind": "password", "sources": [], "refresh": None}
@@ -104,34 +103,40 @@ def test_b14_registry_declares_verification_by_site():
 
 @pytest.mark.parametrize("site_cls", SITES)
 @pytest.mark.parametrize("read_only", [False, True])
-def test_b14_unverified_execution_never_reads_credentials(monkeypatch, site_cls, read_only):
+def test_b14_unverified_enabled_and_selected_executes(monkeypatch, site_cls, read_only):
+    """verified 不再是运行时门控：启用并勾选即执行。"""
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
+    plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
     monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
-        dict(id=site_cls.id, native=True, verified=False, hook_implemented=True)]})
-    def forbidden(*args, **kwargs):
-        pytest.fail("gate must run before credentials or network resources")
-    monkeypatch.setattr(module, "managed_site", forbidden)
-    monkeypatch.setattr(module, "run_native", forbidden)
+        dict(id=site_cls.id, native=True, verified=False, hook_implemented=True,
+             signin_capable=True, signin_applicable=True)]})
+    monkeypatch.setattr(module, "managed_site", lambda sid: {})
+    called = []
+    monkeypatch.setattr(module, "run_native",
+                        lambda runner, site, info, **kwargs: called.append(site.id) or SignResult(SignStatus.SUCCESS, "ok"))
     result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
-    assert result["status"] == "skipped"
-    assert result["metadata"]["reason"] == "native_unverified"
+    assert result["status"] == "signed"
+    assert called == [site_cls.id]
 
 
 @pytest.mark.parametrize("site_cls", SPECIAL)
 @pytest.mark.parametrize("read_only", [False, True])
-def test_b14_verified_without_hook_is_still_blocked(monkeypatch, site_cls, read_only):
+def test_b14_hook_attribute_no_longer_blocks_execution(monkeypatch, site_cls, read_only):
+    """hook_not_implemented 运行时门控已移除；实际防护由站点 signin 自守。"""
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
+    plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
     monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
-        dict(id=site_cls.id, native=True, verified=True, hook_implemented=False)]})
-    def forbidden(*args, **kwargs):
-        pytest.fail("unimplemented hook must never create requests")
-    monkeypatch.setattr(module, "managed_site", forbidden)
-    monkeypatch.setattr(module, "run_native", forbidden)
+        dict(id=site_cls.id, native=True, verified=True, hook_implemented=False,
+             signin_capable=True, signin_applicable=False)]})
+    monkeypatch.setattr(module, "managed_site", lambda sid: {})
+    called = []
+    monkeypatch.setattr(module, "run_native",
+                        lambda runner, site, info, **kwargs: called.append(site.id) or SignResult(SignStatus.SUCCESS, "ok"))
     result = plugin._execute_site(site_cls.id, read_only=read_only, trigger="scheduler")
-    assert result["status"] == "skipped"
-    assert result["metadata"]["reason"] == "hook_not_implemented"
+    assert result["status"] == "signed"
+    assert called == [site_cls.id]
 
 
 def test_mteam_preserves_legacy_multi_domain_matcher(monkeypatch):

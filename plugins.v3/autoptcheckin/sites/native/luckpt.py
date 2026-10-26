@@ -4,7 +4,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class LuckPT(NexusSignin):
-    verified = True
     id = "luckpt"
     name = "LuckPT"
     url = "https://pt.luckpt.de/"

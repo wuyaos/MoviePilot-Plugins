@@ -15,14 +15,15 @@ from autoptcheckin.core.registry import get_registry
 @pytest.mark.parametrize('action,read_only', [('sign', False), ('sign', True), ('login', False)])
 def test_all_native_sites_dispatch_without_legacy_bridge(monkeypatch, action, read_only):
     rows = [row for row in get_registry()['sites'] if row.get('native')]
-    assert len(rows) == 128  # 3.38：hares 转正 + FileList/15 排除清单站转仅登录声明
+    assert len(rows) == 126  # 已移除关闭站点 hares、52movie
+    assert not {'hares', '52movie'} & {row['id'] for row in rows}
     monkeypatch.setattr(entry, 'managed_site', lambda sid: {})
     run = Mock(return_value=SignResult(SignStatus.UNCONFIRMED, 'offline dispatch'))
     monkeypatch.setattr(entry, 'run_native', run)
     monkeypatch.setattr(entry, 'run_native_login', run)
     obj = entry.AutoPtCheckin()
     ids = [row['id'] for row in rows]
-    obj.init_plugin({'enabled_sites': ids, 'sign_sites': ids, 'login_sites': ids, 'unlock_all_sites': True})
+    obj.init_plugin({'enabled_sites': ids, 'sign_sites': ids, 'login_sites': ids})
     for row in rows:
         run.reset_mock()
         result = obj._execute_site(row['id'], action=action, read_only=read_only)
@@ -30,7 +31,7 @@ def test_all_native_sites_dispatch_without_legacy_bridge(monkeypatch, action, re
             assert result['status'] == 'skipped'
             run.assert_not_called()
         else:
-            assert result['status'] == 'unconfirmed'
+            assert result['status'] == 'pending'
             run.assert_called_once()
             assert run.call_args.args[1].id == row['id']
             if action == 'sign':

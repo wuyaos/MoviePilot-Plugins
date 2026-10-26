@@ -8,6 +8,7 @@ from lxml import html
 from .credentials import Credential
 from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
 from .native import NativeHttpClient, cookie_candidates, persist_cookie_result, read_login_twice
+from .siteconf import resolve as resolve_site_flags, cloak_proxy
 from .nexus import NexusSignin
 from .sitemodel import RecordSpec, SignContext, login_redirect, page_available
 
@@ -35,14 +36,18 @@ class CustomNexusSignin(NexusSignin):
 
 
 @contextmanager
-def custom_client(credential, info, config):
+def custom_client(credential, info, config, proxy=None):
+    """custom 条目执行客户端；effective emulate 时走 CloakBrowser 前读/回读 + HTTP 提交。
+
+    仿真与代理按 siteconf 有效配置传入（proxy=None=直连，不做 PROXY_HOST 兜底）。
+    """
     http = NativeHttpClient(credential, info)
     if not info.get("emulate"):
         yield http
         return
     from types import SimpleNamespace
     from .cloak import CloakHttpClient
-    client = CloakHttpClient(http, info, SimpleNamespace(id=info.get("id", "custom"), url=info["url"]))
+    client = CloakHttpClient(http, info, SimpleNamespace(id=info.get("id", "custom"), url=info["url"]), proxy=proxy)
     class ReadHttpSubmit:
         def get(self, url): return client.get(url)
         def post(self, url, **kwargs): return http.post(url, **kwargs)
@@ -57,6 +62,8 @@ def custom_client(credential, info, config):
 def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
                read_only=False, trigger='manual', action='sign'):
     config = config or {}
+    # 有效仿真/代理与 /sites、/stats 同源：custom 条目填写 emulate 为默认，site_emulate 可覆盖。
+    flags = resolve_site_flags(str(site_id), config, declared_emulate=bool(info.get('emulate')))
 
     def finish(result):
         try:
@@ -66,7 +73,7 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
             logger = SimpleNamespace(info=lambda *a, **k: None)
         result.site_id, result.run_id = site_id, str(uuid4())
         result.metadata.update(action='login' if read_only else action, trigger=trigger, read_only=read_only)
-        if info.get('emulate'):
+        if flags['emulate']:
             result.metadata['transport'] = 'cloak'
         if result.status == SignStatus.SKIPPED:
             result.metadata['reason'] = result.message
@@ -78,9 +85,6 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
         return finish(SignResult.skipped('site_disabled'))
     if not read_only and not selected:
         return finish(SignResult.skipped('login_not_selected' if action == 'login' else 'signin_not_selected'))
-    if info.get('emulate') and action != "login":
-        if str(site_id) not in {str(value) for value in config.get('site_browserless', [])}:
-            return finish(SignResult.skipped('emulation_not_selected'))
     with runner.locks.acquire((site_id, '')) as acquired:
         if not acquired:
             return finish(SignResult.skipped())
@@ -102,8 +106,10 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
             if urlsplit(url).scheme not in {'http', 'https'} or not urlsplit(url).netloc:
                 return finish(SignResult(SignStatus.UNCONFIRMED, '自定义站点地址无效'))
             credential = Credential(credential_source, cookie)
-            client_info = {**info, "emulate": bool(info.get("emulate") and action != "login")}
-            with custom_client(credential, client_info, config) as client:
+            # 仿真对签到与登录一致生效（旧「custom 登录不走仿真」契约由 site_emulate 取代）。
+            client_info = {**info, "emulate": flags['emulate'], "proxy": flags['proxy']}
+            with custom_client(credential, client_info, config,
+                               proxy=cloak_proxy(flags['proxy'], config)) as client:
                 if not read_only and action == 'sign':
                     ctx = SignContext(site_id, credential, client, site_lock=runner.locks, cancel=runner.stop)
                     result = CustomNexusSignin(site_id, info).signin(ctx)

@@ -43,7 +43,6 @@ def _submit_mteam_otp(page):
 
 
 class MTorrent(SiteModule):
-    verified = True
     id = "mteam"
     name = "M-Team"
     url = "https://kp.m-team.cc/"
@@ -56,6 +55,8 @@ class MTorrent(SiteModule):
         return "m-team" in host.split(".")
     credential = CredentialSpec(kind="password", cookie_sources=())
     login_capable = True
+    # 保活语义：无签到实现，仅浏览器真实登录（能力声明，registry 不再复合推断）。
+    signin_capable = False
     emulate = False
     hook_implemented = False
     record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]', {})

@@ -1,5 +1,6 @@
 """S7 真实 APScheduler Trigger + 离线宿主边界，不访问站点。"""
 import asyncio
+import threading
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -78,37 +79,79 @@ def test_activation_gate(config):
         assert 'scheduler_disabled' in stats['schedule_status']
 
 
-def test_onlyonce_triggers_without_scheduler_gate():
-    p = plugin({'enabled': True, 'onlyonce': True})
-    once = p.get_service()
-    assert len(once) == 1 and 'once' in once[0]['id']
+def test_config_save_preserves_existing_round_cancellation():
+    p = plugin({'enabled': True})
+    p._round_active = True
+    p._runner.stop.set()
+    p._save_config({'notify': False, 'onlyonce': True})
+    assert p._runner.stop.is_set()
+    assert 'onlyonce' not in p._config
+    p._round_active = False
 
-def test_once_executes_without_scheduler_enabled():
-    data = {}
-    p = plugin({'enabled': True, 'onlyonce': True}, data)
-    calls = []
-    p._execute_all = lambda trigger: calls.append((trigger, data['config']['onlyonce']))
-    services = p.get_service()
-    assert [s['id'] for s in services] == ['AutoSignIn.once']
-    services[0]['func']()
-    assert calls == [('scheduler', False)]
-    assert data['config']['onlyonce'] is False
-def test_once_consumed_before_execution_and_reload():
-    data = {}
-    p = plugin({**BASE, 'enabled': False, 'onlyonce': True}, data)
-    calls = []
-    p._execute_all = lambda trigger: calls.append((trigger, data['config']['onlyonce']))
-    services = p.get_service()
-    assert [s['id'] for s in services] == ['AutoSignIn.once']
-    assert p.get_state() is True
-    assert p._next_schedule() is not None
-    services[0]['func']()
-    services[0]['func']()
-    assert calls == [('scheduler', False)]
+
+def test_scheduler_flag_does_not_enable_plugin_state():
+    p = plugin({'enabled': False, 'scheduler_enabled': True, 'onlyonce': True})
     assert p.get_state() is False
-    assert p._next_schedule() is None
-    p.init_plugin(data['config'])
     assert p.get_service() == []
+
+
+def test_manual_round_reserves_before_thread_start(monkeypatch):
+    p = plugin({'enabled': False, 'scheduler_enabled': False})
+    pending, calls = [], []
+    class DeferredThread:
+        def __init__(self, target, **kwargs):
+            pending.append(target)
+        def start(self):
+            pass
+    monkeypatch.setattr(threading, 'Thread', DeferredThread)
+    p._execute_all_round = lambda trigger: calls.append(trigger)
+    assert asyncio.run(p.api_run_once())['success']
+    assert not asyncio.run(p.api_run_once())['success']
+    assert p._round_active is True
+    p._save_config({"notify": False})
+    assert not p._runner.stop.is_set()
+    assert p._execute_all('scheduler') is None
+    assert calls == []
+    pending.pop()()
+    assert calls == ['manual']
+    assert not p._round_lock.locked()
+
+
+def test_manual_thread_start_failure_releases_lock(monkeypatch):
+    p = plugin({})
+    class BrokenThread:
+        def __init__(self, **kwargs):
+            pass
+        def start(self):
+            raise RuntimeError('thread unavailable')
+    monkeypatch.setattr(threading, 'Thread', BrokenThread)
+    with pytest.raises(RuntimeError, match='thread unavailable'):
+        asyncio.run(p.api_run_once())
+    assert not p._round_lock.locked()
+
+
+def test_immediate_run_is_not_registered():
+    p = plugin({'enabled': True, 'onlyonce': True})
+    assert p.get_service() == []
+    assert "onlyonce" not in p._config
+    assert all('once' not in service['id'] for service in p.get_service())
+
+
+def test_manual_execution_does_not_use_onlyonce(monkeypatch):
+    p = plugin({'enabled': True})
+    calls = []
+    p._execute_all_round = lambda trigger: calls.append(trigger)
+    class InlineThread:
+        def __init__(self, target, **kwargs):
+            self.target = target
+        def start(self):
+            self.target()
+    monkeypatch.setattr(threading, 'Thread', InlineThread)
+    result = asyncio.run(p.api_run_once())
+    assert result['success'] is True
+    assert calls == ['manual']
+    assert 'onlyonce' not in p._config
+    assert not p._round_lock.locked()
 
 
 def test_scheduler_and_manual_history_sources():
@@ -146,10 +189,6 @@ def test_invalid_schedule_is_not_registered(overrides):
     assert p.get_service() == []
 
 
-def test_host_timezone_once():
-    scheduler = Scheduler(timezone='Asia/Shanghai')
-    services = scheduler.build({'scheduler_enabled': True, 'onlyonce': True}, lambda: None)
-    assert str(services[0]['trigger'].run_date.tzinfo) == 'Asia/Shanghai'
 
 
 def test_scheduler_runner_records_trigger_without_cookie(monkeypatch):
@@ -157,7 +196,7 @@ def test_scheduler_runner_records_trigger_without_cookie(monkeypatch):
     p = plugin({**BASE, 'enabled_sites': ['hdsky'], 'sign_sites': ['hdsky']})
     p.get_service()[0]['func']()
     record = asyncio.run(p.api_history())['data']['items'][0]
-    assert record['status'] == 'auth_failed'
+    assert record['status'] == 'failed' and record['reason'] == 'auth_failed'
     assert record['trigger'] == 'scheduler'
 
 
@@ -172,3 +211,43 @@ def test_saving_config_during_running_round_does_not_cancel_it(monkeypatch):
     p._save_config({**BASE, 'cron_mode': 'cron', 'cron': '0 10 * * *'})
     assert p._runner.stop.is_set() is False
     assert p._running is True
+
+
+@pytest.mark.parametrize('save_path', ['init', 'save'])
+def test_disable_cancels_reserved_round(monkeypatch, save_path):
+    p = plugin({**BASE, 'enabled_sites': ['btschool'], 'sign_sites': ['btschool']})
+    pending, calls = [], []
+    class DeferredThread:
+        def __init__(self, target, **kwargs):
+            pending.append(target)
+        def start(self):
+            pass
+    monkeypatch.setattr(threading, 'Thread', DeferredThread)
+    p._run_with_retry = lambda *a, **kw: calls.append(a)
+    assert asyncio.run(p.api_run_once())['success']
+    if save_path == 'init':
+        p.init_plugin({**p._config, 'enabled': False})
+    else:
+        p._save_config({'enabled': False})
+    assert p._runner.stop.is_set()
+    pending.pop()()
+    assert calls == []
+    assert not p._round_active and not p._round_lock.locked()
+
+
+def test_cancellation_during_config_write_is_not_cleared():
+    p = plugin(BASE)
+    p._round_active = True
+    p.update_config = lambda config: p.stop_service()
+    p._save_config({'notify': False})
+    assert p._runner.stop.is_set()
+
+
+def test_stopped_manual_request_rejected_without_clearing_cancel():
+    p = plugin(BASE)
+    p.stop_service()
+    result = asyncio.run(p.api_run_once())
+    assert result['success'] is False
+    assert '停止' in result['message']
+    assert p._runner.stop.is_set()
+    assert not p._round_lock.locked()

@@ -125,15 +125,17 @@ def test_52pt_attendance_link_waits_for_delayed_slider_then_stashes(navigate, mo
     assert result.status == 'success' and result.message == '签到已得100'
 
 
-def test_human_verify_timeout_is_per_site_even_in_shared_session(monkeypatch):
+def test_human_verify_timeout_is_per_site(monkeypatch):
     class Session:
         def __init__(self, **kwargs): pass
         def __enter__(self): return self
+        def close(self): pass
     monkeypatch.setattr(cloak, 'CloakSession', Session)
     http = SimpleNamespace(cookies={})
-    shared = SimpleNamespace(context=SimpleNamespace(cookies=lambda url: []))
     for sid, timeout in [('vclib', 90000), ('mua_xloli', 60000), ('audiences', 60000)]:
         site = get_native_module(sid)
-        for session in (None, shared):
-            client = cloak.CloakHttpClient(http, {'url': 'https://fixture.invalid/'}, site, shared=session)
+        client = cloak.CloakHttpClient(http, {'url': 'https://fixture.invalid/'}, site)
+        try:
             assert client.session.human_verify_timeout == timeout
+        finally:
+            client.close()

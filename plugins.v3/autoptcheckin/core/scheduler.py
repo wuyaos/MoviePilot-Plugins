@@ -1,11 +1,10 @@
 """声明宿主服务；随机计划独立持久化，不创建第二个调度线程。"""
-from datetime import datetime, timedelta
+from datetime import datetime
 import math
 import random
 from zoneinfo import ZoneInfo
 
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.date import DateTrigger
 
 
 class Scheduler:
@@ -22,11 +21,6 @@ class Scheduler:
 
     def build(self, config, callback):
         self.clear()
-        if config.get("onlyonce", False):
-            self.services = [{"id": "AutoSignIn.once", "name": "PT 签到中心（一次）",
-                              "trigger": DateTrigger(run_date=datetime.now(self.timezone) + timedelta(seconds=120)),
-                              "func": callback, "kwargs": {}}]
-            return list(self.services)
         if not config.get("scheduler_enabled", False):
             return []
         if not config.get("enabled", False):

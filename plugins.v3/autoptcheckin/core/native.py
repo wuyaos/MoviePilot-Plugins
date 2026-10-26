@@ -7,6 +7,7 @@ from threading import RLock
 
 from .cloak import native_cloak_client, CloakHttpClient, run_isolated
 from . import cloudsign
+from .siteconf import resolve as resolve_site_flags
 from .credentials import Credential, cookiecloud_candidate
 from .models import LoginPage, LoginResult, LoginStatus, SignResult, SignStatus
 from .sitemodel import SignContext, page_available, page_maintenance
@@ -174,6 +175,11 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
         result.metadata['reason'] = 'signin_not_applicable'
         return finish(result)
 
+    # 有效执行配置与 /sites、/stats 同源（siteconf.resolve）；云签能力来自显式声明，
+    # 只有用户选择（site_cloudsign）且非只读核验才走云签；登录/核验永远走本地通道。
+    flags = resolve_site_flags(site.id, config or {},
+                               declared_emulate=bool(getattr(site, 'emulate', False)),
+                               mp_proxy=bool(info.get('proxy')), mp_render=bool(info.get('render')))
     with runner.locks.acquire((site.id, '')) as acquired:
         if not acquired:
             return finish(SignResult.skipped())
@@ -183,12 +189,19 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
         save_data = save_data or getattr(runner, 'save_data', None)
         attempted_cookie_sources = []
         result = SignResult(SignStatus.AUTH_FAILED, '缺少可用 Cookie')
+        if flags['cloudsign_selected'] and not read_only:
+            # 未配置不提交，归待处理；不计失败、不静默回退本地仿真。
+            missing = cloudsign.missing_config(config or {})
+            if missing:
+                result = SignResult(SignStatus.PROTOCOL_PENDING, missing)
+                result.metadata['transport'] = 'cloud'
+                return finish(result)
         for credential in cookie_candidates(site.id, info, custom_cookie, get_data, site.url):
             attempted_cookie_sources.append(credential.source)
             session = None
             ctx = None
             try:
-                if cloudsign.enabled(site.id) and not read_only and cloudsign.configured(config or {}):
+                if flags['cloudsign_selected'] and not read_only:
                     # 云签分流：整条签到流程替代，不启动本地浏览器，也不回退本地仿真
                     cloud = cloudsign.sign(site.id, site.url, credential.value, config or {})
                     result = SignResult(SignStatus(cloud.status), cloud.message)
@@ -203,7 +216,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                     import requests
                     session = requests.Session()
                     ctx.http.session = session
-                ctx.http = native_cloak_client(site, ctx.http, info, config or {}, shared=getattr(runner, "shared_cloak", None))
+                ctx.http = native_cloak_client(site, ctx.http, info, config or {})
                 ctx.get_data, ctx.save_data = get_data, save_data
                 if read_only:
                     try:
@@ -427,7 +440,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             for credential in cookie_candidates(site.id, info, custom_cookie, get_data, url):
                 attempted_cookie_sources.append(credential.source)
                 client = NativeHttpClient(credential, info)
-                client = native_cloak_client(site, client, info, config or {}, shared=getattr(runner, 'shared_cloak', None))
+                client = native_cloak_client(site, client, info, config or {})
                 try:
                     if site.id == 'yzyy':
                         from ..integrations import yzyy

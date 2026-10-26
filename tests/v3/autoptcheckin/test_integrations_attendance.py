@@ -107,7 +107,7 @@ def test_execute_site_routes_integration_sign_and_login(monkeypatch):
     monkeypatch.setattr(entry, 'run_integration', dispatch)
     plugin = entry.AutoPtCheckin()
     plugin.init_plugin({'enabled_sites': ['rousi', 'sunnypt'], 'sign_sites': ['rousi'], 'login_sites': ['sunnypt']})
-    assert plugin._execute_site('rousi')['status'] == 'success'
+    assert plugin._execute_site('rousi')['status'] == 'signed'
     assert plugin._execute_site('sunnypt', action='login')['status'] == 'login_ok'
     assert dispatched == [('rousi', 'sign', 'offline-cookie'), ('sunnypt', 'login', 'offline-cookie')]
 

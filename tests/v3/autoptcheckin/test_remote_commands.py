@@ -17,7 +17,7 @@ def test_remote_command_force_clears_and_runs():
     class _FakeEventType:
         PluginAction = "PluginAction"
 
-    plugin = AutoPtCheckin.__new__(AutoPtCheckin)
+    plugin = AutoPtCheckin()
     plugin._round_active = False
     plugin._config = {}
     called = {}
@@ -40,14 +40,43 @@ def test_remote_command_force_clears_and_runs():
     try:
         plugin._history = type('H', (), {'clear_today': staticmethod(lambda: called.setdefault('clean', True))})()
         plugin._track_store = lambda: type('S', (), {'clear_transient': staticmethod(lambda: called.setdefault('clear', True))})()
-        plugin._scheduled_once = lambda: called.setdefault('run', True)
-        plugin._config['onlyonce'] = False
+        plugin._round_lock = threading.Lock()
+        plugin._execute_all = lambda trigger, **kwargs: called.setdefault('run', trigger)
         plugin._handle_remote_command(FakeEvent())
     finally:
         threading.Thread = orig
         mod.EventType = orig_et
     assert called.get('clean') and called.get('clear') and called.get('run')
-    assert plugin._config['onlyonce'] is True
+    assert called['run'] == 'manual'
+    assert 'onlyonce' not in plugin._config
+    assert not plugin._round_lock.locked()
+
+
+def test_force_command_does_not_clear_when_stopped_or_busy(monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    import autoptcheckin as mod
+    monkeypatch.setattr(mod, 'EventType', SimpleNamespace(PluginAction='PluginAction'))
+    class InlineThread:
+        def __init__(self, target, **kwargs):
+            self.target = target
+        def start(self):
+            self.target()
+    monkeypatch.setattr(threading, 'Thread', InlineThread)
+    for stopped in (True, False):
+        p = AutoPtCheckin()
+        calls = []
+        p._history.clear_today = lambda: calls.append('clear')
+        p._execute_all = lambda *a, **kw: calls.append('run')
+        if stopped:
+            p._runner.stop.set()
+        else:
+            p._round_lock.acquire()
+        p._handle_remote_command(SimpleNamespace(event_data={'action': 'checkin_force'}))
+        assert calls == []
+        if not stopped:
+            p._round_lock.release()
+        assert not p._round_lock.locked()
 
 
 def test_remote_command_unknown_action_ignored():

@@ -14,13 +14,14 @@ from ...core.sitemodel import RecordSpec, page_available
 
 
 class Tjupt(NexusSignin):
-    verified = True
     id = 'tjupt'
     name = 'TJUPT'
     url = 'https://www.tjupt.org/'
     attendance_path = '/attendance.php'
     hook_implemented = True
     # 答题类：误答有账号风险，仅保留模拟登录（配置/数据卡 ⚠ 徽标）。
+    signin_capable = False
+    signin_note = '答题类签到不建议使用（误答有账号风险），仅保留模拟登录'
     login_notice = 'TJUPT 为答题类签到，误答有账号风险，建议仅人工登录'
     record_spec = RecordSpec('//a[@href="attendance.php"]', {'今日已签到': 'signed'})
     answer_key = 'tjupt.answer'

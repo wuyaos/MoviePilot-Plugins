@@ -59,8 +59,9 @@ def test_history_keeps_new_states_outside_four_counters():
     store = HistoryStore()
     for status in (SignStatus.MAINTENANCE, SignStatus.NETWORK_ERROR, SignStatus.PROTOCOL_PENDING):
         store.append(SignResult(status, site_id='fixture'))
-    assert {item['status'] for item in store.list()['items']} == {'maintenance', 'network_error', 'protocol_pending'}
-    assert store.today_counts() == dict(success=0, signed=0, failed=0, unconfirmed=0)
+    assert {item['status'] for item in store.list()['items']} == {'pending'}
+    assert {item['reason'] for item in store.list()['items']} == {'maintenance', 'network_error', 'protocol_pending'}
+    assert store.today_counts() == dict(signed=0, failed=0, pending=3)
 
 
 @pytest.mark.parametrize('value', [None, LoginPage('error', URL, 500), TimeoutError()])

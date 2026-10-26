@@ -42,10 +42,11 @@ def test_history_persistence_pagination_retention():
     assert store.list()['total'] == 5
     assert len(store.list(page=2,size=2)['items']) == 2
     assert store.list(page=99)['items'] == []
-    assert store.today_counts() == dict(success=1,signed=1,failed=0,unconfirmed=1)
+    # success→signed、signed(旧 already)→signed、unconfirmed→pending：统一三卡口径
+    assert store.today_counts() == dict(signed=2, failed=0, pending=1)
     store.append(SignResult(SignStatus.ALREADY, site_id='fixture', evidence=Evidence(uid='12',status='signed')))
     record = store.list()['items'][0]
-    assert set(record) == {'time','site','status','message','reward','evidence','trigger','action'}
+    assert set(record) == {'time','site','status','reason','message','reward','evidence','trigger','action'}
     assert data[store.KEY][-1]['evidence']['record_status'] == 'signed'
     reloaded = HistoryStore(data.get, clock=lambda:now+timedelta(days=91))
     assert reloaded.list()['total'] == 0
@@ -56,12 +57,14 @@ def test_real_api_contract(monkeypatch):
     module = importlib.import_module('autoptcheckin')
     monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites':[{'id':'fixture'}], 'sources':{'adapters':1,'integrations':0}})
     plugin = AutoPtCheckin()
-    assert asyncio.run(plugin.api_sites())['data']['sites'] == [{'id':'fixture', 'cf':'unknown', 'emulate': False}]
+    assert asyncio.run(plugin.api_sites())['data']['sites'] == [
+        {'id': 'fixture', 'cf': 'unknown', 'proxy': False, 'emulate': False,
+         'cloudsign_capable': False, 'cloudsign_selected': False, 'shield': None}]
     assert any(route['path'] == '/sites' and route['auth'] == 'bear' for route in plugin.get_api())
     assert asyncio.run(plugin.api_history())['data'] == {'total':0,'items':[]}
     plugin._history.append(SignResult(SignStatus.UNCONFIRMED, site_id='fixture'))
     assert asyncio.run(plugin.api_history(size=1))['data']['total'] == 1
-    assert asyncio.run(plugin.api_status())['data']['today']['unconfirmed'] == 1
+    assert asyncio.run(plugin.api_status())['data']['today']['pending'] == 1
 
 
 def test_registry_uses_managed_name_and_cached_icon(monkeypatch):

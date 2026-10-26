@@ -10,7 +10,6 @@ class Haitang(NexusSignin):
     id = "haitang"
     name = "海棠"
     url = "https://www.htpt.cc/"
-    verified = True  # Pilot authorization, not production HTML verification.
     signed_marker = '//span[b[contains(text(), "今日已签到")]] | //a[contains(@class, "faqlink") and contains(text(), "签到已得")]'
     # pilot-calibrated 2026-10-21 real page
     record_spec = RecordSpec(

@@ -107,29 +107,11 @@ class CloakSession:
 
 class CloakHttpClient:
     """映射浏览器页面为 native 签到执行器所需的同步 HTTP 契约。"""
-    def __init__(self, http, info, site, shared=None, proxy=None):
+    def __init__(self, http, info, site, proxy=None):
         self.http, self.info, self.site = http, info, site
         self.proxy = proxy
         self.url = info.get("url") or site.url
         cookie = "; ".join(f"{k}={v}" for k, v in http.cookies.items())
-        if shared is not None:
-            # 轮内共享会话：按站注入 cookie，不重复开关浏览器（生命周期归轮次所有）。
-            self.session = shared
-            self.shared = True
-            self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
-            # Remove the previous candidate's visible cookies, preserving other sites.
-            for previous in self.session.context.cookies(self.url):
-                self.session.context.clear_cookies(name=previous['name'], domain=previous['domain'], path=previous['path'])
-            host = urlsplit(self.url).hostname
-            cookies = []
-            for pair in cookie.split(";"):
-                key, sep, value = pair.strip().partition("=")
-                if sep:
-                    cookies.append({"name": key, "value": value, "domain": host, "path": "/"})
-            if cookies:
-                self.session.context.add_cookies(cookies)
-            return
-        self.shared = False
         # Actor 线程：playwright 全生命周期（open/goto/evaluate/close）绑定本专属线程。
         # 宿主线程池线程可能被 playwright 判定为 loop 污染（4.0.19 单站复现），
         # 线程检测不可靠——构造即锁死线程身份，调用方线程不再重要。
@@ -142,7 +124,7 @@ class CloakHttpClient:
                                         headless=not (bool(getattr(site, "headful", False)) or
                                                       site.id in TURNSTILE_HEADFUL_SITES),
                                         navigation_timeout=timeout,
-                                        proxy=self.proxy or _resolve_cloak_proxy(self.site, self.info))
+                                        proxy=self.proxy)
             self.session.action_timeout = timeout
             self.session.human_verify_timeout = 90000 if site.id == "vclib" else 60000
             self.session.__enter__()
@@ -155,17 +137,11 @@ class CloakHttpClient:
             raise
 
     def _run(self, fn):
-        """在 actor 线程串行执行并同步等待；异常在调用方线程原样重抛。
-
-        共享会话没有 _pool（生命周期归轮次线程，调用方即创建线程），直行——
-        否则共享客户端 get/post 直接 AttributeError（reviewer 7e8635a6 P1-1）。
-        """
-        pool = getattr(self, "_pool", None)
-        return fn() if pool is None else pool.submit(fn).result()
+        """在 actor 线程串行执行并同步等待；异常在调用方线程原样重抛。"""
+        return self._pool.submit(fn).result()
 
     def run_page_action(self, steps):
-        """页面动作必须与 session 同线程（playwright greenlet 线程亲和），
-        独立会话经 actor 执行，共享会话经 _run 回退直行（7e8635a6 P1-2）。"""
+        """页面动作必须与 session 同线程（playwright greenlet 线程亲和），统一经 actor 执行。"""
         return self._run(lambda: run_page_action(self.session, list(steps)))
 
     def page_snapshot(self):
@@ -223,9 +199,6 @@ class CloakHttpClient:
     def get_bytes(self, url): return self.http.get_bytes(url)
     def retain_cookies(self, names): return self.http.retain_cookies(names)
     def close(self):
-        # 共享会话生命周期归轮次（_execute_all finally 统一关闭），单站不关。
-        if getattr(self, "shared", False):
-            return
         pool = getattr(self, "_pool", None)
         if not pool:
             return
@@ -425,19 +398,17 @@ def run_page_action(session, steps):
     return results
 
 
-def _resolve_cloak_proxy(site, info, config=None):
-    """仿真会话出口代理：插件配置 cloak_proxy 优先；'off' 强制直连；默认回退宿主 PROXY_HOST。"""
-    if config is not None:
-        value = str(config.get("cloak_proxy") or "").strip()
-        if value:
-            return None if value.lower() == "off" else value
-    import os
-    return os.getenv("PROXY_HOST") or None
+def native_cloak_client(site, http, info, config):
+    """有效仿真站启动单次 CloakBrowser 上下文；其余站点保留原 HTTP 客户端。
 
-def native_cloak_client(site, http, info, config, shared=None):
-    """启动声明且名单授权的单次仿真上下文；其余站点保留原 HTTP 客户端。"""
-    if not (getattr(site, "emulate", False) and
-            site.id in {str(value) for value in config.get("site_browserless", [])}):
+    仿真与代理均按 siteconf.resolve 的有效配置（site_emulate/site_proxy 覆盖、
+    MP render/proxy 继承）判定，不再用 site_browserless 名单，也无 PROXY_HOST 兜底。
+    """
+    from .siteconf import resolve as resolve_flags, cloak_proxy
+    flags = resolve_flags(site.id, config,
+                          declared_emulate=bool(getattr(site, "emulate", False)),
+                          mp_proxy=bool(info.get("proxy")), mp_render=bool(info.get("render")))
+    if not flags["emulate"]:
         return http
-    return CloakHttpClient(http, {**info, "url": info.get("url") or site.url}, site, shared=shared,
-                           proxy=_resolve_cloak_proxy(site, info, config))
+    return CloakHttpClient(http, {**info, "url": info.get("url") or site.url}, site,
+                           proxy=cloak_proxy(flags["proxy"], config))

@@ -8,7 +8,6 @@ from ...core.sitemodel import RecordSpec, SignContext, SiteModule
 
 
 class Hdwing(SiteModule):
-    verified = True
     id = "hdwing"
     name = "HDWinG"
     url = "https://hdwing.org/"

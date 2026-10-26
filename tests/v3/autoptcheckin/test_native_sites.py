@@ -111,35 +111,28 @@ def test_registry_native_overrides_legacy_without_duplicate_ids():
     result = discover_sites()
     for sid in ('hdsky', 'haitang'):
         rows = [row for row in result['sites'] if row['id'] == sid]
-        assert len(rows) == 1 and rows[0]['native'] and rows[0]['verified']
+        assert len(rows) == 1 and rows[0]['native']
     batch1 = {'52pt', 'agsvpt', 'baozi', 'btschool', 'chdbits'}
     expected_native = {path.stem for path in (Path(__file__).parents[3] / 'plugins.v3' / 'autoptcheckin' / 'sites' / 'native').glob('*.py') if path.stem != '__init__'}
     from autoptcheckin.sites.native.generic import build_generic_sites
     expected_native.discard('generic')
-    expected_verified = (expected_native - {'pt52'}) | {'52pt'}
     expected_native.update(cls.id for cls in build_generic_sites())
     assert expected_native >= batch1
-    assert all(row['native'] and row['verified'] is (row['id'] in expected_verified)
-               for row in result['sites'] if row['id'] in expected_native)
-    assert all(row['native'] and row['verified'] is (row['id'] != 'baozi')
-               for row in result['sites'] if row['id'] in batch1)
-    assert all(not row['native'] and not row['verified'] for row in result['sites']
+    assert all(row['native'] for row in result['sites'] if row['id'] in expected_native)
+    assert all(not row['native'] for row in result['sites']
                if row['id'] not in {'hdsky', 'haitang', *expected_native})
     assert sum(row['native'] for row in result['sites']) >= 7
 
 
-def test_discover_sites_repeated_calls_preserve_verification():
+def test_discover_sites_repeated_calls_are_stable():
     first = discover_sites()
     second = discover_sites()
     assert first == second
     assert first is not second
+    # 调用方修改返回副本不污染 discovery 缓存（verified 元数据已移除）。
     rows = {row['id']: row for row in first['sites']}
-    for sid in ('btschool', 'hdbao', 'hdchina'):
-        assert rows[sid]['verified'] is True
-    for sid in ('hdcity', 'hdupt', 'hhanclub'):
-        assert rows[sid]['verified'] is False
-    rows['btschool']['verified'] = False
-    assert next(row for row in discover_sites()['sites'] if row['id'] == 'btschool')['verified'] is True
+    rows['btschool']['name'] = 'mutated'
+    assert next(row for row in discover_sites()['sites'] if row['id'] == 'btschool')['name'] != 'mutated'
 
 
 def test_native_discovery_default_unverified_and_import_isolation(tmp_path, monkeypatch):
@@ -152,7 +145,8 @@ def test_native_discovery_default_unverified_and_import_isolation(tmp_path, monk
     monkeypatch.syspath_prepend(str(tmp_path))
     result = discover_sites('n3_fixture_sites')
     row = next(row for row in result['sites'] if row['id'] == 'n3sample')
-    assert row['native'] and not row['verified']
+    # 新模块默认声明：可登录、可签到、无云签实现（verified 审批元数据已移除）。
+    assert row['native'] and row['login_capable'] and row['signin_capable'] and not row['cloudsign_capable']
     assert result['skipped'] == [{'module': 'n3_fixture_sites.native.broken', 'error': 'RuntimeError'}]
 
 
@@ -162,17 +156,18 @@ def test_sites_api_merges_custom_metadata_without_cache_or_credential_leak(monke
     plugin._config = {'custom_sites_data': [{'id': 'custom_one', 'name': 'Custom', 'url': 'https://fixture.invalid/', 'emulate': True, 'cookie': 'not-for-api'}, {'id': 'hdsky', 'name': 'collision'}]}
     sites = asyncio.run(plugin.api_sites())['data']['sites']
     row = next(row for row in sites if row['id'] == 'custom_one')
-    assert row['source'] == '自定义站点' and row['emulate'] and not row['native'] and not row['verified']
+    assert row['source'] == '自定义站点' and row['emulate'] and not row['native']
+    assert not row['cloudsign_capable'] and not row['cloudsign_selected']
     assert 'cookie' not in row and len([row for row in sites if row['id'] == 'hdsky']) == 1
     assert not any(row['id'] == 'custom_one' for row in get_registry()['sites'])
 
 
-@pytest.mark.parametrize('native,verified,expected', [(True, True, 'native'), (True, False, 'native_unverified'), (False, False, 'removed')])
-def test_execute_site_dual_track_and_gate(monkeypatch, native, verified, expected):
+@pytest.mark.parametrize('native,expected', [(True, 'native'), (False, 'removed')])
+def test_execute_site_dual_track_and_gate(monkeypatch, native, expected):
     module = importlib.import_module('autoptcheckin')
     plugin = module.AutoPtCheckin()
-    plugin._config = {'enabled_sites': ['hdsky'], 'sign_sites': ['hdsky'], 'unlock_all_sites': native and verified}
-    monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites': [dict(id='hdsky', native=native, verified=verified, signin_capable=True, signin_applicable=True, login_capable=True, source='插件适配')]})
+    plugin._config = {'enabled_sites': ['hdsky'], 'sign_sites': ['hdsky']}
+    monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites': [dict(id='hdsky', native=native, verified=False, signin_capable=True, signin_applicable=True, login_capable=True, source='插件适配')]})
     calls = []
     def managed(sid):
         calls.append('managed')

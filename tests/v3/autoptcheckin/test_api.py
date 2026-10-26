@@ -28,9 +28,8 @@ def test_render_and_api_contract():
     assert ('/manual_signin', 'POST') not in routes and ('/notify_preview', 'GET') not in routes
     assert all(item['auth'] == 'bear' for item in plugin.get_api())
     assert all(callable(item['endpoint']) and item['endpoint'].__self__ is plugin for item in plugin.get_api())
-    plugin.init_plugin({'enabled': True, 'onlyonce': True})
-    once = plugin.get_service()
-    assert len(once) == 1 and 'once' in once[0]['id']
+    plugin.init_plugin({'enabled': True})
+    assert all('once' not in service['id'] for service in plugin.get_service())
     assert run(plugin.api_signin_by_domain())['success'] is False
 
 
@@ -90,17 +89,22 @@ def test_frontend_defaults_and_distribution():
     assert 'browserless_enabled' not in defaults
     assert defaults['browserless_url'] == 'https://production-sfo.browserless.io'
     assert defaults['browserless_token'] == ''
-    assert defaults['site_browserless'] == []
+    # 4.2 每站执行配置契约：site_browserless 名单退役，site_emulate/site_proxy 覆盖表 + 云签选择
+    assert 'site_browserless' not in defaults
+    assert defaults['site_proxy'] == {} and defaults['site_emulate'] == {}
+    assert defaults['site_cloudsign'] == []
     assert {'rousi_username', 'rousi_password', 'sunnypt_username', 'sunnypt_password', 'sunnypt_token'} <= defaults.keys()
     remote = (PKG / 'dist/assets/remoteEntry.js').read_text(encoding='utf8')
     assert './Config' in remote and './Page' in remote
     assert not (PKG / 'form_builder.py').exists()
 
 
-def test_site_emulation_list_and_site_metadata():
+def test_site_emulation_map_and_site_metadata():
     plugin = Plugin()
     plugin.init_plugin({})
-    assert plugin._config.get('site_browserless', []) == []
-    plugin._config.update(enabled_sites=['mteam'], site_browserless=['mteam'])
-    row = next(row for row in plugin._site_rows() if row['id'] == 'mteam')
-    assert row['cf'] == 'unknown' and row['emulate'] is True
+    assert plugin._config.get('site_emulate', {}) == {}
+    # 覆盖表可把无内置声明的站点打开仿真，也可显式关闭声明仿真的站点。
+    plugin._config.update(enabled_sites=['hdsky', '52pt'], site_emulate={'hdsky': True, '52pt': False})
+    rows = {row['id']: row for row in plugin._site_rows()}
+    assert rows['hdsky']['emulate'] is True and rows['52pt']['emulate'] is False
+    assert rows['hdsky']['cf'] == 'unknown'

@@ -5,7 +5,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class LaJiDui(NexusSignin):
-    verified = True
     id = "lajidui"
     name = "垃圾堆"
     url = "https://pt.lajidui.top/"

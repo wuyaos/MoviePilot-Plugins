@@ -158,7 +158,6 @@ def test_c2_registry_verification_and_optional_get_referer(monkeypatch):
     rows = {row['id']: row for row in discover_sites()['sites']}
     for sid in IDS:
         assert rows[sid]['hook_implemented']
-        assert rows[sid]['verified'] is (sid in {'btschool', 'pttime', 'lajidui', 'siqi'})
     client = NativeHttpClient(Credential('managed_site', 'synthetic'), {})
     request = Mock()
     monkeypatch.setattr(client, '_request', request)

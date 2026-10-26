@@ -6,7 +6,6 @@ _base = next(site for site in build_generic_sites() if site.id == "yema")
 
 
 class YemaPT(_base):
-    verified = True
     id = "yema"
     name = "YemaPT"
     url = "https://www.yemapt.org/"

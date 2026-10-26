@@ -4,7 +4,6 @@ from ...core.sitemodel import RecordSpec, SignContext, SiteModule
 
 
 class DigitalCore(SiteModule):
-    verified = True
     id = 'digitalcore'
     name = 'DigitalCore'
     url = 'https://digitalcore.club/'

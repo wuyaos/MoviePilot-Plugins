@@ -39,11 +39,10 @@ class FakeSite:
     emulate = True
 
 
-def test_declared_and_listed_site_uses_cloak_and_syncs_cookie(monkeypatch):
+def test_declared_site_uses_cloak_and_syncs_cookie(monkeypatch):
     context = FakeContext()
     monkeypatch.setattr(cloak, "launch_context", lambda **kwargs: context)
-    client = cloak.native_cloak_client(FakeSite(), FakeHttp(), {"url": FakeSite.url},
-                                      {"site_browserless": ["ourbits"]})
+    client = cloak.native_cloak_client(FakeSite(), FakeHttp(), {"url": FakeSite.url}, {})
     response = client.get(FakeSite.url)
     assert response.status_code == 200 and response.text == "<html>fixture</html>"
     assert response.url == FakeSite.url
@@ -52,10 +51,11 @@ def test_declared_and_listed_site_uses_cloak_and_syncs_cookie(monkeypatch):
     assert context.closed
 
 
-def test_undeclared_or_unlisted_site_keeps_http_client(monkeypatch):
+def test_unselected_or_undeclared_site_keeps_http_client(monkeypatch):
     http = FakeHttp()
     monkeypatch.setattr(cloak, "launch_context", lambda **kwargs: pytest.fail("unexpected browser"))
-    assert cloak.native_cloak_client(FakeSite(), http, {"url": FakeSite.url}, {"site_browserless": []}) is http
+    # 显式 site_emulate=false 终结内置声明，不再有 site_browserless 名单。
+    assert cloak.native_cloak_client(FakeSite(), http, {"url": FakeSite.url},
+                                     {"site_emulate": {"ourbits": False}}) is http
     site = SimpleNamespace(id="elsewhere", url=FakeSite.url, emulate=False)
-    assert cloak.native_cloak_client(site, http, {"url": FakeSite.url},
-                                     {"site_browserless": ["elsewhere"]}) is http
+    assert cloak.native_cloak_client(site, http, {"url": FakeSite.url}, {}) is http

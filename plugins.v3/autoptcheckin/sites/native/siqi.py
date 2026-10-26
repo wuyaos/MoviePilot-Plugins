@@ -5,7 +5,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class SiQi(NexusSignin):
-    verified = True
     id = 'siqi'
     name = '思齐'
     url = 'https://si-qi.xyz/'

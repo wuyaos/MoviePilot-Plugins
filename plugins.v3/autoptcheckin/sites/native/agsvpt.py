@@ -4,7 +4,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class Agsvpt(NexusSignin):
-    verified = True
     id = "agsvpt"
     name = "AGSVPT"
     url = "https://www.agsvpt.com/"

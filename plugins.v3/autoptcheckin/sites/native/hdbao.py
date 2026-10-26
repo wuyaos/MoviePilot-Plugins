@@ -4,7 +4,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class HDBao(NexusSignin):
-    verified = True
     id = "hdbao"
     name = "HDBao"
     url = "https://hdbao.cc/"

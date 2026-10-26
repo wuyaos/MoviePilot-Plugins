@@ -105,6 +105,16 @@ def configured(config: dict) -> bool:
     return bool(token) or bool(url and url != DEFAULT_BROWSERLESS_URL)
 
 
+def missing_config(config: dict) -> str:
+    """与迁移同口径：自建服务允许免 Token，公共默认服务要求凭据。
+
+    未配置时保留待处理提示，不提交、不重试、不回退本地仿真。
+    """
+    if not configured(config):
+        return "云签已选择但未配置 Browserless Token（browserless_token）或自建服务地址"
+    return ""
+
+
 def bql_endpoint(address: str, token: str = "") -> str:
     """规范化 BrowserQL 端点：根地址自动补 /stealth/bql；已以 /bql 结尾的原样保留。"""
     address, token = str(address or "").strip(), str(token or "").strip()

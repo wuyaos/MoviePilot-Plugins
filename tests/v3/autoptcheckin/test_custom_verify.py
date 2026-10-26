@@ -44,17 +44,18 @@ def test_custom_verify_bypasses_native_gate_without_claiming_attendance(probe):
     assert plugin._history.list(1, 10)['items'][0]['action'] == 'login'
 
 
-@pytest.mark.parametrize('page,status', [
-    (LoginPage('<form>Login</form>', 'https://custom.invalid/login.php'), 'auth_failed'),
-    (LoginPage('<input type="password">', 'https://custom.invalid/'), 'auth_failed'),
-    (LoginPage('denied', 'https://custom.invalid/', 403), 'unconfirmed'),
-    (LoginPage('error', 'https://custom.invalid/', 500), 'unconfirmed'),
-    (None, 'unconfirmed'), (TimeoutError(), 'unconfirmed'),
+@pytest.mark.parametrize('page,status,reason', [
+    (LoginPage('<form>Login</form>', 'https://custom.invalid/login.php'), 'failed', 'auth_failed'),
+    (LoginPage('<input type="password">', 'https://custom.invalid/'), 'failed', 'auth_failed'),
+    (LoginPage('denied', 'https://custom.invalid/', 403), 'pending', 'result_unknown'),
+    (LoginPage('error', 'https://custom.invalid/', 500), 'pending', 'result_unknown'),
+    (None, 'pending', 'result_unknown'), (TimeoutError(), 'pending', 'result_unknown'),
 ])
-def test_custom_verify_unreachable_and_login_pages(probe, page, status):
+def test_custom_verify_unreachable_and_login_pages(probe, page, status, reason):
     plugin, calls, pages = probe
     pages[0] = page
-    assert plugin._execute_site('custom-60005', read_only=True)['status'] == status
+    result = plugin._execute_site('custom-60005', read_only=True)
+    assert result['status'] == status and result.get('reason') == reason
     assert len(calls) == 1
 
 
@@ -70,12 +71,12 @@ def test_custom_configured_ids(probe, site_id):
 def test_custom_without_attendance_does_not_submit(probe):
     plugin, calls, _ = probe
     result = plugin._execute_site('custom-60005')
-    assert result['status'] == 'protocol_pending'
+    assert result['status'] == 'pending' and result['reason'] == 'protocol_pending'
     assert result['message'] == '未发现唯一签到表单'
     assert calls == ['https://custom.invalid/attendance.php']
 
 
-@pytest.mark.parametrize('condition,status', [('disabled', 'skipped'), ('cookie', 'auth_failed'), ('cancel', 'cancelled'), ('busy', 'skipped')])
+@pytest.mark.parametrize('condition,status', [('disabled', 'skipped'), ('cookie', 'failed'), ('cancel', 'cancelled'), ('busy', 'skipped')])
 def test_custom_guards_do_not_request(probe, condition, status):
     plugin, calls, _ = probe
     if condition == 'disabled':
@@ -96,7 +97,6 @@ def test_custom_guards_do_not_request(probe, condition, status):
 def test_custom_verify_api_read_only(probe):
     import asyncio
     plugin, calls, _ = probe
-    plugin._config['unlock_all_sites'] = True
     result = asyncio.run(plugin.api_verify_site(domain='custom-60005'))
     assert result['success'] is True
     assert result['data']['status'] == 'login_ok'

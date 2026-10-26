@@ -6,7 +6,6 @@ from ...core.sitemodel import RecordSpec
 
 
 class TTG(NexusSignin):
-    verified = True
     id = 'ttg'
     name = 'TTG'
     url = 'https://totheglory.im/'
