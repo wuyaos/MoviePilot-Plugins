@@ -235,7 +235,8 @@ config/
 .pi-loop.json
 .pi-loop.json.lock
 .pi-subagents/
-.agents/
+.agents/*
+!.agents/notes/
 .mindfs/
 .ralph/
 .ruff_cache/
