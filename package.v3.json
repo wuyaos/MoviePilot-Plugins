@@ -2,7 +2,7 @@
     "AutoPtCheckin": {
         "name": "PT 签到中心",
         "description": "PT 站点自动签到与模拟登录",
-        "labels": "签到,PT,V3",
+        "labels": "签到,PT",
         "version": "4.1.0",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
@@ -99,24 +99,10 @@
         },
         "release": true
     },
-    "RuntimePatchGuard": {
-        "name": "运行时补丁守卫",
-        "description": "为站点解析网络请求增加总时长守卫，防止慢站挂起工作线程。内存补丁，升级免重打。",
-        "labels": "运维,补丁",
-        "version": "1.0.0",
-        "icon": "Moviepilot_A.png",
-        "author": "wuyaos",
-        "level": 1,
-        "system_version": ">=3.0.0",
-        "history": {
-            "v3.6.2": "batch1-2：迁移冬樱、DStudio、海胆、白兔、好大原生声明与离线三态夹具",
-            "v1.0.0": "初始版本：SiteParserBase._get_page_content 总时长守卫"
-        }
-    },
     "ForumSignin": {
         "name": "论坛签到",
         "description": "蜂巢、药丸与 SSDForum 论坛签到",
-        "labels": "签到,论坛,V3",
+        "labels": "签到,论坛",
         "version": "3.1.23",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/signin.png",
         "author": "wuyaos",
@@ -155,7 +141,7 @@
     "Hhanclubrescueseed": {
         "name": "憨憨保种区",
         "description": "憨憨 BT 保种区自动保种：定时抓取保种区种子，按条件自动下载做种",
-        "labels": "保种,憨憨,V3",
+        "labels": "保种,憨憨",
         "version": "3.3.11",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png",
         "author": "Seed680, wuyaos",
@@ -200,7 +186,7 @@
     "DownloadManagerLocal": {
         "name": "下载中心",
         "description": "转移做种、命名补刀、站点标签、H&R 保护、自动删种、失败清理与上传限速，一站式下载管理。",
-        "labels": "下载管理,做种,H&R,V3",
+        "labels": "下载管理,做种,H&R",
         "version": "3.5.0",
         "icon": "downloadmanagerlocal.png",
         "author": "Kurisu, wuyaos",

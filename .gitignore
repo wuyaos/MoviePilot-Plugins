@@ -23,10 +23,8 @@ develop-eggs/
 dist/
 # FarmAuto 等 Vue 渲染插件需要提交构建产物到 GitHub，
 # 否则远程 MP 通过插件市场安装后没有 dist 前端无法加载。
-!plugins.v2/farmauto/dist/
-!plugins.v3/autoptcheckin/dist/
-!plugins.v3/forumsignin/dist/
-!plugins.v3/hhanclubrescueseed/dist/
+!plugins.v2/*/dist/
+!plugins.v3/*/dist/
 downloads/
 eggs/
 .eggs/
@@ -234,4 +232,12 @@ config/
 
 # Pi 本地配置
 .pi/
+.pi-loop.json
+.pi-loop.json.lock
+.pi-subagents/
+.agents/
+.mindfs/
+.ralph/
+.ruff_cache/
+sessions/
 TODO.md
