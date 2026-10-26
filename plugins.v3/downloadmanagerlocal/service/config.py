@@ -87,7 +87,6 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     plugin._seed_check_interval = safe_int(config.get("seed_check_interval"), 60, 10, 3600)
     plugin._seed_max_wait_minutes = safe_int(config.get("seed_max_wait_minutes"), 120, 10, 1440)
 
-    plugin._rename_enabled = config.get("rename_enabled", defaults["rename_enabled"])
     plugin._rename_movie_format = config.get(
         "rename_movie_format",
         defaults["rename_movie_format"],
@@ -98,15 +97,6 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     )
     plugin._rename_exclude_dirs = config.get("rename_exclude_dirs", defaults["rename_exclude_dirs"])
     plugin._rename_enabled = module_active(config, "rename")
-    plugin._rename_movie_format = config.get(
-        "rename_movie_format",
-        defaults["rename_movie_format"],
-    )
-    plugin._rename_tv_format = config.get(
-        "rename_tv_format",
-        defaults["rename_tv_format"],
-    )
-    plugin._rename_exclude_dirs = config.get("rename_exclude_dirs", defaults["rename_exclude_dirs"])
     # 嵌套视图与门控属性对齐：调度注册、状态展示读嵌套键时口径一致。
     plugin._rename_config["enabled"] = plugin._rename_enabled
 
@@ -131,6 +121,7 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
 
 _TAG_FLAT_PREFIX_MAP = {
     "tag_interval_cron": "interval_cron",
+    "tag_enabled": "enable",
     "tag_enable_media_tag": "enable_media_tag",
     "tag_enable_tag": "enable_tag",
     "tag_enable_category": "enable_category",

@@ -1,5 +1,5 @@
 """
-DownloadManagerLocal v3.5.0 - MoviePilot V3 本地插件
+DownloadManagerLocal v3.5.1 - MoviePilot V3 本地插件
 下载中心插件，支持转移做种、命名补刀、站点标签、H&R、自动删种、失败清理与上传限速
 """
 from threading import Event as ThreadEvent
@@ -71,7 +71,7 @@ class DownloadManagerLocal(_PluginBase):
 
     # ── 转移做种配置 ──
     _enabled = False
-    _transfer_enabled = True
+    _transfer_enabled = False
     _delay_minutes = 25
     _transfer_fallback_enabled = True
     _transfer_fallback_interval_minutes = 60

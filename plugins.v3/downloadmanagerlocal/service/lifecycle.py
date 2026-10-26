@@ -84,6 +84,13 @@ def _schedule_transfer_once(plugin, config: dict) -> None:
     """根据 onlyonce 配置登记立即执行一次的转移做种任务。"""
     if not plugin._onlyonce:
         return
+    # 门控统一：转移做种模块未生效（总开关关/模块关/配置不完整）时不再旁路执行。
+    if not plugin._transfer_active:
+        logger.info("转移做种模块未启用，跳过 onlyonce 立即执行")
+        plugin._onlyonce = False
+        config["onlyonce"] = plugin._onlyonce
+        plugin.update_config(config=config)
+        return
     logger.info("转移做种服务启动，立即运行一次")
     plugin._scheduler.add_job(
         plugin.transfer,

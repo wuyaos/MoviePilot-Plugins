@@ -232,8 +232,10 @@ def clear_transfer_schedule(plugin) -> None:
 
 def handle_download_added_event(plugin, event) -> None:
     """处理 DownloadAdded 事件、回收临时标签、纳入 H&R/站点标签/命名补刀管理并唤醒上传限速 worker。"""
-    cleanup_temporary_tags_for_event(plugin, event)
-    process_download_added(plugin, event)
+    # 站点标签事件路径与 cron 路径同口径：模块门控关闭时不再触碰下载器（utils/config.py::module_active）。
+    if getattr(plugin, "_tag_enabled", False):
+        cleanup_temporary_tags_for_event(plugin, event)
+        process_download_added(plugin, event)
     handle_download_added_rename(plugin, event)
     _register_hr_download_added(plugin, event)
     wake_upload_limit_worker(plugin)

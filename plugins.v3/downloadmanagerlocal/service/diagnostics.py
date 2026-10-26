@@ -89,6 +89,20 @@ def _path_exists(path_text: str) -> bool:
 def _check(label: str, status: str, detail: str) -> dict:
     """构造详情页健康检查项。"""
     return {"label": label, "status": status, "detail": detail}
+def _module_switch_checks(plugin) -> list[dict]:
+    """消费裸开关快照：区分「插件停用」与「模块停用」（快照由 service/config.py 写入）。"""
+    switches = getattr(plugin, "_module_switches", None)
+    if not isinstance(switches, dict) or not switches:
+        return []
+    entries = [f"{name}={'开' if on else '关'}" for name, on in sorted(switches.items())]
+    on_count = sum(1 for on in switches.values() if on)
+    if on_count == len(switches):
+        status = "ok"
+    elif on_count:
+        status = "warn"
+    else:
+        status = "off"
+    return [_check("模块开关（裸值）", status, " / ".join(entries))]
 
 
 def build_diagnostics(plugin):
@@ -128,6 +142,7 @@ def build_diagnostics(plugin):
             "ok" if getattr(plugin, "_enabled", False) else "off",
             _bool_text(getattr(plugin, "_enabled", False)),
         ),
+        *_module_switch_checks(plugin),
         _check(
             "种子重命名",
             "warn" if to_service.get("type") == "transmission" else ("ok" if plugin._rename_enabled else "off"),
@@ -159,7 +174,8 @@ def build_diagnostics(plugin):
             "transfer_active": bool(plugin._transfer_active),
             "transfer_fallback_enabled": bool(plugin._transfer_fallback_enabled),
             "rename_enabled": bool(plugin._rename_enabled),
-            "tag_enabled": bool(plugin._tag_enabled),            "seed_autostart": bool(plugin._seed_autostart),
+            "tag_enabled": bool(plugin._tag_enabled),
+            "seed_autostart": bool(plugin._seed_autostart),
             "seed_skipverify": bool(plugin._seed_skipverify),
         },
         "paths": {
