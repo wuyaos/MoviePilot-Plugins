@@ -167,16 +167,21 @@ def advance_transfer(plugin, item, service, task, stopped):
     if phase == "target_added":
         if item["skipverify"] and skipverify_applies(service.type):
             # 跳过校验：qB 添加时已带 is_skip_checking，rt 不主动触发校验。
+            logger.info(f"[PT下载中心]目标端跳过校验（{service.type}）"
+                        f"{item['hash'][:8]}，不做校验等待")
             item["phase"] = "verifying"
         elif supports_recheck(service.type):
             if service.instance.recheck_torrents(ids=[item["hash"]]) is False:
                 item["phase"] = "rollback"
             else:
+                logger.info(f"[PT下载中心]目标端发起校验（{service.type}）"
+                            f"{item['hash'][:8]}，等待校验完成")
                 item["phase"] = "verifying"
         elif service.type == "rtorrent":
             # rt 无校验 API：启动目的端任务即触发 rtorrent 自动哈希校验。
             if service.instance.start_torrents(ids=[item["hash"]]) is False:
                 return False
+            logger.info(f"[PT下载中心]rt 目标端启动触发校验：{item['hash'][:8]}")
             item["phase"] = "verifying"
         else:
             item["phase"] = "verifying"
