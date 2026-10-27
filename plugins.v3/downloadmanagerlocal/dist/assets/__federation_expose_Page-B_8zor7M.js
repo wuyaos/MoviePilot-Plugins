@@ -1060,7 +1060,7 @@ async function doFailcleanScan() {
 }
 
 async function doRetryRenames() {
-  const resp = await runModuleAction('rename-retry', () => postApi('retry_renames', {}), '补刀完成');
+  const resp = await runModuleAction('rename-retry', () => postApi('retry_renames', {}), '补刀已在后台开始');
   if (resp?.code !== 1) await refreshActive();
 }
 
@@ -1788,13 +1788,13 @@ return (_ctx, _cache) => {
                         size: "small",
                         "prepend-icon": "mdi-auto-fix",
                         class: "text-none",
-                        loading: moduleRunning.value === 'rename-retry',
-                        disabled: moduleRunning.value !== '' && moduleRunning.value !== 'rename-retry',
+                        loading: moduleRunning.value === 'rename-retry' || renameStatus.value.batch_running,
+                        disabled: (moduleRunning.value !== '' && moduleRunning.value !== 'rename-retry') || renameStatus.value.batch_running,
                         onClick: doRetryRenames
                       }, {
-                        default: _withCtx(() => [...(_cache[32] || (_cache[32] = [
-                          _createTextVNode("全量补刀", -1)
-                        ]))]),
+                        default: _withCtx(() => [
+                          _createTextVNode(_toDisplayString(renameStatus.value.batch_running ? '补刀中…' : '全量补刀'), 1)
+                        ]),
                         _: 1
                       }, 8, ["loading", "disabled"])
                     ]),
@@ -1806,7 +1806,7 @@ return (_ctx, _cache) => {
                             color: "grey-lighten-1",
                             class: "mb-2"
                           }),
-                          _cache[33] || (_cache[33] = _createElementVNode("div", null, "暂无命名记录", -1))
+                          _cache[32] || (_cache[32] = _createElementVNode("div", null, "暂无命名记录", -1))
                         ]))
                       : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
                           _createElementVNode("div", _hoisted_55, [
@@ -1815,7 +1815,7 @@ return (_ctx, _cache) => {
                               class: "dm-table"
                             }, {
                               default: _withCtx(() => [
-                                _cache[37] || (_cache[37] = _createElementVNode("thead", null, [
+                                _cache[36] || (_cache[36] = _createElementVNode("thead", null, [
                                   _createElementVNode("tr", null, [
                                     _createElementVNode("th", { class: "text-caption" }, "时间"),
                                     _createElementVNode("th", { class: "text-caption" }, "原始名称"),
@@ -1859,7 +1859,7 @@ return (_ctx, _cache) => {
                                             onClick: $event => (doRetryRename(r.hash)),
                                             loading: retryingHash.value === r.hash
                                           }, {
-                                            default: _withCtx(() => [...(_cache[34] || (_cache[34] = [
+                                            default: _withCtx(() => [...(_cache[33] || (_cache[33] = [
                                               _createTextVNode("补刀", -1)
                                             ]))]),
                                             _: 1
@@ -1872,7 +1872,7 @@ return (_ctx, _cache) => {
                                                 color: "warning",
                                                 onClick: $event => (doRecovery(r.hash))
                                               }, {
-                                                default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
+                                                default: _withCtx(() => [...(_cache[34] || (_cache[34] = [
                                                   _createTextVNode("恢复", -1)
                                                 ]))]),
                                                 _: 1
@@ -1884,7 +1884,7 @@ return (_ctx, _cache) => {
                                             color: "error",
                                             onClick: $event => (doDelete(r.hash))
                                           }, {
-                                            default: _withCtx(() => [...(_cache[36] || (_cache[36] = [
+                                            default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
                                               _createTextVNode("删除", -1)
                                             ]))]),
                                             _: 1
@@ -1923,18 +1923,18 @@ return (_ctx, _cache) => {
                                 ]),
                                 _createElementVNode("div", _hoisted_63, [
                                   _createElementVNode("div", _hoisted_64, [
-                                    _cache[38] || (_cache[38] = _createElementVNode("span", { class: "dm-record-label" }, "时间", -1)),
+                                    _cache[37] || (_cache[37] = _createElementVNode("span", { class: "dm-record-label" }, "时间", -1)),
                                     _createElementVNode("span", _hoisted_65, _toDisplayString(r.time || '-'), 1)
                                   ]),
                                   _createElementVNode("div", _hoisted_66, [
-                                    _cache[39] || (_cache[39] = _createElementVNode("span", { class: "dm-record-label" }, "原始", -1)),
+                                    _cache[38] || (_cache[38] = _createElementVNode("span", { class: "dm-record-label" }, "原始", -1)),
                                     _createElementVNode("span", {
                                       class: "dm-record-value",
                                       title: r.original_name
                                     }, _toDisplayString(r.original_name || '-'), 9, _hoisted_67)
                                   ]),
                                   _createElementVNode("div", _hoisted_68, [
-                                    _cache[40] || (_cache[40] = _createElementVNode("span", { class: "dm-record-label" }, "命名后", -1)),
+                                    _cache[39] || (_cache[39] = _createElementVNode("span", { class: "dm-record-label" }, "命名后", -1)),
                                     _createElementVNode("span", {
                                       class: "dm-record-value",
                                       title: r.after_name
@@ -1950,7 +1950,7 @@ return (_ctx, _cache) => {
                                     onClick: $event => (doRetryRename(r.hash)),
                                     loading: retryingHash.value === r.hash
                                   }, {
-                                    default: _withCtx(() => [...(_cache[41] || (_cache[41] = [
+                                    default: _withCtx(() => [...(_cache[40] || (_cache[40] = [
                                       _createTextVNode("补刀", -1)
                                     ]))]),
                                     _: 1
@@ -1964,7 +1964,7 @@ return (_ctx, _cache) => {
                                         "prepend-icon": "mdi-undo",
                                         onClick: $event => (doRecovery(r.hash))
                                       }, {
-                                        default: _withCtx(() => [...(_cache[42] || (_cache[42] = [
+                                        default: _withCtx(() => [...(_cache[41] || (_cache[41] = [
                                           _createTextVNode("恢复", -1)
                                         ]))]),
                                         _: 1
@@ -1977,7 +1977,7 @@ return (_ctx, _cache) => {
                                     "prepend-icon": "mdi-delete-outline",
                                     onClick: $event => (doDelete(r.hash))
                                   }, {
-                                    default: _withCtx(() => [...(_cache[43] || (_cache[43] = [
+                                    default: _withCtx(() => [...(_cache[42] || (_cache[42] = [
                                       _createTextVNode("删除", -1)
                                     ]))]),
                                     _: 1
@@ -2014,7 +2014,7 @@ return (_ctx, _cache) => {
                 ? (_openBlock(), _createElementBlock("div", _hoisted_73, [
                     _createElementVNode("div", _hoisted_74, [
                       _createElementVNode("div", null, [
-                        _cache[44] || (_cache[44] = _createElementVNode("div", { class: "dm-record-block-title" }, "重命名归档", -1)),
+                        _cache[43] || (_cache[43] = _createElementVNode("div", { class: "dm-record-block-title" }, "重命名归档", -1)),
                         _createElementVNode("div", _hoisted_75, "共 " + _toDisplayString(archiveTotal.value) + " 条连续失败后归档的记录，可补刀、恢复或删除。", 1)
                       ])
                     ]),
@@ -2026,7 +2026,7 @@ return (_ctx, _cache) => {
                             color: "grey-lighten-1",
                             class: "mb-2"
                           }),
-                          _cache[45] || (_cache[45] = _createElementVNode("div", null, "暂无归档记录", -1))
+                          _cache[44] || (_cache[44] = _createElementVNode("div", null, "暂无归档记录", -1))
                         ]))
                       : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
                           _createElementVNode("div", _hoisted_77, [
@@ -2035,7 +2035,7 @@ return (_ctx, _cache) => {
                               class: "dm-table"
                             }, {
                               default: _withCtx(() => [
-                                _cache[49] || (_cache[49] = _createElementVNode("thead", null, [
+                                _cache[48] || (_cache[48] = _createElementVNode("thead", null, [
                                   _createElementVNode("tr", null, [
                                     _createElementVNode("th", { class: "text-caption" }, "归档时间"),
                                     _createElementVNode("th", { class: "text-caption" }, "名称"),
@@ -2082,7 +2082,7 @@ return (_ctx, _cache) => {
                                             loading: retryingHash.value === r.hash,
                                             disabled: !!retryingHash.value || restoringHash.value === r.hash || deletingHash.value === r.hash
                                           }, {
-                                            default: _withCtx(() => [...(_cache[46] || (_cache[46] = [
+                                            default: _withCtx(() => [...(_cache[45] || (_cache[45] = [
                                               _createTextVNode("补刀", -1)
                                             ]))]),
                                             _: 1
@@ -2095,7 +2095,7 @@ return (_ctx, _cache) => {
                                             loading: restoringHash.value === r.hash,
                                             disabled: retryingHash.value === r.hash
                                           }, {
-                                            default: _withCtx(() => [...(_cache[47] || (_cache[47] = [
+                                            default: _withCtx(() => [...(_cache[46] || (_cache[46] = [
                                               _createTextVNode("恢复", -1)
                                             ]))]),
                                             _: 1
@@ -2108,7 +2108,7 @@ return (_ctx, _cache) => {
                                             loading: deletingHash.value === r.hash,
                                             disabled: retryingHash.value === r.hash
                                           }, {
-                                            default: _withCtx(() => [...(_cache[48] || (_cache[48] = [
+                                            default: _withCtx(() => [...(_cache[47] || (_cache[47] = [
                                               _createTextVNode("删除", -1)
                                             ]))]),
                                             _: 1
@@ -2147,15 +2147,15 @@ return (_ctx, _cache) => {
                                 ]),
                                 _createElementVNode("div", _hoisted_86, [
                                   _createElementVNode("div", _hoisted_87, [
-                                    _cache[50] || (_cache[50] = _createElementVNode("span", { class: "dm-record-label" }, "归档", -1)),
+                                    _cache[49] || (_cache[49] = _createElementVNode("span", { class: "dm-record-label" }, "归档", -1)),
                                     _createElementVNode("span", _hoisted_88, _toDisplayString(r.archived_at || r.last_failed_at || '-'), 1)
                                   ]),
                                   _createElementVNode("div", _hoisted_89, [
-                                    _cache[51] || (_cache[51] = _createElementVNode("span", { class: "dm-record-label" }, "次数", -1)),
+                                    _cache[50] || (_cache[50] = _createElementVNode("span", { class: "dm-record-label" }, "次数", -1)),
                                     _createElementVNode("span", _hoisted_90, _toDisplayString(r.fail_count), 1)
                                   ]),
                                   _createElementVNode("div", _hoisted_91, [
-                                    _cache[52] || (_cache[52] = _createElementVNode("span", { class: "dm-record-label" }, "原因", -1)),
+                                    _cache[51] || (_cache[51] = _createElementVNode("span", { class: "dm-record-label" }, "原因", -1)),
                                     _createElementVNode("span", _hoisted_92, _toDisplayString(r.archive_reason || r.reason || '-'), 1)
                                   ])
                                 ]),
@@ -2169,7 +2169,7 @@ return (_ctx, _cache) => {
                                     loading: retryingHash.value === r.hash,
                                     disabled: !!retryingHash.value || restoringHash.value === r.hash || deletingHash.value === r.hash
                                   }, {
-                                    default: _withCtx(() => [...(_cache[53] || (_cache[53] = [
+                                    default: _withCtx(() => [...(_cache[52] || (_cache[52] = [
                                       _createTextVNode("补刀", -1)
                                     ]))]),
                                     _: 1
@@ -2183,7 +2183,7 @@ return (_ctx, _cache) => {
                                     loading: restoringHash.value === r.hash,
                                     disabled: retryingHash.value === r.hash
                                   }, {
-                                    default: _withCtx(() => [...(_cache[54] || (_cache[54] = [
+                                    default: _withCtx(() => [...(_cache[53] || (_cache[53] = [
                                       _createTextVNode("恢复", -1)
                                     ]))]),
                                     _: 1
@@ -2197,7 +2197,7 @@ return (_ctx, _cache) => {
                                     loading: deletingHash.value === r.hash,
                                     disabled: retryingHash.value === r.hash
                                   }, {
-                                    default: _withCtx(() => [...(_cache[55] || (_cache[55] = [
+                                    default: _withCtx(() => [...(_cache[54] || (_cache[54] = [
                                       _createTextVNode("删除", -1)
                                     ]))]),
                                     _: 1
@@ -2233,7 +2233,7 @@ return (_ctx, _cache) => {
               (activeTab.value === 'autoremove')
                 ? (_openBlock(), _createElementBlock("div", _hoisted_96, [
                     _createElementVNode("div", _hoisted_97, [
-                      _cache[56] || (_cache[56] = _createElementVNode("div", null, [
+                      _cache[55] || (_cache[55] = _createElementVNode("div", null, [
                         _createElementVNode("div", { class: "dm-record-block-title" }, "删种预览记录"),
                         _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, " 自动删种的候选清单；点「预览」重新收集候选，不写下载器。 ")
                       ], -1)),
@@ -2256,7 +2256,7 @@ return (_ctx, _cache) => {
                           density: "compact",
                           class: "mt-2"
                         }, {
-                          default: _withCtx(() => [...(_cache[57] || (_cache[57] = [
+                          default: _withCtx(() => [...(_cache[56] || (_cache[56] = [
                             _createTextVNode(" 迁移观察期：仅列出候选，不执行下载器写操作。 ", -1)
                           ]))]),
                           _: 1
@@ -2270,7 +2270,7 @@ return (_ctx, _cache) => {
                             color: "grey-lighten-1",
                             class: "mb-2"
                           }),
-                          _cache[58] || (_cache[58] = _createElementVNode("div", null, "暂无候选记录", -1))
+                          _cache[57] || (_cache[57] = _createElementVNode("div", null, "暂无候选记录", -1))
                         ]))
                       : (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
                           _createElementVNode("div", _hoisted_99, [
@@ -2279,7 +2279,7 @@ return (_ctx, _cache) => {
                               class: "dm-table"
                             }, {
                               default: _withCtx(() => [
-                                _cache[59] || (_cache[59] = _createElementVNode("thead", null, [
+                                _cache[58] || (_cache[58] = _createElementVNode("thead", null, [
                                   _createElementVNode("tr", null, [
                                     _createElementVNode("th", { class: "text-caption" }, "下载器"),
                                     _createElementVNode("th", { class: "text-caption" }, "名称"),
@@ -2340,23 +2340,23 @@ return (_ctx, _cache) => {
                                 ]),
                                 _createElementVNode("div", _hoisted_110, [
                                   _createElementVNode("div", _hoisted_111, [
-                                    _cache[60] || (_cache[60] = _createElementVNode("span", { class: "dm-record-label" }, "下载器", -1)),
+                                    _cache[59] || (_cache[59] = _createElementVNode("span", { class: "dm-record-label" }, "下载器", -1)),
                                     _createElementVNode("span", _hoisted_112, _toDisplayString(item.downloader_id), 1)
                                   ]),
                                   _createElementVNode("div", _hoisted_113, [
-                                    _cache[61] || (_cache[61] = _createElementVNode("span", { class: "dm-record-label" }, "站点", -1)),
+                                    _cache[60] || (_cache[60] = _createElementVNode("span", { class: "dm-record-label" }, "站点", -1)),
                                     _createElementVNode("span", _hoisted_114, _toDisplayString(item.site || '-'), 1)
                                   ]),
                                   _createElementVNode("div", _hoisted_115, [
-                                    _cache[62] || (_cache[62] = _createElementVNode("span", { class: "dm-record-label" }, "体积", -1)),
+                                    _cache[61] || (_cache[61] = _createElementVNode("span", { class: "dm-record-label" }, "体积", -1)),
                                     _createElementVNode("span", _hoisted_116, _toDisplayString(item.size_text), 1)
                                   ]),
                                   _createElementVNode("div", _hoisted_117, [
-                                    _cache[63] || (_cache[63] = _createElementVNode("span", { class: "dm-record-label" }, "分享率", -1)),
+                                    _cache[62] || (_cache[62] = _createElementVNode("span", { class: "dm-record-label" }, "分享率", -1)),
                                     _createElementVNode("span", _hoisted_118, _toDisplayString(item.ratio), 1)
                                   ]),
                                   _createElementVNode("div", _hoisted_119, [
-                                    _cache[64] || (_cache[64] = _createElementVNode("span", { class: "dm-record-label" }, "做种", -1)),
+                                    _cache[63] || (_cache[63] = _createElementVNode("span", { class: "dm-record-label" }, "做种", -1)),
                                     _createElementVNode("span", _hoisted_120, _toDisplayString(item.seeding_hours) + " 小时", 1)
                                   ])
                                 ])
@@ -2370,7 +2370,7 @@ return (_ctx, _cache) => {
                 ? (_openBlock(), _createElementBlock("div", _hoisted_121, [
                     _createElementVNode("div", _hoisted_122, [
                       _createElementVNode("div", null, [
-                        _cache[65] || (_cache[65] = _createElementVNode("div", { class: "dm-record-block-title" }, "H&R 任务", -1)),
+                        _cache[64] || (_cache[64] = _createElementVNode("div", { class: "dm-record-block-title" }, "H&R 任务", -1)),
                         _createElementVNode("div", _hoisted_123, "任务总数 " + _toDisplayString(hrSummary.value.total || 0) + " · 达标 " + _toDisplayString(hrSummary.value.compliant || 0) + " · 超期 " + _toDisplayString(hrSummary.value.overdue || 0) + " · 需做种 " + _toDisplayString(hrSummary.value.needs_seeding || 0), 1)
                       ]),
                       _createElementVNode("div", _hoisted_124, [
@@ -2382,7 +2382,7 @@ return (_ctx, _cache) => {
                           onClick: _cache[3] || (_cache[3] = $event => (askHrClear('compliant'))),
                           disabled: hrClearing.value
                         }, {
-                          default: _withCtx(() => [...(_cache[66] || (_cache[66] = [
+                          default: _withCtx(() => [...(_cache[65] || (_cache[65] = [
                             _createTextVNode("清除已满足", -1)
                           ]))]),
                           _: 1
@@ -2395,7 +2395,7 @@ return (_ctx, _cache) => {
                           onClick: _cache[4] || (_cache[4] = $event => (askHrClear('missing'))),
                           disabled: hrClearing.value
                         }, {
-                          default: _withCtx(() => [...(_cache[67] || (_cache[67] = [
+                          default: _withCtx(() => [...(_cache[66] || (_cache[66] = [
                             _createTextVNode("清除已消失", -1)
                           ]))]),
                           _: 1
@@ -2410,7 +2410,7 @@ return (_ctx, _cache) => {
                             color: "grey-lighten-1",
                             class: "mb-2"
                           }),
-                          _cache[68] || (_cache[68] = _createElementVNode("div", null, "暂无 H&R 任务", -1))
+                          _cache[67] || (_cache[67] = _createElementVNode("div", null, "暂无 H&R 任务", -1))
                         ]))
                       : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
                           _createElementVNode("div", _hoisted_126, [
@@ -2419,7 +2419,7 @@ return (_ctx, _cache) => {
                               class: "dm-table"
                             }, {
                               default: _withCtx(() => [
-                                _cache[70] || (_cache[70] = _createElementVNode("thead", null, [
+                                _cache[69] || (_cache[69] = _createElementVNode("thead", null, [
                                   _createElementVNode("tr", null, [
                                     _createElementVNode("th", { class: "text-caption" }, "站点名"),
                                     _createElementVNode("th", { class: "text-caption" }, "状态"),
@@ -2461,7 +2461,7 @@ return (_ctx, _cache) => {
                                           loading: hrClearing.value && hrClearKey.value === `${task.downloader_id}-${task.torrent_hash}`,
                                           onClick: $event => (askHrClear('task', task))
                                         }, {
-                                          default: _withCtx(() => [...(_cache[69] || (_cache[69] = [
+                                          default: _withCtx(() => [...(_cache[68] || (_cache[68] = [
                                             _createTextVNode("清除", -1)
                                           ]))]),
                                           _: 1
@@ -2499,15 +2499,15 @@ return (_ctx, _cache) => {
                                 ]),
                                 _createElementVNode("div", _hoisted_134, [
                                   _createElementVNode("div", _hoisted_135, [
-                                    _cache[71] || (_cache[71] = _createElementVNode("span", { class: "dm-record-label" }, "剩余", -1)),
+                                    _cache[70] || (_cache[70] = _createElementVNode("span", { class: "dm-record-label" }, "剩余", -1)),
                                     _createElementVNode("span", _hoisted_136, _toDisplayString(formatDuration(task.remain_seconds)), 1)
                                   ]),
                                   _createElementVNode("div", _hoisted_137, [
-                                    _cache[72] || (_cache[72] = _createElementVNode("span", { class: "dm-record-label" }, "截止", -1)),
+                                    _cache[71] || (_cache[71] = _createElementVNode("span", { class: "dm-record-label" }, "截止", -1)),
                                     _createElementVNode("span", _hoisted_138, _toDisplayString(formatTimestamp(task.deadline)), 1)
                                   ]),
                                   _createElementVNode("div", _hoisted_139, [
-                                    _cache[73] || (_cache[73] = _createElementVNode("span", { class: "dm-record-label" }, "进度", -1)),
+                                    _cache[72] || (_cache[72] = _createElementVNode("span", { class: "dm-record-label" }, "进度", -1)),
                                     _createElementVNode("span", _hoisted_140, _toDisplayString(formatPercent(task.progress)), 1)
                                   ])
                                 ]),
@@ -2519,7 +2519,7 @@ return (_ctx, _cache) => {
                                     loading: hrClearing.value && hrClearKey.value === `${task.downloader_id}-${task.torrent_hash}`,
                                     onClick: $event => (askHrClear('task', task))
                                   }, {
-                                    default: _withCtx(() => [...(_cache[74] || (_cache[74] = [
+                                    default: _withCtx(() => [...(_cache[73] || (_cache[73] = [
                                       _createTextVNode("清除", -1)
                                     ]))]),
                                     _: 1
@@ -2533,7 +2533,7 @@ return (_ctx, _cache) => {
                 : _createCommentVNode("", true),
               (activeTab.value === 'sitetag')
                 ? (_openBlock(), _createElementBlock("div", _hoisted_142, [
-                    _cache[81] || (_cache[81] = _createElementVNode("div", { class: "dm-record-block-head" }, [
+                    _cache[80] || (_cache[80] = _createElementVNode("div", { class: "dm-record-block-head" }, [
                       _createElementVNode("div", null, [
                         _createElementVNode("div", { class: "dm-record-block-title" }, "标签清理"),
                         _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "扫描所选 qBittorrent 下载器的标签，勾选保留项后清理其余标签。")
@@ -2561,7 +2561,7 @@ return (_ctx, _cache) => {
                         disabled: !cleanupDownloaders.value.length,
                         onClick: scanCleanupTags
                       }, {
-                        default: _withCtx(() => [...(_cache[75] || (_cache[75] = [
+                        default: _withCtx(() => [...(_cache[74] || (_cache[74] = [
                           _createTextVNode("扫描标签", -1)
                         ]))]),
                         _: 1
@@ -2587,7 +2587,7 @@ return (_ctx, _cache) => {
                       ? (_openBlock(), _createElementBlock("div", _hoisted_144, [
                           _createElementVNode("div", _hoisted_145, [
                             _createElementVNode("div", null, [
-                              _cache[76] || (_cache[76] = _createElementVNode("div", { class: "text-subtitle-2" }, "扫描结果", -1)),
+                              _cache[75] || (_cache[75] = _createElementVNode("div", { class: "text-subtitle-2" }, "扫描结果", -1)),
                               _createElementVNode("div", _hoisted_146, _toDisplayString(cleanupGroups.value.length) + " 个下载器 · 自动清理 " + _toDisplayString(cleanupAutoRemovedCount.value) + " 个临时标签 ", 1)
                             ]),
                             _createElementVNode("div", _hoisted_147, [
@@ -2597,7 +2597,7 @@ return (_ctx, _cache) => {
                                 "prepend-icon": "mdi-check-all",
                                 onClick: _cache[7] || (_cache[7] = $event => (setAllCleanupTags(true)))
                               }, {
-                                default: _withCtx(() => [...(_cache[77] || (_cache[77] = [
+                                default: _withCtx(() => [...(_cache[76] || (_cache[76] = [
                                   _createTextVNode("全部保留", -1)
                                 ]))]),
                                 _: 1
@@ -2609,7 +2609,7 @@ return (_ctx, _cache) => {
                                 "prepend-icon": "mdi-checkbox-blank-outline",
                                 onClick: _cache[8] || (_cache[8] = $event => (setAllCleanupTags(false)))
                               }, {
-                                default: _withCtx(() => [...(_cache[78] || (_cache[78] = [
+                                default: _withCtx(() => [...(_cache[77] || (_cache[77] = [
                                   _createTextVNode("取消全选", -1)
                                 ]))]),
                                 _: 1
@@ -2653,7 +2653,7 @@ return (_ctx, _cache) => {
                                       size: "28",
                                       color: "success"
                                     }),
-                                    _cache[79] || (_cache[79] = _createElementVNode("span", null, "没有待选择标签", -1))
+                                    _cache[78] || (_cache[78] = _createElementVNode("span", null, "没有待选择标签", -1))
                                   ]))
                                 : (_openBlock(), _createElementBlock("div", _hoisted_153, [
                                     (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(group.tags, (item) => {
@@ -2703,7 +2703,7 @@ return (_ctx, _cache) => {
                               disabled: !cleanupRemovals.value.length,
                               onClick: previewCleanupTags
                             }, {
-                              default: _withCtx(() => [...(_cache[80] || (_cache[80] = [
+                              default: _withCtx(() => [...(_cache[79] || (_cache[79] = [
                                 _createTextVNode("预览清理", -1)
                               ]))]),
                               _: 1
@@ -2715,14 +2715,14 @@ return (_ctx, _cache) => {
                 : _createCommentVNode("", true),
               (activeTab.value === 'diagnostics')
                 ? (_openBlock(), _createElementBlock("section", _hoisted_161, [
-                    _cache[88] || (_cache[88] = _createElementVNode("div", { class: "dm-section-heading" }, [
+                    _cache[87] || (_cache[87] = _createElementVNode("div", { class: "dm-section-heading" }, [
                       _createElementVNode("div", null, [
                         _createElementVNode("div", { class: "dm-section-title" }, "运行详情"),
                         _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "上传限速运行状态；下载器与站点明细见「上传限速」模块卡的展开详情。")
                       ])
                     ], -1)),
                     _createElementVNode("div", _hoisted_162, [
-                      _cache[83] || (_cache[83] = _createElementVNode("div", null, [
+                      _cache[82] || (_cache[82] = _createElementVNode("div", null, [
                         _createElementVNode("div", { class: "dm-runtime-title" }, "上传限速"),
                         _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "MP 或插件离线时，下载器继续保留最后一次已写入的限速。")
                       ], -1)),
@@ -2743,7 +2743,7 @@ return (_ctx, _cache) => {
                           class: "text-none",
                           onClick: _cache[9] || (_cache[9] = $event => (selectTab('upload')))
                         }, {
-                          default: _withCtx(() => [...(_cache[82] || (_cache[82] = [
+                          default: _withCtx(() => [...(_cache[81] || (_cache[81] = [
                             _createTextVNode("查看明细", -1)
                           ]))]),
                           _: 1
@@ -2766,28 +2766,28 @@ return (_ctx, _cache) => {
                     }), 128)),
                     _createElementVNode("div", _hoisted_164, [
                       _createElementVNode("div", _hoisted_165, [
-                        _cache[84] || (_cache[84] = _createElementVNode("span", null, "服务", -1)),
+                        _cache[83] || (_cache[83] = _createElementVNode("span", null, "服务", -1)),
                         _createElementVNode("strong", null, _toDisplayString(uploadLimitStatus.value.label), 1)
                       ]),
                       _createElementVNode("div", _hoisted_166, [
-                        _cache[85] || (_cache[85] = _createElementVNode("span", null, "实时速率", -1)),
+                        _cache[84] || (_cache[84] = _createElementVNode("span", null, "实时速率", -1)),
                         _createElementVNode("strong", null, _toDisplayString(formatUploadRate(uploadLimit.value.upload_rate_bps)), 1)
                       ]),
                       _createElementVNode("div", _hoisted_167, [
-                        _cache[86] || (_cache[86] = _createElementVNode("span", null, "受限任务", -1)),
+                        _cache[85] || (_cache[85] = _createElementVNode("span", null, "受限任务", -1)),
                         _createElementVNode("strong", null, _toDisplayString(uploadLimit.value.managed_torrents || 0), 1)
                       ]),
                       _createElementVNode("div", _hoisted_168, [
-                        _cache[87] || (_cache[87] = _createElementVNode("span", null, "宽限任务", -1)),
+                        _cache[86] || (_cache[86] = _createElementVNode("span", null, "宽限任务", -1)),
                         _createElementVNode("strong", null, _toDisplayString(uploadLimit.value.grace_torrents || 0), 1)
                       ])
                     ]),
-                    _cache[89] || (_cache[89] = _createElementVNode("div", { class: "text-caption text-medium-emphasis mt-2" }, "实时速率是下载器当前实际上传流量；站点额度是插件写入单种限速的合计值，两者不是同一指标。", -1))
+                    _cache[88] || (_cache[88] = _createElementVNode("div", { class: "text-caption text-medium-emphasis mt-2" }, "实时速率是下载器当前实际上传流量；站点额度是插件写入单种限速的合计值，两者不是同一指标。", -1))
                   ]))
                 : _createCommentVNode("", true),
               (activeTab.value === 'diagnostics')
                 ? (_openBlock(), _createElementBlock("section", _hoisted_169, [
-                    _cache[100] || (_cache[100] = _createElementVNode("div", { class: "dm-section-heading" }, [
+                    _cache[99] || (_cache[99] = _createElementVNode("div", { class: "dm-section-heading" }, [
                       _createElementVNode("div", null, [
                         _createElementVNode("div", { class: "dm-section-title" }, "诊断"),
                         _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "按运行链路顺序检查下载器、路径、转移、命名、标签和归档状态。")
@@ -2797,11 +2797,11 @@ return (_ctx, _cache) => {
                       ? (_openBlock(), _createElementBlock("div", _hoisted_170, [
                           _createElementVNode("div", _hoisted_171, [
                             _createElementVNode("div", _hoisted_172, [
-                              _cache[90] || (_cache[90] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "版本", -1)),
+                              _cache[89] || (_cache[89] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "版本", -1)),
                               _createElementVNode("div", _hoisted_173, _toDisplayString(diagnostics.value?.plugin?.version), 1)
                             ]),
                             _createElementVNode("div", _hoisted_174, [
-                              _cache[91] || (_cache[91] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "源下载器", -1)),
+                              _cache[90] || (_cache[90] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "源下载器", -1)),
                               _createElementVNode("div", _hoisted_175, _toDisplayString(diagnostics.value?.downloaders?.from?.name || '未配置'), 1),
                               _createVNode(_component_VChip, {
                                 size: "x-small",
@@ -2815,7 +2815,7 @@ return (_ctx, _cache) => {
                               }, 8, ["color"])
                             ]),
                             _createElementVNode("div", _hoisted_176, [
-                              _cache[92] || (_cache[92] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "目标下载器", -1)),
+                              _cache[91] || (_cache[91] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "目标下载器", -1)),
                               _createElementVNode("div", _hoisted_177, _toDisplayString(diagnostics.value?.downloaders?.to?.name || '未配置'), 1),
                               _createVNode(_component_VChip, {
                                 size: "x-small",
@@ -2829,7 +2829,7 @@ return (_ctx, _cache) => {
                               }, 8, ["color"])
                             ]),
                             _createElementVNode("div", _hoisted_178, [
-                              _cache[93] || (_cache[93] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "补刀归档", -1)),
+                              _cache[92] || (_cache[92] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "补刀归档", -1)),
                               _createElementVNode("div", _hoisted_179, _toDisplayString(diagnostics.value?.rename_archive?.archived || 0) + " 条", 1),
                               _createElementVNode("div", _hoisted_180, "连续失败 " + _toDisplayString(diagnostics.value?.rename_archive?.active_failed || 0) + " · 阈值 " + _toDisplayString(diagnostics.value?.rename_archive?.threshold || 3), 1)
                             ])
@@ -2843,11 +2843,11 @@ return (_ctx, _cache) => {
                                     size: "20"
                                   })
                                 ]),
-                                _cache[94] || (_cache[94] = _createElementVNode("span", null, "运行诊断", -1))
+                                _cache[93] || (_cache[93] = _createElementVNode("span", null, "运行诊断", -1))
                               ]),
                               _createElementVNode("div", _hoisted_185, [
                                 _createElementVNode("strong", null, _toDisplayString(diagnosticsOkCount.value) + " / " + _toDisplayString(diagnosticsCards.value.length), 1),
-                                _cache[95] || (_cache[95] = _createElementVNode("span", null, "正常", -1)),
+                                _cache[94] || (_cache[94] = _createElementVNode("span", null, "正常", -1)),
                                 (diagnosticsAttentionCount.value)
                                   ? (_openBlock(), _createElementBlock("span", _hoisted_186, "· " + _toDisplayString(diagnosticsAttentionCount.value) + " 项关注", 1))
                                   : _createCommentVNode("", true)
@@ -2874,14 +2874,14 @@ return (_ctx, _cache) => {
                               }), 128))
                             ]),
                             _createElementVNode("div", _hoisted_193, [
-                              _cache[96] || (_cache[96] = _createElementVNode("span", null, "按运行链路顺序检查下载器、路径、转移、命名、标签和归档状态。", -1)),
+                              _cache[95] || (_cache[95] = _createElementVNode("span", null, "按运行链路顺序检查下载器、路径、转移、命名、标签和归档状态。", -1)),
                               (diagnosticsAttentionCount.value)
                                 ? (_openBlock(), _createElementBlock("span", _hoisted_194, "关注项不阻断运行"))
                                 : _createCommentVNode("", true)
                             ])
                           ]),
                           _createElementVNode("div", null, [
-                            _cache[98] || (_cache[98] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "最近失败", -1)),
+                            _cache[97] || (_cache[97] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "最近失败", -1)),
                             (!diagnostics.value?.rename_history?.recent_failures?.length)
                               ? (_openBlock(), _createElementBlock("div", _hoisted_195, "暂无失败记录"))
                               : (_openBlock(), _createElementBlock("div", _hoisted_196, [
@@ -2890,7 +2890,7 @@ return (_ctx, _cache) => {
                                     class: "dm-table"
                                   }, {
                                     default: _withCtx(() => [
-                                      _cache[97] || (_cache[97] = _createElementVNode("thead", null, [
+                                      _cache[96] || (_cache[96] = _createElementVNode("thead", null, [
                                         _createElementVNode("tr", null, [
                                           _createElementVNode("th", { class: "text-caption" }, "时间"),
                                           _createElementVNode("th", { class: "text-caption" }, "名称"),
@@ -2924,7 +2924,7 @@ return (_ctx, _cache) => {
                             color: "grey-lighten-1",
                             class: "mb-2"
                           }),
-                          _cache[99] || (_cache[99] = _createElementVNode("div", null, "点击刷新诊断", -1))
+                          _cache[98] || (_cache[98] = _createElementVNode("div", null, "点击刷新诊断", -1))
                         ]))
                   ]))
                 : _createCommentVNode("", true)
@@ -2955,13 +2955,13 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
-                  default: _withCtx(() => [...(_cache[101] || (_cache[101] = [
+                  default: _withCtx(() => [...(_cache[100] || (_cache[100] = [
                     _createTextVNode("确认立即运行转移做种", -1)
                   ]))]),
                   _: 1
                 }),
                 _createVNode(_component_VCardSubtitle, null, {
-                  default: _withCtx(() => [...(_cache[102] || (_cache[102] = [
+                  default: _withCtx(() => [...(_cache[101] || (_cache[101] = [
                     _createTextVNode("按当前配置扫描源下载器并转移种子；若配置了删源，转移完成后会删除源任务。", -1)
                   ]))]),
                   _: 1
@@ -2978,7 +2978,7 @@ return (_ctx, _cache) => {
                   disabled: moduleRunning.value === 'transfer-run',
                   onClick: _cache[10] || (_cache[10] = $event => (transferRunDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[103] || (_cache[103] = [
+                  default: _withCtx(() => [...(_cache[102] || (_cache[102] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -2990,7 +2990,7 @@ return (_ctx, _cache) => {
                   loading: moduleRunning.value === 'transfer-run',
                   onClick: confirmTransferRun
                 }, {
-                  default: _withCtx(() => [...(_cache[104] || (_cache[104] = [
+                  default: _withCtx(() => [...(_cache[103] || (_cache[103] = [
                     _createTextVNode("确认运行", -1)
                   ]))]),
                   _: 1
@@ -3028,7 +3028,7 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
-                  default: _withCtx(() => [...(_cache[105] || (_cache[105] = [
+                  default: _withCtx(() => [...(_cache[104] || (_cache[104] = [
                     _createTextVNode("确认清除 H&R 记录", -1)
                   ]))]),
                   _: 1
@@ -3062,7 +3062,7 @@ return (_ctx, _cache) => {
                   disabled: hrClearing.value,
                   onClick: _cache[12] || (_cache[12] = $event => (hrClearDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[106] || (_cache[106] = [
+                  default: _withCtx(() => [...(_cache[105] || (_cache[105] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3074,7 +3074,7 @@ return (_ctx, _cache) => {
                   loading: hrClearing.value,
                   onClick: confirmHrClear
                 }, {
-                  default: _withCtx(() => [...(_cache[107] || (_cache[107] = [
+                  default: _withCtx(() => [...(_cache[106] || (_cache[106] = [
                     _createTextVNode("确认清除", -1)
                   ]))]),
                   _: 1
@@ -3112,7 +3112,7 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
-                  default: _withCtx(() => [...(_cache[108] || (_cache[108] = [
+                  default: _withCtx(() => [...(_cache[107] || (_cache[107] = [
                     _createTextVNode("确认标签清理", -1)
                   ]))]),
                   _: 1
@@ -3171,7 +3171,7 @@ return (_ctx, _cache) => {
                   disabled: cleanupExecuting.value,
                   onClick: _cache[14] || (_cache[14] = $event => (cleanupDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[109] || (_cache[109] = [
+                  default: _withCtx(() => [...(_cache[108] || (_cache[108] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3183,7 +3183,7 @@ return (_ctx, _cache) => {
                   loading: cleanupExecuting.value,
                   onClick: executeCleanupTags
                 }, {
-                  default: _withCtx(() => [...(_cache[110] || (_cache[110] = [
+                  default: _withCtx(() => [...(_cache[109] || (_cache[109] = [
                     _createTextVNode("确认清理", -1)
                   ]))]),
                   _: 1
@@ -3202,6 +3202,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-6849da32"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-14c2c991"]]);
 
 export { Page as default };

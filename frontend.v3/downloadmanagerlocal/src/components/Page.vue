@@ -746,7 +746,7 @@ async function doFailcleanScan() {
 }
 
 async function doRetryRenames() {
-  const resp = await runModuleAction('rename-retry', () => postApi('retry_renames', {}), '补刀完成')
+  const resp = await runModuleAction('rename-retry', () => postApi('retry_renames', {}), '补刀已在后台开始')
   if (resp?.code !== 1) await refreshActive()
 }
 
@@ -1193,7 +1193,7 @@ onBeforeUnmount(() => {
                 <div class="text-caption text-medium-emphasis">共 {{ total }} 条，逐条可补刀、恢复原始名称或删除记录。</div>
               </div>
               <VBtn variant="tonal" size="small" prepend-icon="mdi-auto-fix" class="text-none"
-                :loading="moduleRunning === 'rename-retry'" :disabled="moduleRunning !== '' && moduleRunning !== 'rename-retry'" @click="doRetryRenames">全量补刀</VBtn>
+                :loading="moduleRunning === 'rename-retry' || renameStatus.batch_running" :disabled="(moduleRunning !== '' && moduleRunning !== 'rename-retry') || renameStatus.batch_running" @click="doRetryRenames">{{ renameStatus.batch_running ? '补刀中…' : '全量补刀' }}</VBtn>
             </div>
             <div v-if="records.length === 0" class="dm-state text-center text-medium-emphasis">
               <VIcon icon="mdi-history" size="48" color="grey-lighten-1" class="mb-2" />

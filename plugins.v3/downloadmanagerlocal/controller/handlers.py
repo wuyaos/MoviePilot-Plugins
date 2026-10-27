@@ -1,6 +1,7 @@
 """下载管理插件 - API 路由实现"""
 
 import json
+import threading
 from datetime import datetime
 from typing import TypeVar
 
@@ -96,17 +97,29 @@ def _require_module(plugin, module: str, label: str) -> None:
 
 
 def api_retry_renames(plugin):
-    """手动触发失败历史和脏名称种子的批量补刮。"""
+    """后台线程触发失败历史和脏名称种子的批量补刮，立即返回。"""
     _require_module(plugin, "rename", "命名补刀")
-    try:
-        return _operation_response(plugin._retry_pending_renames(), RetryRenamesResult)
-    except Exception as e:
-        logger.error(f"[PT下载中心]一键补刀失败: {e}")
-        return _operation_response(
-            {"code": 1, "msg": f"补刀失败: {e}", "history": 0, "dirty": 0, "total": 0},
-            RetryRenamesResult,
-        )
+    with getattr(plugin, "_rename_batch_lock", threading.Lock()):
+        if getattr(plugin, "_rename_batch_running", False):
+            return _operation_response(
+                {"code": 1, "msg": "补刀已在后台运行，请稍后查看重命名历史"},
+                RetryRenamesResult,
+            )
+        plugin._rename_batch_running = True
+    def _run_batch():
+        try:
+            result = plugin._retry_pending_renames()
+            logger.info(f"[PT下载中心:命名补刀]后台批量补刀完成: {result}")
+        except Exception as e:
+            logger.error(f"[PT下载中心:命名补刀]后台批量补刀失败: {e}")
+        finally:
+            plugin._rename_batch_running = False
 
+    threading.Thread(target=_run_batch, daemon=True, name="dml-rename-batch").start()
+    return _operation_response(
+        {"code": 0, "msg": "补刀已开始，正在后台逐条处理，结果见重命名历史", "running": True},
+        RetryRenamesResult,
+    )
 
 def api_retry_rename(plugin, hash: str = ""):
     """对指定种子 hash 手动重试重命名和站点标签。"""
@@ -659,4 +672,6 @@ def api_rename_status(plugin):
     """返回命名补刀模块运行状态。"""
     from ..service.rename import get_module_status as rename_module_status
 
-    return ModuleStatusResult(code=0, status=rename_module_status(plugin))
+    status = rename_module_status(plugin)
+    status["batch_running"] = bool(getattr(plugin, "_rename_batch_running", False))
+    return ModuleStatusResult(code=0, status=status)

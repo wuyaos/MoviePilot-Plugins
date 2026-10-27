@@ -45,7 +45,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.8.3"
+    plugin_version = "3.8.4"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页
@@ -158,7 +158,10 @@ class DownloadManagerLocal(_PluginBase):
         self._seed_recheck_lock = threading.RLock()
         self._seed_recheck_queue_lock = self._seed_recheck_lock
         self._seed_recheck_thread = None
+        self._seed_recheck_thread = None
         self._seed_recheck_stop_event = None
+        self._rename_batch_running = False
+        self._rename_batch_lock = threading.Lock()
         self._torrent_tags = []
         self._tracker_mappings = {}
         self.downloader_helper = None
