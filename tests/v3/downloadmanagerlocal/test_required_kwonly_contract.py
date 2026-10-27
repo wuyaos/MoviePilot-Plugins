@@ -14,6 +14,7 @@ keyword-only 的 `fallback`，运行到「转移完成」才抛
 覆盖插件内所有「必填 keyword-only 参数」的调用点，避免同类问题再次漏网。
 """
 import ast
+import importlib.machinery
 import importlib.util
 import sys
 import types
@@ -25,11 +26,23 @@ PLUGIN = Path(__file__).resolve().parents[3] / "plugins.v3" / "downloadmanagerlo
 PREFIX = "app.plugins.downloadmanagerlocal"
 
 
+def _module(name: str) -> types.ModuleType:
+    """建带 __spec__ 的替身模块。
+
+    无 spec 的替身一旦被写进 sys.modules（本文件在导入期就写），pytest 渲染
+    任何失败回溯时会调用 importlib.resources.files() 解析父包并抛 INTERNALERROR，
+    把真实失败掩盖成「no tests ran」。
+    """
+    module = types.ModuleType(name)
+    module.__spec__ = importlib.machinery.ModuleSpec(name, None)
+    return module
+
+
 def _bootstrap():
     """桩掉外部边界，真实加载 model/state.py 以取得权威签名。"""
-    sys.modules.setdefault("app", types.ModuleType("app"))
-    sdk = sys.modules.setdefault("app.sdk", types.ModuleType("app.sdk"))
-    logging_mod = types.ModuleType("app.sdk.logging")
+    sys.modules.setdefault("app", _module("app"))
+    sdk = sys.modules.setdefault("app.sdk", _module("app.sdk"))
+    logging_mod = _module("app.sdk.logging")
     logging_mod.logger = types.SimpleNamespace(
         info=lambda *a, **k: None,
         warning=lambda *a, **k: None,
@@ -39,14 +52,14 @@ def _bootstrap():
     sys.modules["app.sdk.logging"] = logging_mod
     sdk.logging = logging_mod
 
-    pkg = types.ModuleType(PREFIX)
+    pkg = _module(PREFIX)
     pkg.__path__ = [str(PLUGIN)]
     sys.modules[PREFIX] = pkg
     for name in ("model", "service", "service.hr"):
-        mod = types.ModuleType(f"{PREFIX}.{name}")
+        mod = _module(f"{PREFIX}.{name}")
         mod.__path__ = []
         sys.modules[f"{PREFIX}.{name}"] = mod
-    hr_constants = types.ModuleType(f"{PREFIX}.service.hr.constants")
+    hr_constants = _module(f"{PREFIX}.service.hr.constants")
     hr_constants.HR_NOTIFY_EVENTS_DATA_KEY = "hr_notify_events"
     hr_constants.HR_TASKS_DATA_KEY = "hr_tasks"
     sys.modules[f"{PREFIX}.service.hr.constants"] = hr_constants

@@ -4,6 +4,7 @@
 """
 
 import copy
+import importlib.machinery
 import importlib.util
 import sys
 import threading
@@ -23,6 +24,11 @@ def runtime(monkeypatch):
     """隔离加载真实事务及校验模块，仅替换外部边界。"""
     def module(name, **attrs):
         result = types.ModuleType(name)
+        # 替身必须带 __spec__：否则测试失败时 pytest 渲染回溯会去
+        # importlib.resources.files() 解析父包并抛 INTERNALERROR，真实失败被掩盖。
+        result.__spec__ = importlib.machinery.ModuleSpec(
+            name, None, is_package="__path__" in attrs
+        )
         result.__dict__.update(attrs)
         monkeypatch.setitem(sys.modules, name, result)
         return result
@@ -37,6 +43,21 @@ def runtime(monkeypatch):
     guard.return_value.is_protected.side_effect = lambda *a, **k: guard.is_protected(*a, **k)
     module(PREFIX + '.hr.guard', HrGuard=guard)
     module(PREFIX + '.transfer', post_transfer_process=Mock(return_value=True))
+
+    # recheck 依赖真实 utils.torrent_adapter（纯 Python，只用到被替身的 app.sdk.logging），
+    # 因此这里挂上真实的 utils 包与适配器，而不是再造替身。
+    plugin_root = SERVICE.parent
+    module(
+        'app.plugins.downloadmanagerlocal.utils',
+        __path__=[str(plugin_root / 'utils')],
+    )
+    adapter_spec = importlib.util.spec_from_file_location(
+        'app.plugins.downloadmanagerlocal.utils.torrent_adapter',
+        plugin_root / 'utils' / 'torrent_adapter.py',
+    )
+    adapter = importlib.util.module_from_spec(adapter_spec)
+    monkeypatch.setitem(sys.modules, adapter_spec.name, adapter)
+    adapter_spec.loader.exec_module(adapter)
 
     def load(name):
         spec = importlib.util.spec_from_file_location(PREFIX + '.' + name, SERVICE / (name + '.py'))
