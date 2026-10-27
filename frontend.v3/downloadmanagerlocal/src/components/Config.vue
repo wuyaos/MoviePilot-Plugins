@@ -83,6 +83,7 @@ const defaults = {
   rename_tv_format: '[ {{ title }}{% if year %} ({{ year }}){% endif %}{% if season_episode %} - {{season_episode}}{% endif %} ] - {{original_name}}',
   rename_exclude_dirs: '',
   tag_enabled: true, tag_siteprefix: '🏠', tag_tracker_mappings_str: '',
+  tag_custom_sites_str: '',
   seed_autostart: true, seed_skipverify: false,
   seed_check_interval: 60, seed_max_wait_minutes: 120,
   upload_limit_enabled: false, upload_limit_downloaders: [],
@@ -226,6 +227,24 @@ function serializeTrackerPairs(pairs) {
     .join('\n')
 }
 
+function parseCustomSiteLabels(text) {
+  const out = {}
+  String(text || '').split('\n').forEach(line => {
+    const [from, ...rest] = line.split('->')
+    const domain = (from || '').trim().toLowerCase()
+    const label = rest.join('->').trim()
+    if (domain && label) out[domain] = label
+  })
+  return out
+}
+
+function serializeCustomSiteLabels(pairs) {
+  return pairs
+    .filter(p => !siteNameByDomain(p.site || p.tracker) && String(p.custom || '').trim())
+    .map(p => `${(p.site || p.tracker || '').trim().toLowerCase()} -> ${String(p.custom).trim()}`)
+    .join('\n')
+}
+
 function siteNameByDomain(domain) {
   const clean = String(domain || '').trim().toLowerCase()
   if (!clean) return ''
@@ -257,7 +276,11 @@ Object.keys(form).forEach(k => delete form[k])
   form.tag_all_cat = [...(v?.tag_all_cat || [])]
   form.tag_all_cat_rename = [...(v?.tag_all_cat_rename || [])]
   tagCatPairs.value = parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename)
-  tagTrackerPairs.value = parseTrackerPairs(form.tag_tracker_mappings_str)
+  const customLabels = parseCustomSiteLabels(form.tag_custom_sites_str)
+  tagTrackerPairs.value = parseTrackerPairs(form.tag_tracker_mappings_str).map(p => ({
+    ...p,
+    custom: customLabels[String(p.site || p.tracker || '').trim().toLowerCase()] || '',
+  }))
   syncHrSiteRulesFromForm()
 }, { immediate: true, deep: true })
 function saveConfig() {
@@ -276,6 +299,7 @@ function saveConfig() {
     tag_downloaders: [...(form.tag_downloaders || [])],
     ...serializeCatPairs(tagCatPairs.value),
     tag_tracker_mappings_str: serializeTrackerPairs(tagTrackerPairs.value),
+    tag_custom_sites_str: serializeCustomSiteLabels(tagTrackerPairs.value),
   })
 }
 function selectMain(key) {
@@ -1730,6 +1754,7 @@ function serializeHrSiteConfigYaml(rules) {
                   <span>站点库域名</span>
                   <span>匹配站点</span>
                   <span>标签</span>
+                  <span>自定义标签</span>
                   <span />
                 </div>
                 <div v-for="(pair, idx) in tagTrackerPairs" :key="`tracker-${idx}`" class="dm-map-row">
@@ -1746,7 +1771,14 @@ function serializeHrSiteConfigYaml(rules) {
                     <VChip v-if="siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker)" size="x-small" label variant="tonal">
                       {{ form.tag_siteprefix || '' }}{{ siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker) }}
                     </VChip>
+                    <VChip v-else-if="String(pair.custom || '').trim()" size="x-small" label variant="tonal" color="primary">
+                      {{ form.tag_siteprefix || '' }}{{ String(pair.custom).trim() }}
+                    </VChip>
                     <span v-else class="dm-map-empty-cell">—</span>
+                  </div>
+                  <div class="dm-map-site">
+                    <VChip v-if="siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker)" size="x-small" label variant="tonal" color="success">已收录</VChip>
+                    <VTextField v-else v-model="pair.custom" label="标签名" density="compact" variant="outlined" hide-details style="max-width: 130px" />
                   </div>
                   <div class="d-flex justify-end">
                     <VBtn icon="mdi-close" size="x-small" variant="text" color="error" @click="tagTrackerPairs.splice(idx, 1)" />
@@ -1758,7 +1790,7 @@ function serializeHrSiteConfigYaml(rules) {
                 <VBtn size="small" variant="tonal" prepend-icon="mdi-plus" @click="addTrackerPair">添加 Tracker 映射</VBtn>
               </div>
               <div class="dm-hint mt-2">
-                种子 Tracker 域名按行换算成站点库域名后匹配站点打「站点前缀 + 站点名」标签；右侧显示按域名匹配到的站点名，「未收录」表示站点库没有该域名。
+                种子 Tracker 域名按行换算成站点库域名后匹配站点打「站点前缀 + 站点名」标签；站点库未收录的行可填「自定义标签」，按「站点前缀 + 自定义标签」打标，留空则跳过。
               </div>
             </div>
 

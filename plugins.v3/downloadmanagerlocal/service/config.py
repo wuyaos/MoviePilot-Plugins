@@ -105,6 +105,7 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     if plugin._tag_tracker_mappings_str:
         plugin._tracker_mappings.update(parse_tracker_mappings(plugin._tag_tracker_mappings_str))
     plugin._site_tag_config["enable"] = plugin._tag_enabled
+    plugin._custom_site_labels = dict(config.get("custom_site_labels") or {})
 
     # hr/autoremove/failclean/upload_limit 的门控属性（transfer/rename/tag 已在上方按注册表口径赋值）；
     # upload_limit 此前由 normalize 循环写入裸值，此处统一覆盖为门控值。
@@ -133,6 +134,7 @@ _TAG_FLAT_PREFIX_MAP = {
     "tag_catprefix": "catprefix",
     "tag_siteprefix": "siteprefix",
     "tag_tracker_mappings_str": "tracker_mappings_str",
+    "tag_custom_sites_str": "custom_site_labels_str",
 }
 
 

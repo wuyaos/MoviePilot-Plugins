@@ -45,7 +45,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.8.4"
+    plugin_version = "3.8.5"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页
@@ -127,6 +127,7 @@ class DownloadManagerLocal(_PluginBase):
     _torrent_tags: Optional[list] = None
     # tracker 映射
     _tracker_mappings: Optional[Dict[str, str]] = None
+    _custom_site_labels: Optional[Dict[str, str]] = None
 
     # 辅助
     downloader_helper = None
@@ -164,6 +165,7 @@ class DownloadManagerLocal(_PluginBase):
         self._rename_batch_lock = threading.Lock()
         self._torrent_tags = []
         self._tracker_mappings = {}
+        self._custom_site_labels = {}
         self.downloader_helper = None
 
     def init_plugin(self, config: dict = None):

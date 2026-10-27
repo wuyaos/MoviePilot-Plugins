@@ -98,17 +98,18 @@ const _hoisted_61 = { class: "dm-hr-table mt-2" };
 const _hoisted_62 = { class: "dm-map-site" };
 const _hoisted_63 = { class: "dm-map-site" };
 const _hoisted_64 = {
-  key: 1,
+  key: 2,
   class: "dm-map-empty-cell"
 };
-const _hoisted_65 = { class: "d-flex justify-end" };
-const _hoisted_66 = {
+const _hoisted_65 = { class: "dm-map-site" };
+const _hoisted_66 = { class: "d-flex justify-end" };
+const _hoisted_67 = {
   key: 0,
   class: "dm-map-empty"
 };
-const _hoisted_67 = { class: "d-flex justify-end mt-2" };
-const _hoisted_68 = { class: "dm-pane" };
-const _hoisted_69 = {
+const _hoisted_68 = { class: "d-flex justify-end mt-2" };
+const _hoisted_69 = { class: "dm-pane" };
+const _hoisted_70 = {
   key: 0,
   class: "text-caption text-error mt-2"
 };
@@ -203,6 +204,7 @@ const defaults = {
   rename_tv_format: '[ {{ title }}{% if year %} ({{ year }}){% endif %}{% if season_episode %} - {{season_episode}}{% endif %} ] - {{original_name}}',
   rename_exclude_dirs: '',
   tag_enabled: true, tag_siteprefix: '🏠', tag_tracker_mappings_str: '',
+  tag_custom_sites_str: '',
   seed_autostart: true, seed_skipverify: false,
   seed_check_interval: 60, seed_max_wait_minutes: 120,
   upload_limit_enabled: false, upload_limit_downloaders: [],
@@ -346,6 +348,24 @@ function serializeTrackerPairs(pairs) {
     .join('\n')
 }
 
+function parseCustomSiteLabels(text) {
+  const out = {};
+  String(text || '').split('\n').forEach(line => {
+    const [from, ...rest] = line.split('->');
+    const domain = (from || '').trim().toLowerCase();
+    const label = rest.join('->').trim();
+    if (domain && label) out[domain] = label;
+  });
+  return out
+}
+
+function serializeCustomSiteLabels(pairs) {
+  return pairs
+    .filter(p => !siteNameByDomain(p.site || p.tracker) && String(p.custom || '').trim())
+    .map(p => `${(p.site || p.tracker || '').trim().toLowerCase()} -> ${String(p.custom).trim()}`)
+    .join('\n')
+}
+
 function siteNameByDomain(domain) {
   const clean = String(domain || '').trim().toLowerCase();
   if (!clean) return ''
@@ -377,7 +397,11 @@ Object.keys(form).forEach(k => delete form[k]);
   form.tag_all_cat = [...(v?.tag_all_cat || [])];
   form.tag_all_cat_rename = [...(v?.tag_all_cat_rename || [])];
   tagCatPairs.value = parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename);
-  tagTrackerPairs.value = parseTrackerPairs(form.tag_tracker_mappings_str);
+  const customLabels = parseCustomSiteLabels(form.tag_custom_sites_str);
+  tagTrackerPairs.value = parseTrackerPairs(form.tag_tracker_mappings_str).map(p => ({
+    ...p,
+    custom: customLabels[String(p.site || p.tracker || '').trim().toLowerCase()] || '',
+  }));
   syncHrSiteRulesFromForm();
 }, { immediate: true, deep: true });
 function saveConfig() {
@@ -396,6 +420,7 @@ function saveConfig() {
     tag_downloaders: [...(form.tag_downloaders || [])],
     ...serializeCatPairs(tagCatPairs.value),
     tag_tracker_mappings_str: serializeTrackerPairs(tagTrackerPairs.value),
+    tag_custom_sites_str: serializeCustomSiteLabels(tagTrackerPairs.value),
   });
 }
 function selectMain(key) {
@@ -3582,7 +3607,7 @@ return (_ctx, _cache) => {
                 [_vShow, activeSub.value === 'tag_basic']
               ]),
               _withDirectives(_createElementVNode("div", _hoisted_57, [
-                _cache[151] || (_cache[151] = _createElementVNode("div", { class: "dm-section-title" }, "映射规则", -1)),
+                _cache[152] || (_cache[152] = _createElementVNode("div", { class: "dm-section-title" }, "映射规则", -1)),
                 _createVNode(_component_VRow, { class: "mt-2" }, {
                   default: _withCtx(() => [
                     _createVNode(_component_VCol, {
@@ -3606,7 +3631,7 @@ return (_ctx, _cache) => {
                   ]),
                   _: 1
                 }),
-                _cache[152] || (_cache[152] = _createElementVNode("div", { class: "dm-section-title mt-2" }, "分类规则", -1)),
+                _cache[153] || (_cache[153] = _createElementVNode("div", { class: "dm-section-title mt-2" }, "分类规则", -1)),
                 (!form.tag_rename_type)
                   ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                       _createElementVNode("div", _hoisted_58, [
@@ -3691,14 +3716,15 @@ return (_ctx, _cache) => {
                       _cache[146] || (_cache[146] = _createElementVNode("div", { class: "dm-hint" }, " 当前模式：按下载保存路径包含的关键词判断分类（如 /anime/#动漫），一行不命中则不设分类；关闭上方开关则改按 TMDB 识别设置分类。 ", -1))
                     ], 64))
                   : _createCommentVNode("", true),
-                _cache[153] || (_cache[153] = _createElementVNode("div", { class: "dm-section-title mt-4" }, "站点规则", -1)),
+                _cache[154] || (_cache[154] = _createElementVNode("div", { class: "dm-section-title mt-4" }, "站点规则", -1)),
                 _createElementVNode("div", _hoisted_61, [
-                  _cache[149] || (_cache[149] = _createElementVNode("div", { class: "dm-map-row dm-map-row--head" }, [
+                  _cache[150] || (_cache[150] = _createElementVNode("div", { class: "dm-map-row dm-map-row--head" }, [
                     _createElementVNode("span", null, "Tracker 域名"),
                     _createElementVNode("span"),
                     _createElementVNode("span", null, "站点库域名"),
                     _createElementVNode("span", null, "匹配站点"),
                     _createElementVNode("span", null, "标签"),
+                    _createElementVNode("span", null, "自定义标签"),
                     _createElementVNode("span")
                   ], -1)),
                   (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(tagTrackerPairs.value, (pair, idx) => {
@@ -3714,7 +3740,7 @@ return (_ctx, _cache) => {
                         variant: "outlined",
                         "hide-details": ""
                       }, null, 8, ["modelValue", "onUpdate:modelValue"]),
-                      _cache[148] || (_cache[148] = _createElementVNode("span", { class: "dm-map-arrow" }, "→", -1)),
+                      _cache[149] || (_cache[149] = _createElementVNode("span", { class: "dm-map-arrow" }, "→", -1)),
                       _createVNode(_component_VTextField, {
                         modelValue: pair.site,
                         "onUpdate:modelValue": $event => ((pair.site) = $event),
@@ -3763,9 +3789,47 @@ return (_ctx, _cache) => {
                               ]),
                               _: 2
                             }, 1024))
-                          : (_openBlock(), _createElementBlock("span", _hoisted_64, "—"))
+                          : (String(pair.custom || '').trim())
+                            ? (_openBlock(), _createBlock(_component_VChip, {
+                                key: 1,
+                                size: "x-small",
+                                label: "",
+                                variant: "tonal",
+                                color: "primary"
+                              }, {
+                                default: _withCtx(() => [
+                                  _createTextVNode(_toDisplayString(form.tag_siteprefix || '') + _toDisplayString(String(pair.custom).trim()), 1)
+                                ]),
+                                _: 2
+                              }, 1024))
+                            : (_openBlock(), _createElementBlock("span", _hoisted_64, "—"))
                       ]),
                       _createElementVNode("div", _hoisted_65, [
+                        (siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker))
+                          ? (_openBlock(), _createBlock(_component_VChip, {
+                              key: 0,
+                              size: "x-small",
+                              label: "",
+                              variant: "tonal",
+                              color: "success"
+                            }, {
+                              default: _withCtx(() => [...(_cache[148] || (_cache[148] = [
+                                _createTextVNode("已收录", -1)
+                              ]))]),
+                              _: 1
+                            }))
+                          : (_openBlock(), _createBlock(_component_VTextField, {
+                              key: 1,
+                              modelValue: pair.custom,
+                              "onUpdate:modelValue": $event => ((pair.custom) = $event),
+                              label: "标签名",
+                              density: "compact",
+                              variant: "outlined",
+                              "hide-details": "",
+                              style: {"max-width":"130px"}
+                            }, null, 8, ["modelValue", "onUpdate:modelValue"]))
+                      ]),
+                      _createElementVNode("div", _hoisted_66, [
                         _createVNode(_component_VBtn, {
                           icon: "mdi-close",
                           size: "x-small",
@@ -3777,35 +3841,35 @@ return (_ctx, _cache) => {
                     ]))
                   }), 128)),
                   (!tagTrackerPairs.value.length)
-                    ? (_openBlock(), _createElementBlock("div", _hoisted_66, "暂无映射，点击下方按钮添加"))
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_67, "暂无映射，点击下方按钮添加"))
                     : _createCommentVNode("", true)
                 ]),
-                _createElementVNode("div", _hoisted_67, [
+                _createElementVNode("div", _hoisted_68, [
                   _createVNode(_component_VBtn, {
                     size: "small",
                     variant: "tonal",
                     "prepend-icon": "mdi-plus",
                     onClick: addTrackerPair
                   }, {
-                    default: _withCtx(() => [...(_cache[150] || (_cache[150] = [
+                    default: _withCtx(() => [...(_cache[151] || (_cache[151] = [
                       _createTextVNode("添加 Tracker 映射", -1)
                     ]))]),
                     _: 1
                   })
                 ]),
-                _cache[154] || (_cache[154] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 种子 Tracker 域名按行换算成站点库域名后匹配站点打「站点前缀 + 站点名」标签；右侧显示按域名匹配到的站点名，「未收录」表示站点库没有该域名。 ", -1))
+                _cache[155] || (_cache[155] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 种子 Tracker 域名按行换算成站点库域名后匹配站点打「站点前缀 + 站点名」标签；站点库未收录的行可填「自定义标签」，按「站点前缀 + 自定义标签」打标，留空则跳过。 ", -1))
               ], 512), [
                 [_vShow, activeSub.value === 'mapping']
               ]),
-              _withDirectives(_createElementVNode("div", _hoisted_68, [
-                _cache[156] || (_cache[156] = _createElementVNode("div", { class: "dm-section-title" }, "基础设置", -1)),
+              _withDirectives(_createElementVNode("div", _hoisted_69, [
+                _cache[157] || (_cache[157] = _createElementVNode("div", { class: "dm-section-title" }, "基础设置", -1)),
                 _createVNode(_component_VAlert, {
                   type: "info",
                   variant: "tonal",
                   density: "compact",
                   class: "mb-4"
                 }, {
-                  default: _withCtx(() => [...(_cache[155] || (_cache[155] = [
+                  default: _withCtx(() => [...(_cache[156] || (_cache[156] = [
                     _createTextVNode("做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。", -1)
                   ]))]),
                   _: 1
@@ -3906,7 +3970,7 @@ return (_ctx, _cache) => {
               variant: "text",
               onClick: _cache[100] || (_cache[100] = $event => (emit('close')))
             }, {
-              default: _withCtx(() => [...(_cache[157] || (_cache[157] = [
+              default: _withCtx(() => [...(_cache[158] || (_cache[158] = [
                 _createTextVNode("取消", -1)
               ]))]),
               _: 1
@@ -3917,7 +3981,7 @@ return (_ctx, _cache) => {
               "prepend-icon": "mdi-content-save-outline",
               onClick: saveConfig
             }, {
-              default: _withCtx(() => [...(_cache[158] || (_cache[158] = [
+              default: _withCtx(() => [...(_cache[159] || (_cache[159] = [
                 _createTextVNode("保存配置", -1)
               ]))]),
               _: 1
@@ -3952,13 +4016,13 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
-                  default: _withCtx(() => [...(_cache[159] || (_cache[159] = [
+                  default: _withCtx(() => [...(_cache[160] || (_cache[160] = [
                     _createTextVNode("新增自定义站点", -1)
                   ]))]),
                   _: 1
                 }),
                 _createVNode(_component_VCardSubtitle, null, {
-                  default: _withCtx(() => [...(_cache[160] || (_cache[160] = [
+                  default: _withCtx(() => [...(_cache[161] || (_cache[161] = [
                     _createTextVNode("站点名需与站点标签识别出的站点名一致", -1)
                   ]))]),
                   _: 1
@@ -3981,7 +4045,7 @@ return (_ctx, _cache) => {
                   onKeyup: _withKeys(hrConfirmAddSite, ["enter"])
                 }, null, 8, ["modelValue"]),
                 (hrAddError.value)
-                  ? (_openBlock(), _createElementBlock("div", _hoisted_69, _toDisplayString(hrAddError.value), 1))
+                  ? (_openBlock(), _createElementBlock("div", _hoisted_70, _toDisplayString(hrAddError.value), 1))
                   : _createCommentVNode("", true)
               ]),
               _: 1
@@ -3994,7 +4058,7 @@ return (_ctx, _cache) => {
                   variant: "text",
                   onClick: _cache[102] || (_cache[102] = $event => (hrAddDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[161] || (_cache[161] = [
+                  default: _withCtx(() => [...(_cache[162] || (_cache[162] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -4005,7 +4069,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-plus",
                   onClick: hrConfirmAddSite
                 }, {
-                  default: _withCtx(() => [...(_cache[162] || (_cache[162] = [
+                  default: _withCtx(() => [...(_cache[163] || (_cache[163] = [
                     _createTextVNode("添加", -1)
                   ]))]),
                   _: 1
@@ -4060,7 +4124,7 @@ return (_ctx, _cache) => {
             _createVNode(_component_VDivider),
             _createVNode(_component_VCardText, { class: "text-body-2" }, {
               default: _withCtx(() => [
-                _cache[163] || (_cache[163] = _createTextVNode(" 将把本页签全部设置恢复为插件默认值。改动先作用于表单，点击下方「保存配置」后才会真正生效。", -1)),
+                _cache[164] || (_cache[164] = _createTextVNode(" 将把本页签全部设置恢复为插件默认值。改动先作用于表单，点击下方「保存配置」后才会真正生效。", -1)),
                 (paneResetTarget.value === 'hr')
                   ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                       _createTextVNode("H&R 站点独立规则也会一并清空回全局基准。")
@@ -4077,7 +4141,7 @@ return (_ctx, _cache) => {
                   variant: "text",
                   onClick: _cache[104] || (_cache[104] = $event => (paneResetDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[164] || (_cache[164] = [
+                  default: _withCtx(() => [...(_cache[165] || (_cache[165] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -4088,7 +4152,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-restore",
                   onClick: confirmPaneReset
                 }, {
-                  default: _withCtx(() => [...(_cache[165] || (_cache[165] = [
+                  default: _withCtx(() => [...(_cache[166] || (_cache[166] = [
                     _createTextVNode("恢复默认", -1)
                   ]))]),
                   _: 1
@@ -4107,6 +4171,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-1e9657c3"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b21aded8"]]);
 
 export { Config as default };

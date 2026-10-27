@@ -70,6 +70,7 @@ PLUGIN_CONFIG_DEFAULTS = {
     "tag_enabled": True,
     "tag_siteprefix": "🏠",
     "tag_tracker_mappings_str": "",
+    "tag_custom_sites_str": "",
     **TAG_MODULE_FLAT_DEFAULTS,
     **UPLOAD_LIMIT_CONFIG_DEFAULTS,
     **build_hr_config_defaults(),

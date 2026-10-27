@@ -435,7 +435,8 @@ def tag_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags: list,
             if not domain:
                 continue
             # 从系统配置中查找匹配的站点
-            site_name = find_site_by_domain(domain)
+            custom_labels = getattr(plugin, "_custom_site_labels", None) or {}
+            site_name = find_site_by_domain(domain) or custom_labels.get((domain or "").lower())
             if site_name:
                 break
 
@@ -477,6 +478,7 @@ __all__ = (
     "complement_history",
     "get_module_status",
     "parse_tracker_mappings",
+    "parse_custom_site_labels",
     "process_download_added",
 )
 
@@ -509,6 +511,7 @@ DEFAULT_TAG_CONFIG = {
     "catprefix": "",
     "siteprefix": "",
     "tracker_mappings_str": DEFAULT_TRACKER_MAPPINGS,
+    "custom_site_labels_str": "",
 }
 
 
@@ -525,6 +528,19 @@ def parse_tracker_mappings(mapping_str: str) -> dict[str, str]:
     return mappings
 
 
+def parse_custom_site_labels(mapping_str: str) -> dict[str, str]:
+    """解析每行 ``域名 -> 标签名`` 的自定义站点标签表（站点库未收录时兜底）。"""
+    labels = {}
+    for raw_line in str(mapping_str or "").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "->" not in line:
+            continue
+        domain, label = (part.strip() for part in line.split("->", 1))
+        if domain and label:
+            labels[domain.lower()] = label
+    return labels
+
+
 def build_tag_config(config: dict | None = None) -> dict:
     """按来源 ``get_form`` 默认值构建标签模块配置，不以 qnap 配置覆盖缺省值。"""
     result = dict(DEFAULT_TAG_CONFIG)
@@ -537,6 +553,7 @@ def build_tag_config(config: dict | None = None) -> dict:
     result["all_cat"] = list(result.get("all_cat") or DEFAULT_ALL_CAT)
     result["all_cat_rename"] = list(result.get("all_cat_rename") or result["all_cat"])
     result["tracker_mappings"] = parse_tracker_mappings(result.get("tracker_mappings_str", ""))
+    result["custom_site_labels"] = parse_custom_site_labels(result.get("custom_site_labels_str", ""))
     result["category_mapping"] = dict(zip(result["all_cat"], result["all_cat_rename"]))
     return result
 
@@ -617,7 +634,10 @@ def _apply_metadata(plugin, service, torrent, config: dict, context=None) -> dic
     site_name = None
     for tracker in trackers:
         domain = next((mapped for key, mapped in config["tracker_mappings"].items() if key in tracker), None)
-        site_name = find_site_by_domain(domain or get_url_domain(tracker))
+        custom_labels = config.get("custom_site_labels") or {}
+        site_name = find_site_by_domain(domain or get_url_domain(tracker)) or custom_labels.get(
+            (domain or get_url_domain(tracker) or "").lower()
+        )
         if site_name:
             break
     tags = []

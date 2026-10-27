@@ -2,7 +2,7 @@
 
 覆盖 v3.5.1 门控回归（commit 5c0b3ec7 + review 修复）：
 - MODULE_SWITCHES 注册表 / module_active / module_switch_on / build_module_switches
-- PLUGIN_CONFIG_DEFAULTS 键数（107，防漂移）
+- PLUGIN_CONFIG_DEFAULTS 键数（108，防漂移）
 - _TAG_FLAT_PREFIX_MAP 的 tag_enabled→enable 映射（review P1-2 回归）
 - initialize_runtime_config 门控覆盖（总开关×模块开关矩阵、嵌套视图对齐）
 宿主（app.sdk/app.plugins）全部替身；不连接 MoviePilot。
@@ -98,12 +98,12 @@ def gating(monkeypatch):
 
 
 def test_registry_and_defaults(gating):
-    """注册表覆盖 7 模块、属性名与默认键存在、键数 107。"""
+    """注册表覆盖 7 模块、属性名与默认键存在、键数 108。"""
     u = gating.utils
     assert set(u.MODULE_SWITCHES) == {
         'transfer', 'rename', 'tag', 'hr', 'autoremove', 'failclean', 'upload_limit'}
     defaults = u.build_plugin_config_defaults()
-    assert len(defaults) == 107
+    assert len(defaults) == 108
     for removed_key in ('onlyonce', 'hr_onlyonce', 'remover_onlyonce',
                         'rename_onlyonce', 'rename_retry', 'rename_recovery'):
         assert removed_key not in defaults, removed_key
