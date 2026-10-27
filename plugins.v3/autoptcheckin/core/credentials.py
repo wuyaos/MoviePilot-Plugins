@@ -34,52 +34,6 @@ class CredentialResolution:
     status: str
     reason: str = ""
 
-class CredentialResolver:
-    def __init__(self, invalid_fingerprints: set[str] | None = None):
-        self.invalid_fingerprints = invalid_fingerprints if invalid_fingerprints is not None else set()
-
-    def select_cookie(self, candidates: dict[str, Credential], bound_uid: str = '') -> CredentialResolution:
-        """试点先选择 Cookie；身份校验在 runner 的新页面前读中执行。"""
-        for source in CredentialSpec().cookie_sources:
-            candidate = candidates.get(source)
-            if candidate is None or not candidate.value:
-                continue
-            if candidate.fingerprint not in self.invalid_fingerprints:
-                return CredentialResolution(candidate, 'valid')
-        return CredentialResolution(None, 'auth_failed', '站点管理中缺少可用 Cookie')
-
-    def resolve(self, spec: CredentialSpec, candidates: dict[str, Credential], bound_uid: str,
-                validate: Callable[[Credential], CredentialCheck],
-                refresh: Callable[[], Credential] | None = None) -> CredentialResolution:
-        explicitly_invalid = False
-        for source in spec.cookie_sources:
-            candidate = candidates.get(source)
-            if candidate is None or not candidate.value:
-                continue
-            if candidate.fingerprint in self.invalid_fingerprints:
-                explicitly_invalid = True
-                continue
-            try:
-                check = validate(candidate)
-            except Exception:
-                return CredentialResolution(None, "network_error", "凭证校验不可达，未触发续期")
-            if check.status == "valid":
-                return CredentialResolution(Credential(source, candidate.value, check.uid), "valid")
-            if check.status != "invalid":
-                return CredentialResolution(None, check.status, "未明确失效，不续期或切换凭证")
-            explicitly_invalid = True
-            self.invalid_fingerprints.add(candidate.fingerprint)
-        # 无候选不等同于明确认证失效；阶段1不做静默首次登录。
-        if explicitly_invalid and spec.refresh == "password" and refresh:
-            try:
-                candidate = refresh()
-                check = validate(candidate)
-            except Exception:
-                return CredentialResolution(None, "network_error", "续期校验不可达")
-            if check.status == "valid":
-                return CredentialResolution(Credential(candidate.source, candidate.value, check.uid), "valid")
-            return CredentialResolution(None, "unconfirmed", "续期未通过身份校验")
-        return CredentialResolution(None, "auth_failed", "没有已验证凭证")
 
 
 def cookiecloud_candidate(url: str) -> CredentialResolution:

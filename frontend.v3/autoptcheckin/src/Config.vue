@@ -97,6 +97,11 @@ function toggleSite(id) { openSites.value = openSites.value.includes(id) ? openS
 function expandSites() { openSites.value = selected.value.filter(hasExtraSettings).map(site => site.id) }
 function collapseSites() { openSites.value = [] }
 const pickerOpen = ref(false), pendingSites = ref([])
+// 自定义站点弹窗的全部编辑（含签到勾选/删除）都停留在草稿，取消不落任何主模型。
+// 自定义站点弹窗编辑全落草稿：draftSign 记录「显式切换增量」（Map id→bool），
+// 未切换行沿用主模型现状；visible 过滤删除行。取消弹窗不落任何主模型。
+const draftSign = ref(new Map())
+const visibleCustomDraft = computed(() => customDraft.value.filter(site => !site.deleted))
 const pickerAnchor = ref(null), pickerPopup = ref(null), pickerStyle = ref({})
 function positionPicker() {
   if (!pickerOpen.value || !pickerAnchor.value) return
@@ -127,38 +132,47 @@ function editCustomSites() {
   pickerOpen.value = false
   error.value = ''
   customDraft.value = JSON.parse(JSON.stringify(model.custom_sites_data))
+  draftSign.value = new Map()
   customDialog.value?.showModal()
 }
 function toggleCustomSignin(site, checked) {
-  const id = String(site.id)
-  if (checked) {
-    if (!model.sign_sites.includes(id)) model.sign_sites.push(id)
-    if (!model.enabled_sites.includes(id)) model.enabled_sites.push(id)
-  } else {
-    model.sign_sites = model.sign_sites.filter(key => key !== id)
-  }
+  draftSign.value = new Map(draftSign.value).set(String(site.id), !!checked)
 }
 function addCustomSite() {
   const id = 'custom-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
   customDraft.value.push({id, name:'', url:'', emulate:false, source:'自定义站点', login_capable:true, credential:'cookie', fields:[]})
 }
 function removeCustomDraft(id) {
-  const key = String(id)
-  customDraft.value = customDraft.value.filter(site => String(site.id) !== key)
-  customOverlay.value = [...customOverlay.value.filter(site => site.id !== key), {id: key, deleted:true}]
+  const site = customDraft.value.find(item => String(item.id) === String(id))
+  if (site) site.deleted = true
 }
 function saveCustomDraft() {
-  for (const site of customDraft.value) {
+  const kept = customDraft.value.filter(site => !site.deleted)
+  for (const site of kept) {
     const id = String(site.id)
     if (!site.name.trim() || !site.url) { error.value = '请填写名称及 HTTP(S) 地址'; return }
     let url; try { url = new URL(site.url) } catch { error.value = '请填写有效的 HTTP(S) 地址'; return }
     if (!['http:', 'https:'].includes(url.protocol)) { error.value = '请填写名称及 HTTP(S) 地址'; return }
     Object.assign(site, {id, name:site.name.trim(), url:url.href, source:'自定义站点'})
-    if (model.sign_sites.includes(id) && !model.enabled_sites.includes(id)) model.enabled_sites.push(id)
-    if (!model.sign_sites.includes(id)) model.sign_sites = model.sign_sites.filter(item => item !== id)
+    // 仿真开关与主卡同源（siteEmulated/setSiteOverride 直写覆盖表），保存时不再二次同步；
+    // 签到状态：显式切换过的行以草稿为准，未切换的行沿用主模型现状（重命名/改址不丢勾选）。
+    const toggled = draftSign.value.get(id)
+    const signOn = toggled !== undefined ? toggled : model.sign_sites.includes(id)
+    if (signOn) {
+      if (!model.sign_sites.includes(id)) model.sign_sites.push(id)
+      if (!model.enabled_sites.includes(id)) model.enabled_sites.push(id)
+    } else {
+      model.sign_sites = model.sign_sites.filter(item => item !== id)
+    }
   }
-  model.custom_sites_data = customDraft.value.map(site => ({...site}))
-  customOverlay.value = [...customOverlay.value.filter(site => site.deleted), ...model.custom_sites_data.map(site => ({...site}))]
+  model.custom_sites_data = kept.map(site => ({...site}))
+  // overlay 重建保留 deleted 占位（含本轮草稿删除项）：sites 合并时靠它压制 registry 同 id 行。
+  const draftDeleted = customDraft.value.filter(site => site.deleted).map(site => ({id: String(site.id), deleted: true}))
+  customOverlay.value = [
+    ...customOverlay.value.filter(site => site.deleted),
+    ...draftDeleted,
+    ...model.custom_sites_data.map(site => ({...site}))
+  ]
   customDialog.value?.close()
 }
 const pendingRemove = ref(null)
@@ -206,7 +220,7 @@ emit('layout', { maxWidth: '1000px' })
 <div class="topline"><h3>启用站点</h3><div class="row"><span class="chip blue">已启用 {{ selected.length }} 个站点</span><button class="btn ghost mini" @click="editCustomSites">编辑自定义站点</button></div></div><details class="picker" :open="pickerOpen"><summary ref="pickerAnchor" @click.prevent="togglePicker"><span class="picker-selection"><button v-for="site in pickerSelected" :key="site.id" type="button" class="chip" :class="sourceBadge(site.source)" :aria-label="'移除选择 '+site.name" @click.stop.prevent="removePickerSite(site.id)">{{ site.name }} ×</button><span v-if="!pickerSelected.length">选择启用的站点 · 支持名称筛选</span></span><span>⌄</span></summary><div ref="pickerPopup" popover="manual" class="picker-popup" :style="pickerStyle"><label class="field"><span>筛选站点</span><input v-model="search" class="input" type="search" placeholder="搜索站点名称"></label><button type="button" class="btn ghost mini" :disabled="!filtered.length" @click="toggleFilteredSelection">{{ allFilteredSelected ? '全不选' : '全选' }}</button><div class="choices"><label v-for="site in filtered" :key="site.id" class="choice"><span><input v-model="pendingSites" type="checkbox" :value="site.id">{{ site.name }}</span><span class="chip" :class="sourceBadge(site.source)">{{ site.source }}</span></label><p v-if="!filtered.length" class="hint">没有匹配的站点</p></div><div class="row picker-actions"><button class="btn confirm" @click="confirmSites">确认选择</button><button class="btn subtle" @click="pickerOpen = false">取消</button></div></div></details>
 
 <div v-if="selected.length" class="site-management"><label class="field"><span>筛选已启用站点</span><input v-model="selectedSearch" type="search" class="input" placeholder="搜索已启用站点"></label><div class="row management-actions"><button class="btn ghost mini" @click="expandSites">全部展开</button><button class="btn ghost mini" @click="collapseSites">全部收起</button></div><div class="enabled-site-list"><details v-for="site in filteredSelected" :key="site.id" class="site-card config-site" :open="hasExtraSettings(site) && openSites.includes(site.id)"><summary @click.prevent><span class="row-left"><button v-if="pendingRemove !== site.id" type="button" class="remove-icon" :aria-label="'移出启用 '+site.name" @click="pendingRemove = site.id">×</button><template v-else><button type="button" class="btn danger mini" @click="confirmRemove(site.id)">确认移除</button><button type="button" class="btn subtle mini" @click="pendingRemove = null">取消</button></template><span class="site-name site-label"><img v-if="site.icon && !brokenIcons[site.id]" class="site-icon" :src="site.icon" alt="" @error="brokenIcons[site.id] = true"><span v-else class="site-icon site-initial" aria-hidden="true">{{ site.name?.slice(0,1) }}</span>{{ site.name }}</span><button type="button" class="pwr" :class="model.paused_sites.includes(String(site.id)) ? 'paused' : 'active'" :title="model.paused_sites.includes(String(site.id)) ? '恢复执行' : '暂停执行'" :aria-label="model.paused_sites.includes(String(site.id)) ? '恢复执行' : '暂停执行'" @click.stop="togglePaused(site)">⏻</button><span class="badges"><span class="chip" :class="sourceBadge(site.source)">{{ site.source }}</span><span class="chip" :class="credentialBadge(site.credential)">{{ (site.credential && site.credential.kind) ? site.credential.kind : (site.credential || 'cookie') }}</span><span v-if="site.cf === true" class="chip cf-yes">CF 盾</span><span v-if="cloudsignSelected(site)" class="chip shield-cloud">云签</span><span v-else-if="siteEmulated(site)" class="chip emulate">仿真</span><span v-if="hasCloudsign(site) && cloudsignSelected(site) && !cloudsignConfigured" class="chip badge-unknown" title="未配置 Browserless Token 或自建服务地址，云签不会生效">云签未配置</span><span v-if="site.notice" class="chip badge-unknown" :title="site.notice">⚠</span></span></span><span class="row-right"><span class="switch-group switch-group-left"><label class="switch mini-switch switch-col" :title="site.name+' 代理'" @click.stop><input type="checkbox" role="switch" :checked="siteProxied(site)" :aria-label="site.name+' 代理'" @change="setSiteOverride('site_proxy', site, $event.target.checked)"><span>代理</span></label><label class="switch mini-switch switch-col emulate-switch" :class="{adapt: hasEmulate(site)}" :title="site.name+(hasEmulate(site) ? ' 仿真（有适配）' : ' 仿真')" @click.stop><input type="checkbox" role="switch" :checked="siteEmulated(site)" :aria-label="site.name+' 仿真'" @change="setSiteOverride('site_emulate', site, $event.target.checked)"><span>仿真</span></label><label v-if="hasCloudsign(site)" class="switch mini-switch switch-col" :title="site.name+' 云签'" @click.stop><input type="checkbox" role="switch" :checked="cloudsignSelected(site)" :aria-label="site.name+' 云签'" @change="toggleCloudsign(site, $event.target.checked)"><span>云签</span></label><span v-else class="switch-col switch-placeholder" aria-hidden="true"></span></span><span class="switch-group switch-group-right"><label v-if="canSign(site)" class="switch mini-switch switch-col" :title="site.name+' 签到'" @click.stop><input v-model="model.sign_sites" type="checkbox" role="switch" :value="site.id" :aria-label="site.name+' 签到'"><span>签到</span></label><span v-else class="switch-col switch-placeholder" aria-hidden="true"></span><label class="switch mini-switch switch-col" :title="site.name+' 登录'" @click.stop><input v-model="model.login_sites" type="checkbox" role="switch" :value="site.id" :aria-label="site.name+' 登录'"><span>登录</span></label></span></span><button v-if="hasExtraSettings(site)" type="button" class="btn ghost mini expand-icon" :aria-expanded="openSites.includes(site.id)" :aria-label="(openSites.includes(site.id) ? '收起配置 ' : '展开配置 ')+site.name" @click.prevent="toggleSite(site.id)">{{ openSites.includes(site.id) ? '▾' : '▸' }}</button><span v-else class="expand-placeholder" aria-hidden="true"></span></summary><div class="site-detail"><div v-if="(site.fields || []).length && (model.sign_sites.includes(site.id) || model.login_sites.includes(site.id))" class="credentials"><div class="grid fields-grid"><label v-for="field in (site.fields || [])" :key="field.key" class="field"><span>{{ field.label }}</span><input v-model="model[field.key]" class="input" :type="field.type === 'password' && showPlain[site.id + '.' + field.key] ? 'text' : field.type" autocomplete="off"><button v-if="field.type === 'password'" type="button" class="btn ghost mini eye-btn" :aria-label="(showPlain[site.id + '.' + field.key] ? '隐藏' : '显示')+field.label" @click="showPlain[site.id + '.' + field.key] = !showPlain[site.id + '.' + field.key]">{{ showPlain[site.id + '.' + field.key] ? '隐藏' : '显示' }}</button></label></div></div></div></details><div v-if="!filteredSelected.length" class="empty">没有匹配的已启用站点</div></div></div>
-<div v-if="!selected.length" class="empty">尚未启用站点。请从上方下拉清单选择。</div><dialog ref="customDialog" class="custom-dialog" aria-labelledby="custom-dialog-title"><div class="card-head"><h3 id="custom-dialog-title">编辑自定义站点</h3><button type="button" class="btn ghost" @click="customDialog.close()">关闭</button></div><div class="custom-list"><div class="custom-table-head" role="row"><span></span><span>站点名称</span><span>站点地址</span><span>仿真</span><span>签到</span></div><div v-for="site in customDraft" :key="site.id" class="custom-row custom-columns"><button type="button" class="remove-icon" aria-label="删除自定义站点" @click="removeCustomDraft(site.id)">×</button><label class="field" aria-label="站点名称"><input class="input" v-model="site.name" required></label><label class="field" aria-label="站点地址"><input class="input" type="url" v-model="site.url" required></label><label class="switch mini-switch"><input type="checkbox" role="switch" v-model="site.emulate">仿真</label><label class="switch mini-switch"><input type="checkbox" role="switch" :checked="model.sign_sites.includes(String(site.id))" @change="toggleCustomSignin(site, $event.target.checked)">签到</label></div><p v-if="!customDraft.length" class="hint">暂无自定义站点</p><span role="alert">{{ error }}</span></div><div class="footer custom-footer"><button type="button" class="btn ghost" @click="addCustomSite">+ 新增站点</button><div class="row"><button type="button" class="btn subtle" @click="customDialog.close()">取消</button><button type="button" class="btn" @click="saveCustomDraft">保存</button></div></div></dialog>
+<div v-if="!selected.length" class="empty">尚未启用站点。请从上方下拉清单选择。</div><dialog ref="customDialog" class="custom-dialog" aria-labelledby="custom-dialog-title"><div class="card-head"><h3 id="custom-dialog-title">编辑自定义站点</h3><button type="button" class="btn ghost" @click="customDialog.close()">关闭</button></div><div class="custom-list"><div class="custom-table-head" role="row"><span></span><span>站点名称</span><span>站点地址</span><span>仿真</span><span>签到</span></div><div v-for="site in visibleCustomDraft" :key="site.id" class="custom-row custom-columns"><button type="button" class="remove-icon" aria-label="删除自定义站点" @click="removeCustomDraft(site.id)">×</button><label class="field" aria-label="站点名称"><input class="input" v-model="site.name" required></label><label class="field" aria-label="站点地址"><input class="input" type="url" v-model="site.url" required></label><label class="switch mini-switch"><input type="checkbox" role="switch" :checked="siteEmulated(site)" @change="setSiteOverride('site_emulate', site, $event.target.checked)">仿真</label><label class="switch mini-switch"><input type="checkbox" role="switch" :checked="draftSign.has(String(site.id))" @change="toggleCustomSignin(site, $event.target.checked)">签到</label></div><p v-if="!visibleCustomDraft.length" class="hint">暂无自定义站点</p><span role="alert">{{ error }}</span></div><div class="footer custom-footer"><button type="button" class="btn ghost" @click="addCustomSite">+ 新增站点</button><div class="row"><button type="button" class="btn subtle" @click="customDialog.close()">取消</button><button type="button" class="btn" @click="saveCustomDraft">保存</button></div></div></dialog>
 </section><div class="footer"><button class="btn ghost" @click="emit('switch')">查看数据</button><button class="btn" @click="save">保存配置</button></div>
 </section></div>
 </template>

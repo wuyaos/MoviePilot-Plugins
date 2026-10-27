@@ -714,7 +714,7 @@ class AutoPtCheckin(_PluginBase):
         return {'success': True, 'data': result}
 
     async def api_login_by_domain(self, domain: str = '') -> dict:
-        site_id = site_id_for_domain(domain, include_legacy=True)
+        site_id = site_id_for_domain(domain)
         if not site_id:
             site_id = next((str(item.get('id')) for item in self._config.get('custom_sites_data', [])
                             if isinstance(item, dict) and (str(item.get('id')) == str(domain) or (domain and hostname(item.get('url', '')) == hostname(domain)))), None)

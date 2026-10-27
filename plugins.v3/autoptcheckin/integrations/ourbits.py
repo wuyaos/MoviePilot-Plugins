@@ -57,11 +57,26 @@ def login(http, info) -> LoginResult:
     else:
         data.pop('2fa_code', None)
     action = urljoin(BASE, form.get('action'))
-    posted = http.post(action, data=data,
-                       headers={'Origin': BASE, 'Referer': BASE + 'login.php'})
+    try:
+        posted = http.post(action, data=data,
+                           headers={'Origin': BASE, 'Referer': BASE + 'login.php'})
+    except Exception:
+        posted = None
     if posted is not None and _logged_in(posted.text):
         return LoginResult(LoginStatus.LOGIN_OK, 'ourbits 账密登录成功')
     home = http.get(BASE)
     if home is not None and _logged_in(home.text):
         return LoginResult(LoginStatus.LOGIN_OK, 'ourbits 账密登录成功')
-    return LoginResult(LoginStatus.AUTH_FAILED, 'ourbits 账号认证失败（账号、密码或 TOTP 密钥有误）')
+
+    def _status(resp):
+        return (getattr(resp, 'status_code', None) or getattr(resp, 'status', 0) or 0) if resp is not None else 0
+
+    # 首页正常返回但无登录标记，才是明确的认证失败；提交异常、回读不可达或
+    # 防护页/服务器错误都不是认证拒绝证据，按未确认处理留待下轮，不触发当场重试。
+    if home is not None and _status(home) < 400:
+        return LoginResult(LoginStatus.AUTH_FAILED, 'ourbits 账号认证失败（账号、密码或 TOTP 密钥有误）')
+    if home is None and posted is None:
+        return LoginResult(LoginStatus.UNCONFIRMED, 'ourbits 登录提交与回读均不可达')
+    if _status(home) >= 400 or _status(posted) >= 400:
+        return LoginResult(LoginStatus.UNCONFIRMED, 'ourbits 登录回读被防护页或服务器错误拦截')
+    return LoginResult(LoginStatus.UNCONFIRMED, 'ourbits 登录回读不可达，未确认认证结果')

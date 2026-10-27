@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[3] / 'plugins.v3'))
-from autoptcheckin.core.credentials import Credential, CredentialResolver, cookiecloud_candidate
+from autoptcheckin.core.credentials import Credential, cookiecloud_candidate
 from autoptcheckin.core import native
 from autoptcheckin.core.models import SignResult
 from autoptcheckin.core.runner import SignRunner
@@ -40,10 +40,6 @@ def test_remote_cookiecloud_follows_local_candidates_and_closes_response(cloud):
     result = cookiecloud_candidate('https://pt.example.invalid/attendance.php')
     assert result.status == 'valid'
     assert result.credential.source == 'cookiecloud'
-    selected = CredentialResolver().select_cookie({'cookiecloud': result.credential,
-        'managed_site': Credential('managed_site', 'synthetic-managed'),
-        'local_cookie': Credential('local_cookie', 'synthetic-local')})
-    assert selected.credential.source == 'managed_site'
     cloud.request.assert_called_once_with(timeout=20, content_type='application/json')
     cloud.request.return_value.get_res.assert_called_once_with(
         url='https://cloud.example.invalid/get/synthetic-key', allow_redirects=False, raise_exception=True)
@@ -93,8 +89,6 @@ def test_cookiecloud_unavailable_is_silent_and_falls_back(cloud, failure, caplog
             'name': 'cf_clearance', 'value': 'synthetic'}]}).encode()
     result = cookiecloud_candidate('https://pt.example.invalid')
     assert result.credential is None and result.status == 'cookiecloud_unavailable'
-    fallback = Credential('managed_site', 'synthetic-managed')
-    assert CredentialResolver().select_cookie({'managed_site': fallback}).credential == fallback
     if failure.startswith('missing-') or failure == 'bad-local-key':
         cloud.request.assert_not_called()
     assert not caplog.records

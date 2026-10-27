@@ -26,7 +26,7 @@
 - 窄屏（预览断点 640px）字段与站点数据卡改为单列；统计卡、证据字段改为两列，避免强制保留桌面同行布局。
 
 ### 配置站点卡片
-- 收起态使用约 36px 的紧凑行：小号移除按钮 → 站点名 → ⏻ 暂停/恢复 → 来源/凭据等徽标 → 五行开关（云签、仿真、代理、签到、登录，按能力显隐）→「展开配置/收起配置」按钮。整行不触发展开，仅显式按钮切换；动作开关可直接交互，不触发详情折叠；仿真不由 CF 推断。详情默认收起；行内使用 flex align-items:center，站点名固定列宽，徽标紧随且垂直居中。
+- 收起态使用约 36px 的紧凑行，五区域列轨（×移除/站名/徽标/开关组/▸）：`.row-left` 小号移除按钮（×，二次确认后为 danger「确认移除」+subtle「取消」）→ 站名（图标+名称）；`.badges` 来源/凭据/CF盾/云签|仿真/云签未配置/⚠notice 徽标；`.row-right` 双开关组——左组「代理/仿真/云签」（仿真全站渲染：无适配站关闭态灰、有适配站 `adapt` 橙变体，开启仍 success；云签仅 capable 站显示，缺位 placeholder 对齐），右组「签到（canSign 才显示）/登录」；`.btn.ghost.mini.expand-icon` ▸ 仅 hasExtraSettings（凭据字段）站显示，缺位 placeholder 保列轨。⏻ 暂停/恢复（`.pwr`，30px 圆形）在站名前。整行不触发展开，仅 ▸ 切换；开关可直接交互不折叠详情；仿真不由 CF 推断。开关统一 38×22、18px 圆点：关闭浅灰 inset 描边、开启 success 绿、adapt 关闭 warning 橙。
 - 已启用列表为单一平铺紧凑行，不显示分组；提供独立名称筛选、8 枚状态筛选 chips、全部展开/收起。「全部展开」仅打开所有已启用且有额外配置的站点详情（不受名称筛选限制），「全部收起」关闭所有详情。列表最大高度 68vh 并内部滚动，桌面以一屏至少 15 行为验收。
 - 徽标枚举：来源「MP 站点 / 插件适配 / 自定义站点」；能力「可签到」，支持模拟登录时才显示「模拟登录」徽标与选项；凭证方式 `cookie / api / password`，允许组合，API 可标注 JWT；CF 状态「CF 有盾 / CF 无盾 / CF 未检测」，未知不得当成无盾；`shield=cloud` 云签徽标 / `emulate` 仿真徽标 / `null` 无徽标。
 - 收起态即可勾选「签到」；支持模拟登录时才显示「模拟登录」勾选（同行），直接同步 sign_sites/login_sites，不改变 enabled_sites；勾选不触发详情展开，展开态显示来源、凭证方式、CF 状态、模拟登录能力的只读站点类型行，以及凭据、自定义地址/仿真等额外配置，不重复动作勾选或移除按钮。自定义站点同时展示地址与仿真状态；收起态站点名前的 × 经行内二次确认移出启用，同步 chips 与启用数量。
@@ -47,7 +47,7 @@
 ### 数据页
 - 站点名优先采用适配器 match 命中的 MP 登记名，未匹配保留适配器名；/sites 和 /stats 使用相同映射。图标仅读取 SiteOper.get_icon_by_domain 的 data:image 缓存，不加载远程 URL；配置卡及数据卡显示图标，缺失/加载失败用首字母占位。关闭按钮用 ghost 描边，×/移除 chip 用 danger 描边。
 - 今日总览保留下次调度与运行操作；签到、登录各三卡（桌面三列等宽，窄屏自适应）：成功/失败为当前启用且勾选轨道的今日结论，待处理为有效队列中的 pending（含尚未执行），不是本轮执行次数。
-- 站点小卡三行紧凑布局：第一行图标+站点名+站点名后方无文字「测试连接」图标按钮（原只读核验，ghost pico，title/aria-label=测试连接）+「签到」「登录」两枚徽标，徽标文字固定为签到/登录、颜色表状态（绿=成功、红=失败、橙=结果待确认、灰=待执行），pending 按 reason 入徽标（结果待确认=unknown 色；不可达/维护中/待验证/无原因待执行=off 色），消息全文放徽标 title；第二行「签到」「登录」pico 小按钮与第一行同名徽标的显隐只跟随站点配置开关（开启即显示，未开启完全不出现），按钮置灰才由执行能力（disabled/门控）决定；不展示结果文字行、UID、时间、凭证来源或奖励明细。总览保留只读核验入口；停用或不支持对应能力的站点禁用执行按钮。可见文案统一用「登录」，不再出现「模拟登录」。数据页底部不放图例。
+- 站点小卡三行紧凑布局（`.site-r1`/`.site-caps`/`.site-msg`）：第一行 ⏻ 暂停/恢复（`.pwr` 30px 圆形）+ 图标/首字母占位 + 站名（外链）+ `.head-right` 内「签到」「登录」状态 chip 按钮（文字固定签到/登录、颜色表状态：绿=成功、红=失败、橙=结果待确认、灰=待执行；pending 按 reason 选色；消息全文放 title），chip 即执行按钮，点击直接执行对应动作，显隐只跟随站点配置开关，置灰由暂停/忙态决定；第二行能力 chips（云签/仿真/代理，仅生效时显示）；第三行消息摘要（30px 两行截断，title 全文）。不展示结果文字行、UID、时间、凭证来源或奖励明细；总览行保留「立即运行/清理缓存/⟳刷新」。可见文案统一用「登录」，不再出现「模拟登录」。数据页底部不放图例。
 - 卡片区筛选 chips 与站点徽标同款样式：签到（绿/红=成功/失败）、结果待确认（橙）、登录（绿/红）、不可达、维护中、待验证、待执行（均 off 色），再点选中态恢复全部；认证失败归失败，skipped 沿用停用色归停用；维护、网络及协议状态虽共用 off 中性色，筛选按状态与 reason 独立匹配，不按颜色混入停用。切换筛选重置为筛选后前 8 张，空匹配显示独立空态。
 - 桌面三列等宽等高小卡，中屏两列、640px 以下单列；末张不跨列。默认前 8 张，failed/unconfirmed/auth_failed 优先且同优先级保持原顺序；其余用「展开其余 X 个站点」/「收起其余站点」切换，空态单独展示。
 - 历史通过现有 page/size API 每页 100 条加载全部保留记录，按浏览器本地日期前端聚合；分组头为「YYYY-MM-DD · N 条记录」，默认仅当天展开，其余收起。列顺序为「时间 / 站点 / 状态 / 最近消息」四列；不提供证据展开行，失败与异常说明（403/503/维护等）由最近消息列承载；API 与存储不变。历史表容器 max-height:60vh、内部横纵滚动，不提供证据展开行，不撑破宿主页面。
@@ -116,7 +116,7 @@
 ## 执行边界
 - 账号锁忙立即 skipped；站点锁在身份解析前获取，避免首次绑定与后续执行交错。Cookie 按 cookiecloud → managed_site → local_cookie 选择，并按请求 host 与 Cookie domain 边界匹配。
 - 无 Cookie 返回 auth_failed，不请求签到页面。原生轨道 UID/日期仅展示；提交状态依声明消息或 signed_marker 确认，证据不足为 unconfirmed。每次尝试独立写 history。
-- 原生签到与只读核验走 `run_native`；custom 走 `run_custom`；rousi/sunnypt 走 integrations；M-Team 登录走独立 CloakBrowser。其它无执行实现的旧站点返回 `skipped(site_removed)`。
+- 原生签到与只读核验走 `run_native`；custom 走 `run_custom`；rousi/sunnypt 走 integrations；M-Team 登录走独立 CloakBrowser。ourbits 为账密兜底 hook（`integrations/ourbits.py`）：Cookie 全源失效（auth_failed）后表单登录 takelogin.php 换取新 Cookie 并经 persist_cookie_result 回写统一 Cookie 表；2FA TOTP 可选——配置 ourbits_totp 才填 2fa_code（pyotp），未配置不填直接提交；登录页出现 imagestring 验证码明确放弃。其它无执行实现的旧站点返回 `skipped(site_removed)`。
 
 ## 组件与宿主玻璃主题
 - Config/Page 共用 preview.css 的 .btn/.input/.switch/.chip/table；常规控件统一 36px 最小高度、6px 圆角、同一焦点框，紧凑列表 chip 是明确的小号变体。
@@ -167,4 +167,4 @@
 ### 3.36.0 后端数据与端点契约
 - `/manual_signin` 与 `/notify_preview` 已移除；保留 `/verify_site` 只读核验入口及 `/run_once`。数据页按钮、错误消息行、统计合并卡、历史按天、配置 switch 与 per-site 仿真的渲染由前端契约负责；接口不另增前端字段。
 - /sites 与 /stats 返回同源有效 proxy/emulate、cloudsign_capable/cloudsign_selected；shield 仅在实际选中云签时为 cloud，否则按有效仿真显示。
-- 集成凭据分类：rousi/sunnypt 为 password（账密登录；SunnyPT JWT 是登录产物）；mteam 凭据 password（账密登录；登录态 Cookie/storage_state 内置存储，失效自动重新账密登录），CloakBrowser 保活（`login_capable=true`）。
+- 集成凭据分类：rousi/sunnypt 为 password（账密登录；SunnyPT JWT 是登录产物）；mteam 凭据 password（账密登录；登录态 Cookie/storage_state 内置存储，失效自动重新账密登录），CloakBrowser 保活（`login_capable=true`）；ourbits 为 password（ourbits_username/ourbits_password/ourbits_totp 可选，作为 Cookie 全源失效后的兜底换取通道，不是常规登录轨）。

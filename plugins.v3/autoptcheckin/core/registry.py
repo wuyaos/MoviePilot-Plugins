@@ -34,7 +34,7 @@ def managed_site(site_id):
     return {}
 
 
-def site_id_for_domain(value, *, include_legacy=False):
+def site_id_for_domain(value):
     _discovery()
     normalized = hostname(value)
     for site_id, module in _NATIVE_MODULES.items():

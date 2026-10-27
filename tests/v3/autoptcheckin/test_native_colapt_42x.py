@@ -61,14 +61,29 @@ def test_probe_signed_skips_post_zero_side_effect():
 def test_unsigned_then_post_200_earns_reward():
     site = Colapt()
     http = Http([me_ok(), (cola_week(0), 200),
-                 (json.dumps({"balance": 17, "currency": "cola", "earned": 14}), 200)])
+                 (json.dumps({"balance": 17, "currency": "cola", "earned": 14}), 200),
+                 (cola_week(14), 200)])
     r = site.signin(SignContext("colapt", Credential("cookie", "fixture"), http))
     assert r.status == "success" and "获得 14 个核子可乐" in r.message and "余额 17" in r.message
-    assert [c[0] for c in http.calls] == ["get", "get", "post"]
+    assert [c[0] for c in http.calls] == ["get", "get", "post", "get"]
     method, url, body, headers = http.calls[2]
     assert url == urljoin(site.url, "/api/v1/me/cola/checkin")
     assert body == {} and headers["X-CSRF-Token"] == "c" * 64
     assert headers["Origin"] == "https://www.colapt.com"
+
+
+def test_post_200_empty_body_readback_zero_stays_unconfirmed():
+    http = Http([me_ok(), (cola_week(0), 200),
+                 ("<html>ok</html>", 200), (cola_week(0), 200)])
+    r = Colapt().signin(SignContext("colapt", Credential("cookie", "fixture"), http))
+    assert r.status == "unconfirmed"
+
+
+def test_post_200_readback_blocked_stays_unconfirmed():
+    http = Http([me_ok(), (cola_week(0), 200),
+                 (json.dumps({"earned": 14}), 200), ("<html>Just a moment</html>", 200)])
+    r = Colapt().signin(SignContext("colapt", Credential("cookie", "fixture"), http))
+    assert r.status == "unconfirmed"
 
 
 def test_post_409_falls_back_to_already():

@@ -14,6 +14,8 @@ def test_config_expand_collapse_and_batch_confirmation():
     script = """
 const assert = require('node:assert/strict');
 const ref = value => ({value});
+const computed = () => ({value: []});
+const customDraft = {value: []};
 const selected = ref([{id:'alpha'}, {id:'hotel'}, {id:'tango', fields:[{key:'rousi_username'}]}]);
 const openSites = ref([]);
 const model = {enabled_sites:['alpha'], site_proxy:{}, site_emulate:{}, site_cloudsign:[]};
@@ -122,7 +124,7 @@ def test_custom_site_dialog_contract():
     assert '@click="editCustomSites"' in source
     assert 'customEnabled' not in source
     assert '@click="removeCustomDraft(site.id)"' in source
-    assert 'model.custom_sites_data = customDraft.value.map' in source
+    assert 'model.custom_sites_data = kept.map' in source
     assert 'model.sign_sites = model.sign_sites.filter' in source
     assert 'customDialog.value?.showModal()' in source
 

@@ -268,6 +268,12 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                 if login.status == LoginStatus.LOGIN_OK:
                     result = site.signin(ctx)
                     persist_cookie_result(result, ctx.http, site.id, 'password_login', get_data, save_data)
+                else:
+                    # 兜底登录未成功（认证失败/不可达/防护拦截）：保留登录结论与具体原因，
+                    # 不再以凭据全源失效时的 AUTH_FAILED 覆盖，也不强行重跑签到。
+                    result = SignResult(
+                        SignStatus.AUTH_FAILED if login.status == LoginStatus.AUTH_FAILED else SignStatus.UNCONFIRMED,
+                        f'{site.id} 账密兜底登录未成功：{login.message}')
             except Exception as exc:
                 result = SignResult(SignStatus.UNCONFIRMED, f'原生签到执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])
             finally:

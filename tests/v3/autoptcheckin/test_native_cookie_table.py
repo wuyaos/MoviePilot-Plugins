@@ -10,6 +10,7 @@ from autoptcheckin.core import native
 from autoptcheckin.core.credentials import Credential, CredentialResolution, CredentialSpec
 from autoptcheckin.core.models import LoginPage, LoginResult, SignResult
 from autoptcheckin.core.runner import SignRunner
+from autoptcheckin.integrations import ourbits as ourbits_mod
 from autoptcheckin.integrations import rousi, sunnypt, yzyy
 
 
@@ -166,7 +167,31 @@ def test_plugin_login_connects_storage_callbacks(storage, monkeypatch):
     assert data['cookies.table']['darkland']['source'] == 'managed_site'
 
 
-@pytest.mark.parametrize('action', ['login', 'sign'])
+def test_native_hook_login_unconfirmed_propagates(storage, monkeypatch):
+    """兜底登录未成功时保留登录结论（不可达=unconfirmed），不再覆盖为凭据失败。"""
+    runner, data = storage
+    data['cookies.table']['ourbits'] = {'cookie': 'session=expired'}
+    site = login_site('ourbits')
+    site.signin = lambda ctx: SignResult('auth_failed')
+    monkeypatch.setattr(ourbits_mod, 'login',
+                        lambda http, info: LoginResult('unconfirmed', 'ourbits 登录提交与回读均不可达'))
+    result = native.run_native(runner, site, {'cookie': 'session=managed'})
+    assert result.status == 'unconfirmed'
+    assert 'ourbits 账密兜底登录未成功' in result.message
+
+
+def test_native_hook_login_auth_failed_propagates(storage, monkeypatch):
+    runner, data = storage
+    data['cookies.table']['ourbits'] = {'cookie': 'session=expired'}
+    site = login_site('ourbits')
+    site.signin = lambda ctx: SignResult('auth_failed')
+    monkeypatch.setattr(ourbits_mod, 'login',
+                        lambda http, info: LoginResult('auth_failed', 'ourbits 账号认证失败（账号、密码或 TOTP 密钥有误）'))
+    result = native.run_native(runner, site, {'cookie': 'session=managed'})
+    assert result.status == 'auth_failed'
+    assert 'ourbits 账密兜底登录未成功' in result.message
+
+@pytest.mark.parametrize('action', ['sign', 'login'])
 def test_sunnypt_actual_cookie_records_password_source(storage, monkeypatch, action):
     runner, data = storage
     def operation(http, info):
