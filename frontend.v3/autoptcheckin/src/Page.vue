@@ -99,9 +99,10 @@ const cardCls = site => {
 }
 function cardMessage(site) {
   const pick = (kind) => {
-    if (site[kind + '_state'] === 'success') return ''
+    const label = kind === 'login' ? '登录' : '签到'
     const msg = site[kind + '_message']
-    return msg ? `${kind === 'login' ? '登录' : '签到'}：${msg}` : ''
+    if (site[kind + '_state'] === 'success') return msg ? `${label}：${msg}` : `${label}：成功`
+    return msg ? `${label}：${msg}` : ''
   }
   return pick('sign') || pick('login')
 }
