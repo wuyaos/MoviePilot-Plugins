@@ -12,6 +12,7 @@ from ..model.state import SEED_RECHECK_QUEUE_KEY
 
 from ..utils.torrent_adapter import get_torrent_state, torrent_is_complete
 
+
 def _queue_lock(plugin) -> threading.RLock:
     """获取做种校验队列锁，兼容未声明该属性的测试替身。"""
     lock = getattr(plugin, "_seed_recheck_queue_lock", None)
