@@ -37,10 +37,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File D:\test\MoviePilot-v3\mp.ps1
 # 探活（/docs 返回 404 属正常——文档路由未开，TCP 连通即实例在跑）
 curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 http://127.0.0.1:17430/docs
 
-# 带 key 调用（key 从文件读）
-curl -sS "http://127.0.0.1:17430/api/v1/plugin/AutoPtCheckin/config" \
+# 带 key 调用（key 从文件读；key 无效时返回 404 而非 401，别按「路由不存在」处理）
+curl -sS "http://127.0.0.1:17430/api/v1/plugin/form/AutoPtCheckin" \
   -H "X-API-KEY: $(cat /d/tmp/.mp_local_key)"
 ```
+
+### 宿主插件端点（本地 17430 实测，2026-10-28）
+
+| 用途 | 方法与路径 | 说明 |
+|---|---|---|
+| 读配置 | `GET  /api/v1/plugin/<Id>` | 返回 `data` = 完整配置 dict |
+| 写配置 | `PUT  /api/v1/plugin/<Id>` | body 必须是**完整**配置 dict |
+| 前端表单 | `GET  /api/v1/plugin/form/<Id>` | 返回 `render_mode/conf/model` |
+| 重载插件 | `POST /api/v1/plugin/reload/<Id>` | GET 会 405 |
+| 插件业务 | `POST /api/v1/plugin/<Id>/<action>` | 插件注册的 action 路由 |
+| 运行数据 | `GET  /api/v1/plugin/runtime/<Id>/data/summary` | |
+
+反例：`/api/v1/plugin/config/<Id>`（把 `config` 插在 id 前）与 `/api/v1/plugin/<Id>/config` 在本实例**都是 404**。别再凭印象拼路径，先用上表核对一次。
 
 ## 插件部署与重载
 
