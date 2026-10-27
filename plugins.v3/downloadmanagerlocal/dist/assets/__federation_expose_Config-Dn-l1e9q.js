@@ -306,7 +306,6 @@ const removerActionItems = [
   { title: '删除任务', value: 'delete' },
   { title: '删除任务及文件', value: 'deletefile' },
 ];
-watch(() => props.initialConfig, v => {
 const tagCatPairs = ref([]);
 const tagTrackerPairs = ref([]);
 
@@ -326,6 +325,36 @@ function parseTrackerPairs(text) {
     return { tracker: (from || '').trim(), site: rest.join('->').trim() }
   }).filter(p => p.tracker || p.site)
 }
+
+function serializeCatPairs(pairs) {
+  return {
+    tag_all_cat: pairs.map(p => (p.from || '').trim()).filter(Boolean),
+    tag_all_cat_rename: pairs.map(p => (p.to || '').trim()),
+  }
+}
+
+function serializeTrackerPairs(pairs) {
+  return pairs
+    .map(p => `${(p.tracker || '').trim()} -> ${(p.site || '').trim()}`)
+    .filter(line => !line.startsWith(' -> '))
+    .join('\n')
+}
+
+function siteNameByDomain(domain) {
+  const clean = String(domain || '').trim().toLowerCase();
+  if (!clean) return ''
+  const hit = (siteItems.value || []).find(s => String(s.domain || '').toLowerCase() === clean);
+  return hit?.title || ''
+}
+
+function addCatPair() {
+  tagCatPairs.value.push({ from: '', to: '' });
+}
+
+function addTrackerPair() {
+  tagTrackerPairs.value.push({ tracker: '', site: '' });
+}
+watch(() => props.initialConfig, v => {
 Object.keys(form).forEach(k => delete form[k]);
   Object.assign(form, defaults, v || {});
   form.upload_limit_downloaders = [...(v?.upload_limit_downloaders || [])];
@@ -3580,7 +3609,7 @@ return (_ctx, _cache) => {
                           _createElementVNode("span", null, "写入分类"),
                           _createElementVNode("span")
                         ], -1)),
-                        (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.tagCatPairs, (pair, idx) => {
+                        (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(tagCatPairs.value, (pair, idx) => {
                           return (_openBlock(), _createElementBlock("div", {
                             key: `cat-${idx}`,
                             class: "dm-map-row"
@@ -3607,11 +3636,11 @@ return (_ctx, _cache) => {
                               size: "x-small",
                               variant: "text",
                               color: "error",
-                              onClick: $event => (_ctx.tagCatPairs.splice(idx, 1))
+                              onClick: $event => (tagCatPairs.value.splice(idx, 1))
                             }, null, 8, ["onClick"])
                           ]))
                         }), 128)),
-                        (!_ctx.tagCatPairs.length)
+                        (!tagCatPairs.value.length)
                           ? (_openBlock(), _createElementBlock("div", _hoisted_59, "暂无映射，点击下方按钮添加"))
                           : _createCommentVNode("", true)
                       ]),
@@ -3620,13 +3649,13 @@ return (_ctx, _cache) => {
                           size: "small",
                           variant: "tonal",
                           "prepend-icon": "mdi-plus",
-                          onClick: _ctx.addCatPair
+                          onClick: addCatPair
                         }, {
                           default: _withCtx(() => [...(_cache[144] || (_cache[144] = [
                             _createTextVNode("添加分类映射", -1)
                           ]))]),
                           _: 1
-                        }, 8, ["onClick"])
+                        })
                       ]),
                       _cache[145] || (_cache[145] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 当前模式：按 TMDB 识别结果设置分类，每行「载入分类 → 写入分类」一一对应；改为路径判断后此表不生效。 ", -1))
                     ], 64))
@@ -3662,7 +3691,7 @@ return (_ctx, _cache) => {
                     _createElementVNode("span", null, "站点库域名"),
                     _createElementVNode("span", null, "匹配站点")
                   ], -1)),
-                  (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.tagTrackerPairs, (pair, idx) => {
+                  (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(tagTrackerPairs.value, (pair, idx) => {
                     return (_openBlock(), _createElementBlock("div", {
                       key: `tracker-${idx}`,
                       class: "dm-map-row"
@@ -3685,7 +3714,7 @@ return (_ctx, _cache) => {
                         "hide-details": ""
                       }, null, 8, ["modelValue", "onUpdate:modelValue"]),
                       _createElementVNode("div", _hoisted_62, [
-                        (_ctx.siteNameByDomain(pair.site) || _ctx.siteNameByDomain(pair.tracker))
+                        (siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker))
                           ? (_openBlock(), _createBlock(_component_VChip, {
                               key: 0,
                               size: "x-small",
@@ -3693,7 +3722,7 @@ return (_ctx, _cache) => {
                               color: "primary"
                             }, {
                               default: _withCtx(() => [
-                                _createTextVNode(_toDisplayString(_ctx.siteNameByDomain(pair.site) || _ctx.siteNameByDomain(pair.tracker)), 1)
+                                _createTextVNode(_toDisplayString(siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker)), 1)
                               ]),
                               _: 2
                             }, 1024))
@@ -3715,12 +3744,12 @@ return (_ctx, _cache) => {
                           size: "x-small",
                           variant: "text",
                           color: "error",
-                          onClick: $event => (_ctx.tagTrackerPairs.splice(idx, 1))
+                          onClick: $event => (tagTrackerPairs.value.splice(idx, 1))
                         }, null, 8, ["onClick"])
                       ])
                     ]))
                   }), 128)),
-                  (!_ctx.tagTrackerPairs.length)
+                  (!tagTrackerPairs.value.length)
                     ? (_openBlock(), _createElementBlock("div", _hoisted_63, "暂无映射，点击下方按钮添加"))
                     : _createCommentVNode("", true)
                 ]),
@@ -3729,13 +3758,13 @@ return (_ctx, _cache) => {
                     size: "small",
                     variant: "tonal",
                     "prepend-icon": "mdi-plus",
-                    onClick: _ctx.addTrackerPair
+                    onClick: addTrackerPair
                   }, {
                     default: _withCtx(() => [...(_cache[150] || (_cache[150] = [
                       _createTextVNode("添加 Tracker 映射", -1)
                     ]))]),
                     _: 1
-                  }, 8, ["onClick"])
+                  })
                 ]),
                 _cache[152] || (_cache[152] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 种子 Tracker 域名按行换算成站点库域名后匹配站点打「站点前缀 + 站点名」标签；右侧显示按域名匹配到的站点名，「未收录」表示站点库没有该域名。 ", -1))
               ], 512), [
@@ -4051,6 +4080,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-f066ba47"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-8ded2671"]]);
 
 export { Config as default };

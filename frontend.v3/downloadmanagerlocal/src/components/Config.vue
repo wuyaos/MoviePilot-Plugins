@@ -192,6 +192,54 @@ const removerActionItems = [
   { title: '删除任务', value: 'delete' },
   { title: '删除任务及文件', value: 'deletefile' },
 ]
+const tagCatPairs = ref([])
+const tagTrackerPairs = ref([])
+
+function parseCatPairs(cats, renames) {
+  const catsList = Array.isArray(cats) ? cats : []
+  const renamesList = Array.isArray(renames) ? renames : []
+  const rows = []
+  for (let i = 0; i < Math.max(catsList.length, renamesList.length); i++) {
+    rows.push({ from: catsList[i] || '', to: renamesList[i] || '' })
+  }
+  return rows
+}
+
+function parseTrackerPairs(text) {
+  return String(text || '').split('\n').map(line => {
+    const [from, ...rest] = line.split('->')
+    return { tracker: (from || '').trim(), site: rest.join('->').trim() }
+  }).filter(p => p.tracker || p.site)
+}
+
+function serializeCatPairs(pairs) {
+  return {
+    tag_all_cat: pairs.map(p => (p.from || '').trim()).filter(Boolean),
+    tag_all_cat_rename: pairs.map(p => (p.to || '').trim()),
+  }
+}
+
+function serializeTrackerPairs(pairs) {
+  return pairs
+    .map(p => `${(p.tracker || '').trim()} -> ${(p.site || '').trim()}`)
+    .filter(line => !line.startsWith(' -> '))
+    .join('\n')
+}
+
+function siteNameByDomain(domain) {
+  const clean = String(domain || '').trim().toLowerCase()
+  if (!clean) return ''
+  const hit = (siteItems.value || []).find(s => String(s.domain || '').toLowerCase() === clean)
+  return hit?.title || ''
+}
+
+function addCatPair() {
+  tagCatPairs.value.push({ from: '', to: '' })
+}
+
+function addTrackerPair() {
+  tagTrackerPairs.value.push({ tracker: '', site: '' })
+}
 watch(() => props.initialConfig, v => {
 Object.keys(form).forEach(k => delete form[k])
   Object.assign(form, defaults, v || {})
@@ -206,7 +254,10 @@ Object.keys(form).forEach(k => delete form[k])
   form.rename_downloaders = [...(v?.rename_downloaders || [])]
   form.tag_downloaders = [...(v?.tag_downloaders || [])]
   form.tag_all_cat = [...(v?.tag_all_cat || [])]
+  form.tag_all_cat = [...(v?.tag_all_cat || [])]
   form.tag_all_cat_rename = [...(v?.tag_all_cat_rename || [])]
+  tagCatPairs.value = parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename)
+  tagTrackerPairs.value = parseTrackerPairs(form.tag_tracker_mappings_str)
   syncHrSiteRulesFromForm()
 }, { immediate: true, deep: true })
 function saveConfig() {
@@ -222,8 +273,9 @@ function saveConfig() {
     remover_downloaders: [...(form.remover_downloaders || [])],
     rename_downloaders: [...(form.rename_downloaders || [])],
     tag_downloaders: [...(form.tag_downloaders || [])],
-    tag_all_cat: [...(form.tag_all_cat || [])],
-    tag_all_cat_rename: [...(form.tag_all_cat_rename || [])],
+    tag_downloaders: [...(form.tag_downloaders || [])],
+    ...serializeCatPairs(tagCatPairs.value),
+    tag_tracker_mappings_str: serializeTrackerPairs(tagTrackerPairs.value),
   })
 }
 function selectMain(key) {
@@ -1628,32 +1680,71 @@ function serializeHrSiteConfigYaml(rules) {
                   <VTextField v-model="form.tag_catprefix" label="分类前缀" density="compact" variant="outlined" hide-details hint="写入分类名前的前缀，留空不加" persistent-hint />
                 </VCol>
               </VRow>
-              <VRow v-if="!form.tag_rename_type" class="mt-2">
-                <VCol cols="12" md="6">
-                  <VCombobox v-model="form.tag_all_cat" label="站点分类（回车输入）" density="compact" variant="outlined" hide-details
-                    multiple chips closable-chips hint="TMDB 分类名列表" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="6">
-                  <VCombobox v-model="form.tag_all_cat_rename" label="映射目标分类（回车输入）" density="compact" variant="outlined" hide-details
-                    multiple chips closable-chips hint="与左侧按顺序一一对应" persistent-hint />
-                </VCol>
-              </VRow>
-              <div v-if="!form.tag_rename_type" class="dm-hint">
-                当前模式：按 TMDB 识别结果设置分类，两个分类列表按顺序一一对应，数量需保持一致；改为路径判断后此表不生效。
+
+              <!-- 分类映射（TMDB 模式）：一行一条 载入分类 -> 写入分类 -->
+              <template v-if="!form.tag_rename_type">
+                <div class="dm-hr-table mt-3">
+                  <div class="dm-map-row dm-map-row--head">
+                    <span>载入分类（TMDB / 站点分类）</span>
+                    <span />
+                    <span>写入分类</span>
+                    <span />
+                  </div>
+                  <div v-for="(pair, idx) in tagCatPairs" :key="`cat-${idx}`" class="dm-map-row">
+                    <VTextField v-model="pair.from" label="载入分类" density="compact" variant="outlined" hide-details />
+                    <span class="dm-map-arrow">→</span>
+                    <VTextField v-model="pair.to" label="写入分类" density="compact" variant="outlined" hide-details />
+                    <VBtn icon="mdi-close" size="x-small" variant="text" color="error" @click="tagCatPairs.splice(idx, 1)" />
+                  </div>
+                  <div v-if="!tagCatPairs.length" class="dm-map-empty">暂无映射，点击下方按钮添加</div>
+                </div>
+                <div class="d-flex justify-end mt-2">
+                  <VBtn size="small" variant="tonal" prepend-icon="mdi-plus" @click="addCatPair">添加分类映射</VBtn>
+                </div>
+                <div class="dm-hint mt-2">
+                  当前模式：按 TMDB 识别结果设置分类，每行「载入分类 → 写入分类」一一对应；改为路径判断后此表不生效。
+                </div>
+              </template>
+
+              <!-- 路径映射（路径模式） -->
+              <template v-if="form.tag_rename_type">
+                <VRow class="mt-2">
+                  <VCol cols="12">
+                    <VTextarea v-model="form.tag_path_rename" label="路径映射规则（每行: 关键词#分类）" density="compact" variant="outlined" hide-details rows="3" />
+                  </VCol>
+                </VRow>
+                <div class="dm-hint">
+                  当前模式：按下载保存路径包含的关键词判断分类（如 /anime/#动漫），一行不命中则不设分类；关闭上方开关则改按 TMDB 识别设置分类。
+                </div>
+              </template>
+
+              <!-- Tracker 映射（恒显示）：一行一条 tracker域名 -> 站点库域名，并反查站点名 -->
+              <div class="dm-hr-table mt-4">
+                <div class="dm-map-row dm-map-row--head">
+                  <span>Tracker 域名</span>
+                  <span />
+                  <span>站点库域名</span>
+                  <span>匹配站点</span>
+                </div>
+                <div v-for="(pair, idx) in tagTrackerPairs" :key="`tracker-${idx}`" class="dm-map-row">
+                  <VTextField v-model="pair.tracker" label="Tracker 域名" density="compact" variant="outlined" hide-details />
+                  <span class="dm-map-arrow">→</span>
+                  <VTextField v-model="pair.site" label="站点库域名" density="compact" variant="outlined" hide-details />
+                  <div class="d-flex align-center justify-end gap-1">
+                    <VChip v-if="siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker)" size="x-small" label color="primary">
+                      {{ siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker) }}
+                    </VChip>
+                    <VChip v-else-if="pair.site" size="x-small" label color="warning">未收录</VChip>
+                    <VBtn icon="mdi-close" size="x-small" variant="text" color="error" @click="tagTrackerPairs.splice(idx, 1)" />
+                  </div>
+                </div>
+                <div v-if="!tagTrackerPairs.length" class="dm-map-empty">暂无映射，点击下方按钮添加</div>
               </div>
-              <VRow v-if="form.tag_rename_type" class="mt-2">
-                <VCol cols="12">
-                  <VTextarea v-model="form.tag_path_rename" label="路径映射规则（每行: 关键词#分类）" density="compact" variant="outlined" hide-details rows="3" />
-                </VCol>
-              </VRow>
-              <div v-if="form.tag_rename_type" class="dm-hint">
-                当前模式：按下载保存路径包含的关键词判断分类（如 /anime/#动漫），一行不命中则不设分类；关闭上方开关则改按 TMDB 识别设置分类。
-              <VRow>
-                <VCol cols="12">
-                  <VTextarea v-model="form.tag_tracker_mappings_str" label="Tracker 映射（每行: 域名 -> 映射域名）" density="compact" variant="outlined" hide-details rows="4" />
-                  <div class="dm-hint">例: tracker.example.com -> example</div>
-                </VCol>
-              </VRow>
+              <div class="d-flex justify-end mt-2">
+                <VBtn size="small" variant="tonal" prepend-icon="mdi-plus" @click="addTrackerPair">添加 Tracker 映射</VBtn>
+              </div>
+              <div class="dm-hint mt-2">
+                种子 Tracker 域名按行换算成站点库域名后匹配站点打「站点前缀 + 站点名」标签；右侧显示按域名匹配到的站点名，「未收录」表示站点库没有该域名。
               </div>
             </div>
 
@@ -1796,6 +1887,11 @@ function serializeHrSiteConfigYaml(rules) {
 .dm-cleanup-results { display: grid; gap: 10px; }
 .dm-cleanup-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dm-tag-group { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow: hidden; }
+.dm-map-row { display: grid; grid-template-columns: minmax(150px, 1fr) 22px minmax(150px, 1fr) minmax(96px, .55fr); gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }
+.dm-map-row:last-child { border-bottom: none; }
+.dm-map-row--head { font-size: 12px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); background: rgba(var(--v-theme-on-surface), 0.03); }
+.dm-map-arrow { text-align: center; color: rgba(var(--v-theme-on-surface), 0.45); }
+.dm-map-empty { padding: 14px 12px; text-align: center; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.5); }
 .dm-tag-group-head { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-on-surface), 0.02); }
 .dm-tag-list { max-height: 280px; overflow-y: auto; }
 .dm-tag-row { min-height: 54px; display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); cursor: pointer; }
