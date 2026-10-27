@@ -14,7 +14,7 @@ def test_emulate_capability_survives_user_overrides(monkeypatch):
     rows = {s['id']: s for s in get_registry([
         {'id': 'custom-fixture', 'name': 'Fixture', 'url': 'https://fixture.invalid', 'emulate': True}
     ])['sites']}
-    for sid in ('52pt', 'yema', 'vclib', 'mteam'):
+    for sid in ('yema', 'vclib', 'mteam'):
         assert rows[sid]['emulate_capable'] is True
     for sid in ('rousi', 'sunnypt', 'custom-fixture', 'hdsky'):
         assert rows[sid]['emulate_capable'] is False

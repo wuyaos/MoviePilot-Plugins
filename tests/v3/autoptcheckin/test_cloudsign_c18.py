@@ -319,7 +319,8 @@ def test_shield_field_from_cloak_steps():
     assert shield_of(get_native_module('audiences')) == 'cloud'
     assert shield_of(get_native_module('mua_xloli')) == 'cloud'
     assert shield_of(get_native_module('vclib')) == 'cloud'
-    assert shield_of(get_native_module('52pt')) == 'emulate'
+    # 52pt 2026-10-28 转 signin_capable=False 并去掉仿真声明（站点入口下线）。
+    assert shield_of(get_native_module('52pt')) is None
     assert shield_of(get_native_module('yema')) == 'emulate'
     assert shield_of(get_native_module('hdsky')) is None
 
@@ -328,7 +329,7 @@ def test_registry_sites_carry_shield():
     from autoptcheckin.core.registry import get_registry
     rows = {row['id']: row for row in get_registry()['sites']}
     assert rows['audiences']['shield'] == 'cloud'
-    assert rows['52pt']['shield'] == 'emulate'
+    assert rows['52pt']['shield'] is None
     assert rows['hdsky']['shield'] is None
 
 

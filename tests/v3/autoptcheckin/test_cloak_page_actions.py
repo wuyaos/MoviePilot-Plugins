@@ -104,9 +104,12 @@ def test_human_verify_continues_to_sign_and_stashed_readback(sid, verify, monkey
 
 
 @pytest.mark.parametrize('navigate', [False, True])
-def test_52pt_attendance_link_waits_for_delayed_slider_then_stashes(navigate, monkeypatch):
+def test_52pt_signin_skipped_when_uncapable(navigate, monkeypatch):
+    # 2026-10-28 方案 A：站点入口下线+反脚本条款，52pt 转 signin_capable=False。
+    # 适配代码（attendance_link/slider/sign_button）保留待站点恢复，但 signin 必须被拦截不执行。
     site = get_native_module('52pt')
-    assert site.cloak_steps == ['attendance_link', 'slider', 'sign_button']
+    assert site.signin_capable is False
+    assert not getattr(site, 'emulate', False) and not getattr(site, 'cloak_steps', None)
     page = Page('52pt', navigate=navigate)
     results = []
     real_action = cloak.run_page_action
@@ -119,10 +122,8 @@ def test_52pt_attendance_link_waits_for_delayed_slider_then_stashes(navigate, mo
         page_snapshot=lambda: (page.content(), page.url),
         get=lambda *a, **k: LoginPage('<a href="52bakatestdate.php">签到赚魔力</a>', page.url, 200))
     result = site.signin(context(site, http, None))
-    assert results == [('attendance_link', 'clicked'), ('slider', 'dragged'), ('sign_button', 'clicked')]
-    assert page.waits[:3] == [500, 500, 500]
-    assert page.drags == page.clicked == 1
-    assert result.status == 'success' and result.message == '签到已得100'
+    assert result.status == 'skipped' and result.metadata.get('reason') == 'signin_not_applicable'
+    assert results == [] and page.drags == 0 and page.clicked == 0
 
 
 def test_human_verify_timeout_is_per_site(monkeypatch):

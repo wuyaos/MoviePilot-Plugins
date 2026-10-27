@@ -91,7 +91,7 @@
 
 | 站名 / ID | hook 类型 | 实现要点 | hook 状态 | 待实现或校准 |
 | --- | --- | --- | --- | --- |
-| 52PT / 52pt、CHDBits / chdbits | 随机问答 | bakatest 参数、数字奖励正则、保留明确重复文本 | hook_implemented=True（C7） | 已实现，待生产校准（见分组校准清单） |
+| 52PT / 52pt、CHDBits / chdbits | 随机问答 | bakatest 参数、数字奖励正则、保留明确重复文本 | hook_implemented=True（C7）；52pt 另 signin_capable=False（2026-10-28） | 已实现，待生产校准；52pt 签到入口已下线（见 2026-10-28 取证） |
 | 包子 / baozi、冬樱 / dongying、可乐 / kelu、NaturePT / naturept、NovaHD / novahd、OshenPT / oshen、凤凰PT / phoenixpt | attendance CAPTCHA | imagehash/imagestring、OCR、消息节点校准；提交后不自动重试 | hook_implemented=True（C1） | 已实现，待生产校准（见分组校准清单） |
 | PlayLet / playlet、烧包乐园 / shaobaoyuan、聆音Club / soulvoice、TU88 / tu88、VC-Lib / vclib | attendance CAPTCHA | 同通用 CAPTCHA 协议，但逐站核对生产页面 | hook_implemented=True（C1） | 已实现，待生产校准（见分组校准清单） |
 | 垃圾堆 / lajidui、思齐 / siqi | 独立 OCR | 独立验证码参数；siqi 完整奖励正则及 attend-success-effect class | hook_implemented=True（C2） | 已实现，待生产校准（见分组校准清单） |
@@ -211,7 +211,7 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 - 遗留：通用站逐站核验实际表单/消息与验证码差异；不以 Cookie 名存在替代生产签到验证，不自动开启 verified。
 
 ## 答题类站点说明（2026-10-22）
-- chdbits/tjupt 为答题类签到（随机问答/豆瓣图片），误答有账号风险，**不建议启用答题功能**；52pt 已改为滑块签到（HTTP 无法完成，须 CloakBrowser 实现，暂缓）；registry signin_applicable=False，均仅保留模拟登录。
+- chdbits/tjupt 为答题类签到（随机问答/豆瓣图片），误答有账号风险，**不建议启用答题功能**。52pt 2026-10-28 凌晨取证（.ralph/52pt-recon-20261028.md）：torrents.php 滑块移除、52bakatestdate.php/nebuirobot.php 死链，签到入口整体下线，且站点公告明确「利用脚本自动签到，最少扣除魔力值5200……直到劝退」——用户裁决转显式 signin_capable=False（滑块/问答适配代码保留），仅保留模拟登录。
 - u2 为随机图片选项（非知识问答），保留签到能力。BakatestSignin 为 52pt/chdbits 共用的 bakatest.php 随机问答实现。
 - hares 站点已关闭，native 模块与声明移除（已移除旧桥副本已删除）。
 

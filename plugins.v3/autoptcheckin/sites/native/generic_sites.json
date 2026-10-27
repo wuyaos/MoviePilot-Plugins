@@ -838,14 +838,8 @@
     "name": "52PT",
     "url": "https://52pt.site/",
     "attendance_path": "/torrents.php",
-    "emulate": true,
-    "cloak_steps": [
-      "attendance_link",
-      "slider",
-      "sign_button"
-    ],
-    "signin_capable": true,
-    "login_notice": "滑块签到，请留意账号安全"
+    "signin_capable": false,
+    "login_notice": "站点已下线签到入口（2026-10-28 取证），仅保留登录；公告禁止脚本自动签到"
   },
   {
     "id": "yema",

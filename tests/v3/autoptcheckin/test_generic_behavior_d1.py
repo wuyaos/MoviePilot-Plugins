@@ -224,52 +224,53 @@ def test_vclib_cloak_human_verify_chain(monkeypatch):
     assert result.status.value in ('success', 'already')
 
 
-def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatch):
+def test_yema_signin_executable_and_52pt_declared_uncapable(monkeypatch):
     rows = {row['id']: row for row in json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))}
     assert rows['yema']['signin_capable'] is True
-    assert rows['52pt']['signin_capable'] is True
+    # 52pt 2026-10-28 用户裁决转显式无签到能力（站点入口整体下线+公告反脚本条款）：仅登录。
+    assert rows['52pt']['signin_capable'] is False
     assert rows['pt_0ff']['signin_capable'] is True
-    assert rows['piggo']['emulate'] is True and rows['piggo']['cloak_steps'] == ['sign_button']
     assert rows['piggo']['cloak_entry_path'] == '/'
     assert 'emulate' not in rows['kamept']
     from autoptcheckin.core import cloak
     monkeypatch.setattr(cloak, 'run_page_action', lambda session, steps: None)
-    for sid in ('yema', '52pt'):
-        site = get_native_module(sid)
-        assert site.signin_capable is True
-        entry = next(row for row in discover_sites()['sites'] if row['id'] == sid)
-        assert entry['signin_capable'] is True
+    # 52pt 声明已转 False，仅验证注册表与模块一致；执行层 skipped 由通用 not_supported 分支覆盖（b17）。
+    site = get_native_module('yema')
+    assert site.signin_capable is True
+    entry = next(row for row in discover_sites()['sites'] if row['id'] == 'yema')
+    assert entry['signin_capable'] is True
+    site_52 = get_native_module('52pt')
+    assert site_52.signin_capable is False
+    entry_52 = next(row for row in discover_sites()['sites'] if row['id'] == '52pt')
+    assert entry_52['signin_capable'] is False
 
-        class Page:
-            url = site.url
-            def content(self):
-                # yema：Ant 按钮态即证据；52pt：默认消息链匹配落点页。
-                return ('<button class="ant-btn">已签到，明日继续</button>' if sid == 'yema'
-                        else '<h2>签到已得100</h2>')
-            def goto(self, *args, **kwargs): return None
-            def wait_for_timeout(self, *args, **kwargs): return None
-            def wait_for_load_state(self, *args, **kwargs): return None
-            def inner_text(self): return ''
+    class Page:
+        url = site.url
+        def content(self):
+            # yema：Ant 按钮态即证据。
+            return '<button class="ant-btn">已签到，明日继续</button>'
+        def goto(self, *args, **kwargs): return None
+        def wait_for_timeout(self, *args, **kwargs): return None
+        def wait_for_load_state(self, *args, **kwargs): return None
+        def inner_text(self): return ''
 
-        class Session:
-            page = Page()
+    class Session:
+        page = Page()
 
-        class Http:
-            session = Session()
-            def run_page_action(self, steps):
-                from autoptcheckin.core import cloak as _cloak
-                return _cloak.run_page_action(self.session, list(steps))
+    class Http:
+        session = Session()
+        def run_page_action(self, steps):
+            from autoptcheckin.core import cloak as _cloak
+            return _cloak.run_page_action(self.session, list(steps))
 
-            def page_snapshot(self):
-                return (self.session.page.content(), self.session.page.url)
+        def page_snapshot(self):
+            return (self.session.page.content(), self.session.page.url)
 
-            def get(self, *args, **kwargs):
-                from autoptcheckin.core.models import LoginPage
-                # torrents 页含「签到赚魔力」入口（入口消失=已签）。
-                return LoginPage('<a href="52bakatestdate0823.php">签到赚魔力</a><div id="slider-container"><div id="slider-btn"></div></div><input id="sign_captcha">', site.url, 200)
+        def get(self, *args, **kwargs):
+            from autoptcheckin.core.models import LoginPage
+            return LoginPage(self.session.page.content(), site.url, 200)
 
-        result = site.signin(c1.context(site, Http(), None))
-        # yema 按钮态映射 signed（回读判已签，SUCCESS/ALREADY 均表示证据成立）。
-        expected_message = '已签到，明日继续' if sid == 'yema' else '签到已得100'
-        assert result.message == expected_message and str(result.status).endswith(('success', 'already')), \
-            f'{sid}: {result.status} | {result.message} | {result.evidence}'
+    result = site.signin(c1.context(site, Http(), None))
+    # yema 按钮态映射 signed（回读判已签，SUCCESS/ALREADY 均表示证据成立）。
+    assert result.message == '已签到，明日继续' and str(result.status).endswith(('success', 'already')), \
+        f'yema: {result.status} | {result.message} | {result.evidence}'

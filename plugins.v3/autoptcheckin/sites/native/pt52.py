@@ -11,7 +11,12 @@ class Pt52(_base):
     name = "52PT"
     url = "https://52pt.site/"
     # 内联滑块在 torrents.php（独立 52bakatestdate 页面已暂停，2026-10-23 采样）。
+    # 2026-10-28 凌晨取证（.ralph/52pt-recon-20261028.md）：torrents.php 滑块移除、
+    # 52bakatestdate.php 与 nebuirobot.php 均死链，站点签到入口整体下线，且公告明确
+    # 「利用脚本自动签到，最少扣除魔力值5200……直到劝退」。转显式无签到能力（仅保留
+    # 登录轨）；适配代码保留，待站点真恢复签到再启用。
     attendance_path = "/torrents.php"
+    signin_capable = False
     hook_implemented = True
     record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]',
                              {'今天已经签过到了': 'signed', '未签到': 'unsigned'})
