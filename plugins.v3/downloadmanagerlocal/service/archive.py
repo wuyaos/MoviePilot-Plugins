@@ -54,7 +54,7 @@ def now_text() -> str:
 def log_rename_failure_state(item: dict, reason_text: str) -> None:
     """输出补刀失败分类日志。"""
     logger.warning(
-        "补刀失败归类：hash=%s category=%s label=%s count=%s archived=%s reason=%s",
+        "[PT下载中心:命名补刀]hash=%s category=%s label=%s count=%s archived=%s reason=%s",
         item.get("hash", ""),
         item.get("category", ""),
         item.get("category_label", ""),

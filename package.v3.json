@@ -9,6 +9,7 @@
         "level": 1,
         "system_version": ">=3.0.0",
         "history": {
+            "3.8.3": "修复 Transmission 下载器转移后重命名崩溃：MP 的 Transmission 封装无 rename_torrent 方法，转移链路内嵌重命名对该类下载器逐条 AttributeError 并拖慢全量补刀（300s 超时），现降级为跳过+归档原因；qnap 实测转移链路正常",
             "4.3.0": "ourbits 账密兜底登录（Cookie 全源失效后表单换取并回写 Cookie 表，2FA TOTP 可选：未配置不填 2fa_code 直接提交）；RetroToon 撤销九点暂缓逻辑，按页面实际状态判定（已签跳过、未签提交）；配置页凭据字段补我堡 TOTP（可选）",
             "4.2.0": "执行结果六值统一（signed/login_ok/failed/pending/skipped/cancelled，旧值兼容读取不批量改写）；unconfirmed 归 pending 不再计失败；通知三行（全部/本次分类/下轮待执行）与明细三分组（待处理含当日未执行）；数据页待处理卡取有效队列；站点锁互斥文案精确化；轮次无执行不推送",
             "4.1.0": "调度注册完整同步：配置保存/重载/模式切换后宿主任务集恒等于当前配置（remove+update 消除 cron/interval 切换与槽数变化的旧任务残留）；保存前校验 cron/interval/mode 非法直接拒绝",
@@ -190,7 +191,7 @@
         "name": "下载中心",
         "description": "转移做种、命名补刀、站点标签、H&R 保护、自动删种、失败清理与上传限速，一站式下载管理。",
         "labels": "下载管理,做种,H&R",
-        "version": "3.8.2",
+        "version": "3.8.3",
         "icon": "downloadmanagerlocal.png",
         "author": "Kurisu, wuyaos",
         "level": 1,

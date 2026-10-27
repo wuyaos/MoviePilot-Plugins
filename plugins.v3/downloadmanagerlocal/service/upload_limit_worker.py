@@ -81,7 +81,7 @@ def stop_upload_limit_worker(plugin: Any, join_timeout: float = 10.0) -> bool:
     if thread is not threading.current_thread() and thread.is_alive():
         thread.join(timeout=max(0.0, float(join_timeout)))
     if thread.is_alive():
-        logger.error("上传限速：worker 停止超时，下载器请求可能仍在执行")
+        logger.error("[PT下载中心:上传限速]上传限速：worker 停止超时，下载器请求可能仍在执行")
         return False
     with _worker_lock(plugin):
         if not thread.is_alive():

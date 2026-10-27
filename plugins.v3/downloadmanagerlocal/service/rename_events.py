@@ -107,13 +107,13 @@ def _run_pending_rename(plugin, key: str) -> None:
 
     service = plugin.service_info(task["downloader"])
     if not service or not getattr(service, "instance", None):
-        logger.warning(f"事件重命名跳过：下载器不可用 {task['downloader']}")
+        logger.warning(f"[PT下载中心:命名补刀]事件重命名跳过：下载器不可用 {task['downloader']}")
         record_rename_module_result(plugin, "event", 0, 1, 0)
         return
 
     torrents, error = service.instance.get_torrents(ids=[task["hash"]])
     if error or not torrents:
-        logger.warning(f"事件重命名跳过：读取任务失败 {task['downloader']} {task['hash']} {error or ''}")
+        logger.warning(f"[PT下载中心:命名补刀]事件重命名跳过：读取任务失败 {task['downloader']} {task['hash']} {error or ''}")
         record_rename_module_result(plugin, "event", 0, 1, 0)
         return
 

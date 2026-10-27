@@ -93,7 +93,7 @@ def cleanup_by_path(plugin, item_path: str, trigger: str = "") -> Dict[str, Any]
     try:
         source_hash = _clean_text(get_download_hash_by_fullpath(path_text))
     except Exception as err:
-        logger.error(f"同步删除：按路径反查下载 hash 失败 path={path_text}: {err}")
+        logger.error(f"[PT下载中心:失败清理]按路径反查下载 hash 失败 path={path_text}: {err}")
         return _empty_result(trigger=trigger)
     return cleanup_by_hash(plugin, source_hash, trigger=trigger)
 
@@ -136,7 +136,7 @@ def _cleanup_by_hash(plugin, source_hash: str, downloader: str = "", trigger: st
         plugin._sync_delete_recent[source_hash] = time.time()
     result["transfer_deleted"] = max(0, transfer_deleted)
     if transfer_deleted:
-        logger.info(f"同步删除：{trigger or '事件'} 已按源 hash={source_hash} 删除转种 {transfer_deleted} 个（含文件）")
+        logger.info(f"[PT下载中心:失败清理]{trigger or '事件'} 已按源 hash={source_hash} 删除转种 {transfer_deleted} 个（含文件）")
     return result
 
 
@@ -150,7 +150,7 @@ def _cleanup_transfer_target(plugin, source_hash: str, source_downloader: str) -
     target_downloader = _clean_text(record.get("to_download"))
     target_hash = _clean_text(record.get("to_download_id"))
     if HrGuard().should_skip(SKIP_PATH_SYNC_DELETE, target_downloader, target_hash):
-        logger.info(f"同步删除：H&R 保护跳过转种目标 {target_downloader} / {target_hash}")
+        logger.info(f"[PT下载中心:失败清理]H&R 保护跳过转种目标 {target_downloader} / {target_hash}")
         return 0
 
 
@@ -164,15 +164,15 @@ def _delete_downloader_hashes(plugin, downloader: str, hashes: Iterable[str]) ->
         service = plugin.service_info(downloader)
         instance = getattr(service, "instance", None) if service else None
         if not instance:
-            logger.warning(f"同步删除：下载器不可用，跳过 {downloader} / {hash_list}")
+            logger.warning(f"[PT下载中心:失败清理]下载器不可用，跳过 {downloader} / {hash_list}")
             return -1
         state = instance.delete_torrents(delete_file=True, ids=hash_list)
         if state is False:
-            logger.warning(f"同步删除：下载器删除返回失败 {downloader} / {hash_list}")
+            logger.warning(f"[PT下载中心:失败清理]下载器删除返回失败 {downloader} / {hash_list}")
             return -1
         return len(hash_list)
     except Exception as err:
-        logger.error(f"同步删除：删除下载器任务失败 {downloader} / {hash_list}: {err}")
+        logger.error(f"[PT下载中心:失败清理]删除下载器任务失败 {downloader} / {hash_list}: {err}")
         return -1
 
 

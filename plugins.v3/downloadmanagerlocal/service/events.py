@@ -46,9 +46,9 @@ def handle_transfer_complete_event(plugin, event) -> None:
         _save_transfer_schedule(plugin, plugin._transfer_pending_runs)
         next_run = _schedule_next_transfer(plugin, generation)
     if next_run:
-        logger.info(f"收到 TransferComplete 事件（来源: {downloader_name}），转移做种保持最早执行时间：{next_run:%Y-%m-%d %H:%M:%S}")
+        logger.info(f"[PT下载中心:转移做种]收到 TransferComplete 事件（来源: {downloader_name}），转移做种保持最早执行时间：{next_run:%Y-%m-%d %H:%M:%S}")
     else:
-        logger.info(f"收到 TransferComplete 事件（来源: {downloader_name}），本轮执行后接续待到期转移")
+        logger.info(f"[PT下载中心:转移做种]收到 TransferComplete 事件（来源: {downloader_name}），本轮执行后接续待到期转移")
 
 
 def _transfer_schedule_active(plugin, generation: int) -> bool:
@@ -118,7 +118,7 @@ def _save_transfer_schedule(plugin, pending_runs: dict) -> None:
     try:
         save_data(TRANSFER_SCHEDULE_KEY, _serialize_transfer_schedule(pending_runs))
     except Exception as error:  # noqa: BLE001  # 由宿主存储实现决定
-        logger.warning(f"保存延迟转种队列失败：{error}")
+        logger.warning(f"[PT下载中心:转移做种]保存延迟转种队列失败：{error}")
 
 
 def _load_transfer_schedule(plugin) -> dict:
@@ -129,13 +129,13 @@ def _load_transfer_schedule(plugin) -> dict:
     try:
         payload = get_data(TRANSFER_SCHEDULE_KEY)
     except Exception as error:  # noqa: BLE001  # 由宿主存储实现决定
-        logger.warning(f"读取延迟转种队列失败：{error}")
+        logger.warning(f"[PT下载中心:转移做种]读取延迟转种队列失败：{error}")
         return {}
     if not isinstance(payload, dict):
         return {}
     version = payload.get("schema_version")
     if version not in (None, TRANSFER_SCHEDULE_SCHEMA_VERSION):
-        logger.warning(f"忽略未知延迟转种队列版本：{version}")
+        logger.warning(f"[PT下载中心:转移做种]忽略未知延迟转种队列版本：{version}")
         return {}
     items = payload.get("items")
     if not isinstance(items, dict):

@@ -93,7 +93,7 @@ def ensure_seed_recheck_worker(plugin):
             plugin._seed_recheck_thread = None
             plugin._seed_recheck_stop_event = None
             raise
-    logger.info("做种校验：按需 worker 已启动")
+    logger.info("[PT下载中心:做种校验]按需 worker 已启动")
 
 
 def stop_seed_recheck_worker(plugin, join_timeout: float = 10.0) -> bool:
@@ -115,7 +115,7 @@ def stop_seed_recheck_worker(plugin, join_timeout: float = 10.0) -> bool:
             if getattr(plugin, "_seed_recheck_stop_event", None) is stop_event:
                 plugin._seed_recheck_stop_event = None
     if thread.is_alive():
-        logger.error("做种校验：worker 停止超时，下载器请求可能仍在执行")
+        logger.error("[PT下载中心:做种校验]worker 停止超时，下载器请求可能仍在执行")
         return False
     return True
 
@@ -127,12 +127,12 @@ def seed_recheck_loop(plugin, stop_event=None):
         while plugin._enabled and not stop_event.is_set():
             queue = load_seed_recheck_queue(plugin)
             if not queue:
-                logger.info("做种校验：队列已清空，worker 退出")
+                logger.info("[PT下载中心:做种校验]队列已清空，worker 退出")
                 break
             try:
                 process_seed_recheck_once(plugin, queue, stop_event=stop_event)
             except Exception as exc:
-                logger.error(f"做种校验：处理队列失败: {exc}")
+                logger.error(f"[PT下载中心:做种校验]处理队列失败: {exc}")
             if stop_event.wait(max(0.1, float(getattr(plugin, "_seed_check_interval", 60) or 60))):
                 break
     finally:
@@ -178,7 +178,7 @@ def process_seed_recheck_once(plugin, queue, stop_event=None):
                 if item["phase"] in ("target_added", "verifying"):
                     item["phase"] = "rollback"
                     item["error"] = str(exc)
-                logger.error(f"转移流水线：{key} 推进失败，保留续办: {exc}")
+                logger.error(f"[PT下载中心:做种校验]转移流水线：{key} 推进失败，保留续办: {exc}")
         save_seed_recheck_queue(plugin, queue)
     return changed
 

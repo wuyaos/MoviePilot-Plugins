@@ -84,7 +84,7 @@ def _operation_response(
 
 def _raise_query_error(summary: str, error: Exception) -> None:
     """把查询端点异常转换为明确的 HTTP 500。"""
-    logger.error(f"{summary}: {error}")
+    logger.error(f"[PT下载中心]{summary}: {error}")
     raise HTTPException(status_code=500, detail=str(error)) from error
 def _require_module(plugin, module: str, label: str) -> None:
     """模块核心执行端点的统一门控：总开关与模块开关任一关闭即拒绝（utils/config.py 注册表口径）。"""
@@ -101,7 +101,7 @@ def api_retry_renames(plugin):
     try:
         return _operation_response(plugin._retry_pending_renames(), RetryRenamesResult)
     except Exception as e:
-        logger.error(f"一键补刀失败: {e}")
+        logger.error(f"[PT下载中心]一键补刀失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"补刀失败: {e}", "history": 0, "dirty": 0, "total": 0},
             RetryRenamesResult,
@@ -114,7 +114,7 @@ def api_retry_rename(plugin, hash: str = ""):
     try:
         return _operation_response(plugin._retry_rename(hash), HashActionResult)
     except Exception as e:
-        logger.error(f"单条补刀失败: {e}")
+        logger.error(f"[PT下载中心]单条补刀失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"补刀失败: {e}", "hash": hash or ""},
             HashActionResult,
@@ -206,7 +206,7 @@ def api_upload_limit_reallocate(plugin, payload: EmptyRequest | None = None):
             UploadLimitReallocateResult,
         )
     except Exception as e:
-        logger.error(f"上传额度重新分配失败: {e}")
+        logger.error(f"[PT下载中心]上传额度重新分配失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"重新分配失败: {e}"},
             UploadLimitReallocateResult,
@@ -234,7 +234,7 @@ def api_upload_limit_site_tags(plugin, payload: UploadLimitSiteTagsRequest):
         result["msg"] = "站点标签扫描完成，策略已立即生效" if result.get("code") == 0 else result.get("msg")
         return _operation_response(result, UploadLimitSiteTagsResult)
     except Exception as e:
-        logger.error(f"上传限速站点标签扫描失败: {e}")
+        logger.error(f"[PT下载中心]上传限速站点标签扫描失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"扫描失败: {e}", "items": [], "errors": [], "rules": {}},
             UploadLimitSiteTagsResult,
@@ -255,7 +255,7 @@ def api_upload_limit_site_rules_update(plugin, payload: UploadLimitRulesRequest)
             UploadLimitRulesResult,
         )
     except Exception as e:
-        logger.error(f"上传限速站点策略保存失败: {e}")
+        logger.error(f"[PT下载中心]上传限速站点策略保存失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"站点策略保存失败: {e}", "rules": {}},
             UploadLimitRulesResult,
@@ -277,7 +277,7 @@ def api_upload_limit_disable_restore(plugin, payload: EmptyRequest | None = None
         result = restore_upload_limits(plugin)
         return _operation_response(result, UploadLimitDisableResult)
     except Exception as e:
-        logger.error(f"停用并恢复上传限速失败: {e}")
+        logger.error(f"[PT下载中心]停用并恢复上传限速失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"停用恢复失败: {e}", "errors": [str(e)]},
             UploadLimitDisableResult,
@@ -321,7 +321,7 @@ def api_tag_cleanup_scan(plugin, payload: TagCleanupScanRequest):
         result = scan_and_clean_tags(plugin, request.get("downloaders") or [])
         return _operation_response(result, TagCleanupScanResult)
     except Exception as e:
-        logger.error(f"标签清理扫描失败: {e}")
+        logger.error(f"[PT下载中心]标签清理扫描失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"扫描失败: {e}", "downloaders": [], "auto_removed": [], "errors": []},
             TagCleanupScanResult,
@@ -336,7 +336,7 @@ def api_tag_cleanup_execute(plugin, payload: TagCleanupExecuteRequest):
         result = execute_tag_cleanup(plugin, request.get("removals") or [])
         return _operation_response(result, TagCleanupExecuteResult)
     except Exception as e:
-        logger.error(f"标签清理执行失败: {e}")
+        logger.error(f"[PT下载中心]标签清理执行失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"清理失败: {e}", "removed": [], "failed": []},
             TagCleanupExecuteResult,
@@ -453,13 +453,13 @@ def api_recovery_torrent(plugin, hash: str = ""):
         record["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         records[hash] = record
         plugin.save_data(RENAME_RECORDS_KEY, records)
-        logger.info(f"种子恢复成功: {hash} → {original_name}")
+        logger.info(f"[PT下载中心]种子恢复成功: {hash} → {original_name}")
         return _operation_response(
             {"code": 0, "msg": f"已恢复为: {original_name}", "hash": hash},
             HashActionResult,
         )
     except Exception as e:
-        logger.error(f"种子恢复失败: {e}")
+        logger.error(f"[PT下载中心]种子恢复失败: {e}")
         return _operation_response(
             {"code": 1, "msg": str(e), "hash": hash},
             HashActionResult,
@@ -499,7 +499,7 @@ def api_hr_check(plugin):
     try:
         result = plugin._hr_service.check_tasks("手动")
     except Exception as e:
-        logger.error(f"H&R 状态检查失败: {e}")
+        logger.error(f"[PT下载中心]H&R 状态检查失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"H&R 状态检查失败: {e}"}, HrActionResult
         )
@@ -514,7 +514,7 @@ def api_hr_scan(plugin):
     try:
         result = plugin._hr_service.run_scan("手动")
     except Exception as e:
-        logger.error(f"H&R 全量扫描失败: {e}")
+        logger.error(f"[PT下载中心]H&R 全量扫描失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"H&R 全量扫描失败: {e}"}, HrActionResult
         )
@@ -532,7 +532,7 @@ def api_hr_clear_task(plugin, payload: HrClearTaskRequest):
             request.get("torrent_hash") or "",
         )
     except Exception as e:
-        logger.error(f"H&R 记录清除失败: {e}")
+        logger.error(f"[PT下载中心]H&R 记录清除失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"H&R 记录清除失败: {e}"}, HrActionResult
         )
@@ -548,7 +548,7 @@ def api_hr_clear_compliant(plugin, payload: EmptyRequest | None = None):
     try:
         cleared = plugin._hr_service.clear_compliant()
     except Exception as e:
-        logger.error(f"H&R 已满足记录清除失败: {e}")
+        logger.error(f"[PT下载中心]H&R 已满足记录清除失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"H&R 已满足记录清除失败: {e}"}, HrActionResult
         )
@@ -563,7 +563,7 @@ def api_hr_clear_missing(plugin, payload: EmptyRequest | None = None):
     try:
         cleared = plugin._hr_service.clear_missing()
     except Exception as e:
-        logger.error(f"H&R 需做种记录清除失败: {e}")
+        logger.error(f"[PT下载中心]H&R 需做种记录清除失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"H&R 需做种记录清除失败: {e}"}, HrActionResult
         )
@@ -627,7 +627,7 @@ def api_transfer_run(plugin, payload: EmptyRequest | None = None):
     try:
         plugin.transfer(trigger_source="手动")
     except Exception as e:
-        logger.error(f"转移做种执行失败: {e}")
+        logger.error(f"[PT下载中心]转移做种执行失败: {e}")
         return _operation_response({"code": 1, "msg": f"转移做种失败: {e}"}, ModuleActionResult)
     return _operation_response({"code": 0, "msg": "转移做种已执行"}, ModuleActionResult)
 
@@ -638,7 +638,7 @@ def api_tag_complement(plugin, payload: EmptyRequest | None = None):
     try:
         result = complement_history(plugin)
     except Exception as e:
-        logger.error(f"站点标签历史补全失败: {e}")
+        logger.error(f"[PT下载中心]站点标签历史补全失败: {e}")
         return _operation_response(
             {"code": 1, "msg": f"站点标签历史补全失败: {e}"}, ModuleActionResult
         )

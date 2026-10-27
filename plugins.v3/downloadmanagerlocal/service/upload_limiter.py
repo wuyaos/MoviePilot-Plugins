@@ -114,7 +114,7 @@ def load_upload_limit_state(plugin: Any) -> dict:
     except ValueError as error:
         state = migrate_upload_limit_state(None)
         plugin._upload_limit_state_error = str(error)
-        logger.error("上传限速状态迁移失败：%s", error)
+        logger.error("[PT下载中心:上传限速]状态迁移失败：%s", error)
     plugin._upload_limit_state = state
     if raw_value != state and not getattr(plugin, "_upload_limit_state_error", ""):
         plugin.save_data(UPLOAD_LIMIT_STATE_KEY, state)
@@ -127,7 +127,7 @@ def save_upload_limit_state(plugin: Any, state: dict) -> None:
     state["schema_version"] = 1
     plugin._upload_limit_state = state
     if getattr(plugin, "_upload_limit_state_error", ""):
-        logger.error("上传限速状态存在迁移错误，拒绝覆盖原始持久化数据")
+        logger.error("[PT下载中心:上传限速]状态存在迁移错误，拒绝覆盖原始持久化数据")
         return
     plugin.save_data(UPLOAD_LIMIT_STATE_KEY, state)
 

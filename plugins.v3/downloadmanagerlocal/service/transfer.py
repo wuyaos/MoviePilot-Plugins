@@ -62,11 +62,11 @@ def _transfer_delay_status(
 def validate_config(plugin) -> bool:
     """校验转移配置"""
     if plugin._fromtorrentpath and not Path(plugin._fromtorrentpath).exists():
-        logger.error(f"源下载器种子文件保存路径不存在：{plugin._fromtorrentpath}")
+        logger.error(f"[PT下载中心:转移做种]源下载器种子文件保存路径不存在：{plugin._fromtorrentpath}")
         plugin.systemmessage.put(f"源下载器种子文件保存路径不存在：{plugin._fromtorrentpath}", title="自动转移做种")
         return False
     if plugin._fromdownloader == plugin._todownloader:
-        logger.error("源下载器和目的下载器不能相同")
+        logger.error("[PT下载中心:转移做种]源下载器和目的下载器不能相同")
         plugin.systemmessage.put("源下载器和目的下载器不能相同", title="自动转移做种")
         return False
     return True
@@ -107,7 +107,7 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
                 return None
             torrent_hash = downloader.get_torrent_id_by_tag(tags=tag)
             if not torrent_hash:
-                logger.error(f"{downloader} 下载任务添加成功，但获取任务信息失败！")
+                logger.error(f"[PT下载中心:转移做种]{downloader} 下载任务添加成功，但获取任务信息失败！")
                 return None
             return torrent_hash
         finally:
@@ -132,7 +132,7 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
         else:
             return torrent.hashString
 
-    logger.error("不支持的下载器类型")
+    logger.error("[PT下载中心:转移做种]不支持的下载器类型")
     return None
 
 
@@ -152,7 +152,7 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
         if dl_type == "qbittorrent":
             torrents, error = dl.get_torrents(ids=[torrent_hash])
             if error or not torrents:
-                logger.warning(f"转移后处理：无法获取种子信息 hash={torrent_hash}")
+                logger.warning(f"[PT下载中心:转移做种]转移后处理：无法获取种子信息 hash={torrent_hash}")
                 return False
             torrent = torrents[0]
             torrent_name = torrent.get("name", "")
@@ -169,7 +169,7 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
             trackers = get_tracker_urls(torrent, dl_type)
             save_path = get_save_path(torrent, dl_type)
     except Exception as e:
-        logger.error(f"转移后处理：获取种子信息失败 hash={torrent_hash}: {e}")
+        logger.error(f"[PT下载中心:转移做种]转移后处理：获取种子信息失败 hash={torrent_hash}: {e}")
         return False
 
     if not torrent_name:
@@ -195,7 +195,7 @@ def transfer(plugin, trigger_source: str = "手动/定时"):
 
 def _transfer_impl(plugin, trigger_source: str):
     """开始转移做种"""
-    logger.info(f"开始转移做种任务，触发来源：{trigger_source} ...")
+    logger.info(f"[PT下载中心:转移做种]开始转移做种任务，触发来源：{trigger_source} ...")
     generation = int(getattr(plugin, "_transfer_stop_generation", 0) or 0)
     if _transfer_stopped(plugin, generation):
         return
@@ -214,15 +214,15 @@ def _transfer_impl(plugin, trigger_source: str):
 
     torrents = from_downloader.get_completed_torrents()
     if torrents:
-        logger.info(f"下载器 {from_service.name} 已做种的种子数：{len(torrents)}")
+        logger.info(f"[PT下载中心:转移做种]下载器 {from_service.name} 已做种的种子数：{len(torrents)}")
     else:
-        logger.info(f"下载器 {from_service.name} 没有已做种的种子")
+        logger.info(f"[PT下载中心:转移做种]下载器 {from_service.name} 没有已做种的种子")
         return
 
     trans_torrents = []
     for torrent in torrents[:max(1, int(getattr(plugin, "_scan_limit", 500)))]:
         if _transfer_stopped(plugin, generation):
-            logger.info("转移服务停止")
+            logger.info("[PT下载中心:转移做种]转移服务停止")
             return
 
         hash_str = plugin.get_hash(torrent, from_service.type)
@@ -236,7 +236,7 @@ def _transfer_impl(plugin, trigger_source: str):
         )
         if should_wait:
             logger.info(
-                f"种子 {hash_str} 完成仅 {age_minutes:.1f} 分钟，"
+                f"[PT下载中心:转移做种]种子 {hash_str} 完成仅 {age_minutes:.1f} 分钟，"
                 f"不足延迟 {delay_minutes} 分钟，跳过"
             )
             continue
@@ -245,7 +245,7 @@ def _transfer_impl(plugin, trigger_source: str):
             nopath_skip = False
             for nopath in plugin._nopaths.split('\n'):
                 if os.path.normpath(save_path).startswith(os.path.normpath(nopath)):
-                    logger.info(f"种子 {hash_str} 保存路径 {save_path} 不需要转移，跳过 ...")
+                    logger.info(f"[PT下载中心:转移做种]种子 {hash_str} 保存路径 {save_path} 不需要转移，跳过 ...")
                     nopath_skip = True
                     break
             if nopath_skip:
@@ -259,7 +259,7 @@ def _transfer_impl(plugin, trigger_source: str):
 
         if plugin._includecategory:
             if torrent_category not in plugin._includecategory.split(','):
-                logger.info(f"种子 {hash_str} 不含有转移分类 {plugin._includecategory}，跳过 ...")
+                logger.info(f"[PT下载中心:转移做种]种子 {hash_str} 不含有转移分类 {plugin._includecategory}，跳过 ...")
                 continue
         if is_torrent_labels_empty:
             if not plugin._transferemptylabel:
@@ -269,7 +269,7 @@ def _transfer_impl(plugin, trigger_source: str):
                 is_skip = False
                 for label in plugin._nolabels.split(','):
                     if label in torrent_labels:
-                        logger.info(f"种子 {hash_str} 含有不转移标签 {label}，跳过 ...")
+                        logger.info(f"[PT下载中心:转移做种]种子 {hash_str} 含有不转移标签 {label}，跳过 ...")
                         is_skip = True
                         break
                 if is_skip:
@@ -278,7 +278,7 @@ def _transfer_impl(plugin, trigger_source: str):
                 is_skip = False
                 for label in plugin._includelabels.split(','):
                     if label not in torrent_labels:
-                        logger.info(f"种子 {hash_str} 不含有转移标签 {label}，跳过 ...")
+                        logger.info(f"[PT下载中心:转移做种]种子 {hash_str} 不含有转移标签 {label}，跳过 ...")
                         is_skip = True
                         break
                 if is_skip:
@@ -291,7 +291,7 @@ def _transfer_impl(plugin, trigger_source: str):
         })
 
     if trans_torrents:
-        logger.info(f"需要转移的种子数：{len(trans_torrents)}")
+        logger.info(f"[PT下载中心:转移做种]需要转移的种子数：{len(trans_torrents)}")
         total = len(trans_torrents)
         success = 0
         fail = 0
@@ -313,7 +313,7 @@ def _transfer_impl(plugin, trigger_source: str):
                 continue
             torrent_file = Path(plugin._fromtorrentpath) / f"{torrent_item.get('hash')}.torrent"
             if not torrent_file.exists():
-                logger.error(f"种子文件不存在：{torrent_file}")
+                logger.error(f"[PT下载中心:转移做种]种子文件不存在：{torrent_file}")
                 fail += 1
                 continue
 
@@ -321,7 +321,7 @@ def _transfer_impl(plugin, trigger_source: str):
             if _transfer_stopped(plugin, generation):
                 break
             if poll_error or torrent_info is None:
-                logger.warning(f"目标任务查询失败，保留源任务：{torrent_item.get('hash')}")
+                logger.warning(f"[PT下载中心:转移做种]目标任务查询失败，保留源任务：{torrent_item.get('hash')}")
                 fail += 1
                 continue
             if torrent_info:
@@ -333,7 +333,7 @@ def _transfer_impl(plugin, trigger_source: str):
                         continue
                     if _transfer_stopped(plugin, generation):
                         break
-                    logger.info(f"删除重复的源下载器任务（不含文件）：{torrent_item.get('hash')} ...")
+                    logger.info(f"[PT下载中心:转移做种]删除重复的源下载器任务（不含文件）：{torrent_item.get('hash')} ...")
                     result = delete_source(plugin, from_service.name, source_hash)
                     if result == "retry":
                         fail += 1
@@ -342,7 +342,7 @@ def _transfer_impl(plugin, trigger_source: str):
                     else:
                         del_dup += 1
                 else:
-                    logger.info(f"{torrent_item.get('hash')} 已在目的下载器中，跳过 ...")
+                    logger.info(f"[PT下载中心:转移做种]{torrent_item.get('hash')} 已在目的下载器中，跳过 ...")
                     skip += 1
                 continue
 
@@ -350,29 +350,29 @@ def _transfer_impl(plugin, trigger_source: str):
                                                     plugin._frompath,
                                                     plugin._topath)
             if not download_dir:
-                logger.error(f"转换保存路径失败：{torrent_item.get('save_path')}")
+                logger.error(f"[PT下载中心:转移做种]转换保存路径失败：{torrent_item.get('save_path')}")
                 fail += 1
                 continue
 
             if is_downloader_type("qbittorrent", service=from_service):
                 content = torrent_file.read_bytes()
                 if not content:
-                    logger.warning(f"读取种子文件失败：{torrent_file}")
+                    logger.warning(f"[PT下载中心:转移做种]读取种子文件失败：{torrent_file}")
                     fail += 1
                     continue
                 try:
                     torrent_main = bdecode(content)
                     main_announce = torrent_main.get('announce')
                 except Exception as err:
-                    logger.warning(f"解析种子文件 {torrent_file} 失败：{str(err)}")
+                    logger.warning(f"[PT下载中心:转移做种]解析种子文件 {torrent_file} 失败：{str(err)}")
                     fail += 1
                     continue
 
                 if not main_announce:
-                    logger.info(f"{torrent_item.get('hash')} 未发现tracker信息，尝试补充tracker信息...")
+                    logger.info(f"[PT下载中心:转移做种]{torrent_item.get('hash')} 未发现tracker信息，尝试补充tracker信息...")
                     fastresume_file = Path(plugin._fromtorrentpath) / f"{torrent_item.get('hash')}.fastresume"
                     if not fastresume_file.exists():
-                        logger.warning(f"fastresume文件不存在：{fastresume_file}")
+                        logger.warning(f"[PT下载中心:转移做种]fastresume文件不存在：{fastresume_file}")
                         fail += 1
                         continue
                     try:
@@ -388,13 +388,13 @@ def _transfer_impl(plugin, trigger_source: str):
                             torrent_file = settings.TEMP_PATH / f"{torrent_item.get('hash')}.torrent"
                             torrent_file.write_bytes(bencode(torrent_main))
                     except Exception as err:
-                        logger.error(f"解析fastresume文件 {fastresume_file} 出错：{str(err)}")
+                        logger.error(f"[PT下载中心:转移做种]解析fastresume文件 {fastresume_file} 出错：{str(err)}")
                         fail += 1
                         continue
 
             if _transfer_stopped(plugin, generation):
                 break
-            logger.info(f"添加转移做种任务到下载器 {to_service.name}：{torrent_file}")
+            logger.info(f"[PT下载中心:转移做种]添加转移做种任务到下载器 {to_service.name}：{torrent_file}")
             submitted = begin_transfer(
                 plugin, from_service, to_service, source_hash, torrent_item["torrent"],
                 add_target=lambda: download_torrent(
@@ -418,14 +418,14 @@ def _transfer_impl(plugin, trigger_source: str):
                 text=f"总数：{total}，已提交校验：{success}，失败：{fail}，跳过：{skip}，删除重复：{del_dup}"
             )
     else:
-        logger.info("没有需要转移的种子")
+        logger.info("[PT下载中心:转移做种]没有需要转移的种子")
 
     if _transfer_stopped(plugin, generation):
-        logger.info("转移做种任务已停止，未继续执行重命名补刀")
+        logger.info("[PT下载中心:转移做种]转移做种任务已停止，未继续执行重命名补刀")
         return
     plugin._retry_failed_renames(to_service)
 
-    logger.info("转移做种任务执行完成")
+    logger.info("[PT下载中心:转移做种]转移做种任务执行完成")
 
 
 def retry_pending_renames(plugin):
@@ -435,7 +435,7 @@ def retry_pending_renames(plugin):
     try:
         to_service = plugin.service_info(plugin._todownloader)
         if not to_service or not to_service.instance:
-            logger.warning("转移做种兜底服务：目标下载器不可用，跳过重命名补刀")
+            logger.warning("[PT下载中心:转移做种]转移做种兜底服务：目标下载器不可用，跳过重命名补刀")
             return {"code": 1, "msg": "目标下载器不可用，已跳过补刀", "history": 0, "dirty": 0, "total": 0}
         history_result = plugin._retry_failed_renames(to_service) or {}
         dirty_result = retry_dirty_torrent_names(plugin, to_service) or {}
@@ -460,7 +460,7 @@ def retry_pending_renames(plugin):
             "errors": errors,
         }
     except Exception as e:
-        logger.error(f"转移做种兜底服务：重命名补刀失败: {e}")
+        logger.error(f"[PT下载中心:转移做种]转移做种兜底服务：重命名补刀失败: {e}")
         return {"code": 1, "msg": f"补刀失败: {e}", "history": 0, "dirty": 0, "total": 0, "attempted": 0, "failed": 1, "skipped": 0, "errors": [str(e)]}
 
 
@@ -474,7 +474,7 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
     try:
         torrents, _ = dl.get_torrents()
     except Exception as e:
-        logger.error(f"转移做种兜底服务：获取目标下载器任务失败: {e}")
+        logger.error(f"[PT下载中心:转移做种]转移做种兜底服务：获取目标下载器任务失败: {e}")
         return result
     if not torrents:
         return result
@@ -485,7 +485,7 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
             continue
         torrent_hash = plugin.get_hash(torrent, dl_type)
         if not torrent_hash:
-            logger.warning(f"转移做种兜底服务：发现副标题污染任务但无 hash，跳过重命名 name={torrent_name}")
+            logger.warning(f"[PT下载中心:转移做种]转移做种兜底服务：发现副标题污染任务但无 hash，跳过重命名 name={torrent_name}")
             continue
         is_archived = getattr(plugin, "is_rename_archived", None)
         if callable(is_archived) and is_archived(torrent_hash):
@@ -493,7 +493,7 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
             continue
         result["attempted"] += 1
         save_path = plugin.get_save_path(torrent, dl_type)
-        logger.info(f"转移做种兜底服务：发现脏种子名，补刀处理 hash={torrent_hash} name={torrent_name}")
+        logger.info(f"[PT下载中心:转移做种]转移做种兜底服务：发现脏种子名，补刀处理 hash={torrent_hash} name={torrent_name}")
         try:
             retry_name = resolve_retry_original_name(
                 plugin,
@@ -502,7 +502,7 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
                 _get_torrent_content_name(torrent, dl_type),
             )
             if not retry_name:
-                logger.warning(f"转移做种兜底服务：原始发布名污染且无可信候选，跳过重命名 hash={torrent_hash}")
+                logger.warning(f"[PT下载中心:转移做种]转移做种兜底服务：原始发布名污染且无可信候选，跳过重命名 hash={torrent_hash}")
                 record_failure = getattr(plugin, "record_rename_failure", None)
                 if callable(record_failure):
                     record_failure(torrent_hash, torrent_name, "NO_TRUSTED_SOURCE", "原始发布名污染且无可信候选")
@@ -519,16 +519,16 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
                 result["failed"] += 1
                 result["errors"].append(f"{torrent_hash}: 重命名失败")
         except Exception as e:
-            logger.error(f"转移做种兜底服务：脏种子名补刀失败 hash={torrent_hash} name={torrent_name}: {e}")
+            logger.error(f"[PT下载中心:转移做种]转移做种兜底服务：脏种子名补刀失败 hash={torrent_hash} name={torrent_name}: {e}")
             result["failed"] += 1
             result["errors"].append(f"{torrent_hash}: {e}")
             record_failure = getattr(plugin, "record_rename_failure", None)
             if callable(record_failure):
                 record_failure(torrent_hash, torrent_name, "RENAME_API_FAILED", str(e))
     if result["success"]:
-        logger.info(f"转移做种兜底服务：脏种子名补刀完成，成功 {result['success']} 个，失败 {result['failed']} 个")
+        logger.info(f"[PT下载中心:转移做种]转移做种兜底服务：脏种子名补刀完成，成功 {result['success']} 个，失败 {result['failed']} 个")
     if result["skipped"]:
-        logger.info(f"转移做种兜底服务：跳过已归档补刀记录 {result['skipped']} 个")
+        logger.info(f"[PT下载中心:转移做种]转移做种兜底服务：跳过已归档补刀记录 {result['skipped']} 个")
     return result
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-HR_LOG_PREFIX = "【H&R】"
+HR_LOG_PREFIX = "[PT下载中心:H&R]"
 
 HR_TASKS_DATA_KEY = "hr_tasks"
 """H&R 任务集合的持久化 key。"""

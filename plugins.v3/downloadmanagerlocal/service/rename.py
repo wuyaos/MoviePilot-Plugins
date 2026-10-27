@@ -200,7 +200,7 @@ def _add_torrent_file_candidates(candidates: list, seen: set, plugin, torrent_ha
                         candidates, seen, Path(_to_text(path_parts)).stem, "torrent_file", 8
                     )
     except Exception as e:
-        logger.warning(f"转移后重命名：读取原始种子名失败 hash={hash_text} file={torrent_file}: {e}")
+        logger.warning(f"[PT下载中心:命名补刀]读取原始种子名失败 hash={hash_text} file={torrent_file}: {e}")
 
 
 def _add_rename_record_candidates(candidates: list, seen: set, plugin, torrent_hash: str) -> None:
@@ -317,7 +317,7 @@ def _get_original_torrent_name(
     best = max(candidates, key=_score_original_name_candidate)
     if _score_original_name_candidate(best) < 8:
         logger.warning(
-            f"转移后重命名：原始发布名候选置信度过低，跳过自动补刀 hash={torrent_hash} "
+            f"[PT下载中心:命名补刀]原始发布名候选置信度过低，跳过自动补刀 hash={torrent_hash} "
             f"candidate={best.get('name')}"
         )
         return ""
@@ -335,7 +335,7 @@ def resolve_retry_original_name(
     if candidate:
         return candidate
     if is_polluted_original_name(current_name):
-        logger.warning(f"补刀跳过重命名：原始发布名污染且无可信候选 hash={torrent_hash} name={current_name}")
+        logger.warning(f"[PT下载中心:命名补刀]补刀跳过重命名：原始发布名污染且无可信候选 hash={torrent_hash} name={current_name}")
         return ""
     return clean_torrent_original_name(current_name).strip()
 
@@ -348,7 +348,7 @@ def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: st
         if plugin._rename_exclude_dirs:
             for d in plugin._rename_exclude_dirs.split("\n"):
                 if d and d in str(save_path):
-                    logger.info(f"转移后重命名：命中排除目录 {d}，跳过 hash={torrent_hash}")
+                    logger.info(f"[PT下载中心:命名补刀]命中排除目录 {d}，跳过 hash={torrent_hash}")
                     save_rename_record(plugin, torrent_hash, torrent_name, torrent_name, False, "命中排除目录")
                     return False
 
@@ -356,7 +356,7 @@ def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: st
         downloadhis = get_download_history_by_hash(torrent_hash)
         if downloadhis:
             logger.info(
-                f"转移后重命名：找到下载历史记录，使用当前种子名保留季集: "
+                f"[PT下载中心:命名补刀]找到下载历史记录，使用当前种子名保留季集: "
                 f"{clean_torrent_original_name(torrent_name).strip() or torrent_name}"
             )
             meta = _build_rename_meta(torrent_name, downloadhis)
@@ -380,26 +380,32 @@ def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: st
                 if new_name and str(new_name) != torrent_name:
                     if dl_type == "qbittorrent":
                         dl.qbc.torrents_rename(torrent_hash=torrent_hash, new_torrent_name=str(new_name))
-                    else:
+                    elif hasattr(dl, "rename_torrent"):
                         dl.rename_torrent(torrent_hash, str(new_name))
-                    logger.info(f"转移后重命名成功(历史): {torrent_name} → {new_name}")
+                    else:
+                        logger.warning(
+                            f"[PT下载中心:命名补刀]下载器类型不支持重命名，跳过(历史) hash={torrent_hash} type={type(dl).__name__}"
+                        )
+                        save_rename_record(plugin, torrent_hash, torrent_name, str(new_name), False, "下载器不支持重命名")
+                        return False
+                    logger.info(f"[PT下载中心:命名补刀]转移后重命名成功(历史): {torrent_name} → {new_name}")
                     save_rename_record(plugin, torrent_hash, torrent_name, str(new_name), True, "")
                     return True
                 else:
-                    logger.info("转移后重命名(历史): 名称未变化或格式化失败，回退到种子名解析")
+                    logger.info("[PT下载中心:命名补刀]转移后重命名(历史): 名称未变化或格式化失败，回退到种子名解析")
 
         # 回退：解析种子名称
         cleaned_torrent_name = clean_torrent_original_name(torrent_name).strip()
         meta = MetaInfo(cleaned_torrent_name or torrent_name)
         if not meta or not meta.title:
-            logger.warning(f"转移后重命名：元数据获取失败 hash={torrent_hash} name={torrent_name}")
+            logger.warning(f"[PT下载中心:命名补刀]元数据获取失败 hash={torrent_hash} name={torrent_name}")
             save_rename_record(plugin, torrent_hash, torrent_name, torrent_name, False, "元数据获取失败")
             return False
 
         # TMDB 识别
         media_info = plugin.chain.recognize_media(meta=meta)
         if not media_info:
-            logger.warning(f"转移后重命名：媒体识别失败 hash={torrent_hash} name={torrent_name}")
+            logger.warning(f"[PT下载中心:命名补刀]媒体识别失败 hash={torrent_hash} name={torrent_name}")
             save_rename_record(plugin, torrent_hash, torrent_name, torrent_name, False, "媒体识别失败")
             return False
 
@@ -407,24 +413,32 @@ def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: st
         template = plugin._rename_movie_format if media_info.type == MediaType.MOVIE else plugin._rename_tv_format
         new_name = format_torrent_name(template, meta, media_info)
         if not new_name:
-            logger.warning(f"转移后重命名：格式化结果为空 hash={torrent_hash}")
+            logger.warning(f"[PT下载中心:命名补刀]格式化结果为空 hash={torrent_hash}")
             save_rename_record(plugin, torrent_hash, torrent_name, torrent_name, False, "格式化结果为空")
             return False
         if str(new_name) == torrent_name:
-            logger.info(f"转移后重命名：名称未变化 hash={torrent_hash}")
+            logger.info(f"[PT下载中心:命名补刀]名称未变化 hash={torrent_hash}")
             save_rename_record(plugin, torrent_hash, torrent_name, str(new_name), True, "名称未变化")
             return True
 
         # 执行重命名
         if dl_type == "qbittorrent":
             dl.qbc.torrents_rename(torrent_hash=torrent_hash, new_torrent_name=str(new_name))
-        else:
+        if dl_type == "qbittorrent":
+            dl.qbc.torrents_rename(torrent_hash=torrent_hash, new_torrent_name=str(new_name))
+        elif hasattr(dl, "rename_torrent"):
             dl.rename_torrent(torrent_hash, str(new_name))
-        logger.info(f"转移后重命名成功: {torrent_name} → {new_name}")
+        else:
+            logger.warning(
+                f"[PT下载中心:命名补刀]下载器类型不支持重命名，跳过 hash={torrent_hash} type={type(dl).__name__}"
+            )
+            save_rename_record(plugin, torrent_hash, torrent_name, str(new_name), False, "下载器不支持重命名")
+            return False
+        logger.info(f"[PT下载中心:命名补刀]转移后重命名成功: {torrent_name} → {new_name}")
         save_rename_record(plugin, torrent_hash, torrent_name, str(new_name), True, "")
         return True
     except Exception as e:
-        logger.error(f"转移后重命名失败 hash={torrent_hash}: {e}")
+        logger.error(f"[PT下载中心:命名补刀]转移后重命名失败 hash={torrent_hash}: {e}")
         save_rename_record(plugin, torrent_hash, torrent_name, torrent_name, False, str(e))
         return False
 
@@ -455,7 +469,7 @@ def retry_failed_renames(plugin, to_service):
                 continue
             is_archived = getattr(plugin, "is_rename_archived", None)
             if callable(is_archived) and is_archived(th):
-                logger.info(f"补刀跳过归档记录 hash={th}")
+                logger.info(f"[PT下载中心:命名补刀]补刀跳过归档记录 hash={th}")
                 summary["skipped"] += 1
                 continue
             summary["attempted"] += 1
@@ -463,7 +477,7 @@ def retry_failed_renames(plugin, to_service):
             sp = get_save_path(torrent, dl_type)
             tags = get_label(torrent, dl_type)
             trackers = get_tracker_urls(torrent, dl_type)
-            logger.info(f"补刀处理: hash={th} name={tn}")
+            logger.info(f"[PT下载中心:命名补刀]补刀处理: hash={th} name={tn}")
             item_success = True
             if plugin._rename_enabled:
                 retry_name = resolve_retry_original_name(plugin, th, tn, _get_torrent_content_name(torrent, dl_type))
@@ -485,10 +499,10 @@ def retry_failed_renames(plugin, to_service):
             else:
                 summary["failed"] += 1
         if summary["success"] > 0:
-            logger.info(f"补刀完成，成功 {summary['success']} 个，失败 {summary['failed']} 个")
+            logger.info(f"[PT下载中心:命名补刀]补刀完成，成功 {summary['success']} 个，失败 {summary['failed']} 个")
         return summary
     except Exception as e:
-        logger.error(f"补刀失败: {e}")
+        logger.error(f"[PT下载中心:命名补刀]补刀失败: {e}")
         summary["errors"].append(str(e))
         return summary
 
@@ -545,7 +559,7 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
             save_path = get_save_path(torrent, dl_type)
             torrent_tags = get_label(torrent, dl_type)
             trackers = _get_tracker_urls(torrent, dl_type)
-            logger.info(f"单条补刀处理: hash={hash_text} name={torrent_name}")
+            logger.info(f"[PT下载中心:命名补刀]单条补刀处理: hash={hash_text} name={torrent_name}")
 
             rename_succeeded = True
             if plugin._rename_enabled:
@@ -583,7 +597,7 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
             record_failure(hash_text, "", "TASK_NOT_FOUND", "未在目标下载器找到该种子")
         return {"code": 1, "msg": "未在目标下载器找到该种子", "hash": hash_text}
     except Exception as e:
-        logger.error(f"单条补刀失败 hash={hash_text}: {e}")
+        logger.error(f"[PT下载中心:命名补刀]单条补刀失败 hash={hash_text}: {e}")
         record_failure = getattr(plugin, "record_rename_failure", None)
         if callable(record_failure):
             record_failure(hash_text, "", "UNKNOWN_ERROR", str(e))
@@ -818,7 +832,7 @@ def add_rename_tag(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags,
             dl.set_torrent_tag(ids=torrent_hash, tags=merged)
         return True
     except Exception as err:  # noqa: BLE001  # 下载器写入结果由其实现决定
-        logger.warning(f"重命名后补打标签失败 hash={torrent_hash}: {err}")
+        logger.warning(f"[PT下载中心:命名补刀]重命名后补打标签失败 hash={torrent_hash}: {err}")
         return False
 
 
@@ -843,7 +857,7 @@ def notify_rename_result(plugin, trigger: str, rename_config: dict, result: dict
         )
         return True
     except Exception as err:  # noqa: BLE001  # 通知发送由宿主实现决定
-        logger.warning(f"重命名结果通知发送失败：{err}")
+        logger.warning(f"[PT下载中心:命名补刀]重命名结果通知发送失败：{err}")
         return False
 
 
@@ -859,7 +873,7 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     torrent_tags = get_label(torrent, dl_type)
     allowed, reason = passes_rename_filters(rename_config, torrent_hash, torrent_tags, save_path)
     if not allowed:
-        logger.info(f"重命名跳过 hash={torrent_hash}：{reason}")
+        logger.info(f"[PT下载中心:命名补刀]重命名跳过 hash={torrent_hash}：{reason}")
         return "skipped"
     if rename_torrent(plugin, dl, dl_type, torrent_hash, torrent_name, save_path):
         add_rename_tag(plugin, dl, dl_type, torrent_hash, torrent_tags, rename_config)
@@ -895,7 +909,7 @@ def scan_renames(plugin) -> dict:
     for downloader_name in rename_config["downloader"]:
         service = plugin.service_info(downloader_name)
         if not service or not getattr(service, "instance", None):
-            logger.warning(f"重命名跳过：下载器不可用 {downloader_name}")
+            logger.warning(f"[PT下载中心:命名补刀]重命名跳过：下载器不可用 {downloader_name}")
             result["downloaders"][downloader_name] = {
                 "renamed": 0, "failed": 0, "skipped": 0, "reason": "downloader_unavailable",
             }
@@ -903,7 +917,7 @@ def scan_renames(plugin) -> dict:
             continue
         torrents, error = service.instance.get_torrents()
         if error:
-            logger.warning(f"重命名跳过：读取任务失败 {downloader_name}: {error}")
+            logger.warning(f"[PT下载中心:命名补刀]重命名跳过：读取任务失败 {downloader_name}: {error}")
             result["downloaders"][downloader_name] = {
                 "renamed": 0, "failed": 0, "skipped": 0, "reason": str(error),
             }

@@ -121,7 +121,7 @@ def stop_plugin_service(plugin) -> None:
             plugin._scheduler.shutdown()
         plugin._scheduler = None
     except Exception as error:
-        logger.error(f"停止服务失败: {error}")
+        logger.error(f"[PT下载中心]停止服务失败: {error}")
     finally:
         stop_seed_recheck_worker(plugin)
         _stop_hr_service(plugin)

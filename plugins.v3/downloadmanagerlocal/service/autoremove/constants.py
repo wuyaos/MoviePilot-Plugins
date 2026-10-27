@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-REMOVER_LOG_PREFIX = "【自动删种】"
+REMOVER_LOG_PREFIX = "[PT下载中心:自动删种]"
 
 REMOVER_NOTIFY_TITLE = "【自动删种任务完成】"
 

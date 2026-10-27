@@ -55,7 +55,7 @@ def _build_autoremove_services(plugin) -> List[Dict[str, Any]]:
     try:
         trigger = CronTrigger.from_crontab(service.config.cron)
     except ValueError as error:
-        logger.error(f"【自动删种】Cron 无效，已禁用该服务：{service.config.cron}（{error}）")
+        logger.error(f"[PT下载中心]Cron 无效，已禁用该服务：{service.config.cron}（{error}）")
         return []
     return [{
         "id": REMOVER_SERVICE_ID,
@@ -74,7 +74,7 @@ def _build_failclean_services(plugin) -> List[Dict[str, Any]]:
     try:
         trigger = CronTrigger.from_crontab(service.config.cron)
     except ValueError as error:
-        logger.error(f"{FAILCLEAN_LOG_PREFIX}Cron 无效，已禁用该服务：{service.config.cron}（{error}）")
+        logger.error(f"[PT下载中心]{FAILCLEAN_LOG_PREFIX}Cron 无效，已禁用该服务：{service.config.cron}（{error}）")
         return []
     return [{
         "id": FAILCLEAN_REPEAT_SERVICE_ID,
@@ -93,7 +93,7 @@ def _build_site_tag_services(plugin) -> List[Dict[str, Any]]:
     try:
         trigger = CronTrigger.from_crontab(config["interval_cron"])
     except ValueError as error:
-        logger.error(f"【站点标签】Cron 无效，已禁用该服务：{config['interval_cron']}（{error}）")
+        logger.error(f"[PT下载中心]【站点标签】Cron 无效，已禁用该服务：{config['interval_cron']}（{error}）")
         return []
     return [{
         "id": "DownloadCenterSiteHistory",
@@ -115,7 +115,7 @@ def _build_rename_services(plugin) -> List[Dict[str, Any]]:
     try:
         trigger = CronTrigger.from_crontab(cron)
     except ValueError as error:
-        logger.error(f"【命名补刀】Cron 无效，已禁用该服务：{cron}（{error}）")
+        logger.error(f"[PT下载中心]【命名补刀】Cron 无效，已禁用该服务：{cron}（{error}）")
         return []
     return [{
         "id": "DownloadCenterRenameScan",
@@ -170,5 +170,5 @@ def _hr_summary_trigger(cron: str):
     try:
         return CronTrigger.from_crontab(cron)
     except ValueError as error:
-        logger.error(f"{HR_LOG_PREFIX}汇总通知 Cron 无效，已禁用该服务：{cron}（{error}）")
+        logger.error(f"[PT下载中心]{HR_LOG_PREFIX}汇总通知 Cron 无效，已禁用该服务：{cron}（{error}）")
         return None
