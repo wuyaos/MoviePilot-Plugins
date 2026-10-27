@@ -319,9 +319,63 @@ function parseDownloaderExt(raw) {
   }]))
 }
 
-function downloaderLabel(name) {
+
+/** 下载器类型 → 专属图标（图标反映类型，与名称并列展示）。 */
+const DOWNLOADER_TYPE_ICONS = {
+  qbittorrent: 'mdi-alpha-q-box',
+  transmission: 'mdi-alpha-t-box',
+  rtorrent: 'mdi-alpha-r-box',
+}
+const DOWNLOADER_TYPE_LABELS = {
+  qbittorrent: 'qBittorrent',
+  transmission: 'Transmission',
+  rtorrent: 'rTorrent',
+}
+
+function downloaderTypeOf(name) {
+  return downloaderItems.value.find(item => item.value === name)?.type || ''
+}
+
+function downloaderTitle(name) {
   const hit = downloaderItems.value.find(item => item.value === name)
-  return hit ? `${hit.title} (${hit.type})` : (name || '—')
+  return hit ? hit.title : (name || '—')
+}
+
+function downloaderTypeIcon(name) {
+  return DOWNLOADER_TYPE_ICONS[downloaderTypeOf(name)] || 'mdi-download-outline'
+}
+
+function downloaderTypeLabel(name) {
+  return DOWNLOADER_TYPE_LABELS[downloaderTypeOf(name)] || '未识别下载器类型'
+}
+
+/** 筛选条件摘要：只列实际生效的条件，无条件时明确显示「不限分类」。 */
+function taskFilterChips(task) {
+  const chips = []
+  const category = String(task.include_category || '').trim()
+  chips.push(category ? `分类 ${category}` : '不限分类')
+  const labels = String(task.include_labels || '').trim()
+  if (labels) chips.push(`标签 ${labels}`)
+  const excludeLabels = String(task.exclude_labels || '').trim()
+  if (excludeLabels) chips.push(`排除 ${excludeLabels}`)
+  if (task.empty_label_ok) chips.push('允许无标签')
+  if (task.no_paths) chips.push('不限路径')
+  return chips
+}
+
+/** 设置列徽标：显示该任务启用了哪些高级设置，未启用任何项时前端显示「默认」。 */
+function taskSettingBadges(task) {
+  const badges = []
+  if (task.delete_source) badges.push({ text: '删源种', color: 'error' })
+  if (task.delete_duplicate) badges.push({ text: '去重', color: 'warning' })
+  if (!task.keep_category) badges.push({ text: '不保留分类', color: 'secondary' })
+  if (!task.keep_tag) badges.push({ text: '不保留标签', color: 'secondary' })
+  const transferTag = String(task.transfer_tag || '').trim()
+  if (transferTag) badges.push({ text: `标签 ${transferTag}`, color: 'primary' })
+  const ext = transferExt.value[task.name] || {}
+  if (ext.webui_url) badges.push({ text: 'WebUI 覆盖', color: 'info' })
+  if (ext.source_plugin) badges.push({ text: 'source 插件', color: 'info' })
+  return badges
 }
 
 const transferDialogSourceType = computed(() => (
@@ -1331,9 +1385,11 @@ function serializeHrSiteConfigYaml(rules) {
               <div class="dm-task-table mt-3">
                 <div class="dm-task-row dm-task-row--head">
                   <span>名称</span>
-                  <span>启用</span>
-                  <span>源 → 目的</span>
+                  <span>状态</span>
+                  <span>下载器</span>
                   <span>数据映射</span>
+                  <span>筛选条件</span>
+                  <span>设置</span>
                   <span class="dm-task-actions">操作</span>
                 </div>
                 <div v-for="(task, idx) in transferTasks" :key="`transfer-task-${idx}`" class="dm-task-row">
@@ -1341,21 +1397,41 @@ function serializeHrSiteConfigYaml(rules) {
                     <strong class="text-body-2 dm-break-text">{{ task.name }}</strong>
                     <span class="text-caption text-medium-emphasis">转移标签：{{ task.transfer_tag || '不打标签' }}</span>
                   </div>
-                  <div>
+                  <div class="dm-task-state">
                     <VSwitch v-model="task.enabled" color="success" inset hide-details density="compact" />
+                    <span class="text-caption text-medium-emphasis">{{ task.enabled ? '启用' : '停用' }}</span>
                   </div>
                   <div class="dm-task-route">
-                    <span class="dm-break-text">{{ downloaderLabel(task.from_downloader) }}</span>
+                    <span class="dm-route-item">
+                      <VIcon :icon="downloaderTypeIcon(task.from_downloader)" size="15"
+                        :title="downloaderTypeLabel(task.from_downloader)" />
+                      <span class="dm-break-text">{{ downloaderTitle(task.from_downloader) }}</span>
+                    </span>
                     <VIcon icon="mdi-arrow-right" size="15" class="dm-map-arrow" />
-                    <span class="dm-break-text">{{ downloaderLabel(task.to_downloader) }}</span>
+                    <span class="dm-route-item">
+                      <VIcon :icon="downloaderTypeIcon(task.to_downloader)" size="15"
+                        :title="downloaderTypeLabel(task.to_downloader)" />
+                      <span class="dm-break-text">{{ downloaderTitle(task.to_downloader) }}</span>
+                    </span>
                   </div>
                   <div class="dm-task-paths">
                     <span class="text-caption dm-break-text">{{ task.from_path || '—' }}</span>
                     <div class="text-caption dm-map-arrow">→ {{ task.to_path || '—' }}</div>
                   </div>
+                  <div class="dm-task-filters">
+                    <VChip v-for="chip in taskFilterChips(task)" :key="chip" size="x-small" variant="tonal"
+                      color="secondary">{{ chip }}</VChip>
+                  </div>
+                  <div class="dm-task-settings">
+                    <VChip v-for="badge in taskSettingBadges(task)" :key="badge.text" size="x-small" variant="flat"
+                      :color="badge.color">{{ badge.text }}</VChip>
+                    <span v-if="!taskSettingBadges(task).length" class="text-caption text-medium-emphasis">默认</span>
+                  </div>
                   <div class="dm-task-actions">
-                    <VBtn icon="mdi-pencil-outline" size="small" variant="text" title="编辑任务" @click="openTransferDialog(idx)" />
-                    <VBtn icon="mdi-delete-outline" size="small" variant="text" color="error" title="删除任务" @click="askTransferDelete(idx)" />
+                    <VBtn icon="mdi-pencil-outline" size="small" variant="text" title="编辑任务"
+                      @click="openTransferDialog(idx)" />
+                    <VBtn icon="mdi-delete-outline" size="small" variant="text" color="error" title="删除任务"
+                      @click="askTransferDelete(idx)" />
                   </div>
                 </div>
                 <div v-if="!transferTasks.length" class="dm-map-empty">暂无转移任务，点击右上角「添加任务」创建。</div>
@@ -2247,13 +2323,16 @@ function serializeHrSiteConfigYaml(rules) {
   .dm-upload-site-status-row { grid-template-columns: minmax(170px, 1fr) repeat(3, minmax(96px, auto)); }
 }
 .dm-task-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.dm-task-table { display: flex; flex-direction: column; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow: hidden; }
-.dm-task-row { display: grid; grid-template-columns: minmax(140px, 1fr) 72px minmax(190px, 1.3fr) minmax(180px, 1.2fr) 88px; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }
+.dm-task-table { display: flex; flex-direction: column; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow-x: auto; }
+.dm-task-row { display: grid; grid-template-columns: minmax(150px, 1.1fr) 72px minmax(180px, 1.1fr) minmax(150px, 1fr) minmax(160px, 1fr) minmax(150px, 1fr) 76px; gap: 10px; align-items: center; padding: 8px 12px; min-width: 1020px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }
 .dm-task-row:last-child { border-bottom: none; }
 .dm-task-row--head { font-size: 12px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); background: rgba(var(--v-theme-on-surface), 0.03); }
 .dm-task-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .dm-task-route { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .dm-task-paths { min-width: 0; }
+.dm-task-state { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.dm-route-item { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.dm-task-filters, .dm-task-settings { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; align-content: center; }
 .dm-task-actions { display: flex; align-items: center; justify-content: flex-end; }
 .dm-hr-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .dm-hr-table { display: flex; flex-direction: column; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow: hidden; }
