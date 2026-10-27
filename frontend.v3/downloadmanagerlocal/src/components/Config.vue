@@ -2000,7 +2000,7 @@ function serializeHrSiteConfigYaml(rules) {
                   <VSwitch v-model="form.seed_autostart" color="success" inset hide-details label="启用自动开始做种" />
                 </VCol>
                 <VCol cols="12" md="4">
-                  <VSwitch v-model="form.seed_skipverify" color="info" inset hide-details label="跳过校验(QB有效)" />
+                  <VSwitch v-model="form.seed_skipverify" color="info" inset hide-details label="跳过校验(QB/RT有效)" />
                 </VCol>
               </VRow>
               <VRow class="mt-2">

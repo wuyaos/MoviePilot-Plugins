@@ -288,6 +288,12 @@ def is_torrent_active(torrent: Any, dl_type: str) -> bool:
     return str(getattr(state, "name", None) or str(state)) != "stopped"
 
 
+def skipverify_applies(dl_type: str) -> bool:
+    """跳过校验开关的作用范围：qB 走添加时 skip_checking，rt 走「不触发也不等待」；TR 始终显式校验。"""
+    return str(dl_type or "").lower() in ("qbittorrent", "rtorrent")
+
+
+
 def supports_recheck(dl_type: str) -> bool:
     """rt 宿主客户端没有 recheck_torrents，rt 目的端必须跳过显式校验。"""
     return str(dl_type or "").lower() != "rtorrent"

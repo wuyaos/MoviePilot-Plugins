@@ -13,7 +13,8 @@ from .recheck import (
     seed_is_timeout,
 )
 from ..utils.torrent_adapter import (
-    get_torrent_state, is_torrent_active, supports_recheck, torrent_is_complete,
+    get_torrent_state, is_torrent_active, skipverify_applies, supports_recheck,
+    torrent_is_complete,
 )
 
 
@@ -164,17 +165,30 @@ def advance_transfer(plugin, item, service, task, stopped):
         save_transaction(plugin, item)
         return rollback_transfer(plugin, item, service, stopped)
     if phase == "target_added":
-        if supports_recheck(service.type) and not (service.type == "qbittorrent" and item["skipverify"]):
+        if item["skipverify"] and skipverify_applies(service.type):
+            # 跳过校验：qB 添加时已带 is_skip_checking，rt 不主动触发校验。
+            item["phase"] = "verifying"
+        elif supports_recheck(service.type):
             if service.instance.recheck_torrents(ids=[item["hash"]]) is False:
                 item["phase"] = "rollback"
             else:
                 item["phase"] = "verifying"
+        elif service.type == "rtorrent":
+            # rt 无校验 API：启动目的端任务即触发 rtorrent 自动哈希校验。
+            if service.instance.start_torrents(ids=[item["hash"]]) is False:
+                return False
+            item["phase"] = "verifying"
         else:
             item["phase"] = "verifying"
         save_transaction(plugin, item)
         # 不能用发起校验前读取的状态认定校验通过。
         return False
-    if seed_is_checking(state, service.type) or not seed_is_ready(state, service.type, task):
+    if seed_is_checking(state, service.type):
+        return False
+    # 跳过校验的 rt 目的端不等待校验完成：rt 无 skip_checking 等价开关，
+    # 只能在启动后以活动状态作为做种证据。
+    if not seed_is_ready(state, service.type, task) and not (
+            item["skipverify"] and skipverify_applies(service.type) and service.type == "rtorrent"):
         return False
     if phase != "target_ready":
         item["phase"] = "target_ready"
@@ -187,7 +201,11 @@ def advance_transfer(plugin, item, service, task, stopped):
             active = state in ("uploading", "stalledUP", "forcedUP")
         elif service.type == "rtorrent":
             # rt 没有 uploading/seeding 文本状态：以「已完成且在活动」作为做种证据。
-            active = torrent_is_complete(task, "rtorrent") and is_torrent_active(task, "rtorrent")
+            # 跳过校验时数据未经校验，只能以活动状态作为做种证据。
+            active = is_torrent_active(task, "rtorrent") and (
+                torrent_is_complete(task, "rtorrent")
+                or (item["skipverify"] and skipverify_applies("rtorrent"))
+            )
         else:
             active = str(state) == "seeding"
         if not active:

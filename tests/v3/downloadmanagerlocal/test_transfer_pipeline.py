@@ -70,7 +70,7 @@ def runtime(monkeypatch):
         _seed_recheck_lock=threading.RLock(), _seed_max_wait_minutes=120,
         _pause_source=True, _deletesource=True, _seed_autostart=True, _seed_skipverify=False,
         _event=threading.Event(), service_info=services.get,
-        get_hash=lambda task, kind: task['hash'] if kind == 'qbittorrent' else task.hashString,
+        get_hash=lambda task, kind: task['hash'] if isinstance(task, dict) else task.hashString,
         get_data=lambda key: copy.deepcopy(data.get(key)),
         save_data=lambda key, value: data.__setitem__(key, copy.deepcopy(value)),
     )
@@ -253,6 +253,72 @@ def test_legacy_unowned_queue_is_not_started(runtime):
     r.data['queue'] = {'old': {'hash': 'abc', 'downloader': 'target', 'source': 'legacy'}}
     assert not r.recheck.load_seed_recheck_queue(r.plugin)
     r.target.start_torrents.assert_not_called()
+
+def rt_task(complete=1, active=1):
+    """构造宿主 rtorrent 模块形态的任务字典（get_torrents 返回 dict）。"""
+    return [{'hash': 'abc', 'state': 1 if active else 0, 'is_active': active,
+             'complete': complete, 'progress': 100 if complete else 0}]
+
+
+def rt_cycle(r):
+    """按 rt 任务形态推进一步；cycle() 会把目标任务覆盖为 qB 形态字典。"""
+    queue = r.recheck.load_seed_recheck_queue(r.plugin)
+    r.recheck.process_seed_recheck_once(r.plugin, queue)
+
+
+def test_rtorrent_target_start_triggers_verification(runtime):
+    """rt 目的端无校验 API：启动即触发 rtorrent 自动哈希校验，未完成前不删源。"""
+    r = runtime
+    r.services['target'].type = 'rtorrent'
+    begin(r)
+    r.target.get_torrents.return_value = (rt_task(complete=0, active=0), None)
+    rt_cycle(r)  # 启动触发校验
+    r.target.start_torrents.assert_called_once_with(ids=['abc'])
+    r.target.recheck_torrents.assert_not_called()
+    r.source.delete_torrents.assert_not_called()
+    assert r.data['queue']['target::abc']['phase'] == 'verifying'
+
+    rt_cycle(r)  # 数据未校验完成，一直不确认做种
+    r.source.delete_torrents.assert_not_called()
+
+
+def test_rtorrent_target_completes_after_verification(runtime):
+    r = runtime
+    r.services['target'].type = 'rtorrent'
+    begin(r)
+    r.target.get_torrents.return_value = (rt_task(), None)
+    rt_cycle(r)
+    rt_cycle(r)  # 校验完成且活动：确认做种
+    r.source.delete_torrents.assert_called_once_with(delete_file=False, ids=['abc'])
+    assert not r.data['queue']
+
+
+def test_rtorrent_skipverify_starts_without_waiting_for_completion(runtime):
+    """跳过校验时 rt 目的端不等校验完成：启动后以活动状态作为做种证据。"""
+    r = runtime
+    r.services['target'].type = 'rtorrent'
+    r.plugin._seed_skipverify = True
+    begin(r)
+    r.target.get_torrents.return_value = (rt_task(complete=0, active=1), None)
+    rt_cycle(r)  # 不触发校验，进入 verifying
+    r.target.start_torrents.assert_not_called()
+    r.source.delete_torrents.assert_not_called()
+    rt_cycle(r)  # 未完成也放行：启动 + 活动状态即确认做种
+    r.target.start_torrents.assert_called_once_with(ids=['abc'])
+    r.source.delete_torrents.assert_called_once_with(delete_file=False, ids=['abc'])
+    assert not r.data['queue']
+
+
+def test_qbittorrent_skipverify_still_requires_ready_state(runtime):
+    """qB 跳过校验靠 skip_checking 自身完成，不会绕过就绪门禁。"""
+    r = runtime
+    r.plugin._seed_skipverify = True
+    begin(r)
+    cycle(r)  # pausedUP 仍视为就绪，但不删除源
+    r.target.recheck_torrents.assert_not_called()
+    r.source.delete_torrents.assert_not_called()
+    cycle(r, 'stalledUP')
+    r.source.delete_torrents.assert_called_once_with(delete_file=False, ids=['abc'])
 
 
 def test_rollback_waits_for_target_removal_confirmation(runtime):
