@@ -81,7 +81,7 @@
 | vclib | 通用 CAPTCHA helper 简繁成功/重复词 | special-hook；page_message 合成节点 | attendance；imagehash/imagestring OCR 已实现，待生产消息/表单校准 |
 | yema | CloakBrowser 页面动作：ALTCHA 验证后点击签到按钮 | cloak_steps；altcha + sign_button，提交后以落点页回读 | /#/user/growth；页面动作与回读已实现，按钮缺失不猜测成功 |
 | yzyy | .signbtn 今日已打卡/点击打卡；本人行；同 Session 动态 sign token | special-hook；限定唯一 .signbtn 消息 | plugin.php?id=zqlj_sign；同 Session/Cookie 同步、动态链接、无条件按钮/本人行回读已实现，待生产校准；不移植响应兜底 |
-| zhuque | CSRF + fireGenshinCharacterMagic；JSON status=200、data.bonus | api-evidence；response_json(status)，精确数值200 | /；这是技能动作回执而非独立每日签到；动作与安全回读已实现，待生产校准 |
+| zhuque | CSRF + fireGenshinCharacterMagic；JSON status=200、data.bonus | api-evidence；response_json(status)，精确数值200 | /；这是技能动作回执而非独立每日签到；**signin_capable=False**（不暴露签到开关），代码保留待站点真出签到再启用 |
 
 三态例外：tjupt/u2 的状态只有已签标记，未签/未知输入均 unconfirmed；Yema 通过 ALTCHA 页面动作并以回读消息判定，按钮缺失或回读证据不足保持 unconfirmed；登录站任何内容均不生成签到结果；朱雀非200无充分未签证据，保留 unconfirmed。不编造 unsigned 生产判据。
 
@@ -115,7 +115,7 @@
 | HDChina / hdchina | API证据/CSRF POST | Cookie 刷新、x-csrf、state=success；首页已签 anchor 回读 | hook_implemented=True（C4） | 已实现，待生产校准（见分组校准清单） |
 | OpenCD / opencd | API证据/OCR POST | frmSignin/imagehash/img、六位 OCR、state=success、show-log 安全回读 | hook_implemented=True（C4） | 已实现，待生产校准（见分组校准清单） |
 | PTerClub / pterclub | API证据/动作 GET | attendance-ajax.php status 字符串1；0 不单独证明重复 | hook_implemented=True（C4） | 已实现，待生产校准（见分组校准清单） |
-| 朱雀 / zhuque | API证据/技能动作 | x-csrf-token、JSON POST、status 数值200/data.bonus；保留技能语义 | hook_implemented=True（C4） | 已实现，待生产校准（见分组校准清单） |
+| 朱雀 / zhuque | API证据/技能动作 | x-csrf-token、JSON POST、status 数值200/data.bonus；保留技能语义 | hook_implemented=True（C4）；signin_capable=False | 技能动作非每日签到，签到轨标 signin_not_supported |
 
 已实现 历史 HDSky/海棠试点记录不代表当前门控。普通声明站仍需真实消息节点校准，不在特殊钩子清单重复列出。所有真实请求和生产启用另需授权。
 
@@ -169,7 +169,7 @@ SiQi 的 attend-success-effect 按完整 class token 判定前读和回读，不
 | hdchina | 执行级 Cookie 仅保留 hdchina 前读并接收刷新 Cookie；x-csrf → POST csrf；index.php | Cookie 刷新、CSRF、state=success、已签 anchor |
 | opencd | frmSignin/imagehash/img 六位 OCR（ddddocr→ocrhelper）POST cmd=signin；/ | 表单/验证码、state=success、show-log anchor |
 | pterclub | GET attendance-ajax.php；/ | status 字符串1的回执；0不猜重复 |
-| zhuque | x-csrf-token + JSON POST fireGenshinCharacterMagic；/ | status 数值200与 data.bonus；仍为技能动作语义 |
+| zhuque | x-csrf-token + JSON POST fireGenshinCharacterMagic；/ | status 数值200与 data.bonus；仍为技能动作语义；signin_capable=False |
 | yema | GET api/consumer/checkIn；/ | success 精确布尔；false→unsigned（V2 无重复分支） |
 
 API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确字段；安全回读失败不丢弃明确 JSON 回执。前读/只读页即使是 JSON 也不当动作回执。RecordSpec 布尔键不与数值0/1互换；缺失、错误类型、未知值为 unconfirmed。合成三态只验证执行契约，不表示十站生产校准完成；TJUPT 由 C5、52pt/chdbits/yzyy 由 C7 补齐。dist 未改，无真实请求。

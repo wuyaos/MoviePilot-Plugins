@@ -59,7 +59,7 @@ def test_site_name_badges_and_equal_data_grid():
     css = (SRC / 'preview.css').read_text(encoding='utf8')
     assert 'min-width:120px; flex:0 0 120px;' in css
     assert '.enabled-site-list .badges {display:flex; align-items:center;' in css
-    assert '.data-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:1fr;' in css
+    assert '.data-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:auto;gap:14px}' in css
     assert '.data-grid .site-card:last-child' not in css
     assert '.grid,.data-grid{grid-template-columns:1fr}' in css
     assert 'v-if="!stats.sites.length"' in (SRC / 'Page.vue').read_text(encoding='utf8')

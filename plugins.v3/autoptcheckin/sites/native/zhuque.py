@@ -14,7 +14,9 @@ class ZhuQue(ApiSignin):
     url = 'https://zhuque.in/'
     attendance_path = '/'
     hook_implemented = True
-
+    # 朱雀无每日签到：fireGenshinCharacterMagic 是技能动作回执，不作为签到能力暴露
+    # （配置页不渲染签到开关，签到轨标 signin_not_supported）。适配代码保留待站点真出签到再启用。
+    signin_capable = False
     record_spec = RecordSpec(source="response_json", response_field="status", status_map={200: "signed"})
 
     def discover_form(self, ctx, page):

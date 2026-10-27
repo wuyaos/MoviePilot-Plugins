@@ -43,4 +43,4 @@ AutoPtCheckin 的站点级签到适配层；输入站点 Cookie/UA/代理配置�
 - `u2.py`: U2 站点签到适配。
 - `vclib.py`: VC-Lib attendance.php 验证码签到适配（复用通用基类）。
 - `yema.py`: 夜猫 站点签到适配。
-- `zhuque.py`: 朱雀 站点签到适配。
+- `zhuque.py`: 朱雀 技能动作适配（signin_capable=False：无每日签到，不暴露签到开关；代码保留待站点真出签到再启用）。

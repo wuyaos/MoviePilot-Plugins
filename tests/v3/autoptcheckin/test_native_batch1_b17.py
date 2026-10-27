@@ -194,8 +194,8 @@ def test_new_sites_enabled_and_selected_execute_without_verified_gate(monkeypatc
         if site_id in ['darkland', 'digitalcore']:
             assert result['metadata']['reason'] == 'signin_not_applicable'
             assert site_id not in called
-        elif site_id == 'tjupt':
-            # 答题站风险声明 signin_capable=False（2026-10-22 运营裁决转显式声明）：仅登录。
+        elif site_id in ['tjupt', 'zhuque']:
+            # 答题站风险声明（2026-10-22）与朱雀技能动作非每日签到（2026-10-29 用户裁决）：均 signin_capable=False，仅登录。
             assert result['status'] == 'skipped' and result['metadata']['reason'] == 'signin_not_supported'
             assert site_id not in called
         else:
