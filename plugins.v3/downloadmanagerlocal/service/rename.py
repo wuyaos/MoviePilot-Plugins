@@ -20,7 +20,7 @@ from ..utils.name_cleaner import (
     is_polluted_original_name,
 )
 from ..utils.tag_cleanup import normalize_tags
-from ..utils.torrent_adapter import get_hash, get_label, get_save_path, get_tracker_urls
+from ..utils.torrent_adapter import get_hash, get_label, get_save_path, get_torrent_name, get_tracker_urls
 
 
 def _tr_rename(dl, torrent_hash: str, torrent_name: str, new_name) -> None:
@@ -492,7 +492,7 @@ def retry_failed_renames(plugin, to_service):
                 summary["skipped"] += 1
                 continue
             summary["attempted"] += 1
-            tn = torrent.get("name", "") if dl_type == "qbittorrent" else torrent.name
+            tn = get_torrent_name(torrent)
             sp = get_save_path(torrent, dl_type)
             tags = get_label(torrent, dl_type)
             trackers = get_tracker_urls(torrent, dl_type)
@@ -533,9 +533,7 @@ def _retry_summary() -> dict:
 
 def _get_torrent_name(torrent, dl_type):
     """按下载器类型读取当前种子名称。"""
-    if dl_type == "qbittorrent":
-        return torrent.get("name", "")
-    return torrent.name
+    return get_torrent_name(torrent)
 
 
 def _get_tracker_urls(torrent, dl_type):

@@ -12,7 +12,7 @@ from app.sdk.logging import logger
 
 from ..adapter.moviepilot import is_downloader_type
 from ..utils.name_cleaner import is_dirty_renamed_torrent_name
-from ..utils.torrent_adapter import get_label, get_save_path, get_tracker_urls
+from ..utils.torrent_adapter import get_label, get_save_path, get_torrent_name, get_tracker_urls
 from .recheck import _queue_lock, load_seed_recheck_queue, ensure_seed_recheck_worker, seed_is_ready, seed_is_error
 from .transfer_pipeline import begin_transfer, delete_source
 from .rename import _get_torrent_content_name, resolve_retry_original_name
@@ -175,25 +175,17 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
     dl_type = to_service.type
 
     try:
-        if dl_type == "qbittorrent":
-            torrents, error = dl.get_torrents(ids=[torrent_hash])
-            if error or not torrents:
-                logger.warning(f"[PT下载中心:转移做种]转移后处理：无法获取种子信息 hash={torrent_hash}")
-                return False
-            torrent = torrents[0]
-            torrent_name = torrent.get("name", "")
-            torrent_tags = get_label(torrent, dl_type)
-            trackers = get_tracker_urls(torrent, dl_type)
-            save_path = get_save_path(torrent, dl_type)
-        else:
-            torrents, error = dl.get_torrents(ids=[torrent_hash])
-            if error or not torrents:
-                return False
-            torrent = torrents[0]
-            torrent_name = torrent.name
-            torrent_tags = get_label(torrent, dl_type)
-            trackers = get_tracker_urls(torrent, dl_type)
-            save_path = get_save_path(torrent, dl_type)
+        torrents, error = dl.get_torrents(ids=[torrent_hash])
+        if error or not torrents:
+            logger.warning(f"[PT下载中心:转移做种]转移后处理：无法获取种子信息 hash={torrent_hash}")
+            return False
+        torrent = torrents[0]
+        # 宿主下载器模块对 qB 返回 dict、对 TR/rt 在部分版本返回对象或 dict，
+        # 统一走适配器读取，避免 `.name` 直接取属性在 dict 形态下抛 AttributeError。
+        torrent_name = get_torrent_name(torrent)
+        torrent_tags = get_label(torrent, dl_type)
+        trackers = get_tracker_urls(torrent, dl_type)
+        save_path = get_save_path(torrent, dl_type)
     except Exception as e:
         logger.error(f"[PT下载中心:转移做种]转移后处理：获取种子信息失败 hash={torrent_hash}: {e}")
         return False
@@ -533,7 +525,7 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
         return result
 
     for torrent in torrents:
-        torrent_name = torrent.get("name", "") if dl_type == "qbittorrent" else torrent.name
+        torrent_name = get_torrent_name(torrent)
         if not is_dirty_renamed_torrent_name(torrent_name):
             continue
         torrent_hash = plugin.get_hash(torrent, dl_type)

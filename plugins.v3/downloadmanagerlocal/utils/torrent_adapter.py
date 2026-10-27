@@ -205,6 +205,11 @@ def _split_labels(labels: Any) -> List[str]:
     return []
 
 
+def get_torrent_name(torrent: Any) -> str:
+    """获取种子名称：兼容 qB/TR 返回 dict、部分版本返回对象两种形态。"""
+    return str(_read(torrent, "name", "torrentName", default="") or "")
+
+
 def get_label(torrent: Any, dl_type: str) -> List[str]:
     """获取种子标签/分类。"""
     if dl_type == "qbittorrent":
@@ -217,7 +222,7 @@ def get_label(torrent: Any, dl_type: str) -> List[str]:
 def get_category(torrent: Any, dl_type: str) -> str:
     """获取种子分类（qB category / TR group）。"""
     if dl_type == "qbittorrent":
-        return torrent.get("category", "")
+        return _read(torrent, "category", default="") or ""
     return _read(torrent, "group", default="") or ""
 
 

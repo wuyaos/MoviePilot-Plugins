@@ -12,7 +12,7 @@ from ..utils.tag_cleanup import (
     is_auto_removable,
     normalize_tags,
 )
-from ..utils.torrent_adapter import get_hash, get_label
+from ..utils.torrent_adapter import get_hash, get_label, get_torrent_name
 
 
 def _active_temporary_tags(plugin) -> set:
@@ -223,7 +223,7 @@ def _group_tags(torrents: Iterable[dict]) -> tuple:
             continue
         tags = normalize_tags(get_label(torrent, "qbittorrent"))
         torrent_tags_by_hash[torrent_hash] = tags
-        torrent_name = str(torrent.get("name", "") or torrent_hash)
+        torrent_name = get_torrent_name(torrent) or torrent_hash
         for tag in tags:
             item = grouped.setdefault(tag, {"hashes": [], "samples": []})
             item["hashes"].append(torrent_hash)
