@@ -1,6 +1,6 @@
 # DownloadManagerLocal 插件上下文（AI 交接文档）
 
-面向后续维护本插件的 AI agent / 开发者。只记录代码不能可靠推断的事实、真实路径与边界；版本、路径、键名以当前工作树代码为准（`plugin_version = 3.5.1`）。
+面向后续维护本插件的 AI agent / 开发者。只记录代码不能可靠推断的事实、真实路径与边界；版本、路径、键名以当前工作树代码为准；配置平铺键共 111 个（`utils/config.py::build_plugin_config_defaults` 实测）。
 
 ## 1. 插件概览
 
@@ -86,7 +86,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 - 职责：把源下载器的种子按路径映射复制到目标下载器，支持删源、去重、转移后做种校验；`TransferComplete` 事件驱动 + 兜底 interval 扫描。
 - 关键文件：`service/transfer.py`（主流程 `transfer`、兜底 `fallback_transfer`、延迟 `delayed_transfer`、后处理）、`service/transfer_pipeline.py`（事务化：目标确认完整前保留源）、`service/recheck.py`（做种校验队列与 worker）、`service/events.py`（延迟批次调度）、`adapter/moviepilot.py`。
-- 关键配置：`transfer_enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`fromdownloader`/`todownloader`、`frompath`/`topath`、`fromtorrentpath`、`deletesource`、`deleteduplicate`、`nolabels`/`includelabels`/`includecategory`、`nopaths`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`/`remainoldtag`、`scan_limit`、`pause_source`、`notify`、`transfer_cron`、`transfer_event_enabled`、`seed_autostart`、`seed_skipverify`、`seed_check_interval`、`seed_max_wait_minutes`。
+- 关键配置（v3.9.0 多任务引擎）：`transfer_tasks`（JSON 任务数组：name/enabled/from_downloader/to_downloader/include_category/include_labels/exclude_labels/empty_label_ok/no_paths/from_path/to_path/delete_source/delete_duplicate/keep_category/keep_tag/transfer_tag）、`transfer_rename_enabled`（转移后重命名，默认关，仅 qB 显示名语义，TR 目的端禁用）、`downloader_ext`（rt 下载器扩展配置 JSON：webui_url/source_plugin）、`transfer_enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`frompath`/`topath`（已并入任务，旧键保留兼容读取）、`add_torrent_tags`、`scan_limit`、`pause_source`、`notify`、`transfer_cron`、`transfer_event_enabled`、`seed_autostart`、`seed_skipverify`、`seed_check_interval`、`seed_max_wait_minutes`。`fromtorrentpath`（源种子文件路径）已废弃：加载时忽略并提示一次；单链路旧键（fromdownloader/todownloader/筛选/高级）保留作为旧配置迁移视图的数据源
 - 端点：无专用 REST 路由；结果汇总进 `/overview`。
 - 调度：`TorrentTransferFallback`（interval，`transfer_fallback_interval_minutes`）。
 - 事件：`TransferComplete`（延迟调度）。
@@ -171,11 +171,11 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 - **组合函数**：`is_transfer_active`/`is_upload_limit_active` 基于门控属性，只追加配置完整性条件（下载器/路径/额度）；`is_plugin_active` = 七模块门控属性任一为真。
 - **新增模块时**：先在 `MODULE_SWITCHES` 登记，再让属性/服务/端点走注册表口径，禁止散落手写 `enabled and xxx_enabled`。
 
-**总键数：107**（v3.7.0 删 6 键：`onlyonce`/`hr_onlyonce`/`remover_onlyonce`/`rename_onlyonce`/`rename_retry`/`rename_recovery`；分组见下，`utils/config.py` 显式键 + 7 处 spread 合并去重后）。
+**总键数：117**（dev MP form 端点实测）（v3.7.0 删 6 键：`onlyonce`/`hr_onlyonce`/`remover_onlyonce`/`rename_onlyonce`/`rename_retry`/`rename_recovery`；分组见下，`utils/config.py` 显式键 + 7 处 spread 合并去重后）。
 
 | 分组 | 键数 | 键 |
 | --- | --- | --- |
-| 总开关 + 转移做种 | 29 | `enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`seed_check_interval`、`seed_max_wait_minutes`、`transfer_event_enabled`，加 `TRANSFER_DEFAULTS`：`transfer_enabled`、`notify`、`transfer_cron`、`nolabels`、`includelabels`、`includecategory`、`frompath`、`topath`、`fromdownloader`、`todownloader`、`deletesource`、`deleteduplicate`、`fromtorrentpath`、`nopaths`、`seed_autostart`、`seed_skipverify`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`、`remainoldtag`、`scan_limit`、`pause_source` |
+| 总开关 + 转移做种 | 29 | `enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`seed_check_interval`、`seed_max_wait_minutes`、`transfer_event_enabled`，加 `TRANSFER_DEFAULTS` + `transfer_tasks`/`transfer_rename_enabled`/`downloader_ext`：`transfer_enabled`、`notify`、`transfer_cron`、`nolabels`、`includelabels`、`includecategory`、`frompath`、`topath`、`fromdownloader`、`todownloader`、`deletesource`、`deleteduplicate`、`fromtorrentpath`、`nopaths`、`seed_autostart`、`seed_skipverify`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`、`remainoldtag`、`scan_limit`、`pause_source` |
 | 命名补刀 | 14 | `rename_enabled`、`rename_notify`、`rename_cron_enabled`、`rename_on_download_added`、`rename_downloaders`、`rename_exclude_dirs`、`rename_hash_white_list`、`rename_exclude_tags`、`rename_include_tags`、`rename_cron`、`rename_add_tag_after_rename`、`rename_movie_format`、`rename_tv_format`、`rename_event_debounce_seconds` |
 | 站点标签 | 15 | `tag_enabled`、`tag_siteprefix`、`tag_tracker_mappings_str`、`tag_custom_sites_str`、`tag_interval_cron`、`tag_enable_media_tag`、`tag_enable_tag`、`tag_enable_category`、`tag_enable_del_tags`、`tag_downloaders`、`tag_all_cat`、`tag_all_cat_rename`、`tag_rename_type`、`tag_path_rename`、`tag_catprefix` |
 | 上传限速 | 5 | `upload_limit_enabled`、`upload_limit_downloaders`、`upload_limit_downloader_limits_kib`、`upload_limit_site_rules`、`upload_limit_grace_minutes` |

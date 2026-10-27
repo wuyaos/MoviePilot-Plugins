@@ -109,9 +109,9 @@ def api_retry_renames(plugin):
     def _run_batch():
         try:
             result = plugin._retry_pending_renames()
-            logger.info(f"[PT下载中心:命名补刀]后台批量补刀完成: {result}")
+            logger.info(f"【PT下载中心:命名补刀】后台批量补刀完成: {result}")
         except Exception as e:
-            logger.error(f"[PT下载中心:命名补刀]后台批量补刀失败: {e}")
+            logger.error(f"【PT下载中心:命名补刀】后台批量补刀失败: {e}")
         finally:
             plugin._rename_batch_running = False
 

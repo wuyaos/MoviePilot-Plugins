@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-FAILCLEAN_LOG_PREFIX = "[PT下载中心:失败清理]"
+FAILCLEAN_LOG_PREFIX = "【PT下载中心:失败清理】"
 
 FAILCLEAN_STATUS_DATA_KEY = "failclean_status"
 """最近巡检与累计清理计数的持久化 key。"""

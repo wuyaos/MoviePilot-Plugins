@@ -9,7 +9,6 @@ from app.schemas import ServiceInfo
 from app.schemas.types import MessageType
 from app.sdk.config import settings
 from app.sdk.logging import logger
-from bencode import bdecode, bencode
 
 from ..adapter.moviepilot import is_downloader_type
 from ..utils.name_cleaner import is_dirty_renamed_torrent_name
@@ -18,6 +17,7 @@ from .recheck import _queue_lock, load_seed_recheck_queue, ensure_seed_recheck_w
 from .transfer_pipeline import begin_transfer, delete_source
 from .rename import _get_torrent_content_name, resolve_retry_original_name
 from .site_tag import create_temporary_tag, forget_temporary_tag, release_temporary_tag
+from .transfer_tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated
 
 _AUTOMATIC_DELAY_TRIGGER_SOURCES = frozenset({"兜底扫描", "事件驱动"})
 
@@ -60,20 +60,15 @@ def _transfer_delay_status(
 
 
 def validate_config(plugin) -> bool:
-    """校验转移配置"""
-    if plugin._fromtorrentpath and not Path(plugin._fromtorrentpath).exists():
-        logger.error(f"[PT下载中心:转移做种]源下载器种子文件保存路径不存在：{plugin._fromtorrentpath}")
-        plugin.systemmessage.put(f"源下载器种子文件保存路径不存在：{plugin._fromtorrentpath}", title="自动转移做种")
-        return False
-    if plugin._fromdownloader == plugin._todownloader:
-        logger.error("[PT下载中心:转移做种]源下载器和目的下载器不能相同")
-        plugin.systemmessage.put("源下载器和目的下载器不能相同", title="自动转移做种")
+    """校验转移做种任务配置可用性。"""
+    if not load_transfer_tasks(plugin):
+        logger.warning("[PT下载中心:转移做种]尚未配置转移任务，请检查配置")
         return False
     return True
 
-
 def download_torrent(plugin, service: ServiceInfo, content: bytes,
-                     save_path: str, torrent, stop_generation: Optional[int] = None) -> Optional[str]:
+                     save_path: str, torrent, stop_generation: Optional[int] = None,
+                     task: Optional[dict] = None, source_hash: str = "") -> Optional[str]:
     """添加目标任务前核对所属批次仍有效。"""
     generation = int(getattr(plugin, "_transfer_stop_generation", 0) or 0) if stop_generation is None else stop_generation
     if _transfer_stopped(plugin, generation):
@@ -177,7 +172,11 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
 
     if _transfer_stopped(plugin, generation):
         return False
-    if plugin._rename_enabled:
+    if not getattr(plugin, "_transfer_rename_enabled", False):
+        logger.info("【PT下载中心:转移做种】转移后重命名未启用（transfer_rename_enabled），跳过补刀")
+    elif dl_type != "qbittorrent":
+        logger.info(f"【PT下载中心:转移做种】目的端 {dl_type} 不适用转移后重命名（仅支持 qB 显示名改名），跳过补刀")
+    elif plugin._rename_enabled:
         plugin._rename_torrent(dl, dl_type, torrent_hash, torrent_name, save_path)
 
     if _transfer_stopped(plugin, generation):
@@ -194,35 +193,69 @@ def transfer(plugin, trigger_source: str = "手动/定时"):
 
 
 def _transfer_impl(plugin, trigger_source: str):
-    """开始转移做种"""
-    logger.info(f"[PT下载中心:转移做种]开始转移做种任务，触发来源：{trigger_source} ...")
+    """转移做种多任务引擎：遍历全部启用任务执行。"""
+    logger.info(f"【PT下载中心:转移做种】开始转移做种任务，触发来源：{trigger_source} ...")
     generation = int(getattr(plugin, "_transfer_stop_generation", 0) or 0)
     if _transfer_stopped(plugin, generation):
         return
 
     ensure_seed_recheck_worker(plugin)
-    if not validate_config(plugin):
+    notify_fromtorrentpath_deprecated(plugin)
+
+    tasks = load_transfer_tasks(plugin)
+    if not tasks:
+        logger.info("【PT下载中心:转移做种】没有启用的转移任务，跳过")
         return
+    logger.info(f"【PT下载中心:转移做种】启用任务 {len(tasks)} 个：{[t['name'] for t in tasks]}")
 
-    from_service = plugin.service_info(plugin._fromdownloader)
+    totals: dict = {"success": 0, "fail": 0, "skip": 0, "del_dup": 0, "notify": False}
+    for task in tasks:
+        if _transfer_stopped(plugin, generation):
+            logger.info("【PT下载中心:转移做种】转移服务停止")
+            break
+        try:
+            _run_task(plugin, task, trigger_source, generation, totals)
+        except Exception as err:
+            logger.error(f"【PT下载中心:转移做种】任务「{task['name']}」执行异常：{err}")
+            totals["fail"] += 1
+
+    if totals["notify"] and plugin._notify:
+        stopped = _transfer_stopped(plugin, generation)
+        plugin.post_message(
+            mtype=MessageType.SiteMessage,
+            title="【转移做种任务已停止】" if stopped else "【转移做种任务执行完成】",
+            parse_mode="plain",
+            text=(f"任务数：{len(tasks)}，已提交校验：{totals['success']}，"
+                  f"失败：{totals['fail']}，跳过：{totals['skip']}，删除重复：{totals['del_dup']}")
+        )
+    if _transfer_stopped(plugin, generation):
+        logger.info("【PT下载中心:转移做种】转移做种任务已停止，未继续执行重命名补刀")
+        return
+    logger.info("【PT下载中心:转移做种】转移做种任务执行完成")
+
+
+def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: dict):
+    """执行单个转移任务（筛选 → 批量网络导出 → 逐种子提交目的端）。"""
+    task_name = task["name"]
+    from_service = plugin.service_info(task["from_downloader"])
+    to_service = plugin.service_info(task["to_downloader"])
     from_downloader: Optional[Any] = from_service.instance if from_service else None
-    to_service = plugin.service_info(plugin._todownloader)
     to_downloader: Optional[Any] = to_service.instance if to_service else None
-
     if not from_downloader or not to_downloader:
+        logger.warning(f"【PT下载中心:转移做种】任务「{task_name}」源/目的下载器不可用，跳过")
         return
 
     torrents = from_downloader.get_completed_torrents()
     if torrents:
-        logger.info(f"[PT下载中心:转移做种]下载器 {from_service.name} 已做种的种子数：{len(torrents)}")
+        logger.info(f"【PT下载中心:转移做种】任务「{task_name}」源 {from_service.name} 已做种的种子数：{len(torrents)}")
     else:
-        logger.info(f"[PT下载中心:转移做种]下载器 {from_service.name} 没有已做种的种子")
+        logger.info(f"【PT下载中心:转移做种】任务「{task_name}」源 {from_service.name} 没有已做种的种子")
         return
 
     trans_torrents = []
     for torrent in torrents[:max(1, int(getattr(plugin, "_scan_limit", 500)))]:
         if _transfer_stopped(plugin, generation):
-            logger.info("[PT下载中心:转移做种]转移服务停止")
+            logger.info("【PT下载中心:转移做种】转移服务停止")
             return
 
         hash_str = plugin.get_hash(torrent, from_service.type)
@@ -236,16 +269,16 @@ def _transfer_impl(plugin, trigger_source: str):
         )
         if should_wait:
             logger.info(
-                f"[PT下载中心:转移做种]种子 {hash_str} 完成仅 {age_minutes:.1f} 分钟，"
+                f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 完成仅 {age_minutes:.1f} 分钟，"
                 f"不足延迟 {delay_minutes} 分钟，跳过"
             )
             continue
 
-        if plugin._nopaths and save_path:
+        if task["no_paths"]:
             nopath_skip = False
-            for nopath in plugin._nopaths.split('\n'):
-                if os.path.normpath(save_path).startswith(os.path.normpath(nopath)):
-                    logger.info(f"[PT下载中心:转移做种]种子 {hash_str} 保存路径 {save_path} 不需要转移，跳过 ...")
+            for nopath in task["no_paths"].split('\n'):
+                if save_path and os.path.normpath(save_path).startswith(os.path.normpath(nopath)):
+                    logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 保存路径 {save_path} 不需要转移，跳过 ...")
                     nopath_skip = True
                     break
             if nopath_skip:
@@ -257,28 +290,28 @@ def _transfer_impl(plugin, trigger_source: str):
         if is_torrent_labels_empty:
             torrent_labels = []
 
-        if plugin._includecategory:
-            if torrent_category not in plugin._includecategory.split(','):
-                logger.info(f"[PT下载中心:转移做种]种子 {hash_str} 不含有转移分类 {plugin._includecategory}，跳过 ...")
+        if task["include_category"]:
+            if torrent_category not in task["include_category"].split(','):
+                logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 不含有转移分类 {task['include_category']}，跳过 ...")
                 continue
         if is_torrent_labels_empty:
-            if not plugin._transferemptylabel:
+            if not task["empty_label_ok"]:
                 continue
         else:
-            if plugin._nolabels:
+            if task["exclude_labels"]:
                 is_skip = False
-                for label in plugin._nolabels.split(','):
+                for label in task["exclude_labels"].split(','):
                     if label in torrent_labels:
-                        logger.info(f"[PT下载中心:转移做种]种子 {hash_str} 含有不转移标签 {label}，跳过 ...")
+                        logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 含有不转移标签 {label}，跳过 ...")
                         is_skip = True
                         break
                 if is_skip:
                     continue
-            if plugin._includelabels:
+            if task["include_labels"]:
                 is_skip = False
-                for label in plugin._includelabels.split(','):
+                for label in task["include_labels"].split(','):
                     if label not in torrent_labels:
-                        logger.info(f"[PT下载中心:转移做种]种子 {hash_str} 不含有转移标签 {label}，跳过 ...")
+                        logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 不含有转移标签 {label}，跳过 ...")
                         is_skip = True
                         break
                 if is_skip:
@@ -290,143 +323,123 @@ def _transfer_impl(plugin, trigger_source: str):
             "torrent": torrent
         })
 
-    if trans_torrents:
-        logger.info(f"[PT下载中心:转移做种]需要转移的种子数：{len(trans_torrents)}")
-        total = len(trans_torrents)
-        success = 0
-        fail = 0
-        skip = 0
-        del_dup = 0
+    if not trans_torrents:
+        logger.info(f"【PT下载中心:转移做种】任务「{task_name}」没有需要转移的种子")
+        return
 
-        for torrent_item in trans_torrents:
-            if _transfer_stopped(plugin, generation):
-                break
-            source_hash = torrent_item["hash"]
-            pending = load_seed_recheck_queue(plugin)
-            if any(item.get("source_downloader") == from_service.name and
-                   item.get("source_hash") == source_hash for item in pending.values()):
-                skip += 1
-                continue
-            previous = plugin.get_data(f"{from_service.name}-{source_hash}") or {}
-            if previous.get("to_download") == to_service.name and previous.get("transfer_state") in ("completed", "stopped_after_add"):
-                skip += 1
-                continue
-            torrent_file = Path(plugin._fromtorrentpath) / f"{torrent_item.get('hash')}.torrent"
-            if not torrent_file.exists():
-                logger.error(f"[PT下载中心:转移做种]种子文件不存在：{torrent_file}")
-                fail += 1
-                continue
+    logger.info(f"【PT下载中心:转移做种】任务「{task_name}」需要转移的种子数：{len(trans_torrents)}")
+    payloads = get_torrent_payloads(
+        plugin, from_service.type, from_service.name, from_downloader,
+        [item["hash"] for item in trans_torrents],
+    )
+    if not payloads:
+        logger.warning(
+            f"【PT下载中心:转移做种】任务「{task_name}」源端网络导出全部失败（type={from_service.type}）"
+        )
 
-            torrent_info, poll_error = to_downloader.get_torrents(ids=[torrent_item.get('hash')])
-            if _transfer_stopped(plugin, generation):
-                break
-            if poll_error or torrent_info is None:
-                logger.warning(f"[PT下载中心:转移做种]目标任务查询失败，保留源任务：{torrent_item.get('hash')}")
-                fail += 1
-                continue
-            if torrent_info:
-                if plugin._deleteduplicate:
-                    target = torrent_info[0]
-                    state = target.get("state") if to_service.type == "qbittorrent" else target.status
-                    if not seed_is_ready(state, to_service.type, target) or seed_is_error(state, to_service.type) or (to_service.type == "transmission" and getattr(target, "error", 0)):
-                        skip += 1
-                        continue
-                    if _transfer_stopped(plugin, generation):
-                        break
-                    logger.info(f"[PT下载中心:转移做种]删除重复的源下载器任务（不含文件）：{torrent_item.get('hash')} ...")
-                    result = delete_source(plugin, from_service.name, source_hash)
-                    if result == "retry":
-                        fail += 1
-                    elif result == "protected":
-                        skip += 1
-                    else:
-                        del_dup += 1
-                else:
-                    logger.info(f"[PT下载中心:转移做种]{torrent_item.get('hash')} 已在目的下载器中，跳过 ...")
+    total = len(trans_torrents)
+    success = 0
+    fail = 0
+    skip = 0
+    del_dup = 0
+
+    for torrent_item in trans_torrents:
+        if _transfer_stopped(plugin, generation):
+            break
+        source_hash = torrent_item["hash"]
+        content = payloads.get(source_hash)
+        if not content:
+            logger.warning(f"【PT下载中心:转移做种】任务「{task_name}」种子 {source_hash[:8]} 网络导出失败，跳过")
+            fail += 1
+            continue
+
+        pending = load_seed_recheck_queue(plugin)
+        if any(item.get("source_downloader") == from_service.name and
+               item.get("source_hash") == source_hash for item in pending.values()):
+            skip += 1
+            continue
+        previous = plugin.get_data(f"{from_service.name}-{source_hash}") or {}
+        if previous.get("to_download") == to_service.name and previous.get("transfer_state") in ("completed", "stopped_after_add"):
+            skip += 1
+            continue
+
+        torrent_info, poll_error = to_downloader.get_torrents(ids=[source_hash])
+        if _transfer_stopped(plugin, generation):
+            break
+        if poll_error or torrent_info is None:
+            logger.warning(f"【PT下载中心:转移做种】任务「{task_name}」目标任务查询失败，保留源任务：{source_hash[:8]}")
+            fail += 1
+            continue
+        if torrent_info:
+            if task["delete_duplicate"]:
+                target = torrent_info[0]
+                state = target.get("state") if to_service.type == "qbittorrent" else target.status
+                if not seed_is_ready(state, to_service.type, target) or seed_is_error(state, to_service.type) or (to_service.type == "transmission" and getattr(target, "error", 0)):
                     skip += 1
-                continue
-
-            download_dir = plugin.convert_save_path(torrent_item.get('save_path'),
-                                                    plugin._frompath,
-                                                    plugin._topath)
-            if not download_dir:
-                logger.error(f"[PT下载中心:转移做种]转换保存路径失败：{torrent_item.get('save_path')}")
-                fail += 1
-                continue
-
-            if is_downloader_type("qbittorrent", service=from_service):
-                content = torrent_file.read_bytes()
-                if not content:
-                    logger.warning(f"[PT下载中心:转移做种]读取种子文件失败：{torrent_file}")
-                    fail += 1
                     continue
-                try:
-                    torrent_main = bdecode(content)
-                    main_announce = torrent_main.get('announce')
-                except Exception as err:
-                    logger.warning(f"[PT下载中心:转移做种]解析种子文件 {torrent_file} 失败：{str(err)}")
+                if _transfer_stopped(plugin, generation):
+                    break
+                logger.info(f"【PT下载中心:转移做种】任务「{task_name}」删除重复的源下载器任务（不含文件）：{source_hash[:8]} ...")
+                result = delete_source(plugin, from_service.name, source_hash)
+                if result == "retry":
                     fail += 1
-                    continue
-
-                if not main_announce:
-                    logger.info(f"[PT下载中心:转移做种]{torrent_item.get('hash')} 未发现tracker信息，尝试补充tracker信息...")
-                    fastresume_file = Path(plugin._fromtorrentpath) / f"{torrent_item.get('hash')}.fastresume"
-                    if not fastresume_file.exists():
-                        logger.warning(f"[PT下载中心:转移做种]fastresume文件不存在：{fastresume_file}")
-                        fail += 1
-                        continue
-                    try:
-                        fastresume = fastresume_file.read_bytes()
-                        torrent_fastresume = bdecode(fastresume)
-                        fastresume_trackers = torrent_fastresume.get('trackers')
-                        if isinstance(fastresume_trackers, list) \
-                                and len(fastresume_trackers) > 0 \
-                                and fastresume_trackers[0]:
-                            torrent_main['announce'] = fastresume_trackers[0][0]
-                            if len(fastresume_trackers) > 1 or len(fastresume_trackers[0]) > 1:
-                                torrent_main['announce-list'] = fastresume_trackers
-                            torrent_file = settings.TEMP_PATH / f"{torrent_item.get('hash')}.torrent"
-                            torrent_file.write_bytes(bencode(torrent_main))
-                    except Exception as err:
-                        logger.error(f"[PT下载中心:转移做种]解析fastresume文件 {fastresume_file} 出错：{str(err)}")
-                        fail += 1
-                        continue
-
-            if _transfer_stopped(plugin, generation):
-                break
-            logger.info(f"[PT下载中心:转移做种]添加转移做种任务到下载器 {to_service.name}：{torrent_file}")
-            submitted = begin_transfer(
-                plugin, from_service, to_service, source_hash, torrent_item["torrent"],
-                add_target=lambda: download_torrent(
-                    plugin, service=to_service, content=torrent_file.read_bytes(),
-                    save_path=download_dir, torrent=torrent_item["torrent"],
-                    stop_generation=generation,
-                ),
-                stopped=lambda: _transfer_stopped(plugin, generation),
-            )
-            if submitted:
-                success += 1
+                elif result == "protected":
+                    skip += 1
+                else:
+                    del_dup += 1
             else:
-                fail += 1
+                logger.info(f"【PT下载中心:转移做种】任务「{task_name}」{source_hash[:8]} 已在目的下载器中，跳过 ...")
+                skip += 1
+            continue
 
+        download_dir = plugin.convert_save_path(torrent_item.get('save_path'),
+                                                task["from_path"],
+                                                task["to_path"])
+        if not download_dir:
+            logger.error(f"【PT下载中心:转移做种】任务「{task_name}」转换保存路径失败：{torrent_item.get('save_path')}")
+            fail += 1
+            continue
 
-        if plugin._notify:
-            plugin.post_message(
-                mtype=MessageType.SiteMessage,
-                title="【转移做种任务已停止】" if _transfer_stopped(plugin, generation) else "【转移做种任务执行完成】",
-                parse_mode="plain",
-                text=f"总数：{total}，已提交校验：{success}，失败：{fail}，跳过：{skip}，删除重复：{del_dup}"
-            )
-    else:
-        logger.info("[PT下载中心:转移做种]没有需要转移的种子")
+        if _transfer_stopped(plugin, generation):
+            break
+        logger.info(f"【PT下载中心:转移做种】任务「{task_name}」添加转移做种任务到下载器 {to_service.name}：{source_hash[:8]}")
+        submitted = begin_transfer(
+            plugin, from_service, to_service, source_hash, torrent_item["torrent"],
+            add_target=lambda c=content, dd=download_dir, t=torrent_item["torrent"], h=source_hash: download_torrent(
+                plugin, service=to_service, content=c,
+                save_path=dd, torrent=t,
+                stop_generation=generation,
+                task=task, source_hash=h,
+            ),
+            stopped=lambda: _transfer_stopped(plugin, generation),
+        )
+        if submitted:
+            success += 1
+        else:
+            fail += 1
+
+    totals["success"] += success
+    totals["fail"] += fail
+    totals["skip"] += skip
+    totals["del_dup"] += del_dup
+    if trans_torrents:
+        totals["notify"] = True
+    logger.info(
+        f"【PT下载中心:转移做种】任务「{task_name}」本轮完成：总数 {total}，"
+        f"已提交校验 {success}，失败 {fail}，跳过 {skip}，删除重复 {del_dup}"
+    )
 
     if _transfer_stopped(plugin, generation):
-        logger.info("[PT下载中心:转移做种]转移做种任务已停止，未继续执行重命名补刀")
+        return
+    if not getattr(plugin, "_transfer_rename_enabled", False):
+        return
+    if to_service.type != "qbittorrent":
+        logger.info(
+            f"【PT下载中心:转移做种】任务「{task_name}」目的端 {to_service.type} 不适用转移后重命名"
+            "（仅支持 qB 显示名改名），跳过补刀"
+        )
         return
     plugin._retry_failed_renames(to_service)
-
-    logger.info("[PT下载中心:转移做种]转移做种任务执行完成")
-
 
 def retry_pending_renames(plugin):
     """独立补刀重命名，避免转移扫描提前返回时跳过旧污染记录修复。"""
@@ -551,4 +564,6 @@ __all__ = (
     "retry_pending_renames",
     "transfer",
     "validate_config",
+    "load_transfer_tasks",
+    "notify_fromtorrentpath_deprecated",
 )

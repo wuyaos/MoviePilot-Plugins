@@ -14,6 +14,14 @@ const form = reactive({})
 const activeMain = ref('transfer')
 const activeSub = ref('basic')
 const downloaderItems = ref([])
+const transferTasks = ref([])
+const transferExt = ref({})
+const transferDialog = ref(false)
+const transferEditing = ref(-1)
+const transferForm = reactive({})
+const transferError = ref('')
+const transferDeleteDialog = ref(false)
+const transferDeleteIndex = ref(-1)
 const siteItems = ref([])
 const hrPresets = ref([])
 const hrPresetsLoading = ref(false)
@@ -78,6 +86,7 @@ const defaults = {
   transferemptylabel: false, add_torrent_tags: '⏩转种',
   deletesource: false, deleteduplicate: false,
   remainoldcat: false, remainoldtag: false,
+  transfer_tasks: '[]', transfer_rename_enabled: false, downloader_ext: '{}',
   rename_enabled: true,
   rename_movie_format: '[ {{ title }}{% if year %} ({{ year }}){% endif %} ] - {{original_name}}',
   rename_tv_format: '[ {{ title }}{% if year %} ({{ year }}){% endif %}{% if season_episode %} - {{season_episode}}{% endif %} ] - {{original_name}}',
@@ -98,6 +107,7 @@ const PANE_RESET_KEYS = {
     'fromdownloader', 'todownloader', 'frompath', 'topath', 'fromtorrentpath',
     'nopaths', 'nolabels', 'includelabels', 'includecategory', 'transferemptylabel',
     'add_torrent_tags', 'deletesource', 'deleteduplicate', 'remainoldcat', 'remainoldtag',
+    'transfer_tasks', 'transfer_rename_enabled', 'downloader_ext',
     'seed_autostart', 'seed_skipverify', 'seed_check_interval', 'seed_max_wait_minutes'],
   hr: Object.keys(defaults).filter(k => k.startsWith('hr_')),
   remover: Object.keys(defaults).filter(k => k.startsWith('remover_')),
@@ -120,6 +130,10 @@ function confirmPaneReset() {
   for (const k of PANE_RESET_KEYS[paneResetTarget.value] || []) {
     form[k] = JSON.parse(JSON.stringify(defaults[k]))
   }
+  if (paneResetTarget.value === 'transfer') {
+    transferTasks.value = parseTransferTasks(form.transfer_tasks)
+    transferExt.value = parseDownloaderExt(form.downloader_ext)
+  }
   paneResetDialog.value = false
 }
 
@@ -140,8 +154,7 @@ const subTabs = {
   ],
   transfer: [
     { key: 'basic', title: '基础设置', icon: 'mdi-tune-variant' },
-    { key: 'filter', title: '筛选条件', icon: 'mdi-filter-variant' },
-    { key: 'advanced', title: '高级设置', icon: 'mdi-tune' },
+    { key: 'tasks', title: '任务列表', icon: 'mdi-playlist-check' },
     { key: 'seed_basic', title: '做种校验', icon: 'mdi-check-circle-outline' },
   ],
   hr: [
@@ -166,10 +179,11 @@ const subTabs = {
 
 const currentMain = computed(() => mainTabs.find(i => i.key === activeMain.value) || mainTabs[0])
 const currentSubs = computed(() => subTabs[activeMain.value] || [])
-const selectedToDownloaderType = computed(() => {
-  const selected = downloaderItems.value.find(item => item.value === form.todownloader)
-  return selected?.type || ''
-})
+/** 下载器下拉统一展示「名称 (类型)」；value 仍是下载器名，后端只认名字。 */
+const downloaderSelectItems = computed(() => downloaderItems.value.map(item => ({
+  ...item,
+  title: `${item.title} (${item.type})`,
+})))
 const qbDownloaderItems = computed(() => downloaderItems.value.filter(item => item.type === 'qbittorrent'))
 const uploadDownloaderItems = computed(() => downloaderItems.value.filter(item => ['qbittorrent', 'transmission'].includes(item.type)))
 const uploadSelectedDownloaders = computed(() => {
@@ -259,6 +273,145 @@ function addCatPair() {
 function addTrackerPair() {
   tagTrackerPairs.value.push({ tracker: '', site: '' })
 }
+
+// ═══ 转移做种 · 多任务引擎（transfer_tasks / downloader_ext）═══
+
+/** 任务字段与后端 service/transfer_tasks.py::_TASK_DEFAULTS 一致。 */
+const transferTaskDefaults = {
+  name: '', enabled: true, from_downloader: '', to_downloader: '',
+  include_category: '', include_labels: '', exclude_labels: '', empty_label_ok: true,
+  no_paths: '', from_path: '', to_path: '',
+  delete_source: false, delete_duplicate: true, keep_category: true, keep_tag: true,
+  transfer_tag: '已转移',
+}
+
+/** 对话框草稿；ext_* 只用于 downloader_ext，不进入任务对象。 */
+function blankTransferForm() {
+  return { ...transferTaskDefaults, ext_webui_url: '', ext_source_plugin: '' }
+}
+
+function parseTransferTasks(raw) {
+  let parsed
+  try {
+    parsed = JSON.parse(String(raw || '[]'))
+  } catch (error) {
+    console.error('transfer_tasks 解析失败:', error)
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .filter(item => item && typeof item === 'object')
+    .map(item => ({ ...transferTaskDefaults, ...item, enabled: item.enabled !== false }))
+}
+
+function parseDownloaderExt(raw) {
+  let parsed
+  try {
+    parsed = JSON.parse(String(raw || '{}'))
+  } catch (error) {
+    console.error('downloader_ext 解析失败:', error)
+    return {}
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+  return Object.fromEntries(Object.entries(parsed).map(([name, value]) => [name, {
+    webui_url: String(value?.webui_url || ''),
+    source_plugin: String(value?.source_plugin || ''),
+  }]))
+}
+
+function downloaderLabel(name) {
+  const hit = downloaderItems.value.find(item => item.value === name)
+  return hit ? `${hit.title} (${hit.type})` : (name || '—')
+}
+
+const transferDialogSourceType = computed(() => (
+  downloaderItems.value.find(item => item.value === transferForm.from_downloader)?.type || ''
+))
+
+const transferDeleteName = computed(() => transferTasks.value[transferDeleteIndex.value]?.name || '')
+
+function loadTransferTaskExt(name) {
+  const entry = transferExt.value[name] || {}
+  transferForm.ext_webui_url = entry.webui_url || ''
+  transferForm.ext_source_plugin = entry.source_plugin || ''
+}
+
+// 对话框内改源下载器时同步该下载器的 downloader_ext 草稿
+watch(() => transferForm.from_downloader, name => loadTransferTaskExt(name))
+
+function openTransferDialog(index = -1) {
+  transferError.value = ''
+  transferEditing.value = index
+  const task = index >= 0 ? transferTasks.value[index] : null
+  Object.keys(transferForm).forEach(key => delete transferForm[key])
+  Object.assign(transferForm, blankTransferForm(), task || {})
+  loadTransferTaskExt(transferForm.from_downloader)
+  transferDialog.value = true
+}
+
+function confirmTransferTask() {
+  transferError.value = ''
+  const from = String(transferForm.from_downloader || '')
+  const to = String(transferForm.to_downloader || '')
+  const fromPath = String(transferForm.from_path || '').trim()
+  const toPath = String(transferForm.to_path || '').trim()
+  if (!from || !to) {
+    transferError.value = '请选择源下载器与目的下载器'
+    return
+  }
+  if (from === to) {
+    transferError.value = '源下载器与目的下载器不能相同'
+    return
+  }
+  if (!fromPath || !toPath) {
+    transferError.value = '请填写源数据路径与目的数据路径'
+    return
+  }
+  const index = transferEditing.value
+  const task = {
+    ...transferTaskDefaults,
+    name: String(transferForm.name || '').trim() || `任务${index >= 0 ? index + 1 : transferTasks.value.length + 1}`,
+    enabled: transferForm.enabled !== false,
+    from_downloader: from,
+    to_downloader: to,
+    include_category: String(transferForm.include_category || '').trim(),
+    include_labels: String(transferForm.include_labels || '').trim(),
+    exclude_labels: String(transferForm.exclude_labels || '').trim(),
+    empty_label_ok: transferForm.empty_label_ok !== false,
+    no_paths: String(transferForm.no_paths || ''),
+    from_path: fromPath,
+    to_path: toPath,
+    delete_source: !!transferForm.delete_source,
+    delete_duplicate: transferForm.delete_duplicate !== false,
+    keep_category: transferForm.keep_category !== false,
+    keep_tag: transferForm.keep_tag !== false,
+    transfer_tag: String(transferForm.transfer_tag ?? '').trim(),
+  }
+  transferTasks.value = index >= 0
+    ? transferTasks.value.map((item, position) => (position === index ? task : item))
+    : [...transferTasks.value, task]
+  if (transferDialogSourceType.value === 'rtorrent') {
+    transferExt.value = {
+      ...transferExt.value,
+      [from]: {
+        webui_url: String(transferForm.ext_webui_url || '').trim(),
+        source_plugin: String(transferForm.ext_source_plugin || '').trim(),
+      },
+    }
+  }
+  transferDialog.value = false
+}
+
+function askTransferDelete(index) {
+  transferDeleteIndex.value = index
+  transferDeleteDialog.value = true
+}
+
+function confirmTransferDelete() {
+  transferTasks.value = transferTasks.value.filter((_, position) => position !== transferDeleteIndex.value)
+  transferDeleteDialog.value = false
+}
+
 watch(() => props.initialConfig, v => {
 Object.keys(form).forEach(k => delete form[k])
   Object.assign(form, defaults, v || {})
@@ -282,10 +435,14 @@ Object.keys(form).forEach(k => delete form[k])
     custom: customLabels[String(p.site || p.tracker || '').trim().toLowerCase()] || '',
   }))
   syncHrSiteRulesFromForm()
+  transferTasks.value = parseTransferTasks(form.transfer_tasks)
+  transferExt.value = parseDownloaderExt(form.downloader_ext)
 }, { immediate: true, deep: true })
 function saveConfig() {
   emit('save', {
     ...form,
+    transfer_tasks: JSON.stringify(transferTasks.value),
+    downloader_ext: JSON.stringify(transferExt.value),
     upload_limit_downloaders: [...(form.upload_limit_downloaders || [])],
     upload_limit_downloader_limits_kib: { ...(form.upload_limit_downloader_limits_kib || {}) },
     upload_limit_site_rules: Object.fromEntries(Object.entries(form.upload_limit_site_rules || {}).map(([name, rule]) => [name, { ...rule }])),
@@ -1136,48 +1293,12 @@ function serializeHrSiteConfigYaml(rules) {
                 <VCol cols="12" md="3">
                   <VSwitch v-model="form.notify" color="info" inset hide-details label="发送通知" />
                 </VCol>
+              </VRow>
+              <div class="dm-section-title mt-4">触发与执行</div>
+              <VRow>
                 <VCol cols="12" md="6">
                   <VTextField v-model.number="form.delay_minutes" label="延迟时间（分钟）" type="number" density="compact" variant="outlined" hide-details
                     hint="下载完成后延迟 N 分钟再转移" persistent-hint />
-                </VCol>
-              </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12" md="6">
-                  <VSelect v-model="form.fromdownloader" label="源下载器" density="compact" variant="outlined" hide-details
-                    :items="downloaderItems" hint="选择源下载器" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="6">
-                  <VSelect v-model="form.todownloader" label="目的下载器" density="compact" variant="outlined" hide-details
-                    :items="downloaderItems" hint="选择目的下载器" persistent-hint />
-                </VCol>
-              </VRow>
-              <VAlert
-                v-if="form.todownloader && selectedToDownloaderType === 'transmission'"
-                type="warning"
-                variant="tonal"
-                density="compact"
-                class="mt-2"
-              >
-                Transmission 当前不支持种子重命名，命名补刀与恢复原名不会生效；转移做种和做种校验不受影响。
-              </VAlert>
-              <VRow class="mt-2">
-                <VCol cols="12" md="6">
-                  <VTextField v-model="form.frompath" label="源数据文件根路径" density="compact" variant="outlined" hide-details
-                    hint="源下载器中数据的根路径" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="6">
-                  <VTextField v-model="form.topath" label="目的数据文件根路径" density="compact" variant="outlined" hide-details
-                    hint="目标下载器中数据的根路径" persistent-hint />
-                </VCol>
-              </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12" md="6">
-                  <VTextField v-model="form.fromtorrentpath" label="源种子文件路径" density="compact" variant="outlined" hide-details
-                    hint="如 BT_backup，留空自动获取" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="6">
-                  <VTextField v-model="form.add_torrent_tags" label="添加种子标签" density="compact" variant="outlined" hide-details
-                    hint="多个以逗号分隔" persistent-hint />
                 </VCol>
               </VRow>
               <VRow class="mt-2">
@@ -1189,56 +1310,56 @@ function serializeHrSiteConfigYaml(rules) {
                     :disabled="!form.transfer_fallback_enabled" hint="事件漏触发时按此间隔扫描，默认60分钟" persistent-hint />
                 </VCol>
               </VRow>
-            </div>
-
-            <!-- ═══ 转移做种 · 筛选条件 ═══ -->
-            <div v-show="activeSub === 'filter'" class="dm-pane">
-              <div class="dm-section-title">筛选条件</div>
+              <div class="dm-section-title mt-4">转移后重命名</div>
               <VRow>
-                <VCol cols="12" md="6">
-                  <VTextField v-model="form.includelabels" label="转移种子标签（逗号分隔）" density="compact" variant="outlined" hide-details
-                    hint="仅转移包含这些标签的种子" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="6">
-                  <VTextField v-model="form.nolabels" label="不转移种子标签（逗号分隔）" density="compact" variant="outlined" hide-details
-                    hint="跳过包含这些标签的种子" persistent-hint />
-                </VCol>
-              </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12" md="6">
-                  <VTextField v-model="form.includecategory" label="转移种子分类（逗号分隔）" density="compact" variant="outlined" hide-details
-                    hint="仅转移这些分类的种子" persistent-hint />
-                </VCol>
-                <VCol cols="12" md="6">
-                  <VSwitch v-model="form.transferemptylabel" color="info" inset hide-details label="转移无标签种子" />
-                </VCol>
-              </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12">
-                  <VTextarea v-model="form.nopaths" label="不转移数据文件目录（每行一个）" density="compact" variant="outlined" hide-details rows="3" />
+                <VCol cols="12" md="8">
+                  <VSwitch v-model="form.transfer_rename_enabled" color="info" inset hide-details label="转移完成后重命名种子" />
+                  <div class="dm-hint">仅 qB 目的端生效：修改显示名，不动磁盘文件；Transmission 目的端自动跳过</div>
                 </VCol>
               </VRow>
             </div>
 
-            <!-- ═══ 转移做种 · 高级设置 ═══ -->
-            <div v-show="activeSub === 'advanced'" class="dm-pane">
-              <div class="dm-section-title">高级设置</div>
-              <VRow>
-                <VCol cols="12" md="4">
-                  <VSwitch v-model="form.deletesource" color="warning" inset hide-details label="删除源种子" />
-                </VCol>
-                <VCol cols="12" md="4">
-                  <VSwitch v-model="form.deleteduplicate" color="warning" inset hide-details label="删除重复种子" />
-                </VCol>
-                <VCol cols="12" md="4">
-                  <VSwitch v-model="form.remainoldcat" color="info" inset hide-details label="保留原分类" />
-                </VCol>
-              </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12" md="4">
-                  <VSwitch v-model="form.remainoldtag" color="info" inset hide-details label="保留原标签" />
-                </VCol>
-              </VRow>
+            <!-- ═══ 转移做种 · 任务列表 ═══ -->
+            <div v-show="activeSub === 'tasks'" class="dm-pane">
+              <div class="dm-task-toolbar">
+                <div class="min-w-0">
+                  <div class="dm-section-title mb-1">任务列表</div>
+                  <div class="dm-hint">每个任务独立配置源/目的下载器、数据可见性映射、筛选条件与高级选项，保存后写回 transfer_tasks。</div>
+                </div>
+                <VBtn color="primary" variant="tonal" size="small" prepend-icon="mdi-plus" @click="openTransferDialog()">添加任务</VBtn>
+              </div>
+              <div class="dm-task-table mt-3">
+                <div class="dm-task-row dm-task-row--head">
+                  <span>名称</span>
+                  <span>启用</span>
+                  <span>源 → 目的</span>
+                  <span>数据映射</span>
+                  <span class="dm-task-actions">操作</span>
+                </div>
+                <div v-for="(task, idx) in transferTasks" :key="`transfer-task-${idx}`" class="dm-task-row">
+                  <div class="dm-task-name">
+                    <strong class="text-body-2 dm-break-text">{{ task.name }}</strong>
+                    <span class="text-caption text-medium-emphasis">转移标签：{{ task.transfer_tag || '不打标签' }}</span>
+                  </div>
+                  <div>
+                    <VSwitch v-model="task.enabled" color="success" inset hide-details density="compact" />
+                  </div>
+                  <div class="dm-task-route">
+                    <span class="dm-break-text">{{ downloaderLabel(task.from_downloader) }}</span>
+                    <VIcon icon="mdi-arrow-right" size="15" class="dm-map-arrow" />
+                    <span class="dm-break-text">{{ downloaderLabel(task.to_downloader) }}</span>
+                  </div>
+                  <div class="dm-task-paths">
+                    <span class="text-caption dm-break-text">{{ task.from_path || '—' }}</span>
+                    <div class="text-caption dm-map-arrow">→ {{ task.to_path || '—' }}</div>
+                  </div>
+                  <div class="dm-task-actions">
+                    <VBtn icon="mdi-pencil-outline" size="small" variant="text" title="编辑任务" @click="openTransferDialog(idx)" />
+                    <VBtn icon="mdi-delete-outline" size="small" variant="text" color="error" title="删除任务" @click="askTransferDelete(idx)" />
+                  </div>
+                </div>
+                <div v-if="!transferTasks.length" class="dm-map-empty">暂无转移任务，点击右上角「添加任务」创建。</div>
+              </div>
             </div>
 
             <!-- ═══ H&R · 基础设置 ═══ -->
@@ -1851,6 +1972,139 @@ function serializeHrSiteConfigYaml(rules) {
       </VCard>
     </VDialog>
 
+    <VDialog v-model="transferDialog" max-width="780" scrollable>
+      <VCard>
+        <VCardItem>
+          <template #prepend>
+            <VAvatar color="primary" variant="tonal" size="40" rounded="lg"><VIcon icon="mdi-transfer" /></VAvatar>
+          </template>
+          <VCardTitle class="text-subtitle-1">{{ transferEditing >= 0 ? '编辑转移任务' : '添加转移任务' }}</VCardTitle>
+          <VCardSubtitle>源/目的下载器与数据映射为必填；同一任务的源与目的不能相同</VCardSubtitle>
+        </VCardItem>
+        <VDivider />
+        <VCardText>
+          <VRow>
+            <VCol cols="12" md="6">
+              <VTextField v-model="transferForm.name" label="任务名称" density="compact" variant="outlined" hide-details
+                hint="留空自动命名为「任务N」" persistent-hint />
+            </VCol>
+            <VCol cols="12" md="6" class="d-flex align-center">
+              <VSwitch v-model="transferForm.enabled" color="success" inset hide-details label="启用该任务" />
+            </VCol>
+          </VRow>
+          <VRow class="mt-2">
+            <VCol cols="12" md="6">
+              <VSelect v-model="transferForm.from_downloader" :items="downloaderSelectItems" label="源下载器" density="compact" variant="outlined" hide-details
+                hint="从该下载器复制种子" persistent-hint />
+            </VCol>
+            <VCol cols="12" md="6">
+              <VSelect v-model="transferForm.to_downloader" :items="downloaderSelectItems" label="目的下载器" density="compact" variant="outlined" hide-details
+                hint="转移目标下载器" persistent-hint />
+            </VCol>
+          </VRow>
+          <VRow class="mt-2">
+            <VCol cols="12" md="6">
+              <VTextField v-model="transferForm.from_path" label="源数据路径" density="compact" variant="outlined" hide-details
+                hint="源数据路径/目的数据路径（数据可见性映射）" persistent-hint />
+            </VCol>
+            <VCol cols="12" md="6">
+              <VTextField v-model="transferForm.to_path" label="目的数据路径" density="compact" variant="outlined" hide-details
+                hint="源数据路径/目的数据路径（数据可见性映射）" persistent-hint />
+            </VCol>
+          </VRow>
+          <div class="dm-section-title mt-4">筛选条件</div>
+          <VRow>
+            <VCol cols="12" md="6">
+              <VTextField v-model="transferForm.include_category" label="转移种子分类（逗号分隔）" density="compact" variant="outlined" hide-details
+                hint="仅转移这些分类的种子，留空不限制" persistent-hint />
+            </VCol>
+            <VCol cols="12" md="6">
+              <VTextField v-model="transferForm.include_labels" label="转移种子标签（逗号分隔）" density="compact" variant="outlined" hide-details
+                hint="仅转移包含这些标签的种子，留空不限制" persistent-hint />
+            </VCol>
+          </VRow>
+          <VRow class="mt-2">
+            <VCol cols="12" md="6">
+              <VTextField v-model="transferForm.exclude_labels" label="不转移种子标签（逗号分隔）" density="compact" variant="outlined" hide-details
+                hint="包含这些标签的种子跳过" persistent-hint />
+            </VCol>
+            <VCol cols="12" md="6" class="d-flex align-center">
+              <VCheckbox v-model="transferForm.empty_label_ok" color="info" density="compact" hide-details label="允许无标签种子" />
+            </VCol>
+          </VRow>
+          <VRow class="mt-2">
+            <VCol cols="12">
+              <VTextarea v-model="transferForm.no_paths" label="不需要转移的路径（每行一个）" density="compact" variant="outlined" hide-details rows="3" />
+            </VCol>
+          </VRow>
+          <div class="dm-section-title mt-4">高级设置</div>
+          <VRow>
+            <VCol cols="12" sm="6" md="3">
+              <VSwitch v-model="transferForm.delete_source" color="warning" inset hide-details label="删除源种子" />
+            </VCol>
+            <VCol cols="12" sm="6" md="3">
+              <VSwitch v-model="transferForm.delete_duplicate" color="warning" inset hide-details label="删除重复种子" />
+            </VCol>
+            <VCol cols="12" sm="6" md="3">
+              <VSwitch v-model="transferForm.keep_category" color="info" inset hide-details label="保留原分类" />
+            </VCol>
+            <VCol cols="12" sm="6" md="3">
+              <VSwitch v-model="transferForm.keep_tag" color="info" inset hide-details label="保留原标签" />
+            </VCol>
+          </VRow>
+          <VRow class="mt-2">
+            <VCol cols="12" md="6">
+              <VTextField v-model="transferForm.transfer_tag" label="目的端转移标签" density="compact" variant="outlined" hide-details
+                hint="默认「已转移」；留空表示不打标签" persistent-hint />
+            </VCol>
+          </VRow>
+          <template v-if="transferDialogSourceType === 'rtorrent'">
+            <div class="dm-section-title mt-4">ruTorrent 网络导出</div>
+            <div class="dm-hint mb-2">源端为 rtorrent 时，必须填写 ruTorrent WebUI 地址与 source 插件路径，否则无法导出种子数据。</div>
+            <VRow>
+              <VCol cols="12" md="6">
+                <VTextField v-model="transferForm.ext_webui_url" label="ruTorrent WebUI 地址" density="compact" variant="outlined" hide-details
+                  hint="如 http://127.0.0.1:8080/rutorrent，不含末尾斜杠" persistent-hint />
+              </VCol>
+              <VCol cols="12" md="6">
+                <VTextField v-model="transferForm.ext_source_plugin" label="source 插件路径" density="compact" variant="outlined" hide-details
+                  hint="相对 WebUI 地址的 source 插件路径，如 plugins/source/action.php" persistent-hint />
+              </VCol>
+            </VRow>
+          </template>
+          <div v-if="transferError" class="text-caption text-error mt-3">{{ transferError }}</div>
+        </VCardText>
+        <VDivider />
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="transferDialog = false">取消</VBtn>
+          <VBtn color="primary" variant="flat" prepend-icon="mdi-check" @click="confirmTransferTask">确定</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <VDialog v-model="transferDeleteDialog" max-width="480">
+      <VCard>
+        <VCardItem>
+          <template #prepend>
+            <VAvatar color="error" variant="tonal" size="40" rounded="lg"><VIcon icon="mdi-delete-outline" /></VAvatar>
+          </template>
+          <VCardTitle class="text-subtitle-1">删除转移任务</VCardTitle>
+          <VCardSubtitle>{{ transferDeleteName || '未命名任务' }}</VCardSubtitle>
+        </VCardItem>
+        <VDivider />
+        <VCardText class="text-body-2">
+          删除后该任务不再参与转移做种；已转移的种子不受影响。改动先作用于表单，点击下方「保存配置」后才会真正生效。
+        </VCardText>
+        <VDivider />
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="transferDeleteDialog = false">取消</VBtn>
+          <VBtn color="error" variant="flat" prepend-icon="mdi-delete-outline" @click="confirmTransferDelete">删除</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
     <VDialog v-model="paneResetDialog" max-width="560">
       <VCard>
         <VCardItem>
@@ -1970,6 +2224,9 @@ function serializeHrSiteConfigYaml(rules) {
   .dm-subtabs::-webkit-scrollbar { display: none; }
   .dm-subtab { flex: 0 0 auto; padding: 6px 12px; }
   .dm-hr-row { grid-template-columns: 1fr; }
+  .dm-task-row { grid-template-columns: 1fr; }
+  .dm-task-toolbar { align-items: stretch; flex-direction: column; }
+  .dm-task-toolbar :deep(.v-btn) { width: 100%; }
   .dm-hr-tier-row { grid-template-columns: 1fr 40px; }
   .dm-hr-toolbar { align-items: stretch; }
   .dm-monitor-summary, .dm-upload-summary { grid-template-columns: 1fr; }
@@ -1989,6 +2246,15 @@ function serializeHrSiteConfigYaml(rules) {
   .dm-upload-status-grid { grid-template-columns: 1fr; }
   .dm-upload-site-status-row { grid-template-columns: minmax(170px, 1fr) repeat(3, minmax(96px, auto)); }
 }
+.dm-task-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dm-task-table { display: flex; flex-direction: column; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow: hidden; }
+.dm-task-row { display: grid; grid-template-columns: minmax(140px, 1fr) 72px minmax(190px, 1.3fr) minmax(180px, 1.2fr) 88px; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }
+.dm-task-row:last-child { border-bottom: none; }
+.dm-task-row--head { font-size: 12px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); background: rgba(var(--v-theme-on-surface), 0.03); }
+.dm-task-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dm-task-route { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.dm-task-paths { min-width: 0; }
+.dm-task-actions { display: flex; align-items: center; justify-content: flex-end; }
 .dm-hr-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .dm-hr-table { display: flex; flex-direction: column; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow: hidden; }
 .dm-hr-row { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(280px, 2.2fr) minmax(92px, .5fr) 64px minmax(196px, auto); gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }

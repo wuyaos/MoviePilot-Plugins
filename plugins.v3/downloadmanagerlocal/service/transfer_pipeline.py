@@ -41,7 +41,7 @@ def delete_source(plugin, downloader_id, torrent_hash):
         stats = plugin.get_data("transfer_skip_stats") or {"hr_protected": 0}
         stats["hr_protected"] += 1
         plugin.save_data("transfer_skip_stats", stats)
-        logger.info(f"[PT下载中心:转移做种]H&R 保护，保留源任务 {downloader_id}/{torrent_hash}")
+        logger.info(f"【PT下载中心:转移做种】H&R 保护，保留源任务 {downloader_id}/{torrent_hash}")
         return "protected"
     service = plugin.service_info(downloader_id)
     if not service or not service.instance:
@@ -105,7 +105,7 @@ def begin_transfer(plugin, from_service, to_service, source_hash, torrent, add_t
         item["phase"] = "rollback"
         item["error"] = str(exc)
         save_transaction(plugin, item)
-        logger.error(f"[PT下载中心:转移做种]转移失败，等待回滚 {source_hash}: {exc}")
+        logger.error(f"【PT下载中心:转移做种】转移失败，等待回滚 {source_hash}: {exc}")
     finally:
         ensure_seed_recheck_worker(plugin)
     return item["phase"] == "target_added"
