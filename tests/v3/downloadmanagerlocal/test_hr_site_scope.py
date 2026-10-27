@@ -84,3 +84,24 @@ def test_site_in_scope_by_custom_rule(hr):
 def test_qnap_baseline_uses_names(hr):
     baseline = hr.constants.HR_QNAP_CONFIG['hr_sites']
     assert baseline and all(isinstance(item, str) and item for item in baseline)
+
+
+def test_legacy_site_ids_migrated_by_mapping(hr):
+    parse = hr.rules._as_site_names
+    assert parse([24, 'GGPT'], {'24': '老师', '40': 'GGPT'}) == ['老师', 'GGPT']
+    assert parse(['24', '8.5', '52pt'], {'24': '老师'}) == ['老师', '52pt']
+
+
+def test_legacy_site_ids_dropped_without_mapping(hr):
+    parse = hr.rules._as_site_names
+    assert parse([24, 40]) == []
+    assert parse([24], {}) == []
+    assert parse([24], {'99': '其他站'}) == []
+
+
+def test_parse_hr_config_migrates_sites(hr):
+    config = hr.rules.parse_hr_config(
+        {'hr_sites': [24, 40, 'GGPT']},
+        site_id_to_name={'24': '老师', '40': 'GGPT'},
+    )
+    assert config.sites == ['老师', 'GGPT']
