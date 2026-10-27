@@ -17,6 +17,13 @@ from autoptcheckin.sites.native.generic import GenericNovahd as NovaHD
 from autoptcheckin.sites.native.opencd import OpenCD
 from autoptcheckin.sites.native.generic import GenericOshen as OshenPT
 
+def _bind_registry(plugin, module):
+    plugin._registry = lambda: module.get_registry(
+        getattr(plugin, "_config", {}).get("custom_sites_data", []),
+        sign_sites=getattr(plugin, "_config", {}).get("sign_sites", []),
+    )
+
+
 SITES = [NaturePT, NexusHD, NovaHD, OpenCD, OshenPT]
 MESSAGE_SITES = [NaturePT, NexusHD, NovaHD, OshenPT]
 
@@ -102,7 +109,8 @@ def test_b15_verified_and_hook_no_longer_gate_execution(monkeypatch, site_cls, r
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
     plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
-    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+    _bind_registry(plugin, module)
+    monkeypatch.setattr(module, "get_registry", lambda *args, **kwargs: {"sites": [
         dict(id=site_cls.id, native=True, verified=verified, hook_implemented=False,
              signin_capable=True, signin_applicable=True)]})
     monkeypatch.setattr(module, "managed_site", lambda sid: {})

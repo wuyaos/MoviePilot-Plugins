@@ -16,18 +16,6 @@ class Pt52(_base):
     record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]',
                              {'今天已经签过到了': 'signed', '未签到': 'unsigned'})
 
-    def read_before(self, ctx, page):
-        base = super().read_before(ctx, page)
-        if base.status == SignStatus.ALREADY or base.metadata.get('reason') == 'identity_conflict':
-            return base
-        from lxml import html as _html
-        links = _html.fromstring(page.text or '').xpath('//a[contains(@href, "52bakatestdate")]/@href')
-        if not links:
-            # 签到后入口消失（用户实证）：入口缺失=已签证据。
-            result = SignResult(SignStatus.ALREADY, '签到入口已消失（今日已签）')
-            result.metadata['action'] = 'sign'
-            return result
-        return base
 
     def discover_form(self, ctx, page):
         # 内联滑块就在当前页（torrents.php）；合成表单占位承载动作。

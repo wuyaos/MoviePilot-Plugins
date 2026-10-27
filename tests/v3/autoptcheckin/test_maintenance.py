@@ -93,7 +93,7 @@ def test_post_submit_maintenance_is_still_unconfirmed():
 @pytest.mark.parametrize('site_id', ['phoenixpt'])
 def test_closed_sites_registry_signin_not_applicable(site_id):
     row = next(row for row in discover_sites()['sites'] if row['id'] == site_id)
-    assert row['signin_applicable'] is False
+    assert row['signin_capable'] is False
     assert row['signin_capable'] is False
 
 

@@ -86,7 +86,8 @@
     "id": "dragonhd",
     "name": "龙之家",
     "url": "https://www.dragonhd.xyz/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "signin_capable": false
   },
   {
     "id": "dubhe",
@@ -460,8 +461,7 @@
       "human_verify",
       "sign_button"
     ],
-    "headful": true,
-    "login_notice": "人工验证签到，需浏览器环境"
+    "headful": true
   },
   {
     "id": "baozi",

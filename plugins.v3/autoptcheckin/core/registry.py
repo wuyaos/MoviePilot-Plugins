@@ -90,6 +90,8 @@ def discover_sites(package_name: str | None = None) -> dict:
                                   'login_capable': cls.login_capable, 'url': cls.url or '', 'credential': credential(cls.credential),
                                   'cf': 'unknown' if cls.cf is None else cls.cf, 'source': '插件适配', 'impersonate': bool(getattr(cls, 'impersonate', False)), 'hook_implemented': bool(getattr(cls, 'hook_implemented', True)),
                                   'emulate': bool(getattr(cls, 'emulate', False)), 'notice': getattr(cls, 'login_notice', '') or '',
+                                  # Capability is code support, never the effective emulate selection.
+                                  'emulate_capable': bool(getattr(cls, 'cloak_steps', ())) or callable(getattr(cls, 'keepalive_login', None)),
                                   'cloudsign_capable': cloudsign.enabled(cls.id),
                                   'shield': shield_of(cls)})
             except Exception as exc:
@@ -101,17 +103,16 @@ def discover_sites(package_name: str | None = None) -> dict:
                                 ("sunnypt", "SunnyPT", SUNNYPT_CREDENTIALS)):
         sites.append({"id": site_id, "name": name, "native": False, "login_capable": True,
                       "credential": credential(spec), "cf": "unknown", "source": "插件适配",
-                      "cloudsign_capable": False})
+                      "emulate_capable": False, "cloudsign_capable": False})
     for item in sites:
         # 能力即声明：mteam 保活语义、chdbits/tjupt 答题风险（仅登录）由各模块显式声明
         # signin_capable=False/signin_note，registry 不再做复合规则推断。
-        item['signin_capable'] = (getattr(_NATIVE_MODULES[item['id']], 'signin_capable', True)
+        item['signin_capable'] = (bool(getattr(_NATIVE_MODULES[item['id']], 'signin_capable', True))
                                   if item.get('native') else True)
         if item.get('native'):
             note = getattr(_NATIVE_MODULES[item['id']], 'signin_note', '')
             if note:
                 item['signin_note'] = note
-        item['signin_applicable'] = item['signin_capable']
     for item in skipped:
         logging.getLogger(__name__).warning("跳过原生站点模块 %s (%s)", item["module"], item["error"])
     return {"sites": sorted(sites, key=lambda item: item["id"]), "skipped": skipped,
@@ -151,7 +152,7 @@ def get_native_module(site_id):
     return _NATIVE_MODULES[site_id]()
 
 
-def get_registry(custom_sites_data=None) -> dict:
+def get_registry(custom_sites_data=None, sign_sites=None) -> dict:
     registry = deepcopy(_discovery())
     try:
         managed = managed_sites()
@@ -181,6 +182,7 @@ def get_registry(custom_sites_data=None) -> dict:
         except Exception:
             return ''
     known_hosts = {host for host in (_host(site.get('url')) for site in registry['sites']) if host}
+    custom_sign = None if sign_sites is None else {str(s) for s in sign_sites}
     for item in custom_sites_data or []:
         if not isinstance(item, dict) or not item.get('id') or item['id'] in known:
             continue
@@ -192,8 +194,9 @@ def get_registry(custom_sites_data=None) -> dict:
         registry['sites'].append({'id': item['id'], 'name': item.get('name', ''),
             'url': item.get('url', ''), 'emulate': bool(item.get('emulate', False)),
             'source': '自定义站点', 'icon': '', 'native': False,
-            'login_capable': True, 'signin_capable': True,
-            'signin_applicable': True, 'cloudsign_capable': False,
+            'login_capable': True,
+            'signin_capable': (True if custom_sign is None else str(item['id']) in custom_sign),
+            'emulate_capable': False, 'cloudsign_capable': False,
             'credential': credential(CredentialSpec()), 'cf': 'unknown',
             'shield': 'emulate' if bool(item.get('emulate', False)) else None})
         known.add(item['id'])

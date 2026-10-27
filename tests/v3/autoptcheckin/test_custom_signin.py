@@ -116,7 +116,7 @@ def test_custom_emulate_map_overrides_entry(attendance, monkeypatch, entry_emula
     assert result['status'] == 'signed'
     row = next(row for row in get_registry(plugin._config['custom_sites_data'])['sites']
                if row['id'] == 'custom-60005')
-    assert row['signin_applicable'] is True
+    assert row['signin_capable'] is True
     # 注册表声明不被有效值反写污染（响应副本才携带有效 emulate）。
     assert row['emulate'] is entry_emulate
 

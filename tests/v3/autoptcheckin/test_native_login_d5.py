@@ -70,8 +70,8 @@ def test_native_login_gates(config, reason, offline):
 
 def test_signin_gates_do_not_block_login(offline, monkeypatch):
     real = entry.get_registry
-    def unverified(*args):
-        data = real(*args)
+    def unverified(*args, **kwargs):
+        data = real(*args, **kwargs)
         for site in data['sites']:
             if site['id'] == 'hdsky':
                 site.update(verified=False, hook_implemented=False)
@@ -168,8 +168,8 @@ def test_non_native_registry_id_uses_matcher(offline, monkeypatch):
     oper = ModuleType('app.db.oper')
     monkeypatch.setitem(sys.modules, 'app.db.oper', oper)
     real = entry.get_registry
-    def with_legacy(*args):
-        data = real(*args)
+    def with_legacy(*args, **kwargs):
+        data = real(*args, **kwargs)
         data['sites'].append({'id': 'legacy_fixture', 'native': False, 'login_capable': True})
         return data
     monkeypatch.setattr(registry, 'get_registry', with_legacy)

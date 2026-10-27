@@ -23,21 +23,15 @@ const trackPriority = site => Number(site.sign_state === 'failed' || site.login_
 const sortedSites = computed(() => [...(stats.value?.sites || [])].sort((a, b) => trackPriority(b) - trackPriority(a)))
 function trackMatches(site, filter) {
   const track = kind => ({state: site[kind + '_state'], status: site[kind + '_status'], reason: trackReason(site, kind)})
-  const s = track('sign'), l = track('login')
   const unknown = t => (t.state === 'failed' && t.status === 'unconfirmed') ||
     (t.state === 'pending' && t.reason === 'result_unknown')
-  const failed = t => t.state === 'failed' && t.status !== 'unconfirmed'
-  const crossReason = (a, b, r) => (a.state !== 'success' && a.reason === r) || (b.state !== 'success' && b.reason === r)
-  const off = t => t.state === 'disabled' || (t.state === 'pending' && !t.reason)
-  return ({sign_success: s.state === 'success',
-           sign_failed: failed(s),
-           sign_unknown: unknown(s),
-           login_success: l.state === 'success',
-           login_failed: failed(l),
-           unreachable: crossReason(s, l, 'network_error'),
-           maintenance: crossReason(s, l, 'maintenance'),
-           protocol: crossReason(s, l, 'protocol_pending'),
-           off: off(s) && off(l)})[filter]
+  const failed = t => t.state === 'failed' && !unknown(t)
+  const pending = t => t.state === 'pending' || t.state === 'disabled'
+  const s = track('sign'), l = track('login')
+  return ({sign_success: s.state === 'success', sign_failed: failed(s),
+           sign_unknown: unknown(s), sign_pending: pending(s),
+           login_success: l.state === 'success', login_failed: failed(l),
+           login_unknown: unknown(l), login_pending: pending(l)})[filter]
 }
 const filteredSites = computed(() => sortedSites.value.filter(site => !siteFilter.value || trackMatches(site, siteFilter.value)))
 const visibleSites = computed(() => showAllSites.value ? filteredSites.value : filteredSites.value.slice(0, siteLimit))
@@ -79,18 +73,12 @@ const REASON_LABELS = {already_signed: '已签', result_unknown: '结果待确�
   maintenance: '维护中', protocol_pending: '待验证', auth_failed: '认证失败'}
 const trackChip = (site, kind) => {
   const state = site[kind + '_state']
-  const raw = site[kind + '_status']
+  const status = site[kind + '_status']
   const reason = trackReason(site, kind)
   const label = kind === 'login' ? '登录' : '签到'
   if (state === 'success') return [label, 'success']
-  if (state === 'failed') return [label, 'failure']
-  if (state === 'pending') {
-    if (reason === 'result_unknown') return ['结果待确认', 'unknown']
-    if (reason === 'network_error') return ['不可达', 'off']
-    if (reason === 'maintenance') return ['维护中', 'off']
-    if (reason === 'protocol_pending') return ['待验证', 'off']
-    return ['待执行', 'off']
-  }
+  if (state === 'failed') return [(status === 'unconfirmed' || reason === 'result_unknown') ? label : label, (status === 'unconfirmed' || reason === 'result_unknown') ? 'unknown' : 'failure']
+  if (state === 'pending') return [label, reason === 'result_unknown' ? 'unknown' : 'off']
   return [label, 'off']
 }
 function trackTitle(site, kind) {
@@ -118,15 +106,14 @@ function cardMessage(site) {
   return pick('sign') || pick('login')
 }
 const trackStates = [
-  {key: 'sign_success', label: '签到', cls: 'success'},
-  {key: 'sign_failed', label: '签到', cls: 'failure'},
-  {key: 'sign_unknown', label: '结果待确认', cls: 'unknown'},
-  {key: 'login_success', label: '登录', cls: 'success'},
-  {key: 'login_failed', label: '登录', cls: 'failure'},
-  {key: 'unreachable', label: '不可达', cls: 'off'},
-  {key: 'maintenance', label: '维护中', cls: 'off'},
-  {key: 'protocol', label: '待验证', cls: 'off'},
-  {key: 'off', label: '待执行', cls: 'off'},
+  {key: 'sign_success', label: '签到成功', cls: 'success'},
+  {key: 'sign_failed', label: '签到失败', cls: 'failure'},
+  {key: 'sign_unknown', label: '签到待确认', cls: 'unknown'},
+  {key: 'sign_pending', label: '签到待执行', cls: 'off'},
+  {key: 'login_success', label: '登录成功', cls: 'success'},
+  {key: 'login_failed', label: '登录失败', cls: 'failure'},
+  {key: 'login_unknown', label: '登录待确认', cls: 'unknown'},
+  {key: 'login_pending', label: '登录待执行', cls: 'off'},
 ]
 const states = {success:['成功','success'],signed:['已签','signed'],login_ok:['登录成功','signed'],failed:['失败','failure'],pending:['待处理','off'],skipped:['已跳过','off'],cancelled:['已取消','off'],unconfirmed:['结果待确认','unknown'],maintenance:['维护中','off'],network_error:['不可达','off'],protocol_pending:['待验证','off'],auth_failed:['认证失败','failure'],disabled:['停用','off'],off:['未进行','off']}
 // 历史行徽标：新统一值按 reason 细分，旧原始值经 legacyReason 兼容推导。
@@ -168,8 +155,19 @@ async function load() {
     emit('action')
   } catch (e) { error.value = e.message || '加载失败'; toast?.error(error.value) }
 }
-async function toggleTrack(site, kind, on) {
-  await execute(`site_track?domain=${encodeURIComponent(site.id)}&track=${kind}&on=${on ? 1 : 0}`)
+async function toggleSitePaused(site) {
+  if (busy.value) return
+  const id = String(site.id), wasPaused = !!site.site_paused
+  busy.value = true; error.value = ''
+  try {
+    const config = await get('config')
+    const paused = new Set((config.paused_sites || []).map(String))
+    wasPaused ? paused.delete(id) : paused.add(id)
+    const response = await props.api.put(`plugin/${props.pluginId}/config`, {...config, paused_sites: [...paused]})
+    if (response?.success === false) throw new Error(response.message)
+    site.site_paused = !wasPaused
+  } catch (e) { site.site_paused = wasPaused; error.value = e.message || '站点暂停状态保存失败'; toast?.error(error.value) }
+  finally { busy.value = false }
 }
 const busy = ref(false)
 async function execute(action, domain = '') {
@@ -191,7 +189,10 @@ emit('layout',{maxWidth:'1000px'})
 <template v-else-if="stats"><div class="win"><div class="topline"><div><h3 style="margin:0">站点状态总览</h3><p class="hint">下次调度：<b>{{ formatShort(stats.next_schedule) || '暂无调度' }}</b> · {{ stats.schedule.mode === 'cron' ? 'Cron：' + (stats.schedule.cron || '未配置') : '间隔：' + stats.schedule.interval_hours + ' 小时 · ' + timeWindow }}</p></div><div class="row" style="gap:8px"><button class="btn ghost" :disabled="busy" @click="execute('run_once')">{{ busy ? '执行中…' : '立即运行' }}</button><button class="btn ghost" :disabled="busy" @click="execute('clean_today')">清理缓存</button><button class="btn ghost refresh-btn" aria-label="刷新数据" title="刷新数据" :disabled="busy" @click="load">⟳</button></div></div>
 <div class="stats-row"><div class="stat-card" v-for="group in [{key:'sign',label:'签到统计'},{key:'login',label:'登录统计'}]" :key="group.key"><h4 class="stats-title">{{ group.label }}</h4><div class="stats-numbers"><strong class="num-success">{{ (stats.latest[group.key]||{}).success || 0 }}</strong><span class="stats-sep">/</span><strong class="num-failure">{{ (stats.latest[group.key]||{}).failed || 0 }}</strong><span class="stats-sep">/</span><strong class="num-unknown">{{ (stats.latest[group.key]||{}).pending || 0 }}</strong></div><div class="stats-labels"><span class="num-success">成功</span><span class="stats-sep">/</span><span class="num-failure">失败</span><span class="stats-sep">/</span><span class="num-unknown">待处理</span></div></div></div>
 <div class="site-filters" aria-label="筛选站点状态"><button v-for="item in trackStates" :key="item.key" type="button" class="chip" :class="item.cls" :aria-pressed="siteFilter === item.key" @click="toggleSiteFilter(item.key)">{{ item.label }}</button></div>
-<div class="data-grid"><article v-for="site in visibleSites" :key="site.id" class="site-card" :class="'is-'+cardCls(site)"><div class="site-head"><strong class="site-label"><img v-if="site.icon && !brokenIcons[site.id]" class="site-icon" :src="site.icon" alt="" @error="brokenIcons[site.id] = true"><span v-else class="site-icon site-initial" aria-hidden="true">{{ site.name?.slice(0,1) }}</span><a v-if="site.url" class="site-link" :href="site.url" target="_blank" rel="noopener" @click.stop>{{ site.name }}</a><span v-else>{{ site.name }}</span><button class="verify-btn" aria-label="测试连接" title="测试连接" :disabled="busy || !site.can_verify" @click="execute('verify_site',site.id)">🔗</button></strong><span class="head-right"><span v-if="site.sign_selected && !site.sign_disabled_struct" class="chip" :class="trackChip(site,'sign')[1]" :title="`签到：${trackTitle(site,'sign')}`">{{ trackChip(site,'sign')[0] }}</span><span v-if="site.login_selected && !site.login_disabled_struct" class="chip" :class="trackChip(site,'login')[1]" :title="`登录：${trackTitle(site,'login')}`">{{ trackChip(site,'login')[0] }}</span><span v-if="site.cf === true" class="chip badge-cf-yes">CF 盾</span><span v-if="site.shield === 'cloud'" class="chip badge-shield-cloud">云签</span><span v-else-if="site.emulate === true" class="chip badge-emulate">仿真</span><span v-if="site.notice" class="chip badge-unknown" :title="site.notice">⚠</span></span></div><p v-if="cardMessage(site)" class="site-error-line" :title="cardMessage(site)">{{ cardMessage(site) }}</p><div class="row" v-if="!site.sign_disabled_struct || !site.login_disabled_struct"><button v-if="site.sign_selected && !site.sign_disabled_struct" class="btn ghost pico" :disabled="busy || !site.can_signin" @click="execute('signin_by_domain',site.id)">签到</button><button v-if="site.login_selected && !site.login_disabled_struct" class="btn ghost pico" :disabled="busy || !site.can_login" @click="execute('login_by_domain',site.id)">登录</button><span class="row-toggles"><label v-if="site.sign_track_available" class="mini-switch" :title="(site.sign_selected?'停用':'启用')+'签到轨道'"><input type="checkbox" role="switch" :checked="!!site.sign_selected" :disabled="busy" @change="toggleTrack(site,'sign',$event.target.checked)"><span>签</span></label><label v-if="site.login_track_available" class="mini-switch" :title="(site.login_selected?'停用':'启用')+'登录轨道'"><input type="checkbox" role="switch" :checked="!!site.login_selected" :disabled="busy" @change="toggleTrack(site,'login',$event.target.checked)"><span>登</span></label></span></div></article></div>
-<button v-if="filteredSites.length > siteLimit" class="btn ghost sites-toggle" :aria-expanded="showAllSites" @click="showAllSites = !showAllSites">{{ showAllSites ? '收起其余站点' : `展开其余 ${filteredSites.length - siteLimit} 个站点` }}</button><div v-if="!stats.sites.length" class="empty">暂无站点结果</div><div v-else-if="!filteredSites.length" class="empty">该状态暂无站点</div><h3 style="margin:28px 0 0">历史记录</h3></div>
+<div class="data-grid"><article v-for="site in visibleSites" :key="site.id" class="site-card" :class="['is-'+cardCls(site), site.site_paused ? 'is-paused' : '']">
+<div class="site-r1"><button type="button" class="pwr" :class="site.site_paused ? 'paused' : 'active'" :aria-label="site.site_paused ? '恢复站点' : '暂停站点'" @click="toggleSitePaused(site)">⏻</button><strong class="site-label"><img v-if="site.icon && !brokenIcons[site.id]" class="site-icon" :src="site.icon" alt="" @error="brokenIcons[site.id] = true"><span v-else class="site-icon site-initial" aria-hidden="true">{{ site.name?.slice(0,1) }}</span><a v-if="site.url" class="site-link" :href="site.url" target="_blank" rel="noopener" @click.stop>{{ site.name }}</a><span v-else>{{ site.name }}</span></strong><span class="head-right"><button v-if="site.sign_selected && !site.sign_disabled_struct && trackChip(site,'sign')" type="button" class="chip" :class="trackChip(site,'sign')[1]" :title="site.site_paused ? '站点已暂停执行' : trackTitle(site,'sign')" :disabled="site.site_paused || busy" @click="execute('signin_by_domain',site.id)">{{ trackChip(site,'sign')[0] }}</button><button v-if="site.login_selected && !site.login_disabled_struct && trackChip(site,'login')" type="button" class="chip" :class="trackChip(site,'login')[1]" :title="site.site_paused ? '站点已暂停执行' : trackTitle(site,'login')" :disabled="site.site_paused || busy" @click="execute('login_by_domain',site.id)">{{ trackChip(site,'login')[0] }}</button></span></div>
+<div class="site-caps"><span v-if="site.cloudsign_selected" class="chip badge-shield-cloud">云签</span><span v-if="site.emulate" class="chip badge-emulate">仿真</span><span v-if="site.proxy" class="chip blue">代理</span></div>
+<p class="site-msg" :title="cardMessage(site)">{{ cardMessage(site) }}</p></article></div><button v-if="filteredSites.length > siteLimit" class="btn ghost sites-toggle" :aria-expanded="showAllSites" @click="showAllSites = !showAllSites">{{ showAllSites ? '收起其余站点' : `展开其余 ${filteredSites.length - siteLimit} 个站点` }}</button><div v-if="!stats.sites.length" class="empty">暂无站点结果</div><div v-else-if="!filteredSites.length" class="empty">该状态暂无站点</div><h3 style="margin:28px 0 0">历史记录</h3></div>
 <div class="table-wrap"><table><caption class="hint" style="text-align:left;padding:0 24px 12px">{{ history.total || 0 }} 条记录</caption><thead><tr><th v-for="label in ['时间','站点','状态','最近消息']" :key="label">{{ label }}</th></tr></thead><tbody><template v-for="group in historyDays" :key="group.day"><tr class="history-day"><th colspan="4"><button class="btn ghost mini" :aria-expanded="dayIsOpen(group.day)" @click="toggleDay(group.day)">{{ dayIsOpen(group.day) ? '▾' : '▸' }} {{ group.day }} · {{ group.records.length }} 条 · <span class="num-success">成功 {{ group.success }}</span> / <span class="num-failure">失败 {{ group.failed }}</span> / <span class="num-unknown">未确认 {{ group.unconfirmed }}</span> / <span class="num-off">不可达 {{ group.unreachable }}</span></button></th></tr><template v-if="dayIsOpen(group.day)"><template v-for="{item,index} in group.records" :key="index"><tr><td>{{ formatTime(item.time) }}</td><td>{{ siteName(item.site) }}</td><td><span class="chip" :class="historyBadge(item)[1]">{{ historyBadge(item)[0] }}</span></td><td>{{ resultMessage(item) }}</td></tr></template></template></template><tr v-if="!historyDays.length"><td colspan="4" class="muted">暂无历史记录</td></tr></tbody></table></div></template><div v-else class="win">加载中…</div></section></div></template>
 <style scoped src="./preview.css"></style>
+<style scoped> .data-grid .site-card.is-paused{opacity:.55;border-color:var(--ptc-off-border,var(--ptc-line-strong))}.pwr.active{background:var(--ptc-success-bg);color:var(--ptc-success-text)}.pwr.paused{background:var(--ptc-unknown-bg);color:var(--ptc-unknown-text)}.site-card .chip:disabled{opacity:.6;cursor:not-allowed} </style>

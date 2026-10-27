@@ -55,7 +55,7 @@ def test_history_persistence_pagination_retention():
 
 def test_real_api_contract(monkeypatch):
     module = importlib.import_module('autoptcheckin')
-    monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites':[{'id':'fixture'}], 'sources':{'adapters':1,'integrations':0}})
+    monkeypatch.setattr(module, 'get_registry', lambda *args, **kwargs: {'sites':[{'id':'fixture'}], 'sources':{'adapters':1,'integrations':0}})
     plugin = AutoPtCheckin()
     assert asyncio.run(plugin.api_sites())['data']['sites'] == [
         {'id': 'fixture', 'cf': 'unknown', 'proxy': False, 'emulate': False,

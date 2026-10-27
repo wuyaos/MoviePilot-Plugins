@@ -17,6 +17,13 @@ from autoptcheckin.sites.native.generic import GenericHdcity as HDCity
 from autoptcheckin.sites.native.generic import GenericHdupt as HDUpt
 from autoptcheckin.sites.native.generic import GenericHhanclub as Hhanclub
 
+def _bind_registry(plugin, module):
+    plugin._registry = lambda: module.get_registry(
+        getattr(plugin, "_config", {}).get("custom_sites_data", []),
+        sign_sites=getattr(plugin, "_config", {}).get("sign_sites", []),
+    )
+
+
 SITES = [HDBao, HDChina, HDCity, HDUpt, Hhanclub]
 SPECIAL = [HDChina, HDCity, HDUpt, Hhanclub]
 
@@ -111,7 +118,8 @@ def test_b13_unverified_enabled_and_selected_executes(monkeypatch, site_cls, rea
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
     plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
-    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+    _bind_registry(plugin, module)
+    monkeypatch.setattr(module, "get_registry", lambda *args, **kwargs: {"sites": [
         dict(id=site_cls.id, native=True, verified=False, hook_implemented=True,
              signin_capable=True, signin_applicable=True)]})
     monkeypatch.setattr(module, "managed_site", lambda sid: {})
@@ -130,7 +138,8 @@ def test_b13_hook_attribute_no_longer_blocks_execution(monkeypatch, site_cls, re
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
     plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
-    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+    _bind_registry(plugin, module)
+    monkeypatch.setattr(module, "get_registry", lambda *args, **kwargs: {"sites": [
         dict(id=site_cls.id, native=True, verified=True, hook_implemented=False,
              signin_capable=True, signin_applicable=False)]})
     monkeypatch.setattr(module, "managed_site", lambda sid: {})
@@ -147,7 +156,8 @@ def test_b13_not_enabled_still_skipped_before_credentials(monkeypatch, site_cls)
     """站点开关未启用仍跳过，且发生在凭据与网络资源之前。"""
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
-    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+    _bind_registry(plugin, module)
+    monkeypatch.setattr(module, "get_registry", lambda *args, **kwargs: {"sites": [
         dict(id=site_cls.id, native=True, verified=False, hook_implemented=True,
              signin_capable=True, signin_applicable=True)]})
     def forbidden(*args, **kwargs):

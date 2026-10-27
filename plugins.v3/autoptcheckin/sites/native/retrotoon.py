@@ -55,6 +55,7 @@ class RetroToon(NexusSignin):
         return form if data.get("csrf_token") and "claim" in data else None
 
     def read_before(self, ctx: SignContext, page: LoginPage | None) -> SignResult:
+        # 9 点前 already=昨日已签（跳过即可）、未签=照常提交；9 点后页面即今日状态。
         return self._trim(super().read_before(ctx, page))
 
     def read_after(self, ctx: SignContext, page: LoginPage | None) -> SignResult:

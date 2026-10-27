@@ -120,7 +120,7 @@ def test_generic_login_only_is_skipped_and_registry_honors_capability(monkeypatc
     assert result.status == 'skipped' and result.metadata['reason'] == 'signin_not_applicable'
     assert not http.mock_calls
     row = next(row for row in discover_sites()['sites'] if row['id'] == site.id)
-    assert not row['signin_capable'] and not row['signin_applicable']
+    assert not row['signin_capable']
 
 
 def test_generic_kelu_variants_and_btschool_opt_out():
@@ -189,7 +189,6 @@ def test_cloak_action_readback_prefers_stashed_landing_page(monkeypatch):
 def test_vclib_cloak_human_verify_chain(monkeypatch):
     site = get_native_module('vclib')
     assert site.emulate is True and site.cloak_steps == ['human_verify', 'sign_button']
-    assert '人工验证' in site.login_notice
 
     class Page:
         url = site.url + '/attendance.php'
@@ -239,7 +238,7 @@ def test_yema_and_52pt_signin_capability_is_registered_and_executable(monkeypatc
         site = get_native_module(sid)
         assert site.signin_capable is True
         entry = next(row for row in discover_sites()['sites'] if row['id'] == sid)
-        assert entry['signin_capable'] is True and entry['signin_applicable'] is True
+        assert entry['signin_capable'] is True
 
         class Page:
             url = site.url

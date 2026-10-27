@@ -26,9 +26,13 @@ def _plugin(monkeypatch, ids):
     plugin._state = TrackStateStore()
     plugin._state.rollover()
     plugin._config = {'enabled_sites': ids, 'sign_sites': ids[:], 'login_sites': []}
-    monkeypatch.setattr(entry, 'get_registry', lambda *args: {'sites': [
+    monkeypatch.setattr(entry, 'get_registry', lambda *args, **kwargs: {'sites': [
         {'id': sid, 'signin_capable': True, 'signin_applicable': True, 'login_capable': True}
         for sid in ids]})
+    plugin._registry = lambda: entry.get_registry(
+        plugin._config.get('custom_sites_data', []),
+        sign_sites=plugin._config.get('sign_sites', []),
+    )
     return plugin
 
 
@@ -115,7 +119,7 @@ def test_disabled_capability_excludes_retained_failure_from_queue(monkeypatch):
         for track in ('sign', 'login'):
             plugin._track_store().apply_result(sid, track, 'failed')
     plugin._config['login_sites'] = ['a', 'b']
-    monkeypatch.setattr(entry, 'get_registry', lambda *args: {'sites': [
+    monkeypatch.setattr(entry, 'get_registry', lambda *args, **kwargs: {'sites': [
         {'id': 'a', 'signin_capable': False, 'signin_applicable': False, 'login_capable': False},
         {'id': 'b', 'signin_capable': True, 'signin_applicable': True, 'login_capable': True},
     ]})
@@ -146,3 +150,31 @@ def test_rendered_notification_does_not_count_old_pending_as_current(monkeypatch
     assert text.splitlines()[:3] == ['全部签到: 2',
                                      '本次签到: 0（成功 0 · 失败 0 · 待处理 0）',
                                      '下轮待执行: 1']
+
+
+def test_paused_site_is_excluded_from_due_summary_and_stats(monkeypatch):
+    import asyncio
+    plugin = _plugin(monkeypatch, ['a', 'b'])
+    plugin._config['paused_sites'] = ['a']
+    plugin._recompute_track_states()
+    assert plugin._due_for('sign') == ['b']
+    summary = plugin._round_summary()['sign']
+    assert summary['total'] == 1 and summary['next'] == 1
+    rows = {row['id']: row for row in plugin._site_rows()}
+    assert rows['a']['site_paused'] is True and rows['b']['site_paused'] is False
+    result = asyncio.run(plugin.api_stats())['data']['latest']['sign']
+    assert result == {'success': 0, 'failed': 0, 'pending': 1}
+    assert plugin._track_store().entry_of('a', 'sign') == {}
+
+
+def test_paused_single_site_apis_refuse_without_state_or_history(monkeypatch):
+    import asyncio
+    plugin = _plugin(monkeypatch, ['a'])
+    plugin._config['paused_sites'] = ['a']
+    plugin._execute_site = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('must not execute'))
+    before = plugin._track_store().snapshot()
+    signin = asyncio.run(plugin.api_signin_by_domain(domain='a'))
+    login = asyncio.run(plugin.api_login_by_domain(domain='a'))
+    assert signin == login == {'success': False, 'message': '站点已暂停执行', 'data': None}
+    assert plugin._track_store().snapshot() == before
+    assert plugin._history.list(1, 100)['items'] == []

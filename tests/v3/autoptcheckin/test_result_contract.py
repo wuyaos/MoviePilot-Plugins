@@ -237,7 +237,7 @@ def _queue_plugin(monkeypatch, ids):
     plugin._state.rollover()
     plugin._config = {'enabled_sites': ids, 'sign_sites': ids[:], 'login_sites': [],
                       'retry_count': 2}
-    monkeypatch.setattr(entry, 'get_registry', lambda *args: {'sites': [
+    monkeypatch.setattr(entry, 'get_registry', lambda *args, **kwargs: {'sites': [
         {'id': sid, 'signin_capable': True, 'signin_applicable': True, 'login_capable': True}
         for sid in ids]})
     return plugin

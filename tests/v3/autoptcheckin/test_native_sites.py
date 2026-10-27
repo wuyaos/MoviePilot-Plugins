@@ -167,7 +167,7 @@ def test_execute_site_dual_track_and_gate(monkeypatch, native, expected):
     module = importlib.import_module('autoptcheckin')
     plugin = module.AutoPtCheckin()
     plugin._config = {'enabled_sites': ['hdsky'], 'sign_sites': ['hdsky']}
-    monkeypatch.setattr(module, 'get_registry', lambda *args: {'sites': [dict(id='hdsky', native=native, verified=False, signin_capable=True, signin_applicable=True, login_capable=True, source='插件适配')]})
+    monkeypatch.setattr(module, 'get_registry', lambda *args, **kwargs: {'sites': [dict(id='hdsky', native=native, verified=False, signin_capable=True, signin_applicable=True, login_capable=True, source='插件适配')]})
     calls = []
     def managed(sid):
         calls.append('managed')

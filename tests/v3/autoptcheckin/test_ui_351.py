@@ -17,17 +17,18 @@ const ref = value => ({value});
 const selected = ref([{id:'alpha'}, {id:'hotel'}, {id:'tango', fields:[{key:'rousi_username'}]}]);
 const openSites = ref([]);
 const model = {enabled_sites:['alpha'], site_proxy:{}, site_emulate:{}, site_cloudsign:[]};
+const hasExtraSettings = site => (site.fields || []).length > 0;
 """ + functions + """
 expandSites();
-assert.deepEqual(openSites.value, ['alpha','hotel','tango'], 'R4: 每站都有代理/仿真开关，全部展开打开所有已启用站点');
+assert.deepEqual(openSites.value, ['tango'], '只有含额外配置的站点可展开');
 
 toggleSite('tango');
-assert.deepEqual(openSites.value, ['alpha','hotel']);
+assert.deepEqual(openSites.value, []);
 collapseSites();
 assert.deepEqual(openSites.value, []);
 
 expandSites();
-assert.equal(openSites.value.length, 3);
+assert.equal(openSites.value.length, 1);
 togglePicker();
 pendingSites.value.push('hotel','tango');
 assert.deepEqual(model.enabled_sites, ['alpha']);
@@ -41,10 +42,10 @@ togglePicker();
 assert.deepEqual(pendingSites.value, model.enabled_sites);
 """
     subprocess.run(['node', '-e', script], check=True, capture_output=True, text=True)
-    assert ':open="openSites.includes(site.id)"' in source
+    assert ':open="hasExtraSettings(site) && openSites.includes(site.id)"' in source
     assert '<summary @click.prevent>' in source
     assert 'class="btn ghost mini expand-icon"' in source
-    assert 'hasExtraSettings' not in source  # R4: 每站都有代理/仿真开关，展开按钮不再按 extra 门控
+    assert 'hasExtraSettings(site)' in source
     assert '@click.prevent="toggleSite(site.id)"' in source
     assert 'site-metadata' not in source  # 3.37 用户裁决：展开态不再显示站点类型/凭证/URL 行
     assert '@click="expandSites"' in source and '@click="collapseSites"' in source
@@ -64,8 +65,8 @@ def test_site_name_badges_and_equal_data_grid():
 
 def test_config_summary_actions_and_emulate_contract():
     source = (SRC / 'Config.vue').read_text(encoding='utf8')
-    summary = source.split(':open="openSites.includes(site.id)"><summary', 1)[1].split('</summary>', 1)[0]
-    assert summary.count('type="checkbox"') == 2
+    summary = source.split(':open="hasExtraSettings(site) && openSites.includes(site.id)"><summary', 1)[1].split('</summary>', 1)[0]
+    assert summary.count('type="checkbox"') == 5
     assert 'role="switch"' in summary
     assert 'v-if="site.login_capable"' not in summary  # 3.37 用户裁决：登录开关所有站点可见
     assert 'credentialBadge' in summary
@@ -115,13 +116,15 @@ assert.deepEqual(getSites(),registrySites.value);
 def test_custom_site_dialog_contract():
     source = (SRC / 'Config.vue').read_text(encoding='utf8')
     assert 'class="custom-entry"' not in source
+    assert 'removeCustomDraft' in source and 'saveCustomDraft' in source
+    assert 'class="custom-row custom-columns"' in source and 'class="btn confirm mini"' not in source
     assert '<dialog ref="customDialog"' in source
     assert '@click="editCustomSites"' in source
     assert 'customEnabled' not in source
-    assert '@click="deleteCustomSite(site.id)"' in source
-    assert 'model.custom_sites_data.push(updated)' in source
+    assert '@click="removeCustomDraft(site.id)"' in source
+    assert 'model.custom_sites_data = customDraft.value.map' in source
     assert 'model.sign_sites = model.sign_sites.filter' in source
-    assert 'customDialog.value.showModal()' in source
+    assert 'customDialog.value?.showModal()' in source
 
 
 def test_page_history_four_columns_without_evidence():
@@ -151,7 +154,7 @@ def test_inline_removal_requires_confirmation():
     assert '@click="pendingRemove = site.id"' in source
     assert '@click="confirmRemove(site.id)"' in source
     assert 'class="remove-site"' not in source
-    assert '@submit.prevent="saveCustomSite(site)"' in source
+    assert '@click="saveCustomDraft"' in source and 'custom-footer' in source
 
 
 def test_filtered_select_all_preserves_nonmatching_draft():
@@ -195,7 +198,7 @@ const stats=ref({sites:Array.from({length:12},(_,i)=>({id:i,
   name:'站点'+i}))});
 const history=ref({items:[{time:new Date().toISOString()},{time:'2020-01-02T03:04:05'},{time:'2020-01-02T04:04:05'}]});
 const showAllSites""" + functions + """
-assert.equal(trackStates.length,9); assert.deepEqual(trackStates[0],{key:'sign_success',label:'签到',cls:'success'});
+assert.equal(trackStates.length,8); assert.deepEqual(trackStates[0],{key:'sign_success',label:'签到成功',cls:'success'});
 assert.equal(visibleSites.value.length,8);
 assert.deepEqual(visibleSites.value.slice(0,2).map(s=>s.id),[10,11]);
 showAllSites.value=true; assert.equal(visibleSites.value.length,12);
@@ -203,8 +206,8 @@ toggleSiteFilter('sign_failed'); assert.equal(showAllSites.value,false); assert.
 toggleSiteFilter('sign_failed'); assert.equal(visibleSites.value.length,8);
 toggleSiteFilter('sign_unknown'); assert.deepEqual(visibleSites.value.map(s=>s.id),[11]);
 toggleSiteFilter('sign_unknown');
-toggleSiteFilter('off'); assert.equal(visibleSites.value.length,0);
-toggleSiteFilter('off');
+toggleSiteFilter('sign_pending'); assert.equal(visibleSites.value.length,0);
+toggleSiteFilter('sign_pending');
 const today=historyDay(new Date());
 assert.equal(historyDays.value.some(g=>g.day===today),false);
 assert.equal(dayIsOpen('2020-01-02'),false);
@@ -215,7 +218,7 @@ assert.equal(historyDay('bad'),'日期未知');
     subprocess.run(['node','-e',script],check=True,capture_output=True,text=True)
     card = source.split('<article ',1)[1].split('</article>',1)[0]
     assert 'site.uid' not in card and 'credential_source' not in card and 'site.time' not in card
-    assert 'signin_by_domain' in card and 'verify_site' in card
+    assert 'signin_by_domain' in card and 'toggleSitePaused' in source and 'paused_sites: [...paused]' in source
     assert 'site-icon' in card and '@error=' in card
 
 
@@ -229,3 +232,33 @@ async function get(path) {calls.push(path); const page=Number(new URLSearchParam
 loadHistory().then(result=>{assert.equal(result.items.length,205);assert.equal(calls.length,3);assert.equal(result.items[204].id,204)}).catch(e=>{console.error(e);process.exit(1)});
 """
     subprocess.run(['node','-e',script],check=True,capture_output=True,text=True)
+
+
+def test_config_pause_control_keeps_enabled_sites_and_switch_order():
+    source = (SRC / 'Config.vue').read_text(encoding='utf8')
+    assert 'async function togglePaused(site)' in source
+    assert 'paused_sites: next' in source and 'model.paused_sites = next' in source
+    assert "selected = computed(() => sites.value.filter(s => model.enabled_sites.includes(s.id)))" in source
+    card = source.split('<span class="row-right">', 1)[1].split('</span></summary>', 1)[0]
+    ordered = [' 代理', ' 仿真', ' 云签', ' 签到', ' 登录']
+    positions = [card.index(label) for label in ordered]
+    assert positions == sorted(positions)
+    assert 'class="pwr"' in source and "'恢复执行' : '暂停执行'" in source
+
+
+def test_page_filter_states_are_eight_single_select_and_blank_message():
+    source = (SRC / 'Page.vue').read_text(encoding='utf8')
+    assert source.count("{key:") >= 8
+    assert "sign_pending: pending(s)" in source and "login_pending: pending(l)" in source
+    assert "siteFilter.value === key ? '' : key" in source
+    assert "cardMessage(site) || '—'" not in source
+    card = source.split('<div class="site-caps"', 1)[1].split('</div>', 1)[0]
+    assert 'CF盾' not in card
+
+
+def test_custom_dialog_has_sticky_single_header():
+    source = (SRC / 'Config.vue').read_text(encoding='utf8')
+    assert source.count('class="custom-table-head"') == 1
+    assert 'position:sticky' in (SRC / 'preview.css').read_text(encoding='utf8')
+    row = source.split('class="custom-row custom-columns"', 1)[1].split('</div>', 1)[0]
+    assert '<span>站点名称</span>' not in row and '<span>站点地址</span>' not in row

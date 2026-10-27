@@ -8,6 +8,7 @@
   "end_hour": 24,
   "queue_cnt": 5,
   "enabled_sites": [],
+  "paused_sites": [],
   "sign_sites": [],
   "login_sites": [],
   "retry_count": 3,
@@ -27,5 +28,8 @@
   "mteam_password": "",
   "mteam_totp": "",
   "yzyy_username": "",
-  "yzyy_password": ""
+  "yzyy_password": "",
+  "ourbits_username": "",
+  "ourbits_password": "",
+  "ourbits_totp": ""
 }

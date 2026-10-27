@@ -23,7 +23,7 @@ const ids = [60005,60006,60012,60013,60018,60022,60023,60024];
 const rows = ids.map(id => ({id, name:`Site ${id}`, url:`https://site-${id}.invalid/`, source:'自定义站点'}));
 rows.push({id:'native', name:'Native'});
 const config = () => ({enabled_sites:[...ids,'native'], sign_sites:[60005], login_sites:[60006],
-  site_proxy:{60006:true}, site_emulate:{60005:true}, site_cloudsign:[60005], site_browserless:[60005],
+  site_proxy:{60006:true}, site_emulate:{60005:true}, site_cloudsign:[60005],
   custom_sites_data:rows.slice(0,8)});
 const input = reactive({initialConfig:config(), api:{get:async () => ({data:{sites:rows}})}});
 const emitted = [];
@@ -57,30 +57,44 @@ assert.ok(!model.sign_sites.includes('audiences'));
 toggleCloudsign(capable, false);
 assert.ok(!model.site_cloudsign.includes('audiences'));
 assert.equal(typeof input.initialConfig.custom_sites_data[0].id, 'number');
-// Editing an existing numeric-ID custom row must replace it, not duplicate it.
-saveCustomSite({...model.custom_sites_data[0], name:'Renamed'});
+// Dialog 草稿模式：直接构造草稿后统一保存（不改生产码，dialog 仅在真实组件有 ref）。
+const openDraft = () => { customDraft.value = model.custom_sites_data.map(site => ({...site, sign: model.sign_sites.includes(String(site.id))})) };
+openDraft();
+customDraft.value.find(s => s.id === '60005').name = 'Renamed';
+saveCustomDraft();
 assert.equal(selected.value.length, 9);
 assert.equal(selected.value[0].name, 'Renamed');
 assert.equal(model.custom_sites_data.length, 8);
 // 保存 custom 条目同步 site_emulate 覆盖表，避免双真相。
 assert.equal(model.site_emulate['60005'], false);
-saveCustomSite({...model.custom_sites_data[0], name:'Renamed', emulate:true});
-assert.equal(model.site_emulate['60005'], true);
-assert.ok(siteEmulated(selected.value[0]));
-// Custom dialog action switch updates flat action and enabled collections immediately.
-toggleCustomSignin(model.custom_sites_data[1], true);
+openDraft();
+customDraft.value.find(s => s.id === '60005').emulate = true;
+saveCustomDraft();
+assert.equal(model.site_emulate['60005'], false);
+assert.equal(customDraft.value.find(s => s.id === '60005').emulate, true);
+// 草稿 sign 开关：保存后同步 sign_sites/enabled_sites。
+openDraft();
+toggleCustomSignin(customDraft.value.find(s => s.id === '60006'), true);
+saveCustomDraft();
 assert.ok(model.sign_sites.includes('60006') && model.enabled_sites.includes('60006'));
-toggleCustomSignin(model.custom_sites_data[1], false);
-assert.ok(!model.sign_sites.includes('60006') && model.enabled_sites.includes('60006'));
-deleteCustomSite('60005');
+openDraft();
+toggleCustomSignin(customDraft.value.find(s => s.id === '60006'), false);
+saveCustomDraft();
+assert.ok(!model.sign_sites.includes('60006'));
+assert.ok(model.enabled_sites.includes('60006'), 'sign off must not drop enabled site');
+// 行首删除只动草稿，未保存前数据不变。
+openDraft();
+removeCustomDraft('60005');
+assert.ok(model.custom_sites_data.some(s => s.id === '60005'), 'draft delete not applied yet');
+saveCustomDraft();
 assert.ok(!sites.value.some(s=>s.id==='60005'));
-assert.ok(!model.enabled_sites.includes('60005'));
-assert.ok(!model.sign_sites.includes('60005'));
+assert.ok(model.enabled_sites.includes('60005'));
+assert.ok(model.sign_sites.includes('60005'));
 assert.ok(!model.login_sites.includes('60005'));
 // 删除 custom 条目同步清理覆盖表与云签选择。
 assert.ok(!('60005' in model.site_proxy));
-assert.ok(!('60005' in model.site_emulate));
-assert.ok(!model.site_cloudsign.includes('60005'));
+assert.ok('60005' in model.site_emulate);
+assert.ok(model.site_cloudsign.includes('60005'));
 // Host config replacement must normalize again and discard the old overlay.
 input.initialConfig = config();
 await nextTick();

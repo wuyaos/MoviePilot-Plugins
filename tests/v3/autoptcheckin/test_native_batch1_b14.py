@@ -17,6 +17,13 @@ from autoptcheckin.sites.native.luckpt import LuckPT
 from autoptcheckin.sites.native.mteam import MTorrent
 from autoptcheckin.sites.native.muxuege import Muxuege
 
+def _bind_registry(plugin, module):
+    plugin._registry = lambda: module.get_registry(
+        getattr(plugin, "_config", {}).get("custom_sites_data", []),
+        sign_sites=getattr(plugin, "_config", {}).get("sign_sites", []),
+    )
+
+
 HTML_SITES = [Kelu, LaJiDui, LuckPT, Muxuege]
 SITES = HTML_SITES + [MTorrent]
 SPECIAL = [Kelu, LaJiDui, MTorrent]
@@ -108,7 +115,8 @@ def test_b14_unverified_enabled_and_selected_executes(monkeypatch, site_cls, rea
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
     plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
-    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+    _bind_registry(plugin, module)
+    monkeypatch.setattr(module, "get_registry", lambda *args, **kwargs: {"sites": [
         dict(id=site_cls.id, native=True, verified=False, hook_implemented=True,
              signin_capable=True, signin_applicable=True)]})
     monkeypatch.setattr(module, "managed_site", lambda sid: {})
@@ -127,7 +135,8 @@ def test_b14_hook_attribute_no_longer_blocks_execution(monkeypatch, site_cls, re
     module = importlib.import_module("autoptcheckin")
     plugin = module.AutoPtCheckin()
     plugin._config = {"enabled_sites": [site_cls.id], "sign_sites": [site_cls.id]}
-    monkeypatch.setattr(module, "get_registry", lambda *args: {"sites": [
+    _bind_registry(plugin, module)
+    monkeypatch.setattr(module, "get_registry", lambda *args, **kwargs: {"sites": [
         dict(id=site_cls.id, native=True, verified=True, hook_implemented=False,
              signin_capable=True, signin_applicable=False)]})
     monkeypatch.setattr(module, "managed_site", lambda sid: {})

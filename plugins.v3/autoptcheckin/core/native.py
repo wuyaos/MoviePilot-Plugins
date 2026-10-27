@@ -252,8 +252,8 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
             # Never replay an uncertain submission or switch on a network failure.
             if result.status != SignStatus.AUTH_FAILED:
                 break
-        if site.id == 'yzyy' and not read_only and result.status == SignStatus.AUTH_FAILED:
-            from ..integrations import yzyy
+        password_hook = _password_login_hook(site.id)
+        if password_hook and not read_only and result.status == SignStatus.AUTH_FAILED:
             attempted_cookie_sources.append('password_login')
             session = None
             try:
@@ -263,7 +263,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                     import requests
                     session = requests.Session()
                     ctx.http.session = session
-                login = yzyy.login(ctx.http, {**info, **(config or {})})
+                login = password_hook(ctx.http, {**info, **(config or {})})
                 persist_cookie_result(login, ctx.http, site.id, 'password_login', get_data, save_data)
                 if login.status == LoginStatus.LOGIN_OK:
                     result = site.signin(ctx)
@@ -278,6 +278,17 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                         pass
         result.metadata['cookie_sources'] = attempted_cookie_sources
         return finish(result)
+
+
+def _password_login_hook(site_id):
+    """Cookie 全源失效后的账密兜底登录 hook（yzyy=Discuz 表单、ourbits=NexusPHP 表单）。"""
+    if site_id == 'yzyy':
+        from ..integrations import yzyy
+        return yzyy.login
+    if site_id == 'ourbits':
+        from ..integrations import ourbits as ourbits_login
+        return ourbits_login.login
+    return None
 
 
 def load_cookie_table(get_data):
@@ -456,11 +467,11 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
                             pass
                 if result.status != LoginStatus.AUTH_FAILED:
                     break
-            if site.id == 'yzyy' and result.status == LoginStatus.AUTH_FAILED:
-                from ..integrations import yzyy
+            password_hook = _password_login_hook(site.id)
+            if password_hook and result.status == LoginStatus.AUTH_FAILED:
                 attempted_cookie_sources.append('password_login')
                 client = NativeHttpClient(Credential('password_login', ''), info)
-                result = yzyy.login(client, {**info, **(config or {})})
+                result = password_hook(client, {**info, **(config or {})})
                 persist_cookie_result(result, client, site.id, 'password_login', get_data, save_data)
         except Exception as exc:
             result = LoginResult(LoginStatus.UNCONFIRMED, f'原生登录执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])

@@ -116,8 +116,8 @@ def test_login_only_gates_before_credentials(monkeypatch, site_id, read_only):
     plugin = module.AutoPtCheckin()
     row = next(row for row in discover_sites()['sites'] if row['id'] == site_id)
     assert row['hook_implemented'] and row['signin_capable'] is False
-    monkeypatch.setattr(module, 'get_registry', lambda *a: {'sites': [dict(row)]})
-    monkeypatch.setattr(module, 'managed_site', lambda *a: pytest.fail('must not resolve credentials'))
+    monkeypatch.setattr(module, 'get_registry', lambda *a, **kwargs: {'sites': [dict(row)]})
+    monkeypatch.setattr(module, 'managed_site', lambda *a, **kwargs: pytest.fail('must not resolve credentials'))
     result = plugin._execute_site(site_id, read_only=read_only)
     assert result['status'] == 'skipped' and result['metadata']['reason'] == 'signin_not_applicable'
     runner = SimpleNamespace(history=None, notify=None)
