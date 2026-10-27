@@ -27,6 +27,7 @@ class SelectionItem(ApiBusinessModel):
     title: str
     value: str | int
     type: Optional[str] = None
+    domain: Optional[str] = None
 
 
 class RenameRecord(ApiBusinessModel):

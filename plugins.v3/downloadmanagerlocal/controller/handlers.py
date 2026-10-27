@@ -9,7 +9,7 @@ from app.sdk.logging import logger
 from fastapi import HTTPException
 from pydantic import BaseModel
 
-from ..adapter.moviepilot import get_downloader_service, list_builtin_sites
+from ..adapter.moviepilot import get_downloader_service, get_url_domain, list_builtin_sites
 from ..model.api import (
     ApiBusinessModel,
     DiagnosticsResult,
@@ -304,7 +304,8 @@ def api_downloaders(plugin):
 def api_sites(plugin):
     """返回 V3 站点数据库中的可用站点列表。"""
     try:
-        result = [{"title": site.name, "value": site.id}
+        result = [{"title": site.name, "value": site.id,
+                   "domain": get_url_domain(getattr(site, "domain", None) or getattr(site, "url", "") or "")}
                   for site in list_builtin_sites()]
         return [SelectionItem.model_validate(item) for item in result]
     except Exception as e:
