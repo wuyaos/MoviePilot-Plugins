@@ -13,8 +13,8 @@ from .recheck import (
     seed_is_timeout,
 )
 from ..utils.torrent_adapter import (
-    get_torrent_state, is_torrent_active, skipverify_applies, supports_recheck,
-    torrent_is_complete,
+    get_torrent_state, is_torrent_active, normalize_hash, skipverify_applies,
+    supports_recheck, torrent_is_complete,
 )
 
 
@@ -106,7 +106,7 @@ def begin_transfer(
         download_id = add_target()
         if not download_id:
             raise RuntimeError("添加目标任务失败")
-        item["hash"] = download_id
+        item["hash"] = normalize_hash(download_id)
         item["phase"] = "target_added"
         save_transaction(plugin, item)
     except Exception as exc:

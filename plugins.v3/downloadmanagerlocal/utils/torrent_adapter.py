@@ -79,10 +79,26 @@ def _timestamp(value: Any) -> float:
             return 0.0
     return _number(value)
 
+# Transmission 的「暂停」状态文本：transmission-rpc 归一回 "stopped"，
+# qB 形态的 stoppedUP/stoppedDL 一并接受，便于跨客户端复用同一判定。
+_STOPPED_STATES = frozenset({"stopped", "stoppedup", "stoppeddl", "paused", "pausedup", "pauseddl"})
+
+
+def _state_value(value: Any) -> Any:
+    """取状态字段的真实值：Enum 成员（transmission-rpc 的 Status 是 str 枚举）取 value。
+
+    直接对 str 枚举取 `.name` 会得到 "STOPPED"，与 "stopped" 不相等；
+    先取 `.value` 再比较文本才是可靠做法。
+    """
+    if value is None:
+        return None
+    inner = getattr(value, "value", None)
+    return inner if inner is not None else value
+
 
 def classify_torrent_state(state: Any, downloaded_bytes: int, total_bytes: int) -> str:
     """把 qBittorrent/Transmission 状态归一为监控状态类别。"""
-    raw_state = getattr(state, "name", None) or getattr(state, "value", None) or state or ""
+    raw_state = _state_value(state) or ""
     normalized = str(raw_state).replace("_", "").replace(" ", "").lower()
 
     if total_bytes > 0 and downloaded_bytes >= total_bytes:
@@ -123,7 +139,7 @@ def normalize_torrent(torrent: Any, downloader_id: str, downloader_type: str) ->
         torrent, "added_on", "added_date", "date_added", "dateAdded", default=0,
     ))
     state = _read(torrent, "state", "status", default="")
-    state_text = str(getattr(state, "name", None) or getattr(state, "value", None) or state or "")
+    state_text = str(_state_value(state) or "")
     save_path = _read(torrent, "save_path", "download_dir", "downloadDir", default="")
     speed = _number(_read(
         torrent, "dlspeed", "download_speed", "rate_download", "rateDownload", default=0,
@@ -185,13 +201,22 @@ def delete_torrent_with_files(
     return result
 
 
+def normalize_hash(value: Any) -> str:
+    """统一哈希大小写：qB/TR 一律小写，rTorrent（ruTorrent）回报大写。
+
+    跨客户端比较与查询前必须归一，否则把 rt 的大写哈希丢给 Transmission 会得到
+    `torrent ids XXXXXXXX is not valid`（transmission-rpc 只接受小写 40 位十六进制）。
+    """
+    return str(value or "").strip().lower()
+
+
 def get_hash(torrent: Any, dl_type: str) -> str:
-    """获取种子 hash。"""
+    """获取种子 hash（统一小写）。"""
     if dl_type == "qbittorrent":
-        return torrent.get("hash", "")
+        return normalize_hash(torrent.get("hash", ""))
     if dl_type == "rtorrent":
-        return _read(torrent, "hash", "hashString", "hash_string", default="")
-    return _read(torrent, "hashString", "hash_string", default="")
+        return normalize_hash(_read(torrent, "hash", "hashString", "hash_string", default=""))
+    return normalize_hash(_read(torrent, "hashString", "hash_string", default=""))
 
 
 def _split_labels(labels: Any) -> List[str]:
@@ -289,8 +314,16 @@ def is_torrent_active(torrent: Any, dl_type: str) -> bool:
         return int(_number(_read(torrent, "state", default=0))) != 0
     if dl_type == "qbittorrent":
         return torrent.get("state") not in ("pausedUP", "pausedDL", "stoppedUP", "stoppedDL")
-    state = _read(torrent, "status", "state", default=None)
-    return str(getattr(state, "name", None) or str(state)) != "stopped"
+    state = _state_value(_read(torrent, "status", "state", default=None))
+    if state is None or state == "":
+        # 读不到状态时按「仍活动」处理，避免在未确认暂停的情况下继续转移。
+        return True
+    if isinstance(state, bool):
+        return state
+    if isinstance(state, (int, float)):
+        # transmission-rpc 归一后是字符串，但部分形态仍是原始状态码（0=stopped）。
+        return int(state) != 0
+    return str(state).strip().lower() not in _STOPPED_STATES
 
 
 def skipverify_applies(dl_type: str) -> bool:

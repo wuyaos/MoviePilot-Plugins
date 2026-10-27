@@ -174,20 +174,24 @@ def _tr_export(instance: Any, info_hash: str, service: Any = None,
     2. torrent-get `torrentFile` 路径 → 扩展配置映射后的本机路径直接读
     3. 扩展配置 local_torrent_dir / 全局「源种子文件路径」下 {hash}.torrent
     """
-    arguments = {"ids": [info_hash], "fields": ["torrent"]}
+    # TR 4 已移除 `torrent` 字段：只请求它会被判为「no fields specified」，
+    # 因此连同 torrentFile 一次取回（TR 4 返回 null，TR 3 返回 base64 元数据）。
+    arguments = {"ids": [info_hash], "fields": ["torrent", "torrentFile"]}
     rows: Any = None
     if service is not None and _downloader_credentials(service)["host"]:
         rows = (_tr_rpc(service, "torrent-get", arguments) or {}).get("torrents")
     else:
         trc = getattr(instance, "trc", None) or instance
         try:
-            rows = trc.get_torrents(ids=[info_hash], arguments=["torrent"])
+            rows = trc.get_torrents(ids=[info_hash], arguments=["torrent", "torrentFile"])
         except Exception as err:
             logger.warning(f"【PT下载中心:转移做种】TR 获取种子元数据失败 {info_hash[:8]}：{err}")
             rows = None
     metainfo = None
+    remote_path = ""
     if rows:
         metainfo = _tr_first_field(rows[0], "torrent")
+        remote_path = str(_tr_first_field(rows[0], "torrentFile") or "")
     if metainfo:
         try:
             decoded = base64.b64decode(metainfo)
@@ -197,8 +201,7 @@ def _tr_export(instance: Any, info_hash: str, service: Any = None,
         if decoded:
             return decoded
 
-    remote_path = ""
-    if service is not None and _downloader_credentials(service)["host"]:
+    if not remote_path and service is not None and _downloader_credentials(service)["host"]:
         file_rows = (_tr_rpc(service, "torrent-get",
                              {"ids": [info_hash], "fields": ["torrentFile"]}) or {}).get("torrents")
         if file_rows:
