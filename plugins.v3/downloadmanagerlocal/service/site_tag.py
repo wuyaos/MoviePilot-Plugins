@@ -46,10 +46,10 @@ def release_temporary_tag(plugin, dl, torrent_hash: str, tag: str, source: str) 
         if success:
             dl.delete_torrents_tag(ids=torrent_hash, tag=tag)
         else:
-            logger.warning(f"{source}：临时标签回收失败 hash={torrent_hash} tag={tag}")
+            logger.warning(f"[PT下载中心:站点标签]{source}：临时标签回收失败 hash={torrent_hash} tag={tag}")
         return success
     except Exception as err:
-        logger.warning(f"{source}：临时标签回收异常 hash={torrent_hash} tag={tag}: {err}")
+        logger.warning(f"[PT下载中心:站点标签]{source}：临时标签回收异常 hash={torrent_hash} tag={tag}: {err}")
         return False
     finally:
         forget_temporary_tag(plugin, tag)
@@ -102,7 +102,7 @@ def cleanup_temporary_tags_for_event(plugin, event) -> dict:
         else:
             torrents, error = response, None
     except Exception as err:
-        logger.warning(f"下载新增事件：读取任务失败 downloader={downloader_name} hash={torrent_hash}: {err}")
+        logger.warning(f"[PT下载中心:站点标签]下载新增事件：读取任务失败 downloader={downloader_name} hash={torrent_hash}: {err}")
         return {
             "handled": True,
             "downloader": downloader_name,
@@ -184,7 +184,7 @@ def cleanup_temporary_tags_for_event(plugin, event) -> dict:
 
     if removed:
         logger.info(
-            "下载新增事件：自动移除临时标签 downloader=%s hash=%s tags=%s",
+            "[PT下载中心:站点标签]下载新增事件：自动移除临时标签 downloader=%s hash=%s tags=%s",
             downloader_name,
             current_hash,
             ",".join(removed),
@@ -257,7 +257,7 @@ def _remove_tag_snapshot(dl, tag: str, hashes: Iterable[str]) -> dict:
             "definition_deleted": definition_deleted,
         }
     except Exception as err:
-        logger.warning(f"标签清理失败 tag={tag} count={len(unique_hashes)}: {err}")
+        logger.warning(f"[PT下载中心:站点标签]标签清理失败 tag={tag} count={len(unique_hashes)}: {err}")
         return {"ok": False, "removed": 0, "definition_deleted": False, "error": str(err)}
 
 
@@ -324,7 +324,7 @@ def scan_and_clean_tags(plugin, downloader_names: Iterable[str]) -> dict:
 
     if auto_removed:
         logger.info(
-            "标签清理扫描：自动移除临时标签 %s 个，任务关联 %s 条",
+            "[PT下载中心:站点标签]标签清理扫描：自动移除临时标签 %s 个，任务关联 %s 条",
             len(auto_removed),
             sum(item["removed"] for item in auto_removed),
         )
@@ -385,7 +385,7 @@ def execute_tag_cleanup(plugin, removals: Iterable[dict]) -> dict:
             failed.append(result)
 
     logger.info(
-        "标签清理执行：成功标签 %s 个，任务关联 %s 条，失败 %s 个",
+        "[PT下载中心:站点标签]标签清理执行：成功标签 %s 个，任务关联 %s 条，失败 %s 个",
         len(removed),
         sum(item["removed"] for item in removed),
         len(failed),
@@ -440,13 +440,13 @@ def tag_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags: list,
                 break
 
         if not site_name:
-            logger.info(f"转移后标签：无法识别站点 hash={torrent_hash}")
+            logger.info(f"[PT下载中心:站点标签]转移后标签：无法识别站点 hash={torrent_hash}")
             return False
 
         # 构造标签
         site_tag = (plugin._tag_siteprefix + site_name) if plugin._tag_siteprefix else site_name
         if site_tag in torrent_tags:
-            logger.info(f"转移后标签：标签已存在 hash={torrent_hash}")
+            logger.info(f"[PT下载中心:站点标签]转移后标签：标签已存在 hash={torrent_hash}")
             return True
 
         # 设置标签
@@ -454,10 +454,10 @@ def tag_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags: list,
             dl.set_torrents_tag(ids=torrent_hash, tags=[site_tag])
         else:
             dl.set_torrent_tag(ids=torrent_hash, tags=[site_tag])
-        logger.info(f"转移后标签成功: hash={torrent_hash} tag={site_tag}")
+        logger.info(f"[PT下载中心:站点标签]转移后标签成功: hash={torrent_hash} tag={site_tag}")
         return True
     except Exception as e:
-        logger.error(f"转移后标签失败 hash={torrent_hash}: {e}")
+        logger.error(f"[PT下载中心:站点标签]转移后标签失败 hash={torrent_hash}: {e}")
         return False
 
 
@@ -613,7 +613,7 @@ def _apply_metadata(plugin, service, torrent, config: dict, context=None) -> dic
     if not title and media_info:
         title = getattr(media_info, "title", None)
     current_tags = normalize_tags(get_label(torrent, service.type))
-    trackers = _torrent_trackers(torrent, service.type)
+    trackers = _torrent_trackers(torrent, service.type) or (service.instance.get_trackers(torrent_hash) if torrent_hash and hasattr(service.instance, "get_trackers") else []) or []
     site_name = None
     for tracker in trackers:
         domain = next((mapped for key, mapped in config["tracker_mappings"].items() if key in tracker), None)
@@ -633,7 +633,7 @@ def _apply_metadata(plugin, service, torrent, config: dict, context=None) -> dic
     if category == current_category:
         category = None
     if not tags and not category:
-        return {"ok": True, "changed": False, "hash": torrent_hash, "site": site_name}
+        return {"ok": True, "changed": False, "hash": torrent_hash, "site": site_name, "history": bool(history)}
     if tags:
         if service.type == "qbittorrent":
             service.instance.set_torrents_tag(ids=torrent_hash, tags=tags)
@@ -645,8 +645,7 @@ def _apply_metadata(plugin, service, torrent, config: dict, context=None) -> dic
         except Exception:
             service.instance.qbc.torrents_createCategory(name=category)
             torrent.setCategory(category=category)
-    return {"ok": True, "changed": True, "hash": torrent_hash, "tags": tags, "category": category, "site": site_name}
-
+    return {"ok": True, "changed": True, "hash": torrent_hash, "tags": tags, "category": category, "site": site_name, "history": bool(history)}
 
 def _selected_services(plugin, config: dict):
     names = config["downloaders"]
@@ -661,21 +660,41 @@ def complement_history(plugin, config: dict | None = None) -> dict:
     cfg = build_tag_config(config or getattr(plugin, "_site_tag_config", None))
     state = _module_state(plugin)
     result = {"completed": 0, "skipped": 0, "downloaders": {}}
+    summary = {"history_hit": 0, "site_resolved": 0, "no_change": 0}
     for service in _selected_services(plugin, cfg):
         torrents, error = service.instance.get_torrents()
         if error:
             result["skipped"] += 1
+            logger.warning(f"[PT下载中心:站点标签] 补全：下载器 {service.name} 获取种子失败，跳过")
             continue
         matched = 0
         for torrent in torrents or []:
             outcome = _apply_metadata(plugin, service, torrent, cfg)
+            if outcome.get("history"):
+                summary["history_hit"] += 1
+            if outcome.get("site"):
+                summary["site_resolved"] += 1
             if outcome.get("changed"):
                 matched += 1
                 result["completed"] += 1
+                logger.info(
+                    f"[PT下载中心:站点标签] 补全：{service.name} {outcome.get('hash', '')[:8]} "
+                    f"tags={outcome.get('tags')} category={outcome.get('category')} site={outcome.get('site')}"
+                )
             elif not outcome.get("ok"):
                 result["skipped"] += 1
+            else:
+                summary["no_change"] += 1
         result["downloaders"][service.name] = matched
         state["matched"][service.name] = matched
+        logger.info(
+            f"[PT下载中心:站点标签] 补全：{service.name} 扫描 {len(torrents or [])} 条，"
+            f"补全 {matched} 条，无变更 {summary['no_change']} 条"
+        )
+    logger.info(
+        f"[PT下载中心:站点标签] 历史补全汇总：补全 {result['completed']}，跳过 {result['skipped']}，"
+        f"历史命中 {summary['history_hit']}，站点解析 {summary['site_resolved']}，无变更 {summary['no_change']}"
+    )
     state["completed"] = result["completed"]
     state["skipped"] = result["skipped"]
     if cfg["enable_del_tags"]:
