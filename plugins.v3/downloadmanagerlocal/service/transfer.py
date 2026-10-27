@@ -15,7 +15,7 @@ from ..utils.name_cleaner import is_dirty_renamed_torrent_name
 from ..utils.torrent_adapter import get_label, get_save_path, get_torrent_name, get_tracker_urls
 from .recheck import _queue_lock, load_seed_recheck_queue, ensure_seed_recheck_worker, seed_is_ready, seed_is_error
 from .transfer_pipeline import begin_transfer, delete_source
-from .rename import _get_torrent_content_name, resolve_retry_original_name
+from .rename import _get_torrent_content_name, build_rename_config, resolve_retry_original_name
 from .site_tag import create_temporary_tag, forget_temporary_tag, release_temporary_tag
 from .transfer_tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated
 from .payload_export import get_torrent_payloads
@@ -473,25 +473,51 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
         return
     plugin._retry_failed_renames(to_service)
 
+def _rename_retry_downloaders(plugin) -> list:
+    """一键补刀的目标下载器与定时扫描保持一致：优先 rename_downloaders，旧单链路 todownloader 作回退。"""
+    rename_config = build_rename_config(getattr(plugin, "_rename_config", None))
+    downloaders = [
+        str(item).strip() for item in (rename_config.get("downloader") or []) if str(item).strip()
+    ]
+    if not downloaders:
+        legacy = str(getattr(plugin, "_todownloader", "") or "").strip()
+        if legacy:
+            downloaders = [legacy]
+    return downloaders
+
+
 def retry_pending_renames(plugin):
     """独立补刀重命名，避免转移扫描提前返回时跳过旧污染记录修复。"""
-    if not plugin._todownloader:
+    downloaders = _rename_retry_downloaders(plugin)
+    if not downloaders:
         return {"code": 1, "msg": "未配置目标下载器", "history": 0, "dirty": 0, "total": 0}
     try:
-        to_service = plugin.service_info(plugin._todownloader)
-        if not to_service or not to_service.instance:
-            logger.warning("[PT下载中心:转移做种]转移做种兜底服务：目标下载器不可用，跳过重命名补刀")
+        history_count = 0
+        dirty_count = 0
+        attempted = 0
+        failed = 0
+        skipped = 0
+        errors = []
+        unavailable = []
+        for downloader_name in downloaders:
+            to_service = plugin.service_info(downloader_name)
+            if not to_service or not to_service.instance:
+                unavailable.append(str(downloader_name))
+                logger.warning(
+                    f"【PT下载中心:命名补刀】目标下载器不可用，跳过补刀：{downloader_name}"
+                )
+                continue
+            history_result = plugin._retry_failed_renames(to_service) or {}
+            dirty_result = retry_dirty_torrent_names(plugin, to_service) or {}
+            history_count += int(history_result.get("success", 0) or 0)
+            dirty_count += int(dirty_result.get("success", 0) or 0)
+            attempted += int(history_result.get("attempted", 0) or 0) + int(dirty_result.get("attempted", 0) or 0)
+            failed += int(history_result.get("failed", 0) or 0) + int(dirty_result.get("failed", 0) or 0)
+            skipped += int(history_result.get("skipped", 0) or 0) + int(dirty_result.get("skipped", 0) or 0)
+            errors += list(history_result.get("errors", []) or []) + list(dirty_result.get("errors", []) or [])
+        if unavailable and len(unavailable) == len(downloaders):
             return {"code": 1, "msg": "目标下载器不可用，已跳过补刀", "history": 0, "dirty": 0, "total": 0}
-        history_result = plugin._retry_failed_renames(to_service) or {}
-        dirty_result = retry_dirty_torrent_names(plugin, to_service) or {}
-        history_count = int(history_result.get("success", 0) or 0)
-        dirty_count = int(dirty_result.get("success", 0) or 0)
-        history_failed = int(history_result.get("failed", 0) or 0)
-        dirty_failed = int(dirty_result.get("failed", 0) or 0)
-        skipped = int(history_result.get("skipped", 0) or 0) + int(dirty_result.get("skipped", 0) or 0)
         total = history_count + dirty_count
-        failed = history_failed + dirty_failed
-        errors = list(history_result.get("errors", []) or []) + list(dirty_result.get("errors", []) or [])
         code = 0 if failed == 0 else (2 if total > 0 else 1)
         return {
             "code": code,
@@ -499,7 +525,7 @@ def retry_pending_renames(plugin):
             "history": history_count,
             "dirty": dirty_count,
             "total": total,
-            "attempted": int(history_result.get("attempted", 0) or 0) + int(dirty_result.get("attempted", 0) or 0),
+            "attempted": attempted,
             "failed": failed,
             "skipped": skipped,
             "errors": errors,

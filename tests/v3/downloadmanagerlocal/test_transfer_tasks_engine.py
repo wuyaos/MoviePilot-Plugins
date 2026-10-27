@@ -96,6 +96,7 @@ def tr(monkeypatch):
             seed_is_timeout=Mock(return_value=False))
     _module(monkeypatch, PREFIX + ".rename",
             _get_torrent_content_name=Mock(return_value=""),
+            build_rename_config=Mock(return_value={"enabled": True, "downloader": []}),
             resolve_retry_original_name=Mock(return_value=""))
     _module(monkeypatch, PREFIX + ".site_tag",
             create_temporary_tag=Mock(), forget_temporary_tag=Mock(),
@@ -285,3 +286,67 @@ class TestValidateConfig:
         plugin = _make_plugin(fromdownloader="QB1", todownloader="QB2",
                               frompath="/a", topath="/b")
         assert tr.validate_config(plugin) is True
+
+
+class TestRetryPendingRenamesDownloaders:
+    """一键补刀的目标下载器必须与定时扫描一致：优先 rename_downloaders，回退旧单链路 todownloader。"""
+
+    @staticmethod
+    def _patch(tr, monkeypatch, *, rename_downloaders, legacy, available):
+        monkeypatch.setattr(
+            tr, "build_rename_config",
+            lambda cfg=None: {"enabled": True, "downloader": list(rename_downloaders)},
+        )
+        monkeypatch.setattr(
+            tr, "retry_dirty_torrent_names",
+            Mock(return_value={"attempted": 0, "success": 0, "failed": 0, "skipped": 0, "errors": []}),
+        )
+        plugin = MagicMock()
+        plugin._rename_config = {}
+        plugin._todownloader = legacy
+        services = {}
+        for name in (list(rename_downloaders) or [legacy]):
+            if not name:
+                continue
+            svc = MagicMock()
+            svc.instance = MagicMock() if name in available else None
+            services[name] = svc
+        plugin.service_info = Mock(side_effect=lambda n: services.get(n))
+        plugin._retry_failed_renames = Mock(return_value={"attempted": 1, "success": 1, "failed": 0})
+        return plugin
+
+    def test_uses_rename_downloaders_when_legacy_empty(self, tr, monkeypatch):
+        """回归：只配 rename_downloaders、todownloader 为空时，补刀不能再报「未配置目标下载器」。"""
+        plugin = self._patch(tr, monkeypatch, rename_downloaders=["QB2"], legacy="", available={"QB2"})
+        result = tr.retry_pending_renames(plugin)
+        plugin.service_info.assert_called_with("QB2")
+        assert result["code"] == 0
+        assert result["total"] == 1
+
+    def test_falls_back_to_legacy_single_downloader(self, tr, monkeypatch):
+        plugin = self._patch(tr, monkeypatch, rename_downloaders=[], legacy="QB1", available={"QB1"})
+        result = tr.retry_pending_renames(plugin)
+        plugin.service_info.assert_called_with("QB1")
+        assert result["code"] == 0
+
+    def test_reports_unconfigured_when_both_empty(self, tr, monkeypatch):
+        plugin = self._patch(tr, monkeypatch, rename_downloaders=[], legacy="", available=set())
+        result = tr.retry_pending_renames(plugin)
+        assert result["code"] == 1
+        assert result["msg"] == "未配置目标下载器"
+
+    def test_reports_unavailable_when_all_missing(self, tr, monkeypatch):
+        plugin = self._patch(tr, monkeypatch, rename_downloaders=["QB2", "QB3"], legacy="",
+                             available=set())
+        result = tr.retry_pending_renames(plugin)
+        assert result["code"] == 1
+        assert result["msg"] == "目标下载器不可用，已跳过补刀"
+
+    def test_aggregates_all_available_downloaders(self, tr, monkeypatch):
+        plugin = self._patch(tr, monkeypatch, rename_downloaders=["QB2", "QB3"], legacy="",
+                             available={"QB2", "QB3"})
+        result = tr.retry_pending_renames(plugin)
+        assert plugin._retry_failed_renames.call_count == 2
+        assert result["code"] == 0
+        assert result["total"] == 2
+        assert result["history"] == 2
