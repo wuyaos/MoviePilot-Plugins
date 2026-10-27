@@ -9,8 +9,6 @@
         "level": 1,
         "system_version": ">=3.0.0",
         "history": {
-            "3.8.3": "修复 Transmission 下载器重命名崩溃（rename_torrent 属性缺失时记录归档并跳过，不再中断整批补刀）",
-            "3.8.3": "修复 Transmission 下载器转移后重命名崩溃：MP 的 Transmission 封装无 rename_torrent 方法，转移链路内嵌重命名对该类下载器逐条 AttributeError 并拖慢全量补刀（300s 超时），现降级为跳过+归档原因；qnap 实测转移链路正常",
             "4.3.0": "ourbits 账密兜底登录（Cookie 全源失效后表单换取并回写 Cookie 表，2FA TOTP 可选：未配置不填 2fa_code 直接提交）；RetroToon 撤销九点暂缓逻辑，按页面实际状态判定（已签跳过、未签提交）；配置页凭据字段补我堡 TOTP（可选）",
             "4.2.0": "执行结果六值统一（signed/login_ok/failed/pending/skipped/cancelled，旧值兼容读取不批量改写）；unconfirmed 归 pending 不再计失败；通知三行（全部/本次分类/下轮待执行）与明细三分组（待处理含当日未执行）；数据页待处理卡取有效队列；站点锁互斥文案精确化；轮次无执行不推送",
             "4.1.0": "调度注册完整同步：配置保存/重载/模式切换后宿主任务集恒等于当前配置（remove+update 消除 cron/interval 切换与槽数变化的旧任务残留）；保存前校验 cron/interval/mode 非法直接拒绝",
@@ -198,6 +196,7 @@
         "level": 1,
         "system_version": ">=3.0.0",
         "history": {
+            "3.8.3": "修复 Transmission 下载器转移后重命名崩溃：MP 的 Transmission 封装无 rename_torrent 方法，转移链路内嵌重命名对该类下载器逐条 AttributeError 并拖慢全量补刀（300s 超时），现降级为跳过+归档原因；qnap 实测转移链路正常",
             "3.8.2": "修复模块定时任务全链失效：插件服务声明按 MP V3 调度协议把函数参数从 kwargs 键改为 func_kwargs（kwargs 仅保留 APScheduler 触发器参数），此前定时触发一律以缺参报错（如 complement_history() missing 'plugin'）；qnap 实测 cron 触发正常",
             "3.8.1": "H&R 站点白名单存量迁移：加载时按当前站点库把旧数字站点 ID 自动转换成站点名并回写配置，站点库中已不存在的 ID 提示后忽略；设置页命名补刀模板与过滤区重排（标签过滤在前，命名模板/排除目录/hash 白名单等大输入框统一下沉）",
             "3.8.0": "数据页恢复页签结构（运行总览/H&R 任务/删种记录/失败清理/命名历史/站点标签/上传限速/运行诊断），模块卡与记录表按页签归位、状态与操作卡等高；H&R 站点白名单改存站点名（旧数字站点 id 加载时自动丢弃，避免站点库重建后白名单漂移失效）；设置页大输入框（映射/路径规则）统一下沉到区块底部",
