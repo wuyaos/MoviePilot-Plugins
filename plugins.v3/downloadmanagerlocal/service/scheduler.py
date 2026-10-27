@@ -62,7 +62,7 @@ def _build_autoremove_services(plugin) -> List[Dict[str, Any]]:
         "name": REMOVER_SERVICE_NAME,
         "trigger": trigger,
         "func": service.run_cycle,
-        "kwargs": {"trigger_source": "定时"},
+        "func_kwargs": {"trigger_source": "定时"},
     }]
 
 
@@ -81,7 +81,7 @@ def _build_failclean_services(plugin) -> List[Dict[str, Any]]:
         "name": FAILCLEAN_REPEAT_SERVICE_NAME,
         "trigger": trigger,
         "func": service.cleanup_repeat_sources,
-        "kwargs": {},
+        "func_kwargs": {},
     }]
 
 
@@ -100,7 +100,7 @@ def _build_site_tag_services(plugin) -> List[Dict[str, Any]]:
         "name": "站点标签历史补全",
         "trigger": trigger,
         "func": complement_history,
-        "kwargs": {"plugin": plugin},
+        "func_kwargs": {"plugin": plugin},
     }]
 
 
@@ -122,7 +122,7 @@ def _build_rename_services(plugin) -> List[Dict[str, Any]]:
         "name": "命名补刀扫描",
         "trigger": trigger,
         "func": scan_renames,
-        "kwargs": {"plugin": plugin},
+        "func_kwargs": {"plugin": plugin},
     }]
 
 
@@ -157,7 +157,7 @@ def _build_hr_services(plugin) -> List[Dict[str, Any]]:
             "name": HR_SUMMARY_SERVICE_NAME,
             "trigger": trigger,
             "func": service.send_summary,
-            "kwargs": {},
+            "func_kwargs": {},
         })
 
     return services
