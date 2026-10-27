@@ -3600,6 +3600,7 @@ return (_ctx, _cache) => {
                   ]),
                   _: 1
                 }),
+                _cache[152] || (_cache[152] = _createElementVNode("div", { class: "dm-section-title mt-2" }, "分类规则", -1)),
                 (!form.tag_rename_type)
                   ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                       _createElementVNode("div", _hoisted_58, [
@@ -3684,6 +3685,7 @@ return (_ctx, _cache) => {
                       _cache[146] || (_cache[146] = _createElementVNode("div", { class: "dm-hint" }, " 当前模式：按下载保存路径包含的关键词判断分类（如 /anime/#动漫），一行不命中则不设分类；关闭上方开关则改按 TMDB 识别设置分类。 ", -1))
                     ], 64))
                   : _createCommentVNode("", true),
+                _cache[153] || (_cache[153] = _createElementVNode("div", { class: "dm-section-title mt-4" }, "站点规则", -1)),
                 _createElementVNode("div", _hoisted_61, [
                   _cache[149] || (_cache[149] = _createElementVNode("div", { class: "dm-map-row dm-map-row--head" }, [
                     _createElementVNode("span", null, "Tracker 域名"),
@@ -3766,19 +3768,19 @@ return (_ctx, _cache) => {
                     _: 1
                   })
                 ]),
-                _cache[152] || (_cache[152] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 种子 Tracker 域名按行换算成站点库域名后匹配站点打「站点前缀 + 站点名」标签；右侧显示按域名匹配到的站点名，「未收录」表示站点库没有该域名。 ", -1))
+                _cache[154] || (_cache[154] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 种子 Tracker 域名按行换算成站点库域名后匹配站点打「站点前缀 + 站点名」标签；右侧显示按域名匹配到的站点名，「未收录」表示站点库没有该域名。 ", -1))
               ], 512), [
                 [_vShow, activeSub.value === 'mapping']
               ]),
               _withDirectives(_createElementVNode("div", _hoisted_65, [
-                _cache[154] || (_cache[154] = _createElementVNode("div", { class: "dm-section-title" }, "基础设置", -1)),
+                _cache[156] || (_cache[156] = _createElementVNode("div", { class: "dm-section-title" }, "基础设置", -1)),
                 _createVNode(_component_VAlert, {
                   type: "info",
                   variant: "tonal",
                   density: "compact",
                   class: "mb-4"
                 }, {
-                  default: _withCtx(() => [...(_cache[153] || (_cache[153] = [
+                  default: _withCtx(() => [...(_cache[155] || (_cache[155] = [
                     _createTextVNode("做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。", -1)
                   ]))]),
                   _: 1
@@ -3879,7 +3881,7 @@ return (_ctx, _cache) => {
               variant: "text",
               onClick: _cache[100] || (_cache[100] = $event => (emit('close')))
             }, {
-              default: _withCtx(() => [...(_cache[155] || (_cache[155] = [
+              default: _withCtx(() => [...(_cache[157] || (_cache[157] = [
                 _createTextVNode("取消", -1)
               ]))]),
               _: 1
@@ -3890,7 +3892,7 @@ return (_ctx, _cache) => {
               "prepend-icon": "mdi-content-save-outline",
               onClick: saveConfig
             }, {
-              default: _withCtx(() => [...(_cache[156] || (_cache[156] = [
+              default: _withCtx(() => [...(_cache[158] || (_cache[158] = [
                 _createTextVNode("保存配置", -1)
               ]))]),
               _: 1
@@ -3925,13 +3927,13 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
-                  default: _withCtx(() => [...(_cache[157] || (_cache[157] = [
+                  default: _withCtx(() => [...(_cache[159] || (_cache[159] = [
                     _createTextVNode("新增自定义站点", -1)
                   ]))]),
                   _: 1
                 }),
                 _createVNode(_component_VCardSubtitle, null, {
-                  default: _withCtx(() => [...(_cache[158] || (_cache[158] = [
+                  default: _withCtx(() => [...(_cache[160] || (_cache[160] = [
                     _createTextVNode("站点名需与站点标签识别出的站点名一致", -1)
                   ]))]),
                   _: 1
@@ -3967,7 +3969,7 @@ return (_ctx, _cache) => {
                   variant: "text",
                   onClick: _cache[102] || (_cache[102] = $event => (hrAddDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[159] || (_cache[159] = [
+                  default: _withCtx(() => [...(_cache[161] || (_cache[161] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3978,7 +3980,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-plus",
                   onClick: hrConfirmAddSite
                 }, {
-                  default: _withCtx(() => [...(_cache[160] || (_cache[160] = [
+                  default: _withCtx(() => [...(_cache[162] || (_cache[162] = [
                     _createTextVNode("添加", -1)
                   ]))]),
                   _: 1
@@ -4033,7 +4035,7 @@ return (_ctx, _cache) => {
             _createVNode(_component_VDivider),
             _createVNode(_component_VCardText, { class: "text-body-2" }, {
               default: _withCtx(() => [
-                _cache[161] || (_cache[161] = _createTextVNode(" 将把本页签全部设置恢复为插件默认值。改动先作用于表单，点击下方「保存配置」后才会真正生效。", -1)),
+                _cache[163] || (_cache[163] = _createTextVNode(" 将把本页签全部设置恢复为插件默认值。改动先作用于表单，点击下方「保存配置」后才会真正生效。", -1)),
                 (paneResetTarget.value === 'hr')
                   ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                       _createTextVNode("H&R 站点独立规则也会一并清空回全局基准。")
@@ -4050,7 +4052,7 @@ return (_ctx, _cache) => {
                   variant: "text",
                   onClick: _cache[104] || (_cache[104] = $event => (paneResetDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[162] || (_cache[162] = [
+                  default: _withCtx(() => [...(_cache[164] || (_cache[164] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -4061,7 +4063,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-restore",
                   onClick: confirmPaneReset
                 }, {
-                  default: _withCtx(() => [...(_cache[163] || (_cache[163] = [
+                  default: _withCtx(() => [...(_cache[165] || (_cache[165] = [
                     _createTextVNode("恢复默认", -1)
                   ]))]),
                   _: 1
@@ -4080,6 +4082,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-8ded2671"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-a358121d"]]);
 
 export { Config as default };

@@ -1681,6 +1681,8 @@ function serializeHrSiteConfigYaml(rules) {
                 </VCol>
               </VRow>
 
+              <!-- ═══ 分类规则 ═══ -->
+              <div class="dm-section-title mt-2">分类规则</div>
               <!-- 分类映射（TMDB 模式）：一行一条 载入分类 -> 写入分类 -->
               <template v-if="!form.tag_rename_type">
                 <div class="dm-hr-table mt-3">
@@ -1718,6 +1720,8 @@ function serializeHrSiteConfigYaml(rules) {
                 </div>
               </template>
 
+              <!-- ═══ 站点规则 ═══ -->
+              <div class="dm-section-title mt-4">站点规则</div>
               <!-- Tracker 映射（恒显示）：一行一条 tracker域名 -> 站点库域名，并反查站点名 -->
               <div class="dm-hr-table mt-4">
                 <div class="dm-map-row dm-map-row--head">
