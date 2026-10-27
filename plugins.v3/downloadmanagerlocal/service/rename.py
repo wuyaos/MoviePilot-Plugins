@@ -356,6 +356,10 @@ def resolve_retry_original_name(
 
 def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: str, save_path: str) -> bool:
     """重命名单个种子，持久化记录并返回实际是否成功。"""
+    if dl_type == "rtorrent":
+        # rt 客户端未提供可用的名称修改接口，跳过且不计入失败记录。
+        logger.info(f"【PT下载中心:命名补刀】rTorrent 不支持重命名，跳过 hash={torrent_hash}")
+        return False
     try:
         # 排除目录检查
         if plugin._rename_exclude_dirs:
@@ -880,6 +884,9 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     """对单个候选种子执行过滤与重命名，返回 renamed / failed / skipped。"""
     dl = service.instance
     dl_type = service.type
+    if dl_type == "rtorrent":
+        # rt 不支持改名：按 skipped 计，不进入失败统计。
+        return "skipped"
     torrent_hash = get_hash(torrent, dl_type)
     if not torrent_hash:
         return "skipped"

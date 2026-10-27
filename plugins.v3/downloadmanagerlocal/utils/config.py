@@ -211,13 +211,19 @@ def build_module_switches(config: dict) -> dict:
 
 
 def is_transfer_active(plugin) -> bool:
-    """判断转移做种能力是否处于可运行状态（开关已由门控属性承载）。"""
-    return bool(
-        getattr(plugin, "_transfer_enabled", False)
-        and getattr(plugin, "_fromdownloader", "")
-        and getattr(plugin, "_todownloader", "")
-        and getattr(plugin, "_fromtorrentpath", "")
-    )
+    """判断转移做种能力是否处于可运行状态（开关已由门控属性承载）。
+
+    v3.9.0 多任务引擎：以启用任务列表为准（transfer_tasks 优先，
+    空则回退旧单链路迁移视图）；不再要求已废弃的 _fromtorrentpath。
+    """
+    if not getattr(plugin, "_transfer_enabled", False):
+        return False
+    from ..service.transfer_tasks import iter_enabled_tasks
+
+    try:
+        return bool(iter_enabled_tasks(plugin))
+    except Exception:
+        return False
 
 
 def is_upload_limit_active(plugin) -> bool:

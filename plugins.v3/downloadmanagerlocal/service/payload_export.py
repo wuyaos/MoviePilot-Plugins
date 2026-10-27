@@ -87,27 +87,136 @@ def _qb_export(instance: Any, info_hash: str, service: Any = None) -> Optional[b
     return resp.content
 
 
-def _tr_export(instance: Any, info_hash: str) -> Optional[bytes]:
-    """Transmission：torrent-get 'torrent' 字段（base64 元数据）。"""
-    trc = getattr(instance, "trc", None) or instance
-    try:
-        torrents = trc.get_torrents(ids=[info_hash], arguments=["torrent"])
-        raw = None
-        if torrents:
-            fields = getattr(torrents[0], "fields", None) or getattr(torrents[0], "_fields", {})
-            raw = fields.get("torrent") if isinstance(fields, dict) else None
-        metainfo = getattr(raw, "value", raw)
-    except Exception as err:
-        logger.warning(f"【PT下载中心:转移做种】TR 获取种子元数据失败 {info_hash[:8]}：{err}")
-        return None
-    if not metainfo:
-        return None
-    try:
-        return base64.b64decode(metainfo)
-    except Exception as err:
-        logger.warning(f"【PT下载中心:转移做种】TR 元数据解码失败 {info_hash[:8]}：{err}")
-        return None
+def _tr_rpc(service: Any, method: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """直连 Transmission RPC（含 409 session 握手），返回 arguments 字典。"""
+    cred = _downloader_credentials(service)
+    host = cred["host"]
+    if not host:
+        return {}
+    if not host.startswith("http"):
+        host = f"http://{host}"
+    session = requests.Session()
+    if cred["username"]:
+        session.auth = (cred["username"], cred["password"])
+    url = f"{host.rstrip('/')}/transmission/rpc"
+    for _ in range(2):
+        try:
+            resp = session.post(
+                url, json={"method": method, "arguments": arguments},
+                timeout=_SOURCE_HTTP_TIMEOUT,
+            )
+        except Exception as err:
+            logger.warning(f"【PT下载中心:转移做种】Transmission RPC 请求失败：{err}")
+            return {}
+        if resp.status_code == 409:
+            session.headers["X-Transmission-Session-Id"] = resp.headers.get(
+                "X-Transmission-Session-Id", "")
+            continue
+        if resp.status_code != 200:
+            logger.warning(f"【PT下载中心:转移做种】Transmission RPC HTTP {resp.status_code}")
+            return {}
+        try:
+            payload = resp.json()
+        except ValueError as err:
+            logger.warning(f"【PT下载中心:转移做种】Transmission RPC 响应解析失败：{err}")
+            return {}
+        if payload.get("result") != "success":
+            logger.warning(f"【PT下载中心:转移做种】Transmission RPC 返回 {payload.get('result')}")
+            return {}
+        return payload.get("arguments") or {}
+    return {}
 
+
+def _tr_first_field(rows: Any, name: str) -> Any:
+    """从 transmission_rpc 对象取字段值（兼容 fields 字典与属性两种形态）。"""
+    fields = getattr(rows, "fields", None) or getattr(rows, "_fields", None)
+    if isinstance(fields, dict):
+        raw = fields.get(name)
+        return getattr(raw, "value", raw)
+    return getattr(rows, name, None)
+
+
+def _read_bytes(path: str) -> Optional[bytes]:
+    try:
+        data = Path(path).read_bytes()
+    except OSError:
+        return None
+    return data or None
+
+
+def _tr_path_candidates(remote_path: str, ext: Dict[str, Any], info_hash: str,
+                        fallback_dir: str) -> List[str]:
+    """TR 元数据文件候选：容器内路径映射 → 原路径 → 扩展目录 → 全局源种子目录。"""
+    ext = ext or {}
+    candidates: List[str] = []
+    remote = str(remote_path or "").strip()
+    remote_dir = str(ext.get("torrent_dir") or "").strip().rstrip("/")
+    local_dir = str(ext.get("local_torrent_dir") or "").strip().rstrip("/")
+    if remote and remote_dir and local_dir and remote.startswith(remote_dir):
+        candidates.append(f"{local_dir}{remote[len(remote_dir):]}")
+    if remote:
+        candidates.append(remote)
+    for directory in (local_dir, str(fallback_dir or "").strip().rstrip("/")):
+        if not directory:
+            continue
+        for name in (info_hash.lower(), info_hash.upper()):
+            candidates.append(f"{directory}/{name}.torrent")
+    return candidates
+
+
+def _tr_export(instance: Any, info_hash: str, service: Any = None,
+               ext: Optional[Dict[str, Any]] = None, fallback_dir: str = "") -> Optional[bytes]:
+    """Transmission 元数据导出。
+
+    TR 4 起 torrent-get 不再返回 `torrent`（base64 元数据）字段，只能拿到
+    `torrentFile`（容器内 .torrent 路径），因此按三级回退：
+    1. torrent-get `torrent` 字段（TR 3.x）
+    2. torrent-get `torrentFile` 路径 → 扩展配置映射后的本机路径直接读
+    3. 扩展配置 local_torrent_dir / 全局「源种子文件路径」下 {hash}.torrent
+    """
+    arguments = {"ids": [info_hash], "fields": ["torrent"]}
+    rows: Any = None
+    if service is not None and _downloader_credentials(service)["host"]:
+        rows = (_tr_rpc(service, "torrent-get", arguments) or {}).get("torrents")
+    else:
+        trc = getattr(instance, "trc", None) or instance
+        try:
+            rows = trc.get_torrents(ids=[info_hash], arguments=["torrent"])
+        except Exception as err:
+            logger.warning(f"【PT下载中心:转移做种】TR 获取种子元数据失败 {info_hash[:8]}：{err}")
+            rows = None
+    metainfo = None
+    if rows:
+        metainfo = _tr_first_field(rows[0], "torrent")
+    if metainfo:
+        try:
+            decoded = base64.b64decode(metainfo)
+        except Exception as err:
+            logger.warning(f"【PT下载中心:转移做种】TR 元数据解码失败 {info_hash[:8]}：{err}")
+            decoded = None
+        if decoded:
+            return decoded
+
+    remote_path = ""
+    if service is not None and _downloader_credentials(service)["host"]:
+        file_rows = (_tr_rpc(service, "torrent-get",
+                             {"ids": [info_hash], "fields": ["torrentFile"]}) or {}).get("torrents")
+        if file_rows:
+            remote_path = str(_tr_first_field(file_rows[0], "torrentFile") or "")
+    for candidate in _tr_path_candidates(remote_path, ext or {}, info_hash, fallback_dir):
+        data = _read_bytes(candidate)
+        if data:
+            logger.info(
+                f"【PT下载中心:转移做种】TR 元数据改用本机种子文件 {candidate}：{info_hash[:8]}"
+            )
+            return data
+    logger.warning(
+        f"【PT下载中心:转移做种】TR 元数据获取失败 {info_hash[:8]}："
+        "Transmission 4 已移除 torrent 元数据字段，且本机读不到 .torrent 文件。"
+        "请在下载器扩展配置填 torrent_dir（下载器内路径，如 /config/torrents）"
+        "+ local_torrent_dir（本机可读路径），或全局配置「源种子文件路径」"
+    )
+    return None
 
 def _rt_export_one(ext: Dict[str, Any], info_hash: str) -> Optional[bytes]:
     """rtorrent：ruTorrent source 插件单个导出。"""
@@ -120,30 +229,36 @@ def _rt_export_one(ext: Dict[str, Any], info_hash: str) -> Optional[bytes]:
     password = str(ext.get("password") or "")
     if username:
         auth = (username, password)
-    try:
-        resp = requests.get(
-            f"{webui}/{plugin_path}/get.php",
-            params={"hash": info_hash},
-            auth=auth,
-            timeout=_SOURCE_HTTP_TIMEOUT,
-        )
-    except Exception as err:
-        logger.warning(f"【PT下载中心:转移做种】rt source 导出失败 {info_hash[:8]}：{err}")
-        return None
-    if resp.status_code != 200 or not resp.content:
-        return None
-    return resp.content
+    # ruTorrent source 插件的导出入口是 POST action.php（get.php 是部分分支的 GET 变体）。
+    for method, url, kwargs in (
+        ("post", f"{webui}/{plugin_path}/action.php", {"data": {"hash": info_hash}}),
+        ("get", f"{webui}/{plugin_path}/get.php", {"params": {"hash": info_hash}}),
+    ):
+        try:
+            resp = getattr(requests, method)(
+                url, auth=auth, timeout=_SOURCE_HTTP_TIMEOUT, **kwargs,
+            )
+        except Exception as err:
+            logger.warning(f"【PT下载中心:转移做种】rt source 导出失败 {info_hash[:8]}：{err}")
+            continue
+        # 失败时插件回 HTML/JS 提示，bencode 起始字符是有效性判据。
+        if resp.status_code == 200 and resp.content[:1] == b"d":
+            return resp.content
+    return None
 
 
 def _rt_session_fallback(session_dir: str, info_hash: str) -> Optional[bytes]:
     """rtorrent：从会话目录读取 {hash}.torrent。"""
     if not session_dir:
         return None
-    path = Path(session_dir) / f"{info_hash}.torrent"
-    try:
-        return path.read_bytes()
-    except OSError:
-        return None
+    base = Path(session_dir)
+    # rt 会话目录文件名 hash 为大写，调用方传入可能为小写，两种都尝试。
+    for candidate in (info_hash.lower(), info_hash.upper()):
+        try:
+            return (base / f"{candidate}.torrent").read_bytes()
+        except OSError:
+            continue
+    return None
 
 
 def _rt_source_export(ext: Dict[str, Any], info_hashes: List[str]) -> Dict[str, bytes]:
@@ -188,9 +303,13 @@ def get_torrent_payloads(
                 results[info_hash] = data
         return results
     if dl_type == "transmission":
+        ext = get_downloader_ext(plugin, downloader_name)
+        fallback_dir = str(getattr(plugin, "_fromtorrentpath", "") or "").strip()
         results = {}
         for info_hash in info_hashes:
-            data = _tr_export(instance, info_hash)
+            data = _tr_export(
+                instance, info_hash, service=service, ext=ext, fallback_dir=fallback_dir,
+            )
             if data:
                 results[info_hash] = data
         return results

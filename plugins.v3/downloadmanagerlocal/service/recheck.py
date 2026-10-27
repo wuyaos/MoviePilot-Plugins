@@ -10,6 +10,7 @@ from app.sdk.logging import logger
 
 from ..model.state import SEED_RECHECK_QUEUE_KEY
 
+from ..utils.torrent_adapter import get_torrent_state, torrent_is_complete
 
 def _queue_lock(plugin) -> threading.RLock:
     """获取做种校验队列锁，兼容未声明该属性的测试替身。"""
@@ -193,6 +194,9 @@ def seed_is_checking(state, downloader_type):
     """判断种子是否仍处于校验或移动等不可开始状态。"""
     if downloader_type == "qbittorrent":
         return state in ["checkingUP", "checkingDL", "checkingResumeData", "checking", "queuedUP", "queuedDL", "moving"]
+    if downloader_type == "rtorrent":
+        # rt 宿主客户端无 recheck_torrents，不存在需要等待的校验阶段。
+        return False
     return str(state) in ("checking", "check pending") or bool(getattr(state, "checking", False))
 
 
@@ -200,6 +204,9 @@ def seed_is_ready(state, downloader_type, torrent=None):
     """判断种子是否已校验完成并可开始做种。"""
     if downloader_type == "qbittorrent":
         return state in ["pausedUP", "stoppedUP", "completed", "uploading", "stalledUP", "forcedUP"]
+    if downloader_type == "rtorrent":
+        # rt 无显式 recheck：以 d.complete 或完成度作为校验完成证据。
+        return torrent_is_complete(torrent, "rtorrent")
     percent_done = getattr(torrent, "percent_done", getattr(state, "percent_done", 0))
     return str(state) in ("stopped", "seeding", "seed pending") and percent_done == 1
 
@@ -229,5 +236,5 @@ def sweep_paused_seed_tasks(plugin, check_services):
 
 def can_seed_paused_torrent(torrent, downloader_type):
     """供转移使用的目标完整性判断。"""
-    state = torrent.get("state") if downloader_type == "qbittorrent" else torrent.status
+    state = get_torrent_state(torrent, downloader_type)
     return seed_is_ready(state, downloader_type, torrent)

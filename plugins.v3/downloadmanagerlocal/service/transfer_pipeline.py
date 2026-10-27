@@ -12,6 +12,9 @@ from .recheck import (
     ensure_seed_recheck_worker, seed_is_checking, seed_is_ready, seed_is_error,
     seed_is_timeout,
 )
+from ..utils.torrent_adapter import (
+    get_torrent_state, is_torrent_active, supports_recheck, torrent_is_complete,
+)
 
 
 def save_transaction(plugin, item):
@@ -52,13 +55,15 @@ def delete_source(plugin, downloader_id, torrent_hash):
 
 
 def source_is_active(torrent, downloader_type):
-    """仅记录需要在回滚时恢复的源活动状态。"""
-    if downloader_type == "qbittorrent":
-        return torrent.get("state") not in ("pausedUP", "pausedDL", "stoppedUP", "stoppedDL")
-    return str(torrent.status) != "stopped"
+    """仅记录需要在回滚时恢复的源活动状态（统一 qB/TR/rt 判定）。"""
+    return is_torrent_active(torrent, downloader_type)
 
 
-def begin_transfer(plugin, from_service, to_service, source_hash, torrent, add_target, stopped):
+def begin_transfer(
+    plugin, from_service, to_service, source_hash, torrent, add_target, stopped, *,
+    fallback: bool = False,
+    delete_source: Optional[bool] = None,
+):
     """先落盘源状态再暂停/添加；异常统一进入可续办回滚。"""
     item = {
         "source": "transfer", "source_downloader": from_service.name,
@@ -66,9 +71,11 @@ def begin_transfer(plugin, from_service, to_service, source_hash, torrent, add_t
         "created_at": time.time(), "max_wait_minutes": plugin._seed_max_wait_minutes,
         "source_was_active": source_is_active(torrent, from_service.type),
         "pause_source": bool(getattr(plugin, "_pause_source", True)),
-        "delete_source_requested": bool(plugin._deletesource),
+        "delete_source_requested": bool(plugin._deletesource if delete_source is None else delete_source),
         "autostart": bool(plugin._seed_autostart), "skipverify": bool(plugin._seed_skipverify),
         "phase": "source_pausing", "target_added": False,
+        # 兜底扫描发起的转移单独计数，供「兜底成功」统计区分主链路。
+        "fallback": bool(fallback),
     }
     save_transaction(plugin, item)
     try:
@@ -150,14 +157,14 @@ def advance_transfer(plugin, item, service, task, stopped):
             item["target_added"] = False
         save_transaction(plugin, item)
         return rollback_transfer(plugin, item, service, stopped)
-    state = task.get("state") if service.type == "qbittorrent" else task.status
+    state = get_torrent_state(task, service.type)
     if seed_is_error(state, service.type) or (service.type == "transmission" and getattr(task, "error", 0)):
         item["phase"] = "rollback"
         item["error"] = "目标校验错误"
         save_transaction(plugin, item)
         return rollback_transfer(plugin, item, service, stopped)
     if phase == "target_added":
-        if not (service.type == "qbittorrent" and item["skipverify"]):
+        if supports_recheck(service.type) and not (service.type == "qbittorrent" and item["skipverify"]):
             if service.instance.recheck_torrents(ids=[item["hash"]]) is False:
                 item["phase"] = "rollback"
             else:
@@ -176,7 +183,13 @@ def advance_transfer(plugin, item, service, task, stopped):
         if stopped() or service.instance.start_torrents(ids=[item["hash"]]) is False:
             return False
         # 开始命令不是做种证据，下一轮回读目标活动状态才允许删源。
-        active = state in ("uploading", "stalledUP", "forcedUP") if service.type == "qbittorrent" else str(state) == "seeding"
+        if service.type == "qbittorrent":
+            active = state in ("uploading", "stalledUP", "forcedUP")
+        elif service.type == "rtorrent":
+            # rt 没有 uploading/seeding 文本状态：以「已完成且在活动」作为做种证据。
+            active = torrent_is_complete(task, "rtorrent") and is_torrent_active(task, "rtorrent")
+        else:
+            active = str(state) == "seeding"
         if not active:
             return False
     item["target_confirmed"] = True
@@ -193,5 +206,5 @@ def advance_transfer(plugin, item, service, task, stopped):
         item["hr_protected"] = result == "protected"
     item["phase"] = "completed"
     save_source_record(plugin, item)
-    record_transfer_success(plugin, 1)
+    record_transfer_success(plugin, 1, fallback=bool(item.get("fallback")))
     return True

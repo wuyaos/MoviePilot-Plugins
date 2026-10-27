@@ -105,11 +105,29 @@ def _module_switch_checks(plugin) -> list[dict]:
     return [_check("模块开关（裸值）", status, " / ".join(entries))]
 
 
+def _first_enabled_task(plugin):
+    """v3.9.0 多任务形态：取第一个启用任务做诊断投影；无则回退旧平铺字段。"""
+    from .transfer_tasks import load_transfer_tasks
+
+    tasks = load_transfer_tasks(plugin)
+    for task in tasks:
+        if task.get("enabled"):
+            return {
+                "from_downloader": task.get("from_downloader") or "",
+                "to_downloader": task.get("to_downloader") or "",
+            }
+    return {
+        "from_downloader": getattr(plugin, "_fromdownloader", "") or "",
+        "to_downloader": getattr(plugin, "_todownloader", "") or "",
+    }
+
+
 def build_diagnostics(plugin):
     """构建只读诊断摘要，供详情页展示。"""
-    from_service = _service_status(plugin, plugin._fromdownloader)
-    to_service = _service_status(plugin, plugin._todownloader)
-    source_path_exists = _path_exists(plugin._fromtorrentpath)
+    task_view = _first_enabled_task(plugin)
+    from_service = _service_status(plugin, task_view["from_downloader"])
+    to_service = _service_status(plugin, task_view["to_downloader"])
+    source_path_exists = _path_exists(getattr(plugin, "_fromtorrentpath", ""))
     transfer_ready = bool(
         plugin._transfer_active and from_service["available"] and to_service["available"]
     )
@@ -181,7 +199,7 @@ def build_diagnostics(plugin):
         "paths": {
             "frompath": plugin._frompath or "",
             "topath": plugin._topath or "",
-            "fromtorrentpath": plugin._fromtorrentpath or "",
+            "fromtorrentpath": getattr(plugin, "_fromtorrentpath", "") or "",
             "fromtorrentpath_exists": source_path_exists,
         },
         "rename_history": rename_history,

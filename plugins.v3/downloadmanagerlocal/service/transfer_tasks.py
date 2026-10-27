@@ -122,13 +122,13 @@ def iter_enabled_tasks(plugin) -> List[Dict[str, Any]]:
 
 
 def notify_fromtorrentpath_deprecated(plugin) -> None:
-    """源种子文件路径已废弃（改网络导出）；首次读取时提示一次。"""
+    """源种子文件路径：不再作为主路径（改下载器网络导出），仅作 TR4 元数据兜底目录。"""
     if getattr(plugin, _DEPRECATION_NOTIFIED_FLAG, False):
         return
     legacy = str(getattr(plugin, "_fromtorrentpath", "") or "").strip()
     if legacy:
         logger.info(
-            "【PT下载中心:转移做种】配置项「源种子文件路径」已废弃（改为下载器网络导出），"
-            f"忽略旧值：{legacy}"
+            "【PT下载中心:转移做种】配置项「源种子文件路径」仅作 Transmission 4 元数据兜底目录"
+            f"（主路径为下载器网络导出），当前值：{legacy}"
         )
     setattr(plugin, _DEPRECATION_NOTIFIED_FLAG, True)

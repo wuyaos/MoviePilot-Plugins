@@ -631,6 +631,7 @@ def api_failclean_scan(plugin, payload: EmptyRequest | None = None):
 
 def api_transfer_run(plugin, payload: EmptyRequest | None = None):
     """手动执行一轮转移做种（替代已删除的 onlyonce 立即运行开关）。"""
+    logger.info("[PT下载中心]收到手动转移做种请求")
     _require_module(plugin, "transfer", "转移做种")
     if not plugin._transfer_active:
         return _operation_response(

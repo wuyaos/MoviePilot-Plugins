@@ -18,6 +18,7 @@ from .transfer_pipeline import begin_transfer, delete_source
 from .rename import _get_torrent_content_name, resolve_retry_original_name
 from .site_tag import create_temporary_tag, forget_temporary_tag, release_temporary_tag
 from .transfer_tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated
+from .payload_export import get_torrent_payloads
 
 _AUTOMATIC_DELAY_TRIGGER_SOURCES = frozenset({"兜底扫描", "事件驱动"})
 
@@ -76,18 +77,18 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
     if not service or not service.instance:
         return None
     downloader = service.instance
-    from_service = plugin.service_info(plugin._fromdownloader)
+    from_type = getattr(plugin.service_info((task or {}).get("from_downloader") or plugin._fromdownloader), "type", None)
     if is_downloader_type("qbittorrent", service=service):
         tag = create_temporary_tag(plugin)
         torrent_hash = None
         try:
-            if plugin._remainoldtag:
-                torrent_labels = plugin.get_label(torrent, from_service.type)
+            if bool((task or {}).get("keep_tag", plugin._remainoldtag)):
+                torrent_labels = plugin.get_label(torrent, from_type)
                 new_tag = list(set(torrent_labels + plugin._torrent_tags + [tag]))
             else:
                 new_tag = plugin._torrent_tags + [tag]
-            if plugin._remainoldcat:
-                torrent_category = plugin.get_category(torrent, from_service.type)
+            if bool((task or {}).get("keep_category", plugin._remainoldcat)):
+                torrent_category = plugin.get_category(torrent, from_type)
             else:
                 torrent_category = None
             if _transfer_stopped(plugin, generation):
@@ -111,8 +112,8 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
             else:
                 forget_temporary_tag(plugin, tag)
     elif is_downloader_type("transmission", service=service):
-        if plugin._remainoldtag:
-            torrent_labels = plugin.get_label(torrent, from_service.type)
+        if bool((task or {}).get("keep_tag", plugin._remainoldtag)):
+            torrent_labels = plugin.get_label(torrent, from_type)
             new_tag = list(set(torrent_labels + plugin._torrent_tags))
         else:
             new_tag = plugin._torrent_tags
@@ -126,6 +127,36 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
             return None
         else:
             return torrent.hashString
+
+    elif is_downloader_type("rtorrent", service=service):
+        tag = create_temporary_tag(plugin)
+        torrent_hash = None
+        try:
+            if bool((task or {}).get("keep_tag", plugin._remainoldtag)):
+                torrent_labels = plugin.get_label(torrent, from_type)
+                new_tag = list(set(torrent_labels + plugin._torrent_tags + [tag]))
+            else:
+                new_tag = plugin._torrent_tags + [tag]
+            if _transfer_stopped(plugin, generation):
+                return None
+            # rt 无类别概念，仅写 d.custom1 标签；暂停添加后由管线完成校验与启动。
+            if not downloader.add_torrent(content=content,
+                                          download_dir=save_path,
+                                          is_paused=True,
+                                          tags=new_tag):
+                logger.error(f"[PT下载中心:转移做种]{downloader} rTorrent 添加任务失败")
+                return None
+            # 该接口找到任务后会自行移除查询用的临时标签。
+            torrent_hash = downloader.get_torrent_id_by_tag(tags=tag)
+            if not torrent_hash:
+                logger.error(f"[PT下载中心:转移做种]{downloader} 下载任务添加成功，但获取任务信息失败！")
+                return None
+            return torrent_hash
+        finally:
+            if torrent_hash:
+                release_temporary_tag(plugin, downloader, torrent_hash, tag, "转移做种")
+            else:
+                forget_temporary_tag(plugin, tag)
 
     logger.error("[PT下载中心:转移做种]不支持的下载器类型")
     return None
@@ -329,7 +360,7 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
 
     logger.info(f"【PT下载中心:转移做种】任务「{task_name}」需要转移的种子数：{len(trans_torrents)}")
     payloads = get_torrent_payloads(
-        plugin, from_service.type, from_service.name, from_downloader,
+        plugin, from_service.type, from_service.name, from_service,
         [item["hash"] for item in trans_torrents],
     )
     if not payloads:
@@ -355,13 +386,15 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
 
         pending = load_seed_recheck_queue(plugin)
         if any(item.get("source_downloader") == from_service.name and
-               item.get("source_hash") == source_hash for item in pending.values()):
+               item.get("source_hash") == source_hash and
+               item.get("downloader") == to_service.name for item in pending.values()):
+            logger.info(
+                f"【PT下载中心:转移做种】任务「{task_name}」{source_hash[:8]} "
+                f"已在发往 {to_service.name} 的待校验队列中，跳过"
+            )
             skip += 1
             continue
         previous = plugin.get_data(f"{from_service.name}-{source_hash}") or {}
-        if previous.get("to_download") == to_service.name and previous.get("transfer_state") in ("completed", "stopped_after_add"):
-            skip += 1
-            continue
 
         torrent_info, poll_error = to_downloader.get_torrents(ids=[source_hash])
         if _transfer_stopped(plugin, generation):
@@ -371,6 +404,11 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
             fail += 1
             continue
         if torrent_info:
+            # 历史记录只在目的下载器确实仍持有该任务时才算完成：目标被删后必须能重新转移。
+            if previous.get("to_download") == to_service.name and previous.get("transfer_state") in ("completed", "stopped_after_add"):
+                logger.info(f"【PT下载中心:转移做种】任务「{task_name}」{source_hash[:8]} 已转移过且目的仍在（{previous.get('transfer_state')}），跳过")
+                skip += 1
+                continue
             if task["delete_duplicate"]:
                 target = torrent_info[0]
                 state = target.get("state") if to_service.type == "qbittorrent" else target.status
@@ -412,6 +450,8 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
                 task=task, source_hash=h,
             ),
             stopped=lambda: _transfer_stopped(plugin, generation),
+            fallback=trigger_source in _AUTOMATIC_DELAY_TRIGGER_SOURCES,
+            delete_source=task.get("delete_source"),
         )
         if submitted:
             success += 1

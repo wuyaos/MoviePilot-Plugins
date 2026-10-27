@@ -1,7 +1,10 @@
-"""下载器种子字段适配工具（qBittorrent / Transmission 兼容）。"""
+"""下载器种子字段适配工具（qBittorrent / Transmission / rtorrent 兼容）。"""
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any, List
+
+from app.sdk.logging import logger
 
 
 TORRENT_ACTIVE = "active"
@@ -114,7 +117,7 @@ def normalize_torrent(torrent: Any, downloader_id: str, downloader_type: str) ->
         torrent, "total_size", "size", "totalSize", default=0,
     )))
     downloaded_bytes = int(_number(_read(
-        torrent, "downloaded", "downloaded_ever", "downloadedEver", default=0,
+        torrent, "downloaded", "downloaded_ever", "downloadedEver", "completed", default=0,
     )))
     added_at = _timestamp(_read(
         torrent, "added_on", "added_date", "date_added", "dateAdded", default=0,
@@ -186,6 +189,8 @@ def get_hash(torrent: Any, dl_type: str) -> str:
     """获取种子 hash。"""
     if dl_type == "qbittorrent":
         return torrent.get("hash", "")
+    if dl_type == "rtorrent":
+        return _read(torrent, "hash", "hashString", "hash_string", default="")
     return _read(torrent, "hashString", "hash_string", default="")
 
 
@@ -204,6 +209,8 @@ def get_label(torrent: Any, dl_type: str) -> List[str]:
     """获取种子标签/分类。"""
     if dl_type == "qbittorrent":
         return _split_labels(torrent.get("tags"))
+    if dl_type == "rtorrent":
+        return _split_labels(_read(torrent, "tags", "labels", default=[]))
     return _split_labels(_read(torrent, "labels", default=[]))
 
 
@@ -218,6 +225,8 @@ def get_save_path(torrent: Any, dl_type: str) -> str:
     """获取种子保存路径。"""
     if dl_type == "qbittorrent":
         return torrent.get("save_path", "")
+    if dl_type == "rtorrent":
+        return _read(torrent, "save_path", "download_dir", "downloadDir", default="")
     return _read(torrent, "download_dir", "downloadDir", default="")
 
 
@@ -226,6 +235,77 @@ def get_torrent_size(torrent: Any, dl_type: str) -> int:
     if dl_type == "qbittorrent":
         return torrent.get("size", 0) or torrent.get("total_size", 0) or 0
     return int(_number(_read(torrent, "total_size", "totalSize", default=0)))
+
+
+def get_torrent_state(torrent: Any, dl_type: str) -> Any:
+    """读取统一种子状态：qB 字符串、TR 状态对象、rt 为 d.state 数字。"""
+    if dl_type == "qbittorrent":
+        return torrent.get("state")
+    return _read(torrent, "status", "state", default=None)
+
+
+def torrent_percent_done(torrent: Any, dl_type: str) -> float:
+    """归一化完成度到 0..1，兼容 TR percentDone 与 rt progress（百分数）。"""
+    if torrent is None:
+        return 0.0
+    if dl_type == "rtorrent":
+        if isinstance(torrent, dict) and "progress" in torrent:
+            return min(1.0, max(0.0, _number(torrent.get("progress")) / 100.0))
+        total = _number(_read(torrent, "total_size", "totalSize", default=0))
+        done = _number(_read(torrent, "completed", "downloaded", default=0))
+        return min(1.0, done / total) if total > 0 else 0.0
+    percent = _read(torrent, "percent_done", "percentDone", default=None)
+    if percent is not None:
+        return min(1.0, max(0.0, _number(percent)))
+    total = _number(_read(torrent, "total_size", "totalSize", default=0))
+    done = _number(_read(torrent, "downloaded", "downloaded_ever", default=0))
+    return min(1.0, done / total) if total > 0 else 0.0
+
+
+def torrent_is_complete(torrent: Any, dl_type: str) -> bool:
+    """判断种子是否已完成，优先使用下载器自带的完成标志。"""
+    if torrent is None:
+        return False
+    if dl_type == "rtorrent":
+        flag = _read(torrent, "complete", default=None)
+        if flag is not None:
+            return int(_number(flag)) != 0
+    return torrent_percent_done(torrent, dl_type) >= 1.0
+
+
+def is_torrent_active(torrent: Any, dl_type: str) -> bool:
+    """判断种子是否活动（非停止/暂停），兼容字典与对象两种返回值。"""
+    if torrent is None:
+        return False
+    if dl_type == "rtorrent":
+        # rt：d.state 1=started 0=stopped；d.is_active 为活动标志。
+        if int(_number(_read(torrent, "is_active", default=0))) != 0:
+            return True
+        return int(_number(_read(torrent, "state", default=0))) != 0
+    if dl_type == "qbittorrent":
+        return torrent.get("state") not in ("pausedUP", "pausedDL", "stoppedUP", "stoppedDL")
+    state = _read(torrent, "status", "state", default=None)
+    return str(getattr(state, "name", None) or str(state)) != "stopped"
+
+
+def supports_recheck(dl_type: str) -> bool:
+    """rt 宿主客户端没有 recheck_torrents，rt 目的端必须跳过显式校验。"""
+    return str(dl_type or "").lower() != "rtorrent"
+
+
+def compute_info_hash(payload: bytes) -> str:
+    """从种子文件字节计算 infohash；rt 目的端添加后只能靠它定位任务。"""
+    if not payload:
+        return ""
+    try:
+        from bencode import bdecode, bencode
+        info = bdecode(payload).get(b"info")
+        if not info:
+            return ""
+        return hashlib.sha1(bencode(info)).hexdigest()
+    except Exception as error:
+        logger.error(f"[PT下载中心]计算种子 infohash 失败：{error}")
+        return ""
 
 
 def get_tracker_urls(torrent: Any, dl_type: str) -> List[str]:
