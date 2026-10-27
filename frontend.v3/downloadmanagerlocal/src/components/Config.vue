@@ -1686,13 +1686,13 @@ function serializeHrSiteConfigYaml(rules) {
               <!-- 分类映射（TMDB 模式）：一行一条 载入分类 -> 写入分类 -->
               <template v-if="!form.tag_rename_type">
                 <div class="dm-hr-table mt-3">
-                  <div class="dm-map-row dm-map-row--head">
+                  <div class="dm-cat-row dm-cat-row--head">
                     <span>载入分类（TMDB / 站点分类）</span>
                     <span />
                     <span>写入分类</span>
                     <span />
                   </div>
-                  <div v-for="(pair, idx) in tagCatPairs" :key="`cat-${idx}`" class="dm-map-row">
+                  <div v-for="(pair, idx) in tagCatPairs" :key="`cat-${idx}`" class="dm-cat-row">
                     <VTextField v-model="pair.from" label="载入分类" density="compact" variant="outlined" hide-details />
                     <span class="dm-map-arrow">→</span>
                     <VTextField v-model="pair.to" label="写入分类" density="compact" variant="outlined" hide-details />
@@ -1723,22 +1723,32 @@ function serializeHrSiteConfigYaml(rules) {
               <!-- ═══ 站点规则 ═══ -->
               <div class="dm-section-title mt-4">站点规则</div>
               <!-- Tracker 映射（恒显示）：一行一条 tracker域名 -> 站点库域名，并反查站点名 -->
-              <div class="dm-hr-table mt-4">
+              <div class="dm-hr-table mt-2">
                 <div class="dm-map-row dm-map-row--head">
                   <span>Tracker 域名</span>
                   <span />
                   <span>站点库域名</span>
                   <span>匹配站点</span>
+                  <span>标签</span>
+                  <span />
                 </div>
                 <div v-for="(pair, idx) in tagTrackerPairs" :key="`tracker-${idx}`" class="dm-map-row">
                   <VTextField v-model="pair.tracker" label="Tracker 域名" density="compact" variant="outlined" hide-details />
                   <span class="dm-map-arrow">→</span>
                   <VTextField v-model="pair.site" label="站点库域名" density="compact" variant="outlined" hide-details />
-                  <div class="d-flex align-center justify-end gap-1">
+                  <div class="dm-map-site">
                     <VChip v-if="siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker)" size="x-small" label color="primary">
                       {{ siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker) }}
                     </VChip>
                     <VChip v-else-if="pair.site" size="x-small" label color="warning">未收录</VChip>
+                  </div>
+                  <div class="dm-map-site">
+                    <VChip v-if="siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker)" size="x-small" label variant="tonal">
+                      {{ form.tag_siteprefix || '' }}{{ siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker) }}
+                    </VChip>
+                    <span v-else class="dm-map-empty-cell">—</span>
+                  </div>
+                  <div class="d-flex justify-end">
                     <VBtn icon="mdi-close" size="x-small" variant="text" color="error" @click="tagTrackerPairs.splice(idx, 1)" />
                   </div>
                 </div>
@@ -1891,7 +1901,12 @@ function serializeHrSiteConfigYaml(rules) {
 .dm-cleanup-results { display: grid; gap: 10px; }
 .dm-cleanup-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dm-tag-group { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow: hidden; }
-.dm-map-row { display: grid; grid-template-columns: minmax(150px, 1fr) 22px minmax(150px, 1fr) minmax(96px, .55fr); gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }
+.dm-map-row { display: grid; grid-template-columns: minmax(140px, 1fr) 22px minmax(140px, 1fr) minmax(88px, .5fr) minmax(96px, .55fr) 48px; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }
+.dm-cat-row { display: grid; grid-template-columns: minmax(160px, 1fr) 22px minmax(160px, 1fr) 48px; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }
+.dm-cat-row:last-child { border-bottom: none; }
+.dm-cat-row--head { font-size: 12px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); background: rgba(var(--v-theme-on-surface), 0.03); }
+.dm-map-site { display: flex; align-items: center; justify-content: flex-start; min-width: 0; overflow: hidden; }
+.dm-map-empty-cell { color: rgba(var(--v-theme-on-surface), 0.4); }
 .dm-map-row:last-child { border-bottom: none; }
 .dm-map-row--head { font-size: 12px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); background: rgba(var(--v-theme-on-surface), 0.03); }
 .dm-map-arrow { text-align: center; color: rgba(var(--v-theme-on-surface), 0.45); }

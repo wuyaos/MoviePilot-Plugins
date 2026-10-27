@@ -94,15 +94,21 @@ const _hoisted_59 = {
   class: "dm-map-empty"
 };
 const _hoisted_60 = { class: "d-flex justify-end mt-2" };
-const _hoisted_61 = { class: "dm-hr-table mt-4" };
-const _hoisted_62 = { class: "d-flex align-center justify-end gap-1" };
-const _hoisted_63 = {
+const _hoisted_61 = { class: "dm-hr-table mt-2" };
+const _hoisted_62 = { class: "dm-map-site" };
+const _hoisted_63 = { class: "dm-map-site" };
+const _hoisted_64 = {
+  key: 1,
+  class: "dm-map-empty-cell"
+};
+const _hoisted_65 = { class: "d-flex justify-end" };
+const _hoisted_66 = {
   key: 0,
   class: "dm-map-empty"
 };
-const _hoisted_64 = { class: "d-flex justify-end mt-2" };
-const _hoisted_65 = { class: "dm-pane" };
-const _hoisted_66 = {
+const _hoisted_67 = { class: "d-flex justify-end mt-2" };
+const _hoisted_68 = { class: "dm-pane" };
+const _hoisted_69 = {
   key: 0,
   class: "text-caption text-error mt-2"
 };
@@ -3604,7 +3610,7 @@ return (_ctx, _cache) => {
                 (!form.tag_rename_type)
                   ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                       _createElementVNode("div", _hoisted_58, [
-                        _cache[143] || (_cache[143] = _createElementVNode("div", { class: "dm-map-row dm-map-row--head" }, [
+                        _cache[143] || (_cache[143] = _createElementVNode("div", { class: "dm-cat-row dm-cat-row--head" }, [
                           _createElementVNode("span", null, "载入分类（TMDB / 站点分类）"),
                           _createElementVNode("span"),
                           _createElementVNode("span", null, "写入分类"),
@@ -3613,7 +3619,7 @@ return (_ctx, _cache) => {
                         (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(tagCatPairs.value, (pair, idx) => {
                           return (_openBlock(), _createElementBlock("div", {
                             key: `cat-${idx}`,
-                            class: "dm-map-row"
+                            class: "dm-cat-row"
                           }, [
                             _createVNode(_component_VTextField, {
                               modelValue: pair.from,
@@ -3691,7 +3697,9 @@ return (_ctx, _cache) => {
                     _createElementVNode("span", null, "Tracker 域名"),
                     _createElementVNode("span"),
                     _createElementVNode("span", null, "站点库域名"),
-                    _createElementVNode("span", null, "匹配站点")
+                    _createElementVNode("span", null, "匹配站点"),
+                    _createElementVNode("span", null, "标签"),
+                    _createElementVNode("span")
                   ], -1)),
                   (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(tagTrackerPairs.value, (pair, idx) => {
                     return (_openBlock(), _createElementBlock("div", {
@@ -3740,7 +3748,24 @@ return (_ctx, _cache) => {
                                 ]))]),
                                 _: 1
                               }))
-                            : _createCommentVNode("", true),
+                            : _createCommentVNode("", true)
+                      ]),
+                      _createElementVNode("div", _hoisted_63, [
+                        (siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker))
+                          ? (_openBlock(), _createBlock(_component_VChip, {
+                              key: 0,
+                              size: "x-small",
+                              label: "",
+                              variant: "tonal"
+                            }, {
+                              default: _withCtx(() => [
+                                _createTextVNode(_toDisplayString(form.tag_siteprefix || '') + _toDisplayString(siteNameByDomain(pair.site) || siteNameByDomain(pair.tracker)), 1)
+                              ]),
+                              _: 2
+                            }, 1024))
+                          : (_openBlock(), _createElementBlock("span", _hoisted_64, "—"))
+                      ]),
+                      _createElementVNode("div", _hoisted_65, [
                         _createVNode(_component_VBtn, {
                           icon: "mdi-close",
                           size: "x-small",
@@ -3752,10 +3777,10 @@ return (_ctx, _cache) => {
                     ]))
                   }), 128)),
                   (!tagTrackerPairs.value.length)
-                    ? (_openBlock(), _createElementBlock("div", _hoisted_63, "暂无映射，点击下方按钮添加"))
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_66, "暂无映射，点击下方按钮添加"))
                     : _createCommentVNode("", true)
                 ]),
-                _createElementVNode("div", _hoisted_64, [
+                _createElementVNode("div", _hoisted_67, [
                   _createVNode(_component_VBtn, {
                     size: "small",
                     variant: "tonal",
@@ -3772,7 +3797,7 @@ return (_ctx, _cache) => {
               ], 512), [
                 [_vShow, activeSub.value === 'mapping']
               ]),
-              _withDirectives(_createElementVNode("div", _hoisted_65, [
+              _withDirectives(_createElementVNode("div", _hoisted_68, [
                 _cache[156] || (_cache[156] = _createElementVNode("div", { class: "dm-section-title" }, "基础设置", -1)),
                 _createVNode(_component_VAlert, {
                   type: "info",
@@ -3956,7 +3981,7 @@ return (_ctx, _cache) => {
                   onKeyup: _withKeys(hrConfirmAddSite, ["enter"])
                 }, null, 8, ["modelValue"]),
                 (hrAddError.value)
-                  ? (_openBlock(), _createElementBlock("div", _hoisted_66, _toDisplayString(hrAddError.value), 1))
+                  ? (_openBlock(), _createElementBlock("div", _hoisted_69, _toDisplayString(hrAddError.value), 1))
                   : _createCommentVNode("", true)
               ]),
               _: 1
@@ -4082,6 +4107,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-a358121d"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-1e9657c3"]]);
 
 export { Config as default };
