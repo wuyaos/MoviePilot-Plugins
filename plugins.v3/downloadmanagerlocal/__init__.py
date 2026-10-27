@@ -301,6 +301,10 @@ class DownloadManagerLocal(_PluginBase):
         """手动执行一轮转移做种。"""
         return _controller_handlers.api_transfer_run(self, payload)
 
+    def api_transfer_status(self, page: int = 1, page_size: int = 15):
+        """返回转移做种数据页（任务配置、在途事务、最近记录、汇总）。"""
+        return _controller_handlers.api_transfer_status(self, page=page, page_size=page_size)
+
     def api_tag_status(self):
         """返回站点标签增强模块状态。"""
         return _controller_handlers.api_tag_status(self)

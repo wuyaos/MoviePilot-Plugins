@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 from datetime import datetime
 from typing import TypeVar
 
@@ -644,6 +645,141 @@ def api_transfer_run(plugin, payload: EmptyRequest | None = None):
         logger.error(f"[PT下载中心]转移做种执行失败: {e}")
         return _operation_response({"code": 1, "msg": f"转移做种失败: {e}"}, ModuleActionResult)
     return _operation_response({"code": 0, "msg": "转移做种已执行"}, ModuleActionResult)
+
+
+def _transfer_record_key(value: dict) -> bool:
+    """识别转移事务写下的来源-目标记录（基础插件字段）。"""
+    return bool(value.get("source_hash") and value.get("transfer_state"))
+
+
+def _iter_transfer_records(plugin):
+    """遍历插件持久化的转移事务记录。
+
+    记录以 `f"{源下载器}-{源种子哈希}"` 为 key 分散保存（见
+    ``service/transfer_pipeline.save_source_record``），没有聚合索引，
+    因此需要枚举插件全部数据后按字段筛选。`get_data()` 无参调用在不同
+    MoviePilot 版本返回 dict 或 ORM 行列表，这里两种形态都兼容。
+    """
+    try:
+        raw = plugin.get_data()
+    except Exception as e:
+        logger.warning(f"【PT下载中心:转移做种】读取插件数据失败：{e}")
+        return
+    if isinstance(raw, dict):
+        items = list(raw.items())
+    else:
+        items = []
+        for row in raw or []:
+            try:
+                items.append((row.key, row.value))
+            except Exception:
+                continue
+    for key, value in items:
+        if not isinstance(key, str) or not isinstance(value, dict):
+            continue
+        if _transfer_record_key(value):
+            yield key, value
+
+
+def api_transfer_status(plugin, page: int = 1, page_size: int = 15):
+    """返回转移做种数据页：任务配置、在途事务、最近记录与汇总。"""
+    from ..model.state import TRANSFER_SKIP_STATS_KEY, load_transfer_stats
+    from ..service.recheck import load_seed_recheck_queue
+    from ..service.transfer_tasks import load_transfer_tasks
+
+    try:
+        page = max(1, int(page or 1))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(100, max(1, int(page_size or 15)))
+    except (TypeError, ValueError):
+        page_size = 15
+    now = time.time()
+
+    task_rows = [
+        {
+            "name": task["name"],
+            "enabled": bool(task["enabled"]),
+            "from_downloader": task["from_downloader"],
+            "to_downloader": task["to_downloader"],
+            "include_category": task["include_category"],
+            "include_labels": task["include_labels"],
+            "exclude_labels": task["exclude_labels"],
+            "from_path": task["from_path"],
+            "to_path": task["to_path"],
+            "delete_source": bool(task["delete_source"]),
+            "delete_duplicate": bool(task["delete_duplicate"]),
+            "keep_category": bool(task["keep_category"]),
+            "keep_tag": bool(task["keep_tag"]),
+            "empty_label_ok": bool(task["empty_label_ok"]),
+            "no_paths": task["no_paths"],
+            "transfer_tag": task["transfer_tag"],
+        }
+        for task in load_transfer_tasks(plugin)
+    ]
+
+    pending = []
+    for key, item in (load_seed_recheck_queue(plugin) or {}).items():
+        if not isinstance(item, dict):
+            continue
+        created_at = float(item.get("created_at") or now)
+        pending.append({
+            "key": key,
+            "task": item.get("task") or "",
+            "source_downloader": item.get("source_downloader") or "",
+            "downloader": item.get("downloader") or "",
+            "source_hash": item.get("source_hash") or "",
+            "hash": item.get("hash") or "",
+            "phase": item.get("phase") or "",
+            "fallback": bool(item.get("fallback")),
+            "skipverify": bool(item.get("skipverify")),
+            "autostart": bool(item.get("autostart")),
+            "delete_source": bool(item.get("delete_source_requested")),
+            "waited_minutes": round(max(0.0, (now - created_at) / 60), 1),
+        })
+    pending.sort(key=lambda row: row["waited_minutes"], reverse=True)
+
+    records = []
+    for key, value in _iter_transfer_records(plugin):
+        records.append({
+            "task": value.get("task") or "",
+            "source_downloader": value.get("source_downloader") or key.split("-", 1)[0],
+            "source_hash": value.get("source_hash") or "",
+            "downloader": value.get("to_download") or value.get("downloader") or "",
+            "hash": value.get("to_download_id") or value.get("hash") or "",
+            "phase": value.get("transfer_state") or "",
+            "delete_source": bool(value.get("delete_source")),
+            "hr_protected": bool(value.get("hr_protected")),
+            "fallback": bool(value.get("fallback")),
+            "updated_at": float(value.get("updated_at") or 0),
+        })
+    records.sort(key=lambda row: row["updated_at"], reverse=True)
+    total = len(records)
+    start = (page - 1) * page_size
+    stats = load_transfer_stats(plugin)
+    skip_stats = plugin.get_data(TRANSFER_SKIP_STATS_KEY)
+    skip_stats = skip_stats if isinstance(skip_stats, dict) else {}
+
+    return ModuleStatusResult(code=0, status={
+        "tasks": task_rows,
+        "pending": pending,
+        "records": records[start:start + page_size],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": max(1, -(-total // page_size)),
+        "summary": {
+            "pending": len(pending),
+            "rollback": sum(1 for row in pending if row["phase"] == "rollback"),
+            "completed": sum(1 for row in records if row["phase"] == "completed"),
+            "today_success": stats.get("today_success", 0),
+            "success_total": stats.get("success_total", 0),
+            "today_fallback": stats.get("today_fallback", 0),
+            "fallback_success": stats.get("fallback_success", 0),
+            "hr_protected": int(skip_stats.get("hr_protected", 0) or 0),
+        },
+    })
 
 
 def api_tag_complement(plugin, payload: EmptyRequest | None = None):

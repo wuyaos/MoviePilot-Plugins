@@ -3986,7 +3986,7 @@ return (_ctx, _cache) => {
                           color: "info",
                           inset: "",
                           "hide-details": "",
-                          label: "跳过校验(QB有效)"
+                          label: "跳过校验(QB/RT有效)"
                         }, null, 8, ["modelValue"])
                       ]),
                       _: 1
@@ -4782,6 +4782,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-9f990164"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-cf7ca411"]]);
 
 export { Config as default };

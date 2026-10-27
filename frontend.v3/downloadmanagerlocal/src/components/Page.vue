@@ -15,6 +15,7 @@ const postJsonApi = (path, payload = {}, options = {}) => postPluginJsonApi(prop
 const activeTab = ref('overview')
 const tabs = [
   { key: 'overview', title: '运行总览', icon: 'mdi-view-dashboard-outline' },
+  { key: 'transfer', title: '转移做种', icon: 'mdi-swap-horizontal' },
   { key: 'history', title: '命名历史', icon: 'mdi-history' },
   { key: 'hr', title: 'H&R 任务', icon: 'mdi-timer-alert-outline' },
   { key: 'autoremove', title: '删种记录', icon: 'mdi-delete-clock-outline' },
@@ -61,6 +62,8 @@ const hrSkipStats = ref({})
 const autoremoveStatus = ref({})
 const failcleanStatus = ref({})
 const siteTagStatus = ref({})
+const transferStatus = ref({})
+const transferPage = ref(1)
 const renameStatus = ref({})
 const autoremovePreview = ref(null)
 
@@ -487,6 +490,75 @@ async function loadSiteTagStatus(request) {
   siteTagStatus.value = resp.status
 }
 
+const TRANSFER_PHASE_LABELS = {
+  source_pausing: '暂停源种',
+  adding: '添加目标',
+  target_added: '已添加目标',
+  verifying: '做种校验',
+  target_ready: '待确认做种',
+  completed: '已完成',
+  rollback: '回滚中',
+  rolled_back: '已回滚',
+}
+const transferSummary = computed(() => transferStatus.value.summary || {})
+const transferTasks = computed(() => transferStatus.value.tasks || [])
+const transferPending = computed(() => transferStatus.value.pending || [])
+const transferRecords = computed(() => transferStatus.value.records || [])
+
+function transferPhaseText(phase) {
+  return TRANSFER_PHASE_LABELS[phase] || phase || '—'
+}
+
+function transferPhaseColor(phase) {
+  if (phase === 'completed') return 'success'
+  if (phase === 'rollback' || phase === 'rolled_back') return 'error'
+  if (phase === 'verifying' || phase === 'target_ready') return 'primary'
+  if (phase === 'source_pausing') return 'warning'
+  return 'grey'
+}
+
+function transferShortHash(hash) {
+  const text = String(hash || '')
+  return text ? text.slice(0, 8) : '—'
+}
+
+/** 筛选条件摘要：与配置页任务列表口径一致，无条件时明确显示「不限分类」。 */
+function transferFilterText(task) {
+  const parts = []
+  const category = String(task.include_category || '').trim()
+  parts.push(category ? `分类 ${category}` : '不限分类')
+  const labels = String(task.include_labels || '').trim()
+  if (labels) parts.push(`标签 ${labels}`)
+  const excluded = String(task.exclude_labels || '').trim()
+  if (excluded) parts.push(`排除 ${excluded}`)
+  return parts.join(' · ')
+}
+
+/** 设置徽标：只列已启用的高级设置，未启用时前端显示「默认」。 */
+function transferSettingBadges(task) {
+  const badges = []
+  if (task.delete_source) badges.push({ text: '删源种', color: 'error' })
+  if (task.delete_duplicate) badges.push({ text: '去重', color: 'warning' })
+  if (!task.keep_category) badges.push({ text: '不保留分类', color: 'secondary' })
+  if (!task.keep_tag) badges.push({ text: '不保留标签', color: 'secondary' })
+  const tag = String(task.transfer_tag || '').trim()
+  if (tag) badges.push({ text: `标签 ${tag}`, color: 'primary' })
+  return badges
+}
+
+async function loadTransferStatus(request) {
+  const resp = await getApi(`transfer_status?page=${transferPage.value}&page_size=15`, { feedback: 'silent' }).catch(() => null)
+  if (!isCurrentPageRequest(request) || !resp?.status) return
+  transferStatus.value = resp.status
+  transferPage.value = resp.status.page || transferPage.value
+}
+
+function changeTransferPage(page) {
+  const total = transferStatus.value.total_pages || 1
+  transferPage.value = Math.min(Math.max(1, page), total)
+  void refreshActive()
+}
+
 async function loadDownloaders(request) {
   const resp = await getApi('downloaders', { feedback: 'silent' }).catch(() => null)
   if (!isCurrentPageRequest(request) || !Array.isArray(resp)) return
@@ -600,6 +672,8 @@ async function refreshActive() {
       await loadAutoremoveStatus(request)
     } else if (activeTab.value === 'failclean') {
       await loadFailcleanStatus(request)
+    } else if (activeTab.value === 'transfer') {
+      await loadTransferStatus(request)
     } else if (activeTab.value === 'sitetag') {
       await Promise.all([loadSiteTagStatus(request), loadDownloaders(request)])
     } else if (activeTab.value === 'upload') {
@@ -1463,6 +1537,146 @@ onBeforeUnmount(() => {
                 </article>
               </div>
             </template>
+          </div>
+
+          <div v-if="activeTab === 'transfer'" class="dm-record-block mt-3" data-record-block="transfer-tasks">
+            <div class="dm-record-block-head">
+              <div>
+                <div class="dm-record-block-title">转移做种</div>
+                <div class="text-caption text-medium-emphasis">启用任务 {{ transferTasks.length }} 条 · 在途 {{ transferSummary.pending || 0 }} · 已完成 {{ transferSummary.completed || 0 }} · 累计成功 {{ transferSummary.success_total || 0 }}</div>
+              </div>
+              <div class="d-flex flex-wrap ga-2">
+                <VBtn variant="text" size="small" prepend-icon="mdi-refresh" class="text-none" @click="refreshActive">刷新</VBtn>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap ga-1 mt-2">
+              <VChip size="small" variant="tonal" color="primary">在途 {{ transferSummary.pending || 0 }}</VChip>
+              <VChip size="small" variant="tonal" :color="transferSummary.rollback ? 'error' : 'grey'">回滚 {{ transferSummary.rollback || 0 }}</VChip>
+              <VChip size="small" variant="tonal" color="success">今日成功 {{ transferSummary.today_success || 0 }}</VChip>
+              <VChip size="small" variant="tonal" color="primary">累计成功 {{ transferSummary.success_total || 0 }}</VChip>
+              <VChip size="small" variant="tonal" color="warning">兜底成功 {{ transferSummary.fallback_success || 0 }}</VChip>
+              <VChip size="small" variant="tonal" color="info">H&R 保护 {{ transferSummary.hr_protected || 0 }}</VChip>
+            </div>
+
+            <div class="text-subtitle-2 mt-4">任务配置</div>
+            <div v-if="!transferTasks.length" class="dm-state text-center text-medium-emphasis">
+              <VIcon icon="mdi-swap-horizontal" size="48" color="grey-lighten-1" class="mb-2" />
+              <div>暂无启用的转移任务</div>
+            </div>
+            <div v-else class="dm-table-scroll dm-desktop-table mt-2">
+              <VTable density="compact" class="dm-table">
+                <thead>
+                  <tr>
+                    <th class="text-caption">名称</th>
+                    <th class="text-caption">源下载器</th>
+                    <th class="text-caption">目的下载器</th>
+                    <th class="text-caption">数据映射</th>
+                    <th class="text-caption">筛选条件</th>
+                    <th class="text-caption">设置</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="task in transferTasks" :key="task.name">
+                    <td class="text-caption dm-ellipsis" :title="task.name">{{ task.name }}</td>
+                    <td class="text-caption">{{ task.from_downloader }}</td>
+                    <td class="text-caption">{{ task.to_downloader }}</td>
+                    <td class="text-caption dm-ellipsis" :title="`${task.from_path} → ${task.to_path}`">{{ task.from_path }} → {{ task.to_path }}</td>
+                    <td class="text-caption dm-ellipsis" :title="transferFilterText(task)">{{ transferFilterText(task) }}</td>
+                    <td>
+                      <div v-if="transferSettingBadges(task).length" class="d-flex flex-wrap ga-1">
+                        <VChip v-for="badge in transferSettingBadges(task)" :key="badge.text" size="x-small" variant="tonal" :color="badge.color">{{ badge.text }}</VChip>
+                      </div>
+                      <span v-else class="text-caption text-medium-emphasis">默认</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </VTable>
+            </div>
+
+            <div class="text-subtitle-2 mt-4">在途事务</div>
+            <div v-if="!transferPending.length" class="dm-state text-center text-medium-emphasis">
+              <VIcon icon="mdi-check-circle-outline" size="48" color="grey-lighten-1" class="mb-2" />
+              <div>暂无在途转移事务</div>
+            </div>
+            <div v-else class="dm-table-scroll dm-desktop-table mt-2">
+              <VTable density="compact" class="dm-table">
+                <thead>
+                  <tr>
+                    <th class="text-caption">源 → 目的</th>
+                    <th class="text-caption">种子</th>
+                    <th class="text-caption">阶段</th>
+                    <th class="text-caption">已等待</th>
+                    <th class="text-caption">选项</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in transferPending" :key="item.key">
+                    <td class="text-caption">{{ item.source_downloader }} → {{ item.downloader }}</td>
+                    <td class="text-caption dm-ellipsis" :title="item.source_hash">{{ transferShortHash(item.source_hash) }}</td>
+                    <td><VChip size="x-small" variant="tonal" :color="transferPhaseColor(item.phase)">{{ transferPhaseText(item.phase) }}</VChip></td>
+                    <td class="text-caption text-no-wrap">{{ item.waited_minutes }} 分钟</td>
+                    <td>
+                      <div class="d-flex flex-wrap ga-1">
+                        <VChip v-if="item.fallback" size="x-small" variant="tonal" color="warning">兜底</VChip>
+                        <VChip v-if="item.skipverify" size="x-small" variant="tonal" color="info">跳过校验</VChip>
+                        <VChip v-if="item.autostart" size="x-small" variant="tonal" color="primary">自动开始</VChip>
+                        <VChip v-if="item.delete_source" size="x-small" variant="tonal" color="error">删源种</VChip>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </VTable>
+            </div>
+
+            <div class="text-subtitle-2 mt-4">最近记录</div>
+            <div v-if="!transferRecords.length" class="dm-state text-center text-medium-emphasis">
+              <VIcon icon="mdi-history" size="48" color="grey-lighten-1" class="mb-2" />
+              <div>暂无转移记录</div>
+            </div>
+            <template v-else>
+              <div class="dm-table-scroll dm-desktop-table mt-2">
+                <VTable density="compact" class="dm-table">
+                  <thead>
+                    <tr>
+                      <th class="text-caption">源 → 目的</th>
+                      <th class="text-caption">种子</th>
+                      <th class="text-caption">状态</th>
+                      <th class="text-caption">更新时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="record in transferRecords" :key="`${record.source_downloader}-${record.source_hash}-${record.downloader}`">
+                      <td class="text-caption">{{ record.source_downloader }} → {{ record.downloader }}</td>
+                      <td class="text-caption dm-ellipsis" :title="record.source_hash">{{ transferShortHash(record.source_hash) }}</td>
+                      <td>
+                        <div class="d-flex flex-wrap ga-1 align-center">
+                          <VChip size="x-small" variant="tonal" :color="transferPhaseColor(record.phase)">{{ transferPhaseText(record.phase) }}</VChip>
+                          <VChip v-if="record.delete_source" size="x-small" variant="tonal" color="error">已删源</VChip>
+                          <VChip v-if="record.hr_protected" size="x-small" variant="tonal" color="info">H&R 保护</VChip>
+                          <VChip v-if="record.fallback" size="x-small" variant="tonal" color="warning">兜底</VChip>
+                        </div>
+                      </td>
+                      <td class="text-caption text-no-wrap">{{ formatTimestamp(record.updated_at) }}</td>
+                    </tr>
+                  </tbody>
+                </VTable>
+              </div>
+              <div class="dm-mobile-list mt-2">
+                <article v-for="record in transferRecords" :key="`m-${record.source_downloader}-${record.source_hash}-${record.downloader}`" class="dm-record-card">
+                  <div class="d-flex align-center justify-space-between ga-2">
+                    <strong class="text-body-2 dm-ellipsis">{{ record.source_downloader }} → {{ record.downloader }}</strong>
+                    <VChip size="x-small" variant="tonal" :color="transferPhaseColor(record.phase)">{{ transferPhaseText(record.phase) }}</VChip>
+                  </div>
+                  <div class="text-caption text-medium-emphasis mt-1">{{ transferShortHash(record.source_hash) }} · {{ formatTimestamp(record.updated_at) }}</div>
+                </article>
+              </div>
+            </template>
+            <div v-if="(transferStatus.total_pages || 1) > 1" class="d-flex align-center justify-center ga-2 mt-2">
+              <VBtn size="x-small" variant="text" icon="mdi-chevron-left" :disabled="transferPage <= 1" @click="changeTransferPage(transferPage - 1)" />
+              <span class="text-caption text-medium-emphasis">{{ transferStatus.page || 1 }} / {{ transferStatus.total_pages || 1 }}</span>
+              <VBtn size="x-small" variant="text" icon="mdi-chevron-right" :disabled="transferPage >= (transferStatus.total_pages || 1)" @click="changeTransferPage(transferPage + 1)" />
+            </div>
           </div>
 
           <div v-if="activeTab === 'sitetag'" class="dm-record-block mt-3" data-record-block="tag-cleanup">

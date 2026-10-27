@@ -42,6 +42,7 @@ from .handlers import (
     api_tag_complement,
     api_tag_status,
     api_transfer_run,
+    api_transfer_status,
     api_tag_cleanup_scan,
     api_upload_limit_disable_restore,
     api_upload_limit_reallocate,
@@ -332,6 +333,14 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
             "methods": ["POST"],
             "summary": "手动执行一轮转移做种",
             "response_model": schemas.Response[ModuleActionResult],
+        },
+        {
+            "path": "/transfer_status",
+            "endpoint": partial(api_transfer_status, plugin),
+            "auth": "bear",
+            "methods": ["GET"],
+            "summary": "获取转移做种数据页",
+            "response_model": ModuleStatusResult,
         },
         {
             "path": "/tag_complement",
