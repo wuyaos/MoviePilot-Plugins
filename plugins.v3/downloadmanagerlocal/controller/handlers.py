@@ -519,11 +519,26 @@ def api_recovery_torrent(plugin, hash: str = ""):
 
 
 def api_hr_tasks(plugin):
-    """返回 H&R 任务列表与汇总。"""
+    """返回 H&R 任务列表与汇总。
+
+    模块初始化被隔离（服务为 None）时返回空列表而不是 500：前端会无条件轮询本端点，
+    一个模块不可用不应让数据页整体报错（模块独立性）。
+    """
+    service = getattr(plugin, "_hr_service", None)
+    if service is None:
+        return HrTasksResult.model_validate({"tasks": [], "summary": {}})
     try:
-        return HrTasksResult.model_validate(plugin._hr_service.get_service_infos())
+        return HrTasksResult.model_validate(service.get_service_infos())
     except Exception as e:
         _raise_query_error("H&R 任务查询失败", e)
+
+
+def _require_hr_service(plugin):
+    """取 H&R 服务实例，被隔离时抛出与门控一致的可读错误。"""
+    service = getattr(plugin, "_hr_service", None)
+    if service is None:
+        raise HTTPException(status_code=400, detail="「H&R 助手」未启用或初始化失败（查看插件日志）")
+    return service
 
 
 def api_hr_skip_stats(plugin):
@@ -548,8 +563,9 @@ def api_hr_presets(plugin):
 def api_hr_check(plugin):
     """立即执行一轮 H&R 状态检查。"""
     _require_module(plugin, "hr", "H&R 助手")
+    service = _require_hr_service(plugin)
     try:
-        result = plugin._hr_service.check_tasks("手动")
+        result = service.check_tasks("手动")
     except Exception as e:
         logger.error(f"【PT下载中心】H&R 状态检查失败: {e}")
         return _operation_response(
@@ -563,8 +579,9 @@ def api_hr_check(plugin):
 def api_hr_scan(plugin):
     """立即执行一轮 H&R 自动发现与状态检查。"""
     _require_module(plugin, "hr", "H&R 助手")
+    service = _require_hr_service(plugin)
     try:
-        result = plugin._hr_service.run_scan("手动")
+        result = service.run_scan("手动")
     except Exception as e:
         logger.error(f"【PT下载中心】H&R 全量扫描失败: {e}")
         return _operation_response(
@@ -578,8 +595,9 @@ def api_hr_scan(plugin):
 def api_hr_clear_task(plugin, payload: HrClearTaskRequest):
     """清除单条已结束的 H&R 记录。"""
     request = _request_dict(payload)
+    service = _require_hr_service(plugin)
     try:
-        cleared = plugin._hr_service.clear_task(
+        cleared = service.clear_task(
             request.get("downloader_id") or "",
             request.get("torrent_hash") or "",
         )
@@ -597,8 +615,9 @@ def api_hr_clear_task(plugin, payload: HrClearTaskRequest):
 
 def api_hr_clear_compliant(plugin, payload: EmptyRequest | None = None):
     """批量清除已满足的 H&R 记录。"""
+    service = _require_hr_service(plugin)
     try:
-        cleared = plugin._hr_service.clear_compliant()
+        cleared = service.clear_compliant()
     except Exception as e:
         logger.error(f"【PT下载中心】H&R 已满足记录清除失败: {e}")
         return _operation_response(
@@ -612,8 +631,9 @@ def api_hr_clear_compliant(plugin, payload: EmptyRequest | None = None):
 
 def api_hr_clear_missing(plugin, payload: EmptyRequest | None = None):
     """批量清除种子已不在下载器的 H&R 记录。"""
+    service = _require_hr_service(plugin)
     try:
-        cleared = plugin._hr_service.clear_missing()
+        cleared = service.clear_missing()
     except Exception as e:
         logger.error(f"【PT下载中心】H&R 需做种记录清除失败: {e}")
         return _operation_response(

@@ -345,3 +345,32 @@ def test_rename_scan_rejected_when_module_disabled(endpoints):
         endpoints.handlers.api_rename_scan(plugin)
     assert excinfo.value.status_code == 400
     assert scan.call_count == 0
+
+
+def test_hr_tasks_returns_empty_when_service_isolated(endpoints):
+    """H&R 服务被隔离（None）时任务列表返回空而不是 500：前端会无条件轮询本端点。"""
+    plugin = _fake_plugin(_hr_service=None)
+    result = endpoints.handlers.api_hr_tasks(plugin)
+    assert result.tasks == []
+    assert result.summary == {}
+
+
+def test_hr_manual_actions_reject_isolated_service(endpoints):
+    """模块开关为开但服务初始化被隔离时，手动端点给出明确 400 而不是 AttributeError 文案。"""
+    plugin = _fake_plugin(_hr_enabled=True, _hr_service=None)
+    request = types.SimpleNamespace()
+    for name, call in (
+        ("hr_check", lambda: endpoints.handlers.api_hr_check(plugin)),
+        ("hr_scan", lambda: endpoints.handlers.api_hr_scan(plugin)),
+        ("hr_clear_compliant", lambda: endpoints.handlers.api_hr_clear_compliant(plugin)),
+        ("hr_clear_missing", lambda: endpoints.handlers.api_hr_clear_missing(plugin)),
+        ("hr_clear_task", lambda: endpoints.handlers.api_hr_clear_task(plugin, request)),
+    ):
+        try:
+            result = call()
+        except FakeHTTPException as e:
+            assert e.status_code == 400, name
+            assert "初始化失败" in e.detail, name
+            continue
+        raise AssertionError(f"{name} 未拒绝，返回 {result!r}")
+        assert "初始化失败" in excinfo.value.detail, name

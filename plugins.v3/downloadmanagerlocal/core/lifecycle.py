@@ -6,7 +6,11 @@ from app.sdk.config import settings
 from app.sdk.logging import logger
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from ..utils.config import is_upload_limit_active
+from ..utils.config import (
+    MODULE_SWITCHES,
+    is_upload_limit_active,
+    module_switch_on,
+)
 from .config import initialize_runtime_config
 from ..modules.autoremove.service import AutoRemoveService
 from ..modules.transfer.events import clear_transfer_schedule, restore_transfer_schedule
@@ -48,19 +52,49 @@ def initialize_plugin(plugin, config: dict = None) -> None:
             restore_transfer_schedule(plugin)
             scheduler_needed = True
 
-    plugin._hr_service = HrService(plugin)
-    plugin._hr_service.init_module(config)
-
-    plugin._autoremove_service = AutoRemoveService(plugin)
-    plugin._autoremove_service.init_module(config)
-
-    plugin._failclean_service = FailCleanService(plugin)
-    plugin._failclean_service.init_module(config)
+    # 模块独立性（Goal: 单模块故障不得拖垮其它模块）：每个服务单独隔离初始化，
+    # 任一模块抛异常只禁用该模块，其余模块与转移调度照常启动。
+    plugin._hr_service = _init_service_isolated(plugin, "H&R", "hr", HrService, config)
+    plugin._autoremove_service = _init_service_isolated(
+        plugin, "自动删种", "autoremove", AutoRemoveService, config
+    )
+    plugin._failclean_service = _init_service_isolated(
+        plugin, "失败清理", "failclean", FailCleanService, config
+    )
     if scheduler_needed:
         _start_scheduler_if_needed(plugin, print_jobs=True)
 
     if getattr(plugin, "_enabled", False) and load_seed_recheck_queue(plugin):
-        ensure_seed_recheck_worker(plugin)
+        try:
+            ensure_seed_recheck_worker(plugin)
+        except Exception as error:
+            logger.error(f"【PT下载中心】做种校验 worker 启动失败（不影响其它模块）: {error}")
+
+
+def _init_service_isolated(
+    plugin, label: str, module: str, service_cls, config: dict
+) -> object:
+    """隔离初始化单个模块：失败时按需关闭该模块开关并返回 None，不中断其它模块。
+
+    模块本应启用（裸开关为开）却初始化失败时，把它的开关键落盘为关，避免每轮
+    reload 反复报同一错误；开关来自 MODULE_SWITCHES 注册表，不重复硬编码键名。
+    """
+    service = service_cls(plugin)
+    try:
+        service.init_module(config)
+        return service
+    except Exception as error:
+        logger.error(f"【PT下载中心:{label}】模块初始化失败，已隔离该模块（其它模块不受影响）: {error}")
+        try:
+            config = config or {}
+            disable_key = MODULE_SWITCHES[module][0]
+            if module_switch_on(config, module):
+                config[disable_key] = False
+                plugin.update_config(config=config)
+                logger.warning(f"【PT下载中心:{label}】已关闭开关 {disable_key}，修复配置后可重新启用")
+        except Exception as cfg_err:
+            logger.error(f"【PT下载中心:{label}】隔离时写回配置失败: {cfg_err}")
+        return None
 
 
 def _disable_invalid_transfer_config(plugin, config: dict) -> None:
@@ -105,6 +139,7 @@ def _stop_failclean_service(plugin) -> None:
         return
     service.stop()
     plugin._failclean_service = None
+
 
 def stop_plugin_service(plugin) -> None:
     """发出退出信号并停止后台调度器，旧批次通过代次识别停止。"""

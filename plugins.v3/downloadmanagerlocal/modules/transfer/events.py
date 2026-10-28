@@ -240,15 +240,26 @@ def clear_transfer_schedule(plugin) -> None:
         plugin._transfer_running_generation = None
 
 
+def _event_step(plugin, label: str, fn, *args) -> None:
+    """隔离执行事件处理的单个模块分支：单模块异常不影响后续模块（模块独立性）。"""
+    try:
+        fn(plugin, *args)
+    except Exception as error:
+        logger.error(f"【PT下载中心】事件分支 {label} 异常（已隔离，后续模块继续）: {error}")
+
+
 def handle_download_added_event(plugin, event) -> None:
-    """处理 DownloadAdded 事件、回收临时标签、纳入 H&R/站点标签/命名补刀管理并唤醒上传限速 worker。"""
+    """处理 DownloadAdded 事件、回收临时标签、纳入 H&R/站点标签/命名补刀管理并唤醒上传限速 worker。
+
+    各模块分支逐个隔离：站点标签/重命名补刀/H&R/限速唤醒任何一个失败，其余分支照常执行。
+    """
     # 站点标签事件路径与 cron 路径同口径：模块门控关闭时不再触碰下载器（utils/config.py::module_active）。
     if getattr(plugin, "_tag_enabled", False):
-        cleanup_temporary_tags_for_event(plugin, event)
-        process_download_added(plugin, event)
-    handle_download_added_rename(plugin, event)
-    _register_hr_download_added(plugin, event)
-    wake_upload_limit_worker(plugin)
+        _event_step(plugin, "站点标签:回收临时标签", cleanup_temporary_tags_for_event, event)
+        _event_step(plugin, "站点标签:打标", process_download_added, event)
+    _event_step(plugin, "重命名补刀", handle_download_added_rename, event)
+    _event_step(plugin, "H&R纳管", _register_hr_download_added, event)
+    _event_step(plugin, "限速唤醒", wake_upload_limit_worker)
 
 
 def _register_hr_download_added(plugin, event) -> None:
