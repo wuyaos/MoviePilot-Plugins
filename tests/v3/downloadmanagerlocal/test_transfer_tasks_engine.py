@@ -4,6 +4,7 @@ transfer_tasks / payload_export 真加载（仅存根 app.sdk.logging）；
 transfer.py 以全存根同级依赖加载（相对导入符号全部来自 sys.modules 存根）。
 """
 
+import importlib.machinery
 import importlib.util
 import sys
 import types
@@ -19,11 +20,21 @@ PREFIX = "app.plugins.downloadmanagerlocal.service"
 
 
 def _module(monkeypatch, name, **attrs):
+    """替身模块，必须带 __spec__。
+
+    只写 `types.ModuleType(name)` 会让 `__spec__` 为 None；替身一旦被写进
+    sys.modules 并留在那里，测试失败时 pytest 渲染回溯会调
+    `importlib.resources.files(parent)` 解析父包，抛 TypeError 变成
+    INTERNALERROR，整个会话只报「no tests ran」——真实失败被掩盖。
+    """
+    path = attrs.pop("__path__", None)
     result = types.ModuleType(name)
+    result.__spec__ = importlib.machinery.ModuleSpec(name, None, is_package=path is not None)
+    if path is not None:
+        result.__path__ = path
     result.__dict__.update(attrs)
     monkeypatch.setitem(sys.modules, name, result)
     return result
-
 
 def _load_real(monkeypatch, name):
     spec = importlib.util.spec_from_file_location(PREFIX + "." + name, SERVICE / (name + ".py"))
