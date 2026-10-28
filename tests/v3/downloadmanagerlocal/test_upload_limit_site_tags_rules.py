@@ -92,8 +92,8 @@ def endpoints(monkeypatch):
         (PREFIX + '.adapter', PLUGIN / 'adapter'),
         (PREFIX + '.controller', PLUGIN / 'controller'),
         (PREFIX + '.model', PLUGIN / 'model'),
-        (PREFIX + '.service', PLUGIN / 'service'),
-        (PREFIX + '.service.hr', PLUGIN / 'service/hr'),
+        (PREFIX + '.modules', PLUGIN / 'modules'),
+        (PREFIX + '.modules.hr', PLUGIN / 'modules/hr'),
         (PREFIX + '.utils', PLUGIN / 'utils'),
     ):
         _module(monkeypatch, package, __path__=[str(path)])
@@ -110,14 +110,14 @@ def endpoints(monkeypatch):
     _module(monkeypatch, PREFIX + '.model.state',
             RENAME_RECORDS_KEY='rename_records', RENAME_RETRY_STATE_KEY='rename_retry_state',
             TRANSFER_SKIP_STATS_KEY='transfer_skip_stats', load_transfer_stats=Mock())
-    _module(monkeypatch, PREFIX + '.service.archive', serialized_rename_state=lambda fn: fn)
-    _module(monkeypatch, PREFIX + '.service.hr.guard', HrGuard=Mock())
-    _module(monkeypatch, PREFIX + '.service.hr.rules', load_preset_rules=Mock(return_value={}))
-    _module(monkeypatch, PREFIX + '.service.site_tag',
+    _module(monkeypatch, PREFIX + '.modules.rename.archive', serialized_rename_state=lambda fn: fn)
+    _module(monkeypatch, PREFIX + '.modules.hr.guard', HrGuard=Mock())
+    _module(monkeypatch, PREFIX + '.modules.hr.rules', load_preset_rules=Mock(return_value={}))
+    _module(monkeypatch, PREFIX + '.modules.sitetag.service',
             execute_tag_cleanup=Mock(), scan_and_clean_tags=Mock(), complement_history=Mock())
-    _module(monkeypatch, PREFIX + '.service.upload_limit_worker', stop_upload_limit_worker=Mock())
+    _module(monkeypatch, PREFIX + '.modules.uploadlimit.worker', stop_upload_limit_worker=Mock())
     upload_limiter = _module(
-        monkeypatch, PREFIX + '.service.upload_limiter',
+        monkeypatch, PREFIX + '.modules.uploadlimit.service',
         get_upload_limit_status=Mock(), persist_upload_limit_site_rules=Mock(),
         restore_upload_limits=Mock(), run_upload_limit_cycle=Mock(),
         scan_upload_limit_site_tags=Mock())

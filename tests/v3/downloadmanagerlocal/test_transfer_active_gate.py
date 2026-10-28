@@ -2,7 +2,7 @@
 """is_transfer_active 门控：v3.9.0 多任务形态（transfer_tasks 优先，废弃字段不参与）。
 
 不使用 conftest（其 PLUGIN 常量为 parents[2]，指向错误路径；旧测试均自带加载器），
-本文件自带桩注入与文件加载器，仅真实加载 utils/config.py 与 service/transfer_tasks.py。
+本文件自带桩注入与文件加载器，仅真实加载 utils/config.py 与 modules/transfer/tasks.py。
 """
 import importlib.machinery
 import importlib.util
@@ -50,23 +50,23 @@ def _ensure_loaded():
     _stub("app.sdk.logging", logger=Mock())
     _stub(PREFIX, is_package=True, __path_cancelled=None)
     sys.modules[PREFIX].__path__ = [str(PLUGIN)]
-    for pkg in ("service", "service.autoremove", "service.failclean", "service.hr"):
+    for pkg in ("modules", "modules.autoremove", "modules.failclean", "modules.hr", "core"):
         _stub(f"{PREFIX}.{pkg}", is_package=True)
     _stub(
-        f"{PREFIX}.service.autoremove.constants",
+        f"{PREFIX}.modules.autoremove.constants",
         build_remover_config_defaults=Mock(return_value={}),
     )
     _stub(
-        f"{PREFIX}.service.failclean.constants",
+        f"{PREFIX}.modules.failclean.constants",
         build_failclean_config_defaults=Mock(return_value={}),
     )
     _stub(
-        f"{PREFIX}.service.hr.constants",
+        f"{PREFIX}.modules.hr.constants",
         build_hr_config_defaults=Mock(return_value={}),
     )
-    _stub(f"{PREFIX}.service.rename", build_rename_flat_defaults=Mock(return_value={}))
+    _stub(f"{PREFIX}.modules.rename.service", build_rename_flat_defaults=Mock(return_value={}))
     _stub(
-        f"{PREFIX}.service.site_tag",
+        f"{PREFIX}.modules.sitetag.service",
         DEFAULT_TAG_CONFIG={
             "enable": False,
             "interval_cron": "5 4 * * *",
@@ -85,7 +85,7 @@ def _ensure_loaded():
             "custom_site_labels_str": "",
         },
     )
-    _load_real("service/transfer_tasks.py", f"{PREFIX}.service.transfer_tasks")
+    _load_real("modules/transfer/tasks.py", f"{PREFIX}.modules.transfer.tasks")
     _config = _load_real("utils/config.py", f"{PREFIX}.utils.config")
     # 加载完成，还原 sys.modules（已加载模块持有桩引用，不受影响），
     # 避免污染同进程后续收集的其他测试模块。

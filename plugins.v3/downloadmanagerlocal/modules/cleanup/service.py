@@ -8,8 +8,8 @@ from typing import Any, Dict, Iterable, List
 
 from app.sdk.logging import logger
 
-from ..adapter.moviepilot import get_download_hash_by_fullpath
-from .hr.guard import SKIP_PATH_SYNC_DELETE, HrGuard
+from ...adapter.moviepilot import get_download_hash_by_fullpath
+from ..hr.guard import SKIP_PATH_SYNC_DELETE, HrGuard
 
 RECENT_CLEANUP_WINDOW_SECONDS = 30
 HR_ACTION_CHECK = "hnr_check"

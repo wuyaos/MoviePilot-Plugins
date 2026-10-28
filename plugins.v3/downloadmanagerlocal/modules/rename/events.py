@@ -11,8 +11,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app.sdk.config import settings
 from app.sdk.logging import logger
 
-from ..utils.torrent_adapter import get_hash
-from .rename import (
+from ...utils.torrent_adapter import get_hash
+from .service import (
     build_rename_config,
     notify_rename_result,
     record_rename_module_result,

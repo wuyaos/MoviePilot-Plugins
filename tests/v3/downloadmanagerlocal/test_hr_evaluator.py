@@ -1,11 +1,11 @@
-"""H&R 判定引擎测试：真实加载 service/hr 的 models / rules / evaluator。
+"""H&R 判定引擎测试：真实加载 modules/hr 的 models / rules / evaluator。
 
 只替身 MP 宿主边界（`app.sdk.config.settings` 提供 TZ）；hr 三个模块按真实文件加载，
 被测对象是真实的 `evaluate_task` / `initialize_requirements` / `seeding_progress` /
 `HrTask.meets_hr` / `match_size_tier`。
 
 为什么走规则侧而不是端到端：H&R 的 `seeding_time` 由扫描器按
-`now - completed_at` 现算（`service/hr/scanner.py:96`），真实做种时长在测试里造不出来，
+`now - completed_at` 现算（`modules/hr/scanner.py:96`），真实做种时长在测试里造不出来，
 所以按 `hr_duration` / `hr_ratio` / `hr_upload_multiplier` 等规则字段构造判定场景。
 """
 
@@ -21,7 +21,7 @@ from unittest.mock import Mock
 import pytest
 
 PLUGIN = Path(__file__).resolve().parents[3] / "plugins.v3/downloadmanagerlocal"
-HR_DIR = PLUGIN / "service/hr"
+HR_DIR = PLUGIN / "modules/hr"
 PREFIX = "app.plugins.downloadmanagerlocal"
 GIB = 1024**3
 
@@ -38,7 +38,7 @@ def _pkg(monkeypatch, name, path: Path | None = None, **attrs) -> types.ModuleTy
 
 
 def _load_hr_module(monkeypatch, name: str) -> types.ModuleType:
-    full = f"{PREFIX}.service.hr.{name}"
+    full = f"{PREFIX}.modules.hr.{name}"
     spec = importlib.util.spec_from_file_location(full, HR_DIR / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, full, module)
@@ -55,8 +55,8 @@ def hr(monkeypatch):
     _pkg(monkeypatch, "app.sdk.logging", logger=Mock())
     _pkg(monkeypatch, "app.plugins", path=PLUGIN.parent)
     _pkg(monkeypatch, PREFIX)
-    _pkg(monkeypatch, f"{PREFIX}.service")
-    _pkg(monkeypatch, f"{PREFIX}.service.hr", path=HR_DIR)
+    _pkg(monkeypatch, f"{PREFIX}.modules")
+    _pkg(monkeypatch, f"{PREFIX}.modules.hr", path=HR_DIR)
     models = _load_hr_module(monkeypatch, "models")
     rules = _load_hr_module(monkeypatch, "rules")
     evaluator = _load_hr_module(monkeypatch, "evaluator")

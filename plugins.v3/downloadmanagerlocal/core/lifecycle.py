@@ -8,21 +8,21 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from ..utils.config import is_upload_limit_active
 from .config import initialize_runtime_config
-from .autoremove.service import AutoRemoveService
-from .events import clear_transfer_schedule, restore_transfer_schedule
-from .failclean.service import FailCleanService
-from .hr.service import HrService
-from .recheck import (
+from ..modules.autoremove.service import AutoRemoveService
+from ..modules.transfer.events import clear_transfer_schedule, restore_transfer_schedule
+from ..modules.failclean.service import FailCleanService
+from ..modules.hr.service import HrService
+from ..modules.transfer.recheck import (
     ensure_seed_recheck_worker,
     load_seed_recheck_queue,
     stop_seed_recheck_worker,
 )
-from .transfer import validate_config
-from .upload_limit_worker import (
+from ..modules.transfer.service import validate_config
+from ..modules.uploadlimit.worker import (
     start_upload_limit_worker,
     stop_upload_limit_worker,
 )
-from .upload_limiter import load_upload_limit_state, restore_upload_limits
+from ..modules.uploadlimit.service import load_upload_limit_state, restore_upload_limits
 
 
 def initialize_plugin(plugin, config: dict = None) -> None:

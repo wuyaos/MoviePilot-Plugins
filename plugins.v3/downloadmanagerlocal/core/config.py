@@ -10,8 +10,8 @@ from ..utils.config import (
     normalize_upload_limit_config,
     safe_int,
 )
-from ..service.rename import build_rename_config
-from ..service.site_tag import build_tag_config
+from ..modules.rename.service import build_rename_config
+from ..modules.sitetag.service import build_tag_config
 from ..utils.tracker import parse_tracker_mappings
 
 

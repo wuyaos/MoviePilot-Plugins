@@ -4,15 +4,15 @@ import time
 
 from app.sdk.logging import logger
 
-from ..model.state import record_transfer_success
-from .hr.guard import HrGuard
+from ...model.state import record_transfer_success
+from ..hr.guard import HrGuard
 
 from .recheck import (
     _queue_key, load_seed_recheck_queue, save_seed_recheck_queue,
     ensure_seed_recheck_worker, seed_is_checking, seed_is_ready, seed_is_error,
     seed_is_timeout,
 )
-from ..utils.torrent_adapter import (
+from ...utils.torrent_adapter import (
     get_torrent_state, is_torrent_active, normalize_hash, skipverify_applies,
     supports_recheck, torrent_is_complete,
 )
@@ -216,7 +216,7 @@ def advance_transfer(plugin, item, service, task, stopped):
         if not active:
             return False
     item["target_confirmed"] = True
-    from .transfer import post_transfer_process
+    from .service import post_transfer_process
     if stopped() or not post_transfer_process(plugin, service, item["hash"]):
         return False
     if item["delete_source_requested"]:

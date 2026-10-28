@@ -11,16 +11,16 @@ from app.sdk.logging import logger
 from app.sdk.media import MetaBase, MetaInfo, resolve_media_identity
 from bencode import bdecode
 
-from ..adapter.moviepilot import get_download_history_by_hash
-from ..model.state import RENAME_RECORDS_KEY
-from ..service.archive import serialized_rename_state
-from ..utils.name_cleaner import (
+from ...adapter.moviepilot import get_download_history_by_hash
+from ...model.state import RENAME_RECORDS_KEY
+from .archive import serialized_rename_state
+from ...utils.name_cleaner import (
     clean_torrent_original_name,
     collect_retry_rename_hashes,
     is_polluted_original_name,
 )
-from ..utils.tag_cleanup import normalize_tags
-from ..utils.torrent_adapter import get_hash, get_label, get_save_path, get_torrent_name, get_tracker_urls
+from ...utils.tag_cleanup import normalize_tags
+from ...utils.torrent_adapter import get_hash, get_label, get_save_path, get_torrent_name, get_tracker_urls
 
 
 def _tr_rename(dl, torrent_hash: str, torrent_name: str, new_name) -> None:
@@ -509,7 +509,7 @@ def retry_failed_renames(plugin, to_service):
                     item_success = False
                     summary["errors"].append(f"{th}: 重命名失败")
             if plugin._tag_enabled:
-                from .site_tag import tag_torrent
+                from ..sitetag.service import tag_torrent
                 tag_result = tag_torrent(plugin, dl, dl_type, th, tags, trackers)
                 if tag_result is False:
                     item_success = False

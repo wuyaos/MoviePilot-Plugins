@@ -91,8 +91,8 @@ def endpoints(monkeypatch):
         (PREFIX + '.adapter', PLUGIN / 'adapter'),
         (PREFIX + '.controller', PLUGIN / 'controller'),
         (PREFIX + '.model', PLUGIN / 'model'),
-        (PREFIX + '.service', PLUGIN / 'service'),
-        (PREFIX + '.service.hr', PLUGIN / 'service/hr'),
+        (PREFIX + '.modules', PLUGIN / 'modules'),
+        (PREFIX + '.modules.hr', PLUGIN / 'modules/hr'),
         (PREFIX + '.utils', PLUGIN / 'utils'),
     ):
         _module(monkeypatch, package, __path__=[str(path)])
@@ -109,16 +109,16 @@ def endpoints(monkeypatch):
     _module(monkeypatch, PREFIX + '.model.state',
             RENAME_RECORDS_KEY='rename_records', RENAME_RETRY_STATE_KEY='rename_retry_state',
             TRANSFER_SKIP_STATS_KEY='transfer_skip_stats', load_transfer_stats=Mock())
-    _module(monkeypatch, PREFIX + '.service.archive', serialized_rename_state=lambda fn: fn)
-    _module(monkeypatch, PREFIX + '.service.rename', scan_renames=Mock(return_value={'renamed': 0}))
-    _module(monkeypatch, PREFIX + '.service.hr.guard', HrGuard=Mock())
-    _module(monkeypatch, PREFIX + '.service.hr.rules', load_preset_rules=Mock(return_value={}))
-    site_tag = _module(monkeypatch, PREFIX + '.service.site_tag',
+    _module(monkeypatch, PREFIX + '.modules.rename.archive', serialized_rename_state=lambda fn: fn)
+    _module(monkeypatch, PREFIX + '.modules.rename.service', scan_renames=Mock(return_value={'renamed': 0}))
+    _module(monkeypatch, PREFIX + '.modules.hr.guard', HrGuard=Mock())
+    _module(monkeypatch, PREFIX + '.modules.hr.rules', load_preset_rules=Mock(return_value={}))
+    site_tag = _module(monkeypatch, PREFIX + '.modules.sitetag.service',
                        execute_tag_cleanup=Mock(), scan_and_clean_tags=Mock(),
                        complement_history=Mock(return_value={'completed': 0, 'skipped': 0,
                                                              'downloaders': {}}))
-    _module(monkeypatch, PREFIX + '.service.upload_limit_worker', stop_upload_limit_worker=Mock())
-    _module(monkeypatch, PREFIX + '.service.upload_limiter',
+    _module(monkeypatch, PREFIX + '.modules.uploadlimit.worker', stop_upload_limit_worker=Mock())
+    _module(monkeypatch, PREFIX + '.modules.uploadlimit.service',
             get_upload_limit_status=Mock(), persist_upload_limit_site_rules=Mock(),
             restore_upload_limits=Mock(), run_upload_limit_cycle=Mock(),
             scan_upload_limit_site_tags=Mock())
@@ -302,7 +302,7 @@ def test_tag_complement_reports_exception(endpoints):
 
 def test_rename_scan_starts_background_scan(endpoints):
     """POST /rename_scan：立即返回 running=True，后台线程真调用 scan_renames(plugin)。"""
-    scan = sys.modules[PREFIX + '.service.rename'].scan_renames
+    scan = sys.modules[PREFIX + '.modules.rename.service'].scan_renames
     scan.reset_mock()
     scan.return_value = {'renamed': 2}
     plugin = _fake_plugin(_rename_enabled=True)
@@ -324,7 +324,7 @@ def test_rename_scan_starts_background_scan(endpoints):
 
 def test_rename_scan_rejected_when_already_running(endpoints):
     """扫描运行中再次触发：返回 code=1，不重复启动。"""
-    scan = sys.modules[PREFIX + '.service.rename'].scan_renames
+    scan = sys.modules[PREFIX + '.modules.rename.service'].scan_renames
     scan.reset_mock()
     plugin = _fake_plugin(_rename_enabled=True, _rename_scan_running=True)
 
@@ -338,7 +338,7 @@ def test_rename_scan_rejected_when_already_running(endpoints):
 
 def test_rename_scan_rejected_when_module_disabled(endpoints):
     """命名模块未生效 → HTTP 400，不启动扫描。"""
-    scan = sys.modules[PREFIX + '.service.rename'].scan_renames
+    scan = sys.modules[PREFIX + '.modules.rename.service'].scan_renames
     scan.reset_mock()
     plugin = _fake_plugin(_rename_enabled=False)
     with pytest.raises(FakeHTTPException) as excinfo:

@@ -8,9 +8,9 @@ from typing import Any
 
 from app.sdk.logging import logger
 
-from ..model.state import SEED_RECHECK_QUEUE_KEY
+from ...model.state import SEED_RECHECK_QUEUE_KEY
 
-from ..utils.torrent_adapter import get_torrent_state, torrent_is_complete
+from ...utils.torrent_adapter import get_torrent_state, torrent_is_complete
 
 
 def _queue_lock(plugin) -> threading.RLock:
@@ -152,7 +152,7 @@ def seed_recheck_loop(plugin, stop_event=None):
 
 def process_seed_recheck_once(plugin, queue, stop_event=None):
     """仅推进带源身份的转移事务，不再扫描任意暂停任务。"""
-    from .transfer_pipeline import advance_transfer
+    from .pipeline import advance_transfer
     stop_event = stop_event or getattr(plugin, "_seed_recheck_stop_event", None)
     def stopped():
         return (stop_event is not None and stop_event.is_set()) or plugin._event.is_set()

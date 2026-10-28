@@ -10,14 +10,14 @@ from app.schemas.types import MessageType
 from app.sdk.config import settings
 from app.sdk.logging import logger
 
-from ..adapter.moviepilot import is_downloader_type
-from ..utils.name_cleaner import is_dirty_renamed_torrent_name
-from ..utils.torrent_adapter import get_label, get_save_path, get_torrent_name, get_tracker_urls
+from ...adapter.moviepilot import is_downloader_type
+from ...utils.name_cleaner import is_dirty_renamed_torrent_name
+from ...utils.torrent_adapter import get_label, get_save_path, get_torrent_name, get_tracker_urls
 from .recheck import _queue_lock, load_seed_recheck_queue, ensure_seed_recheck_worker, seed_is_ready, seed_is_error
-from .transfer_pipeline import begin_transfer, delete_source
-from .rename import _get_torrent_content_name, build_rename_config, resolve_retry_original_name
-from .site_tag import create_temporary_tag, forget_temporary_tag, release_temporary_tag
-from .transfer_tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated
+from .pipeline import begin_transfer, delete_source
+from ..rename.service import _get_torrent_content_name, build_rename_config, resolve_retry_original_name
+from ..sitetag.service import create_temporary_tag, forget_temporary_tag, release_temporary_tag
+from .tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated
 from .payload_export import get_torrent_payloads
 
 _AUTOMATIC_DELAY_TRIGGER_SOURCES = frozenset({"兜底扫描", "事件驱动"})

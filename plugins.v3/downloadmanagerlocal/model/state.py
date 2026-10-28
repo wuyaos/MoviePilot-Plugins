@@ -6,7 +6,7 @@ from datetime import date
 from threading import RLock
 from typing import Any
 
-from ..service.hr.constants import HR_NOTIFY_EVENTS_DATA_KEY, HR_TASKS_DATA_KEY
+from ..modules.hr.constants import HR_NOTIFY_EVENTS_DATA_KEY, HR_TASKS_DATA_KEY
 
 RENAME_RECORDS_KEY = "rename_records"
 RENAME_RETRY_STATE_KEY = "rename_retry_state"

@@ -2,15 +2,15 @@
 """站点标签打标的三态契约（True / None / False）。
 
 回归背景（2026-10-28 用户裁决）：「无法识别站点」属可接受情形，算 warning，不能拉低补刀成功率。
-因此 `service/site_tag.py:tag_torrent` 的返回值从布尔改成三态：
+因此 `modules/sitetag/service.py:tag_torrent` 的返回值从布尔改成三态：
 
 - `True`  已打上标签，或标签已存在（幂等）
 - `None`  站点未识别 —— 跳过，**不计失败**（调用侧记 warning）
 - `False` **写入失败**（下载器报错）—— 调用侧记 failure
 
 调用侧对应关系（本文件不覆盖，由各自模块的用例覆盖）：
-- `service/rename.py` 补刀：`False` → `summary["errors"]`，`None` → `summary["warnings"]`
-- `service/transfer.py` 转移后打标：`False` → logger.error，`None` → logger.warning
+- `modules/rename/service.py` 补刀：`False` → `summary["errors"]`，`None` → `summary["warnings"]`
+- `modules/transfer/service.py` 转移后打标：`False` → logger.error，`None` → logger.warning
 
 不使用 conftest（其 PLUGIN 常量为 parents[2]，指向错误路径），本文件自带桩注入。
 """
@@ -83,7 +83,7 @@ def _ensure_loaded():
           get_hash=Mock(return_value=""),
           get_label=Mock(return_value=""),
           get_torrent_name=Mock(return_value=""))
-    _site_tag = _load_real("service/site_tag.py", PREFIX + ".service.site_tag")
+    _site_tag = _load_real("modules/sitetag/service.py", PREFIX + ".modules.sitetag.service")
     _IS_LOADED = True
 
 

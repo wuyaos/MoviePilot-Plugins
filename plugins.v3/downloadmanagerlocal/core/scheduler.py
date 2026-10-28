@@ -6,13 +6,13 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.sdk.logging import logger
 
-from .autoremove.constants import REMOVER_SERVICE_ID, REMOVER_SERVICE_NAME
-from .failclean.constants import (
+from ..modules.autoremove.constants import REMOVER_SERVICE_ID, REMOVER_SERVICE_NAME
+from ..modules.failclean.constants import (
     FAILCLEAN_LOG_PREFIX,
     FAILCLEAN_REPEAT_SERVICE_ID,
     FAILCLEAN_REPEAT_SERVICE_NAME,
 )
-from .hr.constants import (
+from ..modules.hr.constants import (
     HR_CHECK_SERVICE_ID,
     HR_CHECK_SERVICE_NAME,
     HR_DISCOVER_SERVICE_ID,
@@ -21,8 +21,8 @@ from .hr.constants import (
     HR_SUMMARY_SERVICE_ID,
     HR_SUMMARY_SERVICE_NAME,
 )
-from .rename import scan_renames
-from .site_tag import complement_history
+from ..modules.rename.service import scan_renames
+from ..modules.sitetag.service import complement_history
 
 
 def build_plugin_services(plugin) -> List[Dict[str, Any]]:

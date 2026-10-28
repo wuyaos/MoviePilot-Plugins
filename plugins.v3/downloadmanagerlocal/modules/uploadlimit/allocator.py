@@ -6,7 +6,7 @@ import math
 from collections import defaultdict
 from typing import Iterable, Optional
 
-from ..model.upload_limit import UploadPool
+from ...model.upload_limit import UploadPool
 
 
 _EPSILON = 1e-9

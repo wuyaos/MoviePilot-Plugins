@@ -11,7 +11,7 @@ from contextvars import ContextVar
 from functools import wraps
 from typing import Any, Iterable
 
-from ..adapter.upload_limit import (
+from ...adapter.upload_limit import (
     expected_global_upload_settings,
     expected_torrent_upload_settings,
     global_settings_equal,
@@ -27,15 +27,15 @@ from ..adapter.upload_limit import (
     write_global_upload_limit,
     write_torrent_upload_limit,
 )
-from ..model.state import UPLOAD_LIMIT_STATE_KEY
-from ..model.upload_limit import (
+from ...model.state import UPLOAD_LIMIT_STATE_KEY
+from ...model.upload_limit import (
     UPLOAD_LIMIT_FAILURE_NOTIFY_THRESHOLD,
     UploadPool,
     migrate_upload_limit_state,
     pool_state_key,
 )
-from ..utils.config import is_upload_limit_active, normalize_upload_limit_config
-from .upload_allocator import (
+from ...utils.config import is_upload_limit_active, normalize_upload_limit_config
+from .allocator import (
     adjust_auto_probe_count,
     aggregate_pool_demand_kib,
     allocate_site_pools,

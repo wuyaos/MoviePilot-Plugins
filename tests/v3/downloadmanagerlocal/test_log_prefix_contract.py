@@ -24,28 +24,28 @@ PLUGIN = Path(__file__).resolve().parents[3] / "plugins.v3" / "downloadmanagerlo
 
 # 文件（相对插件根）-> 归属模块；不在表内 = 跨层文件，不做 I4 校验
 FILE_MODULE = {
-    "service/transfer.py": "转移做种",
-    "service/transfer_pipeline.py": "转移做种",
-    "service/transfer_tasks.py": "转移做种",
-    "service/payload_export.py": "转移做种",
-    "service/events.py": "转移做种",
-    "service/rename.py": "重命名",
-    "service/rename_events.py": "重命名",
-    "service/archive.py": "重命名",
-    "service/site_tag.py": "站点标签",
-    "service/recheck.py": "做种校验",
-    "service/upload_limiter.py": "上传限速",
-    "service/upload_limit_worker.py": "上传限速",
+    "modules/transfer/service.py": "转移做种",
+    "modules/transfer/pipeline.py": "转移做种",
+    "modules/transfer/tasks.py": "转移做种",
+    "modules/transfer/payload_export.py": "转移做种",
+    "modules/transfer/events.py": "转移做种",
+    "modules/rename/service.py": "重命名",
+    "modules/rename/events.py": "重命名",
+    "modules/rename/archive.py": "重命名",
+    "modules/sitetag/service.py": "站点标签",
+    "modules/transfer/recheck.py": "做种校验",
+    "modules/uploadlimit/service.py": "上传限速",
+    "modules/uploadlimit/worker.py": "上传限速",
 }
 DIR_MODULE = {
-    "service/hr": "H&R",
-    "service/autoremove": "自动删种",
-    "service/failclean": "失败清理",
+    "modules/hr": "H&R",
+    "modules/autoremove": "自动删种",
+    "modules/failclean": "失败清理",
 }
 # I4 的显式例外：同一文件里合法地打另一个域的日志（必须写明理由）
 FILE_MODULE_EXTRA = {
     # retry_pending_renames() 虽在 transfer.py 内，实现的却是重命名补刀的重试，日志归属重命名域
-    "service/transfer.py": {"重命名"},
+    "modules/transfer/service.py": {"重命名"},
 }
 LOG_METHODS = {"debug", "info", "warning", "error", "exception", "critical"}
 LOG_OBJECTS = {"logger", "_logger", "log"}
@@ -248,10 +248,10 @@ def test_every_module_actually_logs():
 
 
 def test_module_vocabulary_covers_service_dirs():
-    """I7：service/ 下每个模块目录都必须出现在清单里（防止新目录被漏登记）。"""
-    service = PLUGIN / "service"
-    dirs = {p.name for p in service.iterdir() if p.is_dir() and not p.name.startswith("_")}
+    """I7：modules/ 下每个模块目录都必须出现在清单里（防止新目录被漏登记）。"""
+    modules_dir = PLUGIN / "modules"
+    dirs = {p.name for p in modules_dir.iterdir() if p.is_dir() and not p.name.startswith("_")}
     # 目录名与日志模块名不是一一同名，按归属表反查覆盖情况
     covered = {module for prefix, module in DIR_MODULE.items()}
     assert covered <= set(MODULES), f"归属表里的模块未登记进清单：{sorted(covered - set(MODULES))}"
-    assert dirs, "service/ 下没有模块目录——I7 校验形同虚设"
+    assert dirs, "modules/ 下没有模块目录——I7 校验形同虚设"

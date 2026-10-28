@@ -5,8 +5,8 @@ from pathlib import Path
 
 from app.sdk.logging import logger
 
-from ..model.state import RENAME_RECORDS_KEY
-from ..utils.name_cleaner import is_dirty_renamed_torrent_name
+from ...model.state import RENAME_RECORDS_KEY
+from ...utils.name_cleaner import is_dirty_renamed_torrent_name
 
 
 def _bool_text(value) -> str:
@@ -90,7 +90,7 @@ def _check(label: str, status: str, detail: str) -> dict:
     """构造详情页健康检查项。"""
     return {"label": label, "status": status, "detail": detail}
 def _module_switch_checks(plugin) -> list[dict]:
-    """消费裸开关快照：区分「插件停用」与「模块停用」（快照由 service/config.py 写入）。"""
+    """消费裸开关快照：区分「插件停用」与「模块停用」（快照由 core/config.py 写入）。"""
     switches = getattr(plugin, "_module_switches", None)
     if not isinstance(switches, dict) or not switches:
         return []
@@ -107,7 +107,7 @@ def _module_switch_checks(plugin) -> list[dict]:
 
 def _first_enabled_task(plugin):
     """v3.9.0 多任务形态：取第一个启用任务做诊断投影；无则回退旧平铺字段。"""
-    from .transfer_tasks import load_transfer_tasks
+    from ..transfer.tasks import load_transfer_tasks
 
     tasks = load_transfer_tasks(plugin)
     for task in tasks:

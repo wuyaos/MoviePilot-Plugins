@@ -14,9 +14,9 @@ from unittest.mock import MagicMock, Mock
 import pytest
 
 PLUGIN = Path(__file__).resolve().parents[3] / "plugins.v3/downloadmanagerlocal"
-SERVICE = PLUGIN / "service"
+SERVICE = PLUGIN / "modules" / "transfer"
 UTILS = PLUGIN / "utils"
-PREFIX = "app.plugins.downloadmanagerlocal.service"
+PREFIX = "app.plugins.downloadmanagerlocal.modules.transfer"
 
 
 def _module(monkeypatch, name, **attrs):
@@ -60,7 +60,7 @@ def tt(monkeypatch):
     _module(monkeypatch, "app")
     _module(monkeypatch, "app.sdk")
     _module(monkeypatch, "app.sdk.logging", logger=Mock())
-    return _load_real(monkeypatch, "transfer_tasks")
+    return _load_real(monkeypatch, "tasks")
 
 
 @pytest.fixture
@@ -83,6 +83,8 @@ def tr(monkeypatch):
     _module(monkeypatch, "app.sdk.config", settings=Mock())
     _module(monkeypatch, "app.plugins")
     _module(monkeypatch, "app.plugins.downloadmanagerlocal")
+    _module(monkeypatch, "app.plugins.downloadmanagerlocal.modules",
+            __path__=[str(PLUGIN / "modules")])
     _module(monkeypatch, PREFIX, __path__=[str(SERVICE)])
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.adapter", __path__=[])
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.adapter.moviepilot",
@@ -96,7 +98,7 @@ def tr(monkeypatch):
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.model.state",
             SEED_RECHECK_QUEUE_KEY="queue", record_transfer_success=Mock())
     # 真加载轻模块，供 transfer.py 的 from-import 使用
-    _load_real(monkeypatch, "transfer_tasks")
+    _load_real(monkeypatch, "tasks")
     _load_real(monkeypatch, "payload_export")
     _module(monkeypatch, PREFIX + ".recheck",
             _queue_lock=Mock(), _queue_key=Mock(return_value="queue"),
@@ -105,14 +107,14 @@ def tr(monkeypatch):
             ensure_seed_recheck_worker=Mock(), seed_is_checking=Mock(return_value=False),
             seed_is_ready=Mock(return_value=True), seed_is_error=Mock(return_value=False),
             seed_is_timeout=Mock(return_value=False))
-    _module(monkeypatch, PREFIX + ".rename",
+    _module(monkeypatch, "app.plugins.downloadmanagerlocal.modules.rename.service",
             _get_torrent_content_name=Mock(return_value=""),
             build_rename_config=Mock(return_value={"enabled": True, "downloader": []}),
             resolve_retry_original_name=Mock(return_value=""))
-    _module(monkeypatch, PREFIX + ".site_tag",
+    _module(monkeypatch, "app.plugins.downloadmanagerlocal.modules.sitetag.service",
             create_temporary_tag=Mock(), forget_temporary_tag=Mock(),
             release_temporary_tag=Mock())
-    return _load_real(monkeypatch, "transfer")
+    return _load_real(monkeypatch, "service")
 
 
 def _make_plugin(**config):

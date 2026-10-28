@@ -15,8 +15,8 @@ from unittest.mock import Mock
 
 import pytest
 
-SERVICE = Path(__file__).resolve().parents[3] / 'plugins.v3/downloadmanagerlocal/service'
-PREFIX = 'app.plugins.downloadmanagerlocal.service'
+SERVICE = Path(__file__).resolve().parents[3] / 'plugins.v3/downloadmanagerlocal/modules/transfer'
+PREFIX = 'app.plugins.downloadmanagerlocal.modules.transfer'
 
 
 @pytest.fixture
@@ -34,19 +34,19 @@ def runtime(monkeypatch):
         return result
 
     for name in ('app', 'app.sdk', 'app.plugins', 'app.plugins.downloadmanagerlocal', PREFIX,
-                 'app.plugins.downloadmanagerlocal.model', PREFIX + '.hr'):
+                 'app.plugins.downloadmanagerlocal.model', 'app.plugins.downloadmanagerlocal.modules.hr'):
         module(name, __path__=[])
     module('app.sdk.logging', logger=Mock())
     module('app.plugins.downloadmanagerlocal.model.state', SEED_RECHECK_QUEUE_KEY='queue', record_transfer_success=Mock())
     guard = Mock()
     guard.is_protected.return_value = False
     guard.return_value.is_protected.side_effect = lambda *a, **k: guard.is_protected(*a, **k)
-    module(PREFIX + '.hr.guard', HrGuard=guard)
-    module(PREFIX + '.transfer', post_transfer_process=Mock(return_value=True))
+    module('app.plugins.downloadmanagerlocal.modules.hr.guard', HrGuard=guard)
+    module(PREFIX + '.service', post_transfer_process=Mock(return_value=True))
 
     # recheck 依赖真实 utils.torrent_adapter（纯 Python，只用到被替身的 app.sdk.logging），
     # 因此这里挂上真实的 utils 包与适配器，而不是再造替身。
-    plugin_root = SERVICE.parent
+    plugin_root = SERVICE.parent.parent
     module(
         'app.plugins.downloadmanagerlocal.utils',
         __path__=[str(plugin_root / 'utils')],
@@ -67,7 +67,7 @@ def runtime(monkeypatch):
         return result
 
     recheck = load('recheck')
-    pipeline = load('transfer_pipeline')
+    pipeline = load('pipeline')
     monkeypatch.setattr(pipeline, 'ensure_seed_recheck_worker', Mock())
     source = Mock()
     target = Mock()

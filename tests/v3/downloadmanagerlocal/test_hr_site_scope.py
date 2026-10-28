@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 
 PLUGIN = Path(__file__).resolve().parents[3] / 'plugins.v3/downloadmanagerlocal'
-HR_DIR = PLUGIN / 'service' / 'hr'
-PKG = 'app.plugins.downloadmanagerlocal.service.hr'
+HR_DIR = PLUGIN / 'modules' / 'hr'
+PKG = 'app.plugins.downloadmanagerlocal.modules.hr'
 
 
 def _module(monkeypatch, name, **attrs):
@@ -47,8 +47,8 @@ def hr(monkeypatch, tmp_path):
     _module(monkeypatch, 'app.sdk.logging', logger=__import__('logging').getLogger('test'))
     _module(monkeypatch, 'app.plugins')
     _module(monkeypatch, 'app.plugins.downloadmanagerlocal', __path__=str(PLUGIN))
-    _module(monkeypatch, 'app.plugins.downloadmanagerlocal.service',
-            __path__=str(PLUGIN / 'service'))
+    _module(monkeypatch, 'app.plugins.downloadmanagerlocal.modules',
+            __path__=str(PLUGIN / 'modules'))
     _module(monkeypatch, PKG, __path__=str(HR_DIR))
     constants = _load_from_file(monkeypatch, f'{PKG}.constants', HR_DIR / 'constants.py')
     models = _load_from_file(monkeypatch, f'{PKG}.models', HR_DIR / 'models.py')

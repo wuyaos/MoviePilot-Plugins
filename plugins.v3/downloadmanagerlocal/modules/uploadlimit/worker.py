@@ -6,8 +6,8 @@ import logging
 import threading
 from typing import Any
 
-from ..model.upload_limit import UPLOAD_LIMIT_INTERVAL_SECONDS
-from ..utils.config import is_upload_limit_active
+from ...model.upload_limit import UPLOAD_LIMIT_INTERVAL_SECONDS
+from ...utils.config import is_upload_limit_active
 
 
 logger = logging.getLogger(__name__)

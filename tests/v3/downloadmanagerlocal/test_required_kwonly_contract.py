@@ -4,7 +4,7 @@
 离线运行：
     micromamba run -n base python -m pytest tests/v3/downloadmanagerlocal/test_required_kwonly_contract.py -q
 
-背景（真实事故）：service/transfer_pipeline.py 的完成分支调用
+背景（真实事故）：modules/transfer/pipeline.py 的完成分支调用
 `record_transfer_success(plugin, 1)` 时漏掉了 `model/state.py` 中声明为必填
 keyword-only 的 `fallback`，运行到「转移完成」才抛
 `TypeError: record_transfer_success() missing 1 required keyword-only argument: 'fallback'`。
@@ -55,14 +55,14 @@ def _bootstrap():
     pkg = _module(PREFIX)
     pkg.__path__ = [str(PLUGIN)]
     sys.modules[PREFIX] = pkg
-    for name in ("model", "service", "service.hr"):
+    for name in ("model", "modules", "modules.hr", "core"):
         mod = _module(f"{PREFIX}.{name}")
         mod.__path__ = []
         sys.modules[f"{PREFIX}.{name}"] = mod
-    hr_constants = _module(f"{PREFIX}.service.hr.constants")
+    hr_constants = _module(f"{PREFIX}.modules.hr.constants")
     hr_constants.HR_NOTIFY_EVENTS_DATA_KEY = "hr_notify_events"
     hr_constants.HR_TASKS_DATA_KEY = "hr_tasks"
-    sys.modules[f"{PREFIX}.service.hr.constants"] = hr_constants
+    sys.modules[f"{PREFIX}.modules.hr.constants"] = hr_constants
 
     spec = importlib.util.spec_from_file_location(
         f"{PREFIX}.model.state", PLUGIN / "model" / "state.py"
@@ -203,7 +203,7 @@ def test_hr_guard_update_call_sites_pass_required_kwargs():
     通用校验只处理裸函数调用（属性调用的名字与内建 dict/set.update 撞名，
     静态无法区分接收者），因此这里用接收者名字精确定位 `…_guard.update(...)`。
     """
-    guard_source = (PLUGIN / "service" / "hr" / "guard.py").read_text(encoding="utf-8")
+    guard_source = (PLUGIN / "modules" / "hr" / "guard.py").read_text(encoding="utf-8")
     assert any(
         isinstance(node, ast.FunctionDef) and node.name == "update"
         and {arg.arg for arg in node.args.kwonlyargs} == {"enabled", "protected"}
@@ -227,7 +227,7 @@ def test_hr_guard_update_call_sites_pass_required_kwargs():
 
 def test_pipeline_completion_path_passes_fallback():
     """事故的精确回归：完成分支必须把 fallback 传给统计函数。"""
-    source = (PLUGIN / "service" / "transfer_pipeline.py").read_text(encoding="utf-8")
+    source = (PLUGIN / "modules" / "transfer" / "pipeline.py").read_text(encoding="utf-8")
     assert "record_transfer_success(plugin, 1, fallback=" in source, (
         "transfer_pipeline 完成分支必须传 fallback=…，否则完成时抛 TypeError"
     )
@@ -235,7 +235,7 @@ def test_pipeline_completion_path_passes_fallback():
 
 def test_begin_transfer_records_fallback_flag():
     """begin_transfer 必须把兜底标记落盘，否则统计无法区分兜底成功。"""
-    source = (PLUGIN / "service" / "transfer_pipeline.py").read_text(encoding="utf-8")
+    source = (PLUGIN / "modules" / "transfer" / "pipeline.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     begin = next(
         node for node in ast.walk(tree)

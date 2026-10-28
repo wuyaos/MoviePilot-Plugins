@@ -1,11 +1,11 @@
 """整理失败清理（failclean）真实分支测试。
 
 替身边界只有三处，都是模块自己声明的隔离点：
-- `service/failclean/hostapi.py`：宿主能力（存储链、整理历史、下载目录、媒体扩展名）。
-- H&R 闸门 `service/hr/guard.py`：保护判定，单独可控。
+- `modules/failclean/hostapi.py`：宿主能力（存储链、整理历史、下载目录、媒体扩展名）。
+- H&R 闸门 `modules/hr/guard.py`：保护判定，单独可控。
 - 门控 `utils/config.py::module_active`：总开关与模块开关的合并，已由 test_gating.py 覆盖。
 
-被测对象是**真实的** `service/failclean/service.py` 与真实 `hostapi.py`，重点覆盖
+被测对象是**真实的** `modules/failclean/service.py` 与真实 `hostapi.py`，重点覆盖
 破坏性分支：什么情况下必须删、什么情况下必须不删。文件删除由替身真正 `unlink`，
 因此断言基于真实文件系统副作用，而不是 mock 调用次数。
 """
@@ -115,13 +115,13 @@ def fc(mp_stubs, monkeypatch):
     history_state: dict = {"record": None, "hash": ""}
     recorder = _Recorder()
 
-    stub(f"{PREFIX}.service.hr.guard", SKIP_PATH_TRANSFER_FAILURE=SKIP_GATE, HrGuard=FakeGuard)
+    stub(f"{PREFIX}.modules.hr.guard", SKIP_PATH_TRANSFER_FAILURE=SKIP_GATE, HrGuard=FakeGuard)
     stub(
         f"{PREFIX}.utils.config",
         module_active=lambda config, key: bool((config or {}).get("failcleanup_enabled")),
     )
     stub(
-        f"{PREFIX}.service.failclean.notify",
+        f"{PREFIX}.modules.failclean.notify",
         notify_delete_failure=Mock(),
         notify_delete_success=Mock(),
         notify_scan_result=Mock(),
@@ -139,11 +139,11 @@ def fc(mp_stubs, monkeypatch):
 
     # 中间包也要占位并给真实 __path__：别的测试文件会在导入期把
     # app.plugins.downloadmanagerlocal.service 装成 __path__=[] 的替身，
-    # 不占位就会在导入 ...service.failclean 时 ModuleNotFoundError。
+    # 不占位就会在导入 ...modules.failclean 时 ModuleNotFoundError。
     plugin_root = Path(__file__).resolve().parents[3] / "plugins.v3" / "downloadmanagerlocal"
     for package, relpath in (
-        (f"{PREFIX}.service", "service"),
-        (f"{PREFIX}.service.failclean", "service/failclean"),
+        (f"{PREFIX}.modules", "modules"),
+        (f"{PREFIX}.modules.failclean", "modules/failclean"),
         (f"{PREFIX}.utils", "utils"),
     ):
         placeholder = types.ModuleType(package)
@@ -153,10 +153,10 @@ def fc(mp_stubs, monkeypatch):
         placeholder.__path__ = [str(plugin_root / relpath)]
         monkeypatch.setitem(sys.modules, package, placeholder)
 
-    mp_stubs("service/failclean/constants.py", "service.failclean.constants")
-    mp_stubs("service/failclean/config.py", "service.failclean.config")
-    hostapi = mp_stubs("service/failclean/hostapi.py", "service.failclean.hostapi")
-    service_mod = mp_stubs("service/failclean/service.py", "service.failclean.service")
+    mp_stubs("modules/failclean/constants.py", "modules.failclean.constants")
+    mp_stubs("modules/failclean/config.py", "modules.failclean.config")
+    hostapi = mp_stubs("modules/failclean/hostapi.py", "modules.failclean.hostapi")
+    service_mod = mp_stubs("modules/failclean/service.py", "modules.failclean.service")
 
     # 默认替身：命中一次成功整理记录、目标存在、扩展名 .mkv、删除真删文件。
     monkeypatch.setattr(hostapi, "local_download_paths", lambda: [

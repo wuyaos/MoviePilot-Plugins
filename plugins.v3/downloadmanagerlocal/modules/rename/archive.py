@@ -7,7 +7,7 @@ from functools import wraps
 from threading import RLock
 
 from app.sdk.logging import logger
-from ..model.state import RENAME_RECORDS_KEY, RENAME_RETRY_STATE_KEY
+from ...model.state import RENAME_RECORDS_KEY, RENAME_RETRY_STATE_KEY
 
 _LOCK_INIT = RLock()
 

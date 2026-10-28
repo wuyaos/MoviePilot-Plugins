@@ -19,20 +19,20 @@ from .utils.config import build_plugin_config_defaults, is_plugin_active, is_tra
 from .utils.path import convert_save_path
 from .utils.torrent_adapter import get_hash, get_label, get_category, get_save_path, get_torrent_size
 from .controller.handlers import api_downloaders as _api_downloaders, api_sites as _api_sites, api_rename_history as _api_rename_history, api_delete_rename_history as _api_delete_rename_history, api_recovery_torrent as _api_recovery_torrent, api_retry_renames as _api_retry_renames, api_retry_rename as _api_retry_rename, api_diagnostics as _api_diagnostics, api_overview as _api_overview, api_rename_archive as _api_rename_archive, api_restore_rename_archive as _api_restore_rename_archive, api_delete_rename_archive as _api_delete_rename_archive, api_hr_tasks as _api_hr_tasks, api_hr_skip_stats as _api_hr_skip_stats
-from .service.rename import rename_torrent as _rename_torrent_impl, format_torrent_name as _format_torrent_name_impl, save_rename_record as _save_rename_record_impl, get_failed_rename_hashes as _get_failed_rename_hashes_impl, retry_failed_renames as _retry_failed_renames_impl, retry_rename_by_hash as _retry_rename_by_hash_impl
-from .service.archive import record_rename_failure as _record_rename_failure_impl, clear_rename_retry_state as _clear_rename_retry_state_impl, is_rename_archived as _is_rename_archived_impl, list_rename_archive as _list_rename_archive_impl, restore_rename_archive as _restore_rename_archive_impl, delete_rename_archive as _delete_rename_archive_impl, rename_archive_stats as _rename_archive_stats_impl
-from .service.diagnostics import build_diagnostics as _build_diagnostics_impl
-from .service.site_tag import tag_torrent as _tag_torrent_impl, find_site_by_domain as _find_site_by_domain_impl
-from .service.recheck import load_seed_recheck_queue as _load_seed_recheck_queue_impl, save_seed_recheck_queue as _save_seed_recheck_queue_impl, ensure_seed_recheck_worker as _ensure_seed_recheck_worker_impl, stop_seed_recheck_worker as _stop_seed_recheck_worker_impl, seed_recheck_loop as _seed_recheck_loop_impl, process_seed_recheck_once as _process_seed_recheck_once_impl, seed_should_remove_missing as _seed_should_remove_missing_impl, seed_is_checking as _seed_is_checking_impl, seed_is_ready as _seed_is_ready_impl, seed_is_error as _seed_is_error_impl, seed_is_timeout as _seed_is_timeout_impl, run_recheck_cycle as _check_recheck_impl, sweep_paused_seed_tasks as _sweep_paused_seed_tasks_impl, can_seed_paused_torrent as _can_seeding_impl
-from .service.transfer import validate_config as _validate_config_impl, download_torrent as _download_impl, post_transfer_process as _post_transfer_process_impl, transfer as _transfer_impl, fallback_transfer as _fallback_transfer_impl, delayed_transfer as _delayed_transfer_impl, retry_pending_renames as _retry_pending_renames_impl
+from .modules.rename.service import rename_torrent as _rename_torrent_impl, format_torrent_name as _format_torrent_name_impl, save_rename_record as _save_rename_record_impl, get_failed_rename_hashes as _get_failed_rename_hashes_impl, retry_failed_renames as _retry_failed_renames_impl, retry_rename_by_hash as _retry_rename_by_hash_impl
+from .modules.rename.archive import record_rename_failure as _record_rename_failure_impl, clear_rename_retry_state as _clear_rename_retry_state_impl, is_rename_archived as _is_rename_archived_impl, list_rename_archive as _list_rename_archive_impl, restore_rename_archive as _restore_rename_archive_impl, delete_rename_archive as _delete_rename_archive_impl, rename_archive_stats as _rename_archive_stats_impl
+from .modules.diagnostics.service import build_diagnostics as _build_diagnostics_impl
+from .modules.sitetag.service import tag_torrent as _tag_torrent_impl, find_site_by_domain as _find_site_by_domain_impl
+from .modules.transfer.recheck import load_seed_recheck_queue as _load_seed_recheck_queue_impl, save_seed_recheck_queue as _save_seed_recheck_queue_impl, ensure_seed_recheck_worker as _ensure_seed_recheck_worker_impl, stop_seed_recheck_worker as _stop_seed_recheck_worker_impl, seed_recheck_loop as _seed_recheck_loop_impl, process_seed_recheck_once as _process_seed_recheck_once_impl, seed_should_remove_missing as _seed_should_remove_missing_impl, seed_is_checking as _seed_is_checking_impl, seed_is_ready as _seed_is_ready_impl, seed_is_error as _seed_is_error_impl, seed_is_timeout as _seed_is_timeout_impl, run_recheck_cycle as _check_recheck_impl, sweep_paused_seed_tasks as _sweep_paused_seed_tasks_impl, can_seed_paused_torrent as _can_seeding_impl
+from .modules.transfer.service import validate_config as _validate_config_impl, download_torrent as _download_impl, post_transfer_process as _post_transfer_process_impl, transfer as _transfer_impl, fallback_transfer as _fallback_transfer_impl, delayed_transfer as _delayed_transfer_impl, retry_pending_renames as _retry_pending_renames_impl
 from .controller import handlers as _controller_handlers
 from .controller.api import build_api_routes as _build_api_routes_impl
-from .service.events import handle_download_added_event as _handle_download_added_event_impl, handle_transfer_complete_event as _handle_transfer_complete_event_impl, handle_plugin_triggered_event as _handle_plugin_triggered_event_impl
-from .service.failclean.events import handle_transfer_failed_event as _handle_transfer_failed_event_impl
-from .service.lifecycle import initialize_plugin as _initialize_plugin_impl, stop_plugin_service as _stop_plugin_service_impl
-from .service.scheduler import build_plugin_services as _build_plugin_services_impl
-from .service.cleanup import handle_sync_delete_by_hash_event as _handle_sync_delete_by_hash_event_impl, handle_webhook_message_event as _handle_webhook_message_event_impl, handle_plugin_action_event as _handle_plugin_action_event_impl
-from .service.upload_limiter import run_upload_limit_cycle as _run_upload_limit_cycle_impl
+from .modules.transfer.events import handle_download_added_event as _handle_download_added_event_impl, handle_transfer_complete_event as _handle_transfer_complete_event_impl, handle_plugin_triggered_event as _handle_plugin_triggered_event_impl
+from .modules.failclean.events import handle_transfer_failed_event as _handle_transfer_failed_event_impl
+from .core.lifecycle import initialize_plugin as _initialize_plugin_impl, stop_plugin_service as _stop_plugin_service_impl
+from .core.scheduler import build_plugin_services as _build_plugin_services_impl
+from .modules.cleanup.service import handle_sync_delete_by_hash_event as _handle_sync_delete_by_hash_event_impl, handle_webhook_message_event as _handle_webhook_message_event_impl, handle_plugin_action_event as _handle_plugin_action_event_impl
+from .modules.uploadlimit.service import run_upload_limit_cycle as _run_upload_limit_cycle_impl
 
 class DownloadManagerLocal(_PluginBase):
     """下载中心插件入口，负责声明 MoviePilot 契约并委托 service 层执行。"""
@@ -45,7 +45,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.9.2"
+    plugin_version = "3.9.3"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页

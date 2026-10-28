@@ -1,7 +1,7 @@
 """H&R 规则解析：插件配置、内置预设、站点独立 YAML 与按种子大小分档。
 
 规则分层（v3.6.0）：自定义（启用中）> 内置预设 > 全局默认。
-- 内置预设：`service/hr/presets.json`（只读，随代码发布）；
+- 内置预设：`modules/hr/presets.json`（只读，随代码发布）；
 - 自定义层：`hr_site_config_str` YAML，同名站点整条覆写预设；
 - 条目 `enabled: false` 为影子条目：屏蔽该站的预设与自定义，回退全局规则。
 """

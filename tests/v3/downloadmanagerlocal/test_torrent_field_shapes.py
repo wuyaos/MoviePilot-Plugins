@@ -113,7 +113,7 @@ def test_service_sources_do_not_access_torrent_name_directly():
     行为验证由本地六实例矩阵（qb2*/tr2*/rt2* 九组合）承担；本断言防止修复被回退。
     """
     offenders = []
-    for path in sorted((PLUGIN / "service").rglob("*.py")):
+    for path in sorted((PLUGIN / "modules").rglob("*.py")):
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if "torrent.name" in line or 'torrent.get("name"' in line:
                 offenders.append(f"{path.relative_to(PLUGIN)}:{lineno}: {line.strip()}")

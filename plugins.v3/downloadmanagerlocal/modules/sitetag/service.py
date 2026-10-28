@@ -5,14 +5,14 @@ from typing import Dict, Iterable, List, Optional
 from app.sdk.config import settings
 from app.sdk.logging import logger
 
-from ..adapter.moviepilot import generate_random_tag, get_site_indexer, get_url_domain, list_site_dicts
-from ..utils.tag_cleanup import (
+from ...adapter.moviepilot import generate_random_tag, get_site_indexer, get_url_domain, list_site_dicts
+from ...utils.tag_cleanup import (
     TEMP_TAG_PREFIX,
     classify_tag,
     is_auto_removable,
     normalize_tags,
 )
-from ..utils.torrent_adapter import get_hash, get_label, get_torrent_name
+from ...utils.torrent_adapter import get_hash, get_label, get_torrent_name
 
 
 def _active_temporary_tags(plugin) -> set:
@@ -595,7 +595,7 @@ def _torrent_trackers(torrent, service_type: str) -> list:
 
 
 def _history_for_hash(torrent_hash: str):
-    from ..adapter.moviepilot import get_download_history_by_hash
+    from ...adapter.moviepilot import get_download_history_by_hash
     return get_download_history_by_hash(torrent_hash)
 
 

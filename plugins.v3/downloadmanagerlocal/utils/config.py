@@ -2,11 +2,11 @@
 
 from copy import deepcopy
 
-from ..service.autoremove.constants import build_remover_config_defaults
-from ..service.failclean.constants import build_failclean_config_defaults
-from ..service.hr.constants import build_hr_config_defaults
-from ..service.rename import build_rename_flat_defaults
-from ..service.site_tag import DEFAULT_TAG_CONFIG
+from ..modules.autoremove.constants import build_remover_config_defaults
+from ..modules.failclean.constants import build_failclean_config_defaults
+from ..modules.hr.constants import build_hr_config_defaults
+from ..modules.rename.service import build_rename_flat_defaults
+from ..modules.sitetag.service import DEFAULT_TAG_CONFIG
 
 TRANSFER_DEFAULTS = {
     "transfer_enabled": False,
@@ -218,7 +218,7 @@ def is_transfer_active(plugin) -> bool:
     """
     if not getattr(plugin, "_transfer_enabled", False):
         return False
-    from ..service.transfer_tasks import iter_enabled_tasks
+    from ..modules.transfer.tasks import iter_enabled_tasks
 
     try:
         return bool(iter_enabled_tasks(plugin))

@@ -46,12 +46,12 @@ from ..model.state import (
     TRANSFER_SKIP_STATS_KEY,
     load_transfer_stats,
 )
-from ..service.archive import serialized_rename_state
-from ..service.hr.guard import HrGuard
-from ..service.hr.rules import load_preset_rules
-from ..service.site_tag import complement_history, execute_tag_cleanup, scan_and_clean_tags
-from ..service.upload_limit_worker import stop_upload_limit_worker
-from ..service.upload_limiter import (
+from ..modules.rename.archive import serialized_rename_state
+from ..modules.hr.guard import HrGuard
+from ..modules.hr.rules import load_preset_rules
+from ..modules.sitetag.service import complement_history, execute_tag_cleanup, scan_and_clean_tags
+from ..modules.uploadlimit.worker import stop_upload_limit_worker
+from ..modules.uploadlimit.service import (
     get_upload_limit_status,
     persist_upload_limit_site_rules,
     restore_upload_limits,
@@ -126,7 +126,7 @@ def api_retry_renames(plugin):
 def api_rename_scan(plugin):
     """后台线程触发一次完整重命名扫描（等价定时任务的一次执行），立即返回。"""
     _require_module(plugin, "rename", "命名补刀")
-    from ..service.rename import scan_renames
+    from ..modules.rename.service import scan_renames
 
     with getattr(plugin, "_rename_scan_lock", threading.Lock()):
         if getattr(plugin, "_rename_scan_running", False):
@@ -709,7 +709,7 @@ def _iter_transfer_records(plugin):
     """遍历插件持久化的转移事务记录。
 
     记录以 `f"{源下载器}-{源种子哈希}"` 为 key 分散保存（见
-    ``service/transfer_pipeline.save_source_record``），没有聚合索引，
+    ``modules/transfer_pipeline.save_source_record``），没有聚合索引，
     因此需要枚举插件全部数据后按字段筛选。`get_data()` 无参调用在不同
     MoviePilot 版本返回 dict 或 ORM 行列表，这里两种形态都兼容。
     """
@@ -737,8 +737,8 @@ def _iter_transfer_records(plugin):
 def api_transfer_status(plugin, page: int = 1, page_size: int = 15):
     """返回转移做种数据页：任务配置、在途事务、最近记录与汇总。"""
     from ..model.state import TRANSFER_SKIP_STATS_KEY, load_transfer_stats
-    from ..service.recheck import load_seed_recheck_queue
-    from ..service.transfer_tasks import load_transfer_tasks
+    from ..modules.transfer.recheck import load_seed_recheck_queue
+    from ..modules.transfer.tasks import load_transfer_tasks
 
     try:
         page = max(1, int(page or 1))
@@ -853,14 +853,14 @@ def api_tag_complement(plugin, payload: EmptyRequest | None = None):
 
 def api_tag_status(plugin):
     """返回站点标签增强模块运行状态。"""
-    from ..service.site_tag import get_module_status as site_tag_module_status
+    from ..modules.sitetag.service import get_module_status as site_tag_module_status
 
     return ModuleStatusResult(code=0, status=site_tag_module_status(plugin))
 
 
 def api_rename_status(plugin):
     """返回命名补刀模块运行状态。"""
-    from ..service.rename import get_module_status as rename_module_status
+    from ..modules.rename.service import get_module_status as rename_module_status
 
     status = rename_module_status(plugin)
     status["batch_running"] = bool(getattr(plugin, "_rename_batch_running", False))

@@ -3,7 +3,7 @@
 
 回归背景（2026-10-28 本地模块测试）：
 - 一键补刀读的下载器来源曾与定时扫描不一致（补刀走 legacy `_todownloaders`、扫描走
-  `rename_downloaders`），已在 `service/transfer.py` 统一到 `build_rename_config`；
+  `rename_downloaders`），已在 `modules/transfer/service.py` 统一到 `build_rename_config`；
   本文件锁住「扁平 rename_* 键 → 嵌套配置」的映射契约，防止再次走偏。
 - 「原始发布名候选置信度过低，跳过自动补刀」这条剪枝决定补刀是否会去调媒体识别，
   用 `_score_original_name_candidate` 的相对序锁定。
@@ -58,17 +58,17 @@ def _ensure_loaded():
     _stub("bencode", bdecode=Mock())
     _stub(PREFIX, is_package=True)
     sys.modules[PREFIX].__path__ = [str(PLUGIN)]
-    for pkg in ("utils", "model", "service", "service.hr", "adapter"):
+    for pkg in ("utils", "model", "modules", "modules.rename", "modules.hr", "adapter"):
         _stub(f"{PREFIX}.{pkg}", is_package=True)
     _stub(f"{PREFIX}.adapter.moviepilot", get_download_history_by_hash=Mock(return_value=None))
 
     _load_real("utils/name_cleaner.py", f"{PREFIX}.utils.name_cleaner")
     _load_real("utils/tag_cleanup.py", f"{PREFIX}.utils.tag_cleanup")
     _load_real("utils/torrent_adapter.py", f"{PREFIX}.utils.torrent_adapter")
-    _load_real("service/hr/constants.py", f"{PREFIX}.service.hr.constants")
+    _load_real("modules/hr/constants.py", f"{PREFIX}.modules.hr.constants")
     _load_real("model/state.py", f"{PREFIX}.model.state")
-    _load_real("service/archive.py", f"{PREFIX}.service.archive")
-    _rename = _load_real("service/rename.py", f"{PREFIX}.service.rename")
+    _load_real("modules/rename/archive.py", f"{PREFIX}.modules.rename.archive")
+    _rename = _load_real("modules/rename/service.py", f"{PREFIX}.modules.rename.service")
     _IS_LOADED = True
 
 

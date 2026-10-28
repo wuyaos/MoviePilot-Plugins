@@ -72,25 +72,26 @@ def gating(monkeypatch):
         return result
 
     # utils/config.py 依赖四个常量/默认值来源，全部加载真实文件
-    pkg = PREFIX + '.service'
-    module(pkg, __path__=[str(PLUGIN / 'service')])
-    autoremove = load('service/autoremove/constants.py', '.constants', pkg + '.autoremove')
-    module(pkg + '.autoremove', __path__=[str(PLUGIN / 'service/autoremove')], **{
+    pkg = PREFIX + '.modules'
+    module(pkg, __path__=[str(PLUGIN / 'modules')])
+    module(PREFIX + '.core', __path__=[str(PLUGIN / 'core')])
+    autoremove = load('modules/autoremove/constants.py', '.constants', pkg + '.autoremove')
+    module(pkg + '.autoremove', __path__=[str(PLUGIN / 'modules/autoremove')], **{
         'constants': autoremove})
-    failclean = load('service/failclean/constants.py', '.constants', pkg + '.failclean')
-    module(pkg + '.failclean', __path__=[str(PLUGIN / 'service/failclean')], **{
+    failclean = load('modules/failclean/constants.py', '.constants', pkg + '.failclean')
+    module(pkg + '.failclean', __path__=[str(PLUGIN / 'modules/failclean')], **{
         'constants': failclean})
-    hr = load('service/hr/constants.py', '.constants', pkg + '.hr')
-    module(pkg + '.hr', __path__=[str(PLUGIN / 'service/hr')], **{'constants': hr})
-    rename_mod = load('service/rename.py', '.rename', pkg)
-    site_tag = load('service/site_tag.py', '.site_tag', pkg)
+    hr = load('modules/hr/constants.py', '.constants', pkg + '.hr')
+    module(pkg + '.hr', __path__=[str(PLUGIN / 'modules/hr')], **{'constants': hr})
+    rename_mod = load('modules/rename/service.py', '.rename.service', pkg)
+    site_tag = load('modules/sitetag/service.py', '.sitetag.service', pkg)
     utils_pkg = module(PREFIX + '.utils', __path__=[str(PLUGIN / 'utils')])
     utils_config = load('utils/config.py', '.config', PREFIX + '.utils')
-    # service/config.py：下载器助手与 tracker 解析用替身
+    # core/config.py：下载器助手与 tracker 解析用替身
     module('app.plugins.downloadmanagerlocal.adapter', __path__=[str(PLUGIN / 'adapter')])
     module(PREFIX + '.adapter.moviepilot', create_downloader_helper=Mock())
     tracker = load('utils/tracker.py', '.tracker', PREFIX + '.utils')
-    service_config = load('service/config.py', '.config', pkg)
+    service_config = load('core/config.py', '.config', PREFIX + '.core')
     return types.SimpleNamespace(
         utils=utils_config, service=service_config,
         rename=rename_mod, site_tag=site_tag,
