@@ -53,6 +53,12 @@ Todo 必须与实际进度同步，避免滞后或遗漏：
 - 禁止把预期当结论：`completed` 必须有实际文件、提交、测试或工具结果支撑
 - 简单单步任务可不建 todo；3 步以上或多目标的复杂工作必须建 todo 跟踪
 
+## 提交规范
+- 暂存只用显式路径：`git add <path>...`；禁止 `git add -A`、`git add .`、`git commit -a`。
+- 原因：本仓库常有多个会话/子代理并发工作，全量暂存会把别的会话未完成的在途改动扫进自己的提交。已发生：提交 `20094ffd` 信息写的是「DML v3.9.4 修复 presets.json」，实际装的是 25 个 autoptcheckin 文件、0 个 DML 文件。
+- 提交前用 `git status --short` 核对暂存范围；发现混入他人文件时 `git restore --staged <path>` 移出，不要顺着一起提交。
+- 跨插件/跨模块的改动拆成独立提交，一个提交只覆盖一个插件或一个明确主题。
+
 ## 常用命令
 - 启动 MP: `moviepilot start`
 - 重载插件: `curl -sS http://127.0.0.1:7300/api/v1/plugin/reload/<PluginId> -H "X-API-KEY: <key>"`
