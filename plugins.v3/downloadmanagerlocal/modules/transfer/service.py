@@ -14,7 +14,9 @@ from ...adapter.moviepilot import is_downloader_type
 from ...utils.name_cleaner import is_dirty_renamed_torrent_name
 from ...utils.torrent_adapter import get_label, get_save_path, get_torrent_name, get_tracker_urls
 from .recheck import _queue_lock, load_seed_recheck_queue, ensure_seed_recheck_worker, seed_is_ready, seed_is_error
-from .pipeline import begin_transfer, delete_source
+from .pipeline import (
+    MAX_TRANSFER_ATTEMPTS, begin_transfer, delete_source, transfer_is_abandoned,
+)
 from ..rename.service import _get_torrent_content_name, build_rename_config, resolve_retry_original_name
 from ..sitetag.service import create_temporary_tag, forget_temporary_tag, release_temporary_tag
 from .tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated
@@ -263,6 +265,9 @@ def _transfer_impl(plugin, trigger_source: str):
 
 def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: dict):
     """执行单个转移任务（筛选 → 批量网络导出 → 逐种子提交目的端）。"""
+    # 只有手动触发（数据页「立即转移」→ /transfer_run，trigger_source="手动"）才算用户明确要求
+    # 重试；定时/事件/兜底这些自动轮次不重置失败计数，否则「最多 3 次」会被自动轮次无限续命。
+    manual = trigger_source == "手动"
     task_name = task["name"]
     from_service = plugin.service_info(task["from_downloader"])
     to_service = plugin.service_info(task["to_downloader"])
@@ -391,6 +396,16 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
             skip += 1
             continue
         previous = plugin.get_data(f"{from_service.name}-{source_hash}") or {}
+        # 已达失败上限的种子：自动轮次不再重试（否则「回滚 → 下轮再选中 → 再失败」会无限循环）。
+        # 手动触发时故意放行并重置计数，重置点见下面 begin_transfer 的 attempts 参数。
+        if transfer_is_abandoned(previous, manual):
+            logger.info(
+                f"【PT下载中心:转移做种】任务「{task_name}」{source_hash[:8]} 已放弃"
+                f"（连续失败 {previous.get('attempts')} 次，上限 {MAX_TRANSFER_ATTEMPTS}），跳过；"
+                f"手动触发一次「转移做种」可重置计数后重试"
+            )
+            skip += 1
+            continue
 
         torrent_info, poll_error = to_downloader.get_torrents(ids=[source_hash])
         if _transfer_stopped(plugin, generation):
@@ -448,6 +463,8 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
             stopped=lambda: _transfer_stopped(plugin, generation),
             fallback=trigger_source in _AUTOMATIC_DELAY_TRIGGER_SOURCES,
             delete_source=task.get("delete_source"),
+            # 手动触发视为用户明确要求重试 → 计数清零；自动轮次带着历史计数继续累计。
+            attempts=0 if manual else int(previous.get("attempts", 0) or 0),
         )
         if submitted:
             success += 1

@@ -390,3 +390,48 @@ def test_rollback_waits_for_target_removal_confirmation(runtime):
     r.target.delete_torrents.assert_called_once()
     r.source.start_torrents.assert_not_called()
     assert r.data['queue']['target::abc']['phase'] == 'rollback'
+
+
+# ── 失败次数上限（v3.9.6）：连续失败 3 次后放弃，手动触发重置 ─────────────────
+
+@pytest.mark.parametrize('attempts, state, manual, expected', [
+    (0, 'failed', False, False),        # 刚失败一次但未到上限
+    (2, 'failed', False, False),        # 还差一次
+    (3, 'failed', False, True),         # 达上限 → 放弃
+    (5, 'failed', False, True),         # 超过上限（旧数据）→ 仍放弃
+    (3, 'rolled_back', False, False),   # 有计数但非终态 → 不放弃（可能还在回滚）
+    (3, 'failed', True, False),         # 手动触发 → 放行并重置
+    (0, '', False, False),              # 无历史
+])
+def test_abandon_gate(runtime, attempts, state, manual, expected):
+    """已放弃判据：需同时满足「终态 failed」与「计数达上限」，手动触发永远放行。"""
+    previous = {'attempts': attempts, 'transfer_state': state}
+    assert runtime.pipeline.transfer_is_abandoned(previous, manual) is expected
+
+
+def test_rollback_attempts_accumulate_across_rounds_then_cap_marks_failed(runtime):
+    """每次回滚完成累加一次失败；到上限置终态 failed 并跳出待办队列。"""
+    r = runtime
+    for round_no in (1, 2):
+        assert not r.pipeline.begin_transfer(
+            r.plugin, r.services['source'], r.services['target'], 'abc',
+            {'state': 'uploading'}, lambda: None, lambda: False,
+        )
+        cycle(r)
+        record = r.plugin.get_data('source-abc')
+        assert record['attempts'] == round_no
+        assert record['transfer_state'] == 'rolled_back'
+        assert r.data['queue'] == {}, '回滚完成后不应留在待办队列'
+
+    # 第 3 次：达上限 → 终态 failed（不是 rolled_back）
+    assert not r.pipeline.begin_transfer(
+        r.plugin, r.services['source'], r.services['target'], 'abc',
+        {'state': 'uploading'}, lambda: None, lambda: False,
+    )
+    cycle(r)
+    record = r.plugin.get_data('source-abc')
+    assert record['attempts'] == 3
+    assert record['transfer_state'] == 'failed'
+    assert r.data['queue'] == {}
+    assert r.pipeline.transfer_is_abandoned(record, manual=False)
+    assert not r.pipeline.transfer_is_abandoned(record, manual=True), '手动触发必须能救回来'

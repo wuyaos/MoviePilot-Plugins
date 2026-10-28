@@ -499,6 +499,7 @@ const TRANSFER_PHASE_LABELS = {
   completed: '已完成',
   rollback: '回滚中',
   rolled_back: '已回滚',
+  failed: '已放弃（超重试上限）',
 }
 const transferSummary = computed(() => transferStatus.value.summary || {})
 const transferTasks = computed(() => transferStatus.value.tasks || [])
@@ -511,7 +512,7 @@ function transferPhaseText(phase) {
 
 function transferPhaseColor(phase) {
   if (phase === 'completed') return 'success'
-  if (phase === 'rollback' || phase === 'rolled_back') return 'error'
+  if (phase === 'rollback' || phase === 'rolled_back' || phase === 'failed') return 'error'
   if (phase === 'verifying' || phase === 'target_ready') return 'primary'
   if (phase === 'source_pausing') return 'warning'
   return 'grey'

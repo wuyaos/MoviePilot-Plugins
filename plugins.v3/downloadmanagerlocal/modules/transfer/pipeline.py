@@ -17,6 +17,26 @@ from ...utils.torrent_adapter import (
     supports_recheck, torrent_is_complete,
 )
 
+# 同一颗源种子最多尝试 3 次：计数跨事务累计（存进来源记录，见 save_source_record），
+# 在**回滚完成后**加一——回滚本体的重试不算失败次数。
+# 达到上限置终态 "failed"，不再被自动轮次选中（跳过点见 service._run_task）。
+# 复位途径：手动触发一次「转移做种」（/transfer_run）——视为用户明确要求重试，计数清零。
+MAX_TRANSFER_ATTEMPTS = 3
+
+def transfer_is_abandoned(previous: dict, manual: bool = False) -> bool:
+    """该源种子是否已放弃（连续失败达上限），自动轮次应跳过。
+
+    手动触发（数据页「立即转移」）不算放弃：它会重置计数后重试，所以这里必须返回 False，
+    否则用户手动点一次也救不回来。放在 pipeline 而非 service，是为了让这条判据可被
+    夹具直接加载的真实模块单测覆盖（service 依赖面太广，难以单独加载）。
+    """
+    if manual:
+        return False
+    return (
+        (previous or {}).get("transfer_state") == "failed"
+        and int((previous or {}).get("attempts", 0) or 0) >= MAX_TRANSFER_ATTEMPTS
+    )
+
 
 def save_transaction(plugin, item):
     """队列及来源索引使用同一事务内容，来源索引供同步删除关联目标。"""
@@ -69,8 +89,13 @@ def begin_transfer(
     plugin, from_service, to_service, source_hash, torrent, add_target, stopped, *,
     fallback: bool = False,
     delete_source: Optional[bool] = None,
+    attempts: Optional[int] = None,
 ):
     """先落盘源状态再暂停/添加；异常统一进入可续办回滚。"""
+    if attempts is None:
+        # 调用方未显式给出失败次数时，从来源记录续算，避免主链路漏传导致计数静默清零。
+        previous = plugin.get_data(f"{from_service.name}-{source_hash}") or {}
+        attempts = int(previous.get("attempts", 0) or 0)
     item = {
         "source": "transfer", "source_downloader": from_service.name,
         "source_hash": source_hash, "downloader": to_service.name, "hash": source_hash,
@@ -80,6 +105,9 @@ def begin_transfer(
         "delete_source_requested": bool(plugin._deletesource if delete_source is None else delete_source),
         "autostart": bool(plugin._seed_autostart), "skipverify": bool(plugin._seed_skipverify),
         "phase": "source_pausing", "target_added": False,
+        # 失败次数跨事务累计。未显式传入（None）时从来源记录续算——不能默认 0，否则调用方
+        # 漏传就把计数静默清零、上限永不生效。手动触发由 service 显式传 0 表示重置。
+        "attempts": max(0, int(attempts)),
         # 兜底扫描发起的转移单独计数，供「兜底成功」统计区分主链路。
         "fallback": bool(fallback),
     }
@@ -142,6 +170,19 @@ def rollback_transfer(plugin, item, target_service, stopped):
             return False
         if service.instance.start_torrents(ids=[item["source_hash"]]) is False:
             return False
+    # 失败次数在回滚**完成后**累计：回滚本体（删目标/恢复源）的重试不计入失败次数，
+    # 否则一次失败的多次回滚轮次会把计数吃满。
+    item["attempts"] = int(item.get("attempts", 0) or 0) + 1
+    if item["attempts"] >= MAX_TRANSFER_ATTEMPTS:
+        item["phase"] = "failed"
+        save_source_record(plugin, item)
+        logger.error(
+            f"【PT下载中心:转移做种】已放弃该种子：连续失败 {item['attempts']} 次"
+            f"（上限 {MAX_TRANSFER_ATTEMPTS}），自动轮次不再重试 "
+            f"{item['source_hash'][:8]} → {item['downloader']}，最后原因："
+            f"{item.get('error') or '未记录'}；手动触发一次「转移做种」可按新计数重试"
+        )
+        return True
     item["phase"] = "rolled_back"
     save_source_record(plugin, item)
     return True
@@ -154,6 +195,7 @@ def advance_transfer(plugin, item, service, task, stopped):
     phase = item["phase"]
     if phase in ("source_pausing", "adding"):
         item["phase"] = "rollback"
+        item["error"] = "事务中断：暂停/添加阶段未完成"
     if item["phase"] == "rollback":
         return rollback_transfer(plugin, item, service, stopped)
     if task is None or (not item.get("target_confirmed") and seed_is_timeout(item, plugin._seed_max_wait_minutes)):
@@ -178,6 +220,7 @@ def advance_transfer(plugin, item, service, task, stopped):
         elif supports_recheck(service.type):
             if service.instance.recheck_torrents(ids=[item["hash"]]) is False:
                 item["phase"] = "rollback"
+                item["error"] = "目的端拒绝发起校验"
             else:
                 logger.info(f"【PT下载中心】目标端发起校验（{service.type}）"
                             f"{item['hash'][:8]}，等待校验完成")
@@ -193,12 +236,27 @@ def advance_transfer(plugin, item, service, task, stopped):
         save_transaction(plugin, item)
         # 不能用发起校验前读取的状态认定校验通过。
         return False
-    if seed_is_checking(state, service.type):
-        return False
-    # 跳过校验的 rt 目的端不等待校验完成：rt 无 skip_checking 等价开关，
-    # 只能在启动后以活动状态作为做种证据。
-    if not seed_is_ready(state, service.type, task) and not (
-            item["skipverify"] and skipverify_applies(service.type) and service.type == "rtorrent"):
+    # ── 判据一：目的端数据是否已到齐（与「自动开始」无关；源是唯一完整副本，没到齐就不动源）──
+    # 完整度证据来源：qB 的状态后缀（UP=完整 / DL=未完整，含 progress）；TR 的 percent_done；
+    # rt 的 d.complete。
+    # 实测（2026-10-28，qB 5.x）：跳过校验**不会谎报字节数**——元数据声明 4MiB、磁盘只有 1MiB 时
+    # 报 stalledDL / progress=0.25 / completed=1048576 / amount_left=3145728，即 progress 与
+    # completed 都基于真实磁盘字节。故 qB 侧无需再自行比对元数据长度。
+    # 例外：rt 跳过校验时 rt 不触发哈希校验，d.complete 恒为 0、不能当完整度证据；该组合的完整度
+    # 改由「自动开始 + 回读活动状态」承担（见判据二与下面的零证据兜底）。
+    rt_unchecked = bool(item["skipverify"] and service.type == "rtorrent")
+    if not rt_unchecked and not seed_is_ready(state, service.type, task):
+        # 「校验中/排队」是正常等待而非异常，按 info 记；只有真未完整才值得 warning。
+        if seed_is_checking(state, service.type):
+            logger.info(
+                f"【PT下载中心:转移做种】目标端仍在校验/排队，等待 hash={item['hash'][:8]} "
+                f"type={service.type} state={state}"
+            )
+        else:
+            logger.warning(
+                f"【PT下载中心:转移做种】目的端数据未确认完整，暂不删源 hash={item['hash'][:8]} "
+                f"type={service.type} state={state}"
+            )
         return False
     if phase != "target_ready":
         item["phase"] = "target_ready"
@@ -207,28 +265,18 @@ def advance_transfer(plugin, item, service, task, stopped):
         if stopped() or service.instance.start_torrents(ids=[item["hash"]]) is False:
             return False
         # 开始命令不是做种证据，下一轮回读目标活动状态才允许删源。
-        if service.type == "qbittorrent":
-            active = state in ("uploading", "stalledUP", "forcedUP")
-        elif service.type == "rtorrent":
-            # rt 没有 uploading/seeding 文本状态：以「已完成且在活动」作为做种证据。
-            # 跳过校验时数据未经校验，只能以活动状态作为做种证据。
-            active = is_torrent_active(task, "rtorrent") and (
-                torrent_is_complete(task, "rtorrent")
-                or (item["skipverify"] and skipverify_applies("rtorrent"))
-            )
-        else:
-            active = str(state) == "seeding"
-        if not active:
+        if not _target_seeding(item, task, state, service):
             return False
-    elif not seed_is_ready(state, service.type, task):
-        # 未自动开始：种子停在暂停态，「在做种」这条证据不可用，于是**回到完整度判据**。
-        # 这不是重复检查——上面那次 seed_is_ready 可能被 skipverify 旁路（仅 rt 会旁路，
-        # rt 无可信校验），而活动证据又被 autostart 门控跳过；
-        # rt + 跳过校验 + 自动开始关 因此是「零证据即删源」，这里必须兜住。
-        # 依据：未完整就是未完整——无论是否自动开始、是否跳过校验，都不该删源。
+    elif rt_unchecked and not seed_is_ready(state, service.type, task):
+        # 跳过校验旁路的是「等待校验」，不是「完整度」：rt 若已自行报完整（d.complete 成立），
+        # 上面的兜底不触发，按正常路径确认删源。
+        # 兜底条件：rt 跳过校验（不触发校验 → d.complete 不成立）且未自动开始（活动状态证据
+        # 不可用）。两个开关同开时没有任何可信的完整度来源，宁可不删源并说清怎么放行。
         logger.warning(
             f"【PT下载中心:转移做种】目的端数据未确认完整，暂不删源 hash={item['hash'][:8]} "
-            f"type={service.type} autostart=False"
+            f"type=rtorrent skipverify=True autostart=False（该组合无可信完整度证据："
+            f"rt 跳过校验则不触发哈希校验，未自动开始则无法以活动状态为证据）；"
+            f"放行办法：打开该任务的「自动开始」，或关闭「跳过校验」让 rt 启动触发校验"
         )
         return False
     item["target_confirmed"] = True
@@ -247,3 +295,22 @@ def advance_transfer(plugin, item, service, task, stopped):
     save_source_record(plugin, item)
     record_transfer_success(plugin, 1, fallback=bool(item.get("fallback")))
     return True
+
+
+def _target_seeding(item, task, state, service):
+    """目的端「在做种」的证据——只在自动开始时才需要（开始命令本身不是证据）。
+
+    三种下载器的活动口径集中在这里，调用点不再内联分支：
+    - qB：uploading / stalledUP / forcedUP（DL 后缀与暂停态都不算）
+    - rt：没有 uploading/seeding 文本状态，用「活动 + 已完成」；跳过校验时 rt 不触发哈希
+      校验、d.complete 不成立，此时只能以活动状态为证据（原式里的 skipverify_applies("rtorrent")
+      恒为 True，已去）
+    - TR：seeding
+    """
+    if service.type == "qbittorrent":
+        return state in ("uploading", "stalledUP", "forcedUP")
+    if service.type == "rtorrent":
+        return is_torrent_active(task, "rtorrent") and (
+            torrent_is_complete(task, "rtorrent") or bool(item["skipverify"])
+        )
+    return str(state) == "seeding"
