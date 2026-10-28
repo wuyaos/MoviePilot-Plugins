@@ -199,3 +199,34 @@ def test_initialize_runtime_config_gating(gating):
     # 裸值快照可用于展示层区分「插件停用」vs「模块停用」
     assert plugin3._module_switches['tag'] is False
     assert plugin3._module_switches['rename'] is True
+
+
+def test_custom_site_labels_loaded_from_nested_tag_config(gating):
+    """回归（2026-10-28）：`_custom_site_labels` 必须来自已构建的嵌套 tag 配置。
+
+    扁平键是 `tag_custom_sites_str`，它到 `custom_site_labels_str` 的别名只发生在
+    `_flat_tag_module_config` 里，只有 `build_tag_config` 会解析并产出 `custom_site_labels`。
+    早期实现直接读扁平 dict 的 `custom_site_labels` → 永远是空 dict：
+
+    - 补全历史路径（走 `plugin._site_tag_config`）正常，所以站点标签用例一直是绿的；
+    - **转移后打标路径**（`modules/sitetag/service.py` 读 `plugin._custom_site_labels`）
+      静默忽略用户配置，表现为转移完成但目的端没站点标签，日志只留
+      「转移后标签：无法识别站点，跳过打标」。
+
+    实测触发场景：T-EXTRA 5/5 未打标、BATCH 107/107 未打标。
+    """
+    sc = gating.service
+    u = gating.utils
+    cfg = dict(u.build_plugin_config_defaults())
+    cfg.update({
+        'enabled': True,
+        'tag_enabled': True,
+        'tag_custom_sites_str': 'dml-test.local:6969/announce -> DML-CUSTOM',
+    })
+
+    plugin = _Recorder()
+    sc.initialize_runtime_config(plugin, cfg)
+
+    assert plugin._custom_site_labels == {'dml-test.local:6969/announce': 'DML-CUSTOM'}
+    # 两处必须同源，不允许漂移
+    assert plugin._custom_site_labels == plugin._site_tag_config['custom_site_labels']
