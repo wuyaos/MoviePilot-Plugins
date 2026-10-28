@@ -65,23 +65,19 @@ def test_anchor_evidence_without_invented_unsigned(site_id, path, signed, unsign
         assert context(site, Http()).read_record(page, site.record_spec).status == state
     for word in site.record_spec.status_map:
         http = Http([f'<a href="{path}">{word}</a>'])
-        with patch('autoptcheckin.sites.native.u2.datetime') as fake_dt:
-            fake_dt.now.return_value.hour = 10  # 9 点后：anchor 即今日已签证据（u2 9 点重置守卫不影响）
-            assert site.signin(context(site, http)).status == 'already', (site_id, word)
+        assert site.signin(context(site, http)).status == 'already', (site_id, word)
         assert len(http.calls) == 1
     page = LoginPage("<script>window.location.href = 'showup.php';</script>", site.url)
     assert context(site, Http()).read_record(page, site.record_spec).status == 'unconfirmed'
 
 
-def test_u2_before_nine_missing_form_is_pending_without_form_error():
+def test_u2_unsigned_reports_missing_form_without_submitting():
+    # 口径（2026-10-28）：未签就照常走提交链，没有表单即 protocol_pending，不再按小时暂缓。
     site = get_native_module('u2')
     http = Http(['<main>未签到</main>'])
-    with patch('autoptcheckin.sites.native.u2.datetime') as fake_dt:
-        fake_dt.now.return_value.hour = 8
-        result = site.signin(context(site, http))
-    assert result.status == 'unconfirmed'
-    assert '9 点后刷新' in result.message
-    assert '未发现唯一签到表单' not in result.message
+    result = site.signin(context(site, http))
+    assert result.status == 'protocol_pending'
+    assert result.message == '未发现唯一签到表单'
     assert http.calls == [('get', site.url + 'showup.php')]
 
 
@@ -107,14 +103,35 @@ def test_nexus_unconfirmed_defer_gate_does_not_change_default_flow():
     assert result.message == '未发现唯一签到表单'
 
 
-def test_u2_before_nine_already_message_is_unchanged():
-    site = get_native_module('u2')
-    http = Http(['<a href="showup.php">已签到</a>'])
-    with patch('autoptcheckin.sites.native.u2.datetime') as fake_dt:
+@pytest.mark.parametrize('site_id,page_html', [
+    ('u2', '<a href="showup.php">已签到</a>'),
+    ('retrotoon', '<div class="rt-form-card"><span>Daily Reward already claimed</span></div>'),
+])
+def test_reset_hour_before_window_only_rewords_message(site_id, page_html):
+    # reset_hour 只改证据归属与消息：状态仍是 already（跳过本轮、不提交），恢复小时前后都照常判定。
+    site = get_native_module(site_id)
+    assert site.reset_hour == 9
+    with patch('autoptcheckin.core.nexus.datetime') as fake_dt:
         fake_dt.now.return_value.hour = 8
-        result = site.signin(context(site, http))
-    assert result.status == 'unconfirmed'
-    assert result.message == '9 点前站点保留昨日签到状态，暂不判定'
+        early = site.signin(context(site, Http([page_html])))
+    assert early.status == 'already'
+    assert early.message == '昨日已签，站点 9 点后刷新'
+
+    with patch('autoptcheckin.core.nexus.datetime') as fake_dt:
+        fake_dt.now.return_value.hour = 10
+        late = site.signin(context(site, Http([page_html])))
+    assert late.status == 'already'
+    assert late.message != '昨日已签，站点 9 点后刷新'
+
+
+def test_reset_hour_not_declared_keeps_page_message():
+    site = get_native_module('tjupt')
+    assert site.reset_hour is None
+    with patch('autoptcheckin.core.nexus.datetime') as fake_dt:
+        fake_dt.now.return_value.hour = 3
+        result = site.signin(context(site, Http(['<a href="attendance.php">今日已签到</a>'])))
+    assert result.status == 'already'
+    assert result.message == '今日已签到'
 
 
 def test_ttg_safe_homepage_marker():

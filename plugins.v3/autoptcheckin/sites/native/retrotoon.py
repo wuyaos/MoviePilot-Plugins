@@ -39,6 +39,8 @@ class RetroToon(NexusSignin):
     url = 'https://retrotoon.world/'
     attendance_path = '/attendance.php'
     record_spec = RecordSpec('//*[contains(concat(" ", normalize-space(@class), " "), " rt-form-card ")][.//*[contains(normalize-space(string(.)), "Daily Reward")]]', {'already claimed': 'signed', 'claimed today': 'signed', 'reward claimed': 'signed', 'reward already collected': 'signed', 'come back tomorrow': 'signed'})
+    # 站点每日 9 点重置：重置前读到的已签只改消息归属（昨日已签），不拦提交。
+    reset_hour = 9
 
     def discover_form(self, ctx, page):
         tree = html.fromstring(page.text)
@@ -55,7 +57,7 @@ class RetroToon(NexusSignin):
         return form if data.get("csrf_token") and "claim" in data else None
 
     def read_before(self, ctx: SignContext, page: LoginPage | None) -> SignResult:
-        # 9 点前 already=昨日已签（跳过即可）、未签=照常提交；9 点后页面即今日状态。
+        # 已签/未签都按页面现状判定（重置小时只改消息归属，见 reset_hour）。
         return self._trim(super().read_before(ctx, page))
 
     def read_after(self, ctx: SignContext, page: LoginPage | None) -> SignResult:

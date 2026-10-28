@@ -1,5 +1,8 @@
-"""U2 image-choice submission; only a fresh showup anchor confirms success."""
-from datetime import datetime
+"""U2 image-choice submission; only a fresh showup anchor confirms success.
+
+9 点前页面的已签 anchor 属昨日：已签=跳过本轮、未签照常提交（与 retrotoon 同口径，不做时间门控）；
+9 点后页面即今日状态。站点每日 9 点重置，签到动作本身不依赖小时判断。
+"""
 import random
 from urllib.parse import urljoin
 
@@ -16,26 +19,11 @@ class U2(NexusSignin):
     attendance_path = '/showup.php'
     hook_implemented = True
     record_spec = RecordSpec('//a[@href="showup.php"]', {'已签到': 'signed', 'Show Up': 'signed', 'Показать': 'signed', '已簽到': 'signed'})
+    # 站点每日 9 点重置：重置前读到的已签只改消息归属（昨日已签），不拦提交。
+    reset_hour = 9
 
-    def read_before(self, ctx, page):
-        result = super().read_before(ctx, page)
-        # 站点按每日 9 点重置签到状态：9 点前页面的已签 anchor 属昨日，不作为今日证据。
-        from ...core.models import SignStatus
-        if datetime.now().hour < 9 and result.status != SignStatus.CANCELLED:
-            message = ('9 点前站点保留昨日签到状态，暂不判定'
-                       if result.status == SignStatus.ALREADY
-                       else '签到页 9 点后刷新，本轮不提交')
-            deferred = ctx.result(status=SignStatus.UNCONFIRMED,
-                                   message=message,
-                                   evidence=result.evidence)
-            deferred.metadata['defer_submission'] = True
-            return deferred
-        return result
 
     def discover_form(self, ctx, page):
-        # Keep read-only/already evidence available before 09:00, but never submit.
-        if datetime.now().hour < 9:
-            return None
         action = self.url + 'showup.php?action=show'
         forms = [form for form in html.fromstring(page.text).forms
                  if form.method.upper() == 'POST'

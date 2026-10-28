@@ -11,7 +11,6 @@ class CredentialSpec:
     kind: Literal["cookie", "api_key", "password"] = "cookie"
     cookie_sources: tuple[str, ...] = ("stored_cookie", "managed_site", "local_cookie", "cookiecloud")
     refresh: Literal["password"] | None = None
-    identity_field: str = "uid"
 
 @dataclass(frozen=True)
 class Credential:

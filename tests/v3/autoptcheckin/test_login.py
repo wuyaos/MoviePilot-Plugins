@@ -6,51 +6,57 @@ FIXTURES = Path(__file__).parent / 'fixtures'
 def page(site='hdsky', state='success'):
     return (FIXTURES / f'{site}_{state}.html').read_text(encoding='utf8')
 from autoptcheckin import AutoPtCheckin
-from autoptcheckin.core.models import Evidence, LoginPage, LoginResult, LoginStatus
-from autoptcheckin.core.verification import normalize_evidence, verify_login
-from autoptcheckin.core.runner import SignRunner
-from autoptcheckin.core.credentials import Credential, CredentialResolution, CredentialCheck
-from autoptcheckin.core.history import HistoryStore
-from autoptcheckin.verifiers.hdsky import HDSkyVerifier
-from autoptcheckin.verifiers.haitang import HaitangVerifier
+from autoptcheckin.core.models import LoginPage, LoginResult, LoginStatus
+from autoptcheckin.core.native import read_login_twice
+from autoptcheckin.core.credentials import CredentialCheck
 from autoptcheckin.integrations.rousi import RousiProtocol
 from autoptcheckin.integrations.sunnypt import SunnyPtProtocol
 
-@pytest.mark.parametrize('state,expected', [('success','success'), ('failed','failed')])
-def test_record_without_button_confirms(state, expected):
-    assert normalize_evidence(Evidence(uid='42', date=DATE, status=state), '42', DATE).status == expected
-    assert normalize_evidence(Evidence(uid='99', date=DATE, status=state), '42', DATE).status == expected
-    assert normalize_evidence(Evidence(uid='42', date='2000-01-01', status=state), '42', DATE).status == 'unconfirmed'
 
-@pytest.mark.parametrize('verifier', [HDSkyVerifier(), HaitangVerifier()])
-@pytest.mark.parametrize('value,expected,uid', [
-    (page(), 'login_ok', '42'), ('<html>reachable</html>', 'login_ok', None),
-    (LoginPage('login', 'https://fixture.invalid/login.php'), 'auth_failed', None),
-    (LoginPage('error', status_code=403), 'auth_failed', None), (LoginPage('error', status_code=503), 'unconfirmed', None), (LoginPage('error', status_code=0), 'unconfirmed', None), ('', 'unconfirmed', None)])
-def test_login_three_states(verifier, value, expected, uid):
-    result = verify_login(lambda: value, verifier, '')
-    assert result.status == expected
-    if result.evidence:
-        assert result.evidence.uid == uid
+class _Site:
+    """登录回读用的最小站点桩：只提供 parse_login。"""
 
-def test_login_exception_is_unconfirmed():
-    def fail(): raise TimeoutError()
-    assert verify_login(fail, HDSkyVerifier(), '').status == 'unconfirmed'
+    def __init__(self, result=None, error=None):
+        self._result, self._error = result, error
 
-@pytest.mark.parametrize('first,calls_expected', [(TimeoutError(), 2), (page(), 1)])
-def test_login_rereads_only_after_unconfirmed_and_records_action(first, calls_expected):
-    values = iter([first, page()]); calls = []
+    def parse_login(self, page, credential=None):
+        if self._error:
+            raise self._error
+        return self._result
+
+
+def test_login_reads_twice_only_after_unconfirmed_first_read():
+    values = iter([TimeoutError(), LoginPage(page(), 'https://fixture.invalid/')])
+    calls = []
+
     def fetch():
-        calls.append(1); value = next(values)
-        if isinstance(value, Exception): raise value
+        calls.append(1)
+        value = next(values)
+        if isinstance(value, Exception):
+            raise value
         return value
-    store = HistoryStore()
-    result = SignRunner(history=store.append).run_login('hdsky', resolve=lambda: CredentialResolution(Credential('managed_site','fixture'), 'valid'), fetch_page=fetch, verifier=HDSkyVerifier())
-    assert len(calls) == calls_expected and result.status == 'login_ok'
-    assert store.list()['items'][0]['action'] == 'login'
-    assert result.account == '42' and 'business_date' not in result.metadata
-    store.append(LoginResult(LoginStatus.AUTH_FAILED, site_id='hdsky', metadata={'action':'login'}))
-    assert not any(store.today_counts().values())
+
+    result = read_login_twice(fetch, _Site(LoginResult(LoginStatus.LOGIN_OK, '已登录')))
+    assert len(calls) == 2 and result.status == 'login_ok'
+
+
+def test_login_first_read_confirmed_short_circuits():
+    calls = []
+    result = read_login_twice(lambda: calls.append(1) or LoginPage(page(), 'https://fixture.invalid/'),
+                              _Site(LoginResult(LoginStatus.LOGIN_OK, '已登录')))
+    assert len(calls) == 1 and result.status == 'login_ok'
+
+
+def test_login_parser_failure_is_unconfirmed():
+    result = read_login_twice(lambda: LoginPage(page(), 'https://fixture.invalid/'),
+                              _Site(error=ValueError()))
+    assert result.status == 'unconfirmed' and result.evidence is None
+
+
+def test_login_unreachable_page_is_unconfirmed():
+    def fail(): raise TimeoutError()
+    assert read_login_twice(fail, _Site()).status == 'unconfirmed'
+
 
 @pytest.mark.parametrize('protocol', [RousiProtocol, SunnyPtProtocol])
 def test_integrations_require_real_checker(protocol):
@@ -86,15 +92,6 @@ def test_login_only_dispatch_and_api(monkeypatch):
     assert dispatched == [('hdsky','sign'),('haitang','login'),('rousi','login')]
 
 
-def test_login_uid_is_display_only_and_shared_lock():
-    assert verify_login(lambda: page(), HDSkyVerifier(), '99').status == 'login_ok'
-    runner = SignRunner()
-    with runner.locks.acquire(('hdsky', '')):
-        result = runner.run_login('hdsky', resolve=lambda: pytest.fail('busy'),
-            fetch_page=lambda: pytest.fail('busy'), verifier=HDSkyVerifier())
-    assert result.status == 'skipped' and result.metadata['action'] == 'login'
-
-
 def test_login_integration_is_enabled_by_default(monkeypatch):
     import autoptcheckin as module
     monkeypatch.setattr(module, 'managed_site', lambda sid: {'cookie': ''})
@@ -104,9 +101,3 @@ def test_login_integration_is_enabled_by_default(monkeypatch):
     result = plugin._execute_site('rousi', action='login')
     assert result['status'] == 'login_ok'
     assert plugin._track_store().state_of('rousi', 'login') == 'pending'  # mocked dispatcher does not persist
-
-
-def test_login_parser_failure_does_not_veto_reachability():
-    class BrokenVerifier:
-        def parse_login(self, page): raise ValueError()
-    assert verify_login(lambda: '<html>reachable</html>', BrokenVerifier(), '').status == 'login_ok'

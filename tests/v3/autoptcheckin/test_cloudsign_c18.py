@@ -202,7 +202,7 @@ def test_ourbits_solve_timeout_returns_already_from_each_attempt_readback(bql):
     result = cloudsign.sign('ourbits', 'https://ourbits.club', 'a=1', {'browserless_token': 'tk'})
     assert result.status == 'success' and '已签到' in result.message
     assert len(calls) == 1
-    assert calls[0]['payload']['variables']['solveTimeout'] == 40000
+    assert calls[0]['payload']['variables']['solveTimeout'] == 60000
     assert calls[0]['timeout'] >= 75
 
 
@@ -217,7 +217,7 @@ def test_ourbits_retries_only_solve_then_submits_once(bql):
     result = cloudsign.sign('ourbits', 'https://ourbits.club', 'a=1', {'browserless_token': 'tk'})
     assert result.status == 'success'
     assert len(calls) == 3
-    assert [call['payload']['variables']['solveTimeout'] for call in calls[:2]] == [40000, 60000]
+    assert [call['payload']['variables']['solveTimeout'] for call in calls[:2]] == [60000, 90000]
     assert 'solve:solve(' in calls[0]['payload']['query']
     assert 'solve:solve(' in calls[1]['payload']['query']
     assert 'autoSubmit' in calls[2]['payload']['query']
@@ -230,8 +230,43 @@ def test_ourbits_stops_after_three_solve_timeouts_without_submitting(bql):
     assert result.status == 'protocol_pending'
     assert '已尝试 3 次' in result.message
     assert len(calls) == 3
-    assert [call['payload']['variables']['solveTimeout'] for call in calls] == [40000, 60000, 80000]
+    assert [call['payload']['variables']['solveTimeout'] for call in calls] == [60000, 90000, 120000]
     assert all('solve:solve(' in call['payload']['query'] for call in calls)
+
+
+def test_ourbits_retries_next_budget_when_bql_request_times_out(bql):
+    calls = bql([
+        requests.exceptions.Timeout('slow'),
+        FakeResp({
+            'data': {
+                'solve': {'token': '0.turnstile-tk'},
+                'session': {'browserQLEndpoint': 'https://production-sfo.browserless.io/e/retry/chromium/bql'},
+                'after': {'html': '待签到'},
+            },
+        }),
+        FakeResp({'data': {'verifyPage': {'html': '签到成功'}, 'after': {'html': ''}}}),
+    ])
+    result = cloudsign.sign('ourbits', 'https://ourbits.club', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'success'
+    assert [call['payload']['variables']['solveTimeout'] for call in calls[:2]] == [60000, 90000]
+    assert calls[0]['timeout'] < calls[1]['timeout']
+
+
+def test_ourbits_reports_attempts_when_every_bql_request_times_out(bql):
+    calls = bql([requests.exceptions.Timeout('slow') for _ in range(3)])
+    result = cloudsign.sign('ourbits', 'https://ourbits.club', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'network_error'
+    assert '已尝试 3 次，未提交' in result.message
+    assert len(calls) == 3
+    assert all('solve:solve(' in call['payload']['query'] for call in calls)
+
+
+def test_ourbits_does_not_retry_bql_auth_error(bql):
+    calls = bql([FakeResp(status=401)])
+    result = cloudsign.sign('ourbits', 'https://ourbits.club', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'network_error'
+    assert '鉴权' in result.message
+    assert len(calls) == 1
 
 
 def test_ourbits_does_not_retry_non_timeout_solve_error(bql):

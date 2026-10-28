@@ -192,14 +192,7 @@ class SiteModule(ABC):
             return LoginResult(LoginStatus.AUTH_FAILED, message, site_id=self.id)
         if not page_available(page):
             return LoginResult(LoginStatus.UNCONFIRMED, "登录页面不可达", site_id=self.id)
-        uid = ""
-        try:
-            uid = select_text(html.fromstring(page.text), self.record_spec.uid)
-            if not uid:
-                from ..verifiers.nexus import NexusVerifier
-                uid = NexusVerifier().identity(page.text)
-        except (ValueError, TypeError, html.etree.XPathError, html.etree.ParserError):
-            pass
         notice = getattr(self, "login_page_notice", "")
         message = notice if notice and notice in (page.text or "") else "已登录"
-        return LoginResult(LoginStatus.LOGIN_OK, message, evidence=Evidence(uid=uid or None), site_id=self.id)
+        # 页面可达即登录态；不解析 UID（UID 防串号已按用户裁决移除），冲突不参与判定。
+        return LoginResult(LoginStatus.LOGIN_OK, message, evidence=Evidence(), site_id=self.id)

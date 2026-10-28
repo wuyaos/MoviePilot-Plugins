@@ -1,5 +1,6 @@
 """Native Nexus form flow. Submission replies never replace a fresh message read."""
 from dataclasses import dataclass, replace
+from datetime import datetime
 import re
 from time import monotonic
 from urllib.parse import urljoin, urlsplit
@@ -22,8 +23,13 @@ class NexusSignin(SiteModule):
     success_texts: tuple[str, ...] = ()
     pre_read_spec: RecordSpec | None = None
     signed_marker: str | None = None
+    # 站点每日重置小时；声明后，重置前的已签只改消息归属，不拦提交（None=不适用）。
+    reset_hour: int | None = None
 
     def read_before(self, ctx: SignContext, page: LoginPage | None) -> SignResult:
+        return self.note_daily_reset(self._read_before(ctx, page))
+
+    def _read_before(self, ctx: SignContext, page: LoginPage | None) -> SignResult:
         if page_available(page) and self.parse_login(page).status != LoginStatus.AUTH_FAILED:
             if self.signed_marker:
                 nodes = html.fromstring(page.text).xpath(self.signed_marker)
@@ -35,6 +41,14 @@ class NexusSignin(SiteModule):
         if spec.source == "response_json":
             return ctx.result(status=SignStatus.UNCONFIRMED, evidence=Evidence(status="unconfirmed"))
         return ctx.record_result(page, spec, before_submit=True)
+
+    def note_daily_reset(self, result: SignResult) -> SignResult:
+        """重置小时之前读到的已签属昨日残留：只改消息归属，不拦提交。"""
+        if self.reset_hour is None or result.status != SignStatus.ALREADY:
+            return result
+        if datetime.now().hour < self.reset_hour:
+            result.message = f"昨日已签，站点 {self.reset_hour} 点后刷新"
+        return result
 
     @staticmethod
     def _with_steps(result: SignResult, steps, ctx: "SignContext | None" = None) -> SignResult:

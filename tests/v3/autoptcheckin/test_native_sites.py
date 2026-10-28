@@ -174,7 +174,6 @@ def test_execute_site_dual_track_and_gate(monkeypatch, native, expected):
         return {}
     monkeypatch.setattr(module, 'managed_site', managed)
     monkeypatch.setattr(module, 'run_native', lambda *args, **kwargs: SignResult(SignStatus.SUCCESS, 'native'))
-    monkeypatch.setattr(plugin._runner, 'run', lambda *args, **kwargs: SignResult(SignStatus.SUCCESS, 'legacy'))
     results = [] if expected == 'removed' else plugin._execute_all(trigger='scheduler')  # removed 直接验证无执行实现
     if expected == 'native_unverified':
         assert results == []

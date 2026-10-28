@@ -7,7 +7,7 @@ from .login import CredentialLoginProtocol
 
 API = "https://api.sunnypt.top"
 REFERER = "https://sunnypt.top/user/attendance"
-SUNNYPT_CREDENTIALS = CredentialSpec(kind="password", refresh="password", identity_field="uid")
+SUNNYPT_CREDENTIALS = CredentialSpec(kind="password", refresh="password")
 
 
 def _body(response):

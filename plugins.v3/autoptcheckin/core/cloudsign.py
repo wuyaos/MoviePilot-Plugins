@@ -69,7 +69,7 @@ CLOUD_RULES: dict[str, dict[str, Any]] = {
         "submit": "auto",
         "before_wait": 5000,
         "solve_timeout": DEFAULT_SOLVE_TIMEOUT_MS,
-        "solve_retry_timeouts": (40000, 60000, 80000),  # 最多三次 solve；无 token 时不提交
+        "solve_retry_timeouts": (60000, 90000, 120000),  # 最多三次 solve；无 token 时不提交
         "auto_wait": 30000,
         "wait": 8000,
         "verify": "/attendance.php",
@@ -459,15 +459,23 @@ def _sign_auto(endpoint: str, token: str, target: str, cookies: list, rule: dict
                 request_timeout,
                 (before_wait + solve_timeout + DEFAULT_RECONNECT_WAIT_MS + 15000) / 1000,
             )
-        stage1 = _bql_request(endpoint, {
-            "query": _solve_query(),
-            "variables": {
-                "cookies": cookies, "url": target,
-                "beforeWait": before_wait,
-                "solveTimeout": solve_timeout,
-                "reconnectTimeout": DEFAULT_RECONNECT_WAIT_MS,
-            },
-        }, timeout=request_timeout)
+        try:
+            stage1 = _bql_request(endpoint, {
+                "query": _solve_query(),
+                "variables": {
+                    "cookies": cookies, "url": target,
+                    "beforeWait": before_wait,
+                    "solveTimeout": solve_timeout,
+                    "reconnectTimeout": DEFAULT_RECONNECT_WAIT_MS,
+                },
+            }, timeout=request_timeout)
+        except CloudSignError as exc:
+            # BQL 请求层超时/失败：非 transient（auth/quota）立即上抛；transient 换下一档预算重试，
+            # 用尽仍失败时如实返回并带上尝试次数，不提交。
+            if exc.kind != "transient" or attempt == len(solve_timeouts):
+                raise CloudSignError(exc.kind, exc.message if attempt == 1
+                                     else f"{exc.message}（已尝试 {attempt} 次，未提交）") from exc
+            continue
         # Every attempt checks page state before deciding whether to retry or submit.
         html = str((stage1.get("after") or {}).get("html") or "")
         state = _classify(html, rule)

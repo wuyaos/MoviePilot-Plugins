@@ -18,15 +18,10 @@ def test_statuses_and_reward():
     assert m.extract_reward_sentence("签到奖励：12 魔力") == "12 魔力"
 
 
-def test_verification_always_reads_and_unconfirmed():
-    v = load("core.verification")
-    called = []
-    class Verifier:
-        def parse(self, page, uid, date):
-            called.append(page)
-            return None
-    result = v.verify_after_submit(lambda: "unparseable", Verifier(), "u1", "2026-01-01")
-    assert result.status.value == "unconfirmed" and called == ["unparseable"]
+def test_statuses_use_unified_six_values():
+    m = load("core.models")
+    assert {s.value for s in m.SignStatus} >= {"success", "already", "unconfirmed", "auth_failed", "cancelled"}
+    assert m.unify_result("unconfirmed")[0] == "pending"
 
 
 def test_migration_preview_is_idempotent_and_read_only():

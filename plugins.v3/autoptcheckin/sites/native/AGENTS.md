@@ -77,7 +77,7 @@
 | tjupt | attendance anchor 今日已签到；首次/连续/重新签到数字奖励正则；豆瓣图片比对 | special-hook；只保留已签 anchor，不把正则裁成宽泛词 | attendance；C5 hook_implemented=True；图片 aHash、answer 文本缓存、豆瓣比对、数字奖励及新 anchor 回读；verified=False |
 | ttg | 首页绿色 b 已签到；提交后“您已连续签到”/“亲，您今天已签到过，不要太贪哦” | special-hook；独立 pre_read_spec + 消息占位 | /；signed_timestamp/signed_token POST signed.php 已实现，待生产参数/消息校准 |
 | tu88 | 通用 CAPTCHA helper 简繁成功/重复词 | special-hook；page_message 合成节点 | attendance；imagehash/imagestring OCR 已实现，待生产消息/表单校准 |
-| u2 | showup anchor 四种语言；POST 回执 JS 跳转 | special-hook；只保留 anchor；不以 JS 跳转冒充新页成功 | showup.php；9点时段、签到表单 _csrf/req/hash/form、图片选项与提交已实现，待生产校准 |
+| u2 | showup anchor 四种语言；POST 回执 JS 跳转 | special-hook；只保留 anchor；不以 JS 跳转冒充新页成功 | showup.php；签到表单 _csrf/req/hash/form、图片选项与提交已实现，待生产校准（reset_hour=9，重置前已签只改消息归属） |
 | vclib | 通用 CAPTCHA helper 简繁成功/重复词 | special-hook；page_message 合成节点 | attendance；imagehash/imagestring OCR 已实现，待生产消息/表单校准 |
 | yema | CloakBrowser 页面动作：ALTCHA 验证后点击签到按钮 | cloak_steps；altcha + sign_button，提交后以落点页回读 | /#/user/growth；页面动作与回读已实现，按钮缺失不猜测成功 |
 | yzyy | .signbtn 今日已打卡/点击打卡；本人行；同 Session 动态 sign token | special-hook；限定唯一 .signbtn 消息 | plugin.php?id=zqlj_sign；同 Session/Cookie 同步、动态链接、无条件按钮/本人行回读已实现，待生产校准；不移植响应兜底 |

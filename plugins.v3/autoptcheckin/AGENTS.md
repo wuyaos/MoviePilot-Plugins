@@ -3,18 +3,19 @@
 ## 边界
 - 站点启用且选择动作即可执行，仍检查真实能力、凭据、站点互斥与已签去重；不再使用 verified/unlock_all_sites 审批或手动旁路。
 - 站点由 `sites/native/` 原生声明、generic 声明与 integrations 组成；不接管 `plugins.v2` 入口，默认不激活自动调度。
-- 站点语义（2026-10-23 用户裁决）：zhuque 的 fireGenshinCharacterMagic「释放技能」动作即其签到能力（signin_capable=True，按技能动作回执判定）；vclib 人工验证、52pt 内联滑块均走 CloakBrowser 页面动作签到。
+- 站点语义（2026-10-28 修订）：zhuque 的 fireGenshinCharacterMagic 是技能动作回执而非每日签到，已转 `signin_capable=False` 仅保留登录；52pt 签到入口整体下线（`signin_capable=False`，去仿真）仅保留登录；vclib 人工验证走 CloakBrowser 页面动作签到。
 - 站点规则（2026-10-24）：HDDolby 公告「API 访问不计有效登录；严禁 Cookies/伪造 UA 模拟登录，违者警告或封号」——hddolby 声明 `login_notice`，配置/数据卡显示 ⚠ 徽标（title 全文）提醒用户定期浏览器人工登录，登录轨不强行关闭（用户裁决）。同类站点规则按此先例加 notice 徽标。
 - Registry 仅发现 `sites/native/`；generic 声明由 native 包提供，rousi/sunnypt 由 integrations 注册。旧适配器副本和旧执行桥已移除。
-- 任何提交结果都必须尝试新页面回读；按钮文本和 UID 只能来自页面证据。
-- 对外新结果使用下方统一六值；适配器内部可保留原始协议状态，但未知证据不得猜成功或失败。提交、回读与身份验证规则不因归一改变。
+- 任何提交结果都必须尝试新页面回读；按钮文本只能来自页面证据。
+- 对外新结果使用下方统一六值；适配器内部可保留原始协议状态，但未知证据不得猜成功或失败。提交与回读规则不因归一改变。
+- 旧 verifier 链（`verifiers/`、`core/verification.py`、`SignRunner.run/run_login`）与 UID 防串号按 2026-10-28 用户裁决删除：生产回读只走 `core/nexus.py` 声明链与 `core/native.py` 的 `read_login_twice`／无条件新页回读，证据只保留消息文本与本人行日期；`Evidence.uid`/`Credential.uid` 字段保留，仅不再自动解析。
 
 ## 验证
 - `PYTHONIOENCODING=utf-8 micromamba run -n base python -m pytest tests/v3/autoptcheckin`
 - 不在离线测试中放置 Cookie、Token 或真实 URL 请求。
 
 ## UI 契约
-以定稿 `D:/tmp/pt-signin-form-preview.html` 为视觉与交互依据；示例站点、数量、UID、日期、奖励和勾选值不作为生产数据或默认配置。
+以定稿 `D:/tmp/pt-signin-form-preview.html` 为视觉与交互依据；示例站点、数量、日期、奖励和勾选值不作为生产数据或默认配置。
 
 ### 配置页
 - 只设「设置 / 站点」两 Tab，默认显示「设置」；使用 Vue 响应式 model 与原生 Tab，不拆出调度或凭证 Tab。
@@ -51,7 +52,7 @@
 - 卡片区筛选 chips 与站点徽标同款样式：签到（绿/红=成功/失败）、结果待确认（橙）、登录（绿/红）、不可达、维护中、待验证、待执行（均 off 色），再点选中态恢复全部；认证失败归失败，skipped 沿用停用色归停用；维护、网络及协议状态虽共用 off 中性色，筛选按状态与 reason 独立匹配，不按颜色混入停用。切换筛选重置为筛选后前 8 张，空匹配显示独立空态。
 - 桌面三列等宽等高小卡，中屏两列、640px 以下单列；末张不跨列。默认前 8 张，failed/unconfirmed/auth_failed 优先且同优先级保持原顺序；其余用「展开其余 X 个站点」/「收起其余站点」切换，空态单独展示。
 - 历史通过现有 page/size API 每页 100 条加载全部保留记录，按浏览器本地日期前端聚合；分组头为「YYYY-MM-DD · N 条记录」，默认仅当天展开，其余收起。列顺序为「时间 / 站点 / 状态 / 最近消息」四列；不提供证据展开行，失败与异常说明（403/503/维护等）由最近消息列承载；API 与存储不变。历史表容器 max-height:60vh、内部横纵滚动，不提供证据展开行，不撑破宿主页面。
-- 历史不展示回读按钮文本/UID/记录日期/记录状态等证据字段（回读证据仍按存储契约保留在 history.records，仅不在 UI 展开）。历史消息使用真实 item.message，奖励如有拼在消息末尾，不借回读按钮文本替代执行结论；历史结果时间按浏览器本地时间显示 YYYY/MM/DD HH:mm:ss，存储 ISO 不变。
+- 历史不展示回读按钮文本/记录日期/记录状态等证据字段（回读证据仍按存储契约保留在 history.records，仅不在 UI 展开）。历史消息使用真实 item.message，奖励如有拼在消息末尾，不借回读按钮文本替代执行结论；历史结果时间按浏览器本地时间显示 YYYY/MM/DD HH:mm:ss，存储 ISO 不变。
 - 配置自定义站点 dialog 使用草稿模式：打开时复制已保存数据，取消/关闭丢弃未保存编辑，行内保存仅更新草稿与已保存项；主配置保存前不持久化。
 - 不提供迁移预览区；不要把静态预览的演示按钮、示例快照提示或刷新恢复示例文案带入正式页面。
 
@@ -74,7 +75,7 @@
 - 兼容层的删除条件（四条全满足才可动手，涉及 `core/state_store.py` 的 `_compat_legacy_entries`、`core/models.py` 的旧 already 解释、`core/history.py` 旧值读取、`core/native.py` 的 `cookies.refreshed` 迁移）：① `track.state` 已无 `version == 1` 数据；② history 14 天保留窗口内所有记录都带 reason 字段；③ `cookies.refreshed.migrated` 已置位且旧键为空；④ `track.state` 不再出现旧审批 reason。删除是不可逆的数据语义变更，动手前先导出 `track.state` 与 history 备份。
 - 轨道仍为 success/failed/pending/disabled；pending 下轮重入队、不当场重试。锁忙 skipped/取消只写流水，不覆盖结论。
 - 憨憨的 register-now-info 声明必须使用 XPath class-token 匹配，不能把 CSS 选择器交给 lxml.xpath；attendance 前读/动作/回读使用相同 URL，测试必须按调用顺序提供响应。
-- U2 按每日 9 点重置：9 点前 read_before 的 ALREADY 一律降级 unconfirmed（昨日状态不作为今日证据，修复 01:00 误判已签）；9 点后表单提交「一切随缘」随机选项。
+- 站点每日重置小时用 `reset_hour` 声明（u2/retrotoon=9，generic 声明同样支持该键）：重置小时前 read_before 读到的 ALREADY 只改消息归属（「昨日已签，站点 9 点后刷新」），状态仍是 already（跳过本轮、不提交），未签照常提交——不做时间门控、不降级 unconfirmed（2026-10-28 用户裁决，旧 U2 9 点守卫已删）。U2 9 点后表单提交「一切随缘」随机选项。
 
 ### 徽标色映射
 - 徽标用 `--ptc-badge-*` 半透明背景和同系文字，深浅主题各一套；配置下拉、chips、收起行与数据页使用同一来源映射。
@@ -92,7 +93,7 @@
 ## 原生站点契约
 - 不以静态 verified 属性表示运行许可，也不为放行伪造已验证证据。
 - 原生站点实现 `SiteModule`，通过类属性声明 `id/name/url/credential/login_capable/cf/record_spec`，仅实现 `signin(ctx)`；`sites/native/` 逐模块发现，导入失败隔离为 `skipped`，不阻断其他站点。
-- `RecordSpec` 默认 page_message，每个 XPath 必须选中唯一消息元素；多选择器遇空值、歧义或无效表达式继续扫描，首个非空文本停止，再按 status_map 声明顺序映射 signed/unsigned（无匹配仍 unconfirmed，不继续找成功词）。NexusSignin 的合成占位声明默认回退消息链，站点可关闭 use_default_message；response_json 仍按 response_field 的精确类型和值匹配。signed_marker 可确认安全前读 already 和提交后新页 success；UID/日期仅展示，不以缺失字段或整页文本补造结论。校准记录见 sites/native/AGENTS.md。
+- `RecordSpec` 默认 page_message，每个 XPath 必须选中唯一消息元素；多选择器遇空值、歧义或无效表达式继续扫描，首个非空文本停止，再按 status_map 声明顺序映射 signed/unsigned（无匹配仍 unconfirmed，不继续找成功词）。NexusSignin 的合成占位声明默认回退消息链，站点可关闭 use_default_message；response_json 仍按 response_field 的精确类型和值匹配。signed_marker 可确认安全前读 already 和提交后新页 success；日期只作本人行匹配，UID 不再解析，不以缺失字段或整页文本补造结论。校准记录见 sites/native/AGENTS.md。
 - `NexusSignin` 提供 attendance 页面 GET、唯一 POST 表单发现、验证码钩子和提交后的无条件新页面 GET 回读；提交响应不能替代回读，超时或异常不得自动重试。
 - `SignContext` 由执行边界注入已认证的 HTTP client、站点锁、取消事件及可选 `page/ocr`；`SiteModule` 不查凭据、不创建或关闭资源，资源生命周期由 `core.native`/runner 管理。
 - native、custom、integrations 使用各自执行器；DarkLand/DigitalCore 签到不适用，M-Team 仅登录。能力声明与用户选择共同约束手动/自动入口。
@@ -100,7 +101,7 @@
 ### 仿真通道（CloakBrowser）
 - site_proxy/site_emulate 为站点ID到布尔的覆盖表：缺键继承 MP proxy / (MP render 或内置 emulate)，显式 false 优先；自定义仿真默认按条目填写。site_cloudsign 为独立选择数组，仅签到走云签，登录不受云签影响仍走原路径（勾选仿真走仿真，不勾选走 HTTP）。旧 site_browserless 仅一次性迁移读取，随后删除，不复活已清空的新选择。
 - 复用 Nexus 前读→动作→无条件回读，结论一律来自回读证据。Cookie 双向同步仅限本次执行；不得重放动作。页面动作后的落点页 stash 即为回读证据；站点每次进入可能发放新的滑块门页，不能用二次 GET 替代动作回读。
-- **页面动作站（`cloak_steps`）**：pt_0ff=[slider,sign_button]（滑块有时不出现，出现才拖动）、52pt=[slider,sign_button]、yema=[altcha,sign_button]（ALTCHA 方框勾选→PoW 验证通过（文案「已验证/Verified」）→点「立即签到」，# /user/growth，slow 90s）、vclib=[human_verify,sign_button]（Cloudflare Turnstile，headful CloakBrowser 等待 token 最多 60 秒）、piggo/kamept=[sign_button]。`run_page_action` 步骤缺失不阻断（absent 继续下一步），点击后等 5s，最终以回读消息链判定成功/已签/未确认，不猜测按钮结果。 pt_0ff 拖到底松开后门页先显示「验证通过」，约 8 秒自动跳转真实签到页；回读出现「签到已得N」才是成功证据，默认消息链已覆盖。slider 拖动后轮询等待标题/正文离开「滑动认证/拖动滑块验证」门页（每 1.5s，最多 25s），离开后再稳定等待 2s，超时如实保留未确认。
+- **页面动作站（`cloak_steps`）**：pt_0ff=[slider,sign_button]（滑块有时不出现，出现才拖动）、yema=[altcha,sign_button]（ALTCHA 方框勾选→PoW 验证通过（文案「已验证/Verified」）→点「立即签到」，# /user/growth，slow 90s）、vclib=[human_verify,sign_button]（Cloudflare Turnstile，headful CloakBrowser 等待 token 最多 60 秒）、piggo/kamept=[sign_button]。`run_page_action` 步骤缺失不阻断（absent 继续下一步），点击后等 5s，最终以回读消息链判定成功/已签/未确认，不猜测按钮结果。 pt_0ff 拖到底松开后门页先显示「验证通过」，约 8 秒自动跳转真实签到页；回读出现「签到已得N」才是成功证据，默认消息链已覆盖。slider 拖动后轮询等待标题/正文离开「滑动认证/拖动滑块验证」门页（每 1.5s，最多 25s），离开后再稳定等待 2s，超时如实保留未确认。
 - 每站独立 actor 创建、操作、关闭 CloakBrowser，禁止跨线程共享 Playwright 对象。多站逐个启动增加开销，换取线程、代理和有头模式隔离；保留严格线程归属反例测试。
 - 单站与批量执行沿用同一能力/启用/动作选择语义；手动调用不绕过未启用或未选动作。
 - 默认 solve 与页面稳定等待各 15 秒；单次导航上限 30 秒。滑块拖动为 humanize 步进鼠标（24 步），真实过盾效果需生产验证。
@@ -116,7 +117,7 @@
 
 ## 执行边界
 - 账号锁忙立即 skipped；站点锁在身份解析前获取，避免首次绑定与后续执行交错。Cookie 按 cookiecloud → managed_site → local_cookie 选择，并按请求 host 与 Cookie domain 边界匹配。
-- 无 Cookie 返回 auth_failed，不请求签到页面。原生轨道 UID/日期仅展示；提交状态依声明消息或 signed_marker 确认，证据不足为 unconfirmed。每次尝试独立写 history。
+- 无 Cookie 返回 auth_failed，不请求签到页面。原生轨道日期只作本人行匹配（不解析 UID）；提交状态依声明消息或 signed_marker 确认，证据不足为 unconfirmed。每次尝试独立写 history。
 - 原生签到与只读核验走 `run_native`；custom 走 `run_custom`；rousi/sunnypt 走 integrations；M-Team 登录走独立 CloakBrowser。ourbits 为账密兜底 hook（`integrations/ourbits.py`）：Cookie 全源失效（auth_failed）后表单登录 takelogin.php 换取新 Cookie 并经 persist_cookie_result 回写统一 Cookie 表；2FA TOTP 可选——配置 ourbits_totp 才填 2fa_code（pyotp），未配置不填直接提交；登录页出现 imagestring 验证码明确放弃。其它无执行实现的旧站点返回 `skipped(site_removed)`。
 
 ## 组件与宿主玻璃主题
@@ -143,13 +144,13 @@
 - interval 对齐 V2 `__generate_schedule_crons` + TimerUtils.random_scheduler：次数 max(1, int((end-begin)/interval))，从 begin:00 累加 [max(30,interval*30),interval*60] 随机分钟，最小 interval=0.5，0<=begin<end<=23。schedule_crons/schedule_signature 用 get_data/save_data 保存，signature 相同复用，变化重排；不采用重载重新随机，以免调度漂移。
 - 数据页「立即运行一次」直接调用 run_once API，在独立线程执行一轮，不写配置、不注册一次性服务；不受 scheduler_enabled/常规运行门控限制，但仍遵守站点选择、账号锁、轮次互斥和停止取消。
 - 调度与立即运行共用全量 runner 路径、站点选择与账号锁，history 增加 trigger=scheduler/manual；调度不绕过站点门控。next_schedule 从已声明的真实 Trigger 计算，不从展示配置猜测。
-- 生产激活衔接 S6：备份并停旧插件任务 → preview/execute 配置迁移 → 核对站点 Cookie/UA/UID 和只读回读 → 用户授权手动验证 → 显式保存 scheduler_enabled=true → 核对宿主服务及 next_schedule。回退先关闭门控并确认旧服务移除，再恢复旧插件，禁止两边同时运行。
+- 生产激活衔接 S6：备份并停旧插件任务 → preview/execute 配置迁移 → 核对站点 Cookie/UA 和只读回读 → 用户授权手动验证 → 显式保存 scheduler_enabled=true → 核对宿主服务及 next_schedule。回退先关闭门控并确认旧服务移除，再恢复旧插件，禁止两边同时运行。
 
 ## 模拟登录契约
 - native 登录调用 parse_login，不执行 signin；只访问登录探测页面，不访问签到或保活动作。
 - 非 native 集成之外的已配置域名登录使用通用页面解析；已有 registry ID 按 matcher 找宿主条目，未登记域名必须已在 enabled_sites/login_sites 配置，并由宿主或 custom 条目提供同 host 地址。不得直接请求任意 API 入参 URL。27域排除清单仅表示没有 native 签到声明，不再表示依赖登录旧桥。
-- GET 站点页面后无条件再次 GET 回读，无签到提交、无业务日期；页面可达即 login_ok，UID 尽力解析，缺失不阻断，显式冲突为 unconfirmed。重定向到登录页为 auth_failed，不可达为 unconfirmed。
-- 批量执行按签到、登录两个独立队列处理，分别遵守对应选择与能力；两项都未勾保留 skipped 记录。单站登录 API 为 POST /login_by_domain（auth: bear），复用站点锁和身份绑定。
+- GET 站点页面后无条件再次 GET 回读，无签到提交、无业务日期；页面可达即 login_ok，不解析 UID（防串号已按用户裁决移除），不因身份冲突降级。重定向到登录页为 auth_failed，不可达为 unconfirmed。
+- 批量执行按签到、登录两个独立队列处理，分别遵守对应选择与能力；两项都未勾保留 skipped 记录。单站登录 API 为 POST /login_by_domain（auth: bear），复用站点锁。
 - history 保存 action=sign/login；旧记录无 action 视为 sign。登录结果写入登录轨道状态并进入对应今日统计，历史同时保留；历史 login_ok 显示「登录成功」。
 - rousi/sunnypt 使用专属集成协议并在启用与动作选择后可执行。PeerGo 登录先 GET `/api/v1/session`，Cookie 无效时使用账密 POST 刷新；签到读取 session/attendance，已有 claimed_today 不重复提交，提交带 Origin、Referer、X-CSRF-Token 与唯一 Idempotency-Key。SunnyPT 优先配置 JWT，否则账密换 token；Bearer 签到按 code=0/400001/400000 分类，token 失效时重新登录并最多重试一次。M-Team 仍仅由独立 CloakBrowser 真实登录实现，不经通用 password 集成协议。
 

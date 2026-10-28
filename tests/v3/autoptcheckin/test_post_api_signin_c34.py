@@ -84,7 +84,8 @@ def context(site, http, ocr=None):
 
 @pytest.fixture(autouse=True)
 def daytime(monkeypatch):
-    module = importlib.import_module('autoptcheckin.sites.native.u2')
+    # 站点重置小时由 NexusSignin.note_daily_reset 统一读取（u2 等不再各自持有时钟）。
+    module = importlib.import_module('autoptcheckin.core.nexus')
     clock = Mock()
     clock.now.return_value.hour = 9
     monkeypatch.setattr(module, 'datetime', clock)
@@ -158,13 +159,26 @@ def test_c34_cancel_and_unavailable_pre_read(sid):
     assert len(http.calls) == 1
 
 
-@pytest.mark.parametrize('hour,submitted', [(8, False), (9, True), (23, True)])
-def test_u2_nine_hour_boundary(daytime, hour, submitted):
+@pytest.mark.parametrize('hour,expected', [(8, '昨日已签，站点 9 点后刷新'), (9, '已签到'), (23, '已签到')])
+def test_u2_reset_hour_never_gates_submission(daytime, hour, expected):
+    # 重置小时只改消息归属：前读已签一律跳过本轮（不提交），不再按小时暂缓。
     daytime.now.return_value.hour = hour
     site = get_native_module('u2')
+    http = Http(site, before=signed('u2'))
+    result = site.signin(context(site, http))
+    assert not http.actions
+    assert result.status == 'already'
+    assert result.message == expected
+
+
+def test_u2_before_reset_hour_unsigned_still_submits(daytime):
+    # 口径（2026-10-28）：重置小时前未签照常提交，不再「本轮不提交」。
+    daytime.now.return_value.hour = 8
+    site = get_native_module('u2')
     http = Http(site, fresh=signed('u2'))
-    site.signin(context(site, http))
-    assert bool(http.actions) == submitted
+    result = site.signin(context(site, http))
+    assert [action[0] for action in http.actions] == ['post']
+    assert result.status == 'success'
 
 
 @pytest.mark.parametrize('sid', ['ttg', 'u2', 'hdchina', 'zhuque'])

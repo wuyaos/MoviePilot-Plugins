@@ -7,7 +7,7 @@ from ..core.models import LoginResult, LoginStatus, SignResult, SignStatus
 from .login import CredentialLoginProtocol
 
 BASE = "https://rousi.pro"
-ROUSI_CREDENTIALS = CredentialSpec(kind="password", refresh="password", identity_field="uid")
+ROUSI_CREDENTIALS = CredentialSpec(kind="password", refresh="password")
 
 
 def _body(response):
