@@ -131,6 +131,15 @@ def test_generic_kelu_variants_and_btschool_opt_out():
     assert site.use_default_message is False and not site.message_spec().status_map
 
 
+
+def test_skyeysnow_login_maintenance_notice_keeps_login_ok_status():
+    from autoptcheckin.core.models import LoginPage
+    site = get_native_module('skyeysnow')
+    result = site.parse_login(LoginPage('<main>In the process of updating php .....</main>', site.url))
+    assert result.status == 'login_ok'
+    assert result.message == 'In the process of updating php .....'
+
+
 @pytest.mark.parametrize('sid', CAPTCHA + GET + POST)
 def test_generic_migrated_module_removed(sid):
     assert not generic._DECLARATIONS.with_name(sid + '.py').exists()

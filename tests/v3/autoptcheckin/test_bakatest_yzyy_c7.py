@@ -105,7 +105,7 @@ def test_yzyy_action_exception_still_reads_and_never_uses_receipt():
     assert len(http.calls) == 3
 
 
-def test_yzyy_repeat_conflict_and_foreign_action():
+def test_yzyy_repeat_and_foreign_action():
     site = get_native_module('yzyy')
     http = Http([discuz('今日已打卡', '今日已打卡')])
     assert site.signin(context(site, http)).status == 'already'
@@ -113,7 +113,7 @@ def test_yzyy_repeat_conflict_and_foreign_action():
     ctx = context(site, Http([]))
     assert site.read_after(ctx, LoginPage(discuz('今日已打卡', '未打卡'))).status == 'unconfirmed'
     ctx.credential = Credential('test', 'synthetic', '99')
-    assert site.read_after(ctx, LoginPage(discuz('今日已打卡', '今日已打卡'))).status == 'unconfirmed'
+    assert site.read_after(ctx, LoginPage(discuz('今日已打卡', '今日已打卡'))).status == 'success'
     http = Http([discuz().replace('href="plugin.php', 'href="https://other.invalid/plugin.php')])
     assert site.signin(context(site, http)).status == 'protocol_pending'
     assert len(http.calls) == 1
@@ -171,13 +171,13 @@ def test_yzyy_session_cookie_refresh(monkeypatch):
     assert http.cookies['sid'] == 'fresh'
 
 
-def test_yzyy_identity_conflict_does_not_submit():
+def test_yzyy_uid_does_not_block_submission():
     site = get_native_module('yzyy')
     http = Http([discuz()])
     ctx = context(site, http)
     ctx.credential = Credential('test', 'synthetic', '99')
     assert site.signin(ctx).status == 'unconfirmed'
-    assert len(http.calls) == 1
+    assert len(http.calls) == 3
 
 
 def test_c7_inventory_all_b18_ids_are_accounted_for():

@@ -119,14 +119,14 @@ def test_notify_pending_reason_variants_and_unknown_status():
         'sign': {'total': 6, 'executed': 6, 'next': 6, 'entries': [
             ('Net', {'status': 'pending', 'reason': 'network_error'}),
             ('Maint', {'status': 'pending', 'reason': 'maintenance'}),
-            ('Proto', {'status': 'pending', 'reason': 'protocol_pending'}),
+            ('Proto', {'status': 'pending', 'reason': 'protocol_pending', 'message': '云签验证超时'}),
             ('Mystery', {'status': 'pending', 'reason': 'result_unknown'}),
             ('Weird', {'status': 'pending', 'message': '回读页面无法解析'}),
             ('Legacy', {'status': 'mystery_status', 'message': '协议返回异常'}),
         ], 'round_entries': [
             ('Net', {'status': 'pending', 'reason': 'network_error'}),
             ('Maint', {'status': 'pending', 'reason': 'maintenance'}),
-            ('Proto', {'status': 'pending', 'reason': 'protocol_pending'}),
+            ('Proto', {'status': 'pending', 'reason': 'protocol_pending', 'message': '云签验证超时'}),
             ('Mystery', {'status': 'pending', 'reason': 'result_unknown'}),
             ('Weird', {'status': 'pending', 'message': '回读页面无法解析'}),
             ('Legacy', {'status': 'mystery_status', 'message': '协议返回异常'}),
@@ -136,7 +136,7 @@ def test_notify_pending_reason_variants_and_unknown_status():
     assert '本次签到: 6（成功 0 · 失败 0 · 待处理 6）' in text
     assert '【Net】网络请求失败或超时，本轮未确认，稍后自动重试' in text
     assert '【Maint】站点维护中/已关闭，本轮跳过' in text
-    assert '【Proto】验证码/协议未适配，未提交' in text
+    assert '【Proto】提交前置条件未满足，本轮未提交（云签验证超时）' in text
     assert '【Mystery】结果未知，待下轮重试' in text
     # 未命中约定 reason：不编造原因，原样保留 message
     assert '【Weird】回读页面无法解析' in text

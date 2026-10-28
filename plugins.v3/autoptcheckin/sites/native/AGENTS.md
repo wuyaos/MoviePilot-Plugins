@@ -219,7 +219,7 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 
 - 将只有协议参数差异的20个专属模块并入 generic_sites.json，复用 C1/C2/C3/C4 执行器而不另造提交链；verified、动作至多一次、异常后安全回读和未确认语义不变。不迁移 Cookie/CSRF/动态问答等专属流程。
 - CAPTCHA：baozi/dongying/kelu/naturept/novahd/oshen/phoenixpt/playlet/shaobaoyuan/soulvoice/tu88/vclib；GET：hdupt/hhanclub/hdcity/haidan/pttime/btschool；静态 POST：hdarea/nexushd。kelu 的简繁 status_map 顺序原样保留，海胆安全路径仍为 /index.php，既有 signed_marker 保留。
-- 可选字段：captcha 委托 attendance_captcha；action_get + 必填 safe_read_path 选择 GetSignin，referer=true 使用站点首页；form_data + form_path 生成独立表单数据副本；response_json + action_path + 必填 safe_read_path 选择 ApiSignin（本轮没有真实站采用此新声明）；use_default_message=false 关闭默认链；signin_capable=false 返回 skipped 且 registry 展示不适用。message/status_map/success_texts/signed_marker 保留站点证据覆盖。
+- 可选字段：captcha 委托 attendance_captcha；action_get + 必填 safe_read_path 选择 GetSignin，referer=true 使用站点首页；form_data + form_path 生成独立表单数据副本；response_json + action_path + 必填 safe_read_path 选择 ApiSignin（本轮没有真实站采用此新声明）；use_default_message=false 关闭默认链；signin_capable=false 返回 skipped 且 registry 展示不适用；login_page_notice 命中登录页时仅覆盖成功消息、不改变 login_ok 分类。message/status_map/success_texts/signed_marker 保留站点证据覆盖。
 - response_json.status_map 的 object 仅表示字符串键；typed pairs 如 [[0,"signed"]] 或 [[true,"signed"],[false,"unsigned"]] 保留数值/布尔类型，禁止数字与布尔相等键共存导致 Python dict 覆盖，不从字符串键猜测类型。
 - 原65条通用声明中 nexushd/shaobaoyuan/vclib 与专属ID重复，按原 registry 最终专属行为覆盖（NexusHD 保留 v6.nexushd.org）；合并后82条通用声明。native 总数108守恒，专属 .py 从47减至27（含既有同ID声明，不等于唯一站点数）。不要运行只输出基础字段的旧导出脚本覆盖此行为表。
 - darkland/digitalcore/mteam 保留专属，新增仅登录字段不迁移其协议；btschool 明确下沉。hdsky/haitang/tjupt/chdbits/yzyy/u2/hdchina/opencd 及其余未列入下沉的专属模块不动，rousi/sunnypt 集成不动；hdchina URL 本轮不改。

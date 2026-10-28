@@ -69,6 +69,7 @@ CLOUD_RULES: dict[str, dict[str, Any]] = {
         "submit": "auto",
         "before_wait": 5000,
         "solve_timeout": DEFAULT_SOLVE_TIMEOUT_MS,
+        "solve_retry_timeouts": (40000, 60000, 80000),  # 最多三次 solve；无 token 时不提交
         "auto_wait": 30000,
         "wait": 8000,
         "verify": "/attendance.php",
@@ -211,6 +212,19 @@ def _error_suffix(data: dict) -> str:
     if not errors:
         return ""
     return f"；BQL步骤失败[{'; '.join(errors[:2])}]"
+
+
+
+def _solve_timed_out(data: dict) -> bool:
+    return any(
+        str(error).startswith("solve:") and "timed out" in str(error).lower()
+        for error in data.get("_errors") or ()
+    )
+
+
+def _solve_pending(data: dict, attempts: int) -> CloudResult:
+    message = f"云签 solve 失败：未获取到 Turnstile token（已尝试 {attempts} 次）{_error_suffix(data)}"
+    return _result("protocol_pending", message)
 
 
 def cookie_objects(cookie: str, url: str) -> list[dict]:
@@ -430,22 +444,42 @@ def _sign_click(endpoint: str, token: str, target: str, cookies: list, rule: dic
 
 
 def _sign_auto(endpoint: str, token: str, target: str, cookies: list, rule: dict) -> CloudResult:
-    stage1 = _bql_request(endpoint, {
-        "query": _solve_query(),
-        "variables": {
-            "cookies": cookies, "url": target,
-            "beforeWait": rule.get("before_wait", 15000),
-            "solveTimeout": rule.get("solve_timeout", DEFAULT_SOLVE_TIMEOUT_MS),
-            "reconnectTimeout": DEFAULT_RECONNECT_WAIT_MS,
-        },
-    }, timeout=75)
-    # 第一段页面若已能判定成功/已签，不必再跑第二段
-    state = _classify(str((stage1.get("after") or {}).get("html") or ""), rule)
-    if state in ("success", "already"):
-        return _state_result(state, rule)
-    solve_token = str(((stage1.get("solve") or {}).get("token")) or "").strip()
+    solve_timeouts = tuple(rule.get("solve_retry_timeouts") or (
+        rule.get("solve_timeout", DEFAULT_SOLVE_TIMEOUT_MS),
+    ))
+    before_wait = int(rule.get("before_wait", 15000))
+    solve_token = ""
+    stage1 = {}
+    for attempt, solve_timeout in enumerate(solve_timeouts, start=1):
+        solve_timeout = int(solve_timeout)
+        # Outer timeout expands only for the explicitly retried site.
+        request_timeout = 75
+        if rule.get("solve_retry_timeouts"):
+            request_timeout = max(
+                request_timeout,
+                (before_wait + solve_timeout + DEFAULT_RECONNECT_WAIT_MS + 15000) / 1000,
+            )
+        stage1 = _bql_request(endpoint, {
+            "query": _solve_query(),
+            "variables": {
+                "cookies": cookies, "url": target,
+                "beforeWait": before_wait,
+                "solveTimeout": solve_timeout,
+                "reconnectTimeout": DEFAULT_RECONNECT_WAIT_MS,
+            },
+        }, timeout=request_timeout)
+        # Every attempt checks page state before deciding whether to retry or submit.
+        html = str((stage1.get("after") or {}).get("html") or "")
+        state = _classify(html, rule)
+        if state in ("success", "already"):
+            return _state_result(state, rule)
+        solve_token = str(((stage1.get("solve") or {}).get("token")) or "").strip()
+        if solve_token:
+            break
+        if attempt == len(solve_timeouts) or not _solve_timed_out(stage1):
+            return _solve_pending(stage1, attempt)
     if not solve_token:
-        return _result("protocol_pending", f"云签 solve 失败：未获取到 Turnstile token{_error_suffix(stage1)}")
+        return _solve_pending(stage1, len(solve_timeouts))
     session_url = session_endpoint(str(((stage1.get("session") or {}).get("browserQLEndpoint")) or ""), token)
     stage2_endpoint = session_url or endpoint
     verify = rule.get("verify")

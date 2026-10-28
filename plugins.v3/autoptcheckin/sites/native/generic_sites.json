@@ -925,7 +925,8 @@
     "name": "天雪",
     "url": "https://skyeysnow.com/",
     "attendance_path": null,
-    "signin_capable": false
+    "signin_capable": false,
+    "login_page_notice": "In the process of updating php ....."
   },
   {
     "id": "animez",

@@ -83,6 +83,16 @@ def test_c1_submit_exception_always_reads_and_never_retries(sid, fresh, expected
     assert ocr.call_count == 1
 
 
+
+def test_kelu_bare_signin_heading_is_not_reported_as_a_result():
+    site = get_native_module('kelu')
+    http = Http([form_page(), '<h1>签到</h1>'])
+    result = site.signin(context(site, http, Mock(return_value='Ab1234')))
+    assert result.status == 'unconfirmed'
+    assert result.message == '已提交签到，但回读未找到成功或已签证据'
+    assert [call[0] for call in http.calls] == ['get', 'post', 'get']
+
+
 @pytest.mark.parametrize('sid', IDS)
 @pytest.mark.parametrize('mode', ['missing_hash', 'duplicate_hash', 'missing_image', 'duplicate_image', 'foreign_image', 'no_ocr', 'cancel'])
 def test_c1_invalid_inputs_do_not_call_ocr_or_submit(sid, mode):

@@ -54,7 +54,6 @@ class AutoPtCheckin(_PluginBase):
         self._scheduler = None
         self._migration = Migration(self)
         self._running = False
-        self._bound_uids = {}
         self._config: dict[str, Any] = {}
         self._site_config: dict[str, Any] = {}
         self._runner = SignRunner(history=self._record_result)
@@ -158,7 +157,6 @@ class AutoPtCheckin(_PluginBase):
         self._running = bool(self._config.get("enabled", False))
         if hasattr(self, "get_data"):
             self._site_config = self.get_data("site_config") or {}
-            self._bound_uids = self.get_data("identity.bindings") or {}
         self._site_config.update({key: deepcopy(self._config[key]) for key in self.SITE_KEYS if key in self._config})
         self._config.update(deepcopy(self._site_config))
         if hasattr(self, "save_data"):
@@ -540,10 +538,6 @@ class AutoPtCheckin(_PluginBase):
                 str(result.site_id), metadata.get("action", "sign"), status,
                 message=getattr(result, "message", "") or "", reason=reason or None,
                 metadata=diag or None)
-        if result.account and result.site_id not in self._bound_uids:
-            self._bound_uids[result.site_id] = result.account
-            if hasattr(self, "save_data"):
-                self.save_data("identity.bindings", dict(self._bound_uids))
 
     def _track_store(self) -> TrackStateStore:
         """惰性构造：测试/宿主在构造后才注入 get_data/save_data，因此不能在 __init__ 固化。"""
@@ -627,7 +621,7 @@ class AutoPtCheckin(_PluginBase):
         if str(site_id) in {str(v) for v in self._config.get('paused_sites', [])}:
             return asdict(SignResult.skipped('site_paused'))
         if custom is not None or str(site_id).isdigit() or str(site_id).startswith(('600', 'custom-')):
-            result = run_custom(self._runner, str(site_id), {**(custom or registry.get(site_id, {})), 'uid': self._bound_uids.get(str(site_id), '')},
+            result = run_custom(self._runner, str(site_id), dict(custom or registry.get(site_id, {})),
                                 enabled=str(site_id) in {str(value) for value in self._config.get('enabled_sites', [])},
                                 read_only=read_only, trigger=trigger, action=action, config=self._config,
                                 selected=str(site_id) in {str(value) for value in self._config.get('login_sites' if action == 'login' else 'sign_sites', [])})
@@ -668,7 +662,6 @@ class AutoPtCheckin(_PluginBase):
             result.metadata["action"] = action
             self._record_result(result)
             return asdict(result)
-        info["uid"] = self._bound_uids.get(site_id, "")
         if site_id in ('rousi', 'sunnypt'):
             result = run_integration(self._runner, site_id, site.get('name', site_id), info, self._config, action=action, trigger=trigger)
             return asdict(result)

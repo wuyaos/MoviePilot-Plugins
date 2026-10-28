@@ -51,7 +51,7 @@ def test_native_api_dispatch_without_bridge(sid, offline, monkeypatch):
         assert offline == calls == []
     else:
         assert result['status'] == 'login_ok'
-        assert len(offline) == len(calls) == 2
+        assert len(offline) == len(calls) == 1
         assert all(url.endswith('/') for url, _ in offline)
     assert result['metadata']['action'] == 'login'
     assert obj._history.list()['total'] == 1
@@ -78,7 +78,7 @@ def test_signin_gates_do_not_block_login(offline, monkeypatch):
         return data
     monkeypatch.setattr(entry, 'get_registry', unverified)
     assert plugin('hdsky')._execute_site('hdsky', action='login')['status'] == 'login_ok' 
-    assert len(offline) == 2
+    assert len(offline) == 1
 
 
 @pytest.mark.parametrize('source', ['cookiecloud', 'managed_site', 'local_cookie'])
@@ -89,17 +89,16 @@ def test_native_login_cookie_candidates(source, offline, monkeypatch):
         monkeypatch.setattr(entry, 'managed_site', lambda sid: {})
     obj = plugin('darkland', custom_sites_data=[{'id': 'local', 'url': 'https://darkland.top/', 'cookie': 'synthetic' if source == 'local_cookie' else ''}])
     assert obj._execute_site('darkland', action='login')['status'] == 'login_ok'
-    assert [s for _, s in offline] == [source, source]
+    assert [s for _, s in offline] == [source]
 
 
-@pytest.mark.parametrize('pages,uid,status,reason', [
-    ([TimeoutError(), LoginPage('<p>ok</p>')], '', 'login_ok', None),
-    ([LoginPage('<p>ok</p>'), LoginPage('login', 'https://fixture.invalid/login.php')], '', 'failed', 'auth_failed'),
-    ([LoginPage('<p>ok</p>'), None], '', 'pending', 'result_unknown'),
-    ([LoginPage('<div id="info_block"><a href="userdetails.php?id=41">me</a></div>'), LoginPage('<div id="info_block"><a href="userdetails.php?id=42">me</a></div>')], '', 'pending', 'result_unknown'),
-    ([LoginPage('<div id="info_block"><a href="userdetails.php?id=41">me</a></div>'), LoginPage('<div id="info_block"><a href="userdetails.php?id=42">me</a></div>')], '42', 'pending', 'result_unknown'),
+@pytest.mark.parametrize('pages,status,calls_expected', [
+    ([TimeoutError(), LoginPage('<p>ok</p>')], 'login_ok', 2),
+    ([LoginPage('<p>ok</p>'), LoginPage('login', 'https://fixture.invalid/login.php')], 'login_ok', 1),
+    ([LoginPage('login', 'https://fixture.invalid/login.php'), LoginPage('<p>ok</p>')], 'failed', 1),
+    ([None, LoginPage('<p>ok</p>')], 'login_ok', 2),
 ])
-def test_unconditional_reread_and_identity(pages, uid, status, reason, offline, monkeypatch):
+def test_login_rereads_only_after_unconfirmed_first_read(pages, status, calls_expected, offline, monkeypatch):
     calls = []
     def get(self, url):
         value = pages[len(calls)]
@@ -108,13 +107,9 @@ def test_unconditional_reread_and_identity(pages, uid, status, reason, offline, 
             raise value
         return value
     monkeypatch.setattr(native.NativeHttpClient, 'get', get)
-    obj = plugin('darkland')
-    obj._bound_uids['darkland'] = uid
-    result = obj._execute_site('darkland', action='login')
-    assert len(calls) == 2
+    result = plugin('darkland')._execute_site('darkland', action='login')
+    assert len(calls) == calls_expected
     assert result['status'] == status
-    assert result.get('reason') == reason
-
 
 def test_busy_cancelled_missing_cookie_do_not_read(offline, monkeypatch):
     obj = plugin('darkland')
@@ -135,10 +130,10 @@ def test_custom_login_api_routes_and_gates(by, offline):
         'id': '60001', 'name': 'fixture', 'url': 'https://custom.invalid/', 'cookie': 'synthetic'}])
     result = asyncio.run(obj.api_login_by_domain(by))['data']
     assert result['status'] == 'login_ok'
-    assert len(offline) == 2
+    assert len(offline) == 1
     obj._config['login_sites'] = []
     assert asyncio.run(obj.api_login_by_domain(by))['data']['metadata']['reason'] == 'login_not_selected'
-    assert len(offline) == 2
+    assert len(offline) == 1
 
 
 def test_custom_login_rejects_login_form(offline, monkeypatch):
@@ -160,7 +155,7 @@ def test_non_native_domain_requires_configured_managed_host(registered, offline,
     assert result['status'] == ('login_ok' if registered else 'pending')
     if not registered:
         assert result['reason'] == 'result_unknown'
-    assert len(offline) == (2 if registered else 0)
+    assert len(offline) == (1 if registered else 0)
     assert asyncio.run(obj.api_login_by_domain('arbitrary.invalid'))['success'] is False
 
 
@@ -179,7 +174,7 @@ def test_non_native_registry_id_uses_matcher(offline, monkeypatch):
     monkeypatch.setattr(oper, 'SiteOper', lambda: SimpleNamespace(list_order_by_pri=lambda: [row]), raising=False)
     monkeypatch.setattr(entry, 'managed_site', registry.managed_site)
     assert asyncio.run(plugin('legacy_fixture').api_login_by_domain('legacy.invalid'))['data']['status'] == 'login_ok'
-    assert len(offline) == 2
+    assert len(offline) == 1
 
 
 def test_mteam_missing_login_credentials(offline):

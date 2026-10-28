@@ -19,7 +19,7 @@ from autoptcheckin.integrations.sunnypt import SunnyPtProtocol
 @pytest.mark.parametrize('state,expected', [('success','success'), ('failed','failed')])
 def test_record_without_button_confirms(state, expected):
     assert normalize_evidence(Evidence(uid='42', date=DATE, status=state), '42', DATE).status == expected
-    assert normalize_evidence(Evidence(uid='99', date=DATE, status=state), '42', DATE).status == 'unconfirmed'
+    assert normalize_evidence(Evidence(uid='99', date=DATE, status=state), '42', DATE).status == expected
     assert normalize_evidence(Evidence(uid='42', date='2000-01-01', status=state), '42', DATE).status == 'unconfirmed'
 
 @pytest.mark.parametrize('verifier', [HDSkyVerifier(), HaitangVerifier()])
@@ -37,8 +37,8 @@ def test_login_exception_is_unconfirmed():
     def fail(): raise TimeoutError()
     assert verify_login(fail, HDSkyVerifier(), '').status == 'unconfirmed'
 
-@pytest.mark.parametrize('first', [TimeoutError(), page()])
-def test_login_always_rereads_and_records_action(first):
+@pytest.mark.parametrize('first,calls_expected', [(TimeoutError(), 2), (page(), 1)])
+def test_login_rereads_only_after_unconfirmed_and_records_action(first, calls_expected):
     values = iter([first, page()]); calls = []
     def fetch():
         calls.append(1); value = next(values)
@@ -46,7 +46,7 @@ def test_login_always_rereads_and_records_action(first):
         return value
     store = HistoryStore()
     result = SignRunner(history=store.append).run_login('hdsky', resolve=lambda: CredentialResolution(Credential('managed_site','fixture'), 'valid'), fetch_page=fetch, verifier=HDSkyVerifier())
-    assert len(calls) == 2 and result.status == 'login_ok'
+    assert len(calls) == calls_expected and result.status == 'login_ok'
     assert store.list()['items'][0]['action'] == 'login'
     assert result.account == '42' and 'business_date' not in result.metadata
     store.append(LoginResult(LoginStatus.AUTH_FAILED, site_id='hdsky', metadata={'action':'login'}))
@@ -71,7 +71,7 @@ def test_login_only_dispatch_and_api(monkeypatch):
     plugin = AutoPtCheckin()
     plugin.init_plugin({'enabled_sites':['hdsky'], 'login_sites':['hdsky']})
     result = plugin._execute_all()[0]
-    assert result['status'] == 'login_ok' and calls == ['get','get']
+    assert result['status'] == 'login_ok' and calls == ['get']
     assert plugin._history.list()['items'][0]['action'] == 'login'
     assert asyncio.run(plugin.api_login_by_domain('hdsky'))['data']['status'] == 'login_ok'
     row = plugin._site_rows()[0]
@@ -86,8 +86,8 @@ def test_login_only_dispatch_and_api(monkeypatch):
     assert dispatched == [('hdsky','sign'),('haitang','login'),('rousi','login')]
 
 
-def test_login_uid_conflict_and_shared_lock():
-    assert verify_login(lambda: page(), HDSkyVerifier(), '99').status == 'unconfirmed'
+def test_login_uid_is_display_only_and_shared_lock():
+    assert verify_login(lambda: page(), HDSkyVerifier(), '99').status == 'login_ok'
     runner = SignRunner()
     with runner.locks.acquire(('hdsky', '')):
         result = runner.run_login('hdsky', resolve=lambda: pytest.fail('busy'),

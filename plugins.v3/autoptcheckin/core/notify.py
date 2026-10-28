@@ -12,7 +12,7 @@ _FAILURE_STATUSES = frozenset({"failed", "auth_failed"})
 _PENDING_REASON_TEXT = {
     "network_error": "网络请求失败或超时，本轮未确认，稍后自动重试",
     "maintenance": "站点维护中/已关闭，本轮跳过",
-    "protocol_pending": "验证码/协议未适配，未提交",
+    "protocol_pending": "提交前置条件未满足，本轮未提交",
     "result_unknown": "结果未知，待下轮重试",
 }
 

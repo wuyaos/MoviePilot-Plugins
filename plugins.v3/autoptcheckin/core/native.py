@@ -361,9 +361,9 @@ def persist_cookie_result(result, http, site_id, cookie_source, get_data, save_d
         save_cookie_table(save_data, cookie_table)
 
 
-def read_login_twice(fetch_page, site, uid="", credential=None):
-    """A failed first visit never suppresses reread; explicit identities cannot switch."""
-    def read(expected):
+def read_login_twice(fetch_page, site, credential=None):
+    """以明确首读短路；仅首读不确定时重读一次，避免瞬态页面误判。"""
+    def read():
         import time as _time
         t0 = _time.monotonic()
         try:
@@ -373,28 +373,19 @@ def read_login_twice(fetch_page, site, uid="", credential=None):
                                f'登录页面不可达（{_time.monotonic() - t0:.1f}s）')
         code = getattr(page, 'status_code', 200) or 0
         if code >= 400 or code == 0:
-            # 2026-10-24 口径：403/404/5xx/无响应 = 站点不可达，不得判 login_ok。
             detail = f'HTTP {code}' if code else '网络超时/无响应'
             return LoginResult(LoginStatus.UNCONFIRMED,
                                f'登录页面不可达：{detail}（{_time.monotonic() - t0:.1f}s）')
         try:
-            result = site.parse_login(page, credential) if credential is not None else site.parse_login(page)
+            return site.parse_login(page, credential) if credential is not None else site.parse_login(page)
         except Exception:
             return LoginResult(LoginStatus.UNCONFIRMED, '登录回读页面不可达')
-        if expected and result.evidence and result.evidence.uid and result.evidence.uid != expected:
-            return LoginResult(LoginStatus.UNCONFIRMED, '页面账号冲突，已停止判定', evidence=result.evidence)
-        return result
-    # Always perform the second page read.  The first response may be a timeout,
-    # stale page, or an intermediate authentication result; only the reread is
-    # the final login evidence.
-    first = read(uid)
-    result = read(uid)
-    first_uid = first.evidence.uid if first.evidence else ''
-    second_uid = result.evidence.uid if result.evidence else ''
-    if first_uid and second_uid and first_uid != second_uid:
-        result = LoginResult(LoginStatus.UNCONFIRMED, '页面账号冲突，已停止判定', evidence=result.evidence)
-    result.account = uid or (result.evidence.uid if result.evidence else '') or ''
-    return result
+
+    first = read()
+    # 明确结果即是最终证据；只为不确定的首读补一次稳定性回读。
+    if first.status in (LoginStatus.LOGIN_OK, LoginStatus.AUTH_FAILED):
+        return first
+    return read()
 
 @off_loop
 def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', credential_check=None, config=None):
@@ -417,7 +408,6 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             return finish(SignResult.skipped())
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
-        uid = str(info.get('uid') or '')
         if site.id == "mteam":
             # M-Team keeps browser storage_state, never the shared Cookie table.
             try:
@@ -428,7 +418,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             return finish(result)
         if site.credential.kind in ('api_key', 'password'):
             from ..integrations.login import CredentialLoginProtocol
-            return finish(CredentialLoginProtocol(credential_check).login(info, uid))
+            return finish(CredentialLoginProtocol(credential_check).login(info))
         if getattr(site, 'browser_login', False):
             # 会话绑定浏览器指纹的站点（如 FileList）：HTTP 重放 Cookie 必失败，
             # 用 CloakBrowser 真实浏览器带站点管理 Cookie 访问首页，以 logout 标记判定登录态。
@@ -463,7 +453,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
                         from ..integrations import yzyy
                         result = yzyy.login(client, {})
                     else:
-                        result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, uid, site.credential)
+                        result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, site.credential)
                     persist_cookie_result(result, client, site.id, credential.source, get_data, save_data)
                 finally:
                     if isinstance(client, CloakHttpClient):

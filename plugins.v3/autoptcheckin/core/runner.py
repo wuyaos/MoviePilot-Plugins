@@ -71,16 +71,11 @@ class SignRunner:
                 status = (SignStatus.AUTH_FAILED if auth.status == "auth_failed" else
                           SignStatus.NETWORK_ERROR if auth.status in {"network_error", "timeout"} else SignStatus.UNCONFIRMED)
                 return finish(SignResult(status, auth.reason or "认证未确认，未提交", metadata={"phase": "credentials"}))
-            if auth.credential.uid and uid and auth.credential.uid != uid:
-                return finish(SignResult(SignStatus.UNCONFIRMED, "认证身份不匹配，未提交"))
             preflight = None
             try:
                 page = fetch_page()
                 if allow_page_identity:
-                    page_uid = verifier.identity(page)
-                    if uid and page_uid and uid != page_uid:
-                        return finish(SignResult(SignStatus.UNCONFIRMED, "页面账号冲突，未提交"))
-                    uid = uid or page_uid
+                    uid = uid or verifier.identity(page)
                 evidence = verifier.parse(page, uid, business_date)
                 before = normalize_evidence(evidence, uid, business_date, True)
                 preflight = verifier.preflight(page) if allow_page_identity else None
@@ -131,12 +126,7 @@ class SignRunner:
             if auth.status != "valid" or auth.credential is None:
                 status = LoginStatus.AUTH_FAILED if auth.status == "auth_failed" else LoginStatus.UNCONFIRMED
                 return finish(LoginResult(status, auth.reason or "认证未确认"))
-            if auth.credential.uid and uid and auth.credential.uid != uid:
-                return finish(LoginResult(LoginStatus.UNCONFIRMED, "认证身份冲突"))
             first = verify_login(fetch_page, verifier, uid)
-            # 访问结果、异常和停止信号都不取消回读；首次读到的身份同样不能切换。
-            observed_uid = first.evidence.uid if first.evidence else ""
-            result = verify_login(fetch_page, verifier, uid or observed_uid or "")
-            if first.evidence and uid and first.evidence.uid and first.evidence.uid != uid:
-                result = first
-            return finish(result)
+            if first.status in (LoginStatus.LOGIN_OK, LoginStatus.AUTH_FAILED):
+                return finish(first)
+            return finish(verify_login(fetch_page, verifier, uid))

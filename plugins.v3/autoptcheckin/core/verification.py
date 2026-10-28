@@ -9,8 +9,6 @@ def normalize_evidence(evidence: Evidence | None, uid: str, business_date: str,
                        before_submit: bool = False) -> SignResult:
     if evidence is None:
         return SignResult(SignStatus.UNCONFIRMED, "签到页未读取到可确认的签到证据", evidence=evidence)
-    if evidence.uid and uid and evidence.uid != uid:
-        return SignResult(SignStatus.UNCONFIRMED, "页面账号与配置 UID 不匹配，已停止判定", evidence=evidence)
     if not evidence.date or not business_date or evidence.date != business_date:
         return SignResult(SignStatus.UNCONFIRMED, "本人记录行日期非今日，需只读复核", evidence=evidence)
     if evidence.source != "page":
@@ -43,7 +41,7 @@ def extract_reward_evidence(submission: str = "", recent_activity: str = "", *,
 
 
 def verify_login(fetch_page, verifier, uid="") -> LoginResult:
-    """页面可达即登录态；身份尽力解析，显式冲突停止确认。"""
+    """页面可达即登录态；身份仅作展示证据，不参与状态判定。"""
     from urllib.parse import urlsplit
     try:
         page = fetch_page()
@@ -62,6 +60,4 @@ def verify_login(fetch_page, verifier, uid="") -> LoginResult:
         evidence = verifier.parse_login(page)
     except Exception:
         evidence = Evidence()
-    if evidence and uid and evidence.uid and evidence.uid != uid:
-        return LoginResult(LoginStatus.UNCONFIRMED, "页面账号冲突，已停止判定", evidence=evidence)
     return LoginResult(LoginStatus.LOGIN_OK, "已登录", evidence=evidence)

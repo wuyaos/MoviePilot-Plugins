@@ -154,6 +154,15 @@ def test_c2_marker_class_is_not_text_or_substring():
         assert site.signin(context(site, Http(site, text))).status == 'unconfirmed'
 
 
+
+
+def test_siqi_reward_receipt_confirms_success_after_submit():
+    site = get_native_module('siqi')
+    receipt = '<div>这是您的第 12 次签到，已连续签到 7 天</div>'
+    result = site.signin(context(site, Http(site, receipt)))
+    assert result.status == 'success'
+    assert result.message == '这是您的第 12 次签到，已连续签到 7 天'
+
 def test_c2_registry_verification_and_optional_get_referer(monkeypatch):
     rows = {row['id']: row for row in discover_sites()['sites']}
     for sid in IDS:

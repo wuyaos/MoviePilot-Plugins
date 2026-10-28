@@ -200,4 +200,6 @@ class SiteModule(ABC):
                 uid = NexusVerifier().identity(page.text)
         except (ValueError, TypeError, html.etree.XPathError, html.etree.ParserError):
             pass
-        return LoginResult(LoginStatus.LOGIN_OK, "已登录", evidence=Evidence(uid=uid or None), site_id=self.id)
+        notice = getattr(self, "login_page_notice", "")
+        message = notice if notice and notice in (page.text or "") else "已登录"
+        return LoginResult(LoginStatus.LOGIN_OK, message, evidence=Evidence(uid=uid or None), site_id=self.id)

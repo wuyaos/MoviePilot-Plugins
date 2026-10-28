@@ -40,6 +40,22 @@ def test_default_message_selector_states(container, text, state):
         'signed': 'success', 'unsigned': 'failed', 'unconfirmed': 'unconfirmed'}[state]
 
 
+def test_after_unknown_result_explains_post_submit_evidence_gap():
+    site = get_native_module('baozi')
+    result = site.read_after(context(site), LoginPage('<div class="alert">未知消息</div>', site.url))
+    assert result.status == 'unconfirmed'
+    assert result.message == '已提交签到，但回读未找到成功或已签证据（页面提示：未知消息）'
+
+
+def test_after_read_error_explains_post_submit_failure():
+    site = get_native_module('baozi')
+    ctx = context(site)
+    ctx.post_read_error = 'TimeoutError'
+    result = site.read_after(ctx, None)
+    assert result.status == 'unconfirmed'
+    assert result.message == '已提交签到，但回读失败：TimeoutError'
+
+
 @pytest.mark.parametrize('markup,summary,state', [
     ('<div class="alert">未知消息</div><div id="msg">签到成功</div>', '未知消息', 'unconfirmed'),
     ('<div class="alert"></div><div id="msg">签到成功</div>', '签到成功', 'signed'),

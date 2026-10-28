@@ -114,7 +114,7 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
                     ctx = SignContext(site_id, credential, client, site_lock=runner.locks, cancel=runner.stop)
                     result = CustomNexusSignin(site_id, info).signin(ctx)
                 elif action == 'login':
-                    result = read_login_twice(lambda: client.get(url), CustomNexusSignin(site_id, info), str(info.get('uid') or ''))
+                    result = read_login_twice(lambda: client.get(url), CustomNexusSignin(site_id, info))
                 else:
                     page = client.get(url)
                     if page is not None and login_redirect(page):

@@ -19,10 +19,6 @@ class Yzyy(NexusSignin):
     record_spec = RecordSpec('//div[contains(concat(" ", normalize-space(@class), " "), " signbtn ")]', {'今日已打卡': 'signed', '点击打卡': 'unsigned'})
 
     def discover_form(self, ctx, page):
-        before = self.read_before(ctx, page)
-        if (ctx.credential.uid and before.evidence and before.evidence.uid
-                and str(ctx.credential.uid) != before.evidence.uid):
-            return None
         tree = html.fromstring(page.text)
         buttons = tree.xpath(self.record_spec.message)
         if len(buttons) != 1:
@@ -49,7 +45,7 @@ class Yzyy(NexusSignin):
         if not evidence or not page_available(page) or self.parse_login(page).status == 'auth_failed':
             return result
         tree = html.fromstring(page.text)
-        # Login identity must come from navigation, never the first leaderboard link.
+        # 仅从导航区取当前页面账号，用于定位其签到记录行。
         links = tree.xpath('//*[@id="um"]//a/@href')
         uids = {match.group(1) for link in links
                 if (match := re.search(r'space-uid-(\d+)\.html', link))}
@@ -66,8 +62,6 @@ class Yzyy(NexusSignin):
         status = evidence.status
         if row_status:
             status = row_status if status in ('unconfirmed', row_status) else 'unconfirmed'
-        if ctx.credential.uid and uid and str(ctx.credential.uid) != uid:
-            status = 'unconfirmed'
         result.evidence = replace(evidence, button_text=evidence.raw_summary,
                                   uid=uid, date=record_date, status=status)
         result.status = type(result.status)({'signed': 'success', 'unsigned': 'failed'}.get(status, 'unconfirmed'))
@@ -75,11 +69,6 @@ class Yzyy(NexusSignin):
 
     def read_before(self, ctx, page):
         result = self.read_after(ctx, page)
-        if (ctx.credential.uid and result.evidence and result.evidence.uid
-                and str(ctx.credential.uid) != result.evidence.uid):
-            result.message = '页面账号冲突，未提交'
-            result.metadata['reason'] = 'identity_conflict'
-            return result
         if result.status == 'success':
             result.status = type(result.status)('already')
         return result

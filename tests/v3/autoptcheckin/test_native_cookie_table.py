@@ -55,7 +55,7 @@ def test_stored_priority_fallback_and_rotated_cookie_write(storage, monkeypatch,
         result = native.run_native_login(runner, site, {'cookie': 'session=managed'})
     expected = ['stored_cookie'] + (['managed_site'] if expected_source == 'managed_site' else [])
     assert result.metadata['cookie_sources'] == expected
-    assert calls == [source for source in expected for _ in range(2 if action == 'login' else 1)]
+    assert calls == expected
     stored_cookie_entry = data['cookies.table']['fixture']
     assert stored_cookie_entry['cookie'] == 'session=rotated'
     assert stored_cookie_entry['source'] == expected_source
@@ -317,7 +317,7 @@ def test_login_unexpected_error_carries_exception_detail(storage, monkeypatch):
     # 登录路径异常透传（与签到路径同格式），不再是无详情固定文案。
     runner, data = storage
 
-    def boom(_fn, _site, _uid, _credential):
+    def boom(_fn, _site, _credential):
         raise ConnectionError('mock network down')
 
     monkeypatch.setattr(native, 'read_login_twice', boom)

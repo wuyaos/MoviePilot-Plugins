@@ -188,6 +188,62 @@ def test_sign_solve_error_reported_in_pending_message(bql):
     assert 'solve 失败' in result.message and 'solve timed out' in result.message
 
 
+
+
+def _solve_timeout_response(html="Cloudflare challenge"):
+    return FakeResp({
+        "data": {"solve": None, "after": {"html": html}, "session": {}},
+        "errors": [{"message": "Captcha solving timed out after 40000 ms", "path": ["solve"]}],
+    })
+
+
+def test_ourbits_solve_timeout_returns_already_from_each_attempt_readback(bql):
+    calls = bql([_solve_timeout_response("今日已签到")])
+    result = cloudsign.sign('ourbits', 'https://ourbits.club', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'success' and '已签到' in result.message
+    assert len(calls) == 1
+    assert calls[0]['payload']['variables']['solveTimeout'] == 40000
+    assert calls[0]['timeout'] >= 75
+
+
+def test_ourbits_retries_only_solve_then_submits_once(bql):
+    calls = bql([
+        _solve_timeout_response(),
+        FakeResp({'data': {'solve': {'token': '0.turnstile-tk'},
+                          'session': {'browserQLEndpoint': 'https://production-sfo.browserless.io/e/retry/chromium/bql'},
+                          'after': {'html': '待签到'}}}),
+        FakeResp({'data': {'verifyPage': {'html': '签到成功'}, 'after': {'html': ''}}}),
+    ])
+    result = cloudsign.sign('ourbits', 'https://ourbits.club', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'success'
+    assert len(calls) == 3
+    assert [call['payload']['variables']['solveTimeout'] for call in calls[:2]] == [40000, 60000]
+    assert 'solve:solve(' in calls[0]['payload']['query']
+    assert 'solve:solve(' in calls[1]['payload']['query']
+    assert 'autoSubmit' in calls[2]['payload']['query']
+    assert calls[2]['payload']['variables']['autoTimeout'] == 30000 + cloudsign.INJECT_STEP_MARGIN_MS
+
+
+def test_ourbits_stops_after_three_solve_timeouts_without_submitting(bql):
+    calls = bql([_solve_timeout_response() for _ in range(3)])
+    result = cloudsign.sign('ourbits', 'https://ourbits.club', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'protocol_pending'
+    assert '已尝试 3 次' in result.message
+    assert len(calls) == 3
+    assert [call['payload']['variables']['solveTimeout'] for call in calls] == [40000, 60000, 80000]
+    assert all('solve:solve(' in call['payload']['query'] for call in calls)
+
+
+def test_ourbits_does_not_retry_non_timeout_solve_error(bql):
+    calls = bql([FakeResp({
+        'data': {'solve': None, 'after': {'html': 'Cloudflare challenge'}, 'session': {}},
+        'errors': [{'message': 'solver returned no token', 'path': ['solve']}],
+    })])
+    result = cloudsign.sign('ourbits', 'https://ourbits.club', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'protocol_pending'
+    assert '已尝试 1 次' in result.message
+    assert len(calls) == 1
+
 def test_sign_http_errors_map_to_network_error_and_never_leak_token(monkeypatch):
     token = 'secret-token-xyz'
     urls = []

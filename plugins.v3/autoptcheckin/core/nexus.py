@@ -57,8 +57,32 @@ class NexusSignin(SiteModule):
             result = self.read_before(ctx, page)
             if result.status == SignStatus.ALREADY:
                 result.status = SignStatus.SUCCESS
-            return self._with_steps(result, steps, ctx)
-        return self._with_steps(ctx.record_result(page, self.message_spec()), steps, ctx)
+        else:
+            result = ctx.record_result(page, self.message_spec())
+        # Some sites return a stable reward receipt rather than the normal status node.
+        # This is only evaluated after one submission; it never changes pre-submit handling.
+        receipt = getattr(self, "reward_pattern", None)
+        if result.status == SignStatus.UNCONFIRMED and receipt and page:
+            match = receipt.search(page.text or "") if hasattr(receipt, "search") else re.search(receipt, page.text or "", re.DOTALL)
+            if match:
+                summary = match.group(0).strip()
+                return self._with_steps(ctx.result(
+                    status=SignStatus.SUCCESS, message=summary,
+                    evidence=Evidence(status="signed", raw_summary=summary),
+                ), steps, ctx)
+        if result.status == SignStatus.UNCONFIRMED:
+            detail = (result.evidence.raw_summary if result.evidence else "").strip()
+            # A bare heading/button label is not diagnostic evidence; do not surface it as a result.
+            if detail in {"签到", "簽到", "打卡"}:
+                detail = ""
+            reason = getattr(ctx, "post_read_error", "")
+            if reason:
+                result.message = f"已提交签到，但回读失败：{reason}"
+            elif detail:
+                result.message = f"已提交签到，但回读未找到成功或已签证据（页面提示：{detail[:120]}）"
+            else:
+                result.message = "已提交签到，但回读未找到成功或已签证据"
+        return self._with_steps(result, steps, ctx)
     # NexusPHP 标准结构默认消息选择器（占位站自动回退，命中即用；全部未命中仍 unconfirmed）
     DEFAULT_MESSAGE_XPATHS = (
         '//h1[contains(.,"签到") or contains(.,"打卡")]',
@@ -164,8 +188,6 @@ class NexusSignin(SiteModule):
             if (before.status == SignStatus.ALREADY
                     or before.metadata.get('defer_submission')):
                 return before
-            if before.metadata.get('reason') == 'identity_conflict':
-                return before
             # 页面动作站（cloak_steps）不是 NexusPHP 表单协议：动作链自身负责验证和点击，
             # 因此直接进入 submit hook，保留统一的无条件回读与异常不重试语义。
             if getattr(self, "cloak_steps", None):
@@ -189,8 +211,9 @@ class NexusSignin(SiteModule):
                                       evidence=before.evidence)
                 if not self.solve_captcha(ctx, page, form):
                     return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="验证码未解决，未提交")
-        except Exception:
-            return ctx.result(status=SignStatus.PROTOCOL_PENDING, message="签到前读或表单解析未确认")
+        except Exception as exc:
+            return ctx.result(status=SignStatus.PROTOCOL_PENDING,
+                              message=f"签到前读取或表单解析未确认：{type(exc).__name__}")
         if ctx.cancel.is_set():
             return ctx.result(status=SignStatus.CANCELLED, message="任务已取消，未提交")
         try:
@@ -203,6 +226,7 @@ class NexusSignin(SiteModule):
             # Also run after cancellation during the action or any submission exception.
             try:
                 fresh = ctx.http.get(attendance_url)
-            except Exception:
+            except Exception as exc:
                 fresh = None
+                ctx.post_read_error = type(exc).__name__
         return self.read_after(ctx, fresh)
