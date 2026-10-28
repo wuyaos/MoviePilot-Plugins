@@ -97,7 +97,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 - 职责：把源下载器的种子按路径映射复制到目标下载器，支持删源、去重、转移后做种校验；`TransferComplete` 事件驱动 + 兜底 interval 扫描。
 - 失败重试上限（v3.9.6）：同一颗源种子最多尝试 `MAX_TRANSFER_ATTEMPTS = 3` 次。计数跨事务累计、存进来源记录（`attempts`），在**回滚完成后** +1（回滚本体的重试不计入，否则一次失败的多次回滚轮次会把计数吃满）；达上限置终态 `failed` 并附带最后一次失败原因，自动轮次不再选中。**手动触发 `/transfer_run`**（`trigger_source="手动"`）视为用户明确要求重试，`attempts` 清零后重来。判据 `pipeline.transfer_is_abandoned(previous, manual)` 是纯函数，放在 pipeline 而非 service 就是为了能被夹具直接加载并单测（7 组参数化 + 1 组真实累计/上限）。
 - 关键文件：`modules/transfer/service.py`（主流程 `transfer`、兜底 `fallback_transfer`、延迟 `delayed_transfer`、后处理）、`modules/transfer/pipeline.py`（事务化：目标确认完整前保留源）、`modules/transfer/recheck.py`（做种校验队列与 worker）、`modules/transfer/events.py`（延迟批次调度）、`adapter/moviepilot.py`。
-- 关键配置（v3.9.0 多任务引擎）：`transfer_tasks`（JSON 任务数组：name/enabled/from_downloader/to_downloader/include_category/include_labels/exclude_labels/empty_label_ok/no_paths/from_path/to_path/delete_source/delete_duplicate/keep_category/keep_tag/transfer_tag）、`transfer_rename_enabled`（转移后重命名，默认关，仅 qB 显示名语义，TR 目的端禁用）、`downloader_ext`（rt 下载器扩展配置 JSON：webui_url/source_plugin）、`transfer_enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`frompath`/`topath`（已并入任务，旧键保留兼容读取）、`add_torrent_tags`、`scan_limit`、`pause_source`、`notify`、`transfer_cron`、`transfer_event_enabled`、`seed_autostart`、`seed_skipverify`、`seed_check_interval`、`seed_max_wait_minutes`。`fromtorrentpath`（源种子文件路径）已废弃：加载时忽略并提示一次；单链路旧键（fromdownloader/todownloader/筛选/高级）保留作为旧配置迁移视图的数据源
+- 关键配置（v3.9.0 多任务引擎）：`transfer_tasks`（JSON 任务数组：name/enabled/from_downloader/to_downloader/include_category/include_labels/exclude_labels/empty_label_ok/no_paths/from_path/to_path/delete_source/delete_duplicate/keep_category/keep_tag/transfer_tag）、`transfer_rename_enabled`（转移后重命名，默认关，仅 qB 显示名语义，TR 目的端禁用）、`downloader_ext`（rt 下载器扩展配置 JSON：webui_url/source_plugin）、`transfer_enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`frompath`/`topath`（已并入任务，旧键保留兼容读取）、`add_torrent_tags`、`scan_limit`、`pause_source`、`notify`、`seed_autostart`（`transfer_cron`/`transfer_event_enabled` 已移除读取，见 `core/config.py:83-84`）、`seed_skipverify`、`seed_check_interval`、`seed_max_wait_minutes`。`fromtorrentpath`（源种子文件路径）已废弃：加载时忽略并提示一次；单链路旧键（fromdownloader/todownloader/筛选/高级）保留作为旧配置迁移视图的数据源
 - 端点：无专用 REST 路由；结果汇总进 `/overview`。
 - 调度：`TorrentTransferFallback`（interval，`transfer_fallback_interval_minutes`）。
 - 事件：`TransferComplete`（延迟调度）。
@@ -186,7 +186,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 | 分组 | 键数 | 键 |
 | --- | --- | --- |
-| 总开关 + 转移做种 | 29 | `enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`seed_check_interval`、`seed_max_wait_minutes`、`transfer_event_enabled`，加 `TRANSFER_DEFAULTS` + `transfer_tasks`/`transfer_rename_enabled`/`downloader_ext`：`transfer_enabled`、`notify`、`transfer_cron`、`nolabels`、`includelabels`、`includecategory`、`frompath`、`topath`、`fromdownloader`、`todownloader`、`deletesource`、`deleteduplicate`、`fromtorrentpath`、`nopaths`、`seed_autostart`、`seed_skipverify`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`、`remainoldtag`、`scan_limit`、`pause_source` |
+| 总开关 + 转移做种 | 27 | `enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`seed_check_interval`、`seed_max_wait_minutes`，加 `TRANSFER_DEFAULTS` + `transfer_tasks`/`transfer_rename_enabled`/`downloader_ext`：`transfer_enabled`、`notify`、`nolabels`、`includelabels`、`includecategory`、`frompath`、`topath`、`fromdownloader`、`todownloader`、`deletesource`、`deleteduplicate`、`fromtorrentpath`、`nopaths`、`seed_autostart`、`seed_skipverify`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`、`remainoldtag`、`scan_limit`、`pause_source` |
 | 命名补刀 | 14 | `rename_enabled`、`rename_notify`、`rename_cron_enabled`、`rename_on_download_added`、`rename_downloaders`、`rename_exclude_dirs`、`rename_hash_white_list`、`rename_exclude_tags`、`rename_include_tags`、`rename_cron`、`rename_add_tag_after_rename`、`rename_movie_format`、`rename_tv_format`、`rename_event_debounce_seconds` |
 | 站点标签 | 15 | `tag_enabled`、`tag_siteprefix`、`tag_tracker_mappings_str`、`tag_custom_sites_str`、`tag_interval_cron`、`tag_enable_media_tag`、`tag_enable_tag`、`tag_enable_category`、`tag_enable_del_tags`、`tag_downloaders`、`tag_all_cat`、`tag_all_cat_rename`、`tag_rename_type`、`tag_path_rename`、`tag_catprefix` |
 | 上传限速 | 5 | `upload_limit_enabled`、`upload_limit_downloaders`、`upload_limit_downloader_limits_kib`、`upload_limit_site_rules`、`upload_limit_grace_minutes` |
@@ -200,7 +200,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 ## 5. API 端点表
 
-`controller/api.py::build_api_routes` 目前声明 34 条路由（14 GET + 20 POST），全部 `auth="bear"`，均为 Vue 前端调用。GET 查询返回声明的裸业务模型，POST 操作返回 `schemas.Response[T]`。
+`controller/api.py::build_api_routes` 目前声明 38 条路由（15 GET + 23 POST），全部 `auth="bear"`，均为 Vue 前端调用。GET 查询返回声明的裸业务模型，POST 操作返回 `schemas.Response[T]`。
 
 ### GET（14）
 

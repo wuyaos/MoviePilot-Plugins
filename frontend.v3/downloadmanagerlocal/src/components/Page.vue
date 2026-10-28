@@ -494,6 +494,9 @@ const TRANSFER_PHASE_LABELS = {
   source_pausing: '暂停源种',
   adding: '添加目标',
   target_added: '已添加目标',
+  // 旧版本写过的历史状态：后端仅作为「视同完成」读取（modules/transfer/service.py:419），
+  // 当前 pipeline 不再产出，但 qnap 的历史记录里可能存在，缺映射会让界面漏出原始英文。
+  stopped_after_add: '已添加目标（旧记录）',
   verifying: '做种校验',
   target_ready: '待确认做种',
   completed: '已完成',
@@ -515,6 +518,7 @@ function transferPhaseColor(phase) {
   if (phase === 'rollback' || phase === 'rolled_back' || phase === 'failed') return 'error'
   if (phase === 'verifying' || phase === 'target_ready') return 'primary'
   if (phase === 'source_pausing') return 'warning'
+  if (phase === 'target_added' || phase === 'stopped_after_add') return 'success'
   return 'grey'
 }
 

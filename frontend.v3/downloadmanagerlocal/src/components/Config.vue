@@ -1821,6 +1821,9 @@ function serializeHrSiteConfigYaml(rules) {
                   <VTextField v-model.number="form.rename_event_debounce_seconds" label="事件防抖（秒）" type="number" min="1" density="compact" variant="outlined" hide-details
                     :disabled="!form.rename_on_download_added" hint="默认 3 秒" persistent-hint />
                 </VCol>
+                <VCol cols="12" md="4">
+                  <VSwitch v-model="form.rename_notify" color="info" inset hide-details label="发送通知" />
+                </VCol>
               </VRow>
               <VRow class="mt-2">
                 <VCol cols="12" md="4">

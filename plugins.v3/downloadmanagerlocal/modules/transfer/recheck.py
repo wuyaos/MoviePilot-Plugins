@@ -125,17 +125,32 @@ def stop_seed_recheck_worker(plugin, join_timeout: float = 10.0) -> bool:
 def seed_recheck_loop(plugin, stop_event=None):
     """持续处理做种校验队列，直到队列清空或插件停用。"""
     stop_event = stop_event or getattr(plugin, "_seed_recheck_stop_event", None) or threading.Event()
+    interval = max(0.1, float(getattr(plugin, "_seed_check_interval", 60) or 60))
+    # 连续失败上限：存储持续异常时不要无限重试，也不要让线程静默死掉后无人知晓。
+    max_consecutive_errors = 5
+    consecutive_errors = 0
     try:
         while plugin._enabled and not stop_event.is_set():
-            queue = load_seed_recheck_queue(plugin)
-            if not queue:
-                logger.info("【PT下载中心:做种校验】队列已清空，worker 退出")
-                break
+            # 队列读取（load_seed_recheck_queue → plugin.get_data()）必须一起放进异常边界：
+            # 之前它在 try 之外，存储读失败会把异常抛出线程 → worker 静默死亡，
+            # 既没有「worker 退出」日志也没有错误记录，外层只看到队列长期无人处理。
             try:
+                queue = load_seed_recheck_queue(plugin)
+                if not queue:
+                    logger.info("【PT下载中心:做种校验】队列已清空，worker 退出")
+                    break
                 process_seed_recheck_once(plugin, queue, stop_event=stop_event)
+                consecutive_errors = 0
             except Exception as exc:
-                logger.error(f"【PT下载中心:做种校验】处理队列失败: {exc}")
-            if stop_event.wait(max(0.1, float(getattr(plugin, "_seed_check_interval", 60) or 60))):
+                consecutive_errors += 1
+                logger.exception(
+                    f"【PT下载中心:做种校验】本轮失败（连续 {consecutive_errors} 次）: {exc}")
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error(
+                        "【PT下载中心:做种校验】连续失败过多，worker 退出"
+                        "（下次入队事件或重新初始化时会再拉起）")
+                    break
+            if stop_event.wait(interval):
                 break
     finally:
         with plugin._seed_recheck_lock:
@@ -146,8 +161,13 @@ def seed_recheck_loop(plugin, stop_event=None):
                 plugin._seed_recheck_stop_event = None
             restart = bool(getattr(plugin, "_seed_recheck_restart_pending", False) and plugin._enabled)
             plugin._seed_recheck_restart_pending = False
-        if restart and load_seed_recheck_queue(plugin):
-            ensure_seed_recheck_worker(plugin)
+        # finally 里抛异常会掩盖原始异常，重启检查单独兜住。
+        if restart:
+            try:
+                if load_seed_recheck_queue(plugin):
+                    ensure_seed_recheck_worker(plugin)
+            except Exception as exc:
+                logger.error(f"【PT下载中心:做种校验】重启检查失败: {exc}")
 
 
 def process_seed_recheck_once(plugin, queue, stop_event=None):

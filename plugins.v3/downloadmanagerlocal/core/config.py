@@ -107,7 +107,10 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     if plugin._tag_tracker_mappings_str:
         plugin._tracker_mappings.update(parse_tracker_mappings(plugin._tag_tracker_mappings_str))
     plugin._site_tag_config["enable"] = plugin._tag_enabled
-    plugin._custom_site_labels = dict(config.get("custom_site_labels") or {})
+    # 自定义站点映射表的扁平键是 tag_custom_sites_str，别名到 custom_site_labels_str
+    # 只发生在 _flat_tag_module_config 里；此处若直接读扁平 config 的 custom_site_labels
+    # 永远为空，会让转移后打标路径静默忽略用户配置的自定义站点（只有补全历史路径生效）。
+    plugin._custom_site_labels = dict(plugin._site_tag_config.get("custom_site_labels") or {})
 
     # hr/autoremove/failclean/upload_limit 的门控属性（transfer/rename/tag 已在上方按注册表口径赋值）；
     # upload_limit 此前由 normalize 循环写入裸值，此处统一覆盖为门控值。

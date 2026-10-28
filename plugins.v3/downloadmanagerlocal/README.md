@@ -24,7 +24,7 @@
 | 开关 | 说明 |
 |---|---|
 | `enabled` | 插件总开关 |
-| `transfer_enabled` / `transfer_cron` / `transfer_event_enabled` | 转移做种：开关 / 兜底扫描周期 / 事件驱动 |
+| `transfer_enabled` | 转移做种总开关（扫描周期由 `transfer_fallback_interval_minutes` 控制） |
 | `rename_enabled` / `rename_cron` / `rename_on_download_added` | 命名补刀：开关 / 扫描周期 / 下载入列事件触发 |
 | `tag_enabled` / `tag_interval_cron` | 站点标签：开关 / 历史补全周期 |
 | `hr_enabled` / `hr_check_period` / `hr_notify_summary_cron` | H&R：开关 / 检查间隔（分钟）/ 汇总通知周期 |

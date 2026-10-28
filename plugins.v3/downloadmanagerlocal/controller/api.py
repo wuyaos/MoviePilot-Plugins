@@ -230,6 +230,7 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
             "auth": "bear",
             "methods": ["GET"],
             "summary": "获取 H&R 保护跳过计数",
+            "response_model": HrSkipStatsResult,
         },
         {
             "path": "/hr_presets",
