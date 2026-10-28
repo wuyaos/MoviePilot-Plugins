@@ -34,7 +34,7 @@ plugins.v3/downloadmanagerlocal/
 ├── AGENTS.md                       # 本文件（AI 交接 + 结构说明）
 ├── controller/
 │   ├── api.py                      # build_api_routes(plugin)：API route metadata
-│   └── handlers.py                 # 34 个 api_* handler 与响应 shape
+│   └── handlers.py                 # 38 个 api_* handler 与响应 shape
 ├── model/
 │   ├── api.py                      # Pydantic 请求/业务/响应模型
 │   ├── state.py                    # 持久化 key 常量与 dict 读写 helper
