@@ -220,6 +220,17 @@ def advance_transfer(plugin, item, service, task, stopped):
             active = str(state) == "seeding"
         if not active:
             return False
+    elif not seed_is_ready(state, service.type, task):
+        # 未自动开始：种子停在暂停态，「在做种」这条证据不可用，于是**回到完整度判据**。
+        # 这不是重复检查——上面那次 seed_is_ready 可能被 skipverify 旁路（仅 rt 会旁路，
+        # rt 无可信校验），而活动证据又被 autostart 门控跳过；
+        # rt + 跳过校验 + 自动开始关 因此是「零证据即删源」，这里必须兜住。
+        # 依据：未完整就是未完整——无论是否自动开始、是否跳过校验，都不该删源。
+        logger.warning(
+            f"【PT下载中心:转移做种】目的端数据未确认完整，暂不删源 hash={item['hash'][:8]} "
+            f"type={service.type} autostart=False"
+        )
+        return False
     item["target_confirmed"] = True
     from .service import post_transfer_process
     if stopped() or not post_transfer_process(plugin, service, item["hash"]):

@@ -80,10 +80,9 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     plugin._remainoldtag = config.get("remainoldtag", defaults["remainoldtag"])
     plugin._scan_limit = safe_int(config.get("scan_limit"), defaults["scan_limit"], 1)
     plugin._pause_source = config.get("pause_source", defaults["pause_source"])
-    plugin._transfer_cron = config.get("transfer_cron", defaults["transfer_cron"]) or ""
-    plugin._transfer_event_enabled = config.get(
-        "transfer_event_enabled", defaults["transfer_event_enabled"]
-    )
+    # transfer_cron / transfer_event_enabled 已移除：全仓零读取（调度实际只有 fallback 间隔一条路径），
+    # 且 transfer_event_enabled 在 defaults 里被重复声明两次。旧配置里若残留这两个键，
+    # 读取时忽略即可，不影响其余键。
     plugin._seed_autostart = config.get("seed_autostart", defaults["seed_autostart"])
     plugin._seed_skipverify = config.get("seed_skipverify", defaults["seed_skipverify"])
     plugin._seed_check_interval = safe_int(config.get("seed_check_interval"), 60, 10, 3600)

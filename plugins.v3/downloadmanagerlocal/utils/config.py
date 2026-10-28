@@ -11,7 +11,6 @@ from ..modules.sitetag.service import DEFAULT_TAG_CONFIG
 TRANSFER_DEFAULTS = {
     "transfer_enabled": False,
     "notify": False,
-    "transfer_cron": "",
     "nolabels": "",
     "includelabels": "",
     "includecategory": "",
@@ -67,9 +66,7 @@ PLUGIN_CONFIG_DEFAULTS = {
     "transfer_fallback_interval_minutes": 60,
     "seed_check_interval": 60,
     "seed_max_wait_minutes": 120,
-    "transfer_event_enabled": False,
     **TRANSFER_DEFAULTS,
-    "transfer_event_enabled": False,
     "transfer_tasks": "[]",
     "transfer_rename_enabled": False,
     "downloader_ext": "{}",

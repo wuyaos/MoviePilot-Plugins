@@ -548,6 +548,7 @@ def _get_tracker_urls(torrent, dl_type):
 def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
     """对目标下载器中的单个种子执行补刀（重命名+站点标签）。"""
     hash_text = str(torrent_hash or "").strip()
+    warnings: list[str] = []
     if not hash_text:
         return {"code": 1, "msg": "缺少 hash 参数", "hash": ""}
     if not plugin._rename_enabled and not plugin._tag_enabled:
@@ -601,7 +602,13 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
                         save_path
                     )
             if plugin._tag_enabled:
-                plugin._tag_torrent(dl, dl_type, hash_text, torrent_tags, trackers)
+                # 站点未识别（None）属 warning：不拉低补刀成功率，但必须在日志里留痕，
+                # 否则用户看到「补刀成功但没打标签」无从判断是未识别还是写失败。
+                _tag_result = plugin._tag_torrent(dl, dl_type, hash_text, torrent_tags, trackers)
+                if _tag_result is None:
+                    warnings.append(f"{hash_text[:8]}: 站点未识别，跳过站点标签")
+                elif _tag_result is False:
+                    warnings.append(f"{hash_text[:8]}: 站点标签写入失败")
 
             if not rename_succeeded:
                 record = (plugin.get_data(RENAME_RECORDS_KEY) or {}).get(hash_text) or {}
@@ -611,7 +618,7 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
             clear_state = getattr(plugin, "clear_rename_retry_state", None)
             if callable(clear_state):
                 clear_state(hash_text)
-            return {"code": 0, "msg": "补刀完成", "hash": hash_text}
+            return {"code": 0, "msg": "补刀完成", "hash": hash_text, "warnings": warnings}
 
         record_failure = getattr(plugin, "record_rename_failure", None)
         if callable(record_failure):

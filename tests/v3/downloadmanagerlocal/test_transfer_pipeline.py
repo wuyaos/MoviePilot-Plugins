@@ -219,6 +219,46 @@ def test_autostart_false_finishes_after_verified_complete(runtime):
     r.source.delete_torrents.assert_called_once()
 
 
+
+def _rt_cycle(r, attrs):
+    """以给定 rt 属性推进一步真实持久队列。"""
+    row = {'hash': 'abc', **attrs}
+    r.target.get_torrents.return_value = ([row], None)
+    queue = r.recheck.load_seed_recheck_queue(r.plugin)
+    r.recheck.process_seed_recheck_once(r.plugin, queue)
+
+
+def test_autostart_false_rt_skipverify_incomplete_never_deletes_source(runtime):
+    """rt + 跳过校验 + 自动开始关：没有完整度证据时**不得**删源。
+
+    覆盖一个真实缺口：rt 无可信校验，上面那次 seed_is_ready 会被 skipverify 旁路；
+    若自动开始也关着，活动证据同样不可用——不兜住就是「零证据删源」。
+    """
+    r = runtime
+    r.plugin._seed_autostart = False
+    r.plugin._seed_skipverify = True
+    r.services['target'].type = 'rtorrent'
+    assert begin(r)
+    # rt 报告未完成（complete=0）且不在活动状态：这是「数据未确认完整」
+    for _ in range(3):
+        _rt_cycle(r, {'state': 0, 'complete': 0, 'progress': 0})
+    r.source.delete_torrents.assert_not_called()
+    assert r.data['source-abc']['transfer_state'] != 'completed'
+
+
+def test_autostart_false_rt_skipverify_complete_deletes_source(runtime):
+    """同组合但 rt 报告完整：完整度成立，允许删源。"""
+    r = runtime
+    r.plugin._seed_autostart = False
+    r.plugin._seed_skipverify = True
+    r.services['target'].type = 'rtorrent'
+    assert begin(r)
+    for _ in range(3):
+        _rt_cycle(r, {'state': 1, 'complete': 1, 'progress': 100})
+        if r.source.delete_torrents.called:
+            break
+    r.source.delete_torrents.assert_called_once_with(delete_file=False, ids=['abc'])
+
 def test_source_delete_failure_retries_without_rolling_back_target(runtime):
     r = runtime
     r.plugin._seed_autostart = False
