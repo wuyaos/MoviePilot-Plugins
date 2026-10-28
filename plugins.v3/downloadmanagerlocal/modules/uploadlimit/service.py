@@ -190,6 +190,25 @@ def run_upload_limit_cycle(
                 if not service or not getattr(service, "instance", None):
                     raise RuntimeError("下载器不可用")
                 downloader_type = _downloader_type(service)
+                # TODO(rtorrent 上传限速——待实现，目前明确不支持)：
+                #   当前只支持 qBittorrent / Transmission，类型不在白名单时直接报错，不做静默降级。
+                #   可行性已查证（2026-10-28，未实现）：
+                #   - MP 的 rtorrent 客户端（app/modules/rtorrent/*.py）**未封装任何限速能力**，
+                #     插件若支持必须自己走裸 XML-RPC，不能复用现有 client 方法。
+                #   - rtorrent 本体提供的能力（dml-test-rt 上 system.listMethods 实测）：
+                #       全局限速：choke_group.up.max / choke_group.up.max.set / .max.unlimited
+                #       分组管理：choke_group.insert / .list / .index_of
+                #       任务归属：d.group.set、d.throttle_name.set
+                #       读侧观测：d.up.rate、choke_group.up.rate
+                #   - 与 qB/TR 的关键差别：没有「一键设置全局限速」的等价物。qB 是
+                #     transfer/setUploadLimit，TR 是 session-set 的 speed-limit-up，rtorrent 只能改
+                #     choke group / throttle 名，而这两者在宿主 rtorrent.rc 里可能需要预先定义。
+                #   - 实现难点：① choke group / throttle 名的创建与清理会影响宿主既有分组语义，
+                #     必须幂等、可回滚，不能破坏用户原有归属；② 恢复阶段要逐任务记录并还原原始的
+                #     group / throttle 归属，与 qB/TR 的「恢复全局值」模型不同；
+                #     ③ rtorrent 侧的限速生效时机与校验/做种状态耦合，需要额外的就绪判定。
+                #   - 建议实现路径：给 read_global_upload_settings / 下发 / 恢复三处各加一个 rtorrent 分支，
+                #     放开本处白名单，并补单测（含 restore 契约）与小范围的容器实测。
                 if downloader_type not in {"qbittorrent", "transmission"}:
                     raise RuntimeError(f"不支持的下载器类型：{downloader_type or 'unknown'}")
                 current_global = read_global_upload_settings(
