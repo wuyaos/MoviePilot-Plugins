@@ -2133,6 +2133,9 @@ function serializeHrSiteConfigYaml(rules) {
             </VCol>
           </VRow>
           <div class="dm-section-title mt-4">高级设置</div>
+          <div class="text-caption text-medium-emphasis mb-2">
+            「删除源种子」受 H&R 保护约束：源种若已纳入 H&amp;R 管理且未达标，源任务会被保留，并计入数据页「转移做种」卡的「H&amp;R 保护」跳过数。放行办法有三种——等它达标（自动放行）、让种子在进入下载器前就带 H&amp;R 排除标签、或关闭 H&amp;R 保护总开关。注意：<strong>已纳管的种子事后补排除标签无效</strong>（排除只在首次纳管时判定）。
+          </div>
           <VRow>
             <VCol cols="12" sm="6" md="3">
               <VSwitch v-model="transferForm.delete_source" color="warning" inset hide-details label="删除源种子" />

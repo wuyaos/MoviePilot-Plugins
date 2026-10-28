@@ -4502,6 +4502,11 @@ return (_ctx, _cache) => {
                   _: 1
                 }),
                 _cache[184] || (_cache[184] = _createElementVNode("div", { class: "dm-section-title mt-4" }, "高级设置", -1)),
+                _cache[185] || (_cache[185] = _createElementVNode("div", { class: "text-caption text-medium-emphasis mb-2" }, [
+                  _createTextVNode(" 「删除源种子」受 H&R 保护约束：源种若已纳入 H&R 管理且未达标，源任务会被保留，并计入数据页「转移做种」卡的「H&R 保护」跳过数。放行办法有三种——等它达标（自动放行）、让种子在进入下载器前就带 H&R 排除标签、或关闭 H&R 保护总开关。注意："),
+                  _createElementVNode("strong", null, "已纳管的种子事后补排除标签无效"),
+                  _createTextVNode("（排除只在首次纳管时判定）。 ")
+                ], -1)),
                 _createVNode(_component_VRow, null, {
                   default: _withCtx(() => [
                     _createVNode(_component_VCol, {
@@ -4659,7 +4664,7 @@ return (_ctx, _cache) => {
                   variant: "text",
                   onClick: _cache[112] || (_cache[112] = $event => (transferDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[185] || (_cache[185] = [
+                  default: _withCtx(() => [...(_cache[186] || (_cache[186] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -4670,7 +4675,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-check",
                   onClick: confirmTransferTask
                 }, {
-                  default: _withCtx(() => [...(_cache[186] || (_cache[186] = [
+                  default: _withCtx(() => [...(_cache[187] || (_cache[187] = [
                     _createTextVNode("确定", -1)
                   ]))]),
                   _: 1
@@ -4708,7 +4713,7 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
-                  default: _withCtx(() => [...(_cache[187] || (_cache[187] = [
+                  default: _withCtx(() => [...(_cache[188] || (_cache[188] = [
                     _createTextVNode("删除转移任务", -1)
                   ]))]),
                   _: 1
@@ -4724,7 +4729,7 @@ return (_ctx, _cache) => {
             }),
             _createVNode(_component_VDivider),
             _createVNode(_component_VCardText, { class: "text-body-2" }, {
-              default: _withCtx(() => [...(_cache[188] || (_cache[188] = [
+              default: _withCtx(() => [...(_cache[189] || (_cache[189] = [
                 _createTextVNode(" 删除后该任务不再参与转移做种；已转移的种子不受影响。改动先作用于表单，点击下方「保存配置」后才会真正生效。 ", -1)
               ]))]),
               _: 1
@@ -4737,7 +4742,7 @@ return (_ctx, _cache) => {
                   variant: "text",
                   onClick: _cache[114] || (_cache[114] = $event => (transferDeleteDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[189] || (_cache[189] = [
+                  default: _withCtx(() => [...(_cache[190] || (_cache[190] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -4748,7 +4753,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-delete-outline",
                   onClick: confirmTransferDelete
                 }, {
-                  default: _withCtx(() => [...(_cache[190] || (_cache[190] = [
+                  default: _withCtx(() => [...(_cache[191] || (_cache[191] = [
                     _createTextVNode("删除", -1)
                   ]))]),
                   _: 1
@@ -4803,7 +4808,7 @@ return (_ctx, _cache) => {
             _createVNode(_component_VDivider),
             _createVNode(_component_VCardText, { class: "text-body-2" }, {
               default: _withCtx(() => [
-                _cache[191] || (_cache[191] = _createTextVNode(" 将把本页签全部设置恢复为插件默认值。改动先作用于表单，点击下方「保存配置」后才会真正生效。", -1)),
+                _cache[192] || (_cache[192] = _createTextVNode(" 将把本页签全部设置恢复为插件默认值。改动先作用于表单，点击下方「保存配置」后才会真正生效。", -1)),
                 (paneResetTarget.value === 'hr')
                   ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                       _createTextVNode("H&R 站点独立规则也会一并清空回全局基准。")
@@ -4820,7 +4825,7 @@ return (_ctx, _cache) => {
                   variant: "text",
                   onClick: _cache[116] || (_cache[116] = $event => (paneResetDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[192] || (_cache[192] = [
+                  default: _withCtx(() => [...(_cache[193] || (_cache[193] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -4831,7 +4836,7 @@ return (_ctx, _cache) => {
                   "prepend-icon": "mdi-restore",
                   onClick: confirmPaneReset
                 }, {
-                  default: _withCtx(() => [...(_cache[193] || (_cache[193] = [
+                  default: _withCtx(() => [...(_cache[194] || (_cache[194] = [
                     _createTextVNode("恢复默认", -1)
                   ]))]),
                   _: 1
@@ -4850,6 +4855,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-f62241b9"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-20125b6c"]]);
 
 export { Config as default };
