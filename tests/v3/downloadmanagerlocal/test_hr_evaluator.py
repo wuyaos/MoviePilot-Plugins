@@ -26,6 +26,20 @@ PREFIX = "app.plugins.downloadmanagerlocal"
 GIB = 1024**3
 
 
+def test_hr_presets_asset_present_and_loadable(hr):
+    """随代码发布的 H&R 预设资源必须存在且可解析。
+
+    回归背景：目录重组（v3.9.3，`94603c4c`）把 `modules/hr/presets.json` 整个丢掉了，
+    直到端到端用例报 `/hr_presets` 返回 0 条才被发现——当时「部署镜像校验」只比 `.py` 的
+    md5，非 .py 资源不在比对范围内，于是一整个版本都缺这个文件。
+    """
+    path = HR_DIR / "presets.json"
+    assert path.is_file(), f"预设资源缺失（重组时丢过）：{path}"
+
+    presets = hr.rules.load_preset_rules()
+    assert isinstance(presets, dict) and presets, "预设资源存在但解析不出任何条目"
+
+
 def _pkg(monkeypatch, name, path: Path | None = None, **attrs) -> types.ModuleType:
     """带 __spec__ 的包/模块替身（pytest 断言重写要求 spec 非 None）。"""
     result = types.ModuleType(name)
