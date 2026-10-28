@@ -106,7 +106,7 @@ def endpoints(monkeypatch):
 
     _module(monkeypatch, PREFIX + '.adapter.moviepilot',
             get_downloader_service=Mock(), get_url_domain=Mock(return_value='example.org'),
-            list_builtin_sites=Mock())
+            get_downloader_services=Mock(return_value={}), list_builtin_sites=Mock())
     _module(monkeypatch, PREFIX + '.model.state',
             RENAME_RECORDS_KEY='rename_records', RENAME_RETRY_STATE_KEY='rename_retry_state',
             TRANSFER_SKIP_STATS_KEY='transfer_skip_stats', load_transfer_stats=Mock())

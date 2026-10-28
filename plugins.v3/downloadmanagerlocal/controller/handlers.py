@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from ..adapter.moviepilot import get_downloader_service, get_url_domain, list_builtin_sites
+from ..modules.rename.locator import resolve_record_downloader
 from ..model.api import (
     ApiBusinessModel,
     DiagnosticsResult,
@@ -475,14 +476,20 @@ def api_recovery_torrent(plugin, hash: str = ""):
             HashActionResult,
         )
 
-    # 在目标下载器中查找并恢复
+    # 在目标下载器中查找并恢复（记录带 downloader 字段用记录值；旧记录按 hash 唯一定位）
+    located = resolve_record_downloader(plugin, hash, record)
+    if located["ambiguous"]:
+        return _operation_response(
+            {"code": 1, "msg": f"该种子在多个下载器中存在（{', '.join(located['candidates'])}），请先移除多余实例中的同名任务", "hash": hash},
+            HashActionResult,
+        )
+    to_service = located["service"] or get_downloader_service(plugin._todownloader)
+    if not to_service or not to_service.instance:
+        return _operation_response(
+            {"code": 1, "msg": "未能在任何已配置下载器中找到该种子", "hash": hash},
+            HashActionResult,
+        )
     try:
-        to_service = get_downloader_service(plugin._todownloader)
-        if not to_service or not to_service.instance:
-            return _operation_response(
-                {"code": 1, "msg": f"下载器 {plugin._todownloader} 不存在", "hash": hash},
-                HashActionResult,
-            )
         dl = to_service.instance
         dl_type = to_service.type
 
@@ -494,6 +501,7 @@ def api_recovery_torrent(plugin, hash: str = ""):
         # 更新记录
         record["after_name"] = original_name
         record["success"] = True
+        record["downloader"] = getattr(to_service, "name", "") or record.get("downloader", "")
         record["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         records[hash] = record
         plugin.save_data(RENAME_RECORDS_KEY, records)

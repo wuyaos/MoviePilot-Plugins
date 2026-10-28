@@ -60,7 +60,8 @@ def _ensure_loaded():
     sys.modules[PREFIX].__path__ = [str(PLUGIN)]
     for pkg in ("utils", "model", "modules", "modules.rename", "modules.hr", "adapter"):
         _stub(f"{PREFIX}.{pkg}", is_package=True)
-    _stub(f"{PREFIX}.adapter.moviepilot", get_download_history_by_hash=Mock(return_value=None))
+    _stub(f"{PREFIX}.adapter.moviepilot", get_download_history_by_hash=Mock(return_value=None),
+      get_downloader_services=Mock(return_value={}))
 
     _load_real("utils/name_cleaner.py", f"{PREFIX}.utils.name_cleaner")
     _load_real("utils/tag_cleanup.py", f"{PREFIX}.utils.tag_cleanup")

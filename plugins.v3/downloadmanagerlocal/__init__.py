@@ -45,7 +45,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.9.8"
+    plugin_version = "3.9.9"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页
@@ -418,7 +418,10 @@ class DownloadManagerLocal(_PluginBase):
 
     def _retry_rename(self, hash: str = ""):
         """对指定 hash 执行单条补刮兼容入口。"""
-        to_service = self.service_info(self._todownloader)
+        from .modules.rename.locator import resolve_record_downloader
+        record = (self.get_data("rename_records") or {}).get(hash) if hash else None
+        located = resolve_record_downloader(self, hash, record if isinstance(record, dict) else None)
+        to_service = located["service"] or self.service_info(self._todownloader)
         return _retry_rename_by_hash_impl(self, to_service, hash)
 
     def _diagnostics(self):

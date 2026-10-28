@@ -25,6 +25,13 @@ from .payload_export import get_torrent_payloads
 _AUTOMATIC_DELAY_TRIGGER_SOURCES = frozenset({"兜底扫描", "事件驱动"})
 
 
+def _torrent_state_of(target: Any, dl_type: str) -> Any:
+    """读取目的端任务状态，兼容对象（.state/.status）与 dict（部分宿主版本）。"""
+    if isinstance(target, dict):
+        return target.get("state") if dl_type == "qbittorrent" else target.get("status")
+    return target.get("state") if dl_type == "qbittorrent" else target.status
+
+
 def _transfer_stopped(plugin, generation: int) -> bool:
     """识别停止信号与已失效批次，避免重新初始化清除旧批次的取消。"""
     event = getattr(plugin, "_event", None)
@@ -80,15 +87,18 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
         return None
     downloader = service.instance
     from_type = getattr(plugin.service_info((task or {}).get("from_downloader") or plugin._fromdownloader), "type", None)
+    # 任务级「目的端转移标签」：非空时覆盖全局 _torrent_tags；留空 = 不打业务转移标签（P1-7）。
+    task_tag = str((task or {}).get("transfer_tag") or "").strip()
+    business_tags = [task_tag] if task_tag else list(plugin._torrent_tags or [])
     if is_downloader_type("qbittorrent", service=service):
         tag = create_temporary_tag(plugin)
         torrent_hash = None
         try:
             if bool((task or {}).get("keep_tag", plugin._remainoldtag)):
                 torrent_labels = plugin.get_label(torrent, from_type)
-                new_tag = list(set(torrent_labels + plugin._torrent_tags + [tag]))
+                new_tag = list(set(torrent_labels + business_tags + [tag]))
             else:
-                new_tag = plugin._torrent_tags + [tag]
+                new_tag = business_tags + [tag]
             if bool((task or {}).get("keep_category", plugin._remainoldcat)):
                 torrent_category = plugin.get_category(torrent, from_type)
             else:
@@ -116,9 +126,9 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
     elif is_downloader_type("transmission", service=service):
         if bool((task or {}).get("keep_tag", plugin._remainoldtag)):
             torrent_labels = plugin.get_label(torrent, from_type)
-            new_tag = list(set(torrent_labels + plugin._torrent_tags))
+            new_tag = list(set(torrent_labels + business_tags))
         else:
-            new_tag = plugin._torrent_tags
+            new_tag = list(business_tags)
         if _transfer_stopped(plugin, generation):
             return None
         torrent = downloader.add_torrent(content=content,
@@ -136,9 +146,9 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
         try:
             if bool((task or {}).get("keep_tag", plugin._remainoldtag)):
                 torrent_labels = plugin.get_label(torrent, from_type)
-                new_tag = list(set(torrent_labels + plugin._torrent_tags + [tag]))
+                new_tag = list(set(torrent_labels + business_tags + [tag]))
             else:
-                new_tag = plugin._torrent_tags + [tag]
+                new_tag = business_tags + [tag]
             if _transfer_stopped(plugin, generation):
                 return None
             # rt 无类别概念，仅写 d.custom1 标签；暂停添加后由管线完成校验与启动。

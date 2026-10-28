@@ -60,6 +60,7 @@ class HrService:
         self._run_lock = Lock()
         self._guard = get_guard()
         self._stopped = False
+        self._generation = 0
 
     @property
     def config(self) -> HrConfig:
@@ -76,6 +77,7 @@ class HrService:
         self._migrate_legacy_site_ids(source, id_to_name)
         self._tasks = self._load_tasks()
         self._stopped = False
+        self._generation += 1  # 新生命周期代次：使旧实例的在途扫描结果失效
         self._refresh_guard()
         logger.info(
             f"{HR_LOG_PREFIX}初始化完成：开关={self._config.enabled} "
@@ -247,8 +249,13 @@ class HrService:
         return True
 
     def send_summary(self) -> bool:
-        """发送每日汇总通知；无待汇总事件时返回 False。"""
-        return send_summary(self._plugin, self._config.notify)
+        """发送每日汇总通知；无待汇总事件时返回 False。
+
+        持 ``_lock``（与 ``record_task_event`` 的写入路径互斥，P2-9）：汇总期间
+        扫描追加的新事件不会在 ``save_events([])`` 清空队列时被误删。
+        """
+        with self._lock:
+            return send_summary(self._plugin, self._config.notify)
 
     def clear_task(self, downloader_id: str, torrent_hash: str) -> bool:
         """按 (downloader, hash) 清除单条已结束记录，不删除下载器任务与文件。"""
@@ -274,6 +281,7 @@ class HrService:
     def stop(self) -> None:
         """停止后续扫描并撤销保护快照，插件停止后不再行使 H&R 保护。"""
         self._stopped = True
+        self._generation += 1  # 使在途扫描的落盘/刷新失效（P1-6：旧扫描不得覆盖新状态）
         self._guard.update(enabled=False, protected=())
         logger.info(f"{HR_LOG_PREFIX}服务已停止")
 
@@ -291,6 +299,7 @@ class HrService:
 
     def _check_once(self, now: float, trigger_source: str) -> dict[str, Any]:
         """执行一轮状态检查：刷新统计、标记删除、达标判定、记录清理与保护快照刷新。"""
+        generation_at_start = self._generation
         services = downloader_services(self._config.downloaders)
         if not services:
             logger.warning(f"{HR_LOG_PREFIX}{trigger_source}：没有可用下载器，跳过检查")
@@ -298,8 +307,13 @@ class HrService:
             result["enabled"] = self._config.enabled
             return result
 
-        snapshots: dict[str, HrTorrentSnapshot] = {}
-        failed: list[str] = []
+        # 被选中但不可用（未连接/缺实例）的下载器必须视作「查询失败」：
+        # 它们的任务缺席不能当作「种子已删除」，否则会误标 deleted 并最终误清保护记录。
+        selected_names = [str(n or "").strip() for n in (self._config.downloaders or [])]
+        unavailable = [n for n in selected_names if n and n not in services]
+        for name in unavailable:
+            logger.warning(f"{HR_LOG_PREFIX}下载器 {name} 不可用，本轮不判定其任务删除")
+        failed: list[str] = list(unavailable)
         for name, service in services.items():
             torrents, error = read_torrents(service)
             if error:
@@ -312,6 +326,12 @@ class HrService:
                 if snapshot.torrent_hash:
                     snapshots[hr_task_key(name, snapshot.torrent_hash)] = snapshot
 
+        if self._generation != generation_at_start or self._stopped:
+            # 下载器查询期间发生了 stop/reload：丢弃本轮结果，不落盘、不刷新 guard。
+            logger.info(f"{HR_LOG_PREFIX}{trigger_source}：扫描期间服务停止/重载，丢弃本轮结果")
+            result = self._empty_result()
+            result["enabled"] = False
+            return result
         deleted = self._apply_snapshots(snapshots, failed, now)
         changed = self._evaluate_all(services, now)
         cleaned = auto_cleanup(self._tasks, self._config.auto_cleanup_days, now)

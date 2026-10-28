@@ -111,7 +111,9 @@ def _task(name="qB到TR", enabled=True, **overrides):
 class _FakePlugin:
     def __init__(self, enabled=True, tasks=None, **legacy):
         self._transfer_enabled = enabled
-        self._transfer_tasks = json.dumps(tasks if tasks is not None else [_task()])
+        # tasks=None → 未迁移（transfer_tasks 键缺失），可回退旧单链路（P1-8 口径）
+        self._transfer_tasks = (json.dumps(tasks) if isinstance(tasks, list)
+                                else json.dumps([_task()]))
         for k, v in legacy.items():
             setattr(self, k, v)
 
@@ -134,6 +136,7 @@ def test_inactive_when_all_tasks_disabled():
 def test_inactive_when_no_tasks():
     _ensure_loaded()
     assert _config.is_transfer_active(_FakePlugin(tasks=[])) is False
+    assert _config.is_transfer_active(_FakePlugin(tasks=[], _transfer_tasks_migrated=True)) is False
 
 
 def test_deprecated_fromtorrentpath_not_required():
@@ -145,7 +148,7 @@ def test_deprecated_fromtorrentpath_not_required():
 def test_legacy_single_chain_fallback():
     """旧单链路键存在时经迁移视图判定就绪。"""
     _ensure_loaded()
-    plugin = _FakePlugin(enabled=True, tasks=[])
+    plugin = _FakePlugin(enabled=True, tasks=None)
     plugin._fromdownloader = "qb"
     plugin._todownloader = "tr"
     plugin._includecategory = ""

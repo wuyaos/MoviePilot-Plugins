@@ -19,6 +19,7 @@ from ..hr.models import HrTaskType
 from ..rename.events import handle_download_added_rename
 from ..sitetag.service import cleanup_temporary_tags_for_event, process_download_added
 from ..uploadlimit.worker import wake_upload_limit_worker
+from ..transfer.tasks import load_transfer_tasks
 
 DateTime = datetime
 
@@ -30,8 +31,17 @@ def handle_transfer_complete_event(plugin, event) -> None:
 
     event_data = event.event_data or {}
     downloader_name = event_data.get("downloader") or event_data.get("downloader_name", "")
-    if downloader_name and downloader_name != plugin._fromdownloader:
-        return
+    if downloader_name:
+        # 多任务引擎：按启用任务的源下载器集合过滤；集合为空时回退旧单链路键。
+        task_sources = {
+            str(task.get("from_downloader") or "").strip()
+            for task in load_transfer_tasks(plugin)
+            if str(task.get("from_downloader") or "").strip()
+        }
+        legacy_source = str(getattr(plugin, "_fromdownloader", "") or "").strip()
+        allowed = task_sources or ({legacy_source} if legacy_source else set())
+        if allowed and downloader_name not in allowed:
+            return
 
     delay = _coerce_delay_minutes(plugin._delay_minutes)
     run_time = _transfer_now() + timedelta(minutes=delay)

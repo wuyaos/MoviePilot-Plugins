@@ -78,13 +78,23 @@ def _normalize_task(raw: Any, index: int) -> Optional[Dict[str, Any]]:
 
 
 def load_transfer_tasks(plugin) -> List[Dict[str, Any]]:
-    """读取 transfer_tasks；为空时从旧单链路键构建迁移任务（不回写）。"""
-    raw = getattr(plugin, "_transfer_tasks", "") or "[]"
-    try:
-        parsed = json.loads(raw)
-    except (TypeError, ValueError) as err:
-        logger.error(f"【PT下载中心:转移做种】transfer_tasks 解析失败：{err}，回退旧单链路配置")
-        parsed = None
+    """读取 transfer_tasks；仅当「从未迁移过」时回退旧单链路键构建迁移任务（不回写）。
+
+    迁移判定（P1-8）：配置里存在 ``transfer_tasks_migrated`` 标记，或 transfer_tasks
+    本身是合法 JSON 数组（包括空数组 ``[]``）即视为已迁移——用户显式删光任务后
+    ``"[]"`` 不得复活旧链路；只有解析失败/键不存在时才回退旧配置。
+    """
+    raw = getattr(plugin, "_transfer_tasks", None)
+    migrated_flag = bool(getattr(plugin, "_transfer_tasks_migrated", False))
+    parsed = None
+    parse_failed = False
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError) as err:
+            logger.error(f"【PT下载中心:转移做种】transfer_tasks 解析失败：{err}，回退旧单链路配置")
+            parse_failed = True
+    migrated = migrated_flag or (isinstance(parsed, list) and not parse_failed)
     tasks: List[Dict[str, Any]] = []
     if isinstance(parsed, list) and parsed:
         for index, item in enumerate(parsed):
@@ -93,6 +103,8 @@ def load_transfer_tasks(plugin) -> List[Dict[str, Any]]:
                 tasks.append(normalized)
     if tasks:
         return [task for task in tasks if task["enabled"]]
+    if migrated:
+        return []
 
     # 旧单链路迁移视图（只读，不回写；前端保存后落为显式任务）
     legacy_from = str(getattr(plugin, "_fromdownloader", "") or "").strip()

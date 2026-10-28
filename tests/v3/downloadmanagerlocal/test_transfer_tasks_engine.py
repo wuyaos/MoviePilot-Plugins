@@ -119,7 +119,8 @@ def tr(monkeypatch):
 
 def _make_plugin(**config):
     plugin = MagicMock()
-    plugin._transfer_tasks = config.get("transfer_tasks", "[]")
+    plugin._transfer_tasks = config.get("transfer_tasks")
+    plugin._transfer_tasks_migrated = config.get("transfer_tasks_migrated", False)
     plugin._fromdownloader = config.get("fromdownloader", "")
     plugin._todownloader = config.get("todownloader", "")
     plugin._includecategory = config.get("includecategory", "")
@@ -182,6 +183,7 @@ class TestNormalizeTask:
 
 class TestLoadTransferTasks:
     def test_empty_falls_back_to_legacy(self, tt):
+        # 未迁移（transfer_tasks 缺失）→ 回退旧单链路
         plugin = _make_plugin(fromdownloader="QB1", todownloader="QB2",
                               frompath="/mnt/a", topath="/mnt/b")
         tasks = tt.load_transfer_tasks(plugin)
@@ -189,6 +191,15 @@ class TestLoadTransferTasks:
         assert tasks[0]["from_downloader"] == "QB1"
         assert tasks[0]["to_downloader"] == "QB2"
         assert "旧配置迁移" in tasks[0]["name"]
+
+    def test_explicit_empty_keeps_empty(self, tt):
+        # P1-8：用户显式保存 "[]"（或带迁移标记）不得复活旧链路
+        plugin = _make_plugin(transfer_tasks="[]",
+                              fromdownloader="QB1", todownloader="QB2")
+        assert tt.load_transfer_tasks(plugin) == []
+        plugin2 = _make_plugin(transfer_tasks=None, transfer_tasks_migrated=True,
+                               fromdownloader="QB1", todownloader="QB2")
+        assert tt.load_transfer_tasks(plugin2) == []
 
     def test_explicit_tasks_win(self, tt):
         payload = str([

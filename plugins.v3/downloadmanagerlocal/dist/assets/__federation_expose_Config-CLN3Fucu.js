@@ -621,6 +621,14 @@ function confirmTransferDelete() {
   transferTasks.value = transferTasks.value.filter((_, position) => position !== transferDeleteIndex.value);
   transferDeleteDialog.value = false;
 }
+// H&R 站点规则的三组键名。必须定义在下方 immediate watcher（syncHrSiteRulesFromForm）之前：
+// watcher 创建即执行（immediate），若此时这些 const 尚未初始化，YAML 解析会抛
+// ReferenceError（TDZ），中断 transferTasks 等后续赋值——配置了 H&R 站点规则的实例
+// 会表现为「任务列表不可见」，且点保存可能把空任务列表写回配置。
+const hrSiteRuleKeys = ['hr_duration', 'additional_seed_time', 'hr_deadline_days', 'hr_ratio', 'hr_upload_multiplier', 'hr_upload_gte_download', 'hr_active'];
+const hrListRuleKeys = ['trackers'];
+const hrTierValueKeys = ['hr_duration', 'hr_deadline_days'];
+
 
 watch(() => props.initialConfig, v => {
 Object.keys(form).forEach(k => delete form[k]);
@@ -738,9 +746,6 @@ const hrTriStateItems = [
   { title: '是', value: 'true' },
   { title: '否', value: 'false' },
 ];
-const hrSiteRuleKeys = ['hr_duration', 'additional_seed_time', 'hr_deadline_days', 'hr_ratio', 'hr_upload_multiplier', 'hr_upload_gte_download', 'hr_active'];
-const hrListRuleKeys = ['trackers'];
-const hrTierValueKeys = ['hr_duration', 'hr_deadline_days'];
 
 /** 全局规则当前值（config 表单的 hr_* 全局字段），供「继承」显示与 tooltip 使用。 */
 const hrGlobalRule = computed(() => ({
@@ -4284,7 +4289,7 @@ return (_ctx, _cache) => {
                 }),
                 _createVNode(_component_VCardSubtitle, null, {
                   default: _withCtx(() => [...(_cache[181] || (_cache[181] = [
-                    _createTextVNode("源/目的下载器与数据映射为必填；同一任务的源与目的不能相同", -1)
+                    _createTextVNode("源/目的下载器必填且不能相同；数据映射可选（两个都空 = 不映射，只填一个才报错）", -1)
                   ]))]),
                   _: 1
                 })
@@ -4873,6 +4878,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ecc6bc53"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-636d2a0d"]]);
 
 export { Config as default };
