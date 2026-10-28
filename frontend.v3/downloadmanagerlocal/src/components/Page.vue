@@ -824,6 +824,11 @@ async function doRetryRenames() {
   if (resp?.code !== 1) await refreshActive()
 }
 
+async function doRenameScan() {
+  const resp = await runModuleAction('rename-scan', () => postApi('rename_scan', {}), '扫描已在后台开始')
+  if (resp?.code !== 1) await refreshActive()
+}
+
 async function doTagComplement() {
   const resp = await runModuleAction('tag-complement', () => postApi('tag_complement', {}), '站点标签补全完成')
   if (resp?.code !== 1) await refreshActive()
@@ -1268,6 +1273,8 @@ onBeforeUnmount(() => {
               </div>
               <VBtn variant="tonal" size="small" prepend-icon="mdi-auto-fix" class="text-none"
                 :loading="moduleRunning === 'rename-retry' || renameStatus.batch_running" :disabled="(moduleRunning !== '' && moduleRunning !== 'rename-retry') || renameStatus.batch_running" @click="doRetryRenames">{{ renameStatus.batch_running ? '补刀中…' : '全量补刀' }}</VBtn>
+              <VBtn variant="tonal" size="small" prepend-icon="mdi-radar" class="text-none ml-2"
+                :loading="moduleRunning === 'rename-scan'" :disabled="moduleRunning !== '' && moduleRunning !== 'rename-scan'" @click="doRenameScan">立即扫描</VBtn>
             </div>
             <div v-if="records.length === 0" class="dm-state text-center text-medium-emphasis">
               <VIcon icon="mdi-history" size="48" color="grey-lighten-1" class="mb-2" />

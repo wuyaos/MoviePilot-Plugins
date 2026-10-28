@@ -37,6 +37,7 @@ from .handlers import (
     api_hr_clear_missing,
     api_hr_clear_task,
     api_hr_scan,
+    api_rename_scan,
     api_rename_status,
     api_tag_cleanup_execute,
     api_tag_complement,
@@ -133,6 +134,14 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
             "auth": "bear",
             "methods": ["POST"],
             "summary": "一键补刀重命名",
+            "response_model": schemas.Response[RetryRenamesResult],
+        },
+        {
+            "path": "/rename_scan",
+            "endpoint": partial(api_rename_scan, plugin),
+            "auth": "bear",
+            "methods": ["POST"],
+            "summary": "立即扫描并重命名未处理种子",
             "response_model": schemas.Response[RetryRenamesResult],
         },
         {

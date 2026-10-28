@@ -420,7 +420,7 @@ def find_site_by_domain(domain: str) -> Optional[str]:
 
 
 def tag_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags: list, trackers: list):
-    """给种子打站点标签，并返回是否完成或已满足幂等条件。"""
+    """给种子打站点标签，返回三态：True 已打标/已存在，None 站点未识别（跳过，非失败），False 写入失败。"""
     try:
         # 通过 tracker 解析站点
         site_name = None
@@ -441,8 +441,8 @@ def tag_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags: list,
                 break
 
         if not site_name:
-            logger.info(f"【PT下载中心:站点标签】转移后标签：无法识别站点 hash={torrent_hash}")
-            return False
+            logger.warning(f"【PT下载中心:站点标签】转移后标签：无法识别站点，跳过打标 hash={torrent_hash}")
+            return None
 
         # 构造标签
         site_tag = (plugin._tag_siteprefix + site_name) if plugin._tag_siteprefix else site_name

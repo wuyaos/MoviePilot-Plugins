@@ -9,6 +9,7 @@ MODULE_SWITCHES 用最小字面量充当门控接缝，真源与全量键数由 
 import importlib.machinery
 import importlib.util
 import sys
+import time
 import types
 from pathlib import Path
 from unittest.mock import Mock
@@ -108,6 +109,7 @@ def endpoints(monkeypatch):
             RENAME_RECORDS_KEY='rename_records', RENAME_RETRY_STATE_KEY='rename_retry_state',
             TRANSFER_SKIP_STATS_KEY='transfer_skip_stats', load_transfer_stats=Mock())
     _module(monkeypatch, PREFIX + '.service.archive', serialized_rename_state=lambda fn: fn)
+    _module(monkeypatch, PREFIX + '.service.rename', scan_renames=Mock(return_value={'renamed': 0}))
     _module(monkeypatch, PREFIX + '.service.hr.guard', HrGuard=Mock())
     _module(monkeypatch, PREFIX + '.service.hr.rules', load_preset_rules=Mock(return_value={}))
     site_tag = _module(monkeypatch, PREFIX + '.service.site_tag',
@@ -150,9 +152,9 @@ def _fake_plugin(**attrs):
 
 
 def test_route_contract(endpoints):
-    """按当前工作树：37 条路由，两条新 POST 端点 auth=bear 且用 Response 包装。"""
+    """按当前工作树：38 条路由，三条新 POST 端点 auth=bear 且用 Response 包装。"""
     routes = endpoints.routes.build_api_routes(Mock())
-    assert len(routes) == 37
+    assert len(routes) == 38
     by_path = {route['path']: route for route in routes}
     for path, summary in (('/transfer_run', '手动执行一轮转移做种'),
                           ('/tag_complement', '手动执行站点标签历史补全')):
@@ -161,6 +163,11 @@ def test_route_contract(endpoints):
         assert route['auth'] == 'bear'
         assert route['summary'] == summary
         assert route['response_model'].model_type.__name__ == 'ModuleActionResult'
+    scan = by_path['/rename_scan']
+    assert scan['methods'] == ['POST']
+    assert scan['auth'] == 'bear'
+    assert scan['summary'] == '立即扫描并重命名未处理种子'
+    assert scan['response_model'].model_type.__name__ == 'RetryRenamesResult'
 
 
 def test_transfer_run_rejected_when_module_disabled(endpoints):
@@ -229,3 +236,50 @@ def test_tag_complement_reports_exception(endpoints):
     response = endpoints.handlers.api_tag_complement(plugin)
     assert response.success is False
     assert 'site down' in response.data.msg
+
+
+def test_rename_scan_starts_background_scan(endpoints):
+    """POST /rename_scan：立即返回 running=True，后台线程真调用 scan_renames(plugin)。"""
+    scan = sys.modules[PREFIX + '.service.rename'].scan_renames
+    scan.reset_mock()
+    scan.return_value = {'renamed': 2}
+    plugin = _fake_plugin(_rename_enabled=True)
+
+    response = endpoints.handlers.api_rename_scan(plugin)
+
+    assert response.success is True
+    assert response.data.code == 0
+    assert response.data.running is True
+    deadline = time.time() + 5
+    while scan.call_count == 0 and time.time() < deadline:
+        time.sleep(0.02)
+    assert scan.call_count == 1
+    assert scan.call_args.args[0] is plugin
+    while getattr(plugin, '_rename_scan_running', False) and time.time() < deadline:
+        time.sleep(0.02)
+    assert plugin._rename_scan_running is False
+
+
+def test_rename_scan_rejected_when_already_running(endpoints):
+    """扫描运行中再次触发：返回 code=1，不重复启动。"""
+    scan = sys.modules[PREFIX + '.service.rename'].scan_renames
+    scan.reset_mock()
+    plugin = _fake_plugin(_rename_enabled=True, _rename_scan_running=True)
+
+    response = endpoints.handlers.api_rename_scan(plugin)
+
+    assert response.success is False
+    assert response.data.code == 1
+    assert '已在运行' in response.data.msg
+    assert scan.call_count == 0
+
+
+def test_rename_scan_rejected_when_module_disabled(endpoints):
+    """命名模块未生效 → HTTP 400，不启动扫描。"""
+    scan = sys.modules[PREFIX + '.service.rename'].scan_renames
+    scan.reset_mock()
+    plugin = _fake_plugin(_rename_enabled=False)
+    with pytest.raises(FakeHTTPException) as excinfo:
+        endpoints.handlers.api_rename_scan(plugin)
+    assert excinfo.value.status_code == 400
+    assert scan.call_count == 0

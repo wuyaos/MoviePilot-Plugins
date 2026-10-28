@@ -25,6 +25,9 @@ REMOVER_NOTIFY_ITEM_LIMIT = 20
 """单条通知中列出的处理条目上限，超出只汇总数量。"""
 
 REMOVER_FORM_DEFAULTS = {
+    # 观察闸门与 remover_ 前缀键同处一份表单：它在 UI 上是「自动删种 → 只观察不执行」开关，
+    # 但键名无前缀（公共迁移闸门，迁移模块也读它），故单独登记、由前端显式加入删除域重置键集。
+    MIGRATION_OBSERVE_ONLY_KEY: True,
     "remover_enabled": False,
     "remover_notify": False,
     "remover_action": "pause",

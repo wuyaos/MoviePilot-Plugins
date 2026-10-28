@@ -122,6 +122,35 @@ def api_retry_renames(plugin):
         RetryRenamesResult,
     )
 
+def api_rename_scan(plugin):
+    """后台线程触发一次完整重命名扫描（等价定时任务的一次执行），立即返回。"""
+    _require_module(plugin, "rename", "命名补刀")
+    from ..service.rename import scan_renames
+
+    with getattr(plugin, "_rename_scan_lock", threading.Lock()):
+        if getattr(plugin, "_rename_scan_running", False):
+            return _operation_response(
+                {"code": 1, "msg": "扫描已在运行，请稍后查看重命名历史"},
+                RetryRenamesResult,
+            )
+        plugin._rename_scan_running = True
+
+    def _run_scan():
+        try:
+            result = scan_renames(plugin)
+            logger.info(f"【PT下载中心:命名补刀】手动扫描完成: {result}")
+        except Exception as e:
+            logger.error(f"【PT下载中心:命名补刀】手动扫描失败: {e}")
+        finally:
+            plugin._rename_scan_running = False
+
+    threading.Thread(target=_run_scan, daemon=True, name="dml-rename-scan").start()
+    return _operation_response(
+        {"code": 0, "msg": "扫描已开始，正在后台处理，结果见重命名历史", "running": True},
+        RetryRenamesResult,
+    )
+
+
 def api_retry_rename(plugin, hash: str = ""):
     """对指定种子 hash 手动重试重命名和站点标签。"""
     _require_module(plugin, "rename", "命名补刀")

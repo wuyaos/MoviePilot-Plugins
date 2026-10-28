@@ -98,12 +98,12 @@ def gating(monkeypatch):
 
 
 def test_registry_and_defaults(gating):
-    """注册表覆盖 7 模块、属性名与默认键存在、键数 111。"""
+    """注册表覆盖 7 模块、属性名与默认键存在、键数 112。"""
     u = gating.utils
     assert set(u.MODULE_SWITCHES) == {
         'transfer', 'rename', 'tag', 'hr', 'autoremove', 'failclean', 'upload_limit'}
     defaults = u.build_plugin_config_defaults()
-    assert len(defaults) == 111
+    assert len(defaults) == 112
     for removed_key in ('onlyonce', 'hr_onlyonce', 'remover_onlyonce',
                         'rename_onlyonce', 'rename_retry', 'rename_recovery'):
         assert removed_key not in defaults, removed_key

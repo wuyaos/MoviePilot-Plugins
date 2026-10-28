@@ -205,7 +205,11 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
     if _transfer_stopped(plugin, generation):
         return False
     if plugin._tag_enabled:
-        plugin._tag_torrent(dl, dl_type, torrent_hash, torrent_tags, trackers)
+        tag_result = plugin._tag_torrent(dl, dl_type, torrent_hash, torrent_tags, trackers)
+        if tag_result is False:
+            logger.error(f"【PT下载中心:转移做种】站点标签写入失败 hash={torrent_hash}")
+        elif tag_result is None:
+            logger.warning(f"【PT下载中心:转移做种】站点未识别，跳过站点标签 hash={torrent_hash}")
     return True
 
 

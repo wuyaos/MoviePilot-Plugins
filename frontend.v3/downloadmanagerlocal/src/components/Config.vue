@@ -70,6 +70,7 @@ const defaults = {
   remover_time: '', remover_upspeed: '', remover_labels: '', remover_pathkeywords: '',
   remover_trackerkeywords: '', remover_errorkeywords: '', remover_torrentstates: '',
   remover_torrentcategorys: '',
+  migration_observe_only: true,
   failcleanup_enabled: false, failcleanup_notify: true, failcleanup_cron: '0 */2 * * *',
   failcleanup_clean_repeat: true, failcleanup_retain_hours: 6,
   rename_notify: false, rename_cron_enabled: false, rename_on_download_added: true,
@@ -95,6 +96,7 @@ const defaults = {
   tag_custom_sites_str: '',
   seed_autostart: true, seed_skipverify: false,
   seed_check_interval: 60, seed_max_wait_minutes: 120,
+  scan_limit: 500, pause_source: true,
   upload_limit_enabled: false, upload_limit_downloaders: [],
   upload_limit_downloader_limits_kib: {}, upload_limit_site_rules: {},
   upload_limit_grace_minutes: 30,
@@ -108,9 +110,11 @@ const PANE_RESET_KEYS = {
     'nopaths', 'nolabels', 'includelabels', 'includecategory', 'transferemptylabel',
     'add_torrent_tags', 'deletesource', 'deleteduplicate', 'remainoldcat', 'remainoldtag',
     'transfer_tasks', 'transfer_rename_enabled', 'downloader_ext',
-    'seed_autostart', 'seed_skipverify', 'seed_check_interval', 'seed_max_wait_minutes'],
+    'seed_autostart', 'seed_skipverify', 'seed_check_interval', 'seed_max_wait_minutes',
+    'scan_limit', 'pause_source'],
   hr: Object.keys(defaults).filter(k => k.startsWith('hr_')),
-  remover: Object.keys(defaults).filter(k => k.startsWith('remover_')),
+  // 观察闸门键无 remover_ 前缀（公共迁移闸门），需显式并入删除域重置集
+  remover: Object.keys(defaults).filter(k => k.startsWith('remover_')).concat(['migration_observe_only']),
   failclean: Object.keys(defaults).filter(k => k.startsWith('failcleanup_')),
   rename: Object.keys(defaults).filter(k => k.startsWith('rename_')),
   tag: Object.keys(defaults).filter(k => k.startsWith('tag_')),
@@ -1364,6 +1368,15 @@ function serializeHrSiteConfigYaml(rules) {
                     :disabled="!form.transfer_fallback_enabled" hint="事件漏触发时按此间隔扫描，默认60分钟" persistent-hint />
                 </VCol>
               </VRow>
+              <VRow class="mt-2">
+                <VCol cols="12" md="4">
+                  <VSwitch v-model="form.pause_source" color="info" inset hide-details label="转移时暂停源种子" />
+                </VCol>
+                <VCol cols="12" md="4">
+                  <VTextField v-model.number="form.scan_limit" label="源端扫描上限（个）" type="number" min="1" density="compact" variant="outlined" hide-details
+                    hint="每轮最多检查的源种子数量，默认 500" persistent-hint />
+                </VCol>
+              </VRow>
               <div class="dm-section-title mt-4">转移后重命名</div>
               <VRow>
                 <VCol cols="12" md="8">
@@ -1713,6 +1726,12 @@ function serializeHrSiteConfigYaml(rules) {
                 </VCol>
                 <VCol cols="12" md="4">
                   <VCronField v-model="form.remover_cron" label="执行周期" density="compact" variant="outlined" hide-details />
+                </VCol>
+              </VRow>
+              <VRow class="mt-2">
+                <VCol cols="12" md="4">
+                  <VSwitch v-model="form.migration_observe_only" color="warning" inset hide-details label="仅观察不执行" />
+                  <div class="dm-hint">打开后只列出候选并发通知，不对下载器做任何写操作（暂停/删除都跳过）</div>
                 </VCol>
               </VRow>
             </div>

@@ -510,9 +510,13 @@ def retry_failed_renames(plugin, to_service):
                     summary["errors"].append(f"{th}: 重命名失败")
             if plugin._tag_enabled:
                 from .site_tag import tag_torrent
-                if not tag_torrent(plugin, dl, dl_type, th, tags, trackers):
+                tag_result = tag_torrent(plugin, dl, dl_type, th, tags, trackers)
+                if tag_result is False:
                     item_success = False
                     summary["errors"].append(f"{th}: 站点标签失败")
+                elif tag_result is None:
+                    # 站点未识别属可接受情形：计入 warning，不拉低补刀成功率
+                    summary["warnings"].append(f"{th}: 站点未识别，跳过站点标签")
             if item_success:
                 summary["success"] += 1
             else:
@@ -528,7 +532,7 @@ def retry_failed_renames(plugin, to_service):
 
 def _retry_summary() -> dict:
     """构造批量补刀统计，成功数与失败数严格对应实际返回值。"""
-    return {"attempted": 0, "success": 0, "failed": 0, "skipped": 0, "errors": []}
+    return {"attempted": 0, "success": 0, "failed": 0, "skipped": 0, "errors": [], "warnings": []}
 
 
 def _get_torrent_name(torrent, dl_type):
