@@ -163,6 +163,10 @@ class DownloadManagerLocal(_PluginBase):
         self._seed_recheck_stop_event = None
         self._rename_batch_running = False
         self._rename_batch_lock = threading.Lock()
+        self._rename_scan_running = False
+        self._rename_scan_lock = threading.Lock()
+        self._transfer_manual_running = False
+        self._transfer_manual_lock = threading.Lock()
         self._torrent_tags = []
         self._tracker_mappings = {}
         self._custom_site_labels = {}

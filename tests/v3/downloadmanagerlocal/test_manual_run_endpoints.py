@@ -9,6 +9,7 @@ MODULE_SWITCHES 用最小字面量充当门控接缝，真源与全量键数由 
 import importlib.machinery
 import importlib.util
 import sys
+import threading
 import time
 import types
 from pathlib import Path
@@ -146,9 +147,28 @@ def endpoints(monkeypatch):
 
 
 def _fake_plugin(**attrs):
-    """最小 plugin 替身：transfer 为 Mock，_transfer_active 直接给值。"""
-    plugin = types.SimpleNamespace(transfer=Mock(), **attrs)
+    """最小 plugin 替身：transfer 为 Mock，_transfer_active 直接给值。
+
+    手动转移在真实插件里由后台线程执行，防重入口的锁与标志在 __init__ 里初始化；
+    替身必须带上，否则测的是「替身缺属性」而不是「后台语义」。
+    """
+    plugin = types.SimpleNamespace(
+        transfer=Mock(),
+        _transfer_manual_running=False,
+        _transfer_manual_lock=threading.Lock(),
+        **attrs,
+    )
     return plugin
+
+
+def _wait_called(mock, timeout=2.0):
+    """等后台线程真正调到 transfer（daemon 线程启动有调度延迟）。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if mock.called:
+            return True
+        time.sleep(0.01)
+    return mock.called
 
 
 def test_route_contract(endpoints):
@@ -190,23 +210,65 @@ def test_transfer_run_reports_incomplete_config(endpoints):
 
 
 def test_transfer_run_invokes_transfer(endpoints):
-    """模块生效时调用 plugin.transfer(trigger_source="手动") 并返回成功。"""
+    """模块生效时后台线程调用 plugin.transfer(trigger_source="手动")，端点立即返回。"""
     plugin = _fake_plugin(_transfer_enabled=True, _transfer_active=True)
     response = endpoints.handlers.api_transfer_run(plugin)
-    plugin.transfer.assert_called_once_with(trigger_source='手动')
     assert response.success is True
     assert response.data.code == 0
-    assert response.data.msg == '转移做种已执行'
+    assert '已开始' in response.data.msg
+    assert response.data.running is True
+    assert _wait_called(plugin.transfer), '后台线程没有调用 transfer'
+    plugin.transfer.assert_called_once_with(trigger_source='手动')
+
+
+def test_transfer_run_returns_before_transfer_finishes(endpoints):
+    """端点不等转移跑完——120 个种子的整轮实测超过 180s，同步会读超时。"""
+    plugin = _fake_plugin(_transfer_enabled=True, _transfer_active=True)
+    release = threading.Event()
+
+    def _slow_transfer(**kwargs):
+        release.wait(timeout=5)
+
+    plugin.transfer.side_effect = _slow_transfer
+    started = time.time()
+    response = endpoints.handlers.api_transfer_run(plugin)
+    elapsed = time.time() - started
+    try:
+        assert response.data.code == 0
+        assert elapsed < 1.0, f'端点阻塞了 {elapsed:.2f}s，应当立即返回'
+        assert plugin._transfer_manual_running is True, '转移未结束前防重入标志应为 True'
+    finally:
+        release.set()
+        for _ in range(200):
+            if not plugin._transfer_manual_running:
+                break
+            time.sleep(0.01)
+
+
+def test_transfer_run_guards_reentrancy(endpoints):
+    """上一轮还在跑时再点一次：拒绝并提示，不再起第二个线程。"""
+    plugin = _fake_plugin(_transfer_enabled=True, _transfer_active=True)
+    plugin._transfer_manual_running = True
+    response = endpoints.handlers.api_transfer_run(plugin)
+    assert response.success is False
+    assert response.data.code == 1
+    assert '已在后台运行' in response.data.msg
+    plugin.transfer.assert_not_called()
 
 
 def test_transfer_run_reports_exception(endpoints):
-    """转移抛错时返回 success=False 且带原因，不向调用方抛异常。"""
+    """转移抛错：后台吞掉并记日志，不向调用方抛异常，防重入标志复位。"""
     plugin = _fake_plugin(_transfer_enabled=True, _transfer_active=True)
     plugin.transfer.side_effect = RuntimeError('boom')
     response = endpoints.handlers.api_transfer_run(plugin)
-    assert response.success is False
-    assert 'boom' in response.data.msg
-
+    assert response.success is True
+    assert response.data.code == 0
+    assert _wait_called(plugin.transfer)
+    for _ in range(200):
+        if not plugin._transfer_manual_running:
+            break
+        time.sleep(0.01)
+    assert plugin._transfer_manual_running is False, '异常路径也必须复位防重入标志'
 
 def test_tag_complement_rejected_when_module_disabled(endpoints):
     """站点标签模块未生效 → HTTP 400，不触发补全。"""

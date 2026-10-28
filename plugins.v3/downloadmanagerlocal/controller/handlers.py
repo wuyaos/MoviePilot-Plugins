@@ -661,7 +661,12 @@ def api_failclean_scan(plugin, payload: EmptyRequest | None = None):
 
 
 def api_transfer_run(plugin, payload: EmptyRequest | None = None):
-    """手动执行一轮转移做种（替代已删除的 onlyonce 立即运行开关）。"""
+    """后台线程触发一轮转移做种，立即返回。
+
+    整轮转移在种子多时会长达数分钟（120 个种子的实测超过 180s），同步执行会让调用方
+    读超时——前端表现为「点了没反应」，实际服务端还在跑。与 /retry_renames、/rename_scan
+    保持一致：后台执行 + 防重入，进度看数据页与插件日志。
+    """
     logger.info("[PT下载中心]收到手动转移做种请求")
     _require_module(plugin, "transfer", "转移做种")
     if not plugin._transfer_active:
@@ -670,12 +675,29 @@ def api_transfer_run(plugin, payload: EmptyRequest | None = None):
             {"code": 1, "msg": "转移做种未就绪：请检查源/目标下载器与种子文件路径"},
             ModuleActionResult,
         )
-    try:
-        plugin.transfer(trigger_source="手动")
-    except Exception as e:
-        logger.error(f"[PT下载中心]转移做种执行失败: {e}")
-        return _operation_response({"code": 1, "msg": f"转移做种失败: {e}"}, ModuleActionResult)
-    return _operation_response({"code": 0, "msg": "转移做种已执行"}, ModuleActionResult)
+
+    def _run_transfer():
+        try:
+            plugin.transfer(trigger_source="手动")
+            logger.info("[PT下载中心]手动转移完成")
+        except Exception as e:
+            logger.error(f"[PT下载中心]转移做种执行失败: {e}")
+        finally:
+            plugin._transfer_manual_running = False
+
+    with plugin._transfer_manual_lock:
+        if plugin._transfer_manual_running:
+            return _operation_response(
+                {"code": 1, "msg": "转移做种已在后台运行，请稍后查看数据页"},
+                ModuleActionResult,
+            )
+        plugin._transfer_manual_running = True
+
+    threading.Thread(target=_run_transfer, daemon=True, name="dml-transfer-manual").start()
+    return _operation_response(
+        {"code": 0, "msg": "转移做种已开始，正在后台处理，进度见数据页与日志", "running": True},
+        ModuleActionResult,
+    )
 
 
 def _transfer_record_key(value: dict) -> bool:
