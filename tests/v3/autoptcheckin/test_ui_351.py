@@ -194,22 +194,30 @@ const assert = require('node:assert/strict');
 const ref = value => ({value});
 const computed = getter => ({get value() {return getter()}});
 const stats=ref({sites:Array.from({length:12},(_,i)=>({id:i,
-  sign_state:i===10||i===11?'failed':'success',
+  sign_state:i===10||i===11?'failed':(i===7?'disabled':'success'),
   sign_status:i===11?'unconfirmed':'success',
-  login_state:'pending', login_status:'',
+  login_state:i===9?'pending':'success', login_status:'',
+  sign_selected:i!==8, login_selected:true,
+  site_paused:i===3,
   name:'站点'+i}))});
 const history=ref({items:[{time:new Date().toISOString()},{time:'2020-01-02T03:04:05'},{time:'2020-01-02T04:04:05'}]});
 const showAllSites""" + functions + """
-assert.equal(trackStates.length,8); assert.deepEqual(trackStates[0],{key:'sign_success',label:'签到成功',cls:'success'});
+assert.equal(trackStates.length,9); assert.deepEqual(trackStates[0],{key:'sign_success',label:'签到成功',cls:'success'});
+assert.deepEqual(trackStates[8],{key:'paused',label:'已暂停',cls:'off'});
+assert.deepEqual(sortedSites.value.map(s=>s.id),[9,10,11,0,1,2,3,4,5,6,7,8]);
 assert.equal(visibleSites.value.length,8);
-assert.deepEqual(visibleSites.value.slice(0,2).map(s=>s.id),[10,11]);
+assert.deepEqual(visibleSites.value.slice(0,2).map(s=>s.id),[9,10]);
 showAllSites.value=true; assert.equal(visibleSites.value.length,12);
 toggleSiteFilter('sign_failed'); assert.equal(showAllSites.value,false); assert.deepEqual(visibleSites.value.map(s=>s.id),[10]);
 toggleSiteFilter('sign_failed'); assert.equal(visibleSites.value.length,8);
 toggleSiteFilter('sign_unknown'); assert.deepEqual(visibleSites.value.map(s=>s.id),[11]);
 toggleSiteFilter('sign_unknown');
-toggleSiteFilter('sign_pending'); assert.equal(visibleSites.value.length,0);
+toggleSiteFilter('sign_pending'); assert.deepEqual(visibleSites.value.map(s=>s.id),[7]);
 toggleSiteFilter('sign_pending');
+toggleSiteFilter('login_pending'); assert.deepEqual(visibleSites.value.map(s=>s.id),[9]);
+toggleSiteFilter('login_pending');
+toggleSiteFilter('paused'); assert.deepEqual(visibleSites.value.map(s=>s.id),[3]);
+toggleSiteFilter('paused');
 const today=historyDay(new Date());
 assert.equal(historyDays.value.some(g=>g.day===today),false);
 assert.equal(dayIsOpen('2020-01-02'),false);
@@ -221,6 +229,7 @@ assert.equal(historyDay('bad'),'日期未知');
     card = source.split('<article ',1)[1].split('</article>',1)[0]
     assert 'site.uid' not in card and 'credential_source' not in card and 'site.time' not in card
     assert 'signin_by_domain' in card and 'toggleSitePaused' in source and 'paused_sites: [...paused]' in source
+    assert '.site-card .head-right .chip{min-height:24px' in source
     assert 'site-icon' in card and '@error=' in card
 
 

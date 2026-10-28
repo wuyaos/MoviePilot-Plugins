@@ -17,9 +17,14 @@ const LEGACY_REASONS = {unconfirmed: 'result_unknown', network_error: 'network_e
   maintenance: 'maintenance', protocol_pending: 'protocol_pending', auth_failed: 'auth_failed'}
 const legacyReason = status => LEGACY_REASONS[status] || ''
 const trackReason = (site, kind) => site[kind + '_reason'] || legacyReason(site[kind + '_status'])
-const trackPriority = site => Number(site.sign_state === 'failed' || site.login_state === 'failed' ||
-  (site.sign_state === 'pending' && trackReason(site, 'sign') === 'result_unknown') ||
-  (site.login_state === 'pending' && trackReason(site, 'login') === 'result_unknown'))
+const trackVerdict = (site, kind) => {
+  // 已暂停、未启用、结构不支持的轨道不参与排序：否则「只签到不登录」的站点会被永久顶到最前
+  if (site.site_paused || !site[kind + '_selected']) return null
+  if (site[kind + '_state'] === 'disabled') return null
+  return site[kind + '_state'] === 'success'
+}
+const trackPriority = site => [trackVerdict(site, 'sign'), trackVerdict(site, 'login')]
+  .some(verdict => verdict === false) ? 1 : 0
 const sortedSites = computed(() => [...(stats.value?.sites || [])].sort((a, b) => trackPriority(b) - trackPriority(a)))
 function trackMatches(site, filter) {
   const track = kind => ({state: site[kind + '_state'], status: site[kind + '_status'], reason: trackReason(site, kind)})
@@ -31,7 +36,8 @@ function trackMatches(site, filter) {
   return ({sign_success: s.state === 'success', sign_failed: failed(s),
            sign_unknown: unknown(s), sign_pending: pending(s),
            login_success: l.state === 'success', login_failed: failed(l),
-           login_unknown: unknown(l), login_pending: pending(l)})[filter]
+           login_unknown: unknown(l), login_pending: pending(l),
+           paused: !!site.site_paused})[filter]
 }
 const filteredSites = computed(() => sortedSites.value.filter(site => !siteFilter.value || trackMatches(site, siteFilter.value)))
 const visibleSites = computed(() => showAllSites.value ? filteredSites.value : filteredSites.value.slice(0, siteLimit))
@@ -115,6 +121,7 @@ const trackStates = [
   {key: 'login_failed', label: '登录失败', cls: 'failure'},
   {key: 'login_unknown', label: '登录待确认', cls: 'unknown'},
   {key: 'login_pending', label: '登录待执行', cls: 'off'},
+  {key: 'paused', label: '已暂停', cls: 'off'},
 ]
 const states = {success:['成功','success'],signed:['已签','signed'],login_ok:['登录成功','signed'],failed:['失败','failure'],pending:['待处理','off'],skipped:['已跳过','off'],cancelled:['已取消','off'],unconfirmed:['结果待确认','unknown'],maintenance:['维护中','off'],network_error:['不可达','off'],protocol_pending:['待验证','off'],auth_failed:['认证失败','failure'],disabled:['停用','off'],off:['未进行','off']}
 // 历史行徽标：新统一值按 reason 细分，旧原始值经 legacyReason 兼容推导。
@@ -196,4 +203,4 @@ emit('layout',{maxWidth:'1000px'})
 <p class="site-msg" :title="cardMessage(site)">{{ cardMessage(site) }}</p></article></div><button v-if="filteredSites.length > siteLimit" class="btn ghost sites-toggle" :aria-expanded="showAllSites" @click="showAllSites = !showAllSites">{{ showAllSites ? '收起其余站点' : `展开其余 ${filteredSites.length - siteLimit} 个站点` }}</button><div v-if="!stats.sites.length" class="empty">暂无站点结果</div><div v-else-if="!filteredSites.length" class="empty">该状态暂无站点</div><h3 style="margin:28px 0 0">历史记录</h3></div>
 <div class="table-wrap"><table><caption class="hint" style="text-align:left;padding:0 24px 12px">{{ history.total || 0 }} 条记录</caption><thead><tr><th v-for="label in ['时间','站点','状态','最近消息']" :key="label">{{ label }}</th></tr></thead><tbody><template v-for="group in historyDays" :key="group.day"><tr class="history-day"><th colspan="4"><button class="btn ghost mini" :aria-expanded="dayIsOpen(group.day)" @click="toggleDay(group.day)">{{ dayIsOpen(group.day) ? '▾' : '▸' }} {{ group.day }} · {{ group.records.length }} 条 · <span class="num-success">成功 {{ group.success }}</span> / <span class="num-failure">失败 {{ group.failed }}</span> / <span class="num-unknown">未确认 {{ group.unconfirmed }}</span> / <span class="num-off">不可达 {{ group.unreachable }}</span></button></th></tr><template v-if="dayIsOpen(group.day)"><template v-for="{item,index} in group.records" :key="index"><tr><td>{{ formatTime(item.time) }}</td><td>{{ siteName(item.site) }}</td><td><span class="chip" :class="historyBadge(item)[1]">{{ historyBadge(item)[0] }}</span></td><td>{{ resultMessage(item) }}</td></tr></template></template></template><tr v-if="!historyDays.length"><td colspan="4" class="muted">暂无历史记录</td></tr></tbody></table></div></template><div v-else class="win">加载中…</div></section></div></template>
 <style scoped src="./preview.css"></style>
-<style scoped> .data-grid .site-card.is-paused{opacity:.55;border-color:var(--ptc-off-border,var(--ptc-line-strong))}.pwr.active{background:var(--ptc-success-bg);color:var(--ptc-success-text)}.pwr.paused{background:var(--ptc-unknown-bg);color:var(--ptc-unknown-text)}.site-card .chip:disabled{opacity:.6;cursor:not-allowed} </style>
+<style scoped> .data-grid .site-card.is-paused{opacity:.55;border-color:var(--ptc-off-border,var(--ptc-line-strong))}.pwr.active{background:var(--ptc-success-bg);color:var(--ptc-success-text)}.pwr.paused{background:var(--ptc-unknown-bg);color:var(--ptc-unknown-text)}.site-card .head-right .chip{min-height:24px;padding:0 8px;line-height:24px;border-radius:12px;gap:3px}.site-card .chip:disabled{opacity:.6;cursor:not-allowed} </style>
