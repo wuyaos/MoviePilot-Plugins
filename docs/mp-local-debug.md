@@ -98,6 +98,9 @@ cp -r $S/dist/assets $J/dist/
 - 启动日志反复刷 `raw.githubusercontent.com ... ReadTimeout` 后插件迟迟不可用：无代理环境下 GitHub 索引请求每次 15 秒超时阻塞装载线程，属慢而非死；`app.env` 配 `GITHUB_TOKEN` 后缓解。判定装载完成以 remotes API 为准，不看启动日志时间戳。
 - `AUDIENCES_UID/PASSKEY` 报「未设置」= env 没进进程（直启没 source），不是文件里没写。
 - **前端是独立 Node 服务**（`public/service.js`，静态 `public/` + 反代 API，监听 NGINX_PORT 17431）。它启动时探测后端 `/health/ready`，后端未就绪达 `MOVIEPILOT_FRONTEND_MAX_FAILURES`（默认 4 次×15s）即退出并记 `Backend is unavailable, skip starting frontend service`——后端冷启动慢会连锁导致前端不启，表现「登录失败，请检查网络连接」。mp.ps1 已把该值调到 40（10 分钟容忍窗口）。前端日志 `config/logs/moviepilot.frontend.log`。
+  - **实测（2026-10-28）**：前端昨天 23:15 就自杀了，后端一直活着 → API、pytest、插件端点全部正常，只有浏览器登录页报「登录失败，请检查网络连接」，容易长时间误判为「MP 挂了」或「插件把 MP 搞坏了」。**30 秒判定**：`curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:17431/`——非 200 就是前端死了，`mp.ps1 restart` 恢复。
+  - 自杀点有两处，不止启动门：`waitForBackendReady()`（启动门，尝试间隔 1s）与 `startBackendWatchdog()`（**常驻看门狗**，每 `MOVIEPILOT_FRONTEND_HEALTH_INTERVAL_MS`=15s 探一次，连续失败到上限即 `server.close()` + `process.exit(1)`）。所以后端运行中掉线超过上限（默认 4×15s=60s）也会永久杀死前端，而 **没有任何东西会把它重新拉起**。`MAX_FAILURES=40` 只延长到 10 分钟，不改变「死了不会自愈」这一点。
+  - `pip install`/重载插件/重启 MP 这类会让后端短暂离线的操作，若超过容忍窗口就会连带打死前端；操作完记得探一次 17431。
 - 删 junction 必须用 `python -c "os.rmdir(...)"` 或资源管理器；**bash 里内嵌 PowerShell 转义会静默失败**（`\\'$p'` 类转义错后 2>/dev/null 吞错），导致「删了其实没删」，后续 cp 还会写穿 junction 污染源目录。删后务必用 resolve() 相对性校验（见「部署形态」）。
 - qnap 生产实例的 `app.env` 可作本地合并基线（2025-10 已合并：GITHUB_TOKEN、PLUGIN_MARKET、LLM、DOH 等），但本地运行时键（PORT/NGINX_PORT/HOST/SUPERUSER/API_TOKEN）保留本地值；qnap 的 compose 级 env（AUTH_SITE/AUDIENCES_*、**PROXY_HOST**）不在其 app.env 里，需单独补——PROXY_HOST 漏配实证：GITHUB_TOKEN 在手仍全部「策略：直连 ConnectTimeout」，插件市场永远加载中，补 `PROXY_HOST='http://127.0.0.1:7890'` 后即愈。
 
