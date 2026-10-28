@@ -93,6 +93,7 @@ def _require_module(plugin, module: str, label: str) -> None:
     from ..utils.config import MODULE_SWITCHES
     attr = MODULE_SWITCHES[module][1]
     if not getattr(plugin, attr, False):
+        logger.warning(f"[PT下载中心]{label}端点被拒：模块开关未启用（{attr}=False）")
         raise HTTPException(status_code=400, detail=f"「{label}」未启用（检查插件总开关与模块开关）")
 
 
@@ -664,6 +665,7 @@ def api_transfer_run(plugin, payload: EmptyRequest | None = None):
     logger.info("[PT下载中心]收到手动转移做种请求")
     _require_module(plugin, "transfer", "转移做种")
     if not plugin._transfer_active:
+        logger.warning("[PT下载中心]手动转移被拒：转移做种未就绪（检查插件总开关、转移做种开关、源/目标下载器与种子文件路径）")
         return _operation_response(
             {"code": 1, "msg": "转移做种未就绪：请检查源/目标下载器与种子文件路径"},
             ModuleActionResult,
