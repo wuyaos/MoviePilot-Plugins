@@ -49,9 +49,14 @@ def delete_source(plugin, downloader_id, torrent_hash):
         return "protected"
     service = plugin.service_info(downloader_id)
     if not service or not service.instance:
+        # 静默返回 "retry" 会让「源种没删」既无日志也无线索：2026-10-28 排查
+        # 「delete_source=True 但源种还在」时，三条分支全无日志，白耗一轮。
+        logger.warning(f"【PT下载中心:转移做种】删源跳过：下载器不可用 {downloader_id}/{torrent_hash}")
         return "retry"
     if service.instance.delete_torrents(delete_file=False, ids=[torrent_hash]) is False:
+        logger.warning(f"【PT下载中心:转移做种】删源失败：下载器拒绝删除 {downloader_id}/{torrent_hash}")
         return "retry"
+    logger.info(f"【PT下载中心:转移做种】已删除源任务（不含文件）{downloader_id}/{torrent_hash}")
     return "deleted"
 
 
