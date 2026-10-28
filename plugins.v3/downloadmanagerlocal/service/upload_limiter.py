@@ -345,7 +345,7 @@ def run_upload_limit_cycle(
             except Exception as error:
                 _cycle_checkpoint()
                 errors[downloader_id].append(str(error))
-                logger.exception("上传限速扫描下载器 %s 失败", downloader_id)
+                logger.exception("【PT下载中心:上传限速】上传限速扫描下载器 %s 失败", downloader_id)
 
         if not site_policy_enabled:
             for downloader_id in selected:
@@ -436,7 +436,7 @@ def run_upload_limit_cycle(
                     f"{snapshot.torrent_hash}: {error}"
                 )
                 logger.exception(
-                    "上传限速写入任务 %s/%s 失败",
+                    "【PT下载中心:上传限速】上传限速写入任务 %s/%s 失败",
                     snapshot.downloader_id,
                     snapshot.torrent_hash,
                 )
@@ -1032,7 +1032,7 @@ def _release_downloader_torrent_limits(
             _cycle_checkpoint()
             report["errors"].append(f"{snapshot.torrent_hash}: {error}")
             logger.exception(
-                "释放上传限速任务 %s/%s 失败",
+                "【PT下载中心:上传限速】释放上传限速任务 %s/%s 失败",
                 downloader_id,
                 snapshot.torrent_hash,
             )
@@ -1070,7 +1070,7 @@ def _release_torrent_record(
     except Exception as error:
         _cycle_checkpoint()
         logger.exception(
-            "释放上传限速任务 %s/%s 失败",
+            "【PT下载中心:上传限速】释放上传限速任务 %s/%s 失败",
             snapshot.downloader_id,
             snapshot.torrent_hash,
         )
@@ -1146,7 +1146,7 @@ def _restore_one_downloader(plugin: Any, state: dict, downloader_id: str) -> dic
     except Exception as error:
         _cycle_checkpoint()
         report["errors"].append(str(error))
-        logger.exception("恢复上传限速下载器 %s 失败", downloader_id)
+        logger.exception("【PT下载中心:上传限速】恢复上传限速下载器 %s 失败", downloader_id)
         return report
 
     state.get("downloaders", {}).pop(downloader_id, None)
@@ -1186,7 +1186,7 @@ def _record_downloader_failure(
             ),
         )
     except Exception:
-        logger.exception("发送上传限速异常通知失败")
+        logger.exception("【PT下载中心:上传限速】发送上传限速异常通知失败")
 
 
 def _clear_downloader_failure(state: dict, downloader_id: str) -> None:

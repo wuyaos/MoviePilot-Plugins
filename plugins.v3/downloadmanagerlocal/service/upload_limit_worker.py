@@ -107,7 +107,7 @@ def _upload_limit_loop(
             try:
                 plugin._coordinate_upload_limits()
             except Exception:
-                logger.exception("上传限速协调 worker 执行失败，将在下一轮重试")
+                logger.exception("【PT下载中心:上传限速】上传限速协调 worker 执行失败，将在下一轮重试")
             if stop_event.is_set():
                 return
             wake_event.wait(UPLOAD_LIMIT_INTERVAL_SECONDS)

@@ -45,7 +45,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.9.1"
+    plugin_version = "3.9.2"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页
@@ -205,16 +205,16 @@ class DownloadManagerLocal(_PluginBase):
         服务信息
         """
         if not name:
-            logger.warning("[PT下载中心]尚未配置下载器，请检查配置")
+            logger.warning("【PT下载中心】尚未配置下载器，请检查配置")
             return None
 
         service = get_downloader_service(name)
         if not service or not service.instance:
-            logger.warning(f"[PT下载中心]获取下载器 {name} 实例失败，请检查配置")
+            logger.warning(f"【PT下载中心】获取下载器 {name} 实例失败，请检查配置")
             return None
 
         if service.instance.is_inactive():
-            logger.warning(f"[PT下载中心]下载器 {name} 未连接，请检查配置")
+            logger.warning(f"【PT下载中心】下载器 {name} 未连接，请检查配置")
             return None
 
         return service
@@ -356,7 +356,7 @@ class DownloadManagerLocal(_PluginBase):
         """追加做种校验任务，记录来源用于日志区分。"""
         if not service or not download_id:
             return
-        logger.info(f"[PT下载中心]做种校验服务：添加校验任务 [{source}] {service.name} / {download_id} ...")
+        logger.info(f"【PT下载中心】做种校验服务：添加校验任务 [{source}] {service.name} / {download_id} ...")
         if not isinstance(self._recheck_torrents.get(service.name), dict):
             self._recheck_torrents[service.name] = {}
         self._recheck_torrents[service.name][download_id] = source or "未知来源"

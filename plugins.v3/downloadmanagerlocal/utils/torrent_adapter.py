@@ -348,7 +348,7 @@ def compute_info_hash(payload: bytes) -> str:
             return ""
         return hashlib.sha1(bencode(info)).hexdigest()
     except Exception as error:
-        logger.error(f"[PT下载中心]计算种子 infohash 失败：{error}")
+        logger.error(f"【PT下载中心】计算种子 infohash 失败：{error}")
         return ""
 
 

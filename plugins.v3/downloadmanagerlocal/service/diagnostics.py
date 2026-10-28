@@ -37,7 +37,7 @@ def _service_status(plugin, name: str) -> dict:
         })
         return result
     except Exception as e:
-        logger.warning(f"[PT下载中心]诊断：检查下载器 {name} 失败: {e}")
+        logger.warning(f"【PT下载中心】诊断：检查下载器 {name} 失败: {e}")
         result["message"] = str(e)
         return result
 
