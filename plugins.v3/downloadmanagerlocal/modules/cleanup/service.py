@@ -154,28 +154,6 @@ def _cleanup_transfer_target(plugin, source_hash: str, source_downloader: str) -
         return 0
 
 
-def _delete_downloader_hashes(plugin, downloader: str, hashes: Iterable[str]) -> int:
-    """返回请求删除的数量；负一表示失败，不得登记成功去重。"""
-    downloader = _clean_text(downloader)
-    hash_list = _unique_hashes(hashes)
-    if not downloader or not hash_list:
-        return 0
-    try:
-        service = plugin.service_info(downloader)
-        instance = getattr(service, "instance", None) if service else None
-        if not instance:
-            logger.warning(f"【PT下载中心:失败清理】下载器不可用，跳过 {downloader} / {hash_list}")
-            return -1
-        state = instance.delete_torrents(delete_file=True, ids=hash_list)
-        if state is False:
-            logger.warning(f"【PT下载中心:失败清理】下载器删除返回失败 {downloader} / {hash_list}")
-            return -1
-        return len(hash_list)
-    except Exception as err:
-        logger.error(f"【PT下载中心:失败清理】删除下载器任务失败 {downloader} / {hash_list}: {err}")
-        return -1
-
-
 def _skip_recent_duplicate(plugin, source_hash: str) -> bool:
     """短时间内跳过同一源 hash 的重复广播。"""
     now = time.time()
@@ -205,16 +183,6 @@ def _data_get(data, key: str) -> Any:
 def _clean_text(value) -> str:
     """把可选值收敛为去空白字符串。"""
     return str(value or "").strip()
-
-
-def _unique_hashes(values: Iterable[str]) -> List[str]:
-    """保序去重并过滤空 hash。"""
-    result = []
-    for value in values or []:
-        text = _clean_text(value)
-        if text and text not in result:
-            result.append(text)
-    return result
 
 
 def _empty_result(trigger: str = "") -> Dict[str, Any]:

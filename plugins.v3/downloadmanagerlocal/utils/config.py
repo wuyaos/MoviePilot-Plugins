@@ -101,17 +101,6 @@ def safe_int(value, default, min_value=None, max_value=None):
     return v
 
 
-def safe_float(value, default, min_exclusive=None):
-    """安全转换浮点数，并在不满足下界时回退默认值。"""
-    try:
-        converted = float(value)
-    except (TypeError, ValueError):
-        return default
-    if min_exclusive is not None and converted <= min_exclusive:
-        return default
-    return converted
-
-
 def _positive_integer_mapping(value) -> dict[str, int]:
     """清洗按下载器保存的正整数 KiB/s 映射。"""
     if not isinstance(value, dict):

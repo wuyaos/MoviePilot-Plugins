@@ -33,17 +33,6 @@ PERSISTED_STATE_KEYS = {
 }
 
 
-def load_dict_data(plugin: Any, key: str) -> dict:
-    """读取 dict 类型持久化数据，非 dict 或空值按旧逻辑回退为空字典。"""
-    value = plugin.get_data(key)
-    return value if isinstance(value, dict) else {}
-
-
-def save_dict_data(plugin: Any, key: str, value: dict | None) -> None:
-    """保存 dict 类型持久化数据，空值按旧逻辑持久化为空字典。"""
-    plugin.save_data(key, value or {})
-
-
 def _non_negative_int(value: Any) -> int:
     """把不可信计数规范为非负整数。"""
     try:

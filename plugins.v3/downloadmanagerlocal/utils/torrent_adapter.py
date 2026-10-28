@@ -1,6 +1,5 @@
 """下载器种子字段适配工具（qBittorrent / Transmission / rtorrent 兼容）。"""
 
-import hashlib
 from dataclasses import dataclass
 from typing import Any, List
 
@@ -40,11 +39,6 @@ class DownloaderPollResult:
     success: bool
     items: tuple[TorrentSnapshot, ...] = ()
     error: str = ""
-
-
-def poll_success(items: List[TorrentSnapshot] | tuple[TorrentSnapshot, ...]) -> DownloaderPollResult:
-    """构造成功轮询结果，允许显式表示成功空列表。"""
-    return DownloaderPollResult(success=True, items=tuple(items), error="")
 
 
 def poll_error(cause: Any) -> DownloaderPollResult:
@@ -122,66 +116,6 @@ def classify_torrent_state(state: Any, downloaded_bytes: int, total_bytes: int) 
     if normalized in {"error", "missingfiles", "unknown", "isolated"}:
         return TORRENT_ERROR
     return TORRENT_ACTIVE
-
-
-def normalize_torrent(torrent: Any, downloader_id: str, downloader_type: str) -> TorrentSnapshot:
-    """将 qBittorrent 字典或 Transmission 对象归一为快照。"""
-    torrent_hash = _read(torrent, "hash", "hashString", "hash_string", default="")
-    name = _read(torrent, "name", default="")
-    category = _read(torrent, "category", "group", default="")
-    total_bytes = int(_number(_read(
-        torrent, "total_size", "size", "totalSize", default=0,
-    )))
-    downloaded_bytes = int(_number(_read(
-        torrent, "downloaded", "downloaded_ever", "downloadedEver", "completed", default=0,
-    )))
-    added_at = _timestamp(_read(
-        torrent, "added_on", "added_date", "date_added", "dateAdded", default=0,
-    ))
-    state = _read(torrent, "state", "status", default="")
-    state_text = str(_state_value(state) or "")
-    save_path = _read(torrent, "save_path", "download_dir", "downloadDir", default="")
-    speed = _number(_read(
-        torrent, "dlspeed", "download_speed", "rate_download", "rateDownload", default=0,
-    ))
-    return TorrentSnapshot(
-        downloader_id=str(downloader_id or ""),
-        downloader_type=str(downloader_type or "").lower(),
-        torrent_hash=str(torrent_hash or "").lower(),
-        name=str(name or ""),
-        category=str(category or ""),
-        total_bytes=total_bytes,
-        downloaded_bytes=min(downloaded_bytes, total_bytes) if total_bytes else downloaded_bytes,
-        added_at=added_at,
-        state=state_text,
-        state_category=classify_torrent_state(state, downloaded_bytes, total_bytes),
-        save_path=str(save_path or ""),
-        download_speed_bps=speed,
-    )
-
-
-def poll_downloader(instance: Any, downloader_id: str, downloader_type: str) -> DownloaderPollResult:
-    """读取并归一化下载器任务，保留成功空列表与错误的差异。"""
-    try:
-        response = instance.get_torrents()
-    except Exception as error:
-        return poll_error(error)
-
-    items = response
-    cause = None
-    if isinstance(response, tuple) and len(response) == 2:
-        items, cause = response
-    if cause:
-        return poll_error(cause)
-    if items is None:
-        return poll_error("downloader returned no result")
-    try:
-        return poll_success([
-            normalize_torrent(item, downloader_id, downloader_type)
-            for item in items
-        ])
-    except (TypeError, ValueError) as error:
-        return poll_error(error)
 
 
 def delete_torrent_with_files(
@@ -335,21 +269,6 @@ def skipverify_applies(dl_type: str) -> bool:
 def supports_recheck(dl_type: str) -> bool:
     """rt 宿主客户端没有 recheck_torrents，rt 目的端必须跳过显式校验。"""
     return str(dl_type or "").lower() != "rtorrent"
-
-
-def compute_info_hash(payload: bytes) -> str:
-    """从种子文件字节计算 infohash；rt 目的端添加后只能靠它定位任务。"""
-    if not payload:
-        return ""
-    try:
-        from bencode import bdecode, bencode
-        info = bdecode(payload).get(b"info")
-        if not info:
-            return ""
-        return hashlib.sha1(bencode(info)).hexdigest()
-    except Exception as error:
-        logger.error(f"【PT下载中心】计算种子 infohash 失败：{error}")
-        return ""
 
 
 def get_tracker_urls(torrent: Any, dl_type: str) -> List[str]:

@@ -78,7 +78,7 @@ plugins.v3/downloadmanagerlocal/
 │   ├── torrent_adapter.py          # qB/TR 字段适配
 │   ├── name_cleaner.py             # 发布名清洗与补刀 hash 收集
 │   ├── tag_cleanup.py              # 临时标签归属判定
-│   ├── path.py / tracker.py / sensitive.py  # 无状态工具
+│   ├── path.py / tracker.py          # 无状态工具
 │   └── ...
 ├── dist/                           # Vue 联邦构建产物
 └── icons/downloadmanagerlocal.png  # 插件图标

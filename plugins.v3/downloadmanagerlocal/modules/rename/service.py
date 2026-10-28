@@ -281,11 +281,6 @@ def _build_original_name_candidate_items(
     return candidates
 
 
-def _get_original_torrent_name_candidates(plugin, torrent_hash: str) -> list:
-    """读取源 .torrent 中可用于识别的原始名称候选。"""
-    return [item["name"] for item in _build_original_name_candidate_items(plugin, torrent_hash)]
-
-
 def _score_original_name_candidate(value) -> int:
     """根据发布名特征和污染特征给候选原始名称打分。"""
     if isinstance(value, dict):

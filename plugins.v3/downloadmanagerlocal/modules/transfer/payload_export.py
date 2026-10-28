@@ -336,7 +336,3 @@ def get_torrent_payloads(
     return {}
 
 
-def get_torrent_payload(plugin, dl_type: str, downloader_name: str, service: Any, info_hash: str) -> Optional[bytes]:
-    """单种子便捷入口。"""
-    mapping = get_torrent_payloads(plugin, dl_type, downloader_name, service, [info_hash])
-    return mapping.get(info_hash)

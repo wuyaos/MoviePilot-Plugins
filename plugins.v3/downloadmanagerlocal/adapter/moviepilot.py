@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.application.torrent.download import TorrentHelper
 from app.db.oper.downloadhistory import DownloadHistoryOper
 from app.db.oper.site import SiteOper
 from app.modules.qbittorrent import Qbittorrent
 from app.modules.transmission import Transmission
-from app.sdk.network import RequestUtils, SitesHelper
+from app.sdk.network import SitesHelper
 from app.sdk.services import DownloaderHelper
 from app.sdk.utilities import StringUtils
 
@@ -37,11 +36,6 @@ def create_downloader_helper() -> DownloaderHelper:
 def get_downloader_service(name: str):
     """按名称读取下载器服务信息。"""
     return create_downloader_helper().get_service(name)
-
-
-def get_downloader_config(name: str):
-    """按名称读取下载器配置对象。"""
-    return create_downloader_helper().get_config(name)
 
 
 def get_downloader_services(name_filters=None):
@@ -126,11 +120,6 @@ def list_site_dicts() -> list[dict]:
     return [_site_to_dict(site) for site in list_builtin_sites() if site]
 
 
-def list_custom_site_dicts() -> list:
-    """V3 站点已统一落库，不再返回独立的自定义站点集合。"""
-    return []
-
-
 def _get_site_by_domain(domain: str):
     """按规范域名查找 MoviePilot V3 站点记录。"""
     normalized = get_url_domain(domain) or str(domain or "").strip()
@@ -157,21 +146,3 @@ def get_site_indexer(domain: str):
     return {**indexer, **_site_to_dict(site)}
 
 
-def check_site(domain: str):
-    """调用 MoviePilot 站点检查。"""
-    return SitesHelper().check(domain)
-
-
-def download_torrent_content(url: str, cookie=None, ua=None, proxy=None):
-    """通过 MoviePilot TorrentHelper 下载种子内容。"""
-    return TorrentHelper().download_torrent(url=url, cookie=cookie, ua=ua, proxy=proxy)
-
-
-def request_get_res(url: str, params: dict | None = None, **kwargs):
-    """通过 MoviePilot RequestUtils 发送 GET 请求。"""
-    return RequestUtils(**kwargs).get_res(url=url, params=params)
-
-
-def request_post_res(url: str, params: dict | None = None, json: dict | None = None, **kwargs):
-    """通过 MoviePilot RequestUtils 发送 POST 请求。"""
-    return RequestUtils(**kwargs).post_res(url, params=params, json=json)

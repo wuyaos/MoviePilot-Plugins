@@ -274,8 +274,7 @@ class DownloadManagerLocal(_PluginBase):
         """返回 H&R 任务列表与汇总。"""; return _api_hr_tasks(self)
 
     def api_hr_skip_stats(self):
-        """返回 H&R 保护在四条破坏性路径上的跳过计数。"""
-        return _controller_handlers.api_hr_skip_stats(self)
+        """返回 H&R 保护在四条破坏性路径上的跳过计数。"""; return _api_hr_skip_stats(self)
 
     def api_hr_presets(self):
         """返回内置 H&R 站点验证预设。"""
