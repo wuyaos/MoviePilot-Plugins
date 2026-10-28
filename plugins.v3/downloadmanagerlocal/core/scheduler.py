@@ -26,25 +26,40 @@ from ..modules.sitetag.service import complement_history
 
 
 def build_plugin_services(plugin) -> List[Dict[str, Any]]:
-    """根据插件运行状态构造 MoviePilot 调度服务声明。"""
-    services = []
+    """根据插件运行状态构造 MoviePilot 调度服务声明。
 
-    if plugin._transfer_active and plugin._transfer_fallback_enabled:
-        services.append({
-            "id": "TorrentTransferFallback",
-            "name": "转移做种兜底服务",
-            "trigger": "interval",
-            "func": plugin._fallback_transfer,
-            "kwargs": {"minutes": plugin._transfer_fallback_interval_minutes}
-        })
-
-    services.extend(_build_hr_services(plugin))
-    services.extend(_build_autoremove_services(plugin))
-    services.extend(_build_failclean_services(plugin))
-    services.extend(_build_site_tag_services(plugin))
-    services.extend(_build_rename_services(plugin))
+    模块独立性（Goal: 单模块故障不得拖垮其它模块）：每个模块的声明单独构造，
+    任一模块抛异常只丢该模块的定时任务，其余模块的调度照常注册——宿主调用
+    ``get_service()`` 时不会因为某一个模块的坏配置拿到空列表。
+    """
+    services: List[Dict[str, Any]] = []
+    for builder in (
+        _build_transfer_fallback_services,
+        _build_hr_services,
+        _build_autoremove_services,
+        _build_failclean_services,
+        _build_site_tag_services,
+        _build_rename_services,
+    ):
+        try:
+            services.extend(builder(plugin) or [])
+        except Exception as error:
+            logger.error(f"【PT下载中心】{builder.__name__} 构造定时任务失败，已跳过该模块: {error}")
 
     return services
+
+
+def _build_transfer_fallback_services(plugin) -> List[Dict[str, Any]]:
+    """按转移兜底开关构造兜底定时任务声明。"""
+    if not plugin._transfer_active or not plugin._transfer_fallback_enabled:
+        return []
+    return [{
+        "id": "TorrentTransferFallback",
+        "name": "转移做种兜底服务",
+        "trigger": "interval",
+        "func": plugin._fallback_transfer,
+        "kwargs": {"minutes": plugin._transfer_fallback_interval_minutes},
+    }]
 
 
 def _build_autoremove_services(plugin) -> List[Dict[str, Any]]:

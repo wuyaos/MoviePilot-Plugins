@@ -79,6 +79,7 @@ def env(monkeypatch):
         f"{PREFIX}.modules.rename.events",
         f"{PREFIX}.modules.sitetag.service",
         f"{PREFIX}.modules.transfer.tasks",
+        f"{PREFIX}.modules.rename.service",
     ):
         _register_package(monkeypatch, deep)
     # events.py 通过 app.modules.hr.models 引用（三段相对导入解析到宿主 app.modules）
@@ -191,3 +192,30 @@ def test_stop_plugin_service_tolerates_none_services(env):
     )
     # 不抛异常即通过（服务为 None 是隔离后的合法状态）
     lifecycle.stop_plugin_service(plugin)
+
+
+def test_scheduler_services_isolates_failing_module(env):
+    """单个模块构造定时任务失败，只丢该模块的声明，其余模块照常注册。"""
+    scheduler = env("core/scheduler.py")
+    plugin = SimpleNamespace()
+
+    scheduler._build_transfer_fallback_services = lambda p: [
+        {"id": "TorrentTransferFallback"}
+    ]
+
+    def boom(_plugin):
+        raise AttributeError("config.cron 缺失")
+
+    scheduler._build_hr_services = boom
+    scheduler._build_autoremove_services = lambda p: [{"id": "AutoRemove"}]
+    scheduler._build_failclean_services = lambda p: []
+    scheduler._build_site_tag_services = lambda p: [{"id": "SiteTagHistory"}]
+    scheduler._build_rename_services = lambda p: []
+
+    services = scheduler.build_plugin_services(plugin)
+
+    assert [item["id"] for item in services] == [
+        "TorrentTransferFallback",
+        "AutoRemove",
+        "SiteTagHistory",
+    ], "坏模块的声明被丢弃，其余模块的正常注册"
