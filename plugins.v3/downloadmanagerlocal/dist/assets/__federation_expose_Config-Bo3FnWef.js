@@ -571,8 +571,10 @@ function confirmTransferTask() {
     transferError.value = '源下载器与目的下载器不能相同';
     return
   }
-  if (!fromPath || !toPath) {
-    transferError.value = '请填写源数据路径与目的数据路径';
+  // 路径映射是可选能力：两者都空 = 不做映射（后端 convert_save_path 契约 C1 同样原样返回）。
+  // 只有「只填了一个」才是配置错误——那会让映射方向不明。
+  if (Boolean(fromPath) !== Boolean(toPath)) {
+    transferError.value = '源数据路径与目的数据路径需同时填写或同时留空（都留空＝不做路径映射）';
     return
   }
   const index = transferEditing.value;
@@ -4389,7 +4391,7 @@ return (_ctx, _cache) => {
                           density: "compact",
                           variant: "outlined",
                           "hide-details": "",
-                          hint: "源数据路径/目的数据路径（数据可见性映射）",
+                          hint: "数据可见性映射（可选）：两个都留空 = 不做映射；只填一个视为配置错误",
                           "persistent-hint": ""
                         }, null, 8, ["modelValue"])
                       ]),
@@ -4407,7 +4409,7 @@ return (_ctx, _cache) => {
                           density: "compact",
                           variant: "outlined",
                           "hide-details": "",
-                          hint: "源数据路径/目的数据路径（数据可见性映射）",
+                          hint: "数据可见性映射（可选）：两个都留空 = 不做映射；只填一个视为配置错误",
                           "persistent-hint": ""
                         }, null, 8, ["modelValue"])
                       ]),
@@ -4871,6 +4873,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-3e4ba361"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ecc6bc53"]]);
 
 export { Config as default };

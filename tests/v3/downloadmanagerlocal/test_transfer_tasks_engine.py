@@ -152,9 +152,24 @@ class TestNormalizeTask:
             "from_path": "/a", "to_path": "/b",
         }, 0) is None
 
-    def test_missing_path_rejected(self, tt):
+    def test_empty_paths_accepted_as_no_mapping(self, tt):
+        """两个都留空 = 不做路径映射（合法），与 convert_save_path 契约 C1 一致。"""
+        task = tt._normalize_task({
+            "from_downloader": "QB1", "to_downloader": "QB2",
+            "from_path": "", "to_path": "",
+        }, 0)
+        assert task is not None
+        assert task["from_path"] == "" and task["to_path"] == ""
+
+    def test_single_path_rejected(self, tt):
+        """只填一个才是配置错误——映射方向不明，必须拒绝。"""
         assert tt._normalize_task({
             "from_downloader": "QB1", "to_downloader": "QB2",
+            "from_path": "/a", "to_path": "",
+        }, 0) is None
+        assert tt._normalize_task({
+            "from_downloader": "QB1", "to_downloader": "QB2",
+            "from_path": "", "to_path": "/b",
         }, 0) is None
 
     def test_defaults_filled(self, tt):

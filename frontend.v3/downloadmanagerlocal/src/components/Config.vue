@@ -421,8 +421,10 @@ function confirmTransferTask() {
     transferError.value = '源下载器与目的下载器不能相同'
     return
   }
-  if (!fromPath || !toPath) {
-    transferError.value = '请填写源数据路径与目的数据路径'
+  // 路径映射是可选能力：两者都空 = 不做映射（后端 convert_save_path 契约 C1 同样原样返回）。
+  // 只有「只填了一个」才是配置错误——那会让映射方向不明。
+  if (Boolean(fromPath) !== Boolean(toPath)) {
+    transferError.value = '源数据路径与目的数据路径需同时填写或同时留空（都留空＝不做路径映射）'
     return
   }
   const index = transferEditing.value
@@ -2103,11 +2105,11 @@ function serializeHrSiteConfigYaml(rules) {
           <VRow class="mt-2">
             <VCol cols="12" md="6">
               <VTextField v-model="transferForm.from_path" label="源数据路径" density="compact" variant="outlined" hide-details
-                hint="源数据路径/目的数据路径（数据可见性映射）" persistent-hint />
+                hint="数据可见性映射（可选）：两个都留空 = 不做映射；只填一个视为配置错误" persistent-hint />
             </VCol>
             <VCol cols="12" md="6">
               <VTextField v-model="transferForm.to_path" label="目的数据路径" density="compact" variant="outlined" hide-details
-                hint="源数据路径/目的数据路径（数据可见性映射）" persistent-hint />
+                hint="数据可见性映射（可选）：两个都留空 = 不做映射；只填一个视为配置错误" persistent-hint />
             </VCol>
           </VRow>
           <div class="dm-section-title mt-4">筛选条件</div>

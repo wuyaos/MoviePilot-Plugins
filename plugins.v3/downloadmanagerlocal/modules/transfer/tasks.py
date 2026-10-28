@@ -66,8 +66,13 @@ def _normalize_task(raw: Any, index: int) -> Optional[Dict[str, Any]]:
     if task["from_downloader"] == task["to_downloader"]:
         logger.warning(f"【PT下载中心:转移做种】任务「{task['name']}」源与目的下载器相同，已忽略")
         return None
-    if not task["from_path"] or not task["to_path"]:
-        logger.warning(f"【PT下载中心:转移做种】任务「{task['name']}」缺少数据映射路径，已忽略")
+    # 路径映射是「可选」能力：两者都为空的语义 = 不做映射（与 utils/path.py 的
+    # convert_save_path 契约 C1 一致——任一入参为空则原样返回）。只有「只填了一个」
+    # 才是真的配置错误：那会让映射方向不明，必须拒绝。
+    if bool(task["from_path"]) != bool(task["to_path"]):
+        logger.warning(
+            f"【PT下载中心:转移做种】任务「{task['name']}」数据映射路径需同时填写或同时留空，已忽略"
+        )
         return None
     return task
 
