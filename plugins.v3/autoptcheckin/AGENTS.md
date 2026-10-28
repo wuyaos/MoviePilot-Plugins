@@ -71,6 +71,7 @@
 - 新执行/API/历史结果只输出 signed/login_ok/failed/pending/skipped/cancelled。signed 无 reason 为本次成功，already_signed 表示此前已签；failed 可带 auth_failed；pending 的 reason 为 result_unknown/network_error/maintenance/protocol_pending。
 - 原始适配器枚举仅在统一边界转换，消息、奖励与回读证据保留。归一必须幂等；未知原值归 pending 并保留 raw_status 诊断，不能猜失败。
 - 旧历史只兼容读取，不批量改写。旧 track.state v1 的 signed 是旧 already；v2 新 signed 不再重解释。新历史显式保存 reason 字段区分新旧记录。
+- 兼容层的删除条件（四条全满足才可动手，涉及 `core/state_store.py` 的 `_compat_legacy_entries`、`core/models.py` 的旧 already 解释、`core/history.py` 旧值读取、`core/native.py` 的 `cookies.refreshed` 迁移）：① `track.state` 已无 `version == 1` 数据；② history 14 天保留窗口内所有记录都带 reason 字段；③ `cookies.refreshed.migrated` 已置位且旧键为空；④ `track.state` 不再出现旧审批 reason。删除是不可逆的数据语义变更，动手前先导出 `track.state` 与 history 备份。
 - 轨道仍为 success/failed/pending/disabled；pending 下轮重入队、不当场重试。锁忙 skipped/取消只写流水，不覆盖结论。
 - 憨憨的 register-now-info 声明必须使用 XPath class-token 匹配，不能把 CSS 选择器交给 lxml.xpath；attendance 前读/动作/回读使用相同 URL，测试必须按调用顺序提供响应。
 - U2 按每日 9 点重置：9 点前 read_before 的 ALREADY 一律降级 unconfirmed（昨日状态不作为今日证据，修复 01:00 误判已签）；9 点后表单提交「一切随缘」随机选项。
