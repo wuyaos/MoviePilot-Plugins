@@ -65,8 +65,13 @@ def test_response_json_exact_receipt_not_homepage(cls, field, value):
     assert site.record_spec.source == "response_json"
     assert ctx.read_record(LoginPage(payload, site.url), site.record_spec).status == "signed"
     assert ctx.record_result(LoginPage(payload, site.url), site.record_spec).status == "success"
-    for data in [{field: False}, {field: "failed"}, {field: "successfully"},
-                 {field: "0"}, {field: 1}, {}, [], {field: {"state": "success"}}]:
+    invalid = [{field: "failed"}, {field: "successfully"}, {field: "0"},
+               {field: 1}, {}, [], {field: {"state": "success"}}]
+    if cls is OpenCD:
+        assert ctx.read_record(LoginPage(json.dumps({field: False}), site.url), site.record_spec).status == "unsigned"
+    else:
+        invalid.append({field: False})
+    for data in invalid:
         assert ctx.read_record(LoginPage(json.dumps(data), site.url), site.record_spec).status == "unconfirmed"
     for text in ["broken JSON", '<p>success</p>', payload]:
         http = Http([text])

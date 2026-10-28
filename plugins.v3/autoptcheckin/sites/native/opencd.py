@@ -15,8 +15,20 @@ class OpenCD(ApiSignin):
     url = 'https://www.open.cd/'
     attendance_path = '/'
     hook_implemented = True
-    record_spec = RecordSpec(source="response_json", response_field='state', status_map={'success': 'signed'})
+    record_spec = RecordSpec(source="response_json", response_field='state', status_map={'success': 'signed', False: 'unsigned'})
     signed_marker = '//a[@href="/plugin_sign-in.php?cmd=show-log" or @href="plugin_sign-in.php?cmd=show-log"]'
+
+    @staticmethod
+    def _readable_unsigned(result):
+        if result.status.value == 'failed' and result.message == 'False':
+            result.message = '当前未签到'
+        return result
+
+    def read_before(self, ctx, page):
+        return self._readable_unsigned(super().read_before(ctx, page))
+
+    def receipt_result(self, ctx, receipt):
+        return self._readable_unsigned(super().receipt_result(ctx, receipt))
 
     def discover_form(self, ctx, page):
         page = ctx.http.get(self.url + 'plugin_sign-in.php')

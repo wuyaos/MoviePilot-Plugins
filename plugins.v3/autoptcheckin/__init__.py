@@ -38,7 +38,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.3.4"
+    plugin_version = "4.3.5"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -194,7 +194,7 @@ class AutoPtCheckin(_PluginBase):
             if isinstance(values, list):
                 config[key] = list(dict.fromkeys(str(v) for v in values))
         if isinstance(config.get("site_cloudsign"), list):
-            # 云签仅有三站实现：塞入任意其他 ID 的脏项静默忽略，不保留。
+            # 云签仅保留已实现站点：塞入任意其他 ID 的脏项静默忽略，不保留。
             config["site_cloudsign"] = [v for v in config["site_cloudsign"] if v in CLOUD_SITES]
         for key in ("site_proxy", "site_emulate"):
             values = config.get(key)

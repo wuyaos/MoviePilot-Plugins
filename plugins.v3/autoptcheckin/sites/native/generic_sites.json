@@ -461,7 +461,9 @@
       "human_verify",
       "sign_button"
     ],
-    "headful": true
+    "headful": true,
+    "success_texts": ["签到成功"],
+    "signed_marker": "//h2[normalize-space(.)='签到成功']"
   },
   {
     "id": "baozi",

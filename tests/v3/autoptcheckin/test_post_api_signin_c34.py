@@ -256,7 +256,11 @@ def test_api_unknown_or_wrong_type_is_not_success(sid, value):
     if sid == 'yema' and value is True:
         return
     http = Http(site, receipt=json.dumps({site.record_spec.response_field: value}))
-    assert site.signin(context(site, http)).status == 'unconfirmed'
+    result = site.signin(context(site, http))
+    if sid == 'opencd' and value is False:
+        assert result.status == 'failed' and result.message == '当前未签到'
+    else:
+        assert result.status == 'unconfirmed'
     assert len(http.actions) == 1 and http.reads == 2
 
 
@@ -280,3 +284,12 @@ def test_ttg_timestamp_must_have_exactly_ten_digits():
         http = Http(site, before=initial('ttg').replace('1234567890', timestamp))
         assert site.signin(context(site, http)).status == 'protocol_pending'
         assert not http.actions
+
+
+def test_vclib_signed_heading_is_pre_submit_evidence():
+    site = get_native_module('vclib')
+    http = Http(site)
+    page = LoginPage('<h2>签到成功</h2>', site.url + 'attendance.php')
+    result = site.read_before(context(site, http), page)
+    assert result.status == 'already'
+    assert result.evidence.status == 'signed'

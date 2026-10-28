@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Browserless 云签引擎（BQL）：audiences / mua_xloli / vclib 三个 CF 盾站。
+"""Browserless 云签引擎（BQL）：audiences / mua_xloli / ourbits / vclib 四个 CF 盾站。
 
 设计约束（与 qingyukb/MoviePilot-Plugins 的差异）：
 - 不引入其 200 行全量注入脚本与通用规则引擎，只保留「solve → reconnect → 注入 → 提交 → verify」
-  主干与三站小规则；签到结果判定用各站关键词在云签会话内完成（CF 挡住本地 HTTP 回读，
+  主干与四站小规则；签到结果判定用各站关键词在云签会话内完成（CF 挡住本地 HTTP 回读，
   无法复用 RecordSpec 回读，这一点是有意偏离并在 AGENTS.md 记录）。
 - 失败分类遵守插件既有语义：solve/验证未完成 → protocol_pending（下轮重入队）；
   BQL 请求/鉴权/网络失败 → network_error；仅提交后回读明确未签 → failed。
@@ -28,7 +28,7 @@ DEFAULT_RECONNECT_WAIT_MS = 60000
 DEFAULT_SOLVE_TIMEOUT_MS = 40000
 
 # 走云签的站点（CF 盾仿真站）；配置了 token 才实际分流
-CLOUD_SITES = ("audiences", "mua_xloli", "vclib")
+CLOUD_SITES = ("audiences", "mua_xloli", "ourbits", "vclib")
 
 # 各站小规则：路径 / 提交方式 / 等待预算 / 判定关键词。
 # submit=auto 两段式（solve 拿 token → reconnect 留会话 → 第二段注入+兜底 POST+verify）；
@@ -61,6 +61,20 @@ CLOUD_RULES: dict[str, dict[str, Any]] = {
         "verify_wait": 15000,
         "success": ["签到成功", "簽到成功"],
         "already": ["今日已签到", "今天已经签到", "您今天已经签到", "已经签到", "已签到"],
+        "pending": [],
+    },
+    "ourbits": {
+        # 2026-10-28: qnap 直连被 CF HTTP 403 拦截；转 browserless 云签。
+        "path": "/attendance.php",
+        "submit": "auto",
+        "before_wait": 5000,
+        "solve_timeout": DEFAULT_SOLVE_TIMEOUT_MS,
+        "auto_wait": 30000,
+        "wait": 8000,
+        "verify": "/attendance.php",
+        "verify_wait": 10000,
+        "success": ["签到成功", "签到已得"],
+        "already": ["今日已签到", "今天已经签到", "已经签到", "已签到"],
         "pending": [],
     },
     "vclib": {

@@ -44,7 +44,7 @@ def test_session_endpoint_keeps_path_and_appends_token():
 # ---- 配置矩阵与 Cookie 解析 ----
 
 def test_enabled_and_configured():
-    assert cloudsign.enabled('audiences') and cloudsign.enabled('vclib')
+    assert cloudsign.enabled('audiences') and cloudsign.enabled('vclib') and cloudsign.enabled('ourbits')
     assert not cloudsign.enabled('52pt') and not cloudsign.enabled('hdsky')
     assert not cloudsign.configured({})
     assert not cloudsign.configured({'browserless_url': cloudsign.DEFAULT_BROWSERLESS_URL, 'browserless_token': ''})
