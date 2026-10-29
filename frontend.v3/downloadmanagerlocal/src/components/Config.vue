@@ -149,12 +149,17 @@ function askPaneReset(key) {
 
 function confirmPaneReset() {
   for (const k of PANE_RESET_KEYS[paneResetTarget.value] || []) {
-    form[k] = JSON.parse(JSON.stringify(defaults[k]))
+    form[k] = OBSERVE_ONLY_KEYS.includes(k) ? true : JSON.parse(JSON.stringify(defaults[k]))
   }
   if (paneResetTarget.value === 'transfer') {
     transferTasks.value = parseTransferTasks(form.transfer_tasks)
     transferExt.value = parseDownloaderExt(form.downloader_ext)
   }
+  if (paneResetTarget.value === 'tag') {
+    tagCatPairs.value = parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename)
+    tagTrackerPairs.value = []
+  }
+  if (paneResetTarget.value === 'hr') syncHrSiteRulesFromForm()
   paneResetDialog.value = false
 }
 
@@ -164,7 +169,7 @@ const mainTabs = [
   { key: 'remover', title: '自动删种', icon: 'mdi-delete-clock-outline', desc: '按时间、分享率、体积等条件自动暂停或删除种子。' },
   { key: 'failclean', title: '失败清理', icon: 'mdi-broom', desc: '整理失败时立即清理源文件与下载历史，并定时清理重复残留。' },
   { key: 'rename', title: '种子重命名', icon: 'mdi-rename-box', desc: '转移后自动根据 TMDB 信息命名种子，失败记录进定时补查，也可手动补刀。' },
-  { key: 'tag', title: '站点标签', icon: 'mdi-tag-multiple', desc: '转移后自动根据 tracker 域名打站点标签。' },
+  { key: 'tag', title: '分类与标签', icon: 'mdi-tag-multiple', desc: '转移后自动根据 tracker 域名打站点标签。' },
   { key: 'upload', title: '上传限速', icon: 'mdi-upload-network-outline', desc: '设置下载器全局上传上限，并按需限制指定站点的合计上传速度。' },
 ]
 
@@ -176,16 +181,13 @@ const subTabs = {
   transfer: [
     { key: 'basic', title: '基础设置', icon: 'mdi-tune-variant' },
     { key: 'tasks', title: '任务列表', icon: 'mdi-playlist-check' },
-    { key: 'seed_basic', title: '做种校验', icon: 'mdi-check-circle-outline' },
   ],
   hr: [
     { key: 'hr_basic', title: '基础设置', icon: 'mdi-tune-variant' },
     { key: 'hr_sites', title: '站点规则', icon: 'mdi-home-outline' },
-    { key: 'hr_advanced', title: '高级设置', icon: 'mdi-shield-check-outline' },
   ],
   remover: [
     { key: 'remover_basic', title: '基础设置', icon: 'mdi-tune-variant' },
-    { key: 'remover_conditions', title: '删除条件', icon: 'mdi-filter-variant' },
   ],
   failclean: [{ key: 'failclean_basic', title: '基础设置', icon: 'mdi-tune-variant' }],
   rename: [
@@ -197,6 +199,12 @@ const subTabs = {
     { key: 'mapping', title: '映射规则', icon: 'mdi-link-variant' },
   ],
 }
+
+// 历史子页跳转仍落在保留内容的新位置。
+const legacySubTabs = { seed_basic: 'basic', hr_advanced: 'hr_basic', remover_conditions: 'remover_basic' }
+watch(activeSub, key => {
+  if (legacySubTabs[key]) activeSub.value = legacySubTabs[key]
+}, { flush: 'sync' })
 
 const currentMain = computed(() => mainTabs.find(i => i.key === activeMain.value) || mainTabs[0])
 const currentSubs = computed(() => subTabs[activeMain.value] || [])
@@ -274,10 +282,15 @@ function parseCustomSiteLabels(text) {
 }
 
 function serializeCustomSiteLabels(pairs) {
-  return pairs
+  // 未出现在映射编辑器中的旧自定义域名不属于本次行编辑，继续原样保留。
+  const editedDomains = new Set([...parseTrackerPairs(form.tag_tracker_mappings_str), ...pairs]
+    .map(p => String(p.site || p.tracker || '').trim().toLowerCase()))
+  const retained = String(form.tag_custom_sites_str || '').split('\n')
+    .filter(line => line.trim() && !editedDomains.has(line.split('->')[0].trim().toLowerCase()))
+  const mapped = pairs
     .filter(p => !siteNameByDomain(p.site || p.tracker) && String(p.custom || '').trim())
     .map(p => `${(p.site || p.tracker || '').trim().toLowerCase()} -> ${String(p.custom).trim()}`)
-    .join('\n')
+  return [...retained, ...mapped].join('\n')
 }
 
 function siteNameByDomain(domain) {
@@ -287,6 +300,14 @@ function siteNameByDomain(domain) {
   return hit?.title || ''
 }
 
+
+function parseTrackerEditor() {
+  const customLabels = parseCustomSiteLabels(form.tag_custom_sites_str)
+  return parseTrackerPairs(form.tag_tracker_mappings_str).map(p => ({
+    ...p,
+    custom: customLabels[String(p.site || p.tracker || '').trim().toLowerCase()] || '',
+  }))
+}
 function addCatPair() {
   tagCatPairs.value.push({ from: '', to: '' })
 }
@@ -335,6 +356,7 @@ function parseDownloaderExt(raw) {
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
   return Object.fromEntries(Object.entries(parsed).map(([name, value]) => [name, {
+    ...value,
     webui_url: String(value?.webui_url || ''),
     source_plugin: String(value?.source_plugin || ''),
   }]))
@@ -427,6 +449,7 @@ function confirmTransferTask() {
   const index = transferEditing.value
   const task = {
     ...transferTaskDefaults,
+    ...(index >= 0 ? transferTasks.value[index] : {}),
     name: String(transferForm.name || '').trim() || `任务${index >= 0 ? index + 1 : transferTasks.value.length + 1}`,
     enabled: transferForm.enabled !== false,
     from_downloader: from,
@@ -451,6 +474,7 @@ function confirmTransferTask() {
     transferExt.value = {
       ...transferExt.value,
       [from]: {
+        ...transferExt.value[from],
         webui_url: String(transferForm.ext_webui_url || '').trim(),
         source_plugin: String(transferForm.ext_source_plugin || '').trim(),
       },
@@ -494,9 +518,13 @@ function buildSavePayload() {
     rename_downloaders: [...(form.rename_downloaders || [])],
     tag_downloaders: [...(form.tag_downloaders || [])],
     tag_downloaders: [...(form.tag_downloaders || [])],
-    ...serializeCatPairs(tagCatPairs.value),
-    tag_tracker_mappings_str: serializeTrackerPairs(tagTrackerPairs.value),
-    tag_custom_sites_str: serializeCustomSiteLabels(tagTrackerPairs.value),
+    // 未编辑的映射保留原串/数组（含未收录旧值），不因保存其他页而重排。
+    ...(JSON.stringify(tagCatPairs.value) === JSON.stringify(parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename))
+      ? {} : serializeCatPairs(tagCatPairs.value)),
+    ...(JSON.stringify(tagTrackerPairs.value) === JSON.stringify(parseTrackerEditor()) ? {} : {
+      tag_tracker_mappings_str: serializeTrackerPairs(tagTrackerPairs.value),
+      tag_custom_sites_str: serializeCustomSiteLabels(tagTrackerPairs.value),
+    }),
   }
 }
 
@@ -1245,14 +1273,9 @@ Object.keys(form).forEach(k => delete form[k])
   form.rename_downloaders = [...(v?.rename_downloaders || [])]
   form.tag_downloaders = [...(v?.tag_downloaders || [])]
   form.tag_all_cat = [...(v?.tag_all_cat || [])]
-  form.tag_all_cat = [...(v?.tag_all_cat || [])]
   form.tag_all_cat_rename = [...(v?.tag_all_cat_rename || [])]
   tagCatPairs.value = parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename)
-  const customLabels = parseCustomSiteLabels(form.tag_custom_sites_str)
-  tagTrackerPairs.value = parseTrackerPairs(form.tag_tracker_mappings_str).map(p => ({
-    ...p,
-    custom: customLabels[String(p.site || p.tracker || '').trim().toLowerCase()] || '',
-  }))
+  tagTrackerPairs.value = parseTrackerEditor()
   syncHrSiteRulesFromForm()
   transferTasks.value = parseTransferTasks(form.transfer_tasks)
   transferExt.value = parseDownloaderExt(form.downloader_ext)
@@ -1419,6 +1442,25 @@ Object.keys(form).forEach(k => delete form[k])
                   <div class="dm-hint">仅 qB 目的端生效：修改显示名，不动磁盘文件；Transmission 目的端自动跳过</div>
                 </div>
               </div>
+            <!-- ═══ 做种校验 v3.0.15 · 基础设置 ═══ -->
+              <div class="dm-section-title mt-4">做种校验</div>
+              <div  class="dm-hint mb-4">做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。</div>
+              <div class="dm-field-row">
+                <div class="dm-field dm-field--toggle">
+                  <VSwitch density="compact" v-model="form.seed_autostart" color="primary" inset hide-details label="自动开始做种" />
+                </div>
+                <div class="dm-field dm-field--toggle">
+                  <VSwitch density="compact" v-model="form.seed_skipverify" color="primary" inset hide-details label="跳过校验" />
+                </div>
+              </div>
+              <div class="dm-field-row">
+                <div class="dm-field dm-field--number">
+                  <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_check_interval" label="检查间隔（秒）" type="number" variant="outlined" hint="建议 60 秒" persistent-hint />
+                </div>
+                <div class="dm-field dm-field--number">
+                  <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_max_wait_minutes" label="最长等待（分钟）" type="number" variant="outlined" hint="超时后移出队列" persistent-hint />
+                </div>
+              </div>
             </div>
 
             <!-- ═══ 转移做种 · 任务列表 ═══ -->
@@ -1519,6 +1561,18 @@ Object.keys(form).forEach(k => delete form[k])
                     hint="只跟踪这些站点的种子（按站点名）；留空表示全部站点" persistent-hint />
                 </div>
               </div>
+              <div class="dm-section-title mt-4">运行调度</div>
+              <div class="dm-field-row">
+                <div class="dm-field dm-field--number">
+                  <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_check_period" label="检查间隔（分钟）" type="number" variant="outlined"
+                    hint="默认 10 分钟" persistent-hint />
+                </div>
+                <div class="dm-field">
+                  <VCronField density="compact" v-model="form.hr_notify_summary_cron" :disabled="form.hr_notify === 'none'" label="汇总计划" variant="outlined" hide-details />
+                </div>
+              </div>
+              <details class="dm-more mt-4">
+                <summary class="dm-section-title">更多设置</summary>
               <div class="dm-field-row">
                 <div class="dm-field">
                   <VTextField density="compact" v-model="form.hr_hit_and_run_tag" label="H&R 标签" variant="outlined"
@@ -1540,6 +1594,24 @@ Object.keys(form).forEach(k => delete form[k])
                 </div>
               </div>
 
+              <div  class="dm-hint mb-3">
+                H&R 纳管且未达标的任务，会在自动删种、整理失败删源、转移源端删除三条破坏性路径上被统一跳过。
+              </div>
+              <div class="dm-field-row">
+                <div class="dm-field dm-field--toggle">
+                  <VSwitch density="compact" v-model="form.hr_protection_enabled" color="primary" inset hide-details label="删除保护" />
+              <div v-if="!form.hr_protection_enabled" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />关闭删除保护后，未达标 H&R 任务可能被删除。</div>
+                </div>
+                <div class="dm-field dm-field--number">
+                  <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_auto_cleanup_days" label="记录保留（天）" type="number" variant="outlined"
+                    hint="达标/失效记录保留天数，默认 15" persistent-hint />
+                </div>
+              </div>
+              </details>
+            </div>
+
+            <!-- ═══ H&R · 站点规则 ═══ -->
+            <div v-show="activeSub === 'hr_sites'" class="dm-pane">
               <div class="dm-section-title mt-4">考核规则</div>
               <div class="dm-hr-global-card mt-1">
                 <div class="dm-hr-global-head">
@@ -1576,20 +1648,6 @@ Object.keys(form).forEach(k => delete form[k])
                 </div>
               </div>
 
-              <div class="dm-section-title mt-4">运行调度</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_check_period" label="检查间隔（分钟）" type="number" variant="outlined"
-                    hint="默认 10 分钟" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VCronField density="compact" v-model="form.hr_notify_summary_cron" label="汇总计划" variant="outlined" hide-details />
-                </div>
-              </div>
-            </div>
-
-            <!-- ═══ H&R · 站点规则 ═══ -->
-            <div v-show="activeSub === 'hr_sites'" class="dm-pane">
               <div class="dm-section-title">站点规则</div>
               <div class="dm-field-row">
                 <div class="dm-field dm-field--full">
@@ -1609,7 +1667,7 @@ Object.keys(form).forEach(k => delete form[k])
                         label="显示继承字段" />
                       <VBtn size="small" variant="text" prepend-icon="mdi-refresh" :loading="hrPresetsLoading"
                         @click="loadHrPresets(true)">重载预设</VBtn>
-                      <VBtn size="small" color="primary" variant="tonal" prepend-icon="mdi-home-plus-outline"
+                      <VBtn :disabled="!form.hr_enable_site_config" size="small" color="primary" variant="tonal" prepend-icon="mdi-home-plus-outline"
                         @click="hrOpenAddDialog">添加站点</VBtn>
                     </div>
                   </div>
@@ -1651,7 +1709,7 @@ Object.keys(form).forEach(k => delete form[k])
                           <VChip size="x-small" variant="tonal" :color="row.sourceColor">{{ row.sourceLabel }}</VChip>
                         </div>
                         <div>
-                          <VSwitch density="compact" :model-value="row.enabled" color="primary" inset hide-details
+                          <VSwitch :disabled="!form.hr_enable_site_config" density="compact" :model-value="row.enabled" color="primary" inset hide-details
                             :title="row.blocked ? '已停用：该站规则不生效，回退全局规则' : '启用中；关闭会写入影子条目，该站回退全局规则'"
                             @update:model-value="hrSetSiteEnabled(row.name, $event)" />
                           </div>
@@ -1659,24 +1717,24 @@ Object.keys(form).forEach(k => delete form[k])
                           <template v-if="row.custom">
                             <VBtn size="small" variant="text" :prepend-icon="row.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
                               @click="hrToggleExpanded(row.name)">{{ row.expanded ? '收起' : '编辑' }}</VBtn>
-                            <VBtn size="small" variant="text" color="primary" prepend-icon="mdi-delete-outline"
+                            <VBtn :disabled="!form.hr_enable_site_config" size="small" variant="text" color="primary" prepend-icon="mdi-delete-outline"
                               :title="row.preset ? '删除自定义条目后该站回退内置预设' : '删除该自定义站点'"
                               @click="hrRemoveCustomSite(row.name)">删除站点</VBtn>
                           </template>
-                          <VBtn size="small" v-else variant="text" prepend-icon="mdi-content-copy"
+                          <VBtn :disabled="!form.hr_enable_site_config" size="small" v-else variant="text" prepend-icon="mdi-content-copy"
                             title="把内置预设值复制为自定义条目后逐字段调整" @click="hrCopyPresetToCustom(row.name)">复制规则</VBtn>
                         </div>
                       </div>
                       <div v-if="row.custom && row.expanded" class="dm-hr-editor">
                         <div class="dm-hr-editor-grid">
-                          <VTextField density="compact" class="dm-number-input" v-for="field in hrNumberFields" :key="field.key" :model-value="hrRuleNumber(row.entry, field.key)"
+                          <VTextField :disabled="!form.hr_enable_site_config" density="compact" class="dm-number-input" v-for="field in hrNumberFields" :key="field.key" :model-value="hrRuleNumber(row.entry, field.key)"
                             @update:model-value="hrSetRuleNumber(row.name, field.key, $event)" :label="field.label" type="number" variant="outlined" :hint="`留空表示继承全局（${hrGlobalText(field.key)}）`"
                             persistent-hint />
-                          <VSelect density="compact" v-for="field in hrFlagFields" :key="field.key" :model-value="hrRuleFlag(row.entry, field.key)"
+                          <VSelect :disabled="!form.hr_enable_site_config" density="compact" v-for="field in hrFlagFields" :key="field.key" :model-value="hrRuleFlag(row.entry, field.key)"
                             @update:model-value="hrSetRuleFlag(row.name, field.key, $event)" :items="hrTriStateItems" :label="field.label" variant="outlined" hide-details />
                         </div>
                         <div class="dm-hr-trackers">
-                          <VCombobox density="compact" :model-value="hrRuleTrackers(row.entry)" @update:model-value="hrSetRuleTrackers(row.name, $event)"
+                          <VCombobox :disabled="!form.hr_enable_site_config" density="compact" :model-value="hrRuleTrackers(row.entry)" @update:model-value="hrSetRuleTrackers(row.name, $event)"
                             label="Tracker 域名" variant="outlined" multiple chips
                             closable-chips clearable placeholder="完整 URL 或裸域名，如 https://tracker.example.com/announce"
                             hint="MP 站点库识别不出站点时，按这里的域名兜底匹配该自定义站点" persistent-hint />
@@ -1684,14 +1742,14 @@ Object.keys(form).forEach(k => delete form[k])
                         <div class="dm-hr-tiers">
                           <div class="dm-hr-tiers-head">
                             <span>体积分档</span><span class="dm-hint">按种子 GiB 匹配；上限为 0 表示不限，需置于末位。</span>
-                            <VBtn size="small" variant="text" prepend-icon="mdi-plus" @click="hrAddTier(row.name)">添加分档</VBtn>
+                            <VBtn :disabled="!form.hr_enable_site_config" size="small" variant="text" prepend-icon="mdi-plus" @click="hrAddTier(row.name)">添加分档</VBtn>
                           </div>
                           <div v-for="(tier, tierIndex) in row.entry.hr_size_tiers || []" :key="`${row.name}-${tierIndex}`"
                             class="dm-hr-tier-row">
-                            <VTextField density="compact" class="dm-number-input" v-for="field in hrTierFields" :key="field.key" :model-value="hrTierNumber(tier, field.key)"
+                            <VTextField :disabled="!form.hr_enable_site_config" density="compact" class="dm-number-input" v-for="field in hrTierFields" :key="field.key" :model-value="hrTierNumber(tier, field.key)"
                               @update:model-value="hrSetTierNumber(row.name, tierIndex, field.key, $event)" :label="field.label"
                               type="number" variant="outlined" hide-details />
-                            <VBtn size="small" aria-label="删除该分档" icon="mdi-delete-outline" variant="text" color="primary" title="删除该分档"
+                            <VBtn :disabled="!form.hr_enable_site_config" size="small" aria-label="删除该分档" icon="mdi-delete-outline" variant="text" color="primary" title="删除该分档"
                               @click="hrRemoveTier(row.name, tierIndex)" />
                           </div>
                           <div v-if="!(row.entry.hr_size_tiers || []).length" class="dm-hint">
@@ -1707,30 +1765,12 @@ Object.keys(form).forEach(k => delete form[k])
                     <VBtn size="small" variant="text" :prepend-icon="hrRawOpen ? 'mdi-chevron-up' : 'mdi-code-json'"
                       @click="hrRawOpen = !hrRawOpen">{{ hrRawOpen ? '收起 YAML' : '编辑 YAML' }}</VBtn>
                     <template v-if="hrRawOpen">
-                      <VTextarea density="compact" v-model="form.hr_site_config_str" :error-messages="hrRawError" label="站点规则" variant="outlined" rows="8" class="mt-1" hint="YAML 格式；解析失败时合并视图保留上一次可解析的规则" persistent-hint />
+                      <VTextarea :disabled="!form.hr_enable_site_config" density="compact" v-model="form.hr_site_config_str" :error-messages="hrRawError" label="站点规则" variant="outlined" rows="8" class="mt-1" hint="YAML 格式；解析失败时合并视图保留上一次可解析的规则" persistent-hint />
                       <div class="dm-hint">
                         顶层为列表，每项含 site_name 与 hr_duration / additional_seed_time / hr_deadline_days / hr_ratio / hr_upload_multiplier / hr_upload_gte_download / hr_active / hr_size_tiers / enabled；未设置字段回退全局规则，enabled: false 为影子条目。
                       </div>
                     </template>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- ═══ H&R · 高级设置 ═══ -->
-            <div v-show="activeSub === 'hr_advanced'" class="dm-pane">
-              <div class="dm-section-title">高级设置</div>
-              <div  class="dm-hint mb-3">
-                H&R 纳管且未达标的任务，会在自动删种、整理失败删源、转移源端删除三条破坏性路径上被统一跳过。
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.hr_protection_enabled" color="primary" inset hide-details label="删除保护" />
-              <div v-if="!form.hr_protection_enabled" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />关闭删除保护后，未达标 H&R 任务可能被删除。</div>
-                </div>
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_auto_cleanup_days" label="记录保留（天）" type="number" variant="outlined"
-                    hint="达标/失效记录保留天数，默认 15" persistent-hint />
                 </div>
               </div>
             </div>
@@ -1755,10 +1795,6 @@ Object.keys(form).forEach(k => delete form[k])
                 <div class="dm-field dm-field--toggle">
                   <VSwitch density="compact" v-model="form.remover_mponly" color="primary" inset hide-details label="仅 MoviePilot 任务" />
                 </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.remover_samedata" color="error" inset hide-details label="连带同名同大小任务" />
-              <div v-if="form.remover_samedata" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />命中规则时也处理同名同大小任务；删除动作可能影响文件。</div>
-                </div>
               </div>
               <div class="dm-field-row">
                 <div class="dm-field">
@@ -1773,11 +1809,7 @@ Object.keys(form).forEach(k => delete form[k])
                   <VCronField density="compact" v-model="form.remover_cron" label="执行计划" variant="outlined" hide-details />
                 </div>
               </div>
-            </div>
-
-            <!-- ═══ 自动删种 · 删除条件 ═══ -->
-            <div v-show="activeSub === 'remover_conditions'" class="dm-pane">
-              <div class="dm-section-title">删除条件</div>
+              <div class="dm-section-title mt-4">普通规则</div>
               <div class="dm-field-row">
                 <div class="dm-field">
                   <VTextField density="compact" v-model="form.remover_time" label="做种时长（小时）" variant="outlined" hint="多个以逗号分隔" persistent-hint />
@@ -1790,6 +1822,14 @@ Object.keys(form).forEach(k => delete form[k])
                 </div>
                 <div class="dm-field">
                   <VTextField density="compact" v-model="form.remover_upspeed" label="平均上传速度（KB/s）" variant="outlined" hint="多个以逗号分隔" persistent-hint />
+                </div>
+              </div>
+              <details class="dm-more mt-4">
+                <summary class="dm-section-title">更多条件与连带处理</summary>
+              <div class="dm-field-row">
+                <div class="dm-field dm-field--toggle">
+                  <VSwitch density="compact" v-model="form.remover_samedata" color="error" inset hide-details label="连带同名同大小任务" />
+              <div v-if="form.remover_samedata" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />命中规则时也处理同名同大小任务；删除动作可能影响文件。</div>
                 </div>
               </div>
               <div class="dm-field-row">
@@ -1814,6 +1854,7 @@ Object.keys(form).forEach(k => delete form[k])
                   <VTextField density="compact" v-model="form.remover_torrentstates" label="任务状态" variant="outlined" hint="多个以逗号分隔" persistent-hint />
                 </div>
               </div>
+              </details>
             </div>
 
             <!-- ═══ 失败清理 · 基础设置 ═══ -->
@@ -1842,10 +1883,10 @@ Object.keys(form).forEach(k => delete form[k])
               </div>
               <div class="dm-field-row">
                 <div class="dm-field">
-                  <VCronField density="compact" v-model="form.failcleanup_cron" label="巡检计划" variant="outlined" hide-details />
+                  <VCronField density="compact" v-model="form.failcleanup_cron" :disabled="!form.failcleanup_clean_repeat" label="巡检计划" variant="outlined" hide-details />
                 </div>
                 <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.failcleanup_retain_hours" label="残留保留（小时）" type="number" variant="outlined"
+                  <VTextField density="compact" class="dm-number-input" v-model.number="form.failcleanup_retain_hours" :disabled="!form.failcleanup_clean_repeat" label="残留保留（小时）" type="number" variant="outlined"
                     hint="仅清理早于该时长的重复残留路径，默认 6" persistent-hint />
                 </div>
               </div>
@@ -1903,15 +1944,19 @@ Object.keys(form).forEach(k => delete form[k])
               <div class="dm-field-row">
                 <div class="dm-field dm-field--full">
                   <VTextarea density="compact" v-model="form.rename_movie_format" label="电影模板" variant="outlined" rows="2" hint="Jinja2 模板" persistent-hint />
-                  <div class="dm-hint">可用变量: {{ title }}, {{ year }}, {{ original_name }}</div>
                 </div>
               </div>
               <div class="dm-field-row">
                 <div class="dm-field dm-field--full">
                   <VTextarea density="compact" v-model="form.rename_tv_format" label="电视剧模板" variant="outlined" rows="2" hint="Jinja2 模板" persistent-hint />
-                  <div class="dm-hint">可用变量: {{ title }}, {{ year }}, {{ season_episode }}, {{ original_name }}</div>
                 </div>
               </div>
+              <details class="dm-more mt-4">
+                <summary class="dm-section-title">可用变量与示例</summary>
+                <div class="dm-hint" v-pre>可用变量：{{ title }}、{{ year }}、{{ season_episode }}、{{ original_name }}；示例：{{ title }} ({{ year }}) - {{ original_name }}</div>
+              </details>
+              <details class="dm-more mt-4">
+                <summary class="dm-section-title">更多过滤</summary>
               <div class="dm-field-row">
                 <div class="dm-field dm-field--full">
                   <VTextarea density="compact" v-model="form.rename_exclude_dirs" label="排除目录" variant="outlined" rows="2" hint="每行一个目录" persistent-hint />
@@ -1922,6 +1967,7 @@ Object.keys(form).forEach(k => delete form[k])
                   <VTextarea density="compact" v-model="form.rename_hash_white_list" label="Hash 白名单" variant="outlined" rows="2" hint="每行一个种子 Hash" persistent-hint />
                 </div>
               </div>
+              </details>
             </div>
 
             <!-- ═══ 站点标签 · 基础设置 ═══ -->
@@ -1948,14 +1994,6 @@ Object.keys(form).forEach(k => delete form[k])
                 <div class="dm-field dm-field--toggle">
                   <VSwitch density="compact" v-model="form.tag_enable_category" color="primary" inset hide-details label="TMDB 二级分类" />
                 </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.tag_enable_del_tags" color="error" inset hide-details label="允许删除标签" />
-              <div v-if="form.tag_enable_del_tags" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />允许在标签补全时删除下载器标签。</div>
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.tag_rename_type" color="primary" inset hide-details label="分类方式" />
-                  <div class="dm-hint">开启：路径关键词；关闭：TMDB 识别。对应规则在映射规则中配置。</div>
-                </div>
               </div>
               <div class="dm-field-row">
                 <div class="dm-field">
@@ -1969,11 +2007,26 @@ Object.keys(form).forEach(k => delete form[k])
                   <VCronField density="compact" v-model="form.tag_interval_cron" label="补全计划" variant="outlined" hide-details />
                 </div>
               </div>
+              <details class="dm-more mt-4">
+                <summary class="dm-section-title">标签删除权限</summary>
+              <div class="dm-field-row">
+                <div class="dm-field dm-field--toggle">
+                  <VSwitch density="compact" v-model="form.tag_enable_del_tags" color="error" inset hide-details label="允许删除标签" />
+              <div v-if="form.tag_enable_del_tags" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />允许在标签补全时删除下载器标签。</div>
+                </div>
+              </div>
+              </details>
             </div>
 
             <!-- ═══ 站点标签 · 映射规则 ═══ -->
             <div v-show="activeSub === 'mapping'" class="dm-pane">
               <div class="dm-section-title">映射规则</div>
+              <div class="dm-field-row">
+                <div class="dm-field dm-field--toggle">
+                  <VSwitch density="compact" v-model="form.tag_rename_type" color="primary" inset hide-details label="分类方式" />
+                  <div class="dm-hint">开启：路径关键词；关闭：TMDB 识别。对应规则在映射规则中配置。</div>
+                </div>
+              </div>
               <div class="dm-field-row">
                 <div class="dm-field">
                   <VTextField density="compact" v-model="form.tag_catprefix" label="分类前缀" variant="outlined" hint="写入分类名前的前缀，留空不加" persistent-hint />
@@ -2069,27 +2122,6 @@ Object.keys(form).forEach(k => delete form[k])
               </div>
             </div>
 
-            <!-- ═══ 做种校验 v3.0.15 · 基础设置 ═══ -->
-            <div v-show="activeSub === 'seed_basic'" class="dm-pane">
-              <div class="dm-section-title">基础设置</div>
-              <div  class="dm-hint mb-4">做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.seed_autostart" color="primary" inset hide-details label="自动开始做种" />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.seed_skipverify" color="primary" inset hide-details label="跳过校验" />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_check_interval" label="检查间隔（秒）" type="number" variant="outlined" hint="建议 60 秒" persistent-hint />
-                </div>
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_max_wait_minutes" label="最长等待（分钟）" type="number" variant="outlined" hint="超时后移出队列" persistent-hint />
-                </div>
-              </div>
-            </div>
 
           </div>
         </section>
