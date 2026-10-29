@@ -1,0 +1,182 @@
+/* Tokens stay inside the plugin and its standalone presentation components. */
+:where(.dm-config, .dm-page, .dm-module-header, .dm-module-table, .dm-table-state) {
+  --dm-color-secondary: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  --dm-color-disabled: rgba(var(--v-theme-on-surface), var(--v-disabled-opacity));
+  --dm-color-warning: rgb(var(--v-theme-warning));
+  --dm-color-error: rgb(var(--v-theme-error));
+  --dm-text-title-size: 16px;
+  --dm-text-title-weight: 600;
+  --dm-text-title-line-height: 24px;
+  --dm-text-title-color: rgb(var(--v-theme-on-surface));
+  --dm-text-section-size: 14px;
+  --dm-text-section-weight: 600;
+  --dm-text-section-line-height: 20px;
+  --dm-text-section-color: rgb(var(--v-theme-primary));
+  --dm-text-label-size: 14px;
+  --dm-text-label-weight: 400;
+  --dm-text-label-line-height: 20px;
+  --dm-text-label-color: rgb(var(--v-theme-on-surface));
+  --dm-text-body-size: 14px;
+  --dm-text-body-weight: 400;
+  --dm-text-body-line-height: 20px;
+  --dm-text-body-color: rgb(var(--v-theme-on-surface));
+  --dm-text-table-head-size: 12px;
+  --dm-text-table-head-weight: 600;
+  --dm-text-table-head-line-height: 18px;
+  --dm-text-table-head-color: var(--dm-color-secondary);
+  --dm-text-button-size: 13px;
+  --dm-text-button-weight: 500;
+  --dm-text-button-line-height: 20px;
+  --dm-text-button-color: inherit;
+  --dm-text-badge-size: 12px;
+  --dm-text-badge-weight: 500;
+  --dm-text-badge-line-height: 18px;
+  --dm-text-badge-color: inherit;
+  --dm-text-help-size: 12px;
+  --dm-text-help-weight: 400;
+  --dm-text-help-line-height: 18px;
+  --dm-text-help-color: var(--dm-color-secondary);
+  --dm-control-height: 40px;
+  --dm-button-height: 32px;
+  --dm-number-width: 144px;
+  --dm-field-min-width: 240px;
+  --dm-field-gap: 12px;
+  --dm-section-gap: 16px;
+  --dm-panel-radius: 8px;
+}
+
+:where(.dm-config, .dm-page) .dm-section-title {
+  font-size: var(--dm-text-section-size);
+  font-weight: var(--dm-text-section-weight);
+  line-height: var(--dm-text-section-line-height);
+  color: var(--dm-text-section-color);
+  margin-bottom: 8px;
+}
+
+:where(.dm-config, .dm-page) .dm-hint {
+  font-size: var(--dm-text-help-size);
+  font-weight: var(--dm-text-help-weight);
+  line-height: var(--dm-text-help-line-height);
+  color: var(--dm-text-help-color);
+  margin-top: 2px;
+}
+
+:where(.dm-config, .dm-page) .v-messages__message {
+  font-size: var(--dm-text-help-size);
+  font-weight: var(--dm-text-help-weight);
+  line-height: var(--dm-text-help-line-height);
+  color: var(--dm-text-help-color);
+}
+
+/* Shared roles only target business content; navigation and floating-label transforms stay native. */
+:where(.dm-config, .dm-page) .dm-title {
+  font-size: var(--dm-text-title-size);
+  font-weight: var(--dm-text-title-weight);
+  line-height: var(--dm-text-title-line-height);
+  color: var(--dm-text-title-color);
+}
+:where(.dm-config, .dm-page) .dm-body-text {
+  font-size: var(--dm-text-body-size);
+  font-weight: var(--dm-text-body-weight);
+  line-height: var(--dm-text-body-line-height);
+  color: var(--dm-text-body-color);
+}
+:where(.dm-config, .dm-page) .v-field__input {
+  font-size: var(--dm-text-body-size);
+  font-weight: var(--dm-text-body-weight);
+  line-height: var(--dm-text-body-line-height);
+}
+:where(.dm-config, .dm-page) .v-label:not(.v-field-label--floating) {
+  font-size: var(--dm-text-label-size);
+  font-weight: var(--dm-text-label-weight);
+  line-height: var(--dm-text-label-line-height);
+}
+:where(.dm-config, .dm-page) .v-selection-control {
+  align-items: center;
+}
+:where(.dm-config, .dm-page) .v-selection-control .v-label {
+  align-self: center;
+  height: auto;
+  min-height: 0;
+}
+:where(.dm-config, .dm-page) .v-btn {
+  font-size: var(--dm-text-button-size);
+  font-weight: var(--dm-text-button-weight);
+  line-height: var(--dm-text-button-line-height);
+  letter-spacing: normal;
+  text-transform: none;
+}
+:where(.dm-config, .dm-page) .v-btn--size-small {
+  height: 32px;
+}
+:where(.dm-config, .dm-page) .v-btn--icon.v-btn--size-small {
+  width: 32px;
+  min-width: 32px;
+}
+:where(.dm-config, .dm-page) .v-chip {
+  font-size: var(--dm-text-badge-size);
+  font-weight: var(--dm-text-badge-weight);
+  line-height: var(--dm-text-badge-line-height);
+}
+:where(.dm-config, .dm-page) .dm-table th {
+  font-size: var(--dm-text-table-head-size);
+  font-weight: var(--dm-text-table-head-weight);
+  line-height: var(--dm-text-table-head-line-height);
+  color: var(--dm-text-table-head-color);
+}
+:where(.dm-config, .dm-page) .dm-table td {
+  font-size: var(--dm-text-body-size);
+  font-weight: var(--dm-text-body-weight);
+  line-height: var(--dm-text-body-line-height);
+  color: var(--dm-text-body-color);
+}
+:where(.dm-config, .dm-page) .dm-risk {
+  color: var(--dm-color-warning);
+}
+:where(.dm-config, .dm-page) .dm-risk .v-icon {
+  vertical-align: text-bottom;
+  margin-inline-end: 4px;
+}
+:where(.dm-config, .dm-page) .v-input--error .v-messages__message {
+  color: var(--dm-color-error);
+}
+:where(.dm-config, .dm-page) .v-input--disabled .v-label {
+  color: var(--dm-color-disabled);
+}
+:where(.dm-config, .dm-page) .dm-error {
+  color: var(--dm-color-error);
+}
+:where(.dm-config, .dm-page) .v-alert__content {
+  font-size: var(--dm-text-help-size);
+  font-weight: var(--dm-text-help-weight);
+  line-height: var(--dm-text-help-line-height);
+}
+
+.dm-downloader-badge[data-v-1ec087bc] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.dm-downloader-badge-mark[data-v-1ec087bc] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 26%;
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+}
+.dm-downloader-badge-mark--unknown[data-v-1ec087bc] {
+  color: var(--dm-color-secondary);
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+.dm-downloader-badge-name[data-v-1ec087bc] {
+  font-size: var(--dm-text-badge-size);
+  font-weight: var(--dm-text-badge-weight);
+  line-height: var(--dm-text-badge-line-height);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

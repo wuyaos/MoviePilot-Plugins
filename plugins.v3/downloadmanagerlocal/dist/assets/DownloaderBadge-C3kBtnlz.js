@@ -114,6 +114,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const DownloaderBadge = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-369b51a3"]]);
+const DownloaderBadge = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-1ec087bc"]]);
 
 export { DownloaderBadge as D, _export_sfc as _, postPluginJsonApi as a, getPluginApi as g, postPluginApi as p };

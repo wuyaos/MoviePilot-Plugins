@@ -2,11 +2,11 @@ const currentImports = {};
       const exportSet = new Set(['Module', '__esModule', 'default', '_export_sfc']);
       let moduleMap = {
 "./Config":()=>{
-      dynamicLoadingCss(["__federation_expose_Config-B82oEuzP.css","DownloaderBadge-BUiqiauh.css"], false, './Config');
-      return __federation_import('./__federation_expose_Config-D0KxFYW8.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},
+      dynamicLoadingCss(["__federation_expose_Config-BAAwq1iJ.css","DownloaderBadge-C_eZvmcy.css"], false, './Config');
+      return __federation_import('./__federation_expose_Config-CchwyciJ.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},
 "./Page":()=>{
-      dynamicLoadingCss(["__federation_expose_Page-C7v1bjO4.css","DownloaderBadge-BUiqiauh.css"], false, './Page');
-      return __federation_import('./__federation_expose_Page-OdumzmAu.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},};
+      dynamicLoadingCss(["__federation_expose_Page-B92GKccv.css","DownloaderBadge-C_eZvmcy.css"], false, './Page');
+      return __federation_import('./__federation_expose_Page-C2S9eZiN.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},};
       const seen = {};
       const dynamicLoadingCss = (cssFilePaths, dontAppendStylesToHead, exposeItemName) => {
         const metaUrl = import.meta.url;

@@ -1,0 +1,243 @@
+{
+  "capturedAt": "2026-10-29T16:52:19.642Z",
+  "fixture": "PASS: tiered H&R + rendered transfer task + save preservation; 958px density harness (not host acceptance)",
+  "viewport": {
+    "w": 1514,
+    "h": 912
+  },
+  "host": {
+    "x": 271,
+    "y": 26,
+    "w": 958,
+    "h": 745
+  },
+  "card": {
+    "x": 271,
+    "y": 26,
+    "w": 958,
+    "h": 745
+  },
+  "legacyFields": {
+    "widths": {
+      "12": 3,
+      "15": 1,
+      "27": 2,
+      "28": 7,
+      "52": 7,
+      "102": 2,
+      "104": 2,
+      "105": 2,
+      "117": 1,
+      "131": 6,
+      "142": 3,
+      "144": 24,
+      "145": 2,
+      "159": 1,
+      "197": 1
+    },
+    "x": [
+      451,
+      452,
+      463,
+      501,
+      523,
+      558,
+      560,
+      565,
+      568,
+      580,
+      607,
+      644,
+      646,
+      685,
+      699,
+      707,
+      708,
+      721,
+      786,
+      788,
+      1106,
+      1159,
+      1161
+    ],
+    "count": 64
+  },
+  "labels": {
+    "heights": {
+      "18": 3,
+      "20": 10
+    },
+    "byState": {
+      "floating": {
+        "18": 3
+      },
+      "resting": {
+        "20": 3
+      },
+      "selection": {
+        "20": 7
+      }
+    }
+  },
+  "inputFields": [
+    {
+      "x": 451,
+      "y": 289,
+      "w": 144,
+      "h": 40,
+      "label": "延迟时间（分钟）",
+      "numeric": true
+    },
+    {
+      "x": 451,
+      "y": 383,
+      "w": 144,
+      "h": 40,
+      "label": "兜底间隔（分钟）",
+      "numeric": true
+    },
+    {
+      "x": 451,
+      "y": 477,
+      "w": 144,
+      "h": 40,
+      "label": "源端扫描上限（个）",
+      "numeric": true
+    }
+  ],
+  "numberWidths": {
+    "144": 3
+  },
+  "inputHeights": {
+    "40": 3
+  },
+  "buttonHeights": {
+    "32": 3
+  },
+  "helpSignatures": {
+    "12px/400/18px": 11
+  },
+  "sectionGaps": [
+    {
+      "title": "触发与执行",
+      "gap": 16
+    },
+    {
+      "title": "转移后重命名",
+      "gap": 16
+    }
+  ],
+  "fieldGroups": [
+    {
+      "x": 451,
+      "y": 201,
+      "w": 758,
+      "h": 40,
+      "rowGap": "12px",
+      "columnGap": "12px",
+      "marginTop": "0px"
+    },
+    {
+      "x": 451,
+      "y": 289,
+      "w": 758,
+      "h": 82,
+      "rowGap": "12px",
+      "columnGap": "12px",
+      "marginTop": "0px"
+    },
+    {
+      "x": 451,
+      "y": 383,
+      "w": 758,
+      "h": 82,
+      "rowGap": "12px",
+      "columnGap": "12px",
+      "marginTop": "12px"
+    },
+    {
+      "x": 451,
+      "y": 477,
+      "w": 758,
+      "h": 82,
+      "rowGap": "12px",
+      "columnGap": "12px",
+      "marginTop": "12px"
+    },
+    {
+      "x": 451,
+      "y": 607,
+      "w": 758,
+      "h": 96,
+      "rowGap": "12px",
+      "columnGap": "12px",
+      "marginTop": "0px"
+    }
+  ],
+  "lastFieldToCardBottom": 125,
+  "lastFieldGroupToCardBottom": 69,
+  "numericX": [
+    451
+  ],
+  "switchOrder": [
+    {
+      "label": "已停用",
+      "labelX": 1106,
+      "switchX": 1159
+    },
+    {
+      "label": "启用",
+      "labelX": 451,
+      "switchX": 501
+    },
+    {
+      "label": "观察模式",
+      "labelX": 565,
+      "switchX": 644
+    },
+    {
+      "label": "发送通知",
+      "labelX": 708,
+      "switchX": 786
+    },
+    {
+      "label": "兜底扫描",
+      "labelX": 607,
+      "switchX": 685
+    },
+    {
+      "label": "暂停源任务",
+      "labelX": 607,
+      "switchX": 699
+    },
+    {
+      "label": "转移后重命名",
+      "labelX": 451,
+      "switchX": 558
+    }
+  ],
+  "sanity": {
+    "version": "3.7.3",
+    "fieldDisplay": "grid",
+    "rowDisplay": "flex",
+    "numericWidth": 144
+  },
+  "footer": {
+    "x": 271,
+    "y": 719,
+    "w": 958,
+    "h": 52
+  },
+  "scroll": {
+    "x": 431,
+    "y": 153,
+    "w": 798,
+    "h": 566,
+    "clientWidth": 798,
+    "scrollWidth": 798,
+    "clientHeight": 566,
+    "scrollHeight": 566
+  },
+  "pageOverflowX": false,
+  "errors": []
+}

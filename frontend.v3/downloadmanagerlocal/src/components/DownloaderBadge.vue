@@ -61,11 +61,14 @@ const markSize = computed(() => `${Number(props.size) || 20}px`)
 }
 
 .dm-downloader-badge-mark--unknown {
-  color: rgba(var(--v-theme-on-surface), 0.55);
+  color: var(--dm-color-secondary);
   background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .dm-downloader-badge-name {
+  font-size: var(--dm-text-badge-size);
+  font-weight: var(--dm-text-badge-weight);
+  line-height: var(--dm-text-badge-line-height);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

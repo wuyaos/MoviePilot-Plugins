@@ -1,0 +1,507 @@
+{
+  "viewport": {
+    "w": 390,
+    "h": 360
+  },
+  "rows": [
+    {
+      "main": "转移做种",
+      "tab": "基础设置",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [
+        144,
+        144,
+        144
+      ],
+      "inputHeights": [
+        40,
+        40,
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 213,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    },
+    {
+      "main": "转移做种",
+      "tab": "任务列表",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [],
+      "inputHeights": [],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 226,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    },
+    {
+      "main": "转移做种",
+      "tab": "做种校验",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [
+        144,
+        144
+      ],
+      "inputHeights": [
+        40,
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 269,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    },
+    {
+      "main": "H&R 管理",
+      "tab": "基础设置",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [
+        144,
+        144,
+        144,
+        144,
+        144,
+        144
+      ],
+      "inputHeights": [
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 257,
+      "pageOverflowX": false,
+      "unresolvedCron": 1
+    },
+    {
+      "main": "H&R 管理",
+      "tab": "站点规则",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [
+        144,
+        144,
+        144,
+        144,
+        144,
+        144,
+        144,
+        144
+      ],
+      "inputHeights": [
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 177,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    },
+    {
+      "main": "H&R 管理",
+      "tab": "高级设置",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [
+        144
+      ],
+      "inputHeights": [
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 269,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    },
+    {
+      "main": "自动删种",
+      "tab": "基础设置",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [],
+      "inputHeights": [
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 257,
+      "pageOverflowX": false,
+      "unresolvedCron": 1
+    },
+    {
+      "main": "自动删种",
+      "tab": "删除条件",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [],
+      "inputHeights": [
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 269,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    },
+    {
+      "main": "失败清理",
+      "tab": "基础设置",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [
+        144
+      ],
+      "inputHeights": [
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 269,
+      "pageOverflowX": false,
+      "unresolvedCron": 1
+    },
+    {
+      "main": "种子重命名",
+      "tab": "基础设置",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [
+        144
+      ],
+      "inputHeights": [
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 269,
+      "pageOverflowX": false,
+      "unresolvedCron": 1
+    },
+    {
+      "main": "种子重命名",
+      "tab": "模板与过滤",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [],
+      "inputHeights": [
+        40,
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 269,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    },
+    {
+      "main": "站点标签",
+      "tab": "基础设置",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [],
+      "inputHeights": [
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 257,
+      "pageOverflowX": false,
+      "unresolvedCron": 1
+    },
+    {
+      "main": "站点标签",
+      "tab": "映射规则",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [],
+      "inputHeights": [
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": -286,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    },
+    {
+      "main": "上传限速",
+      "tab": "基础设置",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [
+        144
+      ],
+      "inputHeights": [
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 217,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    },
+    {
+      "main": "上传限速",
+      "tab": "限速规则",
+      "host": {
+        "x": 16,
+        "y": 26,
+        "w": 343,
+        "h": 312
+      },
+      "numberWidths": [
+        144,
+        144
+      ],
+      "inputHeights": [
+        40,
+        40
+      ],
+      "helpSignatures": [
+        "12px/400/18px"
+      ],
+      "scrollWidth": 329,
+      "clientWidth": 329,
+      "footer": {
+        "x": 16,
+        "y": 286,
+        "w": 343,
+        "h": 52
+      },
+      "scrollBottom": 285,
+      "lastFieldBottom": 204,
+      "pageOverflowX": false,
+      "unresolvedCron": 0
+    }
+  ],
+  "errors": []
+}

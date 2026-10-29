@@ -1,20 +1,44 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>DML config initialization regression</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DML config initialization and density regression</title>
+<style>
+  body { margin: 0; }
+  #app { width: min(958px, calc(100% - 32px)); margin: 26px auto; }
+  #result { position: fixed; inset: auto 0 0; font: 12px/18px sans-serif; pointer-events: none; }
+</style>
 <div id="result">LOADING</div><div id="app"></div>
 <script type="module">
+import 'vuetify/styles'
 import { createApp, h, nextTick } from 'vue'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import Config from '../src/components/Config.vue'
+// Federation intentionally strips dependency CSS; the real host supplies it.
+// Restore the SAME installed Vuetify CSS only in this isolated development harness.
+import vuetifyPackage from 'vuetify/package.json'
+const rawStyles = import.meta.glob('/node_modules/vuetify/lib/**/*.css', { query: '?raw', import: 'default', eager: true })
+const dependencyStyles = [...document.querySelectorAll('style[data-vite-dev-id]')].filter(el => el.dataset.viteDevId.includes('/node_modules/vuetify/'))
+const firstProductStyle = document.querySelector('style[data-vite-dev-id]')
+for (const dependencyStyle of dependencyStyles) {
+  const key = '/node_modules/' + dependencyStyle.dataset.viteDevId.split('/node_modules/')[1]
+  if (!rawStyles[key]) throw new Error(`Missing installed Vuetify CSS: ${key}`)
+  const style = document.createElement('style')
+  style.dataset.harnessVuetify = key
+  style.textContent = rawStyles[key]
+  document.head.insertBefore(style, firstProductStyle)
+}
 const fixture = {
   transfer_tasks: JSON.stringify([{ name: 'seed-test', enabled: true, from_downloader: 'QB-test', to_downloader: 'TR-test' }]),
   hr_site_config_str: "- site_name: 'TestSite'\n  hr_size_tiers:\n    - max_size_gib: 100\n      hr_duration: 72\n",
+  upload_limit_downloaders: ['QB-test'],
+  upload_limit_downloader_limits_kib: { 'QB-test': 1024 },
+  upload_limit_site_rules: { TestSite: { limit_kib: 128 } },
 }
 const errors = []
 let saved
-const api = { get: async path => path.endsWith('/hr_presets') ? { presets: [] } : [] }
+const api = { get: async path => path.endsWith('/hr_presets') ? { presets: [] } : path.endsWith('/downloaders') ? [{ value: 'QB-test', title: 'QB-test', type: 'qbittorrent' }, { value: 'TR-test', title: 'TR-test', type: 'transmission' }] : [] }
 const app = createApp({ render: () => h(Config, { initialConfig: fixture, api, onSave: value => { saved = value } }) })
 app.config.errorHandler = error => errors.push(String(error))
 app.use(createVuetify({ components, directives }))
@@ -29,13 +53,20 @@ const clickText = async text => {
 try {
   await clickText('任务列表')
   if (!document.querySelector('.dm-config').textContent.includes('seed-test')) throw new Error('Transfer task missing')
-  await clickText('保存配置')
+  await clickText('保存')
   if (JSON.parse(saved.transfer_tasks)[0].name !== 'seed-test') throw new Error('Save lost transfer task')
   if (saved.hr_site_config_str !== fixture.hr_site_config_str) throw new Error('Save changed H&R YAML')
   if (errors.length) throw new Error(errors.join('; '))
-  document.querySelector('#result').textContent = 'PASS: tiered H&R + rendered transfer task + save preservation'
+  await clickText('基础设置')
+  const pane = [...document.querySelectorAll('.dm-pane')].find(el => el.getBoundingClientRect().width)
+  const field = pane.querySelector('.v-field')
+  const row = pane.querySelector('.v-row, .dm-field-row')
+  const sanity = { version: vuetifyPackage.version, fieldDisplay: getComputedStyle(field).display, rowDisplay: getComputedStyle(row).display, numericWidth: pane.querySelector('input[type="number"]').closest('.v-field').getBoundingClientRect().width }
+  if (sanity.fieldDisplay !== 'grid' || sanity.rowDisplay !== 'flex' || sanity.numericWidth >= 742) throw new Error(`Vuetify CSS sanity failed: ${JSON.stringify(sanity)}`)
+  window.dmlDensitySanity = sanity
+  document.querySelector('#result').textContent = 'PASS: tiered H&R + rendered transfer task + save preservation; 958px density harness (not host acceptance)'
 } catch (error) {
   document.querySelector('#result').textContent = `FAIL: ${error}`
 }
-window.dmlRegression = { errors, saved }
+window.dmlRegression = { errors, saved, clickText, nextTick }
 </script>

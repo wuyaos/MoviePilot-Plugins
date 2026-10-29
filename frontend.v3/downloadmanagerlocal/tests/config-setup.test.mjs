@@ -8,16 +8,21 @@ import { reactive, ref, computed, watch, effectScope, nextTick } from 'vue'
 const source = readFileSync(new URL('../src/components/Config.vue', import.meta.url), 'utf8')
 const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '')
 const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi',
-  `${script}\nreturn { form, transferTasks, hrCustomRules, hrRawError, saveConfig };`)
+  `${script}\nreturn { form, transferTasks, hrCustomRules, hrRawError, saveConfig, switchToData };`)
 
 function mount(initialConfig) {
   const scope = effectScope()
   const emitted = []
-  const props = reactive({ initialConfig, pluginId: 'DownloadManagerLocal' })
+  const calls = []
+  const props = reactive({
+    initialConfig,
+    pluginId: 'DownloadManagerLocal',
+    api: { put: async (path, payload) => { calls.push([path, payload]); return { success: true } } },
+  })
   try {
     const state = scope.run(() => setup(reactive, ref, computed, watch, () => {}, () => props,
       () => (...args) => emitted.push(args), () => { throw new Error('Unexpected network request') }))
-    return { ...state, props, emitted, stop: () => scope.stop() }
+    return { ...state, props, emitted, calls, stop: () => scope.stop() }
   } catch (error) {
     scope.stop()
     throw error
@@ -33,15 +38,16 @@ const configs = [
   ['invalid H&R YAML', { hr_site_config_str: 'not a site rule' }],
 ]
 for (const [name, config] of configs) {
-  test(`initial setup and save preserve transfer tasks with ${name}`, () => {
+  test(`initial setup and save preserve transfer tasks with ${name}`, async () => {
     const state = mount({ ...config, transfer_tasks: JSON.stringify(tasks) })
     try {
       assert.equal(state.transferTasks.value.length, 1)
       assert.equal(state.transferTasks.value[0].name, 'seed-test')
       if (name === 'tiered H&R rules') assert.equal(state.hrCustomRules.value[0].hr_size_tiers[0].hr_duration, 72)
       if (name === 'invalid H&R YAML') assert.match(state.hrRawError.value, /YAML/)
-      state.saveConfig()
-      const saved = state.emitted.find(([event]) => event === 'save')[1]
+      await state.saveConfig()
+      const saved = state.calls[0][1]
+      assert.equal(state.emitted.some(([event]) => event === 'save'), false)
       assert.equal(JSON.parse(saved.transfer_tasks)[0].name, 'seed-test')
       assert.equal(saved.hr_site_config_str, config.hr_site_config_str ?? '')
     } finally { state.stop() }

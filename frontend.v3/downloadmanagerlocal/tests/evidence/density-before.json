@@ -1,0 +1,183 @@
+{
+  "capturedAt": "2026-10-29T16:31:08.313Z",
+  "fixture": "PASS: tiered H&R + rendered transfer task + save preservation; 958px density harness (not host acceptance)",
+  "viewport": {
+    "w": 1514,
+    "h": 912
+  },
+  "host": {
+    "x": 271,
+    "y": 26,
+    "w": 958,
+    "h": 860
+  },
+  "card": {
+    "x": 271,
+    "y": 26,
+    "w": 958,
+    "h": 860
+  },
+  "legacyFields": {
+    "widths": {
+      "12": 3,
+      "28": 7,
+      "52": 7,
+      "104": 2,
+      "105": 2,
+      "108": 1,
+      "117": 1,
+      "120": 2,
+      "237": 36
+    },
+    "x": [
+      451,
+      453,
+      463,
+      473,
+      567,
+      711,
+      713,
+      723,
+      828,
+      840,
+      972,
+      974,
+      1106,
+      1108
+    ],
+    "count": 61
+  },
+  "labels": {
+    "heights": {
+      "18": 3,
+      "20": 10
+    },
+    "byState": {
+      "floating": {
+        "18": 3
+      },
+      "resting": {
+        "20": 3
+      },
+      "selection": {
+        "20": 7
+      }
+    }
+  },
+  "inputFields": [
+    {
+      "x": 451,
+      "y": 282,
+      "w": 237,
+      "h": 40,
+      "label": "延迟时间（分钟）",
+      "numeric": true
+    },
+    {
+      "x": 711,
+      "y": 366,
+      "w": 237,
+      "h": 40,
+      "label": "兜底间隔（分钟）",
+      "numeric": true
+    },
+    {
+      "x": 711,
+      "y": 468,
+      "w": 237,
+      "h": 40,
+      "label": "源端扫描上限（个）",
+      "numeric": true
+    }
+  ],
+  "numberWidths": {
+    "237": 3
+  },
+  "inputHeights": {
+    "40": 3
+  },
+  "buttonHeights": {
+    "28": 3
+  },
+  "helpSignatures": {
+    "12px/400/17.1px": 1,
+    "12px/400/normal": 6,
+    "12px/400/18px": 4
+  },
+  "sectionGaps": [
+    {
+      "title": "触发与执行",
+      "gap": 4
+    },
+    {
+      "title": "转移后重命名",
+      "gap": 4
+    }
+  ],
+  "fieldGroups": [
+    {
+      "x": 439,
+      "y": 186,
+      "w": 782,
+      "h": 64,
+      "rowGap": "normal",
+      "columnGap": "normal",
+      "marginTop": "-12px"
+    },
+    {
+      "x": 439,
+      "y": 270,
+      "w": 782,
+      "h": 88,
+      "rowGap": "normal",
+      "columnGap": "normal",
+      "marginTop": "-12px"
+    },
+    {
+      "x": 439,
+      "y": 354,
+      "w": 782,
+      "h": 106,
+      "rowGap": "normal",
+      "columnGap": "normal",
+      "marginTop": "8px"
+    },
+    {
+      "x": 439,
+      "y": 456,
+      "w": 782,
+      "h": 106,
+      "rowGap": "normal",
+      "columnGap": "normal",
+      "marginTop": "8px"
+    },
+    {
+      "x": 439,
+      "y": 582,
+      "w": 782,
+      "h": 102,
+      "rowGap": "normal",
+      "columnGap": "normal",
+      "marginTop": "-12px"
+    }
+  ],
+  "lastFieldToCardBottom": 252,
+  "footer": {
+    "x": 271,
+    "y": 834,
+    "w": 958,
+    "h": 52
+  },
+  "scroll": {
+    "x": 431,
+    "y": 152,
+    "w": 798,
+    "h": 681,
+    "clientWidth": 798,
+    "scrollWidth": 798,
+    "clientHeight": 681,
+    "scrollHeight": 681
+  },
+  "pageOverflowX": false,
+  "errors": []
+}
