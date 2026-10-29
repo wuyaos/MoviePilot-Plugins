@@ -3,9 +3,9 @@
 
 运行：pytest tests/v3/downloadmanagerlocal/test_cleanup_module_data.py -q
 
-锁定语义（docs/downloadmanagerlocal-optimization-plan.md §7.2/§7.3 + 决策 C）：
-1. rename_archive 清空只删 archived=True 条目（连归档状态），重试期计数保留；
-2. rename_history/transfer_stats/autoremove_state/failclean_state 清空写空值，返回真实条数，无数据返回 0；
+锁定语义（最终实施规格 §7/P5，覆盖旧决策 C）：
+1. rename_archive 清空仅隐藏展示，archived 排除依据与重试期计数保留；
+2. rename_history 仅隐藏、保留原名；其余模块保持各自清理契约，返回真实条数；
 3. 白名单外的 module 拒绝（HTTP 400），不信任前端传入对象；
 4. 不触碰下载器数据、H&R 安全状态、transfer_schedule、upload_limit_state。
 
@@ -188,7 +188,8 @@ def test_clear_rename_archive_removes_only_archived(archive):
     result = archive.clear_rename_archive(plugin)
     assert result['code'] == 0 and result['removed'] == 2
     state = plugin.get_data(ARCHIVE_STATE)
-    assert set(state) == {'bbb'}
+    assert set(state) == {'aaa', 'bbb', 'ccc'}
+    assert all(state[h]['archived'] and state[h]['display_hidden'] for h in ('aaa', 'ccc'))
     assert state['bbb']['fail_count'] == 1
 
 
@@ -200,7 +201,9 @@ def test_clear_rename_archive_empty_state(archive):
 def test_clear_rename_archive_all_archived(archive):
     plugin = FakePlugin({ARCHIVE_STATE: {'x1': {'archived': True}, 'x2': {'archived': True}}})
     result = archive.clear_rename_archive(plugin)
-    assert result['removed'] == 2 and plugin.get_data(ARCHIVE_STATE) == {}
+    assert result['removed'] == 2
+    assert all(item['archived'] and item['display_hidden'] for item in plugin.get_data(ARCHIVE_STATE).values())
+    assert archive.clear_rename_archive(plugin)['removed'] == 0
 
 
 def test_cleanup_actions_whitelist_semantics(cleanup):
@@ -227,9 +230,12 @@ def test_cleanup_actions_whitelist_semantics(cleanup):
         'autoremove_state', 'failclean_state',
     }
     assert actions['rename_archive']() == 1
-    assert set(plugin.get_data(ARCHIVE_STATE)) == {'h2'}
+    assert set(plugin.get_data(ARCHIVE_STATE)) == {'h1', 'h2'}
+    assert plugin.get_data(ARCHIVE_STATE)['h1']['archived'] is True
+    assert plugin.get_data(ARCHIVE_STATE)['h1']['display_hidden'] is True
     assert actions['rename_history']() == 2
-    assert plugin.get_data('rename_records') == {}
+    assert all(item['history_hidden'] for item in plugin.get_data('rename_records').values())
+    assert plugin.get_data('rename_records')['r1']['original_name'] == 'a'
     assert actions['rename_history']() == 0
     assert actions['transfer_stats']() == 2
     assert plugin.get_data('transfer_stats') == {}

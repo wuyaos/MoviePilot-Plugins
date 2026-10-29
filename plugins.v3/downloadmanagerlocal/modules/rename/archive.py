@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date
+from copy import deepcopy
 from functools import wraps
 from threading import RLock
 
@@ -95,14 +96,18 @@ def classify_rename_failure(reason: str = "") -> str:
 @serialized_rename_state
 def get_rename_retry_state(plugin) -> dict:
     """读取补刀失败状态。"""
-    state = plugin.get_data(RETRY_STATE_KEY) or {}
-    return state if isinstance(state, dict) else {}
+    state = read_state(plugin, RETRY_STATE_KEY)
+    state = state if isinstance(state, dict) else {}
+    if limit_archive_display(state):
+        write_state(plugin, RETRY_STATE_KEY, state)
+    return state
 
 
 @serialized_rename_state
 def save_rename_retry_state(plugin, state: dict) -> None:
     """保存补刀失败状态。"""
-    plugin.save_data(RETRY_STATE_KEY, state or {})
+    limit_archive_display(state)
+    write_state(plugin, RETRY_STATE_KEY, state or {})
 
 
 def is_rename_archived(plugin, torrent_hash: str) -> bool:
@@ -161,6 +166,7 @@ def record_rename_failure(
         item["archive_reason"] = f"连续补刀失败 {fail_count} 次：{reason_text}"
     state[hash_text] = item
     save_rename_retry_state(plugin, state)
+    record_daily_result(plugin, False)
     log_rename_failure_state(item, reason_text)
     return item
 
@@ -182,6 +188,7 @@ def restore_rename_archive(plugin, torrent_hash: str) -> dict:
         "restored_at": restored_at,
     })
     item.pop("archived_at", None)
+    item.pop("display_hidden", None)
     state[hash_text] = item
     save_rename_retry_state(plugin, state)
 
@@ -195,33 +202,32 @@ def restore_rename_archive(plugin, torrent_hash: str) -> dict:
 
 @serialized_rename_state
 def delete_rename_archive(plugin, torrent_hash: str) -> dict:
-    """删除指定归档状态记录。"""
+    """仅删除归档展示，不解除自动补刀排除状态。"""
     hash_text = str(torrent_hash or "").strip()
     if not hash_text:
         return {"code": 1, "msg": "缺少 hash 参数", "hash": ""}
     state = get_rename_retry_state(plugin)
     if hash_text not in state:
         return {"code": 1, "msg": "归档记录不存在", "hash": hash_text}
-    del state[hash_text]
+    state[hash_text]["display_hidden"] = True
     save_rename_retry_state(plugin, state)
     return {"code": 0, "msg": "已删除归档记录", "hash": hash_text}
 
 
 @serialized_rename_state
 def clear_rename_archive(plugin) -> dict:
-    """清空全部已归档记录（决策 C：连归档状态一起删除）。
+    """仅清归档展示；覆盖旧决策 C，依据规格 §7 归档条款 :287。
 
-    被清理的种子回到未记录状态，可重新识别与补试；仍在重试期（未归档）
-    的失败计数不属于归档，保留不动。
+    保留 archived 安全依据，只有显式恢复才重新允许自动补刀。
     """
     state = get_rename_retry_state(plugin)
     archived_hashes = [
         hash_text
         for hash_text, item in state.items()
-        if isinstance(item, dict) and item.get("archived")
+        if isinstance(item, dict) and item.get("archived") and not item.get("display_hidden")
     ]
     for hash_text in archived_hashes:
-        del state[hash_text]
+        state[hash_text]["display_hidden"] = True
     if archived_hashes:
         save_rename_retry_state(plugin, state)
     return {"code": 0, "msg": f"已清理 {len(archived_hashes)} 条归档记录", "removed": len(archived_hashes)}
@@ -231,16 +237,7 @@ def clear_rename_archive(plugin) -> dict:
 def list_rename_archive(plugin, page: int = 1, page_size: int = 15) -> dict:
     """返回补刀归档记录分页。"""
     state = get_rename_retry_state(plugin)
-    archived_items = [
-        dict(item, hash=hash_text)
-        for hash_text, item in state.items()
-        if isinstance(item, dict) and item.get("archived")
-    ]
-    all_items = sorted(
-        archived_items,
-        key=lambda item: item.get("archived_at") or item.get("last_failed_at") or "",
-        reverse=True,
-    )
+    all_items = archive_display_items(state)
     page = max(1, int(page or 1))
     page_size = max(1, int(page_size or 15))
     total = len(all_items)
@@ -260,6 +257,7 @@ def rename_archive_stats(plugin) -> dict:
     state = get_rename_retry_state(plugin)
     items = [item for item in state.values() if isinstance(item, dict)]
     archived = [item for item in items if item.get("archived")]
+    visible_archived = archive_display_items(state)
     active_failed = [item for item in items if not item.get("archived") and int(item.get("fail_count") or 0) > 0]
     category_counts = {}
     for item in archived:
@@ -272,11 +270,7 @@ def rename_archive_stats(plugin) -> dict:
         "near_archive": sum(1 for item in active_failed if int(item.get("fail_count") or 0) >= DEFAULT_ARCHIVE_THRESHOLD - 1),
         "threshold": DEFAULT_ARCHIVE_THRESHOLD,
         "category_counts": category_counts,
-        "recent_archived": sorted(
-            archived,
-            key=lambda item: item.get("archived_at") or item.get("last_failed_at") or "",
-            reverse=True,
-        )[:5],
+        "recent_archived": visible_archived[:5],
     }
 
 
@@ -289,3 +283,89 @@ __all__ = (
     "rename_archive_stats",
     "restore_rename_archive",
 )
+
+
+def archive_display_items(state: dict) -> list[dict]:
+    """时间降序、hash 升序；缺失时间视为最旧，重载与插入顺序无关。"""
+    items = [dict(item, hash=key) for key, item in state.items()
+             if isinstance(item, dict) and item.get("archived") and not item.get("display_hidden")]
+    items.sort(key=lambda item: str(item["hash"]))
+    items.sort(key=lambda item: str(item.get("archived_at") or item.get("last_failed_at") or ""), reverse=True)
+    return items
+
+
+def limit_archive_display(state: dict) -> bool:
+    """只裁展示记录，不删除不自动重试的安全依据。"""
+    overflow = archive_display_items(state)[1000:]
+    for item in overflow:
+        state[item["hash"]]["display_hidden"] = True
+    return bool(overflow)
+
+
+DAILY_STATS_KEY = "rename_daily_stats"
+
+
+def read_state(plugin, key):
+    """批次内读到本轮尚未落盘的状态。"""
+    batch = getattr(plugin, "_rename_write_batch", None)
+    if isinstance(batch, dict) and key in batch:
+        return deepcopy(batch[key])
+    return deepcopy(plugin.get_data(key) or {})
+
+
+def write_state(plugin, key, value):
+    """在批次边界保存一次；单条操作立即保存。"""
+    batch = getattr(plugin, "_rename_write_batch", None)
+    if isinstance(batch, dict):
+        batch[key] = deepcopy(value)
+    else:
+        plugin.save_data(key, value)
+
+
+def rename_write_batch(func):
+    """串行批次保证清理与执行不交错，异常出口也保留已有真实结果。"""
+    @wraps(func)
+    @serialized_rename_state
+    def batched(plugin, *args, **kwargs):
+        if isinstance(getattr(plugin, "_rename_write_batch", None), dict):
+            return func(plugin, *args, **kwargs)
+        plugin._rename_write_batch = {}
+        try:
+            return func(plugin, *args, **kwargs)
+        finally:
+            batch = plugin._rename_write_batch
+            plugin._rename_write_batch = None
+            for key, value in batch.items():
+                plugin.save_data(key, value)
+    return batched
+
+
+@serialized_rename_state
+def today_stats(plugin):
+    """只读投影；旧版本无计数不从历史时间猜测今日结果。"""
+    state = read_state(plugin, DAILY_STATS_KEY)
+    today = date.today().isoformat()
+    if state.get("date") != today:
+        return {"date": today, "today_success": 0, "today_failed": 0}
+    return {"date": today, "today_success": int(state.get("today_success") or 0),
+            "today_failed": int(state.get("today_failed") or 0)}
+
+
+@serialized_rename_state
+def record_daily_result(plugin, success):
+    """在逐条真实结果出口计一次，不再从批次候选或汇总重复累计。"""
+    state = today_stats(plugin)
+    state["today_success" if success else "today_failed"] += 1
+    write_state(plugin, DAILY_STATS_KEY, state)
+
+
+@serialized_rename_state
+def hide_rename_history(plugin) -> int:
+    """清历史只设展示标记，仍保留原名与失败候选。"""
+    records = read_state(plugin, RENAME_RECORDS_KEY)
+    visible = [item for item in records.values() if isinstance(item, dict) and not item.get("history_hidden")]
+    for item in visible:
+        item["history_hidden"] = True
+    if visible:
+        write_state(plugin, RENAME_RECORDS_KEY, records)
+    return len(visible)

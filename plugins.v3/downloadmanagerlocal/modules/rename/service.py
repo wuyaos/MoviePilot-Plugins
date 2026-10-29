@@ -14,6 +14,7 @@ from bencode import bdecode
 from ...adapter.moviepilot import get_download_history_by_hash
 from ...model.state import RENAME_RECORDS_KEY
 from .archive import serialized_rename_state
+from .archive import read_state, write_state, rename_write_batch, record_daily_result, today_stats
 from ...utils.name_cleaner import (
     clean_torrent_original_name,
     collect_retry_rename_hashes,
@@ -105,7 +106,7 @@ def format_torrent_name(template_string: str, meta: MetaBase, mediainfo) -> Opti
 def save_rename_record(plugin, torrent_hash: str, original_name: str, after_name: str,
                        success: bool, reason: str = "", downloader: str = ""):
     """保存重命名记录（downloader：记录所属下载器，供单条补刀/恢复原名定位）"""
-    records = plugin.get_data(RENAME_RECORDS_KEY) or {}
+    records = read_state(plugin, RENAME_RECORDS_KEY)
     records[torrent_hash] = {
         "hash": torrent_hash,
         "original_name": original_name,
@@ -115,8 +116,9 @@ def save_rename_record(plugin, torrent_hash: str, original_name: str, after_name
         "downloader": str(downloader or "").strip(),
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
-    plugin.save_data(RENAME_RECORDS_KEY, records)
+    write_state(plugin, RENAME_RECORDS_KEY, records)
     if success:
+        record_daily_result(plugin, True)
         clear_state = getattr(plugin, "clear_rename_retry_state", None)
         if callable(clear_state):
             clear_state(torrent_hash)
@@ -128,7 +130,7 @@ def save_rename_record(plugin, torrent_hash: str, original_name: str, after_name
 
 def get_failed_rename_hashes(plugin) -> set:
     """获取所有需补刀的种子 hash：失败记录 + 已成功但 original_name 被副标题污染的记录"""
-    records = plugin.get_data(RENAME_RECORDS_KEY) or {}
+    records = read_state(plugin, RENAME_RECORDS_KEY)
     retry_hashes = collect_retry_rename_hashes(records)
     is_archived = getattr(plugin, "is_rename_archived", None)
     if not callable(is_archived):
@@ -220,7 +222,7 @@ def _add_torrent_file_candidates(candidates: list, seen: set, plugin, torrent_ha
 def _add_rename_record_candidates(candidates: list, seen: set, plugin, torrent_hash: str) -> None:
     """从重命名历史中添加原始名候选。"""
     try:
-        records = plugin.get_data(RENAME_RECORDS_KEY) or {}
+        records = read_state(plugin, RENAME_RECORDS_KEY)
     except Exception:
         return
     record = records.get(str(torrent_hash or ""))
@@ -462,6 +464,7 @@ def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: st
         return False
 
 
+@rename_write_batch
 def retry_failed_renames(plugin, to_service):
     """对目标下载器中之前重命名失败的种子进行补刀并返回逐项统计。"""
     summary = _retry_summary()
@@ -626,7 +629,7 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
                     warnings.append(f"{hash_text[:8]}: 站点标签写入失败")
 
             if not rename_succeeded:
-                record = (plugin.get_data(RENAME_RECORDS_KEY) or {}).get(hash_text) or {}
+                record = (read_state(plugin, RENAME_RECORDS_KEY)).get(hash_text) or {}
                 reason = record.get("reason") or "重命名未完成"
                 return {"code": 1, "msg": f"补刀失败：{reason}", "hash": hash_text}
 
@@ -853,6 +856,7 @@ def get_module_status(plugin=None) -> dict:
         return _new_rename_status()
     state = _rename_module_state(plugin)
     return {
+        **today_stats(plugin),
         "renamed": int(state["renamed"]),
         "failed": int(state["failed"]),
         "skipped": int(state["skipped"]),
@@ -932,7 +936,7 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
 
 def _get_renamed_hashes(plugin) -> set:
     """读取已成功重命名的 hash 集合，用于跳过已处理种子。"""
-    records = plugin.get_data(RENAME_RECORDS_KEY) or {}
+    records = read_state(plugin, RENAME_RECORDS_KEY)
     if not isinstance(records, dict):
         return set()
     return {
@@ -949,7 +953,7 @@ def _is_already_renamed(plugin, torrent_hash: str, torrent_name: str) -> bool:
     事件路径若不判断，会把已改名的名称再当作 original_name 套一次模板，
     导致标题等前缀叠加两次。手动补刀走 rename_torrent，不受该判断限制。
     """
-    records = plugin.get_data(RENAME_RECORDS_KEY) or {}
+    records = read_state(plugin, RENAME_RECORDS_KEY)
     record = records.get(str(torrent_hash)) if isinstance(records, dict) else None
     if not isinstance(record, dict) or not record.get("success"):
         return False
@@ -957,6 +961,7 @@ def _is_already_renamed(plugin, torrent_hash: str, torrent_name: str) -> bool:
     return bool(after_name) and after_name == str(torrent_name or "").strip()
 
 
+@rename_write_batch
 def scan_renames(plugin) -> dict:
     """周期扫描来源下载器，按模板重命名尚未处理的种子。"""
     rename_config = build_rename_config(getattr(plugin, "_rename_config", None))

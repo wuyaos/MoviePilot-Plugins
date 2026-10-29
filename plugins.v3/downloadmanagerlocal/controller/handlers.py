@@ -414,7 +414,7 @@ def api_rename_history(plugin, page: int = 1, page_size: int = 20, result_filter
     for record_hash, record in records.items():
         if not isinstance(record, dict):
             continue
-        if record_hash in archived_hashes:
+        if record.get("history_hidden") or record_hash in archived_hashes:
             continue
         item = dict(record)
         item["_record_key"] = record_hash
@@ -431,10 +431,10 @@ def api_rename_history(plugin, page: int = 1, page_size: int = 20, result_filter
 
 @serialized_rename_state
 def api_delete_rename_history(plugin, hash: str = ""):
-    """删除指定 hash 的重命名记录"""
+    """仅隐藏指定历史，保留补刀与恢复原名依据。"""
     records = plugin.get_data(RENAME_RECORDS_KEY) or {}
     if hash in records:
-        del records[hash]
+        records[hash]["history_hidden"] = True
         plugin.save_data(RENAME_RECORDS_KEY, records)
         return _operation_response(
             {"code": 0, "msg": "已删除", "hash": hash},
@@ -455,9 +455,10 @@ def api_rename_archive(plugin, page: int = 1, page_size: int = 20, result_filter
         page, page_size, result_filter, ("all", "failed"))
     state = plugin.get_data(RENAME_RETRY_STATE_KEY) or {}
     items = [dict(item, hash=key) for key, item in state.items()
-             if isinstance(item, dict) and item.get("archived")]
+             if isinstance(item, dict) and item.get("archived") and not item.get("display_hidden")]
     items.sort(key=lambda item: str(item["hash"]))
     items.sort(key=lambda item: str(item.get("archived_at") or item.get("last_failed_at") or ""), reverse=True)
+    items = items[:1000]
     return record_page(items, page, page_size, result_filter)
 
 
@@ -467,7 +468,7 @@ def api_restore_rename_archive(plugin, hash: str = ""):
 
 
 def api_delete_rename_archive(plugin, hash: str = ""):
-    """删除归档状态记录。"""
+    """仅隐藏归档展示，保留自动补刀排除状态。"""
     return _operation_response(plugin.delete_rename_archive(hash), HashActionResult)
 
 
@@ -488,11 +489,8 @@ def _cleanup_actions(plugin) -> dict:
         return int(clear_rename_archive(plugin).get("removed", 0) or 0)
 
     def clear_rename_history() -> int:
-        records = plugin.get_data(RENAME_RECORDS_KEY) or {}
-        if not records:
-            return 0
-        plugin.save_data(RENAME_RECORDS_KEY, {})
-        return len(records)
+        from ..modules.rename.archive import hide_rename_history
+        return hide_rename_history(plugin)
 
     def clear_transfer_stats() -> int:
         removed = 0

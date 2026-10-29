@@ -27,6 +27,8 @@ def observed(interlock, monkeypatch):
     plugin._observe_previews = {}
     plugin._transfer_stop_generation = 0
     plugin._event = threading.Event()
+    plugin._rename_state_lock = threading.RLock()
+    plugin._rename_write_batch = None
     plugin._seed_recheck_lock = threading.RLock()
     plugin._seed_recheck_queue_lock = plugin._seed_recheck_lock
     plugin._seed_recheck_stop_event = None
