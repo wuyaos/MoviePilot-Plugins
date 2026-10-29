@@ -13,6 +13,7 @@ from ..utils.config import (
     normalize_upload_limit_config,
     record_module_fault,
     safe_int,
+    transfer_delete_defaults,
 )
 from ..modules.rename.service import build_rename_config
 from ..modules.sitetag.service import build_tag_config
@@ -85,6 +86,11 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     plugin._todownloader = config.get("todownloader", defaults["todownloader"])
     plugin._deletesource = config.get("deletesource", defaults["deletesource"])
     plugin._deleteduplicate = config.get("deleteduplicate", defaults["deleteduplicate"])
+    delete_defaults = transfer_delete_defaults(config)
+    for key, value in delete_defaults.items():
+        setattr(plugin, f"_{key}", value)
+    if config:
+        config.update(delete_defaults)
     plugin._transfer_tasks = config.get("transfer_tasks", defaults["transfer_tasks"])
     plugin._transfer_rename_enabled = config.get("transfer_rename_enabled", defaults["transfer_rename_enabled"])
     plugin._downloader_ext = config.get("downloader_ext", defaults["downloader_ext"])

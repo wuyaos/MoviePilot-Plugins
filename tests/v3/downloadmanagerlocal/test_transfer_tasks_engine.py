@@ -147,7 +147,8 @@ class TestNormalizeTask:
         }, 0)
         assert task is not None
         assert task["name"] == "主任务"
-        assert task["delete_duplicate"] is True
+        assert "delete_duplicate" not in task
+        assert tt.resolve_task_flag(task, "delete_duplicate", False) == (True, "legacy-default")
 
     def test_same_downloader_rejected(self, tt):
         assert tt._normalize_task({

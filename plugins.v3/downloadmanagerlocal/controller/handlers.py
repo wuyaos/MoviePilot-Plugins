@@ -893,6 +893,18 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
         page, page_size, result_filter, ("all", "success", "failed", "source_pending", "rollback"))
     now = time.time()
 
+    def flag_projection(task):
+        from ..modules.transfer.tasks import resolve_task_flag
+
+        projection = {}
+        for field in ("delete_source", "delete_duplicate"):
+            effective, origin = resolve_task_flag(
+                task, field, getattr(plugin, f"_transfer_{field}_default", False),
+            )
+            projection[f"{field}_effective"] = effective
+            projection[f"{field}_origin"] = origin
+        return projection
+
     task_rows = [
         {
             "name": task["name"],
@@ -904,8 +916,9 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
             "exclude_labels": task["exclude_labels"],
             "from_path": task["from_path"],
             "to_path": task["to_path"],
-            "delete_source": bool(task["delete_source"]),
-            "delete_duplicate": bool(task["delete_duplicate"]),
+            "delete_source": task.get("delete_source"),
+            **flag_projection(task),
+            "delete_duplicate": task.get("delete_duplicate"),
             "keep_category": bool(task["keep_category"]),
             "keep_tag": bool(task["keep_tag"]),
             "empty_label_ok": bool(task["empty_label_ok"]),

@@ -20,7 +20,7 @@ from .pipeline import (
 )
 from ..rename.service import _get_torrent_content_name, build_rename_config, resolve_retry_original_name
 from ..sitetag.service import create_temporary_tag, forget_temporary_tag, release_temporary_tag
-from .tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated
+from .tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated, resolve_task_flag
 from .payload_export import get_torrent_payloads
 
 _AUTOMATIC_DELAY_TRIGGER_SOURCES = frozenset({"兜底扫描", "事件驱动"})
@@ -288,6 +288,12 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
     # 重试；定时/事件/兜底这些自动轮次不重置失败计数，否则「最多 3 次」会被自动轮次无限续命。
     manual = trigger_source == "手动"
     task_name = task["name"]
+    delete_source_effective, _ = resolve_task_flag(
+        task, "delete_source", getattr(plugin, "_transfer_delete_source_default", False),
+    )
+    delete_duplicate_effective, _ = resolve_task_flag(
+        task, "delete_duplicate", getattr(plugin, "_transfer_delete_duplicate_default", False),
+    )
     from_service = plugin.service_info(task["from_downloader"])
     to_service = plugin.service_info(task["to_downloader"])
     from_downloader: Optional[Any] = from_service.instance if from_service else None
@@ -442,7 +448,7 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
                 logger.info(f"【PT下载中心:转移做种】任务「{task_name}」{source_hash[:8]} 已转移过且目的仍在（{previous.get('transfer_state')}），跳过")
                 skip += 1
                 continue
-            if task["delete_duplicate"]:
+            if delete_duplicate_effective:
                 target = torrent_info[0]
                 state = target.get("state") if to_service.type == "qbittorrent" else target.status
                 if not seed_is_ready(state, to_service.type, target) or seed_is_error(state, to_service.type) or (to_service.type == "transmission" and getattr(target, "error", 0)):
@@ -484,7 +490,7 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
             ),
             stopped=lambda: _transfer_stopped(plugin, generation),
             fallback=trigger_source in _AUTOMATIC_DELAY_TRIGGER_SOURCES,
-            delete_source=task.get("delete_source"),
+            delete_source=delete_source_effective,
             # 手动触发视为用户明确要求重试 → 计数清零；自动轮次带着历史计数继续累计。
             attempts=0 if manual else int(previous.get("attempts", 0) or 0),
         )

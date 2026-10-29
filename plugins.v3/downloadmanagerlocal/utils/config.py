@@ -23,6 +23,8 @@ TRANSFER_DEFAULTS = {
     "topath": "",
     "fromdownloader": "",
     "todownloader": "",
+    "transfer_delete_source_default": False,
+    "transfer_delete_duplicate_default": False,
     "deletesource": False,
     "deleteduplicate": False,
     "fromtorrentpath": "",
@@ -120,6 +122,17 @@ PLUGIN_CONFIG_DEFAULTS = {
 def build_plugin_config_defaults() -> dict:
     """返回插件配置页使用的独立默认配置副本。"""
     return deepcopy(PLUGIN_CONFIG_DEFAULTS)
+
+
+def transfer_delete_defaults(config: dict) -> dict[str, bool]:
+    """新键显式优先；仅在新键缺失时迁移旧全局布尔值，不做真值转换。"""
+    return {
+        key: config.get(key, config.get(legacy, False)) is True
+        for key, legacy in (
+            ("transfer_delete_source_default", "deletesource"),
+            ("transfer_delete_duplicate_default", "deleteduplicate"),
+        )
+    }
 
 
 def safe_int(value, default, min_value=None, max_value=None):

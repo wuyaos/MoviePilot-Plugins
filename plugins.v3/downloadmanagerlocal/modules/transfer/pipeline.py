@@ -169,7 +169,7 @@ def begin_transfer(
         "created_at": time.time(), "max_wait_minutes": plugin._seed_max_wait_minutes,
         "source_was_active": source_is_active(torrent, from_service.type),
         "pause_source": bool(getattr(plugin, "_pause_source", True)),
-        "delete_source_requested": bool(plugin._deletesource if delete_source is None else delete_source),
+        "delete_source_requested": (plugin._deletesource if delete_source is None else delete_source) is True,
         "autostart": bool(plugin._seed_autostart), "skipverify": bool(plugin._seed_skipverify),
         "phase": "source_pausing", "target_added": False,
         # 失败次数跨事务累计。未显式传入（None）时从来源记录续算——不能默认 0，否则调用方

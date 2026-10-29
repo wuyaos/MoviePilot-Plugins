@@ -37,12 +37,25 @@ _TASK_DEFAULTS: Dict[str, Any] = {
     "no_paths": "",
     "from_path": "",
     "to_path": "",
-    "delete_source": False,
-    "delete_duplicate": True,
+    "delete_source": "inherit",
+    "delete_duplicate": "inherit",
     "keep_category": True,
     "keep_tag": True,
     "transfer_tag": "已转移",
 }
+
+
+_LEGACY_FLAG_DEFAULTS = {"delete_source": False, "delete_duplicate": True}
+
+
+def resolve_task_flag(task: dict, field: str, global_default: bool) -> tuple[bool, str]:
+    """仅 inherit 跟随全局值；缺失及非法值保留升级前语义（无 IO）。"""
+    value = task.get(field)
+    if type(value) is bool:
+        return value, "task"
+    if value == "inherit":
+        return global_default is True, "global"
+    return _LEGACY_FLAG_DEFAULTS[field], "legacy-default"
 
 
 def _normalize_task(raw: Any, index: int) -> Optional[Dict[str, Any]]:
@@ -50,11 +63,17 @@ def _normalize_task(raw: Any, index: int) -> Optional[Dict[str, Any]]:
     if not isinstance(raw, dict):
         logger.warning(f"【PT下载中心:转移做种】任务 #{index + 1} 不是对象，已忽略")
         return None
-    task = {**_TASK_DEFAULTS}
+    # 旧任务缺失风险键必须保持缺失，不能由新任务模板补成继承。
+    task = {key: value for key, value in _TASK_DEFAULTS.items() if key not in _LEGACY_FLAG_DEFAULTS}
     for key in _TASK_FIELDS:
         if key in raw:
             task[key] = raw[key]
     task["name"] = str(task["name"] or "").strip() or f"任务{index + 1}"
+    for field in _LEGACY_FLAG_DEFAULTS:
+        if field in raw and type(raw[field]) is not bool and raw[field] != "inherit":
+            logger.warning(
+                f"【PT下载中心:转移做种】任务「{task['name']}」{field} 非法值 {raw[field]!r}，按旧默认解释"
+            )
     task["enabled"] = bool(task["enabled"])
     task["from_downloader"] = str(task["from_downloader"] or "").strip()
     task["to_downloader"] = str(task["to_downloader"] or "").strip()
@@ -122,8 +141,8 @@ def load_transfer_tasks(plugin) -> List[Dict[str, Any]]:
             "no_paths": str(getattr(plugin, "_nopaths", "") or ""),
             "from_path": str(getattr(plugin, "_frompath", "") or ""),
             "to_path": str(getattr(plugin, "_topath", "") or ""),
-            "delete_source": bool(getattr(plugin, "_deletesource", False)),
-            "delete_duplicate": bool(getattr(plugin, "_deleteduplicate", True)),
+            "delete_source": getattr(plugin, "_deletesource", False),
+            "delete_duplicate": getattr(plugin, "_deleteduplicate", True),
             "keep_category": bool(getattr(plugin, "_remainoldcat", True)),
             "keep_tag": bool(getattr(plugin, "_remainoldtag", True)),
         }
