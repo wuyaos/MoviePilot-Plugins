@@ -49,7 +49,7 @@ def _rename_history_stats(plugin, recent_limit: int = 5) -> dict:
     recent_limit 只影响返回的最近失败样本条数，供数据页按请求上限展示。
     """
     records = plugin.get_data(RENAME_RECORDS_KEY) or {}
-    items = list(records.values())
+    items = [item for item in records.values() if isinstance(item, dict) and not item.get("history_hidden")]
     success_count = sum(1 for item in items if item.get("success"))
     failed_items = [item for item in items if not item.get("success")]
     dirty_count = sum(
@@ -96,7 +96,10 @@ def _cleanup_stats(plugin, archive_stats: dict) -> dict:
     skip_stats = plugin.get_data(TRANSFER_SKIP_STATS_KEY) or {}
     return {
         "rename_archive": int(archive_stats.get("archived", 0) or 0),
-        "rename_history": len(plugin.get_data(RENAME_RECORDS_KEY) or {}),
+        "rename_history": sum(
+            1 for item in (plugin.get_data(RENAME_RECORDS_KEY) or {}).values()
+            if isinstance(item, dict) and not item.get("history_hidden")
+        ),
         "transfer_stats": len(stats) + len(skip_stats),
         "autoremove_state": history_removed_count(plugin.get_data(REMOVER_STATE_DATA_KEY)),
         "failclean_state": failclean_history_removed_count(plugin.get_data(FAILCLEAN_STATUS_DATA_KEY)),
@@ -327,15 +330,54 @@ def _sitetag_detail(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT) -> dic
     status = status if isinstance(status, dict) else {}
     matched = status.get("matched")
     matched = matched if isinstance(matched, dict) else {}
+    round_stats = status.get("round")
+    round_stats = round_stats if isinstance(round_stats, dict) else {}
     rows = [
         _row("站点标签", _bool_text(getattr(plugin, "_tag_enabled", False))),
         _row("观察模式", _bool_text(_observe_of(plugin, "tag"))),
+        _row("本轮检查", round_stats.get("checked")),
+        _row("成功", round_stats.get("success")),
+        _row("无需更新", round_stats.get("no_update")),
+        _row("失败", round_stats.get("failed")),
         _row("补全完成", _count(status.get("completed"))),
         _row("跳过", _count(status.get("skipped"))),
         _row("命中站点数", len(matched)),
     ]
     items = [_text_item(site, f"{_count(count)} 个任务") for site, count in matched.items()]
     return _detail("站点标签", rows, items, detail_limit=detail_limit)
+
+
+def _tagcleanup_detail(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT) -> dict:
+    """标签清理明细：聚合最近扫描结果，不触发扫描或写入。"""
+    snapshot = getattr(plugin, "_tag_cleanup_status", None)
+    if not isinstance(snapshot, dict):
+        return _detail("标签清理", [], detail_limit=detail_limit)
+    grouped = {}
+    involved_hashes = set()
+    for downloader in snapshot.get("downloaders") or []:
+        if not isinstance(downloader, dict):
+            continue
+        for item in downloader.get("tags") or []:
+            if not isinstance(item, dict):
+                continue
+            tag = str(item.get("tag") or "")
+            if not tag:
+                continue
+            entry = grouped.setdefault(tag, {"hashes": set(), "failed": False})
+            hashes = {str(value) for value in (item.get("hashes") or []) if value}
+            entry["hashes"].update(hashes)
+            involved_hashes.update(hashes)
+            entry["failed"] = entry["failed"] or bool(item.get("cleanup_error"))
+    items = [_text_item(tag, f"{len(data['hashes'])} 个任务") for tag, data in sorted(grouped.items())]
+    involved_tasks = len(involved_hashes)
+    failed = len(snapshot.get("errors") or []) + sum(1 for data in grouped.values() if data["failed"])
+    rows = [
+        _row("候选标签", len(grouped)),
+        _row("涉及任务", involved_tasks),
+        _row("成功", len(snapshot.get("auto_removed") or [])),
+        _row("失败", failed),
+    ]
+    return _detail("标签清理", rows, items, detail_limit=detail_limit)
 
 
 def _hr_detail(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT) -> dict:
@@ -462,6 +504,7 @@ def _module_details(plugin, rename_history: dict, archive_stats: dict,
         ("transfer", "转移做种", lambda: _transfer_detail(plugin, detail_limit)),
         ("rename", "种子重命名", lambda: _rename_detail(plugin, rename_history, archive_stats, detail_limit)),
         ("tag", "站点标签", lambda: _sitetag_detail(plugin, detail_limit)),
+        ("tagcleanup", "标签清理", lambda: _tagcleanup_detail(plugin, detail_limit)),
         ("hr", "H&R 管理", lambda: _hr_detail(plugin, detail_limit)),
         ("autoremove", "自动删种", lambda: _autoremove_detail(plugin, detail_limit)),
         ("failclean", "失败清理", lambda: _failclean_detail(plugin, detail_limit)),

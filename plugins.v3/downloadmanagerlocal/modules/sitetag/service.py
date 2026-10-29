@@ -333,13 +333,16 @@ def scan_and_clean_tags(plugin, downloader_names: Iterable[str]) -> dict:
             sum(item["removed"] for item in auto_removed),
         )
     code = 0 if downloader_results else 1
-    return {
+    result = {
         "code": code,
         "msg": "扫描完成" if code == 0 else "未能扫描所选下载器",
         "downloaders": downloader_results,
         "auto_removed": auto_removed,
         "errors": errors,
     }
+    # 仅保留最近一次已有扫描结果的派生快照，不新增持久化写入。
+    plugin._tag_cleanup_status = result
+    return result
 
 
 def execute_tag_cleanup(plugin, removals: Iterable[dict]) -> dict:
@@ -571,11 +574,12 @@ def build_tag_config(config: dict | None = None) -> dict:
 def _module_state(plugin) -> dict:
     state = getattr(plugin, "_site_tag_status", None)
     if not isinstance(state, dict):
-        state = {"completed": 0, "skipped": 0, "matched": {}}
+        state = {"completed": 0, "skipped": 0, "matched": {}, "round": None}
         plugin._site_tag_status = state
     state.setdefault("completed", 0)
     state.setdefault("skipped", 0)
     state.setdefault("matched", {})
+    state.setdefault("round", None)
     return state
 
 
@@ -584,11 +588,17 @@ def get_module_status(plugin=None) -> dict:
     if plugin is None:
         return {"completed": 0, "skipped": 0, "matched": {}}
     state = _module_state(plugin)
-    return {
+    result = {
         "completed": int(state["completed"]),
         "skipped": int(state["skipped"]),
         "matched": dict(state["matched"]),
     }
+    round_stats = state.get("round")
+    if isinstance(round_stats, dict):
+        result["round"] = dict(round_stats)
+    else:
+        result["round"] = None
+    return result
 
 
 def _torrent_value(torrent, name: str, default=None):
@@ -696,6 +706,7 @@ def complement_history(plugin, config: dict | None = None) -> dict:
     cfg = build_tag_config(config or getattr(plugin, "_site_tag_config", None))
     state = _module_state(plugin)
     result = {"completed": 0, "skipped": 0, "downloaders": {}}
+    round_stats = {"checked": 0, "success": 0, "no_update": 0, "failed": 0}
     summary = {"history_hit": 0, "site_resolved": 0, "no_change": 0}
     for service in _selected_services(plugin, cfg):
         torrents, error = service.instance.get_torrents()
@@ -705,6 +716,7 @@ def complement_history(plugin, config: dict | None = None) -> dict:
             continue
         matched = 0
         for torrent in torrents or []:
+            round_stats["checked"] += 1
             outcome = _apply_metadata(plugin, service, torrent, cfg)
             if outcome.get("history"):
                 summary["history_hit"] += 1
@@ -713,14 +725,17 @@ def complement_history(plugin, config: dict | None = None) -> dict:
             if outcome.get("changed"):
                 matched += 1
                 result["completed"] += 1
+                round_stats["success"] += 1
                 logger.info(
                     f"【PT下载中心:站点标签】 补全：{service.name} {outcome.get('hash', '')[:8]} "
                     f"tags={outcome.get('tags')} category={outcome.get('category')} site={outcome.get('site')}"
                 )
             elif not outcome.get("ok"):
                 result["skipped"] += 1
+                round_stats["failed"] += 1
             else:
                 summary["no_change"] += 1
+                round_stats["no_update"] += 1
         result["downloaders"][service.name] = matched
         state["matched"][service.name] = matched
         logger.info(
@@ -733,6 +748,8 @@ def complement_history(plugin, config: dict | None = None) -> dict:
     )
     state["completed"] = result["completed"]
     state["skipped"] = result["skipped"]
+    state["round"] = round_stats
+    result["round"] = dict(round_stats)
     if cfg["enable_del_tags"]:
         scan_and_clean_tags(plugin, cfg["downloaders"])
     return result

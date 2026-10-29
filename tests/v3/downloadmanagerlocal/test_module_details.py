@@ -101,7 +101,8 @@ def service(env, monkeypatch):
     rename = _register_package(monkeypatch, f"{PREFIX}.modules.rename.service")
     rename.get_module_status = lambda plugin: {"renamed": 2, "failed": 1, "skipped": 0, "last_run": "2026-10-29 10:00:00"}
     sitetag = _register_package(monkeypatch, f"{PREFIX}.modules.sitetag.service")
-    sitetag.get_module_status = lambda plugin: {"completed": 7, "skipped": 1, "matched": {"pt.example": 4}}
+    sitetag.get_module_status = lambda plugin: {"completed": 7, "skipped": 1, "matched": {"pt.example": 4},
+                                                   "round": {"checked": 10, "success": 4, "no_update": 5, "failed": 1}}
     uploadlimit = _register_package(monkeypatch, f"{PREFIX}.modules.uploadlimit.service")
     uploadlimit.get_upload_limit_status = lambda plugin: {
         "service_status": "running",
@@ -140,7 +141,7 @@ def test_module_details_covers_seven_modules(service):
     """七个模块都要有明细块，字段齐全且无错误。"""
     details = service._module_details(_plugin(), {"total": 5}, {"archived": 2, "threshold": 3})
 
-    assert set(details) == {"transfer", "rename", "tag", "hr", "autoremove", "failclean", "upload_limit"}
+    assert set(details) == {"transfer", "rename", "tag", "tagcleanup", "hr", "autoremove", "failclean", "upload_limit"}
     for key, detail in details.items():
         assert detail["title"], key
         assert detail["error"] == "", key
@@ -149,7 +150,26 @@ def test_module_details_covers_seven_modules(service):
         assert detail["truncated"] is False and detail["total"] >= len(detail["items"])
     assert _rows(details["transfer"])["累计成功"] == "120"
     assert _rows(details["tag"])["命中站点数"] == "1"
+    assert [_rows(details["tag"])[label] for label in ("本轮检查", "成功", "无需更新", "失败")] == ["10", "4", "5", "1"]
     assert _rows(details["hr"])["状态"] == "未启用或初始化失败", "服务被隔离时要给出显式提示"
+
+
+def test_tagcleanup_detail_projects_latest_scan(service):
+    """标签清理明细聚合最近扫描结果，并保持标签名与任务数。"""
+    plugin = _plugin(_tag_cleanup_status={
+        "downloaders": [{"name": "qb", "tags": [
+            {"tag": "DML_TMP_old", "hashes": ["a", "b"]},
+            {"tag": "manual", "hashes": ["b"], "cleanup_error": "失败"},
+        ]}],
+        "auto_removed": [{"tag": "DML_TMP_done", "removed": 1}],
+        "errors": [{"downloader": "missing"}],
+    })
+    detail = service._tagcleanup_detail(plugin)
+    rows = _rows(detail)
+    assert rows == {"候选标签": "2", "涉及任务": "2", "成功": "1", "失败": "2"}
+    assert [(item["title"], item["meta"]) for item in detail["items"]] == [
+        ("DML_TMP_old", "2 个任务"), ("manual", "1 个任务")
+    ]
 
 
 def test_failclean_detail_breaks_counters_into_three_sections(service):
@@ -299,6 +319,18 @@ def test_detail_ignores_invalid_items_and_keeps_caller_total(service):
     detail = service._detail("示例", [], ["x", {"title": "a", "meta": ""}, None], total=7)
     assert len(detail["items"]) == 1 and detail["total"] == 7 and detail["truncated"] is True
     assert service._detail("示例", [], None)["total"] == 0
+
+
+def test_rename_history_stats_excludes_hidden_records(service):
+    """诊断与清理计数只统计可见记录，恢复隐藏标记后计数回升。"""
+    records = {
+        "visible": {"success": True, "original_name": "a", "after_name": "b"},
+        "hidden": {"success": False, "history_hidden": True, "original_name": "c"},
+    }
+    plugin = _plugin(get_data=lambda key: records if key == "rename_records" else {})
+    assert service._rename_history_stats(plugin)["total"] == 1
+    records["hidden"].pop("history_hidden")
+    assert service._rename_history_stats(plugin)["total"] == 2
 
 
 def test_rename_history_sample_follows_requested_limit(service):
