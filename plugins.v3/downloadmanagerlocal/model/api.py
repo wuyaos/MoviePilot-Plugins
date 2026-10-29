@@ -147,6 +147,8 @@ class TagCleanupScanResult(ActionResult):
     downloaders: list[dict[str, JsonData]] = Field(default_factory=list)
     auto_removed: list[dict[str, JsonData]] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+    scan_id: Optional[str] = None
+    generated_at: Optional[str] = None
 
 
 class TagCleanupExecuteResult(ActionResult):
@@ -154,6 +156,9 @@ class TagCleanupExecuteResult(ActionResult):
 
     removed: list[dict[str, JsonData]] = Field(default_factory=list)
     failed: list[dict[str, JsonData]] = Field(default_factory=list)
+    requested: int = 0
+    processed: int = 0
+    truncated: bool = False
 
 
 class EmptyRequest(ApiRequestModel):
@@ -197,6 +202,7 @@ class TagCleanupExecuteRequest(ApiRequestModel):
     """按扫描快照执行标签清理的请求。"""
 
     removals: list[TagCleanupRemoval] = Field(default_factory=list)
+    scan_id: Optional[str] = None
 
 
 class HrTasksResult(ApiBusinessModel):

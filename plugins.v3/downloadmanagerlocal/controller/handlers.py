@@ -53,7 +53,11 @@ from ..modules.rename.archive import serialized_rename_state
 from ..modules.hr.guard import HrGuard
 from ..modules.hr.rules import load_preset_rules
 from ..utils.config import observe_skip
-from ..modules.sitetag.service import complement_history, execute_tag_cleanup, scan_and_clean_tags
+from ..modules.sitetag.service import complement_history, execute_tag_cleanup
+try:
+    from ..modules.sitetag.service import scan_tag_candidates
+except ImportError:  # 兼容旧测试夹具
+    from ..modules.sitetag.service import scan_and_clean_tags as scan_tag_candidates
 from ..modules.uploadlimit.worker import stop_upload_limit_worker
 from ..modules.uploadlimit.service import (
     get_upload_limit_status,
@@ -371,12 +375,11 @@ def api_sites(plugin):
 
 
 def api_tag_cleanup_scan(plugin, payload: TagCleanupScanRequest):
-    """扫描所选 qBittorrent 下载器并自动清理明确的临时标签。"""
-    # 扫描兼有写操作（自动移除临时标签），与 execute 同按执行类端点门控。
+    """只读扫描站点标签候选，不做任何写入。"""
     _require_module(plugin, "tag", "站点标签")
     try:
         request = _request_dict(payload)
-        result = scan_and_clean_tags(plugin, request.get("downloaders") or [])
+        result = scan_tag_candidates(plugin, request.get("downloaders") or [])
         return _operation_response(result, TagCleanupScanResult)
     except Exception as e:
         logger.error(f"【PT下载中心】标签清理扫描失败: {e}")
@@ -391,7 +394,7 @@ def api_tag_cleanup_execute(plugin, payload: TagCleanupExecuteRequest):
     _require_module(plugin, "tag", "站点标签")
     try:
         request = _request_dict(payload)
-        result = execute_tag_cleanup(plugin, request.get("removals") or [])
+        result = execute_tag_cleanup(plugin, request.get("removals") or [], request.get("scan_id"))
         return _operation_response(result, TagCleanupExecuteResult)
     except Exception as e:
         logger.error(f"【PT下载中心】标签清理执行失败: {e}")
