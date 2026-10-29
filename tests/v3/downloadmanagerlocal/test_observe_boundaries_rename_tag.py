@@ -113,7 +113,7 @@ def _torrent(torrent_hash):
 
 def test_rename_funnel_blocked_when_observed(mods):
     """观察模式下重命名漏斗跳过写操作：skipped、下载器零调用、登记预览。"""
-    plugin = SimpleNamespace(_module_observe_only={"rename": True}, _observe_previews={})
+    plugin = SimpleNamespace(_module_observe_only={"rename": True}, _observe_previews={}, get_data=lambda key: {})
     dl = Mock()
     service = SimpleNamespace(type="qbittorrent", name="QB1", instance=dl)
     result = mods.rename.rename_candidate(
@@ -129,7 +129,7 @@ def test_rename_funnel_blocked_when_observed(mods):
 
 def test_rename_funnel_executes_when_not_observed(mods, monkeypatch):
     """未观察时重命名漏斗照常进入真实写路径。"""
-    plugin = SimpleNamespace(_module_observe_only={"rename": False}, _observe_previews={})
+    plugin = SimpleNamespace(_module_observe_only={"rename": False}, _observe_previews={}, get_data=lambda key: {})
     service = SimpleNamespace(type="qbittorrent", name="QB1", instance=Mock())
     rename_mock = Mock(return_value=True)
     monkeypatch.setattr(mods.rename, "rename_torrent", rename_mock)

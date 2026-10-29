@@ -902,13 +902,17 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     torrent_name = _get_torrent_name(torrent, dl_type)
     save_path = get_save_path(torrent, dl_type)
     torrent_tags = get_label(torrent, dl_type)
+    if _is_already_renamed(plugin, torrent_hash, torrent_name):
+        logger.info(f"【PT下载中心:重命名】重命名跳过 hash={torrent_hash}：当前名称已是本插件重命名结果")
+        return "skipped"
     allowed, reason = passes_rename_filters(rename_config, torrent_hash, torrent_tags, save_path)
     if not allowed:
         logger.info(f"【PT下载中心:重命名】重命名跳过 hash={torrent_hash}：{reason}")
         return "skipped"
     if observe_skip(plugin, "rename", "重命名种子", f"{torrent_name}（{torrent_hash[:8]}）"):
         return "skipped"
-    if rename_torrent(plugin, dl, dl_type, torrent_hash, torrent_name, save_path):
+    if rename_torrent(plugin, dl, dl_type, torrent_hash, torrent_name, save_path,
+                      downloader=str(getattr(service, "name", "") or "")):
         add_rename_tag(plugin, dl, dl_type, torrent_hash, torrent_tags, rename_config)
         return "renamed"
     return "failed"
@@ -924,6 +928,21 @@ def _get_renamed_hashes(plugin) -> set:
         for torrent_hash, record in records.items()
         if isinstance(record, dict) and record.get("success")
     }
+
+
+def _is_already_renamed(plugin, torrent_hash: str, torrent_name: str) -> bool:
+    """判断当前名称是否已是本插件上一次成功重命名的结果。
+
+    下载器重复添加同一种子（MoviePilot 侧会再次尝试加入并广播下载新增事件）时，
+    事件路径若不判断，会把已改名的名称再当作 original_name 套一次模板，
+    导致标题等前缀叠加两次。手动补刀走 rename_torrent，不受该判断限制。
+    """
+    records = plugin.get_data(RENAME_RECORDS_KEY) or {}
+    record = records.get(str(torrent_hash)) if isinstance(records, dict) else None
+    if not isinstance(record, dict) or not record.get("success"):
+        return False
+    after_name = str(record.get("after_name") or "").strip()
+    return bool(after_name) and after_name == str(torrent_name or "").strip()
 
 
 def scan_renames(plugin) -> dict:
