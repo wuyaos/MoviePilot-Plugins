@@ -94,6 +94,9 @@ def load_transfer_stats(plugin: Any) -> dict[str, Any]:
         "success_total": success_total,
         "fallback_success": fallback_success,
         **daily,
+        "failure_today_date": today_stamp(),
+        "failure_today_count": (_non_negative_int(payload.get("failure_today_count"))
+                                if payload.get("failure_today_date") == today_stamp() else 0),
     }
 
 
@@ -111,3 +114,12 @@ def record_transfer_success(plugin: Any, count: int, *, fallback: bool) -> dict[
             plugin.save_data(TRANSFER_STATS_KEY, stats)
         return stats
 
+
+
+def record_transfer_failure(plugin: Any) -> dict[str, Any]:
+    """累计今日进入终态失败的事件；来源索引被新事务覆盖不减少计数。"""
+    with _TRANSFER_STATS_LOCK:
+        stats = load_transfer_stats(plugin)
+        stats["failure_today_count"] += 1
+        plugin.save_data(TRANSFER_STATS_KEY, stats)
+        return stats

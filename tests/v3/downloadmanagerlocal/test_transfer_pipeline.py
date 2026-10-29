@@ -37,7 +37,14 @@ def runtime(monkeypatch):
                  'app.plugins.downloadmanagerlocal.model', 'app.plugins.downloadmanagerlocal.modules.hr'):
         module(name, __path__=[])
     module('app.sdk.logging', logger=Mock())
-    module('app.plugins.downloadmanagerlocal.model.state', SEED_RECHECK_QUEUE_KEY='queue', record_transfer_success=Mock())
+    module('app.plugins.downloadmanagerlocal.modules.hr.constants',
+           HR_NOTIFY_EVENTS_DATA_KEY='hr_notify_events', HR_TASKS_DATA_KEY='hr_tasks')
+    state_name = 'app.plugins.downloadmanagerlocal.model.state'
+    state_spec = importlib.util.spec_from_file_location(state_name, SERVICE.parent.parent / 'model/state.py')
+    state = importlib.util.module_from_spec(state_spec)
+    monkeypatch.setitem(sys.modules, state_name, state)
+    state_spec.loader.exec_module(state)
+    state.SEED_RECHECK_QUEUE_KEY = 'queue'
     guard = Mock()
     guard.is_protected.return_value = False
     guard.return_value.is_protected.side_effect = lambda *a, **k: guard.is_protected(*a, **k)

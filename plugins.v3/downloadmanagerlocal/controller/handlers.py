@@ -943,6 +943,7 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
     for key, value in _iter_transfer_records(plugin):
         records.append({
             "_record_key": key,
+            "_history_hidden": bool(value.get("history_hidden")),
             "_source_pending": bool(
                 value.get("delete_source_requested") and not value.get("delete_source")
                 and value.get("transfer_state") in ("target_ready", "completed")
@@ -958,10 +959,14 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
             "hr_protected": bool(value.get("hr_protected")),
             "fallback": bool(value.get("fallback")),
             "updated_at": float(value.get("updated_at") or 0),
+            "error": value.get("error") or "",
+            "attempts": value.get("attempts") or 0,
+            "created_at": value.get("created_at") or 0,
+            "delete_source_pending": bool(value.get("delete_source_requested") and not value.get("delete_source")),
         })
     records.sort(key=lambda row: row["_record_key"])
     records.sort(key=lambda row: row["updated_at"], reverse=True)
-    filtered = [row for row in records if (
+    filtered = [row for row in records if not row["_history_hidden"] and (
         result_filter == "all"
         or (result_filter == "success" and row["phase"] == "completed" and not row["_source_pending"])
         or (result_filter == "failed" and row["phase"] == "failed")
@@ -969,6 +974,7 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
         or (result_filter == "source_pending" and row["_source_pending"])
     )]
     for row in records:
+        row.pop("_history_hidden")
         row.pop("_record_key")
         row.pop("_source_pending")
     pagination = record_page(filtered, page, page_size, result_filter)
@@ -985,6 +991,7 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
             "pending": len(pending),
             "rollback": sum(1 for row in records if row["phase"] in ("rollback", "rolled_back")),
             "completed": sum(1 for row in records if row["phase"] == "completed"),
+            "today_failed": stats.get("failure_today_count", 0),
             "today_success": stats.get("today_success", 0),
             "success_total": stats.get("success_total", 0),
             "today_fallback": stats.get("today_fallback", 0),

@@ -40,6 +40,7 @@ def transfer_is_abandoned(previous: dict, manual: bool = False) -> bool:
 
 def save_transaction(plugin, item):
     """队列及来源索引使用同一事务内容，来源索引供同步删除关联目标。"""
+    _preserve_history_hidden(plugin, item)
     item["updated_at"] = time.time()
     queue = load_seed_recheck_queue(plugin)
     queue[_queue_key(item["downloader"], item["hash"])] = dict(item)
@@ -47,8 +48,16 @@ def save_transaction(plugin, item):
     save_source_record(plugin, item)
 
 
+def _preserve_history_hidden(plugin, item):
+    """Display suppression belongs to this transaction, never permanently to a source hash."""
+    previous = plugin.get_data(f"{item['source_downloader']}-{item['source_hash']}") or {}
+    if previous.get("created_at") == item.get("created_at") and previous.get("history_hidden"):
+        item["history_hidden"] = True
+
+
 def save_source_record(plugin, item):
     """保持基础插件的来源到目标映射字段。"""
+    _preserve_history_hidden(plugin, item)
     plugin.save_data(f"{item['source_downloader']}-{item['source_hash']}", {
         **item,
         "to_download": item["downloader"],
@@ -214,6 +223,8 @@ def rollback_transfer(plugin, item, target_service, stopped):
     """先删目标再恢复源，删除失败时不制造双端同时做种。"""
     if transfer_observe_skip(plugin, "回滚转移（原地等待）", str(item.get("source_hash", ""))):
         return False
+    if item.get("phase") in ("failed", "rolled_back"):
+        return True
     if stopped():
         return False
     if item["target_added"]:
@@ -235,7 +246,15 @@ def rollback_transfer(plugin, item, target_service, stopped):
     item["attempts"] = int(item.get("attempts", 0) or 0) + 1
     if item["attempts"] >= MAX_TRANSFER_ATTEMPTS:
         item["phase"] = "failed"
-        save_source_record(plugin, item)
+        from ...model.state import record_transfer_failure
+        with plugin._seed_recheck_lock:
+            previous = plugin.get_data(f"{item['source_downloader']}-{item['source_hash']}") or {}
+            if previous.get("created_at") == item.get("created_at") and previous.get("failed_at"):
+                item["failed_at"] = previous["failed_at"]
+            if not item.get("failed_at"):
+                item["failed_at"] = time.time()
+                record_transfer_failure(plugin)
+            save_source_record(plugin, item)
         logger.error(
             f"【PT下载中心:转移做种】已放弃该种子：连续失败 {item['attempts']} 次"
             f"（上限 {MAX_TRANSFER_ATTEMPTS}），自动轮次不再重试 "
@@ -345,6 +364,15 @@ def advance_transfer(plugin, item, service, task, stopped):
         )
         return False
     item["target_confirmed"] = True
+    # Count confirmed target once, independently of source deletion and its retries.
+    with plugin._seed_recheck_lock:
+        previous = plugin.get_data(f"{item['source_downloader']}-{item['source_hash']}") or {}
+        counted = (previous.get("created_at") == item.get("created_at")
+                   and previous.get("success_counted"))
+        if not item.get("success_counted") and not counted:
+            record_transfer_success(plugin, 1, fallback=bool(item.get("fallback")))
+        item["success_counted"] = True
+        save_transaction(plugin, item)
     from .service import post_transfer_process
     if stopped() or not post_transfer_process(plugin, service, item["hash"]):
         return False
@@ -358,12 +386,14 @@ def advance_transfer(plugin, item, service, task, stopped):
             operation_id="transfer:{}:{}:{}".format(item["downloader"], item["hash"], item.get("created_at", 0)),
         )
         if result == "retry":
+            item["delete_source_pending"] = True
+            save_transaction(plugin, item)
             return False
         item["source_deleted"] = result == "deleted"
         item["hr_protected"] = result == "protected"
+    item["delete_source_pending"] = bool(item["delete_source_requested"] and not item.get("source_deleted"))
     item["phase"] = "completed"
     save_source_record(plugin, item)
-    record_transfer_success(plugin, 1, fallback=bool(item.get("fallback")))
     return True
 
 

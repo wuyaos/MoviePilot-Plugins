@@ -91,12 +91,15 @@ def test_advance_transfer_passes_only_config_authorization_and_real_verification
 ):
     env = wiring
     pipeline = env.pipeline
+    from threading import RLock
+    env.plugin._seed_recheck_lock = RLock()
     transfer = ModuleType("app.plugins.downloadmanagerlocal.modules.transfer.service")
     transfer.post_transfer_process = Mock(return_value=True)
     monkeypatch.setitem(sys.modules, transfer.__name__, transfer)
     consumer = Mock(return_value="protected")
     monkeypatch.setattr(pipeline, "delete_source", consumer)
     monkeypatch.setattr(pipeline, "save_source_record", Mock())
+    monkeypatch.setattr(pipeline, "save_transaction", Mock())
     monkeypatch.setattr(pipeline, "record_transfer_success", Mock())
     env.plugin._hr_enabled = authorized
     env.plugin._seed_max_wait_minutes = 120
@@ -127,6 +130,8 @@ def test_released_reservation_cannot_bypass_begin_delete_on_next_call(wiring, au
 def test_real_verification_progression_controls_protected_source_release(wiring, monkeypatch, kind, skipverify):
     env = wiring
     pipeline = env.pipeline
+    from threading import RLock
+    env.plugin._seed_recheck_lock = RLock()
     transfer = ModuleType("app.plugins.downloadmanagerlocal.modules.transfer.service")
     transfer.post_transfer_process = Mock(return_value=True)
     monkeypatch.setitem(sys.modules, transfer.__name__, transfer)
