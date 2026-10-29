@@ -1,6 +1,7 @@
 <script setup>
 import '../styles/dm-tokens.css'
 import TableState from './TableState.vue'
+import ModuleTable from './ModuleTable.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { getPluginApi, postPluginApi, postPluginJsonApi } from './api'
 import DownloaderBadge from './DownloaderBadge.vue'
@@ -58,12 +59,14 @@ const recordStates = reactive({
   archive: { loading: false, loaded: false, error: '', revision: 0 },
   transfer: { loading: false, loaded: false, error: '', revision: 0 },
   hr: { loading: false, loaded: false, error: '', revision: 0 },
+  autoremove: { loading: false, loaded: false, error: '', revision: 0 },
+  failclean: { loading: false, loaded: false, error: '', revision: 0 },
 })
-function recordTableState(key, rows, empty = 'none') {
+function recordTableState(key, rows, empty = 'none', busyWithResult = false) {
   const state = recordStates[key]
   const hasResult = state.loaded || rows.length > 0
   return {
-    loading: state.loading && !hasResult,
+    loading: state.loading && (!hasResult || busyWithResult),
     error: !hasResult ? state.error || false : false,
     refreshFailed: hasResult ? state.error || false : false,
     empty: rows.length ? '' : empty,
@@ -232,7 +235,41 @@ const autoremoveRows = computed(() => (
     ? autoremovePreview.value.candidate_list
     : autoremoveCandidates.value
 ))
-
+const autoremoveHasRun = computed(() => Number(autoremoveStatus.value.last_run_at || 0) > 0)
+const autoremoveEmptyState = computed(() => {
+  if (autoremoveRows.value.length) return ''
+  if (autoremoveHasRun.value) return 'no-candidates'
+  if (recordStates.autoremove.loaded && autoremoveStatus.value.enabled === false) return 'disabled'
+  return 'not-scanned'
+})
+function failcleanMetric(value) {
+  return value == null || value === '' ? null : value
+}
+function hasFailcleanActivity(source, keys) {
+  return keys.some(key => Number(source?.[key] || 0) > 0)
+}
+const failcleanRows = computed(() => {
+  const status = failcleanStatus.value || {}
+  const rows = []
+  if (hasFailcleanActivity(status.event, ['deleted', 'failed', 'skipped'])) {
+    rows.push({ source: '来源事件', scanned: null, cleaned: failcleanMetric(status.event.deleted), failed: failcleanMetric(status.event.failed), skipped: failcleanMetric(status.event.skipped) })
+  }
+  if (hasFailcleanActivity(status.scan, ['scanned', 'cleaned', 'failed', 'skipped'])) {
+    rows.push({ source: '上轮巡检', scanned: failcleanMetric(status.scan.scanned), cleaned: failcleanMetric(status.scan.cleaned), failed: failcleanMetric(status.scan.failed), skipped: failcleanMetric(status.scan.skipped) })
+  }
+  if (hasFailcleanActivity(status.total, ['cleaned', 'failed', 'skipped'])) {
+    rows.push({ source: '累计', scanned: null, cleaned: failcleanMetric(status.total.cleaned), failed: failcleanMetric(status.total.failed), skipped: failcleanMetric(status.total.skipped) })
+  }
+  return rows
+})
+const failcleanHasRun = computed(() => Number(failcleanStatus.value.last_scan_time || 0) > 0)
+const failcleanHasResult = computed(() => failcleanHasRun.value || failcleanRows.value.length > 0)
+const failcleanEmptyState = computed(() => {
+  if (failcleanRows.value.length) return ''
+  if (failcleanHasResult.value) return 'no-candidates'
+  if (recordStates.failclean.loaded && failcleanStatus.value.enabled === false) return 'disabled'
+  return 'not-scanned'
+})
 const totalPages = computed(() => Math.max(1, Math.ceil((total.value || 0) / pageSize)))
 const archiveTotalPages = computed(() => Math.max(1, Math.ceil((archiveTotal.value || 0) / pageSize)))
 
@@ -635,15 +672,37 @@ async function loadHrStatus(request) {
 }
 
 async function loadAutoremoveStatus(request) {
-  const resp = await getApi('autoremove_status', { feedback: 'silent' }).catch(() => null)
-  if (!isCurrentPageRequest(request) || !resp?.status) return
-  autoremoveStatus.value = resp.status
+  const recordRequest = beginRecordRequest(['autoremove'])
+  recordStates.autoremove.loading = true
+  recordStates.autoremove.error = ''
+  try {
+    const resp = await getApi('autoremove_status', { feedback: 'silent' })
+    if (!isCurrentPageRequest(request) || !isCurrentRecordRequest(recordRequest, 'autoremove')) return
+    if (!resp?.status) throw new Error(resp?.msg || '自动删种记录加载失败')
+    autoremoveStatus.value = resp.status
+    recordStates.autoremove.loaded = true
+  } catch (e) {
+    reportRecordLoadError(recordRequest, e, '自动删种记录加载失败', 'autoremove')
+  } finally {
+    if (isCurrentRecordRequest(recordRequest, 'autoremove')) recordStates.autoremove.loading = false
+  }
 }
 
 async function loadFailcleanStatus(request) {
-  const resp = await getApi('failclean_status', { feedback: 'silent' }).catch(() => null)
-  if (!isCurrentPageRequest(request) || !resp?.status) return
-  failcleanStatus.value = resp.status
+  const recordRequest = beginRecordRequest(['failclean'])
+  recordStates.failclean.loading = true
+  recordStates.failclean.error = ''
+  try {
+    const resp = await getApi('failclean_status', { feedback: 'silent' })
+    if (!isCurrentPageRequest(request) || !isCurrentRecordRequest(recordRequest, 'failclean')) return
+    if (!resp?.status) throw new Error(resp?.msg || '失败清理明细加载失败')
+    failcleanStatus.value = resp.status
+    recordStates.failclean.loaded = true
+  } catch (e) {
+    reportRecordLoadError(recordRequest, e, '失败清理明细加载失败', 'failclean')
+  } finally {
+    if (isCurrentRecordRequest(recordRequest, 'failclean')) recordStates.failclean.loading = false
+  }
 }
 
 async function loadSiteTagStatus(request) {
@@ -1477,7 +1536,7 @@ onBeforeUnmount(() => {
       <main class="dm-main">
         <VAlert v-if="actionMsg" :type="actionOk ? 'success' : 'error'" variant="tonal" class="mb-3" closable density="compact">{{ actionMsg }}</VAlert>
         <VAlert v-if="error" type="error" variant="tonal" class="mb-3" density="compact">{{ error }}</VAlert>
-        <div v-if="loading && !['history', 'transfer', 'hr'].includes(activeTab)" class="dm-state">
+        <div v-if="loading && !['history', 'transfer', 'hr', 'autoremove', 'failclean'].includes(activeTab)" class="dm-state">
           <VProgressCircular indeterminate color="primary" />
         </div>
 
@@ -1834,68 +1893,56 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div v-if="activeTab === 'autoremove'" class="dm-record-block mt-3" data-record-block="autoremove-preview">
+          <div v-if="activeTab === 'autoremove'" class="dm-record-block mt-3" data-record-block="autoremove-preview" data-record-state="autoremove" :aria-busy="recordStates.autoremove.loading">
             <div class="dm-record-block-head">
-              <div>
-                <div class="dm-record-block-title">删种预览记录</div>
-                <div class="dm-hint">
-                  自动删种的候选清单；点「预览」重新收集候选，不写下载器。
-                </div>
-              </div>
-              <VChip size="small" variant="tonal" :color="autoremovePreview ? 'primary' : 'default'">
-                {{ autoremovePreview ? `预览命中 ${autoremoveRows.length} 个候选` : `上轮候选 ${autoremoveRows.length} 个` }}
-              </VChip>
+              <div class="dm-record-block-title"><span class="dm-table-sr">删种预览记录</span></div>
+              <div class="dm-hint">自动删种的候选清单；点「预览」重新收集候选，不写下载器。</div>
             </div>
-            <div v-if="autoremoveStatus.observe_only" class="dm-hint dm-risk mt-2"><VIcon icon="mdi-alert-outline" size="16" />
-              迁移观察期：仅列出候选，不执行下载器写操作。
+            <p v-if="recordStates.autoremove.loading && (recordStates.autoremove.loaded || autoremoveRows.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
+            <ModuleTable title="删种预览记录" :columns="[
+              { key: 'downloader_id', label: '下载器' },
+              { key: 'name', label: '名称' },
+              { key: 'site', label: '站点' },
+              { key: 'size_text', label: '体积', align: 'right' },
+              { key: 'ratio', label: '分享率', align: 'right' },
+              { key: 'seeding_hours', label: '做种时长', align: 'right' },
+              { key: 'reason', label: '原因' },
+            ]" :rows="autoremoveRows" :total="autoremoveRows.length" :state="recordTableState('autoremove', autoremoveRows, autoremoveEmptyState, true)" row-key="torrent_hash" @retry="loadAutoremoveStatus(beginPageRequest())">
+              <template #toolbar>
+                <VChip size="small" variant="tonal" :color="autoremovePreview ? 'primary' : 'default'">
+                  {{ autoremovePreview ? `预览命中 ${autoremoveRows.length} 个候选` : `上轮候选 ${autoremoveRows.length} 个` }}
+                </VChip>
+              </template>
+              <template #cell-name="{ row }"><span class="dm-body-text dm-ellipsis" :title="row.name || row.torrent_hash">{{ row.name || row.torrent_hash || '名称未记录' }}</span></template>
+              <template #cell-site="{ value }">{{ detailValue(value) }}</template>
+              <template #cell-size_text="{ value }">{{ detailValue(value) }}</template>
+              <template #cell-ratio="{ value }">{{ detailValue(value) }}</template>
+              <template #cell-seeding_hours="{ value }">{{ value == null || value === '' ? '—' : `${value} 小时` }}</template>
+              <template #cell-reason="{ value }">{{ detailValue(value) }}</template>
+              <template #cell-downloader_id="{ value }">{{ detailValue(value) }}</template>
+            </ModuleTable>
+            <!-- ModuleTable is the responsive data surface; no second dm-record-card tree. -->
+          </div>
+
+          <div v-if="activeTab === 'failclean'" class="dm-record-block mt-3" data-record-state="failclean" :aria-busy="recordStates.failclean.loading">
+            <div class="dm-record-block-head">
+              <div class="dm-record-block-title"><span class="dm-table-sr">失败清理明细</span></div>
+              <div class="dm-hint">来源事件与上轮巡检分开展示；事件计数不并入上轮巡检徽标。</div>
             </div>
-            <div v-if="autoremoveRows.length === 0" class="dm-state text-center dm-hint">
-              <VIcon icon="mdi-delete-clock-outline" size="48" color="grey-lighten-1" class="mb-2" />
-              <div>暂无候选记录</div>
-            </div>
-            <template v-else>
-              <div class="dm-table-scroll dm-desktop-table mt-2">
-                <VTable density="compact" class="dm-table">
-                  <thead>
-                    <tr>
-                      <th class="dm-table-head">下载器</th>
-                      <th class="dm-table-head">名称</th>
-                      <th class="dm-table-head">站点</th>
-                      <th class="dm-table-head">体积</th>
-                      <th class="dm-table-head">分享率</th>
-                      <th class="dm-table-head">做种时长</th>
-                      <th class="dm-table-head">原因</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in autoremoveRows" :key="`${item.downloader_id}-${item.torrent_hash}`">
-                      <td class="dm-body-text text-no-wrap">{{ item.downloader_id }}</td>
-                      <td class="dm-body-text dm-ellipsis" :title="item.name">{{ item.name }}</td>
-                      <td class="dm-body-text">{{ item.site || '-' }}</td>
-                      <td class="dm-body-text text-no-wrap">{{ item.size_text }}</td>
-                      <td class="dm-body-text">{{ item.ratio }}</td>
-                      <td class="dm-body-text text-no-wrap">{{ item.seeding_hours }} 小时</td>
-                      <td class="dm-body-text dm-ellipsis" :title="item.reason">{{ item.reason }}</td>
-                    </tr>
-                  </tbody>
-                </VTable>
-              </div>
-              <div class="dm-mobile-list mt-2">
-                <article v-for="item in autoremoveRows" :key="`${item.downloader_id}-${item.torrent_hash}`" class="dm-record-card">
-                  <div class="dm-record-head">
-                    <div class="dm-record-title" :title="item.name">{{ item.name }}</div>
-                    <VChip class="dm-record-status" size="x-small" color="warning" variant="tonal">{{ item.reason }}</VChip>
-                  </div>
-                  <div class="dm-record-meta">
-                    <div class="dm-record-row"><span class="dm-record-label">下载器</span><span class="dm-record-value">{{ item.downloader_id }}</span></div>
-                    <div class="dm-record-row"><span class="dm-record-label">站点</span><span class="dm-record-value">{{ item.site || '-' }}</span></div>
-                    <div class="dm-record-row"><span class="dm-record-label">体积</span><span class="dm-record-value">{{ item.size_text }}</span></div>
-                    <div class="dm-record-row"><span class="dm-record-label">分享率</span><span class="dm-record-value">{{ item.ratio }}</span></div>
-                    <div class="dm-record-row"><span class="dm-record-label">做种</span><span class="dm-record-value">{{ item.seeding_hours }} 小时</span></div>
-                  </div>
-                </article>
-              </div>
-            </template>
+            <p v-if="recordStates.failclean.loading && (recordStates.failclean.loaded || failcleanRows.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
+            <ModuleTable title="失败清理明细" :columns="[
+              { key: 'source', label: '来源' },
+              { key: 'scanned', label: '扫描', align: 'right' },
+              { key: 'cleaned', label: '清理', align: 'right' },
+              { key: 'failed', label: '失败', align: 'right' },
+              { key: 'skipped', label: '跳过', align: 'right' },
+            ]" :rows="failcleanRows" :total="failcleanRows.length" :state="recordTableState('failclean', failcleanRows, failcleanEmptyState, true)" row-key="source" @retry="loadFailcleanStatus(beginPageRequest())">
+              <template #cell-scanned="{ value }">{{ detailValue(value) }}</template>
+              <template #cell-cleaned="{ value }">{{ detailValue(value) }}</template>
+              <template #cell-failed="{ value }">{{ detailValue(value) }}</template>
+              <template #cell-skipped="{ value }">{{ detailValue(value) }}</template>
+            </ModuleTable>
+            <!-- ModuleTable is the responsive data surface; no second dm-record-card tree. -->
           </div>
 
           <div v-if="activeTab === 'hr'" class="dm-record-block mt-3" data-record-block="hr-tasks" data-record-state="hr" :aria-busy="recordStates.hr.loading">
