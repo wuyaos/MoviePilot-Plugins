@@ -28,7 +28,6 @@ from ..model.api import (
     ModuleActionResult,
     ModuleStatusResult,
     OverviewResult,
-    RenamePageResult,
     RetryRenamesResult,
     SelectionItem,
     TagCleanupExecuteRequest,
@@ -63,6 +62,9 @@ from ..modules.uploadlimit.service import (
     run_upload_limit_cycle,
     scan_upload_limit_site_tags,
 )
+
+from .records import record_page, record_query
+
 
 BusinessModelT = TypeVar("BusinessModelT", bound=ApiBusinessModel)
 
@@ -397,10 +399,10 @@ def api_tag_cleanup_execute(plugin, payload: TagCleanupExecuteRequest):
         )
 
 
-def api_rename_history(plugin, page: int = 1, page_size: int = 15):
-    """返回重命名历史记录（支持分页）"""
-    page = max(1, int(page or 1))
-    page_size = min(100, max(1, int(page_size or 15)))
+def api_rename_history(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all", detail_limit=None):
+    """返回未归档重命名历史；success/failed 沿用 success 布尔值。"""
+    page, page_size, result_filter = record_query(
+        page, page_size, result_filter, ("all", "success", "failed"))
     records = plugin.get_data(RENAME_RECORDS_KEY) or {}
     retry_state = plugin.get_data(RENAME_RETRY_STATE_KEY) or {}
     archived_hashes = {
@@ -415,19 +417,16 @@ def api_rename_history(plugin, page: int = 1, page_size: int = 15):
         if record_hash in archived_hashes:
             continue
         item = dict(record)
+        item["_record_key"] = record_hash
         item["hash"] = item.get("hash") or record_hash
         items.append(item)
-    all_items = sorted(items, key=lambda x: x.get("time", ""), reverse=True)
-    total = len(all_items)
-    start = (page - 1) * page_size
-    end = start + page_size
-    return RenamePageResult.model_validate({
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": max(1, -(-total // page_size)),
-        "items": all_items[start:end]
-    })
+    if result_filter != "all":
+        items = [item for item in items if bool(item.get("success")) == (result_filter == "success")]
+    items.sort(key=lambda item: str(item["_record_key"]))
+    items.sort(key=lambda item: str(item.get("time") or ""), reverse=True)
+    for item in items:
+        item.pop("_record_key")
+    return record_page(items, page, page_size, result_filter)
 
 
 @serialized_rename_state
@@ -447,9 +446,19 @@ def api_delete_rename_history(plugin, hash: str = ""):
     )
 
 
-def api_rename_archive(plugin, page: int = 1, page_size: int = 15):
-    """返回补刀归档记录（支持分页）。"""
-    return RenamePageResult.model_validate(plugin.list_rename_archive(page, page_size))
+@serialized_rename_state
+def api_rename_archive(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all", detail_limit=None):
+    """返回失败归档；归档本身均为失败，不推导新的成功状态。"""
+    if result_filter == "success":
+        raise HTTPException(status_code=400, detail="归档记录仅表示失败归档状态，不能推导为成功；result_filter 只支持 all/failed")
+    page, page_size, result_filter = record_query(
+        page, page_size, result_filter, ("all", "failed"))
+    state = plugin.get_data(RENAME_RETRY_STATE_KEY) or {}
+    items = [dict(item, hash=key) for key, item in state.items()
+             if isinstance(item, dict) and item.get("archived")]
+    items.sort(key=lambda item: str(item["hash"]))
+    items.sort(key=lambda item: str(item.get("archived_at") or item.get("last_failed_at") or ""), reverse=True)
+    return record_page(items, page, page_size, result_filter)
 
 
 def api_restore_rename_archive(plugin, hash: str = ""):
@@ -870,20 +879,20 @@ def _iter_transfer_records(plugin):
             yield key, value
 
 
-def api_transfer_status(plugin, page: int = 1, page_size: int = 15):
-    """返回转移做种数据页：任务配置、在途事务、最近记录与汇总。"""
+def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all", detail_limit=None):
+    """返回转移任务、在途事务与记录；统计保持全量口径。
+
+    互斥结果分类：success 为 completed 且不属于删源未完成；failed 仅 failed
+    终态；rollback = 回滚中或已回滚（rollback/rolled_back）；source_pending 为已请求删源
+    但尚未删除、阶段 target_ready/completed（含 H&R 保护）。筛选不改真实阶段，
+    不把 rolled_back/verifying 等阶段当作终态失败，all 仍返回全部。
+    """
     from ..model.state import TRANSFER_SKIP_STATS_KEY, load_transfer_stats
     from ..modules.transfer.recheck import load_seed_recheck_queue
     from ..modules.transfer.tasks import load_transfer_tasks
 
-    try:
-        page = max(1, int(page or 1))
-    except (TypeError, ValueError):
-        page = 1
-    try:
-        page_size = min(100, max(1, int(page_size or 15)))
-    except (TypeError, ValueError):
-        page_size = 15
+    page, page_size, result_filter = record_query(
+        page, page_size, result_filter, ("all", "success", "failed", "source_pending", "rollback"))
     now = time.time()
 
     task_rows = [
@@ -933,6 +942,11 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 15):
     records = []
     for key, value in _iter_transfer_records(plugin):
         records.append({
+            "_record_key": key,
+            "_source_pending": bool(
+                value.get("delete_source_requested") and not value.get("delete_source")
+                and value.get("transfer_state") in ("target_ready", "completed")
+            ),
             "task": value.get("task") or "",
             "source_downloader": value.get("source_downloader") or key.split("-", 1)[0],
             "source_hash": value.get("source_hash") or "",
@@ -945,24 +959,31 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 15):
             "fallback": bool(value.get("fallback")),
             "updated_at": float(value.get("updated_at") or 0),
         })
+    records.sort(key=lambda row: row["_record_key"])
     records.sort(key=lambda row: row["updated_at"], reverse=True)
-    total = len(records)
-    start = (page - 1) * page_size
+    filtered = [row for row in records if (
+        result_filter == "all"
+        or (result_filter == "success" and row["phase"] == "completed" and not row["_source_pending"])
+        or (result_filter == "failed" and row["phase"] == "failed")
+        or (result_filter == "rollback" and row["phase"] in ("rollback", "rolled_back"))
+        or (result_filter == "source_pending" and row["_source_pending"])
+    )]
+    for row in records:
+        row.pop("_record_key")
+        row.pop("_source_pending")
+    pagination = record_page(filtered, page, page_size, result_filter)
     stats = load_transfer_stats(plugin)
     skip_stats = plugin.get_data(TRANSFER_SKIP_STATS_KEY)
     skip_stats = skip_stats if isinstance(skip_stats, dict) else {}
 
-    return ModuleStatusResult(code=0, status={
+    status = {
         "tasks": task_rows,
         "pending": pending,
-        "records": records[start:start + page_size],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": max(1, -(-total // page_size)),
+        "records": pagination["items"],
+        **pagination,
         "summary": {
             "pending": len(pending),
-            "rollback": sum(1 for row in pending if row["phase"] == "rollback"),
+            "rollback": sum(1 for row in records if row["phase"] in ("rollback", "rolled_back")),
             "completed": sum(1 for row in records if row["phase"] == "completed"),
             "today_success": stats.get("today_success", 0),
             "success_total": stats.get("success_total", 0),
@@ -970,7 +991,8 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 15):
             "fallback_success": stats.get("fallback_success", 0),
             "hr_protected": int(skip_stats.get("hr_protected", 0) or 0),
         },
-    })
+    }
+    return {"code": 0, "status": status, **pagination}
 
 
 def api_tag_complement(plugin, payload: EmptyRequest | None = None):

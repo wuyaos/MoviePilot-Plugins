@@ -27,7 +27,10 @@ from ..model.api import (
     UploadLimitSiteTagsResult,
     UploadLimitStatusResult,
 )
+from .records import record_endpoint
 from .handlers import (
+    api_rename_history,
+    api_rename_archive,
     api_autoremove_preview,
     api_autoremove_run,
     api_autoremove_status,
@@ -68,9 +71,9 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
         },
         {
             "path": "/rename_history",
-            "endpoint": plugin.api_rename_history,
+            "endpoint": record_endpoint(api_rename_history, plugin),
             "auth": "bear",
-            "methods": ["GET"],
+            "methods": ["GET", "POST"],
             "summary": "获取重命名历史",
             "response_model": RenamePageResult,
         },
@@ -164,9 +167,9 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
         },
         {
             "path": "/rename_archive",
-            "endpoint": plugin.api_rename_archive,
+            "endpoint": record_endpoint(api_rename_archive, plugin),
             "auth": "bear",
-            "methods": ["GET"],
+            "methods": ["GET", "POST"],
             "summary": "获取补刀归档记录",
             "response_model": RenamePageResult,
         },
@@ -356,9 +359,9 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
         },
         {
             "path": "/transfer_status",
-            "endpoint": partial(api_transfer_status, plugin),
+            "endpoint": record_endpoint(api_transfer_status, plugin),
             "auth": "bear",
-            "methods": ["GET"],
+            "methods": ["GET", "POST"],
             "summary": "获取转移做种数据页",
             "response_model": ModuleStatusResult,
         },

@@ -412,13 +412,13 @@ def test_transfer_status_exposes_source_name(endpoints, monkeypatch):
     plugin = types.SimpleNamespace(
         get_data=lambda key=None: copy.deepcopy(records.get(key) if key else records))
 
-    status = endpoints.handlers.api_transfer_status(plugin).status
+    status = endpoints.handlers.api_transfer_status(plugin)["status"]
 
     assert status['pending'][0]['source_name'] == '在途.源种子.mkv'
     rows = {row['source_hash']: row for row in status['records']}
     assert rows['a' * 40]['source_name'] == '已完成.源种子.mkv'
     assert rows['c' * 40]['source_name'] == ''
-    assert status['total'] == 2 and status['page_size'] == 15, '分页与总数口径不能被名称字段改动'
+    assert status['total'] == 2 and status['page_size'] == 20, '分页与总数口径不能被名称字段改动'
 
 
 def test_transfer_status_source_name_supports_orm_rows(endpoints, monkeypatch):
@@ -437,7 +437,7 @@ def test_transfer_status_source_name_supports_orm_rows(endpoints, monkeypatch):
     plugin = types.SimpleNamespace(
         get_data=lambda key=None: copy.deepcopy(rows) if key is None else None)
 
-    status = endpoints.handlers.api_transfer_status(plugin).status
+    status = endpoints.handlers.api_transfer_status(plugin)["status"]
 
     names = {row['source_hash']: row['source_name'] for row in status['records']}
     assert names == {'e' * 40: 'ORM.源种子.mkv', 'g' * 40: ''}
