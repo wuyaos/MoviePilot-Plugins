@@ -268,3 +268,17 @@ def test_transfer_rollback_filter_matches_history_and_summary(records_api, phase
         assert other["items"] == []
         assert other["total"] == 0
         assert other["status"]["summary"]["rollback"] == body["total"]
+
+
+def test_response_model_default_matches_record_query():
+    # Instantiate the real DTO with only host schema imports stubbed.
+    from pydantic import BaseModel, Field
+    root = Path(__file__).resolve().parents[3]
+    tree = ast.parse((root / "plugins.v3/downloadmanagerlocal/model/api.py").read_text(encoding="utf-8"))
+    node = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "RenamePageResult")
+    namespace = {"ApiBusinessModel": BaseModel, "RenameRecord": dict, "Field": Field}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "model/api.py", "exec"), namespace)
+    result = namespace["RenamePageResult"]()
+    assert result.page_size == 20
+    assert result.model_dump()["page_size"] == 20
+    assert result.items == [] and result.total == 0

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
 from threading import Lock, RLock
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from app.sdk.logging import logger
 from pydantic import ValidationError
@@ -61,6 +62,14 @@ class HrService:
         self._guard = get_guard()
         self._stopped = False
         self._generation = 0
+
+    @property
+    def plugin(self) -> Any:
+        return self._plugin
+
+    @property
+    def stopped(self) -> bool:
+        return self._stopped
 
     @property
     def config(self) -> HrConfig:
@@ -195,6 +204,9 @@ class HrService:
         if self._config.downloaders and downloader not in self._config.downloaders:
             logger.debug(f"{HR_LOG_PREFIX}下载器 {downloader} 不在 H&R 下载器列表，跳过纳管 {target_hash}")
             return False
+        existing = self.get_task(downloader, target_hash)
+        if existing and existing.interlock_state:
+            return False
         service = downloader_services([downloader]).get(downloader)
         if service is None:
             logger.warning(f"{HR_LOG_PREFIX}下载器 {downloader} 不可用，跳过纳管 {target_hash}")
@@ -256,6 +268,9 @@ class HrService:
         ):
             set_hr_tag(service, task.hash, self._config.hit_and_run_tag)
         with self._lock:
+            previous = self._tasks.get(task.key)
+            if previous and previous.interlock_state:
+                return False
             self._tasks[task.key] = task
             self._save_tasks()
             self._refresh_guard()
@@ -265,6 +280,32 @@ class HrService:
             f"期限{task.hr_deadline_days or 0}天"
         )
         return True
+
+    def get_task(self, downloader_id: str, torrent_hash: str) -> Optional[HrTask]:
+        """只读任务副本；联动与查询沿用同一任务源。"""
+        with self._lock:
+            task = self._tasks.get(hr_task_key(downloader_id, torrent_hash))
+            return task.model_copy(deep=True) if task else None
+
+    @contextmanager
+    def edit_interlock_task(self, downloader_id: str, torrent_hash: str) -> Iterator[HrTask]:
+        """联动预约/落账的原子边界；上下文内禁止下载器 IO。"""
+        with self._lock:
+            task = self._tasks.get(hr_task_key(downloader_id, torrent_hash))
+            if task is None:
+                raise ValueError("H&R task not found")
+            unconfirmed = self._guard.unconfirmed
+            yield task
+            try:
+                if self._save_tasks() is False:
+                    raise RuntimeError("H&R state persistence rejected")
+            except Exception:
+                task.interlock_state = "interrupted"
+                self._refresh_guard()
+                raise
+            self._refresh_guard()
+            if unconfirmed:
+                self._guard.mark_unconfirmed()
 
     def send_summary(self) -> bool:
         """发送每日汇总通知；无待汇总事件时返回 False。
@@ -280,7 +321,7 @@ class HrService:
         key = hr_task_key(downloader_id, torrent_hash)
         with self._lock:
             task = self._tasks.get(key)
-            if task is None or task.hr_status not in CLEARABLE_STATUSES:
+            if task is None or task.interlock_state or task.hr_status not in CLEARABLE_STATUSES:
                 return False
             del self._tasks[key]
             self._save_tasks()
@@ -306,7 +347,7 @@ class HrService:
     def _clear_by_status(self, statuses: tuple[HrStatus, ...], label: str) -> int:
         """按状态批量清除记录。"""
         with self._lock:
-            removable = [key for key, task in self._tasks.items() if task.hr_status in statuses]
+            removable = [key for key, task in self._tasks.items() if task.hr_status in statuses and not task.interlock_state]
             for key in removable:
                 logger.info(f"{HR_LOG_PREFIX}清除{label}记录: [{self._tasks[key].site_name}] {self._tasks[key].identifier}")
                 del self._tasks[key]
@@ -446,6 +487,8 @@ class HrService:
         """按采样更新任务统计，并标记/恢复种子在下载器中的存在状态。"""
         deleted = 0
         for key, task in self._tasks.items():
+            if task.interlock_state:
+                continue
             if task.downloader in failed:
                 continue
             snapshot = snapshots.get(key)
@@ -467,6 +510,8 @@ class HrService:
         """逐条判定达标状态，并在状态跃迁时移除标签与记录通知事件。"""
         changed = 0
         for task in self._tasks.values():
+            if task.interlock_state:
+                continue
             rule = self._config.get_site_rule(task.site_name)
             new_status = evaluate_task(task, rule, now)
             if new_status is None:
@@ -582,9 +627,12 @@ class HrService:
         protected = [
             (task.downloader, task.hash)
             for task in self._tasks.values()
-            if task.hash and task.hr_status != HrStatus.COMPLIANT
+            if task.hash and (
+                task.interlock_state not in ("released", "deleting", "deleted")
+                and (task.interlock_state or task.hr_status != HrStatus.COMPLIANT)
+            )
         ]
-        self._guard.update(enabled=self._config.protection_enabled, protected=protected)
+        self._guard.update(enabled=self._config.enabled and self._config.protection_enabled and not self._stopped, protected=protected)
 
     def _load_tasks(self) -> dict[str, HrTask]:
         """读取持久化任务，逐条跳过无法解析的历史记录。"""
@@ -598,13 +646,16 @@ class HrService:
             except ValidationError as error:
                 logger.warning(f"{HR_LOG_PREFIX}历史任务记录无效，已跳过：{error}")
                 continue
+            if task.interlock_state in ("pending", "released", "deleting", "restoring"):
+                task.interlock_state = "interrupted"
+                task.interlock_error = "interrupted; deletion not confirmed"
             if task.hash:
                 tasks[task.key] = task
         return tasks
 
-    def _save_tasks(self) -> None:
+    def _save_tasks(self) -> Any:
         """保存任务集合。"""
-        self._plugin.save_data(
+        return self._plugin.save_data(
             HR_TASKS_DATA_KEY,
             {key: task.model_dump(mode="json") for key, task in self._tasks.items()},
         )

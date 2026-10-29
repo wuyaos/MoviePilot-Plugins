@@ -117,6 +117,11 @@ class HrTask(BaseModel):
     deleted: bool = False
     deleted_time: Optional[float] = None
     hr_met_time: Optional[float] = None
+    # 授权账与任务共存；缺字段的旧记录没有联动授权。
+    interlock_id: str = ""
+    interlock_source: str = ""
+    interlock_state: str = ""
+    interlock_error: str = ""
 
     @property
     def key(self) -> str:

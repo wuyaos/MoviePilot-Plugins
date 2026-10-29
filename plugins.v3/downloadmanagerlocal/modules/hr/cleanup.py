@@ -13,12 +13,12 @@ def auto_cleanup(tasks: dict[str, HrTask], auto_cleanup_days: float, now: float)
     removable = [
         key
         for key, task in tasks.items()
-        if (
+        if not task.interlock_state and (
             task.hr_status == HrStatus.COMPLIANT
             and task.hr_met_time
             and now - task.hr_met_time > threshold
         )
-        or (task.deleted and task.deleted_time and now - task.deleted_time > threshold)
+        or (not task.interlock_state and task.deleted and task.deleted_time and now - task.deleted_time > threshold)
     ]
     for key in removable:
         del tasks[key]

@@ -46,7 +46,7 @@ class RenamePageResult(ApiBusinessModel):
 
     total: int = 0
     page: int = 1
-    page_size: int = 15
+    page_size: int = 20
     total_pages: int = 1
     items: list[RenameRecord] = Field(default_factory=list)
 

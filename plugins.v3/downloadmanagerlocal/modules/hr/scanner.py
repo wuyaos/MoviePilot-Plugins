@@ -206,49 +206,65 @@ def is_excluded(
     return False, ""
 
 
-def torrent_labels(service: Any, torrent_hash: str) -> list[str]:
+def torrent_labels(service: Any, torrent_hash: str, *, strict: bool = False) -> list[str]:
     """读取单个任务的最新标签列表，读取失败返回空列表。"""
     torrents, error = read_torrents(service, ids=[torrent_hash])
     if error or not torrents:
+        if strict:
+            raise RuntimeError(error or "torrent not found")
         return []
     return get_label(torrents[0], downloader_type(service))
 
 
-def set_hr_tag(service: Any, torrent_hash: str, tag: str) -> None:
+def set_hr_tag(service: Any, torrent_hash: str, tag: str, *, strict: bool = False) -> None:
     """给任务追加 H&R 标签，Transmission 保留原有标签。"""
     if not torrent_hash or not tag:
         return
     try:
         if downloader_type(service) == QBITTORRENT:
-            service.instance.set_torrents_tag(ids=torrent_hash, tags=[tag])
+            result = service.instance.set_torrents_tag(ids=torrent_hash, tags=[tag])
         else:
-            service.instance.set_torrent_tag(
+            result = service.instance.set_torrent_tag(
                 ids=torrent_hash,
                 tags=[tag],
-                org_tags=torrent_labels(service, torrent_hash),
+                org_tags=torrent_labels(service, torrent_hash, strict=strict),
             )
+        if strict and result is False:
+            raise RuntimeError("tag write rejected")
     except Exception as error:
+        if strict:
+            raise
         logger.warning(f"{HR_LOG_PREFIX}设置 H&R 标签失败 hash={torrent_hash}: {error}")
 
 
-def remove_hr_tag(service: Any, torrent_hash: str, tag: str) -> None:
+def remove_hr_tag(service: Any, torrent_hash: str, tag: str, *, strict: bool = False) -> None:
     """达标后移除 H&R 标签；Transmission 先读最新标签再回写，避免覆盖其他模块写入的标签。"""
     if not torrent_hash or not tag:
         return
     try:
         if downloader_type(service) == QBITTORRENT:
-            service.instance.remove_torrents_tag(ids=torrent_hash, tag=tag)
+            result = service.instance.remove_torrents_tag(ids=torrent_hash, tag=tag)
+            if strict and result is False:
+                raise RuntimeError("tag removal rejected")
             return
-        remaining = [item for item in torrent_labels(service, torrent_hash) if item != tag]
+        remaining = [item for item in torrent_labels(service, torrent_hash, strict=strict) if item != tag]
         if remaining:
-            service.instance.set_torrent_tag(ids=torrent_hash, tags=remaining)
+            result = service.instance.set_torrent_tag(ids=torrent_hash, tags=remaining)
+            if strict and result is False:
+                raise RuntimeError("tag removal rejected")
             return
         client = getattr(service.instance, "trc", None)
         if client is None:
+            if strict:
+                raise RuntimeError("Transmission client unavailable")
             logger.warning(f"{HR_LOG_PREFIX}Transmission 客户端不可用，无法清空 H&R 标签 hash={torrent_hash}")
             return
-        client.change_torrent(ids=[torrent_hash], labels=[])
+        result = client.change_torrent(ids=[torrent_hash], labels=[])
+        if strict and result is False:
+            raise RuntimeError("tag removal rejected")
     except Exception as error:
+        if strict:
+            raise
         logger.warning(f"{HR_LOG_PREFIX}移除 H&R 标签失败 hash={torrent_hash}: {error}")
 
 
