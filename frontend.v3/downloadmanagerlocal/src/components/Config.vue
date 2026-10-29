@@ -27,6 +27,7 @@ const transferForm = reactive({})
 const transferError = ref('')
 const transferDeleteDialog = ref(false)
 const transferDeleteIndex = ref(-1)
+const transferStatusTasks = ref([])
 const siteItems = ref([])
 const hrPresets = ref([])
 const hrPresetsLoading = ref(false)
@@ -44,9 +45,10 @@ let hrSyncedSiteConfigText = ''
 
 onMounted(async () => {
   try {
-    const [dlResp, siteResp] = await Promise.all([
+    const [dlResp, siteResp, transferStatusResp] = await Promise.all([
       getApi('downloaders', { feedback: 'silent' }),
       getApi('sites', { feedback: 'silent' }),
+      getApi('transfer_status?page=1&page_size=100', { feedback: 'silent' }),
       loadHrPresets(),
     ])
     if (dlResp) {
@@ -55,6 +57,9 @@ onMounted(async () => {
     if (siteResp) {
       siteItems.value = siteResp
     }
+    transferStatusTasks.value = Array.isArray(transferStatusResp?.status?.tasks)
+      ? transferStatusResp.status.tasks
+      : (Array.isArray(transferStatusResp?.tasks) ? transferStatusResp.tasks : [])
   } catch (e) {
     console.error('获取列表失败:', e)
   }
@@ -87,6 +92,7 @@ const defaults = {
   tag_catprefix: '',
   enabled: false, transfer_enabled: true, delay_minutes: 25, notify: false,
   transfer_fallback_enabled: true, transfer_fallback_interval_minutes: 60,
+  transfer_delete_source_default: false, transfer_delete_duplicate_default: false,
   fromdownloader: '', todownloader: '', frompath: '', topath: '',
   fromtorrentpath: '', nopaths: '', nolabels: '', includelabels: '', includecategory: '',
   transferemptylabel: false, add_torrent_tags: '⏩转种',
@@ -116,6 +122,7 @@ const defaults = {
 const PANE_RESET_KEYS = {
   transfer: ['transfer_enabled', 'delay_minutes', 'notify',
     'transfer_fallback_enabled', 'transfer_fallback_interval_minutes',
+    'transfer_delete_source_default', 'transfer_delete_duplicate_default',
     'fromdownloader', 'todownloader', 'frompath', 'topath', 'fromtorrentpath',
     'nopaths', 'nolabels', 'includelabels', 'includecategory', 'transferemptylabel',
     'add_torrent_tags', 'deletesource', 'deleteduplicate', 'remainoldcat', 'remainoldtag',
@@ -323,13 +330,17 @@ const transferTaskDefaults = {
   name: '', enabled: true, from_downloader: '', to_downloader: '',
   include_category: '', include_labels: '', exclude_labels: '', empty_label_ok: true,
   no_paths: '', from_path: '', to_path: '',
-  delete_source: false, delete_duplicate: true, keep_category: true, keep_tag: true,
+  delete_source: 'inherit', delete_duplicate: 'inherit', keep_category: true, keep_tag: true,
   transfer_tag: '已转移',
 }
 
 /** 对话框草稿；ext_* 只用于 downloader_ext，不进入任务对象。 */
 function blankTransferForm() {
   return { ...transferTaskDefaults, ext_webui_url: '', ext_source_plugin: '' }
+}
+
+function normalizeTransferDeleteState(value, legacyDefault) {
+  return value === true || value === false || value === 'inherit' ? value : legacyDefault
 }
 
 function parseTransferTasks(raw) {
@@ -343,7 +354,13 @@ function parseTransferTasks(raw) {
   if (!Array.isArray(parsed)) return []
   return parsed
     .filter(item => item && typeof item === 'object')
-    .map(item => ({ ...transferTaskDefaults, ...item, enabled: item.enabled !== false }))
+    .map(item => ({
+      ...transferTaskDefaults,
+      ...item,
+      delete_source: normalizeTransferDeleteState(item.delete_source, false),
+      delete_duplicate: normalizeTransferDeleteState(item.delete_duplicate, true),
+      enabled: item.enabled !== false,
+    }))
 }
 
 function parseDownloaderExt(raw) {
@@ -389,8 +406,8 @@ function taskFilterChips(task) {
 /** 设置列徽标：显示该任务启用了哪些高级设置，未启用任何项时前端显示「默认」。 */
 function taskSettingBadges(task) {
   const badges = []
-  if (task.delete_source) badges.push({ text: '删源种', color: 'error' })
-  if (task.delete_duplicate) badges.push({ text: '去重', color: 'warning' })
+  if (task.delete_source === true) badges.push({ text: '删源种', color: 'error' })
+  if (task.delete_duplicate === true) badges.push({ text: '去重', color: 'warning' })
   if (!task.keep_category) badges.push({ text: '不保留分类', color: 'secondary' })
   if (!task.keep_tag) badges.push({ text: '不保留标签', color: 'secondary' })
   const transferTag = String(task.transfer_tag || '').trim()
@@ -399,6 +416,31 @@ function taskSettingBadges(task) {
   if (ext.webui_url) badges.push({ text: 'WebUI 覆盖', color: 'info' })
   if (ext.source_plugin) badges.push({ text: 'source 插件', color: 'info' })
   return badges
+}
+
+const transferDeleteTriStateItems = [
+  { title: '继承全局', value: 'inherit' },
+  { title: '开启', value: true },
+  { title: '关闭', value: false },
+]
+const transferDeleteOriginLabels = {
+  task: '任务覆盖',
+  global: '继承全局',
+  'legacy-default': '升级前默认',
+}
+
+function transferStatusForTask(task) {
+  return transferStatusTasks.value.find(item => item?.name === task?.name) || null
+}
+
+function transferDeleteMeta(task, field) {
+  const status = transferStatusForTask(task)
+  const origin = status?.[`${field}_origin`]
+  const effective = status?.[`${field}_effective`]
+  return {
+    origin: transferDeleteOriginLabels[origin] || '—',
+    effective: effective === true ? '开启' : (effective === false ? '关闭' : '—'),
+  }
 }
 
 const transferDialogSourceType = computed(() => (
@@ -461,8 +503,8 @@ function confirmTransferTask() {
     no_paths: String(transferForm.no_paths || ''),
     from_path: fromPath,
     to_path: toPath,
-    delete_source: !!transferForm.delete_source,
-    delete_duplicate: transferForm.delete_duplicate !== false,
+    delete_source: normalizeTransferDeleteState(transferForm.delete_source, 'inherit'),
+    delete_duplicate: normalizeTransferDeleteState(transferForm.delete_duplicate, 'inherit'),
     keep_category: transferForm.keep_category !== false,
     keep_tag: transferForm.keep_tag !== false,
     transfer_tag: String(transferForm.transfer_tag ?? '').trim(),
@@ -1410,6 +1452,16 @@ Object.keys(form).forEach(k => delete form[k])
                   <VSwitch density="compact" v-model="form.notify" color="primary" inset hide-details label="发送通知" />
                 </div>
               </div>
+              <div class="dm-field-row">
+                <div class="dm-field dm-field--toggle">
+                  <VSwitch density="compact" v-model="form.transfer_delete_source_default" color="error" inset hide-details label="删源默认" />
+                  <div class="dm-hint">仅影响新任务的默认值；旧任务保持其原有设置</div>
+                </div>
+                <div class="dm-field dm-field--toggle">
+                  <VSwitch density="compact" v-model="form.transfer_delete_duplicate_default" color="error" inset hide-details label="删重复默认" />
+                  <div class="dm-hint">仅影响新任务的默认值；旧任务保持其原有设置</div>
+                </div>
+              </div>
               <div class="dm-section-title mt-4">触发与执行</div>
               <div class="dm-field-row">
                 <div class="dm-field dm-field--number">
@@ -1514,6 +1566,8 @@ Object.keys(form).forEach(k => delete form[k])
                     <VChip v-for="badge in taskSettingBadges(task)" :key="badge.text" size="x-small" variant="flat"
                       :color="badge.color">{{ badge.text }}</VChip>
                     <span v-if="!taskSettingBadges(task).length" class="dm-hint">默认</span>
+                    <span class="dm-hint">删源：来源 {{ transferDeleteMeta(task, 'delete_source').origin }}，生效 {{ transferDeleteMeta(task, 'delete_source').effective }}</span>
+                    <span class="dm-hint">删重复：来源 {{ transferDeleteMeta(task, 'delete_duplicate').origin }}，生效 {{ transferDeleteMeta(task, 'delete_duplicate').effective }}</span>
                   </div>
                   <div class="dm-task-actions">
                     <VBtn size="small" aria-label="编辑任务" icon="mdi-pencil-outline" variant="text" title="编辑任务"
@@ -2222,17 +2276,19 @@ Object.keys(form).forEach(k => delete form[k])
             </div>
           </div>
           <div class="dm-section-title mt-4">高级设置</div>
-          <div v-if="transferForm.delete_source" class="dm-hint dm-risk mb-2"><VIcon icon="mdi-alert-outline" size="16" />
+          <div v-if="transferForm.delete_source === true" class="dm-hint dm-risk mb-2"><VIcon icon="mdi-alert-outline" size="16" />
             「删除源任务」受 H&R 保护约束：源种若已纳入 H&amp;R 管理且未达标，源任务会被保留，并计入数据页「转移做种」卡的「H&amp;R 保护」跳过数。放行办法有三种——等它达标（自动放行）、让种子在进入下载器前就带 H&amp;R 排除标签、或关闭 H&amp;R 保护总开关。注意：<strong>已纳管的种子事后补排除标签无效</strong>（排除只在首次纳管时判定）。
           </div>
           <div class="dm-field-row">
-            <div class="dm-field dm-field--toggle">
-              <VSwitch density="compact" v-model="transferForm.delete_source" color="error" inset hide-details label="删除源任务" />
-              <div v-if="transferForm.delete_source" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />转移后删除源任务，仍受 H&R 保护约束。</div>
+            <div class="dm-field">
+              <VSelect density="compact" v-model="transferForm.delete_source" :items="transferDeleteTriStateItems" label="删除源任务" variant="outlined"
+                hint="继承全局 / 开启 / 关闭；来源与生效值见任务列表" persistent-hint />
+              <div v-if="transferForm.delete_source === true" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />转移后删除源任务，仍受 H&R 保护约束。</div>
             </div>
-            <div class="dm-field dm-field--toggle">
-              <VSwitch density="compact" v-model="transferForm.delete_duplicate" color="error" inset hide-details label="删除重复任务" />
-              <div v-if="transferForm.delete_duplicate" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />转移时删除重复任务，仍受 H&R 保护约束。</div>
+            <div class="dm-field">
+              <VSelect density="compact" v-model="transferForm.delete_duplicate" :items="transferDeleteTriStateItems" label="删除重复任务" variant="outlined"
+                hint="继承全局 / 开启 / 关闭；来源与生效值见任务列表" persistent-hint />
+              <div v-if="transferForm.delete_duplicate === true" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />转移时删除重复任务，仍受 H&R 保护约束。</div>
             </div>
           </div>
           <div class="dm-field-row">

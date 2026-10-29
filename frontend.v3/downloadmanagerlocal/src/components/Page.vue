@@ -1,5 +1,6 @@
 <script setup>
 import '../styles/dm-tokens.css'
+import TableState from './TableState.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { getPluginApi, postPluginApi, postPluginJsonApi } from './api'
 import DownloaderBadge from './DownloaderBadge.vue'
@@ -51,6 +52,22 @@ const diagnostics = ref(null)
 const downloaderItems = ref([])
 const records = ref([])
 const archiveRecords = ref([])
+// Each block owns its result/error; the existing request revision also guards block retries.
+const recordStates = reactive({
+  history: { loading: false, loaded: false, error: '', revision: 0 },
+  archive: { loading: false, loaded: false, error: '', revision: 0 },
+  transfer: { loading: false, loaded: false, error: '', revision: 0 },
+})
+function recordTableState(key, rows) {
+  const state = recordStates[key]
+  const hasResult = state.loaded || rows.length > 0
+  return {
+    loading: state.loading && !hasResult,
+    error: !hasResult ? state.error || false : false,
+    refreshFailed: hasResult ? state.error || false : false,
+    empty: rows.length ? '' : 'none',
+  }
+}
 const total = ref(0)
 const archiveTotal = ref(0)
 const page = ref(1)
@@ -116,11 +133,13 @@ function isCurrentPageRequest(request) {
   return !pageDisposed && request.revision === pageRequestRevision
     && request.pluginId === props.pluginId && request.tab === activeTab.value
 }
-function beginRecordRequest() {
-  return { revision: ++recordRequestRevision, pluginId: props.pluginId, tab: activeTab.value }
+function beginRecordRequest(blocks = ['history', 'archive']) {
+  const request = { revision: ++recordRequestRevision, pluginId: props.pluginId, tab: activeTab.value }
+  for (const key of blocks) recordStates[key].revision = request.revision
+  return request
 }
-function isCurrentRecordRequest(request) {
-  return !pageDisposed && request.revision === recordRequestRevision
+function isCurrentRecordRequest(request, key) {
+  return !pageDisposed && request.revision === (key ? recordStates[key].revision : recordRequestRevision)
     && request.pluginId === props.pluginId && request.tab === activeTab.value
 }
 function beginDiagnosticsRequest() {
@@ -137,9 +156,9 @@ function reportLoadError(request, e, fallback, { silent = false } = {}) {
   }
   error.value = e?.message || fallback
 }
-function reportRecordLoadError(request, e, fallback) {
-  if (!isCurrentRecordRequest(request)) return
-  error.value = e?.message || fallback
+function reportRecordLoadError(request, e, fallback, key) {
+  if (!isCurrentRecordRequest(request, key)) return
+  recordStates[key].error = e?.message || fallback
 }
 
 function formatDuration(seconds) {
@@ -694,10 +713,21 @@ function transferSettingBadges(task) {
 }
 
 async function loadTransferStatus(request) {
-  const resp = await getApi(`transfer_status?page=${transferPage.value}&page_size=15`, { feedback: 'silent' }).catch(() => null)
-  if (!isCurrentPageRequest(request) || !resp?.status) return
-  transferStatus.value = resp.status
-  transferPage.value = resp.status.page || transferPage.value
+  const recordRequest = beginRecordRequest(['transfer'])
+  recordStates.transfer.loading = true
+  recordStates.transfer.error = ''
+  try {
+    const resp = await getApi(`transfer_status?page=${transferPage.value}&page_size=15`, { feedback: 'silent' })
+    if (!isCurrentPageRequest(request) || !isCurrentRecordRequest(recordRequest, 'transfer')) return
+    if (!resp?.status) throw new Error(resp?.msg || '转移记录加载失败')
+    transferStatus.value = resp.status
+    transferPage.value = resp.status.page || transferPage.value
+    recordStates.transfer.loaded = true
+  } catch (e) {
+    reportRecordLoadError(recordRequest, e, '转移记录加载失败', 'transfer')
+  } finally {
+    if (isCurrentRecordRequest(recordRequest, 'transfer')) recordStates.transfer.loading = false
+  }
 }
 
 function changeTransferPage(page) {
@@ -735,34 +765,40 @@ async function loadModuleStatuses(request) {
 }
 
 async function loadHistory(request) {
+  recordStates.history.loading = true
+  recordStates.history.error = ''
   try {
     const resp = await getApi(`rename_history?page=${page.value}&page_size=${pageSize}`)
-    if (!isCurrentRecordRequest(request)) return
+    if (!isCurrentRecordRequest(request, 'history')) return
     records.value = Array.isArray(resp?.items) ? resp.items : []
     total.value = resp?.total || 0
+    recordStates.history.loaded = true
   } catch (e) {
-    reportRecordLoadError(request, e, '命名历史加载失败')
+    reportRecordLoadError(request, e, '命名历史加载失败', 'history')
   } finally {
-    if (isCurrentRecordRequest(request)) paging.value = false
+    if (isCurrentRecordRequest(request, 'history')) { paging.value = false; recordStates.history.loading = false }
   }
 }
 
 async function loadArchive(request) {
+  recordStates.archive.loading = true
+  recordStates.archive.error = ''
   try {
     let resp = await getApi(`rename_archive?page=${archivePage.value}&page_size=${pageSize}`)
-    if (!isCurrentRecordRequest(request)) return
+    if (!isCurrentRecordRequest(request, 'archive')) return
     const lastPage = Math.max(1, Math.ceil((resp?.total || 0) / pageSize))
     if (archivePage.value > lastPage) {
       archivePage.value = lastPage
       resp = await getApi(`rename_archive?page=${archivePage.value}&page_size=${pageSize}`)
     }
-    if (!isCurrentRecordRequest(request)) return
+    if (!isCurrentRecordRequest(request, 'archive')) return
     archiveRecords.value = Array.isArray(resp?.items) ? resp.items : []
     archiveTotal.value = resp?.total || 0
+    recordStates.archive.loaded = true
   } catch (e) {
-    reportRecordLoadError(request, e, '归档加载失败')
+    reportRecordLoadError(request, e, '归档加载失败', 'archive')
   } finally {
-    if (isCurrentRecordRequest(request)) paging.value = false
+    if (isCurrentRecordRequest(request, 'archive')) { paging.value = false; recordStates.archive.loading = false }
   }
 }
 
@@ -826,6 +862,9 @@ const cleanupTargetCount = computed(() => cleanupCounts.value[cleanupTargetKey.v
 
 const moduleDetails = computed(() => diagnostics.value?.module_details || {})
 
+function detailValue(value) {
+  return value == null || value === '' ? '—' : value
+}
 function moduleDetail(key) {
   const detail = moduleDetails.value[key]
   const rows = Array.isArray(detail?.rows) ? detail.rows : []
@@ -834,7 +873,7 @@ function moduleDetail(key) {
   const limitValue = Number(detail?.limit)
   const total = Number.isFinite(totalValue) && totalValue >= 0 ? totalValue : items.length
   return {
-    rows,
+    rows: rows.map(row => ({ ...row, value: detailValue(row.value) })),
     items,
     error: detail?.error || '',
     total,
@@ -1250,25 +1289,25 @@ function prevPage() {
   if (page.value <= 1 || paging.value) return
   paging.value = true
   page.value--
-  void loadHistory(beginRecordRequest())
+  void loadHistory(beginRecordRequest(['history']))
 }
 function nextPage() {
   if (page.value >= totalPages.value || paging.value) return
   paging.value = true
   page.value++
-  void loadHistory(beginRecordRequest())
+  void loadHistory(beginRecordRequest(['history']))
 }
 function prevArchivePage() {
   if (archivePage.value <= 1 || paging.value) return
   paging.value = true
   archivePage.value--
-  void loadArchive(beginRecordRequest())
+  void loadArchive(beginRecordRequest(['archive']))
 }
 function nextArchivePage() {
   if (archivePage.value >= archiveTotalPages.value || paging.value) return
   paging.value = true
   archivePage.value++
-  void loadArchive(beginRecordRequest())
+  void loadArchive(beginRecordRequest(['archive']))
 }
 
 const qbDownloaderItems = computed(() => downloaderItems.value.filter(item => item.type === 'qbittorrent'))
@@ -1413,7 +1452,7 @@ onBeforeUnmount(() => {
       <main class="dm-main">
         <VAlert v-if="actionMsg" :type="actionOk ? 'success' : 'error'" variant="tonal" class="mb-3" closable density="compact">{{ actionMsg }}</VAlert>
         <VAlert v-if="error" type="error" variant="tonal" class="mb-3" density="compact">{{ error }}</VAlert>
-        <div v-if="loading" class="dm-state">
+        <div v-if="loading && !['history', 'transfer'].includes(activeTab)" class="dm-state">
           <VProgressCircular indeterminate color="primary" />
         </div>
 
@@ -1593,7 +1632,7 @@ onBeforeUnmount(() => {
                       </template>
                       <div v-if="card.details?.length" class="dm-module-detail-grid">
                         <div v-for="row in card.details" :key="row.label" class="dm-module-detail-row">
-                          <span>{{ row.label }}</span><strong>{{ row.value }}</strong>
+                          <span>{{ row.label }}</span><strong>{{ detailValue(row.value) }}</strong>
                         </div>
                       </div>
                       <div v-for="note in card.notes || []" :key="note.text" class="dm-hint mt-2" :class="{ 'dm-risk': note.type === 'warning', 'dm-error': note.type === 'error' }"><VIcon v-if="note.type === 'warning' || note.type === 'error'" :icon="note.type === 'error' ? 'mdi-alert-circle-outline' : 'mdi-alert-outline'" size="16" />{{ note.text }}</div>
@@ -1627,11 +1666,8 @@ onBeforeUnmount(() => {
               <VBtn size="small" variant="tonal" prepend-icon="mdi-radar" class="text-none ml-2"
                 :loading="moduleRunning === 'rename-scan'" :disabled="moduleRunning !== '' && moduleRunning !== 'rename-scan'" @click="doRenameScan">扫描重命名</VBtn>
             </div>
-            <div v-if="records.length === 0" class="dm-state text-center dm-hint">
-              <VIcon icon="mdi-history" size="48" color="grey-lighten-1" class="mb-2" />
-              <div>暂无命名记录</div>
-            </div>
-            <template v-else>
+            <div data-record-state="history" :aria-busy="recordStates.history.loading">
+              <p v-if="recordStates.history.loading && (recordStates.history.loaded || records.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
               <div class="dm-table-scroll dm-desktop-table">
                 <VTable density="compact" class="dm-table">
                   <thead>
@@ -1644,6 +1680,7 @@ onBeforeUnmount(() => {
                     </tr>
                   </thead>
                   <tbody>
+                    <tr v-if="!records.length || recordStates.history.error"><td colspan="5"><TableState v-bind="recordTableState('history', records)" @retry="loadHistory(beginRecordRequest(['history']))" /></td></tr>
                     <tr v-for="r in records" :key="r.hash">
                       <td class="dm-body-text text-no-wrap">{{ r.time }}</td>
                       <td class="dm-body-text dm-ellipsis" :title="r.original_name">{{ r.original_name }}</td>
@@ -1661,6 +1698,7 @@ onBeforeUnmount(() => {
                 </VTable>
               </div>
               <div class="dm-mobile-list dm-history-list">
+                <TableState v-bind="recordTableState('history', records)" @retry="loadHistory(beginRecordRequest(['history']))" />
                 <article v-for="r in records" :key="r.hash" class="dm-record-card dm-history-card">
                   <div class="dm-record-head">
                     <div class="dm-record-title" :title="r.after_name || r.original_name">{{ r.after_name || r.original_name || r.hash }}</div>
@@ -1687,8 +1725,8 @@ onBeforeUnmount(() => {
                   </div>
                 </article>
               </div>
-            </template>
-            <div v-if="total > pageSize" class="d-flex align-center justify-center pa-3">
+            </div>
+            <div v-if="records.length && total > pageSize" class="d-flex align-center justify-center pa-3">
               <VBtn size="small" aria-label="上一页" variant="tonal" icon="mdi-chevron-left" :disabled="page <= 1 || paging" @click="prevPage" class="mr-2" />
               <span class="dm-hint mx-1">{{ page }} / {{ totalPages }}（共 {{ total }} 条）</span>
               <VBtn size="small" aria-label="下一页" variant="tonal" icon="mdi-chevron-right" :disabled="page >= totalPages || paging" @click="nextPage" class="ml-2" />
@@ -1702,11 +1740,8 @@ onBeforeUnmount(() => {
                 <div class="dm-hint">共 {{ archiveTotal }} 条连续失败后归档的记录，可补刀、恢复或删除。</div>
               </div>
             </div>
-            <div v-if="archiveRecords.length === 0" class="dm-state text-center dm-hint">
-              <VIcon icon="mdi-archive-outline" size="48" color="grey-lighten-1" class="mb-2" />
-              <div>暂无归档记录</div>
-            </div>
-            <template v-else>
+            <div data-record-state="archive" :aria-busy="recordStates.archive.loading">
+              <p v-if="recordStates.archive.loading && (recordStates.archive.loaded || archiveRecords.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
               <div class="dm-table-scroll dm-desktop-table">
                 <VTable density="compact" class="dm-table">
                   <thead>
@@ -1720,6 +1755,7 @@ onBeforeUnmount(() => {
                     </tr>
                   </thead>
                   <tbody>
+                    <tr v-if="!archiveRecords.length || recordStates.archive.error"><td colspan="6"><TableState v-bind="recordTableState('archive', archiveRecords)" @retry="loadArchive(beginRecordRequest(['archive']))" /></td></tr>
                     <tr v-for="r in archiveRecords" :key="r.hash">
                       <td class="dm-body-text text-no-wrap">{{ r.archived_at || r.last_failed_at }}</td>
                       <td class="dm-body-text dm-ellipsis" :title="r.name">{{ r.name || r.hash }}</td>
@@ -1738,6 +1774,7 @@ onBeforeUnmount(() => {
                 </VTable>
               </div>
               <div class="dm-mobile-list dm-archive-list">
+                <TableState v-bind="recordTableState('archive', archiveRecords)" @retry="loadArchive(beginRecordRequest(['archive']))" />
                 <article v-for="r in archiveRecords" :key="r.hash" class="dm-record-card dm-archive-card">
                   <div class="dm-record-head">
                     <div class="dm-record-title" :title="r.name || r.hash">{{ r.name || r.hash }}</div>
@@ -1764,8 +1801,8 @@ onBeforeUnmount(() => {
                   </div>
                 </article>
               </div>
-            </template>
-            <div v-if="archiveTotal > pageSize" class="d-flex align-center justify-center pa-3">
+            </div>
+            <div v-if="archiveRecords.length && archiveTotal > pageSize" class="d-flex align-center justify-center pa-3">
               <VBtn size="small" aria-label="上一页" variant="tonal" icon="mdi-chevron-left" :disabled="archivePage <= 1 || paging" @click="prevArchivePage" class="mr-2" />
               <span class="dm-hint mx-1">{{ archivePage }} / {{ archiveTotalPages }}（共 {{ archiveTotal }} 条）</span>
               <VBtn size="small" aria-label="下一页" variant="tonal" icon="mdi-chevron-right" :disabled="archivePage >= archiveTotalPages || paging" @click="nextArchivePage" class="ml-2" />
@@ -1988,11 +2025,8 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="dm-section-title mt-4">最近记录</div>
-            <div v-if="!transferRecords.length" class="dm-state text-center dm-hint">
-              <VIcon icon="mdi-history" size="48" color="grey-lighten-1" class="mb-2" />
-              <div>暂无转移记录</div>
-            </div>
-            <template v-else>
+            <div data-record-state="transfer" :aria-busy="recordStates.transfer.loading">
+              <p v-if="recordStates.transfer.loading && (recordStates.transfer.loaded || transferRecords.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
               <div class="dm-table-scroll dm-desktop-table mt-2">
                 <VTable density="compact" class="dm-table">
                   <thead>
@@ -2004,6 +2038,7 @@ onBeforeUnmount(() => {
                     </tr>
                   </thead>
                   <tbody>
+                    <tr v-if="!transferRecords.length || recordStates.transfer.error"><td colspan="4"><TableState v-bind="recordTableState('transfer', transferRecords)" @retry="refreshActive()" /></td></tr>
                     <tr v-for="record in transferRecords" :key="`${record.source_downloader}-${record.source_hash}-${record.downloader}`">
                       <td class="dm-body-text">{{ record.source_downloader }} → {{ record.downloader }}</td>
                       <td class="dm-body-text dm-ellipsis" :title="record.source_hash">{{ transferPrimaryText(record) }}<span class="dm-hint"> · {{ transferSecondaryText(record) }}</span></td>
@@ -2021,6 +2056,7 @@ onBeforeUnmount(() => {
                 </VTable>
               </div>
               <div class="dm-mobile-list mt-2">
+                <TableState v-bind="recordTableState('transfer', transferRecords)" @retry="refreshActive()" />
                 <article v-for="record in transferRecords" :key="`m-${record.source_downloader}-${record.source_hash}-${record.downloader}`" class="dm-record-card">
                   <div class="d-flex align-center justify-space-between ga-2">
                     <strong class="dm-body-text dm-ellipsis">{{ record.source_downloader }} → {{ record.downloader }}</strong>
@@ -2029,8 +2065,8 @@ onBeforeUnmount(() => {
                   <div class="dm-hint mt-1">{{ transferPrimaryText(record) }} · {{ transferSecondaryText(record) }} · {{ formatTimestamp(record.updated_at) }}</div>
                 </article>
               </div>
-            </template>
-            <div v-if="(transferStatus.total_pages || 1) > 1" class="d-flex align-center justify-center ga-2 mt-2">
+            </div>
+            <div v-if="transferRecords.length && (transferStatus.total_pages || 1) > 1" class="d-flex align-center justify-center ga-2 mt-2">
               <VBtn size="small" aria-label="上一页" variant="text" icon="mdi-chevron-left" :disabled="transferPage <= 1" @click="changeTransferPage(transferPage - 1)" />
               <span class="dm-hint">{{ transferStatus.page || 1 }} / {{ transferStatus.total_pages || 1 }}</span>
               <VBtn size="small" aria-label="下一页" variant="text" icon="mdi-chevron-right" :disabled="transferPage >= (transferStatus.total_pages || 1)" @click="changeTransferPage(transferPage + 1)" />
@@ -2044,6 +2080,9 @@ onBeforeUnmount(() => {
                 <div class="dm-hint">扫描所选 qBittorrent 下载器的标签，勾选保留项后清理其余标签。</div>
               </div>
             </div>
+            <ModuleDetailPanel v-if="moduleDetailVisible('tagcleanup')" class="mt-3" title="标签清理明细"
+              :rows="moduleDetail('tagcleanup').rows" v-bind="moduleDetail('tagcleanup')"
+            />
             <div class="dm-cleanup-toolbar mt-2">
               <VSelect density="compact" v-model="cleanupDownloaders" label="下载器" variant="outlined" hide-details
                 :items="qbDownloaderItems" multiple chips closable-chips class="dm-cleanup-select" />
@@ -2298,7 +2337,7 @@ onBeforeUnmount(() => {
             <VSpacer />
             <VBtn size="small" variant="text" :disabled="cleanupRunning" @click="cleanupConfirmDialog = false">取消</VBtn>
             <VBtn size="small" color="error" variant="flat" prepend-icon="mdi-delete-sweep-outline" :loading="cleanupRunning"
-              @click="confirmCleanupData">清理记录</VBtn>
+              :disabled="cleanupTargetCount === 0" @click="confirmCleanupData">清理记录</VBtn>
           </VCardActions>
         </VCard>
       </VDialog>
