@@ -127,6 +127,7 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
         },
         {
             "path": "/diagnostics",
+            # 不用 partial：partial 会隐藏签名，导致 detail_limit / run 查询参数无法绑定。
             "endpoint": plugin.api_diagnostics,
             "auth": "bear",
             "methods": ["GET"],

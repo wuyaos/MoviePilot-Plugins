@@ -414,3 +414,68 @@ def test_build_diagnostics_passes_detail_limit_through(service, monkeypatch):
 
     assert seen["recent_limit"] == 100
     assert payload["module_details"]["upload_limit"]["limit"] == 100
+
+
+def test_diagnostics_check_contract(service):
+    item = service._check("测试", "warn", "legacy")
+    assert item["status"] == "warn"
+    assert item["state"] == "pending"
+    assert set(("time", "reason", "suggestion", "target")) <= item.keys()
+
+
+def test_remote_path_check_stays_pending_with_target(service):
+    item = service._check(
+        "种子文件目录", "warn", "无法核实", state="pending",
+        reason="无法确认该路径归属本机还是远端下载器，未做存在性判定",
+        suggestion="请在该路径所属的下载器/主机上自行核对；本诊断不做跨主机存在性判定",
+        target="/remote/not-present",
+    )
+    assert service._path_exists("/remote/not-present") is False
+    assert item["state"] == "pending" and item["target"] == "/remote/not-present"
+    assert item["status"] == "warn"
+
+
+def test_diagnostics_snapshot_starts_unchecked(service):
+    plugin = object()
+    assert service.diagnostics_snapshot(plugin) == {"code": 0, "checked": False, "time": "", "checks": []}
+
+
+@pytest.mark.parametrize(
+    ("from_available", "to_available"),
+    ((False, True), (True, False), (False, False), (True, True)),
+)
+def test_downloader_diagnostics_states_and_remote_path(service, monkeypatch,
+                                                         from_available, to_available):
+    """下载器连接问题为异常；下载器侧路径存在性保持未知。"""
+    monkeypatch.setattr(service, "_first_enabled_task", lambda plugin: {
+        "from_downloader": "源", "to_downloader": "目标",
+    })
+    statuses = {
+        "源": {"available": from_available, "message": "源状态", "type": "qbittorrent"},
+        "目标": {"available": to_available, "message": "目标状态", "type": "qbittorrent"},
+    }
+    monkeypatch.setattr(service, "_service_status", lambda plugin, name: statuses[name])
+    monkeypatch.setattr(service, "_module_details", lambda *args, **kwargs: {})
+    monkeypatch.setattr(service, "_rename_history_stats", lambda *args, **kwargs: {
+        "total": 0, "failed": 0, "recent_failures": [],
+    })
+
+    plugin = SimpleNamespace(
+        plugin_name="下载中心", plugin_version="3.9.12", get_state=lambda: True,
+        get_data=lambda key: {}, rename_archive_stats=lambda: {"archived": 0, "threshold": 3},
+        _enabled=True, _transfer_enabled=True, _transfer_active=True,
+        _transfer_fallback_enabled=False, _rename_enabled=True, _tag_enabled=True,
+        _seed_autostart=True, _seed_skipverify=True, _frompath="/downloads",
+        _topath="/downloads", _fromtorrentpath="/remote/torrents",
+    )
+
+    payload = service.build_diagnostics(plugin)
+    checks = {item["label"]: item for item in payload["checks"]}
+    expected_state = "ok" if from_available else "error"
+    assert checks["源下载器"]["state"] == expected_state
+    assert checks["源下载器"]["status"] == expected_state
+    expected_state = "ok" if to_available else "error"
+    assert checks["目标下载器"]["state"] == expected_state
+    assert checks["目标下载器"]["status"] == expected_state
+    assert "paths" in payload
+    assert payload["paths"]["fromtorrentpath_exists"] is None

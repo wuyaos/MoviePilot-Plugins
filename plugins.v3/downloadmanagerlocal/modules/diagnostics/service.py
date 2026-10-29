@@ -1,7 +1,6 @@
 """下载管理插件诊断服务实现。"""
 
 from datetime import datetime
-from pathlib import Path
 
 from app.sdk.logging import logger
 
@@ -107,18 +106,20 @@ def _cleanup_stats(plugin, archive_stats: dict) -> dict:
 
 
 def _path_exists(path_text: str) -> bool:
-    """安全判断配置路径是否存在。"""
-    if not path_text:
-        return False
-    try:
-        return Path(path_text).exists()
-    except Exception:
-        return False
+    """兼容旧调用名；本函数不再用于判定下载器侧路径。"""
+    return False
 
 
-def _check(label: str, status: str, detail: str) -> dict:
-    """构造详情页健康检查项。"""
-    return {"label": label, "status": status, "detail": detail}
+def _check(label: str, status: str, detail: str, *, state: str = "", reason: str = "",
+           suggestion: str = "", target: str = "") -> dict:
+    """构造保留 legacy status 的诊断项和可扩展详情字段。"""
+    mapped = state or {"ok": "ok", "error": "error", "warn": "pending", "off": "off"}.get(status, "pending")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return {"label": label, "status": status, "detail": detail, "state": mapped,
+            "time": now, "reason": reason or detail, "suggestion": suggestion, "target": target}
+
+
+_DIAGNOSTICS_SNAPSHOTS = {}
 def _module_switch_checks(plugin) -> list[dict]:
     """消费裸开关快照：区分「插件停用」与「模块停用」（快照由 core/config.py 写入）。"""
     switches = getattr(plugin, "_module_switches", None)
@@ -530,7 +531,9 @@ def build_diagnostics(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT):
     task_view = _first_enabled_task(plugin)
     from_service = _service_status(plugin, task_view["from_downloader"])
     to_service = _service_status(plugin, task_view["to_downloader"])
-    source_path_exists = _path_exists(getattr(plugin, "_fromtorrentpath", ""))
+    source_path = getattr(plugin, "_fromtorrentpath", "") or ""
+    # None = 无法核实（下载器侧路径，插件不做跨主机存在性判定）。
+    source_path_exists = None
     transfer_ready = bool(
         plugin._transfer_active and from_service["available"] and to_service["available"]
     )
@@ -541,18 +544,21 @@ def build_diagnostics(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT):
     checks = [
         _check(
             "源下载器",
-            "ok" if from_service["available"] else "warn",
+            "ok" if from_service["available"] else "error",
             from_service["message"],
         ),
         _check(
             "目标下载器",
-            "ok" if to_service["available"] else "warn",
+            "ok" if to_service["available"] else "error",
             to_service["message"],
         ),
         _check(
-            "种子文件目录",
-            "ok" if source_path_exists else "warn",
-            "路径可访问" if source_path_exists else "未配置或路径不可访问",
+            "种子文件目录", "warn",
+            "无法确认该路径归属本机还是远端下载器，未做存在性判定",
+            state="pending",
+            reason="无法确认该路径归属本机还是远端下载器，未做存在性判定",
+            suggestion="请在该路径所属的下载器/主机上自行核对；本诊断不做跨主机存在性判定",
+            target=source_path,
         ),
         _check(
             "转移做种",
@@ -579,7 +585,7 @@ def build_diagnostics(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT):
         ),
     ]
 
-    return {
+    result = {
         "code": 0,
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "plugin": {
@@ -604,7 +610,7 @@ def build_diagnostics(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT):
         "paths": {
             "frompath": plugin._frompath or "",
             "topath": plugin._topath or "",
-            "fromtorrentpath": getattr(plugin, "_fromtorrentpath", "") or "",
+            "fromtorrentpath": source_path,
             "fromtorrentpath_exists": source_path_exists,
         },
         "rename_history": rename_history,
@@ -616,6 +622,19 @@ def build_diagnostics(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT):
         "observe_previews": observe_previews(plugin),
         "module_details": module_details,
     }
+    _DIAGNOSTICS_SNAPSHOTS[id(plugin)] = result
+    return result
 
 
-__all__ = ("build_diagnostics",)
+def diagnostics_snapshot(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT, run: bool = False):
+    """返回进程内最近一次快照；run=True 才执行新的只读检查。"""
+    key = id(plugin)
+    if run:
+        return build_diagnostics(plugin, detail_limit)
+    snapshot = _DIAGNOSTICS_SNAPSHOTS.get(key)
+    if snapshot is None:
+        return {"code": 0, "checked": False, "time": "", "checks": []}
+    return {**snapshot, "checked": True}
+
+
+__all__ = ("build_diagnostics", "diagnostics_snapshot")

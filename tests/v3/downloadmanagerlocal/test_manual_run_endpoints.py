@@ -443,30 +443,34 @@ def test_transfer_status_source_name_supports_orm_rows(endpoints, monkeypatch):
     assert names == {'e' * 40: 'ORM.源种子.mkv', 'g' * 40: ''}
 
 
-def test_diagnostics_detail_limit_through_route(endpoints):
-    """走真实路由 endpoint：detail_limit 穿透 handler 与插件端点，非法值明确 400。"""
+def test_diagnostics_detail_limit_through_route(endpoints, monkeypatch):
+    """走真实路由 endpoint：默认快照只读，run=true 才触发新检查。"""
     seen = []
 
-    def fake_diagnostics(detail_limit=20):
-        seen.append(detail_limit)
-        return {'detail_limit': detail_limit}
+    service = importlib.import_module(PREFIX + '.modules.diagnostics.service')
 
+    def fake_diagnostics(plugin, detail_limit=20, run=False):
+        seen.append((detail_limit, run))
+        if run:
+            return {'detail_limit': detail_limit, 'checked': True}
+        return {'checked': False, 'checks': []}
+
+    monkeypatch.setattr(service, 'diagnostics_snapshot', fake_diagnostics)
     plugin = Mock()
-    plugin._diagnostics = fake_diagnostics
     plugin.api_diagnostics = types.MethodType(endpoints.handlers.api_diagnostics, plugin)
 
     route = {item['path']: item for item in endpoints.routes.build_api_routes(plugin)}['/diagnostics']
     assert route['methods'] == ['GET'] and route['auth'] == 'bear', '路由契约不变'
 
-    assert route['endpoint']().model_dump() == {'detail_limit': 20}, '缺省按 20 走'
-    assert route['endpoint'](detail_limit=200).model_dump() == {'detail_limit': 200}, '白名单值原样穿透'
-    assert seen == [20, 200]
+    assert route['endpoint']().model_dump()['checked'] is False, '默认返回未检查空快照'
+    assert route['endpoint'](detail_limit=200, run=True).model_dump()['detail_limit'] == 200, '显式 run 才执行'
+    assert seen == [(20, False), (200, True)]
 
     with pytest.raises(FakeHTTPException) as error:
         route['endpoint'](detail_limit=21)
     assert error.value.status_code == 400
     assert '20/50/100/200' in error.value.detail, '拒绝时列出可接受的档位'
-    assert seen == [20, 200], '非法值不得进入诊断构建'
+    assert seen == [(20, False), (200, True)], '非法值不得进入诊断构建'
 
 
 def test_diagnostics_default_matches_service_whitelist(endpoints):

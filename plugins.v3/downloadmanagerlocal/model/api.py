@@ -54,6 +54,7 @@ class RenamePageResult(ApiBusinessModel):
 class DiagnosticsResult(ApiBusinessModel):
     """插件诊断摘要。"""
 
+    checked: bool = True
     code: int = 0
     time: str = ""
     plugin: dict[str, JsonData] = Field(default_factory=dict)

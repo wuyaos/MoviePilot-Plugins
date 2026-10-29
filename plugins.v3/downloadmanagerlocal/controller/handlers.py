@@ -172,15 +172,17 @@ def api_retry_rename(plugin, hash: str = ""):
         )
 
 
-def api_diagnostics(plugin, detail_limit: int = 20):
-    """返回详情页使用的只读诊断摘要。"""
+def api_diagnostics(plugin, detail_limit: int = 20, run: bool = False):
+    """默认读取最近快照；run=true 才执行新一轮只读诊断。"""
     from ..modules.diagnostics.service import MODULE_DETAIL_LIMIT_CHOICES
 
     if detail_limit not in MODULE_DETAIL_LIMIT_CHOICES:
         allowed = "/".join(str(item) for item in MODULE_DETAIL_LIMIT_CHOICES)
         raise HTTPException(status_code=400, detail=f"运行明细条数只支持 {allowed}")
     try:
-        return DiagnosticsResult.model_validate(plugin._diagnostics(detail_limit))
+        from ..modules.diagnostics.service import diagnostics_snapshot
+
+        return DiagnosticsResult.model_validate(diagnostics_snapshot(plugin, detail_limit, run=run))
     except Exception as e:
         _raise_query_error("诊断信息生成失败", e)
 

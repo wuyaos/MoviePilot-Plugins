@@ -272,8 +272,8 @@ class DownloadManagerLocal(_PluginBase):
     def api_retry_rename(self, hash: str = ""):
         """对指定 hash 的种子执行单条补刮。"""; return _api_retry_rename(self, hash)
 
-    def api_diagnostics(self, detail_limit: int = 20):
-        """返回插件只读诊断信息。"""; return _api_diagnostics(self, detail_limit)
+    def api_diagnostics(self, detail_limit: int = 20, run: bool = False):
+        """默认读取最近快照；run=True 才执行新一轮只读诊断。"""; return _api_diagnostics(self, detail_limit, run=run)
 
     def api_hr_tasks(self):
         """返回 H&R 任务列表与汇总。"""; return _api_hr_tasks(self)
