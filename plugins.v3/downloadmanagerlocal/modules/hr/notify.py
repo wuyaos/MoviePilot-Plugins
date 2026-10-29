@@ -8,10 +8,11 @@ from typing import Any, Iterable
 from app.schemas.types import MessageType
 from app.sdk.logging import logger
 
+from ...utils.notify import module_title
 from .constants import HR_LOG_PREFIX, HR_NOTIFY_EVENTS_DATA_KEY, HR_NOTIFY_MODES
 from .models import HrStatus, HrTask
 
-SUMMARY_TITLE = "【H&R 汇总】"
+SUMMARY_TITLE = module_title("hr")
 SUMMARY_GROUPS = (
     ("【已完成】", HrStatus.COMPLIANT),
     ("【已过期】", HrStatus.OVERDUE),

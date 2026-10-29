@@ -37,8 +37,13 @@ def notify_scan_result(plugin: Any, cleaned_paths: list[str]) -> None:
 
 
 def _send(plugin: Any, title: str, text: str) -> None:
-    """按来源语义以“手动处理”类型发送纯文本通知。"""
-    plugin.post_message(mtype=MessageType.Manual, title=title, text=text, parse_mode="plain")
+    """按来源语义以“手动处理”类型发送纯文本通知（统一标题前缀）。"""
+    from ...utils.notify import module_title
+
+    plugin.post_message(
+        mtype=MessageType.Manual, title=module_title("failclean", title),
+        text=text, parse_mode="plain",
+    )
 
 
 __all__ = (

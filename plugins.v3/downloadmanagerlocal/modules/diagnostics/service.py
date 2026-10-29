@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.sdk.logging import logger
 
+from ...utils.config import module_faults, module_observe_flags, observe_previews
 from ...model.state import RENAME_RECORDS_KEY
 from ...utils.name_cleaner import is_dirty_renamed_torrent_name
 
@@ -105,6 +106,15 @@ def _module_switch_checks(plugin) -> list[dict]:
     return [_check("模块开关（裸值）", status, " / ".join(entries))]
 
 
+def _module_fault_checks(plugin) -> list[dict]:
+    """消费模块运行异常快照：与「模块开关（裸值）」并列，页面据此区分「关闭」与「故障」。"""
+    faults = module_faults(plugin)
+    if not faults:
+        return []
+    entries = [f"{name}：{reason}" for name, reason in sorted(faults.items())]
+    return [_check("模块运行异常", "error", " / ".join(entries))]
+
+
 def _first_enabled_task(plugin):
     """v3.9.0 多任务形态：取第一个启用任务做诊断投影；无则回退旧平铺字段。"""
     from ..transfer.tasks import load_transfer_tasks
@@ -161,6 +171,7 @@ def build_diagnostics(plugin):
             _bool_text(getattr(plugin, "_enabled", False)),
         ),
         *_module_switch_checks(plugin),
+        *_module_fault_checks(plugin),
         _check(
             "种子重命名",
             "warn" if to_service.get("type") == "transmission" else ("ok" if plugin._rename_enabled else "off"),
@@ -204,7 +215,10 @@ def build_diagnostics(plugin):
         },
         "rename_history": rename_history,
         "rename_archive": archive_stats,
+        "module_faults": module_faults(plugin),
         "checks": checks,
+        "module_observe_only": module_observe_flags(plugin),
+        "observe_previews": observe_previews(plugin),
     }
 
 

@@ -234,6 +234,19 @@ class HrClearTaskRequest(ApiRequestModel):
     torrent_hash: str = Field(min_length=1, max_length=128)
 
 
+class CleanupModuleRequest(ApiRequestModel):
+    """数据页模块数据清理请求：module 为白名单对象标识。"""
+
+    module: str = Field(min_length=1, max_length=64)
+
+
+class CleanupModuleResult(ActionResult):
+    """数据清理结果：removed 为真实清理条数。"""
+
+    removed: int = 0
+    module: str = ""
+
+
 class ModuleStatusResult(ApiBusinessModel):
     """模块运行状态（自动删种/失败清理/站点标签/命名补刀通用）。"""
 

@@ -34,7 +34,11 @@ from ...model.upload_limit import (
     migrate_upload_limit_state,
     pool_state_key,
 )
-from ...utils.config import is_upload_limit_active, normalize_upload_limit_config
+from ...utils.config import (
+    is_upload_limit_active,
+    normalize_upload_limit_config,
+    observe_only,
+)
 from .allocator import (
     adjust_auto_probe_count,
     aggregate_pool_demand_kib,
@@ -143,6 +147,16 @@ def run_upload_limit_cycle(
     timestamp = float(now if now is not None else time.time())
     if not is_upload_limit_active(plugin):
         return get_upload_limit_status(plugin)
+    if observe_only(plugin, "upload_limit"):
+        # 决策 B：观察期禁止一切限速写入，已有额度保持原样，也不执行恢复。
+        status = get_upload_limit_status(plugin)
+        status["observe_only"] = True
+        status["service_status"] = "observe_only"
+        logger.info(
+            "【PT下载中心:上传限速】观察模式：%s 不写入任何限速，已有额度保持原样",
+            reason,
+        )
+        return status
     with _active_cycle_lock(plugin):
         if not is_upload_limit_active(plugin):
             return get_upload_limit_status(plugin)
@@ -492,6 +506,16 @@ def restore_upload_limits(
     downloader_ids: Iterable[str] | None = None,
 ) -> dict:
     """按 compare-and-set 恢复接管前限速，用户后改值保持不动。"""
+    if observe_only(plugin, "upload_limit"):
+        # 决策 B：观察期不执行恢复，已有额度保持原样（不作为只读清理执行）。
+        logger.info("【PT下载中心:上传限速】观察模式：跳过恢复上传限速")
+        return {
+            "code": 1,
+            "msg": "观察模式：不执行上传限速恢复，已有额度保持原样",
+            "downloaders": [],
+            "errors": [],
+            "observe_only": True,
+        }
     with _cycle_lock(plugin):
         state = load_upload_limit_state(plugin)
         if getattr(plugin, "_upload_limit_state_error", ""):
@@ -1191,21 +1215,18 @@ def _record_downloader_failure(
     if item["count"] < UPLOAD_LIMIT_FAILURE_NOTIFY_THRESHOLD or item.get("notified"):
         return
     item["notified"] = True
-    try:
-        from app.schemas.types import MessageType
+    from app.schemas.types import MessageType
+    from ...utils.notify import notify_module_result, result_text
 
-        plugin.post_message(
-            mtype=MessageType.Plugin,
-            title="下载中心上传限速异常",
-            parse_mode="plain",
-            text=(
-                f"下载器：{downloader_id}\n"
-                f"连续失败：{item['count']} 次\n"
-                f"原因：{item['last_error']}"
-            ),
-        )
-    except Exception:
-        logger.exception("【PT下载中心:上传限速】发送上传限速异常通知失败")
+    notify_module_result(
+        plugin, "upload_limit",
+        text=result_text(
+            downloader=downloader_id,
+            extra=f"连续失败：{item['count']} 次\n原因：{item['last_error']}",
+        ),
+        suffix="限速写入异常",
+        mtype=MessageType.Plugin,
+    )
 
 
 def _clear_downloader_failure(state: dict, downloader_id: str) -> None:

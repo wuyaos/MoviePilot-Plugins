@@ -260,12 +260,16 @@ def _transfer_impl(plugin, trigger_source: str):
 
     if totals["notify"] and plugin._notify:
         stopped = _transfer_stopped(plugin, generation)
-        plugin.post_message(
+        from ...utils.notify import notify_module_result, result_text
+
+        notify_module_result(
+            plugin, "transfer",
+            text=result_text(
+                success=totals["success"], skipped=totals["skip"], failed=totals["fail"],
+                extra=f"任务数：{len(tasks)}，删除重复：{totals['del_dup']}",
+            ),
+            suffix="任务已停止" if stopped else "任务执行完成",
             mtype=MessageType.SiteMessage,
-            title="【转移做种任务已停止】" if stopped else "【转移做种任务执行完成】",
-            parse_mode="plain",
-            text=(f"任务数：{len(tasks)}，已提交校验：{totals['success']}，"
-                  f"失败：{totals['fail']}，跳过：{totals['skip']}，删除重复：{totals['del_dup']}")
         )
     if _transfer_stopped(plugin, generation):
         logger.info("【PT下载中心:转移做种】转移做种任务已停止，未继续执行重命名补刀")
@@ -496,6 +500,11 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
         return
     if not getattr(plugin, "_transfer_rename_enabled", False):
         return
+    if not getattr(plugin, "_rename_enabled", False):
+        logger.info(
+            f"【PT下载中心:转移做种】任务「{task_name}」种子重命名模块未启用，跳过转移后补刀"
+        )
+        return
     if to_service.type != "qbittorrent":
         logger.info(
             f"【PT下载中心:转移做种】任务「{task_name}」目的端 {to_service.type} 不适用转移后重命名"
@@ -519,6 +528,15 @@ def _rename_retry_downloaders(plugin) -> list:
 
 def retry_pending_renames(plugin):
     """独立补刀重命名，避免转移扫描提前返回时跳过旧污染记录修复。"""
+    if not getattr(plugin, "_rename_enabled", False):
+        logger.info("【PT下载中心:转移做种】种子重命名模块未启用，跳过一键补刀")
+        return {
+            "code": 1,
+            "msg": "种子重命名模块未启用，已跳过补刀",
+            "history": 0,
+            "dirty": 0,
+            "total": 0,
+        }
     downloaders = _rename_retry_downloaders(plugin)
     if not downloaders:
         return {"code": 1, "msg": "未配置目标下载器", "history": 0, "dirty": 0, "total": 0}

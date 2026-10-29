@@ -462,6 +462,8 @@ def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: st
 def retry_failed_renames(plugin, to_service):
     """对目标下载器中之前重命名失败的种子进行补刀并返回逐项统计。"""
     summary = _retry_summary()
+    # 懒导入避免与 utils.config（顶层导入本模块）循环
+    from ...utils.config import observe_skip
     if not plugin._rename_enabled and not plugin._tag_enabled:
         return summary
     failed_hashes = get_failed_rename_hashes(plugin)
@@ -486,6 +488,9 @@ def retry_failed_renames(plugin, to_service):
             is_archived = getattr(plugin, "is_rename_archived", None)
             if callable(is_archived) and is_archived(th):
                 logger.info(f"【PT下载中心:重命名】补刀跳过归档记录 hash={th}")
+                summary["skipped"] += 1
+                continue
+            if observe_skip(plugin, "rename", "补刀重命名", f"{get_torrent_name(torrent)}（{th[:8]}）"):
                 summary["skipped"] += 1
                 continue
             summary["attempted"] += 1
@@ -544,6 +549,8 @@ def _get_tracker_urls(torrent, dl_type):
 
 def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
     """对目标下载器中的单个种子执行补刀（重命名+站点标签）。"""
+    # 懒导入避免与 utils.config（顶层导入本模块）循环
+    from ...utils.config import observe_skip
     hash_text = str(torrent_hash or "").strip()
     warnings: list[str] = []
     if not hash_text:
@@ -580,6 +587,8 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
             trackers = _get_tracker_urls(torrent, dl_type)
             logger.info(f"【PT下载中心:重命名】单条补刀处理: hash={hash_text} name={torrent_name}")
 
+            if observe_skip(plugin, "rename", "补刀重命名", f"{torrent_name}（{hash_text[:8]}）"):
+                return {"code": 1, "msg": "观察模式：未执行补刀（仅预览）", "hash": hash_text, "observed": True}
             rename_succeeded = True
             if plugin._rename_enabled:
                 retry_name = resolve_retry_original_name(
@@ -869,25 +878,19 @@ def notify_rename_result(plugin, trigger: str, rename_config: dict, result: dict
     failed = int(result.get("failed", 0) or 0)
     if not renamed and not failed:
         return False
-    try:
-        plugin.post_message(
-            mtype=MessageType.SiteMessage,
-            title="【下载中心重命名结果】",
-            parse_mode="plain",
-            text=(
-                f"触发：{trigger}\n"
-                f"重命名成功：{renamed}，失败：{failed}，"
-                f"跳过：{int(result.get('skipped', 0) or 0)}"
-            ),
-        )
-        return True
-    except Exception as err:  # noqa: BLE001  # 通知发送由宿主实现决定
-        logger.warning(f"【PT下载中心:重命名】重命名结果通知发送失败：{err}")
-        return False
+    from ...utils.notify import notify_module_result, result_text
+
+    text = result_text(
+        success=renamed, skipped=int(result.get("skipped", 0) or 0), failed=failed,
+        extra=f"触发：{trigger}",
+    )
+    return notify_module_result(plugin, "rename", text=text, mtype=MessageType.SiteMessage)
 
 
 def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     """对单个候选种子执行过滤与重命名，返回 renamed / failed / skipped。"""
+    # 懒导入避免与 utils.config（顶层导入本模块）循环
+    from ...utils.config import observe_skip
     dl = service.instance
     dl_type = service.type
     if dl_type == "rtorrent":
@@ -902,6 +905,8 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     allowed, reason = passes_rename_filters(rename_config, torrent_hash, torrent_tags, save_path)
     if not allowed:
         logger.info(f"【PT下载中心:重命名】重命名跳过 hash={torrent_hash}：{reason}")
+        return "skipped"
+    if observe_skip(plugin, "rename", "重命名种子", f"{torrent_name}（{torrent_hash[:8]}）"):
         return "skipped"
     if rename_torrent(plugin, dl, dl_type, torrent_hash, torrent_name, save_path):
         add_rename_tag(plugin, dl, dl_type, torrent_hash, torrent_tags, rename_config)

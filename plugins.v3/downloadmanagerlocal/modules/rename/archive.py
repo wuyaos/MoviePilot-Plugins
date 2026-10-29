@@ -208,6 +208,26 @@ def delete_rename_archive(plugin, torrent_hash: str) -> dict:
 
 
 @serialized_rename_state
+def clear_rename_archive(plugin) -> dict:
+    """清空全部已归档记录（决策 C：连归档状态一起删除）。
+
+    被清理的种子回到未记录状态，可重新识别与补试；仍在重试期（未归档）
+    的失败计数不属于归档，保留不动。
+    """
+    state = get_rename_retry_state(plugin)
+    archived_hashes = [
+        hash_text
+        for hash_text, item in state.items()
+        if isinstance(item, dict) and item.get("archived")
+    ]
+    for hash_text in archived_hashes:
+        del state[hash_text]
+    if archived_hashes:
+        save_rename_retry_state(plugin, state)
+    return {"code": 0, "msg": f"已清理 {len(archived_hashes)} 条归档记录", "removed": len(archived_hashes)}
+
+
+@serialized_rename_state
 def list_rename_archive(plugin, page: int = 1, page_size: int = 15) -> dict:
     """返回补刀归档记录分页。"""
     state = get_rename_retry_state(plugin)

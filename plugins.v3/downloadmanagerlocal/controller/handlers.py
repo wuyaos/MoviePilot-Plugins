@@ -45,11 +45,13 @@ from ..model.state import (
     RENAME_RECORDS_KEY,
     RENAME_RETRY_STATE_KEY,
     TRANSFER_SKIP_STATS_KEY,
+    TRANSFER_STATS_KEY,
     load_transfer_stats,
 )
 from ..modules.rename.archive import serialized_rename_state
 from ..modules.hr.guard import HrGuard
 from ..modules.hr.rules import load_preset_rules
+from ..utils.config import observe_skip
 from ..modules.sitetag.service import complement_history, execute_tag_cleanup, scan_and_clean_tags
 from ..modules.uploadlimit.worker import stop_upload_limit_worker
 from ..modules.uploadlimit.service import (
@@ -453,6 +455,80 @@ def api_delete_rename_archive(plugin, hash: str = ""):
     return _operation_response(plugin.delete_rename_archive(hash), HashActionResult)
 
 
+def _cleanup_actions(plugin) -> dict:
+    """数据页清理白名单：对象标识 → 清理动作。
+
+    只清插件自身历史/统计/快照，不触碰下载器种子与文件、H&R 安全状态、
+    活动队列（transfer_schedule）与上传限速恢复状态（upload_limit_state）。
+    """
+    from ..modules.autoremove.constants import REMOVER_STATE_DATA_KEY
+    from ..modules.failclean.constants import FAILCLEAN_STATUS_DATA_KEY
+    from ..modules.rename.archive import clear_rename_archive
+
+    def clear_rename_archive_data() -> int:
+        return int(clear_rename_archive(plugin).get("removed", 0) or 0)
+
+    def clear_rename_history() -> int:
+        records = plugin.get_data(RENAME_RECORDS_KEY) or {}
+        if not records:
+            return 0
+        plugin.save_data(RENAME_RECORDS_KEY, {})
+        return len(records)
+
+    def clear_transfer_stats() -> int:
+        removed = 0
+        for key in (TRANSFER_STATS_KEY, TRANSFER_SKIP_STATS_KEY):
+            if plugin.get_data(key):
+                plugin.save_data(key, {})
+                removed += 1
+        return removed
+
+    def clear_remover_state() -> int:
+        if not plugin.get_data(REMOVER_STATE_DATA_KEY):
+            return 0
+        plugin.save_data(REMOVER_STATE_DATA_KEY, {})
+        return 1
+
+    def clear_failclean_status() -> int:
+        if not plugin.get_data(FAILCLEAN_STATUS_DATA_KEY):
+            return 0
+        plugin.save_data(FAILCLEAN_STATUS_DATA_KEY, {})
+        return 1
+
+    return {
+        "rename_archive": clear_rename_archive_data,
+        "rename_history": clear_rename_history,
+        "transfer_stats": clear_transfer_stats,
+        "autoremove_state": clear_remover_state,
+        "failclean_state": clear_failclean_status,
+    }
+
+
+def api_cleanup_module_data(plugin, payload=None):
+    """按白名单清理插件自身历史数据，返回真实清理条数。"""
+    from ..model.api import CleanupModuleRequest, CleanupModuleResult
+
+    body = _request_dict(payload)
+    try:
+        request = CleanupModuleRequest.model_validate(body)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=f"清理请求不合法：{error}") from error
+    action = _cleanup_actions(plugin).get(request.module)
+    if action is None:
+        raise HTTPException(status_code=400, detail=f"未知的数据清理对象：{request.module}")
+    removed = action()
+    logger.info(f"【PT下载中心】数据清理[{request.module}]：清理 {removed} 条")
+    return _operation_response(
+        {
+            "code": 0,
+            "msg": f"已清理 {removed} 条",
+            "removed": removed,
+            "module": request.module,
+        },
+        CleanupModuleResult,
+    )
+
+
 @serialized_rename_state
 def api_recovery_torrent(plugin, hash: str = ""):
     """恢复种子原始名称"""
@@ -493,6 +569,11 @@ def api_recovery_torrent(plugin, hash: str = ""):
         dl = to_service.instance
         dl_type = to_service.type
 
+        if observe_skip(plugin, "rename", "恢复原名", f"{hash} → {original_name}"):
+            return _operation_response(
+                {"code": 1, "msg": "观察模式：未执行恢复原名（仅预览）", "hash": hash, "observed": True},
+                HashActionResult,
+            )
         if dl_type == "qbittorrent":
             dl.qbc.torrents_rename(torrent_hash=hash, new_torrent_name=original_name)
         else:

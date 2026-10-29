@@ -10,20 +10,18 @@ from typing import Any, Optional
 from app.schemas.types import MessageType
 from app.sdk.logging import logger
 
-from ...utils.config import module_active
+from ...utils.config import module_active, module_observe_only
 from ...utils.torrent_adapter import delete_torrent_with_files
 from ..hr.guard import SKIP_PATH_AUTO_REMOVE, HrGuard
 from .constants import (
-    MIGRATION_OBSERVE_ONLY_KEY,
     REMOVER_CANDIDATE_VIEW_LIMIT,
     REMOVER_LOG_PREFIX,
     REMOVER_NOTIFY_ITEM_LIMIT,
-    REMOVER_NOTIFY_TITLE,
     REMOVER_STATE_DATA_KEY,
 )
 from .criteria import CompiledConditions, RemoverConfigError, compile_conditions, match_reason
 from .models import RemoveCandidate, RemoveSnapshot, RemoverConfig, format_bytes
-from .rules import as_bool, parse_remover_config
+from .rules import parse_remover_config
 from .scanner import build_snapshot, downloader_type, read_torrents, torrent_hash
 
 _COUNTER_KEYS = (
@@ -84,7 +82,8 @@ class AutoRemoveService:
         # 门控对齐：服务配置 enabled = 总开关 AND remover_enabled（utils/config.py::module_active）。
         self._config.enabled = module_active(config or {}, "autoremove")
         source = config if isinstance(config, dict) else {}
-        self._observe_only = as_bool(source.get(MIGRATION_OBSERVE_ONLY_KEY), True)
+        # 观察模式（阶段三）：新键 remover_observe_only 优先，缺失时继承旧键 migration_observe_only。
+        self._observe_only = module_observe_only(source, "autoremove")
         self._conditions = None
         self._config_error = ""
         try:
@@ -134,6 +133,14 @@ class AutoRemoveService:
                         f"{REMOVER_LOG_PREFIX}{trigger_source}：观察期仅列出 {result['candidates']} 个候选，"
                         f"不执行 {result['action']}"
                     )
+                    if self._config.notify and result["candidates"]:
+                        from ...utils.notify import notify_module_result, result_text
+
+                        notify_module_result(
+                            self._plugin, "autoremove",
+                            text=result_text(observe=True, preview_count=result["candidates"]),
+                            suffix="观察模式",
+                        )
                 else:
                     self._execute(scan)
                 self._record_status(result)
@@ -157,6 +164,7 @@ class AutoRemoveService:
                 "config_error": self._config_error,
                 "running": self._run_lock.locked(),
                 "guard_enabled": guard.enabled,
+                "guard_unconfirmed": guard.unconfirmed,
                 "protected_skips": skip_stats.get(SKIP_PATH_AUTO_REMOVE, 0),
                 "skip_stats": skip_stats,
             }
@@ -348,11 +356,11 @@ class AutoRemoveService:
             )
         if len(executed) > REMOVER_NOTIFY_ITEM_LIMIT:
             lines.append(f"其余 {len(executed) - REMOVER_NOTIFY_ITEM_LIMIT} 个已省略")
-        self._plugin.post_message(
-            mtype=MessageType.SiteMessage,
-            title=REMOVER_NOTIFY_TITLE,
-            parse_mode="plain",
-            text="\n".join(lines),
+        from ...utils.notify import notify_module_result
+
+        notify_module_result(
+            self._plugin, "autoremove",
+            text="\n".join(lines), mtype=MessageType.SiteMessage,
         )
 
     def _sync_totals(self, result: dict[str, Any]) -> None:
