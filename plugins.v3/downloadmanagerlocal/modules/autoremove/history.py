@@ -17,6 +17,7 @@ _EMPTY_TEMPLATE: dict[str, Any] = {
     "deleted_files": 0,
     "skipped_protected": 0,
     "skipped_missing": 0,
+    "skipped": 0,
     "failed": 0,
     "config_error": "",
     "candidate_list": [],

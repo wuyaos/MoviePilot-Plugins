@@ -14,6 +14,8 @@ SEED_RECHECK_QUEUE_KEY = "seed_recheck_queue"
 TRANSFER_STATS_KEY = "transfer_stats"
 TRANSFER_STATS_SCHEMA_VERSION = 2
 TRANSFER_SKIP_STATS_KEY = "transfer_skip_stats"
+SITE_TAG_STATUS_KEY = "sitetag_status"
+TAG_CLEANUP_STATUS_KEY = "tag_cleanup_status"
 _TRANSFER_STATS_LOCK = RLock()
 
 TRANSFER_SCHEDULE_KEY = "transfer_schedule"
@@ -30,6 +32,8 @@ PERSISTED_STATE_KEYS = {
     "upload_limit_state": UPLOAD_LIMIT_STATE_KEY,
     "hr_tasks": HR_TASKS_DATA_KEY,
     "hr_notify_events": HR_NOTIFY_EVENTS_DATA_KEY,
+    "sitetag_status": SITE_TAG_STATUS_KEY,
+    "tag_cleanup_status": TAG_CLEANUP_STATUS_KEY,
 }
 
 
@@ -113,7 +117,6 @@ def record_transfer_success(plugin: Any, count: int, *, fallback: bool) -> dict[
                 stats["today_fallback"] += increment
             plugin.save_data(TRANSFER_STATS_KEY, stats)
         return stats
-
 
 
 def record_transfer_failure(plugin: Any) -> dict[str, Any]:

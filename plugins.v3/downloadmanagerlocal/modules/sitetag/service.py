@@ -13,6 +13,11 @@ from ...utils.tag_cleanup import (
     normalize_tags,
 )
 from ...utils.torrent_adapter import get_hash, get_label, get_torrent_name
+try:
+    from ...model.state import SITE_TAG_STATUS_KEY, TAG_CLEANUP_STATUS_KEY
+except ImportError:  # 兼容仅加载站点标签模块的旧宿主夹具
+    SITE_TAG_STATUS_KEY = "sitetag_status"
+    TAG_CLEANUP_STATUS_KEY = "tag_cleanup_status"
 
 
 def _active_temporary_tags(plugin) -> set:
@@ -340,8 +345,9 @@ def scan_and_clean_tags(plugin, downloader_names: Iterable[str]) -> dict:
         "auto_removed": auto_removed,
         "errors": errors,
     }
-    # 仅保留最近一次已有扫描结果的派生快照，不新增持久化写入。
+    # 仅保留最近一次已有扫描结果的派生快照，避免堆积历史。
     plugin._tag_cleanup_status = result
+    plugin.save_data(TAG_CLEANUP_STATUS_KEY, result)
     return result
 
 
@@ -490,6 +496,7 @@ __all__ = (
     "build_tag_config",
     "complement_history",
     "get_module_status",
+    "get_cleanup_status",
     "parse_tracker_mappings",
     "parse_custom_site_labels",
     "process_download_added",
@@ -574,13 +581,28 @@ def build_tag_config(config: dict | None = None) -> dict:
 def _module_state(plugin) -> dict:
     state = getattr(plugin, "_site_tag_status", None)
     if not isinstance(state, dict):
-        state = {"completed": 0, "skipped": 0, "matched": {}, "round": None}
+        stored = plugin.get_data(SITE_TAG_STATUS_KEY) if hasattr(plugin, "get_data") else None
+        state = stored if isinstance(stored, dict) else {}
+        state.setdefault("completed", 0)
+        state.setdefault("skipped", 0)
+        state.setdefault("matched", {})
+        state.setdefault("round", None)
         plugin._site_tag_status = state
     state.setdefault("completed", 0)
     state.setdefault("skipped", 0)
     state.setdefault("matched", {})
     state.setdefault("round", None)
     return state
+
+
+def get_cleanup_status(plugin) -> dict | None:
+    """读取最近一次标签清理扫描快照；没有历史时返回 None。"""
+    snapshot = getattr(plugin, "_tag_cleanup_status", None)
+    if not isinstance(snapshot, dict):
+        snapshot = plugin.get_data(TAG_CLEANUP_STATUS_KEY) if hasattr(plugin, "get_data") else None
+        if isinstance(snapshot, dict):
+            plugin._tag_cleanup_status = snapshot
+    return snapshot if isinstance(snapshot, dict) else None
 
 
 def get_module_status(plugin=None) -> dict:
@@ -750,6 +772,8 @@ def complement_history(plugin, config: dict | None = None) -> dict:
     state["skipped"] = result["skipped"]
     state["round"] = round_stats
     result["round"] = dict(round_stats)
+    # 结果出口单次保存最近快照；旧数据缺键时读取仍返回 None。
+    plugin.save_data(SITE_TAG_STATUS_KEY, dict(state))
     if cfg["enable_del_tags"]:
         scan_and_clean_tags(plugin, cfg["downloaders"])
     return result

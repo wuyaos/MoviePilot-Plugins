@@ -349,7 +349,13 @@ def _sitetag_detail(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT) -> dic
 
 def _tagcleanup_detail(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT) -> dict:
     """标签清理明细：聚合最近扫描结果，不触发扫描或写入。"""
-    snapshot = getattr(plugin, "_tag_cleanup_status", None)
+    try:
+        from ..sitetag.service import get_cleanup_status
+        snapshot = get_cleanup_status(plugin)
+        if not isinstance(snapshot, dict):
+            snapshot = getattr(plugin, "_tag_cleanup_status", None)
+    except (ImportError, AttributeError):
+        snapshot = getattr(plugin, "_tag_cleanup_status", None)
     if not isinstance(snapshot, dict):
         return _detail("标签清理", [], detail_limit=detail_limit)
     grouped = {}

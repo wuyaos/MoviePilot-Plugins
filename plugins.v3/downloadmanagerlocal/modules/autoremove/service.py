@@ -32,6 +32,7 @@ _COUNTER_KEYS = (
     "deleted_files",
     "skipped_protected",
     "skipped_missing",
+    "skipped",
     "failed",
 )
 
@@ -387,7 +388,10 @@ class AutoRemoveService:
     def _sync_totals(self, result: dict[str, Any]) -> None:
         """按下载器明细汇总本轮计数，明细是唯一计数来源。"""
         for key in _COUNTER_KEYS:
+            if key == "skipped":
+                continue
             result[key] = sum(int(detail.get(key) or 0) for detail in result["details"])
+        result["skipped"] = result["skipped_protected"] + result["skipped_missing"]
 
     def _record_status(self, result: dict[str, Any]) -> None:
         """保存最近一轮执行状态，供 reload 后的 overview 展示。"""
@@ -400,6 +404,7 @@ class AutoRemoveService:
             "deleted_files": result["deleted_files"],
             "skipped_protected": result["skipped_protected"],
             "skipped_missing": result["skipped_missing"],
+            "skipped": result["skipped_protected"] + result["skipped_missing"],
             "failed": result["failed"],
             "config_error": result["config_error"],
             "observe_only": self._observe_only,
@@ -434,6 +439,7 @@ class AutoRemoveService:
             "deleted_files": 0,
             "skipped_protected": 0,
             "skipped_missing": 0,
+            "skipped": 0,
             "failed": 0,
             "config_error": self._config_error,
             "candidate_list": [],
@@ -451,6 +457,7 @@ def _downloader_detail(downloader: str) -> dict[str, Any]:
         "deleted_files": 0,
         "skipped_protected": 0,
         "skipped_missing": 0,
+        "skipped": 0,
         "failed": 0,
         "error": "",
     }
