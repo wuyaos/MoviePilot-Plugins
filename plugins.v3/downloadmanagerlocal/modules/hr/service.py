@@ -9,7 +9,7 @@ from typing import Any, Optional
 from app.sdk.logging import logger
 from pydantic import ValidationError
 
-from ...utils.config import module_active
+from ...utils.config import module_active, observe_skip
 from .cleanup import auto_cleanup
 from .constants import HR_LOG_PREFIX, HR_TASKS_DATA_KEY
 from .evaluator import evaluate_task, initialize_requirements, seeding_progress
@@ -136,6 +136,10 @@ class HrService:
         try:
             with self._lock:
                 return self._check_once(now, trigger_source)
+        except Exception:
+            # 本轮检查中断：保护快照可能缺失，标记无法确认（危险删除保守跳过），异常照常抛出
+            self._guard.mark_unconfirmed()
+            raise
         finally:
             self._run_lock.release()
 
@@ -150,6 +154,10 @@ class HrService:
         try:
             with self._lock:
                 return self._discover_once(now)
+        except Exception:
+            # 本轮发现中断：同上，保护状态无法确认
+            self._guard.mark_unconfirmed()
+            raise
         finally:
             self._run_lock.release()
 
@@ -162,6 +170,10 @@ class HrService:
             with self._lock:
                 discover_result = self._discover_once(now) if self._config.auto_discover else {}
                 check_result = self._check_once(now, trigger_source)
+        except Exception:
+            # 本轮扫描中断：同上，保护状态无法确认
+            self._guard.mark_unconfirmed()
+            raise
         finally:
             self._run_lock.release()
         return {"discover": discover_result, "check": check_result}
@@ -236,7 +248,13 @@ class HrService:
         )
         initialize_requirements(task, rule)
         apply_snapshot(task, snapshot)
-        set_hr_tag(service, task.hash, self._config.hit_and_run_tag)
+        if not observe_skip(
+            self._plugin,
+            "hr",
+            "打 H&R 标签",
+            f"{task.identifier} 标签={self._config.hit_and_run_tag}",
+        ):
+            set_hr_tag(service, task.hash, self._config.hit_and_run_tag)
         with self._lock:
             self._tasks[task.key] = task
             self._save_tasks()
@@ -282,7 +300,7 @@ class HrService:
         """停止后续扫描并撤销保护快照，插件停止后不再行使 H&R 保护。"""
         self._stopped = True
         self._generation += 1  # 使在途扫描的落盘/刷新失效（P1-6：旧扫描不得覆盖新状态）
-        self._guard.update(enabled=False, protected=())
+        self._guard.expect(enabled=False)
         logger.info(f"{HR_LOG_PREFIX}服务已停止")
 
     def _clear_by_status(self, statuses: tuple[HrStatus, ...], label: str) -> int:
@@ -314,6 +332,7 @@ class HrService:
         for name in unavailable:
             logger.warning(f"{HR_LOG_PREFIX}下载器 {name} 不可用，本轮不判定其任务删除")
         failed: list[str] = list(unavailable)
+        snapshots: dict[str, HrTorrentSnapshot] = {}
         for name, service in services.items():
             torrents, error = read_torrents(service)
             if error:
@@ -482,7 +501,13 @@ class HrService:
         tag = self._config.hit_and_run_tag
         service = services.get(task.downloader)
         if tag and service is not None:
-            remove_hr_tag(service, task.hash, tag)
+            if not observe_skip(
+                self._plugin,
+                "hr",
+                "移除 H&R 标签",
+                f"{task.identifier} 标签={tag}",
+            ):
+                remove_hr_tag(service, task.hash, tag)
 
     def _task_view(self, task: HrTask) -> dict[str, Any]:
         """构造单个任务的对外字段视图。"""

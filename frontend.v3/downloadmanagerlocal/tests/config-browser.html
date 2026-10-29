@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>DML config initialization regression</title>
+<div id="result">LOADING</div><div id="app"></div>
+<script type="module">
+import { createApp, h, nextTick } from 'vue'
+import { createVuetify } from 'vuetify'
+import * as components from 'vuetify/components'
+import * as directives from 'vuetify/directives'
+import Config from '../src/components/Config.vue'
+const fixture = {
+  transfer_tasks: JSON.stringify([{ name: 'seed-test', enabled: true, from_downloader: 'QB-test', to_downloader: 'TR-test' }]),
+  hr_site_config_str: "- site_name: 'TestSite'\n  hr_size_tiers:\n    - max_size_gib: 100\n      hr_duration: 72\n",
+}
+const errors = []
+let saved
+const api = { get: async path => path.endsWith('/hr_presets') ? { presets: [] } : [] }
+const app = createApp({ render: () => h(Config, { initialConfig: fixture, api, onSave: value => { saved = value } }) })
+app.config.errorHandler = error => errors.push(String(error))
+app.use(createVuetify({ components, directives }))
+app.mount('#app')
+await nextTick()
+const clickText = async text => {
+  const button = [...document.querySelectorAll('button')].find(el => el.textContent.trim() === text)
+  if (!button) throw new Error(`Missing button: ${text}`)
+  button.click()
+  await nextTick()
+}
+try {
+  await clickText('任务列表')
+  if (!document.querySelector('.dm-config').textContent.includes('seed-test')) throw new Error('Transfer task missing')
+  await clickText('保存配置')
+  if (JSON.parse(saved.transfer_tasks)[0].name !== 'seed-test') throw new Error('Save lost transfer task')
+  if (saved.hr_site_config_str !== fixture.hr_site_config_str) throw new Error('Save changed H&R YAML')
+  if (errors.length) throw new Error(errors.join('; '))
+  document.querySelector('#result').textContent = 'PASS: tiered H&R + rendered transfer task + save preservation'
+} catch (error) {
+  document.querySelector('#result').textContent = `FAIL: ${error}`
+}
+window.dmlRegression = { errors, saved }
+</script>

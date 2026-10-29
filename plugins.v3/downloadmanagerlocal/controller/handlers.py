@@ -15,6 +15,8 @@ from ..adapter.moviepilot import get_downloader_service, get_url_domain, list_bu
 from ..modules.rename.locator import resolve_record_downloader
 from ..model.api import (
     ApiBusinessModel,
+    CleanupModuleRequest,
+    CleanupModuleResult,
     DiagnosticsResult,
     EmptyRequest,
     HashActionResult,
@@ -168,10 +170,15 @@ def api_retry_rename(plugin, hash: str = ""):
         )
 
 
-def api_diagnostics(plugin):
+def api_diagnostics(plugin, detail_limit: int = 20):
     """返回详情页使用的只读诊断摘要。"""
+    from ..modules.diagnostics.service import MODULE_DETAIL_LIMIT_CHOICES
+
+    if detail_limit not in MODULE_DETAIL_LIMIT_CHOICES:
+        allowed = "/".join(str(item) for item in MODULE_DETAIL_LIMIT_CHOICES)
+        raise HTTPException(status_code=400, detail=f"运行明细条数只支持 {allowed}")
     try:
-        return DiagnosticsResult.model_validate(plugin._diagnostics())
+        return DiagnosticsResult.model_validate(plugin._diagnostics(detail_limit))
     except Exception as e:
         _raise_query_error("诊断信息生成失败", e)
 
@@ -462,7 +469,10 @@ def _cleanup_actions(plugin) -> dict:
     活动队列（transfer_schedule）与上传限速恢复状态（upload_limit_state）。
     """
     from ..modules.autoremove.constants import REMOVER_STATE_DATA_KEY
+    from ..modules.autoremove.history import cleared_status, history_removed_count
     from ..modules.failclean.constants import FAILCLEAN_STATUS_DATA_KEY
+    from ..modules.failclean.history import cleared_status as failclean_cleared_status
+    from ..modules.failclean.history import history_removed_count as failclean_history_removed_count
     from ..modules.rename.archive import clear_rename_archive
 
     def clear_rename_archive_data() -> int:
@@ -478,22 +488,41 @@ def _cleanup_actions(plugin) -> dict:
     def clear_transfer_stats() -> int:
         removed = 0
         for key in (TRANSFER_STATS_KEY, TRANSFER_SKIP_STATS_KEY):
-            if plugin.get_data(key):
+            data = plugin.get_data(key)
+            if data:
+                removed += len(data)
                 plugin.save_data(key, {})
-                removed += 1
         return removed
 
     def clear_remover_state() -> int:
-        if not plugin.get_data(REMOVER_STATE_DATA_KEY):
+        """清理最近一轮执行状态；服务在用则走服务清理，保证内存与持久化一致。"""
+        service = getattr(plugin, "_autoremove_service", None)
+        if service is not None:
+            outcome = service.clear_history()
+            if outcome.get("busy"):
+                raise HTTPException(status_code=409, detail="自动删种正在执行，暂不能清理记录")
+            return int(outcome.get("removed", 0) or 0)
+        raw = plugin.get_data(REMOVER_STATE_DATA_KEY)
+        removed = history_removed_count(raw)
+        if not removed:
             return 0
-        plugin.save_data(REMOVER_STATE_DATA_KEY, {})
-        return 1
+        plugin.save_data(REMOVER_STATE_DATA_KEY, cleared_status())
+        return removed
 
     def clear_failclean_status() -> int:
-        if not plugin.get_data(FAILCLEAN_STATUS_DATA_KEY):
+        """清理最近巡检/即时清理结果并保留累计计数；服务在用则走服务清理。"""
+        service = getattr(plugin, "_failclean_service", None)
+        if service is not None:
+            outcome = service.clear_history()
+            if outcome.get("busy"):
+                raise HTTPException(status_code=409, detail="失败清理巡检正在运行，暂不能清理记录")
+            return int(outcome.get("removed", 0) or 0)
+        raw = plugin.get_data(FAILCLEAN_STATUS_DATA_KEY)
+        removed = failclean_history_removed_count(raw)
+        if not removed:
             return 0
-        plugin.save_data(FAILCLEAN_STATUS_DATA_KEY, {})
-        return 1
+        plugin.save_data(FAILCLEAN_STATUS_DATA_KEY, failclean_cleared_status(raw))
+        return removed
 
     return {
         "rename_archive": clear_rename_archive_data,
@@ -504,10 +533,8 @@ def _cleanup_actions(plugin) -> dict:
     }
 
 
-def api_cleanup_module_data(plugin, payload=None):
+def api_cleanup_module_data(plugin, payload: CleanupModuleRequest):
     """按白名单清理插件自身历史数据，返回真实清理条数。"""
-    from ..model.api import CleanupModuleRequest, CleanupModuleResult
-
     body = _request_dict(payload)
     try:
         request = CleanupModuleRequest.model_validate(body)
@@ -892,6 +919,7 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 15):
             "source_downloader": item.get("source_downloader") or "",
             "downloader": item.get("downloader") or "",
             "source_hash": item.get("source_hash") or "",
+            "source_name": str(item.get("source_name") or ""),
             "hash": item.get("hash") or "",
             "phase": item.get("phase") or "",
             "fallback": bool(item.get("fallback")),
@@ -908,6 +936,7 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 15):
             "task": value.get("task") or "",
             "source_downloader": value.get("source_downloader") or key.split("-", 1)[0],
             "source_hash": value.get("source_hash") or "",
+            "source_name": str(value.get("source_name") or ""),
             "downloader": value.get("to_download") or value.get("downloader") or "",
             "hash": value.get("to_download_id") or value.get("hash") or "",
             "phase": value.get("transfer_state") or "",

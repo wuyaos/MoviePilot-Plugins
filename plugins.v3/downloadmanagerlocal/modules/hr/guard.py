@@ -48,9 +48,17 @@ class _GuardState:
     def __init__(self) -> None:
         self.lock = RLock()
         self.enabled = False
+        self.expected = False
+        self.snapshot_ready = True
         self.protected_keys: set[str] = set()
         self.protected_hashes: dict[str, set[str]] = {}
         self.skip_stats: dict[str, int] = {}
+
+    def clear(self) -> None:
+        """清空保护快照（调用方持锁）。"""
+        self.enabled = False
+        self.protected_keys = set()
+        self.protected_hashes = {}
 
 
 _state = _GuardState()
@@ -65,6 +73,29 @@ class HrGuard:
         with _state.lock:
             return _state.enabled
 
+
+
+    @property
+    def unconfirmed(self) -> bool:
+        """保护应按配置生效但没有可用快照：危险删除按「无法确认」保守阻止。"""
+        with _state.lock:
+            return _state.expected and not _state.snapshot_ready
+
+    def expect(self, *, enabled: bool) -> None:
+        """登记保护预期（模块生效但服务不可用时表示无法确认，模块未生效时撤销保护）。
+
+        仅在生命周期初始化时按模块门控调用：enabled=True 且尚无快照时，危险删除保守跳过，
+        直到 HrService 下一轮 update 写入真实快照；enabled=False 表示该联动整体跳过。
+        """
+        with _state.lock:
+            _state.expected = bool(enabled)
+            _state.snapshot_ready = not bool(enabled)
+            _state.clear()
+
+    def mark_unconfirmed(self) -> None:
+        """本轮无法生成保护快照（检查中断/失败）：保留预期，快照置为不可用。"""
+        with _state.lock:
+            _state.snapshot_ready = False
     def update(self, *, enabled: bool, protected: Iterable[tuple[str, str]]) -> None:
         """整体替换受保护任务快照，由 HrService 在每轮检查后调用。"""
         keys: set[str] = set()
@@ -77,6 +108,8 @@ class HrGuard:
                 by_hash.setdefault(hash_key, set()).add(key)
         with _state.lock:
             _state.enabled = bool(enabled)
+            _state.expected = bool(enabled)
+            _state.snapshot_ready = True
             _state.protected_keys = keys
             _state.protected_hashes = by_hash
 
@@ -102,8 +135,8 @@ class HrGuard:
             _state.skip_stats[key] = _state.skip_stats.get(key, 0) + 1
 
     def should_skip(self, path: str, downloader_id: str, torrent_hash: str) -> bool:
-        """查询保护并在命中时计数，供删除路径一次调用完成判断与计数。"""
-        if not self.is_protected(downloader_id, torrent_hash):
+        """查询保护并在命中时计数；保护状态无法确认时同样阻止这次危险删除。"""
+        if not self.is_protected(downloader_id, torrent_hash) and not self.unconfirmed:
             return False
         self.record_skip(path)
         return True

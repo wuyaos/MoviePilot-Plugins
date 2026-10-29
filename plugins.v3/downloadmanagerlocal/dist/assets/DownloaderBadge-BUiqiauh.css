@@ -1,0 +1,26 @@
+
+.dm-downloader-badge[data-v-369b51a3] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.dm-downloader-badge-mark[data-v-369b51a3] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 26%;
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+}
+.dm-downloader-badge-mark--unknown[data-v-369b51a3] {
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+.dm-downloader-badge-name[data-v-369b51a3] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -54,6 +54,7 @@ def _ensure_loaded():
         _stub(f"{PREFIX}.{pkg}", is_package=True)
     _stub(
         f"{PREFIX}.modules.autoremove.constants",
+        MIGRATION_OBSERVE_ONLY_KEY="migration_observe_only",
         build_remover_config_defaults=Mock(return_value={}),
     )
     _stub(

@@ -59,7 +59,7 @@ class FakeBaseModel:
 
 
 MODEL_NAMES = (
-    'DiagnosticsResult', 'EmptyRequest', 'HashActionResult', 'HrActionResult',
+    'CleanupModuleRequest', 'CleanupModuleResult', 'DiagnosticsResult', 'EmptyRequest', 'HashActionResult', 'HrActionResult',
     'HrClearTaskRequest', 'HrPresetsResult', 'HrSkipStatsResult', 'HrTasksResult',
     'ModuleActionResult', 'ModuleStatusResult', 'OverviewResult', 'RenamePageResult',
     'RetryRenamesResult', 'SelectionItem', 'TagCleanupExecuteRequest',
@@ -109,7 +109,8 @@ def endpoints(monkeypatch):
             get_downloader_services=Mock(return_value={}), list_builtin_sites=Mock())
     _module(monkeypatch, PREFIX + '.model.state',
             RENAME_RECORDS_KEY='rename_records', RENAME_RETRY_STATE_KEY='rename_retry_state',
-            TRANSFER_SKIP_STATS_KEY='transfer_skip_stats', load_transfer_stats=Mock())
+            TRANSFER_SKIP_STATS_KEY='transfer_skip_stats', TRANSFER_STATS_KEY='transfer_stats',
+            load_transfer_stats=Mock())
     _module(monkeypatch, PREFIX + '.modules.rename.archive', serialized_rename_state=lambda fn: fn)
     _module(monkeypatch, PREFIX + '.modules.hr.guard', HrGuard=Mock())
     _module(monkeypatch, PREFIX + '.modules.hr.rules', load_preset_rules=Mock(return_value={}))
@@ -129,7 +130,7 @@ def endpoints(monkeypatch):
         'autoremove': ('remover_enabled', '_remover_enabled'),
         'failclean': ('failcleanup_enabled', '_failcleanup_enabled'),
         'upload_limit': ('upload_limit_enabled', '_upload_limit_enabled'),
-    })
+    }, observe_skip=lambda *args, **kwargs: False)
 
     spec = importlib.util.spec_from_file_location(
         PREFIX + '.controller.handlers', PLUGIN / 'controller/handlers.py')

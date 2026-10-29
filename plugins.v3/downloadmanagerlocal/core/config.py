@@ -4,10 +4,14 @@ from app.sdk.logging import logger
 
 from ..adapter.moviepilot import create_downloader_helper
 from ..utils.config import (
+    MODULE_SWITCHES,
     PLUGIN_CONFIG_DEFAULTS,
     build_module_switches,
+    build_module_observe_flags,
     module_active,
+    module_faults,
     normalize_upload_limit_config,
+    record_module_fault,
     safe_int,
 )
 from ..modules.rename.service import build_rename_config
@@ -32,8 +36,25 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
         setattr(plugin, f"_{key}", value)
 
     # 命名补刀与站点标签增强模块配置（来源 get_form 默认 + 扁平键覆盖）
-    plugin._rename_config = build_rename_config(config)
-    plugin._site_tag_config = build_tag_config(_flat_tag_module_config(config))
+    # 模块门控（Goal: 关闭模块不解析、坏配置不阻断其它模块；启用但解析失败只标记运行异常）：
+    # 关闭的模块不解析其用户配置，运行时只留「未启用」占位，历史数据仍可读取。
+    plugin._module_faults = {}
+    # 观察模式快照（阶段三）：一轮运行内固定；保存开关后新一轮才切换。
+    plugin._module_observe_only = build_module_observe_flags(config)
+    plugin._rename_config = _module_config_guarded(
+        plugin,
+        "rename",
+        module_active(config, "rename"),
+        lambda: build_rename_config(config),
+        {"enabled": False},
+    )
+    plugin._site_tag_config = _module_config_guarded(
+        plugin,
+        "tag",
+        module_active(config, "tag"),
+        lambda: build_tag_config(_flat_tag_module_config(config)),
+        {"enable": False},
+    )
 
     # 空配置也按发布默认值继续初始化运行时字段，避免类属性兜底值与配置页默认值不一致；
     # 此时返回的 config 不叠加清洗结果，保持全新安装的空配置语义。
@@ -121,7 +142,41 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     # 裸开关快照：展示层区分「插件停用」与「模块停用」。
     plugin._module_switches = build_module_switches(config)
 
+    # 配置解析失败的模块不进入运行态：门控属性与嵌套视图归零，避免用默认值执行写操作。
+    _downgrade_faulted_module_gates(plugin)
+
     return config
+
+
+def _downgrade_faulted_module_gates(plugin) -> None:
+    """把配置解析失败的模块门控属性归零（用户开关与落盘配置保持不变）。"""
+    faults = module_faults(plugin)
+    if not faults:
+        return
+    for module, (_, attr) in MODULE_SWITCHES.items():
+        if module in faults:
+            setattr(plugin, attr, False)
+    rename_config = getattr(plugin, "_rename_config", None)
+    if "rename" in faults and isinstance(rename_config, dict):
+        rename_config["enabled"] = False
+    tag_config = getattr(plugin, "_site_tag_config", None)
+    if "tag" in faults and isinstance(tag_config, dict):
+        tag_config["enable"] = False
+
+
+def _module_config_guarded(plugin, module: str, active: bool, builder, fallback: dict) -> dict:
+    """按模块门控解析模块配置：关闭不解析，解析失败只记运行异常并回退占位。"""
+    if not active:
+        return dict(fallback)
+    try:
+        return builder()
+    except Exception as error:
+        logger.error(
+            f"【PT下载中心】{module} 模块配置解析失败，已隔离该模块"
+            f"（不改插件总开关与其它模块）: {error}"
+        )
+        record_module_fault(plugin, module, f"配置解析失败：{error}")
+        return dict(fallback)
 
 
 _TAG_FLAT_PREFIX_MAP = {

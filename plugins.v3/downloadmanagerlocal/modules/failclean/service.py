@@ -7,13 +7,13 @@ import traceback
 from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
-from threading import Lock
+from threading import Lock, RLock
 from typing import Any, Optional
 
 from app.sdk.logging import logger
 
 from dataclasses import replace
-from ...utils.config import module_active
+from ...utils.config import module_active, observe_skip
 from ..hr.guard import SKIP_PATH_TRANSFER_FAILURE, HrGuard
 from . import hostapi
 from .config import FailCleanConfig, parse_failclean_config
@@ -25,19 +25,20 @@ from .constants import (
     FAILCLEAN_STATUS_DATA_KEY,
     FAILCLEAN_TRANSFER_FAILED_TRIGGER,
 )
+from .history import (
+    as_counter as _as_counter,
+    as_float as _as_float,
+    cleared_status,
+    empty_status,
+    history_removed_count,
+)
 from .notify import notify_delete_failure, notify_delete_success, notify_scan_result
 
 REPEAT_RESIDUAL_REASON = "已整理成功的重复下载残留"
 UNKNOWN_FAIL_REASON = "未知"
 
-STATUS_TEMPLATE = {
-    "last_scan_time": 0.0,
-    "last_scan_trigger": "",
-    "scan": {"scanned": 0, "cleaned": 0, "failed": 0, "skipped": 0},
-    "event": {"deleted": 0, "failed": 0, "skipped": 0},
-    "total": {"cleaned": 0, "failed": 0, "skipped": 0},
-}
-"""持久化的最近巡检、整理失败即时清理与累计计数模板。"""
+STATUS_TEMPLATE = empty_status()
+"""持久化的最近巡检、整理失败即时清理与累计计数模板（空模板见 history.py）。"""
 
 
 def empty_transfer_failed_result() -> dict[str, Any]:
@@ -87,6 +88,7 @@ class FailCleanService:
         self._status = deepcopy(STATUS_TEMPLATE)
         self._guard = HrGuard()
         self._recent_deletes: dict[str, float] = {}
+        self._status_lock = RLock()
         self._run_lock = Lock()
         self._stopped = False
 
@@ -167,18 +169,44 @@ class FailCleanService:
 
     def get_module_status(self) -> dict[str, Any]:
         """返回模块状态：最近巡检、整理失败清理计数、累计清理数与 H&R 保护跳过数。"""
+        with self._status_lock:
+            last_scan_time = self._status["last_scan_time"]
+            last_scan_trigger = self._status["last_scan_trigger"]
+            scan = dict(self._status["scan"])
+            event = dict(self._status["event"])
+            total = dict(self._status["total"])
         return {
             "enabled": self._config.enabled,
             "clean_repeat": self._config.clean_repeat,
             "cron": self._config.cron,
             "retain_hours": self._config.retain_hours,
-            "last_scan_time": self._status["last_scan_time"],
-            "last_scan_trigger": self._status["last_scan_trigger"],
-            "scan": dict(self._status["scan"]),
-            "event": dict(self._status["event"]),
-            "total": dict(self._status["total"]),
+            "last_scan_time": last_scan_time,
+            "last_scan_trigger": last_scan_trigger,
+            "scan": scan,
+            "event": event,
+            "total": total,
             "skip_stats": self._guard.get_skip_stats(),
         }
+
+    def clear_history(self) -> dict[str, Any]:
+        """清理最近巡检与整理失败即时清理结果，保留累计计数（数据页「清理记录」）。
+
+        :return: ``{"removed": int, "busy": bool}``；``busy=True`` 表示巡检正在运行，
+            未做任何清理，由 handler 转 409。
+        """
+        if not self._run_lock.acquire(blocking=False):
+            return {"removed": 0, "busy": True}
+        try:
+            with self._status_lock:
+                removed = history_removed_count(self._status)
+                if not removed:
+                    return {"removed": 0, "busy": False}
+                cleared = cleared_status(self._status)
+                self._plugin.save_data(FAILCLEAN_STATUS_DATA_KEY, deepcopy(cleared))
+                self._status = cleared
+                return {"removed": removed, "busy": False}
+        finally:
+            self._run_lock.release()
 
     def stop(self) -> None:
         """停止后续巡检；已在运行的巡检在文件之间退出。"""
@@ -295,6 +323,13 @@ class FailCleanService:
         send_notify: bool,
     ) -> dict[str, Any]:
         """删除源文件与下载历史；H&R 保护命中时整条路径跳过（闸门自身完成计数）。"""
+        if observe_skip(self._plugin, "failclean", "删除源文件", f"{path}（{reason}）"):
+            return {
+                "deleted": 0,
+                "history_deleted": False,
+                "skipped": True,
+                "duplicate": False,
+            }
         if self._is_recent_delete(path, download_hash):
             logger.info(f"{FAILCLEAN_LOG_PREFIX}忽略窗口内重复的删除请求：{path}")
             return {
@@ -376,26 +411,28 @@ class FailCleanService:
         """累计一次删除结果；重复请求不计入任何计数。"""
         if duplicate:
             return
-        if scope == "event":
-            self._status["event"]["deleted"] += deleted
-            self._status["event"]["failed"] += failed
-            self._status["event"]["skipped"] += skipped
-        self._status["total"]["cleaned"] += deleted
-        self._status["total"]["failed"] += failed
-        self._status["total"]["skipped"] += skipped
-        self._save_status()
+        with self._status_lock:
+            if scope == "event":
+                self._status["event"]["deleted"] += deleted
+                self._status["event"]["failed"] += failed
+                self._status["event"]["skipped"] += skipped
+            self._status["total"]["cleaned"] += deleted
+            self._status["total"]["failed"] += failed
+            self._status["total"]["skipped"] += skipped
+            self._save_status()
 
     def _record_scan_result(self, trigger_source: str, scan_counts: dict[str, int]) -> None:
         """登记最近一轮巡检结果与时间。"""
-        self._status["last_scan_time"] = time.time()
-        self._status["last_scan_trigger"] = trigger_source
-        self._status["scan"] = dict(scan_counts)
-        self._record_result(
-            scope="scan",
-            deleted=scan_counts["cleaned"],
-            failed=scan_counts["failed"],
-            skipped=scan_counts["skipped"],
-        )
+        with self._status_lock:
+            self._status["last_scan_time"] = time.time()
+            self._status["last_scan_trigger"] = trigger_source
+            self._status["scan"] = dict(scan_counts)
+            self._record_result(
+                scope="scan",
+                deleted=scan_counts["cleaned"],
+                failed=scan_counts["failed"],
+                skipped=scan_counts["skipped"],
+            )
 
     def _load_status(self) -> dict[str, Any]:
         """读取持久化计数；缺失或结构不符时回退模板。"""
@@ -403,19 +440,21 @@ class FailCleanService:
         status = deepcopy(STATUS_TEMPLATE)
         if not isinstance(raw, dict):
             return status
-        status["last_scan_time"] = _as_float(raw.get("last_scan_time"))
-        status["last_scan_trigger"] = _text(raw.get("last_scan_trigger"))
-        for section in ("scan", "event", "total"):
-            stored = raw.get(section)
-            if not isinstance(stored, dict):
-                continue
-            for key in status[section]:
-                status[section][key] = _as_counter(stored.get(key))
-        return status
+        with self._status_lock:
+            status["last_scan_time"] = _as_float(raw.get("last_scan_time"))
+            status["last_scan_trigger"] = _text(raw.get("last_scan_trigger"))
+            for section in ("scan", "event", "total"):
+                stored = raw.get(section)
+                if not isinstance(stored, dict):
+                    continue
+                for key in status[section]:
+                    status[section][key] = _as_counter(stored.get(key))
+            return status
 
     def _save_status(self) -> None:
-        """保存累计计数。"""
-        self._plugin.save_data(FAILCLEAN_STATUS_DATA_KEY, deepcopy(self._status))
+        """保存累计计数（与状态读改写共用状态锁）。"""
+        with self._status_lock:
+            self._plugin.save_data(FAILCLEAN_STATUS_DATA_KEY, deepcopy(self._status))
 
 
 def counters_of(delete_result: dict[str, Any]) -> dict[str, Any]:
@@ -444,22 +483,6 @@ def _field(source: Any, name: str) -> Any:
 def _text(value: Any) -> str:
     """把可选值收敛为去空白字符串。"""
     return str(value or "").strip()
-
-
-def _as_float(value: Any) -> float:
-    """把时间戳收敛为非负浮点数。"""
-    try:
-        return max(float(value), 0.0)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _as_counter(value: Any) -> int:
-    """把持久化计数收敛为非负整数。"""
-    try:
-        return max(int(value), 0)
-    except (TypeError, ValueError):
-        return 0
 
 
 __all__ = ("FailCleanService", "STATUS_TEMPLATE", "empty_scan_result", "empty_transfer_failed_result")

@@ -210,8 +210,14 @@ def test_cleanup_actions_whitelist_semantics(cleanup):
         'rename_records': {'r1': {'original_name': 'a'}, 'r2': {'original_name': 'b'}},
         'transfer_stats': {'total': 5},
         'transfer_skip_stats': {'skip': 2},
-        'remover_state': {'last_run': 1},
-        'failclean_status': {'last_scan_time': 123},
+        'remover_state': {'last_run_at': 1710000000.0, 'deleted': 3, 'candidate_list': [{'hash': 'a'}]},
+        'failclean_status': {
+            'last_scan_time': 1710000000.0,
+            'last_scan_trigger': '定时',
+            'scan': {'scanned': 4, 'cleaned': 2, 'failed': 0, 'skipped': 1},
+            'event': {'deleted': 1, 'failed': 0, 'skipped': 0},
+            'total': {'cleaned': 9, 'failed': 2, 'skipped': 3},
+        },
         'transfer_schedule': {'queue': ['should-stay']},
         'upload_limit_state': {'restore': 'should-stay'},
     })
@@ -227,10 +233,20 @@ def test_cleanup_actions_whitelist_semantics(cleanup):
     assert actions['rename_history']() == 0
     assert actions['transfer_stats']() == 2
     assert plugin.get_data('transfer_stats') == {}
+    # 自动删种：清最近一轮执行状态（只存最近一轮，无累计段），清后按 new 口径计 0
     assert actions['autoremove_state']() == 1
-    assert plugin.get_data('remover_state') == {}
+    remover_state = plugin.get_data('remover_state')
+    assert remover_state['last_run_at'] == 0.0 and remover_state['deleted'] == 0
+    assert remover_state['candidate_list'] == []
+    assert actions['autoremove_state']() == 0
+    # 失败清理：只清最近巡检/即时清理结果，total 累计值保留
     assert actions['failclean_state']() == 1
-    assert plugin.get_data('failclean_status') == {}
+    failclean_state = plugin.get_data('failclean_status')
+    assert failclean_state['last_scan_time'] == 0.0 and failclean_state['last_scan_trigger'] == ''
+    assert failclean_state['scan'] == {'scanned': 0, 'cleaned': 0, 'failed': 0, 'skipped': 0}
+    assert failclean_state['event'] == {'deleted': 0, 'failed': 0, 'skipped': 0}
+    assert failclean_state['total'] == {'cleaned': 9, 'failed': 2, 'skipped': 3}
+    assert actions['failclean_state']() == 0
     assert plugin.get_data('transfer_schedule') == {'queue': ['should-stay']}
     assert plugin.get_data('upload_limit_state') == {'restore': 'should-stay'}
 

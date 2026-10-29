@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue'
 import { getPluginApi } from './api'
+import DownloaderBadge from './DownloaderBadge.vue'
 
 const props = defineProps({
   api: { type: [Object, Function], default: null },
@@ -100,6 +101,11 @@ const defaults = {
   upload_limit_enabled: false, upload_limit_downloaders: [],
   upload_limit_downloader_limits_kib: {}, upload_limit_site_rules: {},
   upload_limit_grace_minutes: 30,
+  // 观察模式（阶段三）：只预览候选、不执行写操作。老配置默认关闭（升级保持升级前行为），
+  // 全新安装时由下方 fresh install 补丁打开；按模块前缀自动归入对应页签的「恢复默认」键集。
+  transfer_observe_only: false, rename_observe_only: false, tag_observe_only: false,
+  hr_observe_only: false, remover_observe_only: false, failcleanup_observe_only: false,
+  upload_limit_observe_only: false,
 }
 
 // 各设置页签的「恢复默认」键集：transfer 为显式列表（含无前缀共享键），其余按模块前缀从 defaults 提取
@@ -111,15 +117,22 @@ const PANE_RESET_KEYS = {
     'add_torrent_tags', 'deletesource', 'deleteduplicate', 'remainoldcat', 'remainoldtag',
     'transfer_tasks', 'transfer_rename_enabled', 'downloader_ext',
     'seed_autostart', 'seed_skipverify', 'seed_check_interval', 'seed_max_wait_minutes',
-    'scan_limit', 'pause_source'],
+    'scan_limit', 'pause_source', 'transfer_observe_only'],
   hr: Object.keys(defaults).filter(k => k.startsWith('hr_')),
-  // 观察闸门键无 remover_ 前缀（公共迁移闸门），需显式并入删除域重置集
-  remover: Object.keys(defaults).filter(k => k.startsWith('remover_')).concat(['migration_observe_only']),
+  // remover 观察开关已迁移为 remover_observe_only（带前缀），旧 migration_observe_only 键保留在 defaults 供迁移回填
+  remover: Object.keys(defaults).filter(k => k.startsWith('remover_')),
   failclean: Object.keys(defaults).filter(k => k.startsWith('failcleanup_')),
   rename: Object.keys(defaults).filter(k => k.startsWith('rename_')),
   tag: Object.keys(defaults).filter(k => k.startsWith('tag_')),
   upload: Object.keys(defaults).filter(k => k.startsWith('upload_limit_')),
 }
+
+// 观察模式键（阶段三）：与后端 utils/config.py 的 OBSERVE_ONLY_KEYS 一一对应；
+// 全新安装默认开启，老配置升级保持升级前行为（见下方 watch 中的补丁）。
+const OBSERVE_ONLY_KEYS = [
+  'transfer_observe_only', 'rename_observe_only', 'tag_observe_only', 'hr_observe_only',
+  'remover_observe_only', 'failcleanup_observe_only', 'upload_limit_observe_only',
+]
 const paneResetDialog = ref(false)
 const paneResetTarget = ref('')
 const paneResetCount = computed(() => (PANE_RESET_KEYS[paneResetTarget.value] || []).length)
@@ -143,10 +156,10 @@ function confirmPaneReset() {
 
 const mainTabs = [
   { key: 'transfer', title: '转移做种', icon: 'mdi-transfer', desc: '监听下载完成事件，延迟后自动转移做种到目标下载器。' },
-  { key: 'hr', title: 'H&R管理', icon: 'mdi-timer-alert-outline', desc: '按站点规则跟踪 H&R 做种状态，为破坏性操作提供统一保护。' },
-  { key: 'remover', title: '自动删种', icon: 'mdi-delete-clock-outline', desc: '按时间、分享率、体积等条件自动暂停或删除任务。' },
+  { key: 'hr', title: 'H&R 管理', icon: 'mdi-timer-alert-outline', desc: '按站点规则跟踪 H&R 做种状态，为破坏性操作提供统一保护。' },
+  { key: 'remover', title: '自动删种', icon: 'mdi-delete-clock-outline', desc: '按时间、分享率、体积等条件自动暂停或删除种子。' },
   { key: 'failclean', title: '失败清理', icon: 'mdi-broom', desc: '整理失败时立即清理源文件与下载历史，并定时清理重复残留。' },
-  { key: 'rename', title: '命名补刀', icon: 'mdi-rename-box', desc: '转移后自动根据 TMDB 信息命名种子，并支持失败补刀。' },
+  { key: 'rename', title: '种子重命名', icon: 'mdi-rename-box', desc: '转移后自动根据 TMDB 信息命名种子，失败记录进定时补查，也可手动补刀。' },
   { key: 'tag', title: '站点标签', icon: 'mdi-tag-multiple', desc: '转移后自动根据 tracker 域名打站点标签。' },
   { key: 'upload', title: '上传限速', icon: 'mdi-upload-network-outline', desc: '设置下载器全局上传上限，并按需限制指定站点的合计上传速度。' },
 ]
@@ -208,8 +221,8 @@ const hrNotifyModeItems = [
 ]
 const removerActionItems = [
   { title: '暂停任务', value: 'pause' },
-  { title: '删除任务', value: 'delete' },
-  { title: '删除任务及文件', value: 'deletefile' },
+  { title: '删除种子', value: 'delete' },
+  { title: '删除种子及文件', value: 'deletefile' },
 ]
 const tagCatPairs = ref([])
 const tagTrackerPairs = ref([])
@@ -324,18 +337,6 @@ function parseDownloaderExt(raw) {
 }
 
 
-/** 下载器类型 → 专属图标（图标反映类型，与名称并列展示）。 */
-const DOWNLOADER_TYPE_ICONS = {
-  qbittorrent: 'mdi-alpha-q-box',
-  transmission: 'mdi-alpha-t-box',
-  rtorrent: 'mdi-alpha-r-box',
-}
-const DOWNLOADER_TYPE_LABELS = {
-  qbittorrent: 'qBittorrent',
-  transmission: 'Transmission',
-  rtorrent: 'rTorrent',
-}
-
 function downloaderTypeOf(name) {
   return downloaderItems.value.find(item => item.value === name)?.type || ''
 }
@@ -343,14 +344,6 @@ function downloaderTypeOf(name) {
 function downloaderTitle(name) {
   const hit = downloaderItems.value.find(item => item.value === name)
   return hit ? hit.title : (name || '—')
-}
-
-function downloaderTypeIcon(name) {
-  return DOWNLOADER_TYPE_ICONS[downloaderTypeOf(name)] || 'mdi-download-outline'
-}
-
-function downloaderTypeLabel(name) {
-  return DOWNLOADER_TYPE_LABELS[downloaderTypeOf(name)] || '未识别下载器类型'
 }
 
 /** 筛选条件摘要：只列实际生效的条件，无条件时明确显示「不限分类」。 */
@@ -471,41 +464,13 @@ function confirmTransferDelete() {
   transferTasks.value = transferTasks.value.filter((_, position) => position !== transferDeleteIndex.value)
   transferDeleteDialog.value = false
 }
-// H&R 站点规则的三组键名。必须定义在下方 immediate watcher（syncHrSiteRulesFromForm）之前：
-// watcher 创建即执行（immediate），若此时这些 const 尚未初始化，YAML 解析会抛
-// ReferenceError（TDZ），中断 transferTasks 等后续赋值——配置了 H&R 站点规则的实例
-// 会表现为「任务列表不可见」，且点保存可能把空任务列表写回配置。
+// H&R 规则键；initialConfig 的 immediate watcher 放在 setup 末尾，
+// 确保 YAML 分档解析依赖的 hrTierFields 等声明也已初始化。
 const hrSiteRuleKeys = ['hr_duration', 'additional_seed_time', 'hr_deadline_days', 'hr_ratio', 'hr_upload_multiplier', 'hr_upload_gte_download', 'hr_active']
 const hrListRuleKeys = ['trackers']
 const hrTierValueKeys = ['hr_duration', 'hr_deadline_days']
 
 
-watch(() => props.initialConfig, v => {
-Object.keys(form).forEach(k => delete form[k])
-  Object.assign(form, defaults, v || {})
-  form.upload_limit_downloaders = [...(v?.upload_limit_downloaders || [])]
-  form.upload_limit_downloader_limits_kib = { ...(v?.upload_limit_downloader_limits_kib || {}) }
-  form.upload_limit_site_rules = Object.fromEntries(Object.entries(v?.upload_limit_site_rules || {}).map(([name, rule]) => [name, { ...rule }]))
-  form.hr_downloader = [...(v?.hr_downloader || [])]
-  form.hr_sites = [...(v?.hr_sites || [])]
-  form.hr_exclude_tags = [...(v?.hr_exclude_tags || [])]
-  form.hr_exclude_categories = [...(v?.hr_exclude_categories || [])]
-  form.remover_downloaders = [...(v?.remover_downloaders || [])]
-  form.rename_downloaders = [...(v?.rename_downloaders || [])]
-  form.tag_downloaders = [...(v?.tag_downloaders || [])]
-  form.tag_all_cat = [...(v?.tag_all_cat || [])]
-  form.tag_all_cat = [...(v?.tag_all_cat || [])]
-  form.tag_all_cat_rename = [...(v?.tag_all_cat_rename || [])]
-  tagCatPairs.value = parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename)
-  const customLabels = parseCustomSiteLabels(form.tag_custom_sites_str)
-  tagTrackerPairs.value = parseTrackerPairs(form.tag_tracker_mappings_str).map(p => ({
-    ...p,
-    custom: customLabels[String(p.site || p.tracker || '').trim().toLowerCase()] || '',
-  }))
-  syncHrSiteRulesFromForm()
-  transferTasks.value = parseTransferTasks(form.transfer_tasks)
-  transferExt.value = parseDownloaderExt(form.downloader_ext)
-}, { immediate: true, deep: true })
 function saveConfig() {
   emit('save', {
     ...form,
@@ -1230,6 +1195,40 @@ function serializeHrSiteConfigYaml(rules) {
   return blocks.join('\n\n')
 }
 
+watch(() => props.initialConfig, v => {
+Object.keys(form).forEach(k => delete form[k])
+  Object.assign(form, defaults, v || {})
+  // 决策 A：全新安装（后端没有已保存配置）时观察模式默认开启；老配置升级保持升级前行为。
+  if (!v || !Object.keys(v).length) {
+    for (const key of OBSERVE_ONLY_KEYS) form[key] = true
+  }
+  // 决策 A：自动删种继承旧「仅观察不执行」开关（仅在旧键存在且未保存过新键时生效）
+  if (v?.migration_observe_only !== undefined && v?.remover_observe_only === undefined) {
+    form.remover_observe_only = !!v.migration_observe_only
+  }
+  form.upload_limit_downloaders = [...(v?.upload_limit_downloaders || [])]
+  form.upload_limit_downloader_limits_kib = { ...(v?.upload_limit_downloader_limits_kib || {}) }
+  form.upload_limit_site_rules = Object.fromEntries(Object.entries(v?.upload_limit_site_rules || {}).map(([name, rule]) => [name, { ...rule }]))
+  form.hr_downloader = [...(v?.hr_downloader || [])]
+  form.hr_sites = [...(v?.hr_sites || [])]
+  form.hr_exclude_tags = [...(v?.hr_exclude_tags || [])]
+  form.hr_exclude_categories = [...(v?.hr_exclude_categories || [])]
+  form.remover_downloaders = [...(v?.remover_downloaders || [])]
+  form.rename_downloaders = [...(v?.rename_downloaders || [])]
+  form.tag_downloaders = [...(v?.tag_downloaders || [])]
+  form.tag_all_cat = [...(v?.tag_all_cat || [])]
+  form.tag_all_cat = [...(v?.tag_all_cat || [])]
+  form.tag_all_cat_rename = [...(v?.tag_all_cat_rename || [])]
+  tagCatPairs.value = parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename)
+  const customLabels = parseCustomSiteLabels(form.tag_custom_sites_str)
+  tagTrackerPairs.value = parseTrackerPairs(form.tag_tracker_mappings_str).map(p => ({
+    ...p,
+    custom: customLabels[String(p.site || p.tracker || '').trim().toLowerCase()] || '',
+  }))
+  syncHrSiteRulesFromForm()
+  transferTasks.value = parseTransferTasks(form.transfer_tasks)
+  transferExt.value = parseDownloaderExt(form.downloader_ext)
+}, { immediate: true, deep: true })
 </script>
 <template>
   <div class="dm-config">
@@ -1276,6 +1275,10 @@ function serializeHrSiteConfigYaml(rules) {
               <VRow>
                 <VCol cols="12" md="4">
                   <VSwitch v-model="form.upload_limit_enabled" color="success" inset hide-details label="启用上传限速" />
+                </VCol>
+                <VCol cols="12" md="4">
+                  <VSwitch v-model="form.upload_limit_observe_only" color="warning" inset hide-details label="观察模式（只预览不写入）" />
+                  <div class="dm-hint">观察模式：不调整任何上传限速，已有额度保持原样，也不执行恢复；诊断页可看预览统计</div>
                 </VCol>
                 <VCol cols="12" md="8">
                   <VSelect v-model="form.upload_limit_downloaders" label="限速下载器" density="compact" variant="outlined"
@@ -1355,6 +1358,10 @@ function serializeHrSiteConfigYaml(rules) {
                 <VCol cols="12" md="3">
                   <VSwitch v-model="form.transfer_enabled" color="success" inset hide-details label="启用转移做种" />
                 </VCol>
+                <VCol cols="12" md="4">
+                  <VSwitch v-model="form.transfer_observe_only" color="warning" inset hide-details label="观察模式（只预览不写入）" />
+                  <div class="dm-hint">观察模式：转移任务只统计（诊断页可见），不向目标下载器添加种子、不删除源种子</div>
+                </VCol>
                 <VCol cols="12" md="3">
                   <VSwitch v-model="form.notify" color="info" inset hide-details label="发送通知" />
                 </VCol>
@@ -1423,15 +1430,13 @@ function serializeHrSiteConfigYaml(rules) {
                   </div>
                   <div class="dm-task-route">
                     <span class="dm-route-item">
-                      <VIcon :icon="downloaderTypeIcon(task.from_downloader)" size="15"
-                        :title="downloaderTypeLabel(task.from_downloader)" />
-                      <span class="dm-break-text">{{ downloaderTitle(task.from_downloader) }}</span>
+                      <DownloaderBadge :name="downloaderTitle(task.from_downloader)"
+                        :type="downloaderTypeOf(task.from_downloader)" :size="16" />
                     </span>
                     <VIcon icon="mdi-arrow-right" size="15" class="dm-map-arrow" />
                     <span class="dm-route-item">
-                      <VIcon :icon="downloaderTypeIcon(task.to_downloader)" size="15"
-                        :title="downloaderTypeLabel(task.to_downloader)" />
-                      <span class="dm-break-text">{{ downloaderTitle(task.to_downloader) }}</span>
+                      <DownloaderBadge :name="downloaderTitle(task.to_downloader)"
+                        :type="downloaderTypeOf(task.to_downloader)" :size="16" />
                     </span>
                   </div>
                   <div class="dm-task-paths">
@@ -1464,6 +1469,10 @@ function serializeHrSiteConfigYaml(rules) {
               <VRow>
                 <VCol cols="12" md="3">
                   <VSwitch v-model="form.hr_enabled" color="success" inset hide-details label="启用 H&R" />
+                </VCol>
+                <VCol cols="12" md="4">
+                  <VSwitch v-model="form.hr_observe_only" color="warning" inset hide-details label="观察模式（只预览不写入）" />
+                  <div class="dm-hint">观察模式：检查与统计照常，但不给种子打 H&R 标签、不移除标签</div>
                 </VCol>
                 <VCol cols="12" md="3">
                   <VSelect v-model="form.hr_notify" label="通知模式" density="compact" variant="outlined" hide-details
@@ -1712,6 +1721,10 @@ function serializeHrSiteConfigYaml(rules) {
                 <VCol cols="12" md="3">
                   <VSwitch v-model="form.remover_enabled" color="success" inset hide-details label="启用自动删种" />
                 </VCol>
+                <VCol cols="12" md="4">
+                  <VSwitch v-model="form.remover_observe_only" color="warning" inset hide-details label="观察模式（只预览不写入）" />
+                  <div class="dm-hint">观察模式：只列出候选并发通知，不暂停、不删除种子；原「仅观察不执行」开关已迁移到此处</div>
+                </VCol>
                 <VCol cols="12" md="3">
                   <VSwitch v-model="form.remover_notify" color="info" inset hide-details label="发送通知" />
                 </VCol>
@@ -1725,7 +1738,7 @@ function serializeHrSiteConfigYaml(rules) {
               <VRow class="mt-2">
                 <VCol cols="12" md="4">
                   <VSelect v-model="form.remover_action" label="执行动作" density="compact" variant="outlined" hide-details
-                    :items="removerActionItems" hint="暂停 / 删除任务 / 删除任务及文件" persistent-hint />
+                    :items="removerActionItems" hint="暂停 / 删除种子 / 删除种子及文件" persistent-hint />
                 </VCol>
                 <VCol cols="12" md="4">
                   <VSelect v-model="form.remover_downloaders" label="目标下载器" density="compact" variant="outlined" hide-details
@@ -1733,12 +1746,6 @@ function serializeHrSiteConfigYaml(rules) {
                 </VCol>
                 <VCol cols="12" md="4">
                   <VCronField v-model="form.remover_cron" label="执行周期" density="compact" variant="outlined" hide-details />
-                </VCol>
-              </VRow>
-              <VRow class="mt-2">
-                <VCol cols="12" md="4">
-                  <VSwitch v-model="form.migration_observe_only" color="warning" inset hide-details label="仅观察不执行" />
-                  <div class="dm-hint">打开后只列出候选并发通知，不对下载器做任何写操作（暂停/删除都跳过）</div>
                 </VCol>
               </VRow>
             </div>
@@ -1795,6 +1802,10 @@ function serializeHrSiteConfigYaml(rules) {
                   <VSwitch v-model="form.failcleanup_enabled" color="success" inset hide-details label="启用失败清理" />
                 </VCol>
                 <VCol cols="12" md="4">
+                  <VSwitch v-model="form.failcleanup_observe_only" color="warning" inset hide-details label="观察模式（只预览不写入）" />
+                  <div class="dm-hint">观察模式：只统计将清理的失败文件，不删除文件、不删下载历史</div>
+                </VCol>
+                <VCol cols="12" md="4">
                   <VSwitch v-model="form.failcleanup_clean_repeat" color="info" inset hide-details label="清理重复残留" />
                 </VCol>
                 <VCol cols="12" md="4">
@@ -1812,12 +1823,16 @@ function serializeHrSiteConfigYaml(rules) {
               </VRow>
             </div>
 
-            <!-- ═══ 命名补刀 · 基础设置 ═══ -->
+            <!-- ═══ 种子重命名 · 基础设置 ═══ -->
             <div v-show="activeSub === 'rename_basic'" class="dm-pane">
               <div class="dm-section-title">基础设置</div>
               <VRow>
                 <VCol cols="12" md="4">
                   <VSwitch v-model="form.rename_enabled" color="success" inset hide-details label="启用重命名" />
+                </VCol>
+                <VCol cols="12" md="4">
+                  <VSwitch v-model="form.rename_observe_only" color="warning" inset hide-details label="观察模式（只预览不写入）" />
+                  <div class="dm-hint">观察模式：只统计将重命名的种子，不改种子名、不写重试与归档记录</div>
                 </VCol>
               </VRow>
               <VRow class="mt-2">
@@ -1834,10 +1849,10 @@ function serializeHrSiteConfigYaml(rules) {
               </VRow>
               <VRow class="mt-2">
                 <VCol cols="12" md="4">
-                  <VSwitch v-model="form.rename_cron_enabled" color="info" inset hide-details label="定时重命名" />
+                  <VSwitch v-model="form.rename_cron_enabled" color="info" inset hide-details label="定时补查" />
                 </VCol>
                 <VCol cols="12" md="4">
-                  <VCronField v-model="form.rename_cron" label="定时重命名周期" density="compact" variant="outlined" hide-details :disabled="!form.rename_cron_enabled" />
+                  <VCronField v-model="form.rename_cron" label="定时补查周期" density="compact" variant="outlined" hide-details :disabled="!form.rename_cron_enabled" />
                 </VCol>
                 <VCol cols="12" md="4">
                   <VSelect v-model="form.rename_downloaders" label="重命名下载器" density="compact" variant="outlined" hide-details
@@ -1846,7 +1861,7 @@ function serializeHrSiteConfigYaml(rules) {
               </VRow>
             </div>
 
-            <!-- ═══ 命名补刀 · 模板与过滤 ═══ -->
+            <!-- ═══ 种子重命名 · 模板与过滤 ═══ -->
             <div v-show="activeSub === 'rename_format'" class="dm-pane">
               <div class="dm-section-title">模板与过滤</div>
               <VRow class="mt-2">
@@ -1887,6 +1902,10 @@ function serializeHrSiteConfigYaml(rules) {
               <VRow>
                 <VCol cols="12" md="4">
                   <VSwitch v-model="form.tag_enabled" color="success" inset hide-details label="启用站点标签" />
+                </VCol>
+                <VCol cols="12" md="4">
+                  <VSwitch v-model="form.tag_observe_only" color="warning" inset hide-details label="观察模式（只预览不写入）" />
+                  <div class="dm-hint">观察模式：只统计将写入的标签/分类，不修改下载器标签</div>
                 </VCol>
                 <VCol cols="12" md="4">
                   <VSwitch v-model="form.tag_enable_tag" color="success" inset hide-details label="站点名标签" />
@@ -2238,9 +2257,8 @@ function serializeHrSiteConfigYaml(rules) {
 </template>
 <style scoped>
 .dm-config {
-  width: min(1120px, calc(100vw - 48px));
+  width: 100%;
   max-width: 100%;
-  padding: 8px;
 }
 .dm-card {
   width: 100%;
@@ -2248,8 +2266,6 @@ function serializeHrSiteConfigYaml(rules) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 14px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 .dm-header { padding: 14px 18px; }
 .dm-header :deep(.v-card-subtitle) {
@@ -2319,7 +2335,6 @@ function serializeHrSiteConfigYaml(rules) {
 .dm-cleanup-preview-list { max-height: 360px; overflow-y: auto; }
 .dm-actions { padding: 10px 18px; }
 @media (max-width: 760px) {
-  .dm-config { width: min(100%, calc(100vw - 16px)); padding: 4px; }
   .dm-card { height: min(860px, calc(100dvh - 16px)); }
   .dm-header :deep(.v-card-subtitle) { max-width: 100%; }
   .dm-body { flex-direction: column; }

@@ -6,6 +6,7 @@
 MODULE_SWITCHES 用最小字面量充当门控接缝，真源与全量键数由 test_gating.py 覆盖。
 """
 
+import copy
 import importlib.machinery
 import importlib.util
 import sys
@@ -58,7 +59,7 @@ class FakeBaseModel:
 
 
 MODEL_NAMES = (
-    'DiagnosticsResult', 'EmptyRequest', 'HashActionResult', 'HrActionResult',
+    'CleanupModuleRequest', 'CleanupModuleResult', 'DiagnosticsResult', 'EmptyRequest', 'HashActionResult', 'HrActionResult',
     'HrClearTaskRequest', 'HrPresetsResult', 'HrSkipStatsResult', 'HrTasksResult',
     'ModuleActionResult', 'ModuleStatusResult', 'OverviewResult', 'RenamePageResult',
     'RetryRenamesResult', 'SelectionItem', 'TagCleanupExecuteRequest',
@@ -108,7 +109,8 @@ def endpoints(monkeypatch):
             get_url_domain=Mock(return_value='example.org'), list_builtin_sites=Mock())
     _module(monkeypatch, PREFIX + '.model.state',
             RENAME_RECORDS_KEY='rename_records', RENAME_RETRY_STATE_KEY='rename_retry_state',
-            TRANSFER_SKIP_STATS_KEY='transfer_skip_stats', load_transfer_stats=Mock())
+            TRANSFER_SKIP_STATS_KEY='transfer_skip_stats', TRANSFER_STATS_KEY='transfer_stats',
+            load_transfer_stats=Mock())
     _module(monkeypatch, PREFIX + '.modules.rename.archive', serialized_rename_state=lambda fn: fn)
     _module(monkeypatch, PREFIX + '.modules.rename.service', scan_renames=Mock(return_value={'renamed': 0}))
     _module(monkeypatch, PREFIX + '.modules.hr.guard', HrGuard=Mock())
@@ -130,7 +132,9 @@ def endpoints(monkeypatch):
         'autoremove': ('remover_enabled', '_remover_enabled'),
         'failclean': ('failcleanup_enabled', '_failcleanup_enabled'),
         'upload_limit': ('upload_limit_enabled', '_upload_limit_enabled'),
-    })
+    }, observe_skip=lambda *args, **kwargs: False,
+            module_faults=Mock(return_value={}), module_observe_flags=Mock(return_value={}),
+            observe_previews=Mock(return_value={}))
 
     def load(relpath, name):
         spec = importlib.util.spec_from_file_location(name, PLUGIN / relpath)
@@ -172,9 +176,9 @@ def _wait_called(mock, timeout=2.0):
 
 
 def test_route_contract(endpoints):
-    """按当前工作树：38 条路由，三条新 POST 端点 auth=bear 且用 Response 包装。"""
+    """按当前工作树：39 条路由（含数据清理端点），新 POST 端点 auth=bear 且用 Response 包装。"""
     routes = endpoints.routes.build_api_routes(Mock())
-    assert len(routes) == 38
+    assert len(routes) == 39
     by_path = {route['path']: route for route in routes}
     for path, summary in (('/transfer_run', '手动执行一轮转移做种'),
                           ('/tag_complement', '手动执行站点标签历史补全')):
@@ -374,3 +378,103 @@ def test_hr_manual_actions_reject_isolated_service(endpoints):
             continue
         raise AssertionError(f"{name} 未拒绝，返回 {result!r}")
         assert "初始化失败" in excinfo.value.detail, name
+
+
+# ── 转移记录名称（P7-2c 需求④）：GET /transfer_status 带出源种子名 ────────────
+
+def _transfer_status_stubs(monkeypatch, queue: dict):
+    """替身：待办队列与任务配置读取，避免为状态投影拉起真实转移模块。"""
+    _module(monkeypatch, PREFIX + '.modules.transfer', __path__=[str(PLUGIN / 'modules' / 'transfer')])
+    _module(monkeypatch, PREFIX + '.modules.transfer.recheck',
+            load_seed_recheck_queue=Mock(return_value=queue))
+    _module(monkeypatch, PREFIX + '.modules.transfer.tasks', load_transfer_tasks=Mock(return_value=[]))
+
+
+def test_transfer_status_exposes_source_name(endpoints, monkeypatch):
+    """在途与最近记录都带出 source_name；旧记录缺失时为空串，不伪造名字。"""
+    _transfer_status_stubs(monkeypatch, {
+        'QB2::' + 'b' * 40: {
+            'source_downloader': 'QB1', 'downloader': 'QB2', 'source_hash': 'a' * 40,
+            'hash': 'b' * 40, 'phase': 'verifying', 'created_at': time.time(),
+            'source_name': '在途.源种子.mkv',
+        },
+    })
+    records = {
+        'QB1-' + 'a' * 40: {
+            'source_hash': 'a' * 40, 'transfer_state': 'completed', 'to_download': 'QB2',
+            'to_download_id': 'b' * 40, 'updated_at': 2.0, 'source_name': '已完成.源种子.mkv',
+        },
+        'QB1-' + 'c' * 40: {
+            'source_hash': 'c' * 40, 'transfer_state': 'rolled_back', 'to_download': 'QB2',
+            'to_download_id': 'd' * 40, 'updated_at': 1.0,
+        },
+    }
+    plugin = types.SimpleNamespace(
+        get_data=lambda key=None: copy.deepcopy(records.get(key) if key else records))
+
+    status = endpoints.handlers.api_transfer_status(plugin).status
+
+    assert status['pending'][0]['source_name'] == '在途.源种子.mkv'
+    rows = {row['source_hash']: row for row in status['records']}
+    assert rows['a' * 40]['source_name'] == '已完成.源种子.mkv'
+    assert rows['c' * 40]['source_name'] == ''
+    assert status['total'] == 2 and status['page_size'] == 15, '分页与总数口径不能被名称字段改动'
+
+
+def test_transfer_status_source_name_supports_orm_rows(endpoints, monkeypatch):
+    """get_data() 返回 ORM 行列表时同样带出名称，缺失时为空串。"""
+    _transfer_status_stubs(monkeypatch, {})
+    rows = [
+        types.SimpleNamespace(key='QB1-' + 'e' * 40, value={
+            'source_hash': 'e' * 40, 'transfer_state': 'completed', 'to_download': 'QB2',
+            'to_download_id': 'f' * 40, 'updated_at': 3.0, 'source_name': 'ORM.源种子.mkv',
+        }),
+        types.SimpleNamespace(key='QB1-' + 'g' * 40, value={
+            'source_hash': 'g' * 40, 'transfer_state': 'failed', 'to_download': 'QB2',
+            'to_download_id': 'h' * 40, 'updated_at': 1.0,
+        }),
+    ]
+    plugin = types.SimpleNamespace(
+        get_data=lambda key=None: copy.deepcopy(rows) if key is None else None)
+
+    status = endpoints.handlers.api_transfer_status(plugin).status
+
+    names = {row['source_hash']: row['source_name'] for row in status['records']}
+    assert names == {'e' * 40: 'ORM.源种子.mkv', 'g' * 40: ''}
+
+
+def test_diagnostics_detail_limit_through_route(endpoints):
+    """走真实路由 endpoint：detail_limit 穿透 handler 与插件端点，非法值明确 400。"""
+    seen = []
+
+    def fake_diagnostics(detail_limit=20):
+        seen.append(detail_limit)
+        return {'detail_limit': detail_limit}
+
+    plugin = Mock()
+    plugin._diagnostics = fake_diagnostics
+    plugin.api_diagnostics = types.MethodType(endpoints.handlers.api_diagnostics, plugin)
+
+    route = {item['path']: item for item in endpoints.routes.build_api_routes(plugin)}['/diagnostics']
+    assert route['methods'] == ['GET'] and route['auth'] == 'bear', '路由契约不变'
+
+    assert route['endpoint']().model_dump() == {'detail_limit': 20}, '缺省按 20 走'
+    assert route['endpoint'](detail_limit=200).model_dump() == {'detail_limit': 200}, '白名单值原样穿透'
+    assert seen == [20, 200]
+
+    with pytest.raises(FakeHTTPException) as error:
+        route['endpoint'](detail_limit=21)
+    assert error.value.status_code == 400
+    assert '20/50/100/200' in error.value.detail, '拒绝时列出可接受的档位'
+    assert seen == [20, 200], '非法值不得进入诊断构建'
+
+
+def test_diagnostics_default_matches_service_whitelist(endpoints):
+    """handler 默认值与诊断服务白名单同源，避免两处各写一套档位。"""
+    import inspect
+
+    service = importlib.import_module(PREFIX + '.modules.diagnostics.service')
+    default = inspect.signature(endpoints.handlers.api_diagnostics).parameters['detail_limit'].default
+
+    assert service.MODULE_DETAIL_LIMIT_CHOICES == (20, 50, 100, 200)
+    assert default == service.MODULE_DETAIL_ITEM_LIMIT == 20

@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from app import schemas
 
 from ..model.api import (
+    CleanupModuleResult,
     DiagnosticsResult,
     HashActionResult,
     HrActionResult,
@@ -30,6 +31,7 @@ from .handlers import (
     api_autoremove_preview,
     api_autoremove_run,
     api_autoremove_status,
+    api_cleanup_module_data,
     api_failclean_scan,
     api_failclean_status,
     api_hr_check,
@@ -183,6 +185,14 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
             "methods": ["POST"],
             "summary": "删除补刀归档记录",
             "response_model": schemas.Response[HashActionResult],
+        },
+        {
+            "path": "/cleanup_module_data",
+            "endpoint": plugin.api_cleanup_module_data,
+            "auth": "bear",
+            "methods": ["POST"],
+            "summary": "按模块清理插件历史数据",
+            "response_model": schemas.Response[CleanupModuleResult],
         },
         {
             "path": "/recovery_torrent",

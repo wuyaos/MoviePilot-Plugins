@@ -57,6 +57,8 @@ def release_temporary_tag(plugin, dl, torrent_hash: str, tag: str, source: str) 
 
 def cleanup_temporary_tags_for_event(plugin, event) -> dict:
     """按下载新增事件清理来源或目标下载器当前任务上的新临时标签。"""
+    # 懒导入避免与 utils.config（顶层导入本模块）循环
+    from ...utils.config import observe_skip
     event_data = getattr(event, "event_data", None)
     if not isinstance(event_data, dict):
         return {"handled": False, "reason": "invalid_event"}
@@ -177,6 +179,8 @@ def cleanup_temporary_tags_for_event(plugin, event) -> dict:
         if not is_auto_removable(kind):
             continue
 
+        if observe_skip(plugin, "tag", "回收临时标签", f"{current_hash[:8]} 标签={tag}"):
+            continue
         if release_temporary_tag(plugin, service.instance, current_hash, tag, "下载新增事件"):
             removed.append(tag)
         else:
@@ -340,9 +344,15 @@ def scan_and_clean_tags(plugin, downloader_names: Iterable[str]) -> dict:
 
 def execute_tag_cleanup(plugin, removals: Iterable[dict]) -> dict:
     """按前端确认的标签与任务 hash 快照执行人工清理。"""
+    # 懒导入避免与 utils.config（顶层导入本模块）循环
+    from ...utils.config import observe_skip
     removal_items = [item for item in removals or [] if isinstance(item, dict)]
     if not removal_items:
         return {"code": 1, "msg": "没有需要清理的标签", "removed": [], "failed": []}
+
+    if observe_skip(plugin, "tag", "清理站点标签", f"待清理 {len(removal_items)} 项"):
+        return {"code": 1, "msg": "观察模式：未执行标签清理（仅预览）", "removed": [], "failed": [],
+                "observed": len(removal_items)}
 
     active_tags = set(_active_temporary_tags(plugin))
     removed = []
@@ -621,6 +631,8 @@ def _category_from_media(plugin, history, config: dict, path: str | None = None)
 
 
 def _apply_metadata(plugin, service, torrent, config: dict, context=None) -> dict:
+    # 懒导入避免与 utils.config（顶层导入本模块）循环
+    from ...utils.config import observe_skip
     torrent_hash = str(_torrent_value(torrent, "hash", "") or _torrent_value(torrent, "hashString", ""))
     if not torrent_hash:
         return {"ok": False, "reason": "hash_missing"}
@@ -654,6 +666,10 @@ def _apply_metadata(plugin, service, torrent, config: dict, context=None) -> dic
         category = None
     if not tags and not category:
         return {"ok": True, "changed": False, "hash": torrent_hash, "site": site_name, "history": bool(history)}
+    if observe_skip(plugin, "tag", "写入站点标签",
+                    f"{torrent_hash[:8]} 标签={tags or []} 分类={category or ''}"):
+        return {"ok": True, "changed": False, "observe_only": True, "hash": torrent_hash,
+                "site": site_name, "history": bool(history)}
     if tags:
         if service.type == "qbittorrent":
             service.instance.set_torrents_tag(ids=torrent_hash, tags=tags)

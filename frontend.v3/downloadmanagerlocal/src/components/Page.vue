@@ -1,6 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { getPluginApi, postPluginApi, postPluginJsonApi } from './api'
+import DownloaderBadge from './DownloaderBadge.vue'
+import ModuleDetailPanel from './ModuleDetailPanel.vue'
 
 const props = defineProps({
   api: { type: [Object, Function], default: null },
@@ -13,6 +15,8 @@ const postApi = (path, payload = {}, options = {}) => postPluginApi(props.api, p
 const postJsonApi = (path, payload = {}, options = {}) => postPluginJsonApi(props.api, props.pluginId, path, payload, options)
 
 const activeTab = ref('overview')
+const DETAIL_LIMIT_CHOICES = [20, 50, 100, 200]
+const detailLimit = ref(20)
 const tabs = [
   { key: 'overview', title: '运行总览', icon: 'mdi-view-dashboard-outline' },
   { key: 'transfer', title: '转移做种', icon: 'mdi-swap-horizontal' },
@@ -35,7 +39,7 @@ const runtimeFlows = [
   { label: '转移做种', steps: ['下载完成', '延迟等待', '目标转移', '公共链路'] },
   { label: '公共链路', steps: ['命名处理', '站点标签', '做种校验'] },
   { label: '上传限速', steps: ['全局限速', '站点识别', '按需设限', '合计限速', '动态调速', '停用恢复'] },
-  { label: '兜底补刀', steps: ['异常命名', '兜底补刀', '失败计数', '归档恢复'] },
+  { label: '兜底补刀', steps: ['异常命名', '定时补查', '失败计数', '归档恢复'] },
 ]
 
 const overview = ref(null)
@@ -98,6 +102,7 @@ let overviewRefreshTimer = null
 let overviewRefreshPending = false
 let pageRequestRevision = 0
 let recordRequestRevision = 0
+let diagnosticsRequestRevision = 0
 let pageDisposed = false
 
 function beginPageRequest() {
@@ -113,6 +118,12 @@ function beginRecordRequest() {
 function isCurrentRecordRequest(request) {
   return !pageDisposed && request.revision === recordRequestRevision
     && request.pluginId === props.pluginId && request.tab === activeTab.value
+}
+function beginDiagnosticsRequest() {
+  return { revision: ++diagnosticsRequestRevision }
+}
+function isCurrentDiagnosticsRequest(request) {
+  return !pageDisposed && request.revision === diagnosticsRequestRevision
 }
 function reportLoadError(request, e, fallback, { silent = false } = {}) {
   if (!isCurrentPageRequest(request)) return
@@ -192,12 +203,14 @@ const diagnosticsCards = computed(() => {
   const items = Array.isArray(diagnostics.value?.checks) ? diagnostics.value.checks : []
   return items.map(item => ({
     ...item,
-    statusText: item.status === 'ok' ? '正常' : item.status === 'warn' ? '关注' : '未启用',
+    statusText: item.status === 'ok' ? '正常' : item.status === 'error' ? '故障' : item.status === 'warn' ? '关注' : '未启用',
     icon: item.status === 'ok'
       ? 'mdi-check-circle-outline'
-      : item.status === 'warn'
-        ? 'mdi-alert-circle-outline'
-        : 'mdi-minus-circle-outline',
+      : item.status === 'error'
+        ? 'mdi-alert-octagon-outline'
+        : item.status === 'warn'
+          ? 'mdi-alert-circle-outline'
+          : 'mdi-minus-circle-outline',
   }))
 })
 const diagnosticsOkCount = computed(() => diagnosticsCards.value.filter(item => item.status === 'ok').length)
@@ -214,6 +227,7 @@ const uploadLimitStatus = computed(() => {
     running: { label: '分配中', color: 'success' },
     degraded: { label: '部分异常', color: 'warning' },
     error: { label: '状态异常', color: 'error' },
+    observe_only: { label: '观察模式', color: 'info' },
   }[status] || { label: '未启用', color: 'default' }
 })
 
@@ -226,6 +240,29 @@ const overviewAttentionCount = computed(() => {
 const overviewPendingCount = computed(() => {
   const archive = overview.value?.archive || {}
   return Number(archive.active_failed || 0) + Number(archive.near_archive || 0)
+})
+const moduleFaultLabels = {
+  transfer: '转移做种',
+  rename: '种子重命名',
+  tag: '站点标签与分类',
+  hr: 'H&R 管理',
+  autoremove: '自动删种',
+  failclean: '失败清理',
+  upload_limit: '上传限速',
+}
+/** 模块运行异常项：模块关闭时后端不产生故障记录，只有启用后运行出错才会出现。 */
+const moduleFaultItems = computed(() => {
+  const faults = diagnostics.value?.module_faults
+  if (!faults || typeof faults !== 'object') return []
+  return Object.entries(faults)
+    .filter(([module]) => moduleFaultLabels[module])
+    .map(([module, reason]) => ({
+      icon: 'mdi-alert-octagon-outline',
+      color: 'error',
+      title: `${moduleFaultLabels[module]}运行异常`,
+      detail: String(reason || '未知原因'),
+      target: module,
+    }))
 })
 const overviewAttentionItems = computed(() => {
   const archive = overview.value?.archive || {}
@@ -245,6 +282,7 @@ const overviewAttentionItems = computed(() => {
   if (['degraded', 'error'].includes(uploadLimit.value.service_status) && !uploadLimit.value.errors?.length && !uploadLimitDownloaderRows.value.some(item => item.error)) {
     items.push({ icon: 'mdi-upload-network-outline', color: 'error', title: '上传限速异常', detail: '服务返回异常状态，请展开上传限速卡详情查看运行数据', target: 'upload_limit' })
   }
+  items.push(...moduleFaultItems.value)
   return items
 })
 const overviewCoreCards = computed(() => {
@@ -343,9 +381,9 @@ const moduleCards = computed(() => {
       value: `${auto.deleted || 0} 个已删除`,
       desc: `候选 ${auto.candidates || 0} · 跳过保护 ${auto.skipped_protected || 0} · 失败 ${auto.failed || 0}`,
       details: [
-        { label: '执行动作', value: auto.action === 'deletefile' ? '删除任务及文件' : (auto.action === 'delete' ? '删除任务' : '暂停任务') },
+        { label: '执行动作', value: auto.action === 'deletefile' ? '删除种子及文件' : (auto.action === 'delete' ? '删除种子' : '暂停任务') },
         { label: '运行中', value: auto.running ? '是' : '否' },
-        { label: '保护闸门', value: auto.guard_enabled ? '已启用' : '未启用' },
+        { label: '保护闸门', value: auto.guard_unconfirmed ? '无法确认（已保守跳过）' : (auto.guard_enabled ? '已启用' : '未启用') },
       ],
       notes: auto.observe_only
         ? [{ type: 'warning', text: '迁移观察期：仅列出候选，不执行下载器写操作。' }]
@@ -374,14 +412,14 @@ const moduleCards = computed(() => {
     },
     {
       key: 'rename',
-      title: '命名补刀',
+      title: '种子重命名',
       icon: 'mdi-auto-fix',
       color: archive.archived ? 'warning' : 'primary',
       value: `${archive.active_failed || 0} / ${archive.archived || 0}`,
       desc: `待处理 / 已归档 · 阈值 ${archive.threshold || 3} 次`,
       details: [
         { label: '事件改名', value: rename.event?.renamed || 0 },
-        { label: '定时改名', value: rename.cron?.renamed || 0 },
+        { label: '定时补查', value: rename.cron?.renamed || 0 },
         { label: '本次失败', value: rename.failed || 0 },
         { label: '本次跳过', value: rename.skipped || 0 },
       ],
@@ -527,6 +565,30 @@ function transferShortHash(hash) {
   return text ? text.slice(0, 8) : '—'
 }
 
+
+/** 源种子名：转移记录写入端自 3.9.13 起落 `source_name`，旧记录为空串（名称未记录）。 */
+function transferSourceName(record) {
+  return String((record && record.source_name) || '').trim()
+}
+
+/** 转移列表主文案：有名字用名字，没有则明确写「名称未记录」，不拿 hash 冒充名称。 */
+function transferPrimaryText(record) {
+  return transferSourceName(record) || '名称未记录'
+}
+
+/** 转移列表次要文案：短 hash 作辅助；无 hash 时为占位符，完整 hash 仍在 title 提示里。 */
+function transferSecondaryText(record) {
+  return transferShortHash(record && record.source_hash)
+}
+
+/** H&R 任务主标题：种子名优先，缺失时「名称未记录 + 短 hash」，站点另作次级信息。 */
+function hrTaskTitle(task) {
+  const name = String((task && task.name) || '').trim()
+  if (name) return name
+  const short = transferShortHash(task && task.torrent_hash)
+  return short === '—' ? '名称未记录' : `名称未记录 · ${short}`
+}
+
 /** 筛选条件摘要：与配置页任务列表口径一致，无条件时明确显示「不限分类」。 */
 function transferFilterText(task) {
   const parts = []
@@ -625,16 +687,175 @@ async function loadArchive(request) {
 }
 
 async function loadDiagnostics(request) {
+  const diagnosticsRequest = beginDiagnosticsRequest()
   try {
-    const resp = await getApi('diagnostics')
-    if (!isCurrentPageRequest(request)) return
+    const resp = await getApi(`diagnostics?detail_limit=${detailLimit.value}`)
+    if (!isCurrentPageRequest(request) || !isCurrentDiagnosticsRequest(diagnosticsRequest)) return
     if (resp?.code && resp.code !== 0) {
       error.value = resp?.msg || '诊断失败'
       return
     }
     diagnostics.value = resp
   } catch (e) {
+    if (!isCurrentDiagnosticsRequest(diagnosticsRequest)) return
     reportLoadError(request, e, '诊断失败')
+  }
+}
+
+// 明细条数只影响诊断读取：变化时只刷新诊断，不重载业务状态、不写配置。
+watch(detailLimit, () => {
+  const request = { revision: pageRequestRevision, pluginId: props.pluginId, tab: activeTab.value }
+  void loadDiagnostics(request)
+})
+
+/** 数据清理白名单口径与后端 _cleanup_actions 一致；只清插件自身历史/统计。 */
+const CLEANUP_TARGETS = {
+  rename_archive: {
+    label: '重命名归档',
+    detail: '连续失败后归档的补刀记录',
+    consequence: '归档状态一并删除，对应种子可重新识别与补刀。',
+  },
+  rename_history: {
+    label: '重命名历史',
+    detail: '已记录的成功与失败命名记录',
+    consequence: '清理后无法再按记录恢复原名或补刀。',
+  },
+  transfer_stats: {
+    label: '转移统计',
+    detail: '转移成功计数与跳过计数',
+    consequence: '运行总览的转移统计归零，不影响下载器任务。',
+  },
+  autoremove_state: {
+    label: '删种执行记录',
+    detail: '自动删种最近一次执行结果',
+    consequence: '只清插件记录，下载器中的种子保持不变。',
+  },
+  failclean_state: {
+    label: '失败清理记录',
+    detail: '失败清理最近一次执行结果',
+    consequence: '只清最近一次执行结果，累计清理统计保留；实际文件与种子保持不变。',
+  },
+}
+const cleanupTargetKey = ref('')
+const cleanupConfirmDialog = ref(false)
+const cleanupRunning = ref(false)
+const cleanupCounts = computed(() => diagnostics.value?.cleanup_data || {})
+const cleanupTarget = computed(() => CLEANUP_TARGETS[cleanupTargetKey.value] || null)
+const cleanupTargetCount = computed(() => cleanupCounts.value[cleanupTargetKey.value] || 0)
+
+
+const moduleDetails = computed(() => diagnostics.value?.module_details || {})
+
+function moduleDetail(key) {
+  const detail = moduleDetails.value[key]
+  const rows = Array.isArray(detail?.rows) ? detail.rows : []
+  const items = Array.isArray(detail?.items) ? detail.items : []
+  const totalValue = Number(detail?.total)
+  const limitValue = Number(detail?.limit)
+  const total = Number.isFinite(totalValue) && totalValue >= 0 ? totalValue : items.length
+  return {
+    rows,
+    items,
+    error: detail?.error || '',
+    total,
+    limit: Number.isFinite(limitValue) && limitValue > 0 ? limitValue : detailLimit.value,
+    // 旧响应没有 total/truncated：按当前条目数处理，不虚构被截断
+    truncated: typeof detail?.truncated === 'boolean' ? detail.truncated : total > items.length,
+  }
+}
+
+function moduleDetailVisible(key) {
+  const detail = moduleDetail(key)
+  return Boolean(detail.rows.length || detail.items.length || detail.error)
+}
+function openCleanupDialog(key) {
+  if (!CLEANUP_TARGETS[key]) return
+  cleanupTargetKey.value = key
+  cleanupConfirmDialog.value = true
+}
+
+/**
+ * 总览卡「查看记录」落点：只切页签 + 各页签原有的 GET 刷新 + 展开 + 滚动定位，
+ * 不触发扫描 / 预览 / 补全 / 重新分配等写操作。
+ */
+const MODULE_RECORD_VIEWS = {
+  transfer: { tab: 'transfer', anchor: '[data-record-block="transfer-tasks"]' },
+  rename: { tab: 'history', anchor: '[data-record-block="rename-history"]' },
+  hr: { tab: 'hr', anchor: '[data-record-block="hr-tasks"]' },
+  autoremove: { tab: 'autoremove', anchor: '[data-record-block="autoremove-preview"]' },
+  // 失败清理没有逐条记录，只切页签看最近一次执行结果
+  failclean: { tab: 'failclean', anchor: '' },
+  tag: { tab: 'sitetag', anchor: '[data-record-block="tag-cleanup"]' },
+  upload_limit: { tab: 'upload', anchor: '[data-runtime-section="upload-limit"]' },
+}
+
+/** 模块卡上的清理按钮：严格对应后端白名单对象，未列出的模块不显示清理入口。 */
+const MODULE_CLEANUP_KEYS = {
+  // 重命名历史与归档是两个独立对象，不做「全部清理」
+  rename: [
+    { key: 'rename_history', label: '清理历史' },
+    { key: 'rename_archive', label: '清理归档' },
+  ],
+  autoremove: [{ key: 'autoremove_state', label: '清理记录' }],
+  failclean: [{ key: 'failclean_state', label: '清理记录' }],
+}
+
+function moduleRecordView(key) {
+  return MODULE_RECORD_VIEWS[key] || null
+}
+
+function moduleCleanupButtons(key) {
+  return (MODULE_CLEANUP_KEYS[key] || []).map(item => ({ ...item, count: cleanupCounts.value[item.key] || 0 }))
+}
+
+function scrollToModuleAnchor(anchor) {
+  // 测试 harness 的 document 桩没有 querySelector：没有真实 DOM 时直接跳过定位
+  if (!anchor || typeof document === 'undefined' || typeof document.querySelector !== 'function') return
+  const node = document.querySelector(anchor)
+  if (!node || typeof node.scrollIntoView !== 'function') return
+  node.scrollIntoView({ block: 'start', behavior: 'smooth' })
+}
+
+async function openModuleRecords(key) {
+  const view = moduleRecordView(key)
+  if (!view || typeof view.tab !== 'string' || !view.tab) return
+  await selectTab(view.tab)
+  // 页签切换后目标块才挂载，必须等一次渲染再定位
+  await nextTick()
+  scrollToModuleAnchor(view.anchor)
+}
+
+async function confirmCleanupData() {
+  const key = cleanupTargetKey.value
+  if (!CLEANUP_TARGETS[key] || cleanupRunning.value) return
+  cleanupRunning.value = true
+  try {
+    const resp = await postJsonApi('cleanup_module_data', { module: key })
+    actionOk.value = !!resp && resp.code !== 1
+    actionMsg.value = resp?.msg || (actionOk.value ? '清理完成' : '清理失败')
+    cleanupConfirmDialog.value = false
+    const request = beginPageRequest()
+    await loadDiagnostics(request)
+    if (key === 'rename_archive' || key === 'rename_history') {
+      // 记录变少后可能停在已不存在的空页：先回第一页再刷新
+      page.value = 1
+      archivePage.value = 1
+      const recordRequest = beginRecordRequest()
+      await Promise.all([loadHistory(recordRequest), loadArchive(recordRequest)])
+    } else if (key === 'transfer_stats') {
+      await loadOverview(request, { silent: true })
+    } else if (key === 'autoremove_state') {
+      // 记录已清空：同步清掉旧预览，避免「上轮候选」残留
+      autoremovePreview.value = null
+      await loadAutoremoveStatus(request)
+    } else if (key === 'failclean_state') {
+      await loadFailcleanStatus(request)
+    }
+  } catch (e) {
+    actionOk.value = false
+    actionMsg.value = e?.message || '清理失败'
+  } finally {
+    cleanupRunning.value = false
   }
 }
 
@@ -648,6 +869,8 @@ async function loadOverviewTab({ silent = false } = {}) {
     await Promise.all([
       loadOverview(request, { silent }),
       loadModuleStatuses(request),
+      // 模块卡「运行明细」依赖诊断数据：首次进入总览就取一次，不必先打开诊断页
+      loadDiagnostics(request),
     ])
   } finally {
     if (isCurrentPageRequest(request)) loading.value = false
@@ -669,23 +892,25 @@ async function refreshActive() {
   loading.value = true
   error.value = ''
   try {
+    const tasks = []
     if (activeTab.value === 'history') {
-      await loadHistoryTab(request)
+      tasks.push(loadHistoryTab(request))
     } else if (activeTab.value === 'hr') {
-      await loadHrStatus(request)
+      tasks.push(loadHrStatus(request))
     } else if (activeTab.value === 'autoremove') {
-      await loadAutoremoveStatus(request)
+      tasks.push(loadAutoremoveStatus(request))
     } else if (activeTab.value === 'failclean') {
-      await loadFailcleanStatus(request)
+      tasks.push(loadFailcleanStatus(request))
     } else if (activeTab.value === 'transfer') {
-      await loadTransferStatus(request)
+      tasks.push(loadTransferStatus(request))
     } else if (activeTab.value === 'sitetag') {
-      await Promise.all([loadSiteTagStatus(request), loadDownloaders(request)])
-    } else if (activeTab.value === 'upload') {
-      await loadUploadLimitStatus(request)
-    } else if (activeTab.value === 'diagnostics') {
-      await Promise.all([loadDiagnostics(request), loadUploadLimitStatus(request)])
+      tasks.push(loadSiteTagStatus(request), loadDownloaders(request))
+    } else if (activeTab.value === 'upload' || activeTab.value === 'diagnostics') {
+      tasks.push(loadUploadLimitStatus(request))
     }
+    // 模块页签同样展示模块卡与运行明细：每轮刷新固定取一次诊断
+    tasks.push(loadDiagnostics(request))
+    await Promise.all(tasks)
   } finally {
     if (isCurrentPageRequest(request)) loading.value = false
   }
@@ -1172,8 +1397,17 @@ onBeforeUnmount(() => {
             <div v-if="activeTab === 'overview'" class="dm-section-heading">
               <div>
                 <div class="dm-section-title">功能状态与操作</div>
-                <div class="text-caption text-medium-emphasis">每个模块卡给出状态摘要与手动操作，需要时展开查看运行明细。</div>
+                <div class="text-caption text-medium-emphasis">每个模块卡给出状态摘要与手动操作，需要时展开查看运行明细，明细条数可调。</div>
               </div>
+              <VSelect
+                v-model="detailLimit"
+                :items="DETAIL_LIMIT_CHOICES"
+                label="明细条数"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="dm-detail-limit-select"
+              />
             </div>
             <div class="dm-module-grid mt-2">
               <article v-for="card in moduleGridCards" :key="card.key" :id="`dm-module-${card.key}`" class="dm-module-card">
@@ -1200,6 +1434,25 @@ onBeforeUnmount(() => {
                     @click="action.run()"
                   >{{ action.label }}</VBtn>
                   <VBtn
+                    v-if="moduleRecordView(card.key)"
+                    size="small"
+                    variant="text"
+                    class="text-none"
+                    prepend-icon="mdi-text-box-search-outline"
+                    @click="openModuleRecords(card.key)"
+                  >查看记录</VBtn>
+                  <VBtn
+                    v-for="item in moduleCleanupButtons(card.key)"
+                    :key="item.key"
+                    size="small"
+                    variant="text"
+                    class="text-none"
+                    color="warning"
+                    prepend-icon="mdi-delete-sweep-outline"
+                    :disabled="item.count === 0"
+                    @click="openCleanupDialog(item.key)"
+                  >{{ item.label }}</VBtn>
+                  <VBtn
                     size="small"
                     variant="text"
                     class="text-none ml-auto"
@@ -1214,41 +1467,46 @@ onBeforeUnmount(() => {
                       <VAlert v-for="runtimeError in uploadLimit.errors || []" :key="runtimeError" type="warning" variant="tonal" density="compact" class="mb-2">
                         {{ runtimeError }}
                       </VAlert>
-                      <div class="dm-module-detail-title">下载器状态</div>
-                      <div v-if="uploadLimitDownloaderRows.length" class="dm-upload-status-grid">
-                        <div v-for="item in uploadLimitDownloaderRows" :key="item.id" class="dm-upload-status-card">
-                          <div class="dm-upload-status-head">
-                            <div class="min-w-0">
-                              <strong class="text-body-2">{{ item.id }}</strong>
-                              <div class="text-caption text-medium-emphasis">{{ item.type === 'transmission' ? 'Transmission' : 'qBittorrent' }}</div>
+                      <!-- 站点聚合与运行错误已由下方网格和告警展示，本模块不传 items，避免同一数据重复出现 -->
+                      <ModuleDetailPanel class="mt-3" title="运行明细" :rows="moduleDetail('upload_limit').rows" :error="moduleDetail('upload_limit').error">
+                        <template #appendix>
+                          <div class="dm-module-detail-title mt-3">下载器状态</div>
+                          <div v-if="uploadLimitDownloaderRows.length" class="dm-upload-status-grid">
+                            <div v-for="item in uploadLimitDownloaderRows" :key="item.id" class="dm-upload-status-card">
+                              <div class="dm-upload-status-head">
+                                <div class="min-w-0">
+                                  <strong class="text-body-2">{{ item.id }}</strong>
+                                  <div class="text-caption text-medium-emphasis">{{ item.type === 'transmission' ? 'Transmission' : 'qBittorrent' }}</div>
+                                </div>
+                                <VChip size="x-small" :color="item.error ? 'warning' : 'success'" variant="tonal">{{ item.error ? '异常' : '正常' }}</VChip>
+                              </div>
+                              <div class="dm-upload-values">
+                                <span>实时 <strong>{{ formatUploadRate(item.upload_rate_bps) }}</strong></span>
+                                <span>{{ item.type === 'transmission' ? 'Session 全局上限' : 'QB 全局上限' }} <strong>{{ item.total_limit_kib }} KiB/s</strong></span>
+                                <span>受限任务 <strong>{{ item.managed_torrents || 0 }}</strong></span>
+                                <span>宽限任务 <strong>{{ item.grace_torrents || 0 }}</strong></span>
+                              </div>
+                              <div v-if="item.error" class="text-caption text-warning mt-2 dm-break-text">{{ item.error }}</div>
                             </div>
-                            <VChip size="x-small" :color="item.error ? 'warning' : 'success'" variant="tonal">{{ item.error ? '异常' : '正常' }}</VChip>
                           </div>
-                          <div class="dm-upload-values">
-                            <span>实时 <strong>{{ formatUploadRate(item.upload_rate_bps) }}</strong></span>
-                            <span>{{ item.type === 'transmission' ? 'Session 全局上限' : 'QB 全局上限' }} <strong>{{ item.total_limit_kib }} KiB/s</strong></span>
-                            <span>受限任务 <strong>{{ item.managed_torrents || 0 }}</strong></span>
-                            <span>宽限任务 <strong>{{ item.grace_torrents || 0 }}</strong></span>
-                          </div>
-                          <div v-if="item.error" class="text-caption text-warning mt-2 dm-break-text">{{ item.error }}</div>
-                        </div>
-                      </div>
-                      <div v-else class="dm-monitor-empty">当前没有启用的限速下载器</div>
+                          <div v-else class="dm-monitor-empty">当前没有启用的限速下载器</div>
 
-                      <div class="dm-module-detail-title mt-3">受限站点</div>
-                      <div v-if="uploadLimitSiteRows.length" class="dm-upload-site-status">
-                        <div v-for="item in uploadLimitSiteRows" :key="item.key" class="dm-upload-site-status-row">
-                          <div class="min-w-0">
-                            <strong class="text-body-2">{{ item.name }}</strong>
-                            <div class="text-caption text-medium-emphasis">{{ item.torrent_count }} 个任务 · {{ item.downloaders?.join('、') }}</div>
+                          <div class="dm-module-detail-title mt-3">受限站点</div>
+                          <div v-if="uploadLimitSiteRows.length" class="dm-upload-site-status">
+                            <div v-for="item in uploadLimitSiteRows" :key="item.key" class="dm-upload-site-status-row">
+                              <div class="min-w-0">
+                                <strong class="text-body-2">{{ item.name }}</strong>
+                                <div class="text-caption text-medium-emphasis">{{ item.torrent_count }} 个任务 · {{ item.downloaders?.join('、') }}</div>
+                              </div>
+                              <span class="text-caption">实时 <strong>{{ formatUploadRate(item.upload_rate_bps) }}</strong></span>
+                              <span class="text-caption">站点额度 <strong>{{ item.allocated_kib }} KiB/s</strong></span>
+                              <span class="text-caption">站点上限 <strong>{{ item.limit_kib }} KiB/s</strong></span>
+                            </div>
                           </div>
-                          <span class="text-caption">实时 <strong>{{ formatUploadRate(item.upload_rate_bps) }}</strong></span>
-                          <span class="text-caption">站点额度 <strong>{{ item.allocated_kib }} KiB/s</strong></span>
-                          <span class="text-caption">站点上限 <strong>{{ item.limit_kib }} KiB/s</strong></span>
-                        </div>
-                      </div>
-                      <div v-else class="dm-monitor-empty">当前没有填写正数上限的受限站点</div>
-                      <div class="text-caption text-medium-emphasis mt-2">实时速率是下载器当前实际上传流量；站点额度是插件写入单种限速的合计值，两者不是同一指标。</div>
+                          <div v-else class="dm-monitor-empty">当前没有填写正数上限的受限站点</div>
+                          <div class="text-caption text-medium-emphasis mt-2">实时速率是下载器当前实际上传流量；站点额度是插件写入单种限速的合计值，两者不是同一指标。</div>
+                        </template>
+                      </ModuleDetailPanel>
                     </template>
 
                     <template v-else>
@@ -1263,6 +1521,18 @@ onBeforeUnmount(() => {
                       <VAlert v-for="note in card.notes || []" :key="note.text" :type="note.type" variant="tonal" density="compact" class="mt-2">
                         {{ note.text }}
                       </VAlert>
+                      <template v-if="moduleDetailVisible(card.key)">
+                        <ModuleDetailPanel
+                          class="mt-3"
+                          title="运行明细"
+                          :rows="moduleDetail(card.key).rows"
+                          :items="moduleDetail(card.key).items"
+                          :total="moduleDetail(card.key).total"
+                          :limit="moduleDetail(card.key).limit"
+                          :truncated="moduleDetail(card.key).truncated"
+                          :error="moduleDetail(card.key).error"
+                        />
+                      </template>
                     </template>
                   </div>
                 </VExpandTransition>
@@ -1510,7 +1780,7 @@ onBeforeUnmount(() => {
                 <VTable density="compact" class="dm-table">
                   <thead>
                     <tr>
-                      <th class="text-caption">站点名</th>
+                      <th class="text-caption">种子</th>
                       <th class="text-caption">状态</th>
                       <th class="text-caption">剩余时长</th>
                       <th class="text-caption">截止日期</th>
@@ -1520,7 +1790,7 @@ onBeforeUnmount(() => {
                   </thead>
                   <tbody>
                     <tr v-for="task in hrTaskRows" :key="`${task.downloader_id}-${task.torrent_hash}`">
-                      <td class="text-caption dm-ellipsis" :title="task.name">{{ task.site || task.name || task.torrent_hash }}</td>
+                      <td class="text-caption dm-ellipsis" :title="task.name || task.torrent_hash">{{ hrTaskTitle(task) }}<span v-if="task.site" class="text-medium-emphasis"> · {{ task.site }}</span></td>
                       <td><VChip size="x-small" :color="hrStatusColor(task.status)" variant="tonal">{{ task.status_text || task.status }}</VChip></td>
                       <td class="text-caption text-no-wrap">{{ formatDuration(task.remain_seconds) }}</td>
                       <td class="text-caption text-no-wrap">{{ formatTimestamp(task.deadline) }}</td>
@@ -1535,7 +1805,7 @@ onBeforeUnmount(() => {
               <div class="dm-mobile-list mt-2">
                 <article v-for="task in hrTaskRows" :key="`${task.downloader_id}-${task.torrent_hash}`" class="dm-record-card">
                   <div class="dm-record-head">
-                    <div class="dm-record-title" :title="task.name">{{ task.site || task.name || task.torrent_hash }}</div>
+                    <div class="dm-record-title" :title="task.name || task.torrent_hash">{{ hrTaskTitle(task) }}<span v-if="task.site" class="text-medium-emphasis"> · {{ task.site }}</span></div>
                     <VChip class="dm-record-status" size="x-small" :color="hrStatusColor(task.status)" variant="tonal">{{ task.status_text || task.status }}</VChip>
                   </div>
                   <div class="dm-record-meta">
@@ -1625,7 +1895,7 @@ onBeforeUnmount(() => {
                 <tbody>
                   <tr v-for="item in transferPending" :key="item.key">
                     <td class="text-caption">{{ item.source_downloader }} → {{ item.downloader }}</td>
-                    <td class="text-caption dm-ellipsis" :title="item.source_hash">{{ transferShortHash(item.source_hash) }}</td>
+                    <td class="text-caption dm-ellipsis" :title="item.source_hash">{{ transferPrimaryText(item) }}<span class="text-medium-emphasis"> · {{ transferSecondaryText(item) }}</span></td>
                     <td><VChip size="x-small" variant="tonal" :color="transferPhaseColor(item.phase)">{{ transferPhaseText(item.phase) }}</VChip></td>
                     <td class="text-caption text-no-wrap">{{ item.waited_minutes }} 分钟</td>
                     <td>
@@ -1660,7 +1930,7 @@ onBeforeUnmount(() => {
                   <tbody>
                     <tr v-for="record in transferRecords" :key="`${record.source_downloader}-${record.source_hash}-${record.downloader}`">
                       <td class="text-caption">{{ record.source_downloader }} → {{ record.downloader }}</td>
-                      <td class="text-caption dm-ellipsis" :title="record.source_hash">{{ transferShortHash(record.source_hash) }}</td>
+                      <td class="text-caption dm-ellipsis" :title="record.source_hash">{{ transferPrimaryText(record) }}<span class="text-medium-emphasis"> · {{ transferSecondaryText(record) }}</span></td>
                       <td>
                         <div class="d-flex flex-wrap ga-1 align-center">
                           <VChip size="x-small" variant="tonal" :color="transferPhaseColor(record.phase)">{{ transferPhaseText(record.phase) }}</VChip>
@@ -1680,7 +1950,7 @@ onBeforeUnmount(() => {
                     <strong class="text-body-2 dm-ellipsis">{{ record.source_downloader }} → {{ record.downloader }}</strong>
                     <VChip size="x-small" variant="tonal" :color="transferPhaseColor(record.phase)">{{ transferPhaseText(record.phase) }}</VChip>
                   </div>
-                  <div class="text-caption text-medium-emphasis mt-1">{{ transferShortHash(record.source_hash) }} · {{ formatTimestamp(record.updated_at) }}</div>
+                  <div class="text-caption text-medium-emphasis mt-1">{{ transferPrimaryText(record) }} · {{ transferSecondaryText(record) }} · {{ formatTimestamp(record.updated_at) }}</div>
                 </article>
               </div>
             </template>
@@ -1708,6 +1978,7 @@ onBeforeUnmount(() => {
             <VAlert v-if="cleanupMessage" :type="cleanupStatus" variant="tonal" density="compact" closable class="mt-3"
               @click:close="cleanupMessage = ''">{{ cleanupMessage }}</VAlert>
 
+            <div v-if="!cleanupScan && !cleanupMessage" class="dm-state text-center text-medium-emphasis">尚未扫描标签，请选择下载器后点击「扫描标签」</div>
             <div v-if="cleanupScan" class="dm-cleanup-results mt-4">
               <div class="dm-cleanup-summary">
                 <div>
@@ -1737,7 +2008,7 @@ onBeforeUnmount(() => {
                   <span class="text-caption text-medium-emphasis">{{ group.task_count }} 个任务 · {{ group.tags.length }} 个标签</span>
                 </div>
 
-                <div v-if="!group.tags.length" class="dm-cleanup-empty">
+                <div v-if="!group.tags.length" class="dm-monitor-empty">
                   <VIcon icon="mdi-tag-check-outline" size="28" color="success" />
                   <span>没有待选择标签</span>
                 </div>
@@ -1813,12 +2084,14 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="dm-stat">
                   <div class="text-caption text-medium-emphasis">源下载器</div>
-                  <div class="text-subtitle-2">{{ diagnostics?.downloaders?.from?.name || '未配置' }}</div>
+                  <DownloaderBadge class="text-subtitle-2" :name="diagnostics?.downloaders?.from?.name || '未配置'"
+                    :type="diagnostics?.downloaders?.from?.type" />
                   <VChip size="x-small" :color="diagnostics?.downloaders?.from?.available ? 'success' : 'warning'" variant="tonal">{{ diagnostics?.downloaders?.from?.message }}</VChip>
                 </div>
                 <div class="dm-stat">
                   <div class="text-caption text-medium-emphasis">目标下载器</div>
-                  <div class="text-subtitle-2">{{ diagnostics?.downloaders?.to?.name || '未配置' }}</div>
+                  <DownloaderBadge class="text-subtitle-2" :name="diagnostics?.downloaders?.to?.name || '未配置'"
+                    :type="diagnostics?.downloaders?.to?.type" />
                   <VChip size="x-small" :color="diagnostics?.downloaders?.to?.available ? 'success' : 'warning'" variant="tonal">{{ diagnostics?.downloaders?.to?.message }}</VChip>
                 </div>
                 <div class="dm-stat">
@@ -1880,6 +2153,27 @@ onBeforeUnmount(() => {
                   </VTable>
                 </div>
               </div>
+
+              <div class="dm-record-block mt-3" data-record-block="module-data-cleanup">
+                <div class="dm-record-block-head">
+                  <div>
+                    <div class="dm-record-block-title">数据清理</div>
+                    <div class="text-caption text-medium-emphasis">
+                      只清理插件自身的历史与统计，不修改下载器任务与文件、H&amp;R 安全状态、活动队列与限速恢复状态。
+                    </div>
+                  </div>
+                </div>
+                <div class="dm-cleanup-list mt-2">
+                  <div v-for="(target, key) in CLEANUP_TARGETS" :key="key" class="dm-cleanup-row">
+                    <div class="dm-cleanup-info">
+                      <span class="text-body-2">{{ target.label }}</span>
+                      <span class="text-caption text-medium-emphasis">{{ target.detail }} · {{ cleanupCounts[key] || 0 }} 条</span>
+                    </div>
+                    <VBtn size="x-small" variant="tonal" color="warning" prepend-icon="mdi-delete-sweep-outline"
+                      :text="`清理`" :disabled="!(cleanupCounts[key] > 0)" @click="openCleanupDialog(key)" />
+                  </div>
+                </div>
+              </div>
             </div>
             <div v-else class="dm-state text-center text-medium-emphasis">
               <VIcon icon="mdi-stethoscope" size="48" color="grey-lighten-1" class="mb-2" />
@@ -1904,6 +2198,31 @@ onBeforeUnmount(() => {
             <VSpacer />
             <VBtn variant="text" :disabled="moduleRunning === 'transfer-run'" @click="transferRunDialog = false">取消</VBtn>
             <VBtn color="primary" variant="flat" prepend-icon="mdi-play-circle-outline" :loading="moduleRunning === 'transfer-run'" @click="confirmTransferRun">确认运行</VBtn>
+          </VCardActions>
+        </VCard>
+      </VDialog>
+
+      <VDialog v-model="cleanupConfirmDialog" max-width="520">
+        <VCard>
+          <VCardItem>
+            <template #prepend>
+              <VAvatar color="warning" variant="tonal" size="40" rounded="lg"><VIcon icon="mdi-delete-sweep-outline" /></VAvatar>
+            </template>
+            <VCardTitle class="text-subtitle-1">确认清理{{ cleanupTarget?.label }}</VCardTitle>
+            <VCardSubtitle>将删除 {{ cleanupTargetCount }} 条{{ cleanupTarget?.detail }}</VCardSubtitle>
+          </VCardItem>
+          <VDivider />
+          <VCardText class="text-body-2">
+            <div>{{ cleanupTarget?.consequence }}</div>
+            <div class="text-caption text-medium-emphasis mt-2">
+              不修改下载器任务与文件，不影响 H&amp;R 安全状态、活动队列与限速恢复状态。
+            </div>
+          </VCardText>
+          <VCardActions>
+            <VSpacer />
+            <VBtn variant="text" :disabled="cleanupRunning" @click="cleanupConfirmDialog = false">取消</VBtn>
+            <VBtn color="warning" variant="flat" prepend-icon="mdi-delete-sweep-outline" :loading="cleanupRunning"
+              @click="confirmCleanupData">确认清理</VBtn>
           </VCardActions>
         </VCard>
       </VDialog>
@@ -1988,6 +2307,7 @@ onBeforeUnmount(() => {
 .dm-flow-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.78); }
 .dm-flow-step { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 999px; padding: 5px 9px; background: rgba(var(--v-theme-on-surface), 0.02); white-space: nowrap; }
 .dm-flow-arrow { flex: 0 0 auto; color: rgba(var(--v-theme-on-surface), 0.44); }
+.dm-detail-limit-select { flex: 0 0 auto; width: 132px; }
 .dm-overview-stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .dm-overview-stat {
   min-width: 0;
@@ -2051,6 +2371,31 @@ onBeforeUnmount(() => {
   background: rgba(var(--v-theme-on-surface), 0.018);
 }
 .dm-record-block-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.dm-cleanup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dm-cleanup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 4px;
+  border-bottom: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.dm-cleanup-row:last-child {
+  border-bottom: none;
+}
+
+.dm-cleanup-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .dm-record-block-title { color: rgb(var(--v-theme-primary)); font-size: 14px; font-weight: 700; }
 .dm-record-block .dm-state { min-height: 160px; }
 .dm-runtime-section {
@@ -2071,7 +2416,7 @@ onBeforeUnmount(() => {
 .dm-monitor-metric { min-width: 0; padding: 10px 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; }
 .dm-monitor-metric span { display: block; color: rgba(var(--v-theme-on-surface), 0.62); font-size: 12px; }
 .dm-monitor-metric strong { display: block; margin-top: 3px; overflow-wrap: anywhere; font-size: 15px; }
-.dm-monitor-empty { display: flex; min-height: 64px; align-items: center; justify-content: center; border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; color: rgba(var(--v-theme-on-surface), 0.6); font-size: 13px; }
+.dm-monitor-empty { display: flex; min-height: 64px; align-items: center; justify-content: center; gap: 8px; border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; color: rgba(var(--v-theme-on-surface), 0.6); font-size: 13px; }
 .dm-upload-status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .dm-upload-status-card { min-width: 0; padding: 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; }
 .dm-upload-status-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; }
@@ -2220,6 +2565,10 @@ onBeforeUnmount(() => {
   border-color: rgba(var(--v-theme-warning), 0.28);
   background: linear-gradient(135deg, rgba(var(--v-theme-warning), 0.12), rgba(var(--v-theme-on-surface), 0.025) 54%);
 }
+.dm-diagnostic-card--error {
+  border-color: rgba(var(--v-theme-error), 0.32);
+  background: linear-gradient(135deg, rgba(var(--v-theme-error), 0.12), rgba(var(--v-theme-on-surface), 0.025) 54%);
+}
 .dm-diagnostic-state {
   width: 32px;
   height: 32px;
@@ -2237,6 +2586,10 @@ onBeforeUnmount(() => {
 .dm-diagnostic-card--warn .dm-diagnostic-state {
   color: rgb(var(--v-theme-warning));
   background: rgba(var(--v-theme-warning), 0.16);
+}
+.dm-diagnostic-card--error .dm-diagnostic-state {
+  color: rgb(var(--v-theme-error));
+  background: rgba(var(--v-theme-error), 0.16);
 }
 .dm-diagnostic-content {
   min-width: 0;
@@ -2292,7 +2645,6 @@ onBeforeUnmount(() => {
 .dm-tag-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .dm-tag-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
 .dm-tag-samples { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(var(--v-theme-on-surface), 0.55); font-size: 11px; }
-.dm-cleanup-empty { min-height: 82px; display: flex; align-items: center; justify-content: center; gap: 8px; color: rgba(var(--v-theme-on-surface), 0.6); font-size: 13px; }
 .dm-cleanup-actions { position: sticky; bottom: -18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0 0; background: rgb(var(--v-theme-surface)); }
 .dm-cleanup-preview-list { max-height: 360px; overflow-y: auto; }
 @media (max-width: 1100px) {

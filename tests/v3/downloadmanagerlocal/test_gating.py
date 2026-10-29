@@ -2,7 +2,7 @@
 
 覆盖 v3.5.1 门控回归（commit 5c0b3ec7 + review 修复）：
 - MODULE_SWITCHES 注册表 / module_active / module_switch_on / build_module_switches
-- PLUGIN_CONFIG_DEFAULTS 键数（111，防漂移）
+- PLUGIN_CONFIG_DEFAULTS 键数（117，防漂移）
 - _TAG_FLAT_PREFIX_MAP 的 tag_enabled→enable 映射（review P1-2 回归）
 - initialize_runtime_config 门控覆盖（总开关×模块开关矩阵、嵌套视图对齐）
 宿主（app.sdk/app.plugins）全部替身；不连接 MoviePilot。
@@ -15,6 +15,7 @@ import importlib.util
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -99,14 +100,15 @@ def gating(monkeypatch):
 
 
 def test_registry_and_defaults(gating):
-    """注册表覆盖 7 模块、属性名与默认键存在、键数 110。"""
+    """注册表覆盖 7 模块、属性名与默认键存在、键数 117。"""
     u = gating.utils
     assert set(u.MODULE_SWITCHES) == {
         'transfer', 'rename', 'tag', 'hr', 'autoremove', 'failclean', 'upload_limit'}
     defaults = u.build_plugin_config_defaults()
     # 112 → 110（2026-10-28）：删除两个死键。`transfer_cron` / `transfer_event_enabled`
     # 全仓零读取（调度实际只有 fallback 间隔一条路径），且后者在 defaults 里被重复声明两次。
-    assert len(defaults) == 110
+    # 110 → 117（阶段三）：新增 7 个模块观察模式键（OBSERVE_ONLY_KEYS）。
+    assert len(defaults) == 117
     for removed_key in ('onlyonce', 'hr_onlyonce', 'remover_onlyonce',
                         'rename_onlyonce', 'rename_retry', 'rename_recovery',
                         'transfer_cron', 'transfer_event_enabled'):
@@ -230,3 +232,156 @@ def test_custom_site_labels_loaded_from_nested_tag_config(gating):
     assert plugin._custom_site_labels == {'dml-test.local:6969/announce': 'DML-CUSTOM'}
     # 两处必须同源，不允许漂移
     assert plugin._custom_site_labels == plugin._site_tag_config['custom_site_labels']
+
+
+def test_module_fault_helpers(gating):
+    """运行异常快照：记录/清除/读取，只写内存，不依赖 plugin 预置属性。"""
+    u = gating.utils
+    plugin = SimpleNamespace()
+
+    assert u.module_faults(plugin) == {}
+
+    u.record_module_fault(plugin, 'hr', ' 下载器不可用 ')
+    u.record_module_fault(plugin, 'transfer', '')
+    assert u.module_faults(plugin) == {'hr': '下载器不可用', 'transfer': '未知原因'}
+
+    u.clear_module_fault(plugin, 'hr')
+    u.clear_module_fault(plugin, 'not-exist')
+    assert u.module_faults(plugin) == {'transfer': '未知原因'}
+
+
+def test_module_config_guarded_skips_closed_module(gating):
+    """P2-1：关闭的模块不解析用户配置，只留「未启用」占位。"""
+    sc = gating.service
+    calls = []
+
+    def builder():
+        calls.append('called')
+        return {'movie_format': '{{ title }}'}
+
+    result = sc._module_config_guarded(
+        SimpleNamespace(), 'rename', False, builder, {'enabled': False})
+
+    assert result == {'enabled': False}
+    assert calls == [], '关闭模块不得解析用户配置'
+
+
+def test_module_config_guarded_marks_fault_on_bad_config(gating):
+    """P2-1：启用模块配置解析失败只标记运行异常并回退占位，不抛给调用方。"""
+    sc = gating.service
+    plugin = SimpleNamespace()
+
+    def boom():
+        raise ValueError('坏配置')
+
+    result = sc._module_config_guarded(plugin, 'rename', True, boom, {'enabled': False})
+
+    assert result == {'enabled': False}
+    assert plugin._module_faults == {'rename': '配置解析失败：坏配置'}
+
+
+def test_initialize_runtime_config_skips_closed_module_parse(gating):
+    """P2-1：总开关关闭时不解析 rename/tag 配置，运行时只有未启用占位。"""
+    sc = gating.service
+    u = gating.utils
+    cfg = dict(u.build_plugin_config_defaults())
+    cfg.update({'tag_siteprefix': '', 'tag_tracker_mappings_str': ''})
+
+    plugin = _Recorder()
+    sc.initialize_runtime_config(plugin, cfg)
+
+    assert plugin._rename_config == {'enabled': False}
+    assert plugin._site_tag_config == {'enable': False}
+    assert plugin._custom_site_labels == {}
+    assert plugin._module_faults == {}
+
+
+def test_initialize_runtime_config_isolates_bad_module_config(gating, monkeypatch):
+    """P2-1：坏配置只标记该模块运行异常，其它模块照常解析，插件总开关不变。"""
+    sc = gating.service
+    u = gating.utils
+    cfg = dict(u.build_plugin_config_defaults())
+    cfg.update({
+        'enabled': True,
+        'transfer_enabled': True,
+        'tag_enabled': True,
+        'tag_tracker_mappings_str': '',
+    })
+
+    def boom(_config):
+        raise ValueError('坏 rename 配置')
+
+    monkeypatch.setattr(sc, 'build_rename_config', boom)
+    plugin = _Recorder()
+    sc.initialize_runtime_config(plugin, cfg)
+
+    assert plugin._rename_config == {'enabled': False}, '坏配置回退占位'
+    assert plugin._module_faults == {'rename': '配置解析失败：坏 rename 配置'}
+    assert plugin._rename_enabled is False, '故障模块不进入运行态'
+    assert plugin._module_switches['rename'] is True, '用户开关不被改写'
+    assert plugin._enabled is True, '插件总开关不变'
+    assert plugin._transfer_enabled is True
+    assert plugin._tag_enabled is True
+    assert plugin._site_tag_config['enable'] is True, '其它模块照常解析'
+
+
+def test_observe_only_resolver(gating):
+    """阶段三观察模式口径：新键优先、旧键继承、老配置保持原行为、全新安装默认开启。"""
+    u = gating.utils
+    assert set(u.OBSERVE_ONLY_KEYS) == set(u.MODULE_SWITCHES)
+    defaults = u.build_plugin_config_defaults()
+    legacy = {'enabled': True, 'transfer_enabled': True, 'tag_enabled': True}
+
+    for module, key in u.OBSERVE_ONLY_KEYS.items():
+        assert key in defaults, key
+        # 全新安装默认开启观察
+        assert u.module_observe_only({}, module) is True, module
+        # 老配置升级（无新键）保持升级前行为：允许执行
+        assert u.module_observe_only(legacy, module) is False, module
+        # 已保存新键以新值为准
+        assert u.module_observe_only({key: True}, module) is True, module
+        assert u.module_observe_only({key: False}, module) is False, module
+
+    # 自动删种旧键 migration_observe_only 继承
+    assert u.module_observe_only({'migration_observe_only': True}, 'autoremove') is True
+    assert u.module_observe_only({'migration_observe_only': False}, 'autoremove') is False
+    # 新键优先于旧键
+    assert u.module_observe_only(
+        {'migration_observe_only': True, 'remover_observe_only': False}, 'autoremove') is False
+    # 旧键不泄漏到其它模块
+    assert u.module_observe_only({'migration_observe_only': True}, 'transfer') is False
+    # 未登记模块恒为 False
+    assert u.module_observe_only({'x': 1}, 'unknown') is False
+
+
+def test_observe_flags_snapshot(gating):
+    """快照口径：一轮运行内固定；快照缺失或类型异常时按不观察处理。"""
+    u = gating.utils
+    assert u.build_module_observe_flags({}) == {name: True for name in u.OBSERVE_ONLY_KEYS}
+    flags = u.build_module_observe_flags({'transfer_observe_only': False, 'hr_observe_only': True})
+    assert flags['transfer'] is False
+    assert flags['hr'] is True
+    assert flags['upload_limit'] is False
+
+    plugin = SimpleNamespace(_module_observe_only={'upload_limit': True})
+    assert u.observe_only(plugin, 'upload_limit') is True
+    assert u.observe_only(plugin, 'transfer') is False
+    assert u.module_observe_flags(SimpleNamespace()) == {
+        name: False for name in u.OBSERVE_ONLY_KEYS}
+    assert u.observe_only(SimpleNamespace(), 'transfer') is False
+    assert u.observe_only(SimpleNamespace(_module_observe_only=None), 'transfer') is False
+
+
+def test_initialize_runtime_config_records_observe_snapshot(gating):
+    """P3-1：初始化时把观察模式快照挂到插件实例，供各模块写边界读取。"""
+    sc = gating.service
+    u = gating.utils
+    # 升级来的老配置：只带旧键，不含观察键（不能用 build_plugin_config_defaults，那里含全新安装默认值）
+    cfg = {'enabled': True, 'transfer_enabled': True, 'transfer_observe_only': True}
+
+    plugin = _Recorder()
+    sc.initialize_runtime_config(plugin, cfg)
+
+    assert plugin._module_observe_only['transfer'] is True
+    assert plugin._module_observe_only['upload_limit'] is False
+    assert set(plugin._module_observe_only) == set(u.OBSERVE_ONLY_KEYS)

@@ -5,7 +5,7 @@ import time
 from app.sdk.logging import logger
 
 from ...model.state import record_transfer_success
-from ..hr.guard import HrGuard
+from ..hr.guard import SKIP_PATH_TRANSFER_SOURCE, HrGuard
 
 from .recheck import (
     _queue_key, load_seed_recheck_queue, save_seed_recheck_queue,
@@ -14,7 +14,7 @@ from .recheck import (
 )
 from ...utils.torrent_adapter import (
     get_torrent_state, is_torrent_active, normalize_hash, skipverify_applies,
-    supports_recheck, torrent_is_complete,
+    get_torrent_name, supports_recheck, torrent_is_complete,
 )
 
 # 同一颗源种子最多尝试 3 次：计数跨事务累计（存进来源记录，见 save_source_record），
@@ -61,11 +61,13 @@ def save_source_record(plugin, item):
 
 def delete_source(plugin, downloader_id, torrent_hash):
     """所有源任务删除共享 H&R 保护；绝不删除源数据文件。"""
-    if HrGuard().is_protected(downloader_id, torrent_hash):
+    guard = HrGuard()
+    if guard.should_skip(SKIP_PATH_TRANSFER_SOURCE, downloader_id, torrent_hash):
         stats = plugin.get_data("transfer_skip_stats") or {"hr_protected": 0}
         stats["hr_protected"] += 1
         plugin.save_data("transfer_skip_stats", stats)
-        logger.info(f"【PT下载中心:转移做种】H&R 保护，保留源任务 {downloader_id}/{torrent_hash}")
+        reason = "H&R 保护状态无法确认" if guard.unconfirmed else "H&R 保护"
+        logger.info(f"【PT下载中心:转移做种】{reason}，保留源任务 {downloader_id}/{torrent_hash}")
         return "protected"
     service = plugin.service_info(downloader_id)
     if not service or not service.instance:
@@ -99,6 +101,8 @@ def begin_transfer(
     item = {
         "source": "transfer", "source_downloader": from_service.name,
         "source_hash": source_hash, "downloader": to_service.name, "hash": source_hash,
+        # 转移发起时的源种子名：仅供数据页展示，缺失时为空串（不参与任何业务判定）。
+        "source_name": get_torrent_name(torrent),
         "created_at": time.time(), "max_wait_minutes": plugin._seed_max_wait_minutes,
         "source_was_active": source_is_active(torrent, from_service.type),
         "pause_source": bool(getattr(plugin, "_pause_source", True)),

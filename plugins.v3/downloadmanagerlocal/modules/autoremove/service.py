@@ -20,6 +20,7 @@ from .constants import (
     REMOVER_STATE_DATA_KEY,
 )
 from .criteria import CompiledConditions, RemoverConfigError, compile_conditions, match_reason
+from .history import cleared_status, empty_status as _empty_status, history_removed_count
 from .models import RemoveCandidate, RemoveSnapshot, RemoverConfig, format_bytes
 from .rules import parse_remover_config
 from .scanner import build_snapshot, downloader_type, read_torrents, torrent_hash
@@ -170,6 +171,26 @@ class AutoRemoveService:
             }
         )
         return status
+
+    def clear_history(self) -> dict[str, Any]:
+        """清理最近一轮执行状态（数据页「清理记录」），只清历史，不动配置与 H&R 状态。
+
+        :return: ``{"removed": int, "busy": bool}``；``busy=True`` 表示已有任务在运行，
+            未做任何清理，由 handler 转 409。
+        """
+        if not self._run_lock.acquire(blocking=False):
+            return {"removed": 0, "busy": True}
+        try:
+            with self._lock:
+                removed = history_removed_count(self._status)
+                if not removed:
+                    return {"removed": 0, "busy": False}
+                cleared = cleared_status()
+                self._plugin.save_data(REMOVER_STATE_DATA_KEY, cleared)
+                self._status = cleared
+                return {"removed": removed, "busy": False}
+        finally:
+            self._run_lock.release()
 
     def stop(self) -> None:
         """插件停止：置停止标志，令在途的候选处理尽快退出。"""
@@ -418,24 +439,6 @@ class AutoRemoveService:
             "candidate_list": [],
             "details": [],
         }
-
-
-def _empty_status() -> dict[str, Any]:
-    """构造最近执行状态的空默认值。"""
-    return {
-        "last_run_at": 0.0,
-        "last_trigger": "",
-        "candidates": 0,
-        "paused": 0,
-        "deleted": 0,
-        "deleted_files": 0,
-        "skipped_protected": 0,
-        "skipped_missing": 0,
-        "failed": 0,
-        "config_error": "",
-        "candidate_list": [],
-        "details": [],
-    }
 
 
 def _downloader_detail(downloader: str) -> dict[str, Any]:

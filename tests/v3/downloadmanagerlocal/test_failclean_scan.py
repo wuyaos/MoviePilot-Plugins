@@ -119,6 +119,8 @@ def fc(mp_stubs, monkeypatch):
     stub(
         f"{PREFIX}.utils.config",
         module_active=lambda config, key: bool((config or {}).get("failcleanup_enabled")),
+        # 观察模式写边界（阶段三）：本测试只关心非观察路径，守卫恒不拦截
+        observe_skip=lambda *args, **kwargs: False,
     )
     stub(
         f"{PREFIX}.modules.failclean.notify",

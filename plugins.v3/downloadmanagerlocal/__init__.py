@@ -1,6 +1,6 @@
 """
 DownloadManagerLocal v3.5.1 - MoviePilot V3 本地插件
-下载中心插件，支持转移做种、命名补刀、站点标签、H&R、自动删种、失败清理与上传限速
+下载中心插件，支持转移做种、种子重命名、站点标签、H&R、自动删种、失败清理与上传限速
 """
 from threading import Event as ThreadEvent
 import threading
@@ -14,6 +14,7 @@ from app.sdk.logging import logger
 from app.sdk.media import MetaBase
 
 from .adapter.moviepilot import get_downloader_service
+from .model.api import CleanupModuleRequest
 from .model.state import SEED_RECHECK_QUEUE_KEY
 from .utils.config import build_plugin_config_defaults, is_plugin_active, is_transfer_active
 from .utils.path import convert_save_path
@@ -39,13 +40,13 @@ class DownloadManagerLocal(_PluginBase):
     # 插件名称
     plugin_name = "下载中心"
     # 插件描述
-    plugin_desc = "转移做种、命名补刀、站点标签、H&R 保护、自动删种、失败清理与上传限速，一站式下载管理。"
+    plugin_desc = "转移做种、种子重命名、站点标签、H&R 保护、自动删种、失败清理与上传限速，一站式下载管理。"
     # 插件图标
     plugin_icon = "downloadmanagerlocal.png"
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.9.11"
+    plugin_version = "3.9.14"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页
@@ -258,6 +259,10 @@ class DownloadManagerLocal(_PluginBase):
     def api_delete_rename_archive(self, hash: str = ""):
         """删除指定 hash 的重命名归档状态。"""; return _api_delete_rename_archive(self, hash)
 
+    def api_cleanup_module_data(self, payload: CleanupModuleRequest):
+        """按白名单清理插件自身历史数据（不触碰下载器数据与安全状态）。"""
+        return _controller_handlers.api_cleanup_module_data(self, payload)
+
     def api_recovery_torrent(self, hash: str = ""):
         """按历史记录恢复指定种子的原始名称。"""; return _api_recovery_torrent(self, hash)
 
@@ -267,8 +272,8 @@ class DownloadManagerLocal(_PluginBase):
     def api_retry_rename(self, hash: str = ""):
         """对指定 hash 的种子执行单条补刮。"""; return _api_retry_rename(self, hash)
 
-    def api_diagnostics(self):
-        """返回插件只读诊断信息。"""; return _api_diagnostics(self)
+    def api_diagnostics(self, detail_limit: int = 20):
+        """返回插件只读诊断信息。"""; return _api_diagnostics(self, detail_limit)
 
     def api_hr_tasks(self):
         """返回 H&R 任务列表与汇总。"""; return _api_hr_tasks(self)
@@ -284,11 +289,11 @@ class DownloadManagerLocal(_PluginBase):
         """返回自动删种模块状态。"""
         return _controller_handlers.api_autoremove_status(self)
 
-    def api_autoremove_run(self, payload=None):
+    def api_autoremove_run(self, payload: dict | None = None):
         """手动执行一轮自动删种。"""
         return _controller_handlers.api_autoremove_run(self, payload)
 
-    def api_autoremove_preview(self, payload=None):
+    def api_autoremove_preview(self, payload: dict | None = None):
         """预览自动删种候选。"""
         return _controller_handlers.api_autoremove_preview(self, payload)
 
@@ -296,11 +301,11 @@ class DownloadManagerLocal(_PluginBase):
         """返回整理失败清理模块状态。"""
         return _controller_handlers.api_failclean_status(self)
 
-    def api_failclean_scan(self, payload=None):
+    def api_failclean_scan(self, payload: dict | None = None):
         """手动执行重复下载残留巡检。"""
         return _controller_handlers.api_failclean_scan(self, payload)
 
-    def api_transfer_run(self, payload=None):
+    def api_transfer_run(self, payload: dict | None = None):
         """手动执行一轮转移做种。"""
         return _controller_handlers.api_transfer_run(self, payload)
 
@@ -312,7 +317,7 @@ class DownloadManagerLocal(_PluginBase):
         """返回站点标签增强模块状态。"""
         return _controller_handlers.api_tag_status(self)
 
-    def api_tag_complement(self, payload=None):
+    def api_tag_complement(self, payload: dict | None = None):
         """手动执行一轮站点标签历史补全。"""
         return _controller_handlers.api_tag_complement(self, payload)
 
@@ -424,8 +429,8 @@ class DownloadManagerLocal(_PluginBase):
         to_service = located["service"] or self.service_info(self._todownloader)
         return _retry_rename_by_hash_impl(self, to_service, hash)
 
-    def _diagnostics(self):
-        """生成插件详情页只读诊断数据。"""; return _build_diagnostics_impl(self)
+    def _diagnostics(self, detail_limit: int = 20):
+        """生成插件详情页只读诊断数据。"""; return _build_diagnostics_impl(self, detail_limit)
 
     def record_rename_failure(self, torrent_hash: str, torrent_name: str,
                               category: str = "", reason: str = ""):

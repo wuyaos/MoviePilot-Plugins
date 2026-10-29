@@ -2,7 +2,12 @@
 
 from copy import deepcopy
 
-from ..modules.autoremove.constants import build_remover_config_defaults
+from app.sdk.logging import logger
+
+from ..modules.autoremove.constants import (
+    MIGRATION_OBSERVE_ONLY_KEY,
+    build_remover_config_defaults,
+)
 from ..modules.failclean.constants import build_failclean_config_defaults
 from ..modules.hr.constants import build_hr_config_defaults
 from ..modules.rename.service import build_rename_flat_defaults
@@ -43,6 +48,34 @@ UPLOAD_LIMIT_CONFIG_DEFAULTS = {
     "upload_limit_grace_minutes": 30,
 }
 
+
+# ---- 模块观察模式注册表（阶段三：每模块独立「只预览不写入」）----
+# module -> 配置页扁平观察键；观察模式下该模块只列候选/预览，不执行下载器写操作。
+OBSERVE_ONLY_KEYS = {
+    "transfer": "transfer_observe_only",
+    "rename": "rename_observe_only",
+    "tag": "tag_observe_only",
+    "hr": "hr_observe_only",
+    "autoremove": "remover_observe_only",
+    "failclean": "failcleanup_observe_only",
+    "upload_limit": "upload_limit_observe_only",
+}
+
+# 旧键兼容（决策 A）：自动删种的观察值原由 MIGRATION_OBSERVE_ONLY_KEY 承载，新键缺失时继承旧值。
+LEGACY_OBSERVE_ONLY_KEYS = {
+    "autoremove": MIGRATION_OBSERVE_ONLY_KEY,
+}
+
+# 全新安装默认值（决策 A）：有写操作的模块默认开启观察；升级来的老配置保持升级前行为，见 module_observe_only。
+OBSERVE_ONLY_DEFAULTS = {
+    "transfer_observe_only": True,
+    "rename_observe_only": True,
+    "tag_observe_only": True,
+    "hr_observe_only": True,
+    "remover_observe_only": True,
+    "failcleanup_observe_only": True,
+    "upload_limit_observe_only": True,
+}
 TAG_MODULE_FLAT_DEFAULTS = {
     "tag_interval_cron": DEFAULT_TAG_CONFIG["interval_cron"],
     "tag_enable_media_tag": DEFAULT_TAG_CONFIG["enable_media_tag"],
@@ -80,6 +113,7 @@ PLUGIN_CONFIG_DEFAULTS = {
     **build_hr_config_defaults(),
     **build_remover_config_defaults(),
     **build_failclean_config_defaults(),
+    **OBSERVE_ONLY_DEFAULTS,
 }
 
 
@@ -195,6 +229,131 @@ def build_module_switches(config: dict) -> dict:
     """返回 {module: 裸开关布尔} 快照，供展示层与诊断使用。"""
     return {module: module_switch_on(config, module) for module in MODULE_SWITCHES}
 
+
+
+def module_observe_only(config: dict, module: str) -> bool:
+    """解析模块观察模式（阶段三唯一口径）。
+
+    - 已保存新键：以新值为准（保存开关后下一轮才切换）。
+    - 只有旧键（自动删种 migration_observe_only）：继承旧值。
+    - 升级来的老配置（新旧键都没有）：保持升级前行为，返回 False（允许执行）。
+    - 全新安装（空配置）：默认开启观察（PLUGIN_CONFIG_DEFAULTS）。
+    """
+    key = OBSERVE_ONLY_KEYS.get(module)
+    if key is None:
+        return False
+    source = config if isinstance(config, dict) else {}
+    if key in source:
+        return bool(source[key])
+    legacy_key = LEGACY_OBSERVE_ONLY_KEYS.get(module)
+    if legacy_key and legacy_key in source:
+        return bool(source[legacy_key])
+    if not source:
+        return bool(PLUGIN_CONFIG_DEFAULTS.get(key, False))
+    return False
+
+
+def build_module_observe_flags(config: dict) -> dict:
+    """返回 {module: 观察模式布尔} 快照；一轮运行内固定，保存开关后新一轮才切换。"""
+    source = config if isinstance(config, dict) else {}
+    return {module: module_observe_only(source, module) for module in OBSERVE_ONLY_KEYS}
+
+
+def module_observe_flags(plugin) -> dict:
+    """读取插件实例上的观察模式快照；快照缺失时按「不观察」处理。"""
+    flags = getattr(plugin, "_module_observe_only", None)
+    if not isinstance(flags, dict):
+        return {module: False for module in OBSERVE_ONLY_KEYS}
+    return {module: bool(flags.get(module, False)) for module in OBSERVE_ONLY_KEYS}
+
+
+def observe_only(plugin, module: str) -> bool:
+    """判断模块本轮是否处于观察模式（模块是否启用由模块门控负责，此处不重复判断）。"""
+    return bool(module_observe_flags(plugin).get(module, False))
+
+
+OBSERVE_PREVIEW_SAMPLE_LIMIT = 20
+
+# 观察模式日志的模块中文名（与 utils/log_prefix.MODULES 一致，供【PT下载中心】日志正文标注）
+OBSERVE_MODULE_LABELS = {
+    "transfer": "转移做种",
+    "rename": "重命名",
+    "tag": "站点标签",
+    "hr": "H&R",
+    "autoremove": "自动删种",
+    "failclean": "失败清理",
+    "upload_limit": "上传限速",
+}
+
+
+def record_observe_preview(plugin, module: str, detail: str) -> None:
+    """登记观察模式预览样本（内存滚动保留），不触发任何下载器写操作。"""
+    previews = getattr(plugin, "_observe_previews", None)
+    if not isinstance(previews, dict):
+        previews = {}
+        plugin._observe_previews = previews
+    entry = previews.get(module)
+    if not isinstance(entry, dict):
+        entry = {"count": 0, "samples": []}
+        previews[module] = entry
+    entry["count"] = int(entry.get("count") or 0) + 1
+    samples = entry.get("samples")
+    if not isinstance(samples, list):
+        samples = []
+        entry["samples"] = samples
+    line = str(detail or "").strip()
+    if line and len(samples) < OBSERVE_PREVIEW_SAMPLE_LIMIT:
+        samples.append(line)
+
+
+def observe_skip(plugin, module: str, action: str, detail: str = "") -> bool:
+    """观察模式统一写边界：返回 True 表示调用方必须跳过真实写操作（只登记预览）。"""
+    if not observe_only(plugin, module):
+        return False
+    record_observe_preview(plugin, module, f"{action}：{detail}" if detail else action)
+    suffix = f"：{detail}" if detail else ""
+    label = OBSERVE_MODULE_LABELS.get(module, module)
+    logger.info(f"【PT下载中心】观察模式[{label}]：跳过{action}{suffix}")
+    return True
+
+
+def observe_previews(plugin) -> dict:
+    """返回观察模式预览快照 {module: {count, samples}}，供页面展示「本应执行」的条数。"""
+    previews = getattr(plugin, "_observe_previews", None)
+    if not isinstance(previews, dict):
+        return {}
+    snapshot = {}
+    for module, entry in previews.items():
+        if not isinstance(entry, dict):
+            continue
+        snapshot[str(module)] = {
+            "count": int(entry.get("count") or 0),
+            "samples": list(entry.get("samples") or []),
+        }
+    return snapshot
+
+def record_module_fault(plugin, module: str, reason: str) -> None:
+    """记录模块运行异常（只记内存、不改用户开关），供页面区分「关闭」与「故障」。"""
+    faults = getattr(plugin, "_module_faults", None)
+    if not isinstance(faults, dict):
+        faults = {}
+        plugin._module_faults = faults
+    faults[module] = str(reason or "").strip() or "未知原因"
+
+
+def clear_module_fault(plugin, module: str) -> None:
+    """清除模块运行异常标记（该模块重新初始化成功时调用）。"""
+    faults = getattr(plugin, "_module_faults", None)
+    if isinstance(faults, dict):
+        faults.pop(module, None)
+
+
+def module_faults(plugin) -> dict:
+    """返回模块运行异常快照 {module: 原因}。"""
+    faults = getattr(plugin, "_module_faults", None)
+    if not isinstance(faults, dict):
+        return {}
+    return {str(name): str(reason) for name, reason in faults.items() if reason}
 
 def is_transfer_active(plugin) -> bool:
     """判断转移做种能力是否处于可运行状态（开关已由门控属性承载）。

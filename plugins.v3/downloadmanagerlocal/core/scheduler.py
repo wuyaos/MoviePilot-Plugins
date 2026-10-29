@@ -24,6 +24,7 @@ from ..modules.hr.constants import (
 from ..modules.rename.service import scan_renames
 from ..modules.sitetag.service import complement_history
 
+from ..utils.config import module_faults
 
 def build_plugin_services(plugin) -> List[Dict[str, Any]]:
     """根据插件运行状态构造 MoviePilot 调度服务声明。
@@ -31,21 +32,27 @@ def build_plugin_services(plugin) -> List[Dict[str, Any]]:
     模块独立性（Goal: 单模块故障不得拖垮其它模块）：每个模块的声明单独构造，
     任一模块抛异常只丢该模块的定时任务，其余模块的调度照常注册——宿主调用
     ``get_service()`` 时不会因为某一个模块的坏配置拿到空列表。
+    模块已标记运行异常时直接跳过其声明，避免用坏配置注册定时任务。
     """
     services: List[Dict[str, Any]] = []
-    for builder in (
-        _build_transfer_fallback_services,
-        _build_hr_services,
-        _build_autoremove_services,
-        _build_failclean_services,
-        _build_site_tag_services,
-        _build_rename_services,
+    faults = module_faults(plugin)
+    for module, builder in (
+        ("transfer", _build_transfer_fallback_services),
+        ("hr", _build_hr_services),
+        ("autoremove", _build_autoremove_services),
+        ("failclean", _build_failclean_services),
+        ("tag", _build_site_tag_services),
+        ("rename", _build_rename_services),
     ):
+        if module in faults:
+            logger.error(
+                f"【PT下载中心】{module} 模块运行异常（{faults[module]}），已跳过其定时任务声明"
+            )
+            continue
         try:
             services.extend(builder(plugin) or [])
         except Exception as error:
             logger.error(f"【PT下载中心】{builder.__name__} 构造定时任务失败，已跳过该模块: {error}")
-
     return services
 
 

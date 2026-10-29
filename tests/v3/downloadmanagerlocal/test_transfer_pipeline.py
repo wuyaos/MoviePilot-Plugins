@@ -41,7 +41,10 @@ def runtime(monkeypatch):
     guard = Mock()
     guard.is_protected.return_value = False
     guard.return_value.is_protected.side_effect = lambda *a, **k: guard.is_protected(*a, **k)
-    module('app.plugins.downloadmanagerlocal.modules.hr.guard', HrGuard=guard)
+    guard.return_value.should_skip.side_effect = lambda path, dl, h: guard.is_protected(dl, h)
+    guard.return_value.unconfirmed = False
+    module('app.plugins.downloadmanagerlocal.modules.hr.guard',
+           HrGuard=guard, SKIP_PATH_TRANSFER_SOURCE='transfer_source')
     module(PREFIX + '.service', post_transfer_process=Mock(return_value=True))
 
     # recheck 依赖真实 utils.torrent_adapter（纯 Python，只用到被替身的 app.sdk.logging），
@@ -435,3 +438,59 @@ def test_rollback_attempts_accumulate_across_rounds_then_cap_marks_failed(runtim
     assert r.data['queue'] == {}
     assert r.pipeline.transfer_is_abandoned(record, manual=False)
     assert not r.pipeline.transfer_is_abandoned(record, manual=True), '手动触发必须能救回来'
+
+
+# ── 转移记录名称（P7-2c 需求④）：随事务保存源种子名，供数据页展示 ─────────────
+
+def begin_with(r, torrent, attempts=None):
+    """以指定源种子快照登记转移（校验随事务落盘的展示字段）。"""
+    return r.pipeline.begin_transfer(
+        r.plugin, r.services['source'], r.services['target'], 'abc', torrent,
+        lambda: 'abc', lambda: False, attempts=attempts,
+    )
+
+
+@pytest.mark.parametrize('torrent, expected', [
+    ({'state': 'uploading', 'name': '示例.种子.mkv'}, '示例.种子.mkv'),          # qB dict
+    ({'state': 'uploading', 'torrentName': 'camelName.mkv'}, 'camelName.mkv'),  # camelCase
+    ({'state': 'uploading'}, ''),                                              # 无名称 → 空串
+])
+def test_source_name_recorded_from_torrent_snapshot(runtime, torrent, expected):
+    """名称字段兼容 dict 与 camelCase，缺失时为空串且登记照常成功。
+
+    对象形态（TR）不在 pipeline 层覆盖：`is_torrent_active` 的 qbittorrent 分支只接受
+    dict，对象种子在该类型下本就不可达；`get_torrent_name` 读对象由
+    test_torrent_field_shapes.py::test_get_torrent_name_accepts_dict_and_object 覆盖。
+    """
+    r = runtime
+    assert begin_with(r, torrent)
+    assert r.data['source-abc']['source_name'] == expected
+    assert r.data['queue']['target::abc']['source_name'] == expected
+
+
+def test_source_name_survives_reload_and_verify_complete(runtime):
+    """字段随来源记录与待办队列落盘，重载后仍可读，校验完成后不丢失。"""
+    r = runtime
+    assert begin_with(r, {'state': 'uploading', 'name': '持久名.mkv'})
+    reloaded = r.recheck.load_seed_recheck_queue(r.plugin)
+    assert reloaded['target::abc']['source_name'] == '持久名.mkv'
+    cycle(r)
+    cycle(r, 'checkingUP')
+    cycle(r)
+    cycle(r, 'stalledUP')
+    assert r.data['source-abc']['transfer_state'] == 'completed'
+    assert r.data['source-abc']['source_name'] == '持久名.mkv'
+
+
+def test_source_name_survives_rollback(runtime):
+    """回滚与终态重写都复用同一 item，展示字段不能被回滚路径擦掉。"""
+    r = runtime
+    assert not r.pipeline.begin_transfer(
+        r.plugin, r.services['source'], r.services['target'], 'abc',
+        {'state': 'uploading', 'name': '回滚名.mkv'}, lambda: None, lambda: False,
+    )
+    assert r.data['queue']['target::abc']['phase'] == 'rollback'
+    assert r.data['queue']['target::abc']['source_name'] == '回滚名.mkv'
+    cycle(r)
+    assert r.data['source-abc']['transfer_state'] == 'rolled_back'
+    assert r.data['source-abc']['source_name'] == '回滚名.mkv'
