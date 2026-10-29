@@ -59,9 +59,46 @@ def save_source_record(plugin, item):
     })
 
 
-def delete_source(plugin, downloader_id, torrent_hash):
+def transfer_observe_skip(plugin, action: str, detail: str = "") -> bool:
+    """转移写边界：只登记预览，不改事务进度或下载器。"""
+    from ...utils.config import observe_only
+
+    if not observe_only(plugin, "transfer"):
+        return False
+    from ...utils.config import record_observe_preview
+    record_observe_preview(plugin, "transfer", f"{action}：{detail}")
+    logger.info(f"【PT下载中心:转移做种】观察模式，仅预览不写入：{action} {detail}")
+    return True
+
+
+def delete_source(plugin, downloader_id, torrent_hash, *, authorized=False,
+                  target_verified=False, operation_id=None):
     """所有源任务删除共享 H&R 保护；绝不删除源数据文件。"""
+    if transfer_observe_skip(plugin, "删除源任务", f"{downloader_id}/{torrent_hash}"):
+        return "protected"
     guard = HrGuard()
+    interlock = None
+    denied = False
+    service = plugin.service_info(downloader_id)
+    permit = dict(source="transfer_source", operation_id=operation_id, authorized=authorized)
+    hr_service = getattr(plugin, "_hr_service", None)
+    task = hr_service.get_task(downloader_id, torrent_hash) if hr_service is not None else None
+    # A prior reservation must not fall through merely because release removed protection.
+    reserved = bool(task and task.interlock_state)
+    if (hr_service is not None and service and service.instance
+            and (reserved or (authorized is True and guard.is_protected(downloader_id, torrent_hash)))):
+        from ..hr.interlock import HrInterlock
+
+        interlock = HrInterlock(hr_service)
+        try:
+            result = interlock.release(downloader_id, torrent_hash, **permit,
+                                       target_verified=target_verified)
+            if result["state"] != "released":
+                logger.warning(f"【PT下载中心:转移做种】H&R 解除未获许可：{result}")
+                return "protected"
+        except PermissionError as error:
+            logger.info(f"【PT下载中心:转移做种】H&R 删源拒绝：{error}")
+            denied = True
     if guard.should_skip(SKIP_PATH_TRANSFER_SOURCE, downloader_id, torrent_hash):
         stats = plugin.get_data("transfer_skip_stats") or {"hr_protected": 0}
         stats["hr_protected"] += 1
@@ -69,13 +106,28 @@ def delete_source(plugin, downloader_id, torrent_hash):
         reason = "H&R 保护状态无法确认" if guard.unconfirmed else "H&R 保护"
         logger.info(f"【PT下载中心:转移做种】{reason}，保留源任务 {downloader_id}/{torrent_hash}")
         return "protected"
-    service = plugin.service_info(downloader_id)
+    if denied:
+        return "protected"
     if not service or not service.instance:
         # 静默返回 "retry" 会让「源种没删」既无日志也无线索：2026-10-28 排查
         # 「delete_source=True 但源种还在」时，三条分支全无日志，白耗一轮。
         logger.warning(f"【PT下载中心:转移做种】删源跳过：下载器不可用 {downloader_id}/{torrent_hash}")
         return "retry"
-    if service.instance.delete_torrents(delete_file=False, ids=[torrent_hash]) is False:
+    if interlock is not None:
+        try:
+            result = interlock.begin_delete(downloader_id, torrent_hash, **permit)
+        except PermissionError as error:
+            logger.info(f"【PT下载中心:转移做种】H&R 删除许可拒绝：{error}")
+            return "protected"
+        if result["state"] != "deleting":
+            return "protected"
+    success = False
+    try:
+        success = service.instance.delete_torrents(delete_file=False, ids=[torrent_hash]) is not False
+    finally:
+        if interlock is not None:
+            interlock.finish_delete(downloader_id, torrent_hash, **permit, success=success)
+    if not success:
         logger.warning(f"【PT下载中心:转移做种】删源失败：下载器拒绝删除 {downloader_id}/{torrent_hash}")
         return "retry"
     logger.info(f"【PT下载中心:转移做种】已删除源任务（不含文件）{downloader_id}/{torrent_hash}")
@@ -94,6 +146,8 @@ def begin_transfer(
     attempts: Optional[int] = None,
 ):
     """先落盘源状态再暂停/添加；异常统一进入可续办回滚。"""
+    if transfer_observe_skip(plugin, "暂停源并添加目标", str(source_hash)):
+        return False
     if attempts is None:
         # 调用方未显式给出失败次数时，从来源记录续算，避免主链路漏传导致计数静默清零。
         previous = plugin.get_data(f"{from_service.name}-{source_hash}") or {}
@@ -158,6 +212,8 @@ def begin_transfer(
 
 def rollback_transfer(plugin, item, target_service, stopped):
     """先删目标再恢复源，删除失败时不制造双端同时做种。"""
+    if transfer_observe_skip(plugin, "回滚转移（原地等待）", str(item.get("source_hash", ""))):
+        return False
     if stopped():
         return False
     if item["target_added"]:
@@ -196,6 +252,8 @@ def advance_transfer(plugin, item, service, task, stopped):
     """推进一次事务；返回 True 仅表示可从待办队列移除。"""
     if stopped():
         return False
+    if transfer_observe_skip(plugin, "续办转移（原地等待）", str(item.get("source_hash", ""))):
+        return False
     phase = item["phase"]
     if phase in ("source_pausing", "adding"):
         item["phase"] = "rollback"
@@ -229,12 +287,15 @@ def advance_transfer(plugin, item, service, task, stopped):
                 logger.info(f"【PT下载中心】目标端发起校验（{service.type}）"
                             f"{item['hash'][:8]}，等待校验完成")
                 item["phase"] = "verifying"
+                # Persist accepted verification, never infer it from target_confirmed/skipverify.
+                item["target_verification_started"] = True
         elif service.type == "rtorrent":
             # rt 无校验 API：启动目的端任务即触发 rtorrent 自动哈希校验。
             if service.instance.start_torrents(ids=[item["hash"]]) is False:
                 return False
             logger.info(f"【PT下载中心】rt 目标端启动触发校验：{item['hash'][:8]}")
             item["phase"] = "verifying"
+            item["target_verification_started"] = True
         else:
             item["phase"] = "verifying"
         save_transaction(plugin, item)
@@ -290,7 +351,12 @@ def advance_transfer(plugin, item, service, task, stopped):
     if item["delete_source_requested"]:
         if stopped():
             return False
-        result = delete_source(plugin, item["source_downloader"], item["source_hash"])
+        result = delete_source(
+            plugin, item["source_downloader"], item["source_hash"],
+            authorized=getattr(plugin, "_hr_enabled", False) is True,
+            target_verified=bool(item.get("target_verification_started") and not item["skipverify"]),
+            operation_id="transfer:{}:{}:{}".format(item["downloader"], item["hash"], item.get("created_at", 0)),
+        )
         if result == "retry":
             return False
         item["source_deleted"] = result == "deleted"

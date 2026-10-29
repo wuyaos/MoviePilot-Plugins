@@ -16,6 +16,7 @@ from ...utils.torrent_adapter import get_label, get_save_path, get_torrent_name,
 from .recheck import _queue_lock, load_seed_recheck_queue, ensure_seed_recheck_worker, seed_is_ready, seed_is_error
 from .pipeline import (
     MAX_TRANSFER_ATTEMPTS, begin_transfer, delete_source, transfer_is_abandoned,
+    transfer_observe_skip,
 )
 from ..rename.service import _get_torrent_content_name, build_rename_config, resolve_retry_original_name
 from ..sitetag.service import create_temporary_tag, forget_temporary_tag, release_temporary_tag
@@ -80,6 +81,8 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
                      save_path: str, torrent, stop_generation: Optional[int] = None,
                      task: Optional[dict] = None, source_hash: str = "") -> Optional[str]:
     """添加目标任务前核对所属批次仍有效。"""
+    if transfer_observe_skip(plugin, "添加目标任务及临时标签", source_hash):
+        return None
     generation = int(getattr(plugin, "_transfer_stop_generation", 0) or 0) if stop_generation is None else stop_generation
     if _transfer_stopped(plugin, generation):
         return None
@@ -177,6 +180,8 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
 def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
                           stop_generation: Optional[int] = None):
     """目标任务后处理逐步响应停止信号。"""
+    if transfer_observe_skip(plugin, "转移后重命名及标签", torrent_hash):
+        return False
     generation = int(getattr(plugin, "_transfer_stop_generation", 0) or 0) if stop_generation is None else stop_generation
     if _transfer_stopped(plugin, generation):
         return False
@@ -374,6 +379,9 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
         return
 
     logger.info(f"【PT下载中心:转移做种】任务「{task_name}」需要转移的种子数：{len(trans_torrents)}")
+    if transfer_observe_skip(plugin, "转移候选", f"任务{task_name}，候选{len(trans_torrents)}个"):
+        totals["skip"] += len(trans_torrents)
+        return
     payloads = get_torrent_payloads(
         plugin, from_service.type, from_service.name, from_service,
         [item["hash"] for item in trans_torrents],
@@ -611,6 +619,10 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
         if callable(is_archived) and is_archived(torrent_hash):
             result["skipped"] += 1
             continue
+        from ...utils.config import observe_skip
+        if observe_skip(plugin, "rename", "脏名称补刀", f"{torrent_name}（{torrent_hash[:8]}）"):
+            result["skipped"] += 1
+            continue
         result["attempted"] += 1
         save_path = plugin.get_save_path(torrent, dl_type)
         logger.info(f"【PT下载中心:转移做种】转移做种兜底服务：发现脏种子名，补刀处理 hash={torrent_hash} name={torrent_name}")
@@ -629,11 +641,14 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
                 result["failed"] += 1
                 result["errors"].append(f"{torrent_hash}: 无可信原始名称")
                 continue
-            if plugin._rename_torrent(
-                dl, dl_type, torrent_hash,
-                retry_name,
-                save_path
-            ):
+            renamed = plugin._rename_torrent(
+                dl, dl_type, torrent_hash, retry_name, save_path
+            )
+            if renamed is None:
+                result["attempted"] -= 1
+                result["skipped"] += 1
+                continue
+            if renamed:
                 result["success"] += 1
             else:
                 result["failed"] += 1
@@ -654,7 +669,8 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
 
 def fallback_transfer(plugin):
     """转移做种兜底扫描包装函数"""
-    retry_pending_renames(plugin)
+    if not transfer_observe_skip(plugin, "兜底联动补刀"):
+        retry_pending_renames(plugin)
     transfer(plugin, trigger_source="兜底扫描")
 
 

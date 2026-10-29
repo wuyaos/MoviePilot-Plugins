@@ -114,6 +114,8 @@ def tr(monkeypatch):
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.modules.sitetag.service",
             create_temporary_tag=Mock(), forget_temporary_tag=Mock(),
             release_temporary_tag=Mock())
+    _module(monkeypatch, "app.plugins.downloadmanagerlocal.utils.config",
+            observe_only=lambda plugin, name: False)
     return _load_real(monkeypatch, "service")
 
 

@@ -351,8 +351,11 @@ def resolve_retry_original_name(
 
 
 def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: str, save_path: str,
-                   downloader: str = "") -> bool:
-    """重命名单个种子，持久化记录并返回实际是否成功（downloader：记录所属下载器名）。"""
+                   downloader: str = "") -> Optional[bool]:
+    """返回 True=成功、False=失败；None=观察跳过，不得据此记录失败或推进重试/归档计数。"""
+    from ...utils.config import observe_skip
+    if observe_skip(plugin, "rename", "重命名种子", f"{torrent_name}（{torrent_hash[:8]}）"):
+        return None
     if dl_type == "rtorrent":
         # rt 客户端未提供可用的名称修改接口，跳过且不计入失败记录。
         logger.info(f"【PT下载中心:重命名】rTorrent 不支持重命名，跳过 hash={torrent_hash}")
@@ -503,7 +506,11 @@ def retry_failed_renames(plugin, to_service):
             if plugin._rename_enabled:
                 retry_name = resolve_retry_original_name(plugin, th, tn, _get_torrent_content_name(torrent, dl_type))
                 if retry_name:
-                    rename_success = bool(rename_torrent(plugin, dl, dl_type, th, retry_name, sp))
+                    rename_success = rename_torrent(plugin, dl, dl_type, th, retry_name, sp)
+                    if rename_success is None:
+                        summary["attempted"] -= 1
+                        summary["skipped"] += 1
+                        continue
                 else:
                     save_rename_record(plugin, th, tn, tn, False, "原始发布名污染，无法可靠补刀", downloader=getattr(to_service, "name", "") or "")
                     rename_success = False
@@ -607,6 +614,8 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
                         retry_name,
                         save_path
                     )
+            if rename_succeeded is None:
+                return {"code": 1, "msg": "观察模式：未执行补刀（仅预览）", "hash": hash_text, "observed": True}
             if plugin._tag_enabled:
                 # 站点未识别（None）属 warning：不拉低补刀成功率，但必须在日志里留痕，
                 # 否则用户看到「补刀成功但没打标签」无从判断是未识别还是写失败。
@@ -911,8 +920,11 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
         return "skipped"
     if observe_skip(plugin, "rename", "重命名种子", f"{torrent_name}（{torrent_hash[:8]}）"):
         return "skipped"
-    if rename_torrent(plugin, dl, dl_type, torrent_hash, torrent_name, save_path,
-                      downloader=str(getattr(service, "name", "") or "")):
+    renamed = rename_torrent(plugin, dl, dl_type, torrent_hash, torrent_name, save_path,
+                             downloader=str(getattr(service, "name", "") or ""))
+    if renamed is None:
+        return "skipped"
+    if renamed:
         add_rename_tag(plugin, dl, dl_type, torrent_hash, torrent_tags, rename_config)
         return "renamed"
     return "failed"

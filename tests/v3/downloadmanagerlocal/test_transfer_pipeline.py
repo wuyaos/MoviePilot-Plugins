@@ -54,6 +54,7 @@ def runtime(monkeypatch):
         'app.plugins.downloadmanagerlocal.utils',
         __path__=[str(plugin_root / 'utils')],
     )
+    module("app.plugins.downloadmanagerlocal.utils.config", observe_only=lambda plugin, name: False)
     adapter_spec = importlib.util.spec_from_file_location(
         'app.plugins.downloadmanagerlocal.utils.torrent_adapter',
         plugin_root / 'utils' / 'torrent_adapter.py',
