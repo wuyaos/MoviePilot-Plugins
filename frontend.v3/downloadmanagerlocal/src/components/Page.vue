@@ -57,15 +57,16 @@ const recordStates = reactive({
   history: { loading: false, loaded: false, error: '', revision: 0 },
   archive: { loading: false, loaded: false, error: '', revision: 0 },
   transfer: { loading: false, loaded: false, error: '', revision: 0 },
+  hr: { loading: false, loaded: false, error: '', revision: 0 },
 })
-function recordTableState(key, rows) {
+function recordTableState(key, rows, empty = 'none') {
   const state = recordStates[key]
   const hasResult = state.loaded || rows.length > 0
   return {
     loading: state.loading && !hasResult,
     error: !hasResult ? state.error || false : false,
     refreshFailed: hasResult ? state.error || false : false,
-    empty: rows.length ? '' : 'none',
+    empty: rows.length ? '' : empty,
   }
 }
 const total = ref(0)
@@ -200,8 +201,21 @@ function hrStatusColor(status) {
   }[status] || 'default'
 }
 
+const hrStatusFilter = ref('all')
+const hrStatusFilterOptions = [
+  { title: '全部状态', value: 'all' },
+  { title: '待处理', value: 'Pending' },
+  { title: '做种中', value: 'In Progress' },
+  { title: '已达标', value: 'Compliant' },
+  { title: '需做种', value: 'Needs Seeding' },
+  { title: '已超期', value: 'Overdue' },
+]
 const hrSummary = computed(() => hrTasks.value.summary || {})
-const hrTaskRows = computed(() => hrTasks.value.tasks || [])
+const hrTaskRows = computed(() => {
+  const rows = hrTasks.value.tasks || []
+  if (hrStatusFilter.value === 'all') return rows
+  return rows.filter(task => task.status === hrStatusFilter.value)
+})
 const hrSkipRowLabels = {
   transfer_source: '转移源端',
   auto_remove: '自动删种',
@@ -600,12 +614,23 @@ async function loadRenameStatus(request) {
 }
 
 async function loadHrStatus(request) {
+  if (isCurrentPageRequest(request)) {
+    recordStates.hr.loading = true
+    recordStates.hr.error = ''
+  }
   const [tasksResp, skipResp] = await Promise.all([
-    getApi('hr/tasks', { feedback: 'silent' }).catch(() => null),
+    getApi('hr/tasks', { feedback: 'silent' }).catch(error => ({ __error: error })),
     getApi('hr/skip_stats', { feedback: 'silent' }).catch(() => null),
   ])
   if (!isCurrentPageRequest(request)) return
-  if (tasksResp) hrTasks.value = { tasks: tasksResp.tasks || [], summary: tasksResp.summary || {} }
+  recordStates.hr.loading = false
+  if (!tasksResp || tasksResp.__error) {
+    recordStates.hr.error = tasksResp?.__error?.message || 'H&R 任务加载失败'
+    return
+  }
+  recordStates.hr.loaded = true
+  recordStates.hr.error = ''
+  hrTasks.value = { tasks: tasksResp.tasks || [], summary: tasksResp.summary || {} }
   if (skipResp?.skip_stats) hrSkipStats.value = skipResp.skip_stats
 }
 
@@ -1452,7 +1477,7 @@ onBeforeUnmount(() => {
       <main class="dm-main">
         <VAlert v-if="actionMsg" :type="actionOk ? 'success' : 'error'" variant="tonal" class="mb-3" closable density="compact">{{ actionMsg }}</VAlert>
         <VAlert v-if="error" type="error" variant="tonal" class="mb-3" density="compact">{{ error }}</VAlert>
-        <div v-if="loading && !['history', 'transfer'].includes(activeTab)" class="dm-state">
+        <div v-if="loading && !['history', 'transfer', 'hr'].includes(activeTab)" class="dm-state">
           <VProgressCircular indeterminate color="primary" />
         </div>
 
@@ -1873,65 +1898,62 @@ onBeforeUnmount(() => {
             </template>
           </div>
 
-          <div v-if="activeTab === 'hr'" class="dm-record-block mt-3" data-record-block="hr-tasks">
+          <div v-if="activeTab === 'hr'" class="dm-record-block mt-3" data-record-block="hr-tasks" data-record-state="hr" :aria-busy="recordStates.hr.loading">
             <div class="dm-record-block-head">
               <div>
                 <div class="dm-record-block-title">H&R 任务</div>
                 <div class="dm-hint">任务总数 {{ hrSummary.total || 0 }} · 达标 {{ hrSummary.compliant || 0 }} · 超期 {{ hrSummary.overdue || 0 }} · 需做种 {{ hrSummary.needs_seeding || 0 }}</div>
               </div>
-              <div class="d-flex flex-wrap ga-2">
-                <VBtn size="small" variant="tonal" prepend-icon="mdi-check-decagram-outline" class="text-none" @click="askHrClear('compliant')" :disabled="hrClearing">清理达标记录</VBtn>
-                <VBtn size="small" variant="tonal" prepend-icon="mdi-link-off" class="text-none" @click="askHrClear('missing')" :disabled="hrClearing">清理失效记录</VBtn>
+              <div class="d-flex flex-wrap ga-2 align-center">
+                <VSelect v-model="hrStatusFilter" :items="hrStatusFilterOptions" label="状态筛选" density="compact" variant="outlined" hide-details class="dm-hr-filter" />
+                <VBtn size="small" variant="tonal" prepend-icon="mdi-check-decagram-outline" class="text-none" @click="askHrClear('compliant')" :disabled="hrClearing || !(hrSummary.compliant || 0)">清理达标记录</VBtn>
+                <VBtn size="small" variant="tonal" prepend-icon="mdi-link-off" class="text-none" @click="askHrClear('missing')" :disabled="hrClearing || !(hrSummary.needs_seeding || 0)">清理失效记录</VBtn>
               </div>
             </div>
-            <div v-if="hrTaskRows.length === 0" class="dm-state text-center dm-hint">
-              <VIcon icon="mdi-timer-outline" size="48" color="grey-lighten-1" class="mb-2" />
-              <div>暂无 H&R 任务</div>
+            <div class="dm-table-scroll dm-desktop-table mt-2">
+              <VTable density="compact" class="dm-table">
+                <thead>
+                  <tr>
+                    <th class="dm-table-head">种子</th>
+                    <th class="dm-table-head">状态</th>
+                    <th class="dm-table-head">剩余时长</th>
+                    <th class="dm-table-head">截止日期</th>
+                    <th class="dm-table-head">做种进度</th>
+                    <th class="dm-table-head">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!hrTaskRows.length || recordStates.hr.error"><td colspan="6"><TableState v-bind="recordTableState('hr', hrTaskRows, hrStatusFilter !== 'all' ? 'filtered' : 'none')" @retry="loadHrStatus(beginPageRequest())" /></td></tr>
+                  <tr v-for="task in hrTaskRows" :key="`${task.downloader_id}-${task.torrent_hash}`">
+                    <td class="dm-body-text dm-ellipsis" :title="task.name || task.torrent_hash">{{ hrTaskTitle(task) }}<span v-if="task.site" class="dm-hint"> · {{ task.site }}</span></td>
+                    <td><VChip size="x-small" :color="hrStatusColor(task.status)" variant="tonal">{{ task.status_text || task.status }}</VChip></td>
+                    <td class="dm-body-text text-no-wrap">{{ formatDuration(task.remain_seconds) }}</td>
+                    <td class="dm-body-text text-no-wrap">{{ formatTimestamp(task.deadline) }}</td>
+                    <td class="dm-body-text">{{ formatPercent(task.progress) }}</td>
+                    <td>
+                      <VBtn size="small" variant="text" color="error" :loading="hrClearing && hrClearKey === `${task.downloader_id}-${task.torrent_hash}`" @click="askHrClear('task', task)">清理记录</VBtn>
+                    </td>
+                  </tr>
+                </tbody>
+              </VTable>
             </div>
-            <template v-else>
-              <div class="dm-table-scroll dm-desktop-table mt-2">
-                <VTable density="compact" class="dm-table">
-                  <thead>
-                    <tr>
-                      <th class="dm-table-head">种子</th>
-                      <th class="dm-table-head">状态</th>
-                      <th class="dm-table-head">剩余时长</th>
-                      <th class="dm-table-head">截止日期</th>
-                      <th class="dm-table-head">做种进度</th>
-                      <th class="dm-table-head">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="task in hrTaskRows" :key="`${task.downloader_id}-${task.torrent_hash}`">
-                      <td class="dm-body-text dm-ellipsis" :title="task.name || task.torrent_hash">{{ hrTaskTitle(task) }}<span v-if="task.site" class="dm-hint"> · {{ task.site }}</span></td>
-                      <td><VChip size="x-small" :color="hrStatusColor(task.status)" variant="tonal">{{ task.status_text || task.status }}</VChip></td>
-                      <td class="dm-body-text text-no-wrap">{{ formatDuration(task.remain_seconds) }}</td>
-                      <td class="dm-body-text text-no-wrap">{{ formatTimestamp(task.deadline) }}</td>
-                      <td class="dm-body-text">{{ formatPercent(task.progress) }}</td>
-                      <td>
-                        <VBtn size="small" variant="text" color="error" :loading="hrClearing && hrClearKey === `${task.downloader_id}-${task.torrent_hash}`" @click="askHrClear('task', task)">清理记录</VBtn>
-                      </td>
-                    </tr>
-                  </tbody>
-                </VTable>
-              </div>
-              <div class="dm-mobile-list mt-2">
-                <article v-for="task in hrTaskRows" :key="`${task.downloader_id}-${task.torrent_hash}`" class="dm-record-card">
-                  <div class="dm-record-head">
-                    <div class="dm-record-title" :title="task.name || task.torrent_hash">{{ hrTaskTitle(task) }}<span v-if="task.site" class="dm-hint"> · {{ task.site }}</span></div>
-                    <VChip class="dm-record-status" size="x-small" :color="hrStatusColor(task.status)" variant="tonal">{{ task.status_text || task.status }}</VChip>
-                  </div>
-                  <div class="dm-record-meta">
-                    <div class="dm-record-row"><span class="dm-record-label">剩余</span><span class="dm-record-value">{{ formatDuration(task.remain_seconds) }}</span></div>
-                    <div class="dm-record-row"><span class="dm-record-label">截止</span><span class="dm-record-value">{{ formatTimestamp(task.deadline) }}</span></div>
-                    <div class="dm-record-row"><span class="dm-record-label">进度</span><span class="dm-record-value">{{ formatPercent(task.progress) }}</span></div>
-                  </div>
-                  <div class="dm-record-actions">
-                    <VBtn size="small" variant="text" color="error" :loading="hrClearing && hrClearKey === `${task.downloader_id}-${task.torrent_hash}`" @click="askHrClear('task', task)">清理记录</VBtn>
-                  </div>
-                </article>
-              </div>
-            </template>
+            <div class="dm-mobile-list mt-2">
+              <TableState v-if="!hrTaskRows.length || recordStates.hr.error" v-bind="recordTableState('hr', hrTaskRows, hrStatusFilter !== 'all' ? 'filtered' : 'none')" @retry="loadHrStatus(beginPageRequest())" />
+              <article v-for="task in hrTaskRows" :key="`${task.downloader_id}-${task.torrent_hash}`" class="dm-record-card">
+                <div class="dm-record-head">
+                  <div class="dm-record-title" :title="task.name || task.torrent_hash">{{ hrTaskTitle(task) }}<span v-if="task.site" class="dm-hint"> · {{ task.site }}</span></div>
+                  <VChip class="dm-record-status" size="x-small" :color="hrStatusColor(task.status)" variant="tonal">{{ task.status_text || task.status }}</VChip>
+                </div>
+                <div class="dm-record-meta">
+                  <div class="dm-record-row"><span class="dm-record-label">剩余</span><span class="dm-record-value">{{ formatDuration(task.remain_seconds) }}</span></div>
+                  <div class="dm-record-row"><span class="dm-record-label">截止</span><span class="dm-record-value">{{ formatTimestamp(task.deadline) }}</span></div>
+                  <div class="dm-record-row"><span class="dm-record-label">进度</span><span class="dm-record-value">{{ formatPercent(task.progress) }}</span></div>
+                </div>
+                <div class="dm-record-actions">
+                  <VBtn size="small" variant="text" color="error" :loading="hrClearing && hrClearKey === `${task.downloader_id}-${task.torrent_hash}`" @click="askHrClear('task', task)">清理记录</VBtn>
+                </div>
+              </article>
+            </div>
           </div>
 
           <div v-if="activeTab === 'transfer'" class="dm-record-block mt-3" data-record-block="transfer-tasks">
