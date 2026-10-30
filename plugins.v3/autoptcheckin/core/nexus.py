@@ -25,6 +25,8 @@ class NexusSignin(SiteModule):
     signed_marker: str | None = None
     # 站点每日重置小时；声明后，重置前的已签只改消息归属，不拦提交（None=不适用）。
     reset_hour: int | None = None
+    # 验证码站每轮最多「识别+提交」次数；页面动作站(cloak_steps)与已签页面不会重试。
+    captcha_attempts: int = 3
 
     def read_before(self, ctx: SignContext, page: LoginPage | None) -> SignResult:
         return self.note_daily_reset(self._read_before(ctx, page))
@@ -98,15 +100,19 @@ class NexusSignin(SiteModule):
                 result.message = "已提交签到，但回读未找到成功或已签证据"
         return self._with_steps(result, steps, ctx)
     # NexusPHP 标准结构默认消息选择器（占位站自动回退，命中即用；全部未命中仍 unconfirmed）
+    # 简繁并存：繁体站（如老师 NicePT）页面用「簽到」，只写简体取不到节点 → 永远拿不到证据。
+    _SIGN_WORDS = ('签到', '簽到', '打卡')
+    _NODE_ANY = ' or '.join(f'contains(.,"{word}")' for word in _SIGN_WORDS)
+    _NODE_LEAF = ' or '.join(f'contains(text(),"{word}")' for word in _SIGN_WORDS)
     DEFAULT_MESSAGE_XPATHS = (
-        '//h1[contains(.,"签到") or contains(.,"打卡")]',
-        '//h2[contains(.,"签到") or contains(.,"打卡")]',
-        '//h3[contains(.,"签到") or contains(.,"打卡")]',
+        f'//h1[{_NODE_ANY}]',
+        f'//h2[{_NODE_ANY}]',
+        f'//h3[{_NODE_ANY}]',
         '//div[contains(@class,"alert") or contains(@class,"layui-layer")]',
         '//div[contains(@id,"msg") or contains(@class,"message")]',
-        '//td[contains(@class,"text") and contains(text(),"签到")]',
+        f'//td[contains(@class,"text") and ({_NODE_LEAF})]',
         '//table[contains(@class,"t1")]//tr[1]',
-        '//div[@id="main"]//font[contains(text(),"签到")]',
+        f'//div[@id="main"]//font[{_NODE_LEAF}]',
     )
     # 已签判据是词表：出现在唯一消息元素里即视为已签；新词只加列表，不再逐条写映射。
     SIGNED_TEXTS = (
@@ -176,6 +182,35 @@ class NexusSignin(SiteModule):
         ctx.http.post(form.action, data=form.data, **kwargs)
 
     def signin(self, ctx: SignContext) -> SignResult:
+        """签到入口：验证码站识别/提交后拿不到证据时重试，每次重新取图（上限 captcha_attempts）。"""
+        limit = 1 if getattr(self, "cloak_steps", None) else max(1, int(getattr(self, "captcha_attempts", 1) or 1))
+        out: dict = {}
+        attempts = 0
+        result = None
+        while attempts < limit:
+            attempts += 1
+            out.clear()
+            result = self._signin_once(ctx, out)
+            # 只在「已提交、无证据、且站点仍以未签到的验证码表单作答」时重试：
+            # 已签到的页面不再带 imagehash/imagestring，因此不会对着已签站点重复提交。
+            if (result.status != SignStatus.UNCONFIRMED or attempts >= limit
+                    or ctx.cancel.is_set() or getattr(ctx, "cloak_submit_error", None)
+                    or not self._page_has_captcha(out.get("fresh"))
+                    or self.discover_form(ctx, out["fresh"]) is None):
+                break
+        if attempts > 1 and result is not None:
+            result.metadata = {**(result.metadata or {}), "signin_attempts": attempts}
+            if result.status == SignStatus.UNCONFIRMED:
+                result.message = f"{result.message or ''}（验证码已重试 {attempts} 次仍无成功证据）"
+        return result
+
+    @staticmethod
+    def _page_has_captcha(page: LoginPage | None) -> bool:
+        """未签到的 NexusPHP 签到页带 imagehash + imagestring 字段；已签或非验证码站不带。"""
+        text = getattr(page, "text", "") or ""
+        return "imagestring" in text and "imagehash" in text
+
+    def _signin_once(self, ctx: SignContext, out: dict) -> SignResult:
         if ctx.cancel.is_set():
             return ctx.result(status=SignStatus.CANCELLED, message="任务已取消")
         attendance_url = urljoin(self.url, self.attendance_path)
@@ -243,4 +278,5 @@ class NexusSignin(SiteModule):
             except Exception as exc:
                 fresh = None
                 ctx.post_read_error = type(exc).__name__
+        out["fresh"] = fresh
         return self.read_after(ctx, fresh)

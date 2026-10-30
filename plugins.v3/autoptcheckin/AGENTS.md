@@ -95,6 +95,7 @@
 - 原生站点实现 `SiteModule`，通过类属性声明 `id/name/url/credential/login_capable/cf/record_spec`，仅实现 `signin(ctx)`；`sites/native/` 逐模块发现，导入失败隔离为 `skipped`，不阻断其他站点。
 - `RecordSpec` 默认 page_message，每个 XPath 必须选中唯一消息元素；多选择器遇空值、歧义或无效表达式继续扫描，首个非空文本停止，再按 status_map 声明顺序映射 signed/unsigned（无匹配仍 unconfirmed，不继续找成功词）。NexusSignin 的合成占位声明默认回退消息链，站点可关闭 use_default_message；response_json 仍按 response_field 的精确类型和值匹配。signed_marker 可确认安全前读 already 和提交后新页 success；日期只作本人行匹配，UID 不再解析，不以缺失字段或整页文本补造结论。校准记录见 sites/native/AGENTS.md。
 - `NexusSignin` 提供 attendance 页面 GET、唯一 POST 表单发现、验证码钩子和提交后的无条件新页面 GET 回读；提交响应不能替代回读，超时或异常不得自动重试。
+- 验证码站每轮最多 `captcha_attempts`（默认 3）次「识别+提交」：仅当回读 unconfirmed、新页面仍是未签到的验证码表单（含 imagehash+imagestring 且能发现唯一 POST 表单）时重新取图再试一次；提交异常/取消/已签页面/页面动作站(cloak_steps)/回读明确 failed 都不得重试（failed 的当场重试由 runner 的 retry_count 负责）。尝试次数写入 `metadata.signin_attempts`，最终仍无证据时消息追加「（验证码已重试 N 次仍无成功证据）」。
 - `SignContext` 由执行边界注入已认证的 HTTP client、站点锁、取消事件及可选 `page/ocr`；`SiteModule` 不查凭据、不创建或关闭资源，资源生命周期由 `core.native`/runner 管理。
 - native、custom、integrations 使用各自执行器；DarkLand/DigitalCore 签到不适用，M-Team 仅登录。能力声明与用户选择共同约束手动/自动入口。
 

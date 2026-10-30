@@ -7,7 +7,7 @@
 - 凭证与证据来源是两个维度：凭证术语为 cookie/password/api_key，证据来源为 page_message/response_json。OpenCD 使用 cookie + response_json；蜂巢对照为 api_key + response_json，不在本插件添加论坛站。旧凭证枚举 api 的统一改名不在本批范围；集成账密站为 rousi/sunnypt（kind=password，PeerGo 会话失效时账密刷新，SunnyPT JWT 为登录产物；执行分支由 integrations 实现并复用站点锁），mteam 保留 api_key 元数据，独立支持 CloakBrowser 真实登录保活。
 - `RecordSpec.source=page_message` 只匹配唯一消息元素；`response_json` 按 `response_field` 取顶层标量并以类型和值精确匹配 `status_map`，不把任意非空值当成功。
 - `pre_read_spec` 用于安全页面前读及只读核验；`signed_marker` 同时用于安全新页回读；页面 JSON 不冒充动作回执。response_json 声明不继承通用 POST；六站真实动作、回执接线与无条件安全回读已在 C4 实现。
-- `batch2-message-pending-calibration` 是历史合成占位，当前 NexusSignin 默认回退消息链（可由 use_default_message 关闭），不是生产选择器；`未签到` 为合成回归输入。没有证据保持 unconfirmed，不从整个页面、表单消失或未知 JSON 值推断成功。
+- `batch2-message-pending-calibration` 是历史合成占位，当前 NexusSignin 默认回退消息链（可由 use_default_message 关闭），不是生产选择器；`未签到` 为合成回归输入。没有证据保持 unconfirmed，不从整个页面、表单消失或未知 JSON 值推断成功。默认链的节点条件同时覆盖简繁（`签到`/`簽到`/`打卡`），繁体站（如老师 NicePT，2026-10-30 线上永远 pending 的根因）无需自定义判据。
 - 本表的 standard-declared 说明证据声明可表达，不表示提交协议已实现；special-hook 说明提交动作需站点钩子。两者与 verified 是独立维度。
 
 ## B1-6 六站对照（3.6.6）
@@ -92,7 +92,7 @@
 | 站名 / ID | hook 类型 | 实现要点 | hook 状态 | 待实现或校准 |
 | --- | --- | --- | --- | --- |
 | 52PT / 52pt、CHDBits / chdbits | 随机问答 | bakatest 参数、数字奖励正则、保留明确重复文本 | hook_implemented=True（C7）；52pt 另 signin_capable=False（2026-10-28） | 已实现，待生产校准；52pt 签到入口已下线（见 2026-10-28 取证） |
-| 包子 / baozi、冬樱 / dongying、可乐 / kelu、NaturePT / naturept、NovaHD / novahd、OshenPT / oshen、凤凰PT / phoenixpt | attendance CAPTCHA | imagehash/imagestring、OCR、消息节点校准；提交后不自动重试 | hook_implemented=True（C1） | 已实现，待生产校准（见分组校准清单） |
+| 包子 / baozi、冬樱 / dongying、可乐 / kelu、NaturePT / naturept、NovaHD / novahd、OshenPT / oshen、凤凰PT / phoenixpt | attendance CAPTCHA | imagehash/imagestring、OCR、消息节点校准；提交后重新取图重试 ≤3 次 | hook_implemented=True（C1） | 已实现，待生产校准（见分组校准清单） |
 | PlayLet / playlet、烧包乐园 / shaobaoyuan、聆音Club / soulvoice、TU88 / tu88、VC-Lib / vclib | attendance CAPTCHA | 同通用 CAPTCHA 协议，但逐站核对生产页面 | hook_implemented=True（C1） | 已实现，待生产校准（见分组校准清单） |
 | 垃圾堆 / lajidui、思齐 / siqi | 独立 OCR | 独立验证码参数；siqi 完整奖励正则及 attend-success-effect class | hook_implemented=True（C2） | 已实现，待生产校准（见分组校准清单） |
 | BTSchool / btschool | 副作用 GET | index.php?action=addbonus；入口消失不足以证明成功，需回读确证 | hook_implemented=True（C2） | 已实现，待生产校准（见分组校准清单） |
@@ -121,7 +121,7 @@
 
 ## C1：attendance CAPTCHA hook（3.8.1）
 
-12 站 V2 副本均仅覆盖域名，无字段、Referer 或成功文案差异；共用 helper 的 4–6 位 alnum，ddddocr 未识别才降级 ocrhelper。图片下载由 ctx.ocr 执行；OCR 和提交均使用 attendance 页 Referer。提交后不重试，始终新 GET 回读。
+12 站 V2 副本均仅覆盖域名，无字段、Referer 或成功文案差异；共用 helper 的 4–6 位 alnum，ddddocr 未识别才降级 ocrhelper。图片下载由 ctx.ocr 执行；OCR 和提交均使用 attendance 页 Referer。提交后始终新 GET 回读；回读仍无证据且站点继续给未签到的验证码表单时，按 NexusSignin 的有界重试（每轮 ≤3 次，每次重新取图）再试，异常/取消/已签/明确未签不重试。
 
 | site | hook 状态 | verified | 遗留校准 |
 | --- | --- | --- | --- |
