@@ -11,6 +11,25 @@ from .models import Evidence, LoginPage, LoginStatus, SignResult, SignStatus
 from .sitemodel import RecordSpec, SignContext, SiteModule, page_available, page_maintenance
 
 
+def captcha_hint(result) -> str:
+    """把识别/提交诊断压成一句话附在最终消息里（详情在 metadata，history 可查）。"""
+    meta = result.metadata or {}
+    trace = meta.get("captcha") or {}
+    submit = meta.get("submit") or {}
+    parts = []
+    if trace.get("code"):
+        parts.append(f"最近识别={trace['code']}/{trace.get('engine', '')}".rstrip("/"))
+    elif trace.get("error"):
+        parts.append(f"未取到验证码（{trace['error']}）")
+    if submit.get("status") is not None:
+        parts.append(f"提交 HTTP {submit['status']}")
+    if submit.get("still_captcha"):
+        parts.append("响应仍是验证码表单")
+    elif submit.get("snippet"):
+        parts.append(f"响应片段「{str(submit['snippet'])[:60]}」")
+    return "，".join(parts)
+
+
 @dataclass
 class SigninForm:
     action: str
@@ -198,10 +217,16 @@ class NexusSignin(SiteModule):
                     or not self._page_has_captcha(out.get("fresh"))
                     or self.discover_form(ctx, out["fresh"]) is None):
                 break
-        if attempts > 1 and result is not None:
-            result.metadata = {**(result.metadata or {}), "signin_attempts": attempts}
-            if result.status == SignStatus.UNCONFIRMED:
-                result.message = f"{result.message or ''}（验证码已重试 {attempts} 次仍无成功证据）"
+        if result is not None:
+            hint = captcha_hint(result) if result.status == SignStatus.UNCONFIRMED else ""
+            if attempts > 1:
+                result.metadata = {**(result.metadata or {}), "signin_attempts": attempts}
+                if result.status == SignStatus.UNCONFIRMED:
+                    tail = f"；{hint}" if hint else ""
+                    result.message = f"{result.message or ''}（验证码已重试 {attempts} 次仍无成功证据{tail}）"
+            elif hint:
+                # 单次尝试的验证码站：把识别/提交现场带出来，否则消息没有可查线索。
+                result.message = f"{result.message or ''}（{hint}）"
         return result
 
     @staticmethod
@@ -279,4 +304,11 @@ class NexusSignin(SiteModule):
                 fresh = None
                 ctx.post_read_error = type(exc).__name__
         out["fresh"] = fresh
-        return self.read_after(ctx, fresh)
+        result = self.read_after(ctx, fresh)
+        trace = getattr(ctx, "captcha_trace", None)
+        if trace:
+            # 验证码站的失败现场：识别结果/原因 + 提交响应切片，供 history 复盘。
+            result.metadata = {**(result.metadata or {}),
+                               "captcha": trace,
+                               "submit": getattr(ctx.http, "last_post", None) or {}}
+        return result

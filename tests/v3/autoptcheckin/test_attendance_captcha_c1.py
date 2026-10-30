@@ -89,7 +89,7 @@ def test_kelu_bare_signin_heading_is_not_reported_as_a_result():
     http = Http([form_page(), '<h1>签到</h1>'])
     result = site.signin(context(site, http, Mock(return_value='Ab1234')))
     assert result.status == 'unconfirmed'
-    assert result.message == '已提交签到，但回读未找到成功或已签证据'
+    assert result.message == '已提交签到，但回读未找到成功或已签证据（最近识别=Ab1234/ddddocr）'
     assert [call[0] for call in http.calls] == ['get', 'post', 'get']
 
 

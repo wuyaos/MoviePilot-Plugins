@@ -70,7 +70,7 @@ def test_captcha_retry_is_bounded_and_reports_the_attempt_count():
     result = site.signin(context(site, Http(pages)))
     assert result.status == 'unconfirmed'
     assert result.message == ('已提交签到，但回读未找到成功或已签证据（页面提示：验证码错误）'
-                              '（验证码已重试 3 次仍无成功证据）')
+                              '（验证码已重试 3 次仍无成功证据；最近识别=Ab1234/ddddocr）')
     assert result.metadata['signin_attempts'] == 3
 
 

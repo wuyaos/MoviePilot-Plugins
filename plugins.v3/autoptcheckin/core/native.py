@@ -1,4 +1,5 @@
 """Native execution boundary: credentials and resources stay outside site declarations."""
+import re
 from urllib.parse import urljoin, urlsplit
 from email.message import Message
 from http.cookies import SimpleCookie
@@ -48,11 +49,49 @@ def decode_response(response):
         return content.decode('utf-8', errors='replace')
 
 
+_BROWSER_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+               '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+
+
+def browser_ua(value=None):
+    """验证码图下载与会话校验都要求浏览器指纹：UA 为空/插件 UA/库默认 UA 时回退到固定浏览器 UA。"""
+    text = str(value or '').strip()
+    if text.startswith('Mozilla/5.0') and 'Plugin/' not in text:
+        return text
+    return _BROWSER_UA
+
+
+_CAPTCHA_NOTE_KEYS = ('验证码', '驗證碼', '错误', '錯誤', '失败', '失敗', '成功',
+                      '已經簽到', '已经签到', '簽到', '签到')
+
+
+def response_note(page):
+    """POST 响应诊断切片：状态码、是否仍是验证码表单、首个关键文案片段（history 是唯一现场）。"""
+    if page is None:
+        return {'status': None, 'still_captcha': False, 'snippet': ''}
+    text = getattr(page, 'text', '') or ''
+    if not isinstance(text, str):
+        # 宿主解码层/测试替身可能给出非文本体：只留状态码，不猜内容。
+        return {'status': getattr(page, 'status_code', None), 'still_captcha': False, 'snippet': ''}
+    plain = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', text)).strip()
+    note = {'status': getattr(page, 'status_code', None),
+            'still_captcha': 'imagestring' in text and 'imagehash' in text}
+    for key in _CAPTCHA_NOTE_KEYS:
+        index = plain.find(key)
+        if index >= 0:
+            note['snippet'] = plain[max(0, index - 40):index + 90]
+            break
+    else:
+        note['snippet'] = plain[:120]
+    return note
+
+
 class NativeHttpClient:
     def __init__(self, credential, site_info, session=None):
         self.session = session
         self.credential = credential
         self.info = site_info
+        self.last_post = None
         parsed = SimpleCookie()
         parsed.load(credential.value)
         self.cookies = {key: morsel.value for key, morsel in parsed.items()}
@@ -70,7 +109,7 @@ class NativeHttpClient:
             try:
                 from curl_cffi import requests as cffi_requests
                 m = {'get': cffi_requests.get, 'post': cffi_requests.post}[method]
-                resp = m(url, headers={'User-Agent': self.info.get('ua') or 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36',
+                resp = m(url, headers={'User-Agent': browser_ua(self.info.get('ua')),
                                        'Referer': kwargs.pop('referer', self.info.get('url') or '')},
                          cookies=self.cookies, timeout=20, impersonate='chrome',
                          allow_redirects=True, proxies=({'https': settings.PROXY, 'http': settings.PROXY} if self.info.get('proxy') and settings.PROXY else None))
@@ -79,7 +118,7 @@ class NativeHttpClient:
             except Exception:
                 pass  # cffi 失败退回普通通道
         session_args = {"session": self.session} if self.session is not None else {}
-        request = RequestUtils(**session_args, cookies=self.cookies, ua=self.info.get('ua'),
+        request = RequestUtils(**session_args, cookies=self.cookies, ua=browser_ua(self.info.get('ua')),
                                referer=kwargs.pop('referer', self.info.get('url')), timeout=20,
                                headers=kwargs.pop('headers', None),
                                content_type='application/json; charset=UTF-8' if 'json' in kwargs else 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -101,7 +140,7 @@ class NativeHttpClient:
     def get_bytes(self, url):
         from app.sdk.config import settings
         from app.sdk.network import RequestUtils
-        response = RequestUtils(cookies=self.cookies, ua=self.info.get('ua'), timeout=20,
+        response = RequestUtils(cookies=self.cookies, ua=browser_ua(self.info.get('ua')), timeout=20,
                                 proxies=settings.PROXY if self.info.get('proxy') else None).get_res(url=url)
         if response is None or response.status_code != 200:
             raise ValueError('image unavailable')
@@ -115,7 +154,10 @@ class NativeHttpClient:
             kwargs['json'] = json
         else:
             kwargs['data'] = data
-        return self._request('post', url, **kwargs)
+        page = self._request('post', url, **kwargs)
+        # 提交响应是验证码站唯一的失败现场（qnap 日志不落盘），留切片进 metadata。
+        self.last_post = response_note(page)
+        return page
 
 
 def native_context(site, credential, info, lock, cancel):
@@ -124,7 +166,7 @@ def native_context(site, credential, info, lock, cancel):
         # Reuse the existing engines, but never an adapter's submission/retry loop.
         from ..helper.ocr_helper import recognize_captcha
         cookie = "; ".join(f"{key}={value}" for key, value in http.cookies.items())
-        return recognize_captcha(cookie=cookie, ua=info.get('ua'),
+        return recognize_captcha(cookie=cookie, ua=browser_ua(info.get('ua')),
                                  proxy=info.get('proxy', False), timeout=20, **kwargs)
     def public_get(url, *, referer=None):
         from app.sdk.network import RequestUtils
