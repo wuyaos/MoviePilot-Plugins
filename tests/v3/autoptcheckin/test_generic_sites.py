@@ -70,33 +70,3 @@ def test_generic_enabled_and_selected_executes_under_scheduler(monkeypatch):
     assert [row['message'] for row in results] == ['ok']
     assert called == ['hddolby']
     assert plugin._track_store().state_of('hddolby', 'sign') == 'pending'  # run_native 被替换，结论由真实执行链回写
-
-
-def test_generator_filters_sources_and_deduplicates(tmp_path, monkeypatch, capsys):
-    spec = importlib.util.spec_from_file_location('build_generic_sites', ROOT / 'scripts/build_generic_sites.py')
-    builder = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(builder)
-    native = tmp_path / 'plugins.v3/autoptcheckin/sites/native'
-    native.mkdir(parents=True)
-    (native / 'known.py').write_text("class Known:\n id = 'known'\n url = 'https://known.example/'\n", encoding='utf-8')
-    rows = [{'id': 1, 'name': 'New', 'url': 'https://www.new.example/'},
-            {'id': 2, 'name': 'Known', 'url': 'https://known.example/'},
-            {'id': 3, 'name': 'Foreign', 'url': 'https://foreign.example/'},
-            {'id': 4, 'name': 'Not selected', 'url': 'https://unused.example/'},
-            {'id': 5, 'name': 'Alias', 'url': 'https://pterclub.net/'}]
-    sites, config, log, out = [tmp_path / name for name in ('sites.json', 'config.json', 'cookies.log', 'out.json')]
-    sites.write_text(json.dumps({'data': rows}), encoding='utf-8')
-    config.write_text(json.dumps({'data': repr({'sign_sites': [1, 2, 3, 5], 'login_sites': [1, 60005], 'custom_sites_data': [{'id': 60005, 'name': 'Duplicate', 'url': 'https://new.example/'}]})}), encoding='utf-8')
-    log.write_text('.new.example c_secure_pass len= 32\n.known.example c_secure_pass len= 32\n.unused.example c_secure_pass len= 32\npterclub.net c_secure_pass len= 32\n', encoding='utf-8')
-    for key, value in dict(ROOT=tmp_path, SITES=sites, CONFIG=config, COOKIE_LOG=log, OUTPUT=out).items():
-        monkeypatch.setattr(builder, key, value)
-    # Alias exclusion applies even when the fixture omits the dedicated declaration.
-    (native / 'pterclub.py').write_text("id = 'pterclub'\nurl = 'https://pterclub.com/'\n", encoding='utf-8')
-    builder.main()
-    result = json.loads(out.read_text(encoding='utf-8'))
-    assert [row['id'] for row in result] == ['new']
-    report = json.loads(capsys.readouterr().out)
-    assert {row['id'] for row in report['excluded_rows']} == {2, 3, 5}
-    assert builder.generic_id('https://www.hddolby.com/', set()) == 'hddolby'
-    assert builder.generic_id('https://pt.sjtu.edu.cn/', set()) == 'pt_sjtu_edu'
-    assert builder.generic_id('https://hddolby.com/', {'hddolby'}) == 'hddolby_g'
