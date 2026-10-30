@@ -28,18 +28,18 @@ const emptyState = computed(() => emptyStates[props.empty])
     <span class="mdi mdi-alert-circle-outline dm-table-state-icon dm-table-state-error" aria-hidden="true" />
     <p class="dm-table-state-title">记录加载失败</p>
     <p v-if="typeof error === 'string'" class="dm-table-state-help dm-table-state-error">{{ error }}</p>
-    <button type="button" class="dm-table-state-button" @click="emit('retry')">重试</button>
+    <VBtn size="small" variant="tonal" color="primary" type="button" class="dm-table-state-button" @click="emit('retry')">重试</VBtn>
   </div>
   <div v-else-if="refreshFailed" class="dm-table-state dm-table-state--refresh" role="status">
     <span class="mdi mdi-alert-outline dm-table-state-icon" aria-hidden="true" />
     <p class="dm-table-state-help">刷新失败，保留上次结果{{ typeof refreshFailed === 'string' ? '：' + refreshFailed : '' }}</p>
-    <button type="button" class="dm-table-state-button" @click="emit('retry')">重试</button>
+    <VBtn size="small" variant="tonal" color="primary" type="button" class="dm-table-state-button" @click="emit('retry')">重试</VBtn>
   </div>
   <div v-else-if="emptyState" class="dm-table-state" role="status">
     <span class="mdi dm-table-state-icon" :class="emptyState.icon" aria-hidden="true" />
     <p class="dm-table-state-title">{{ emptyState.title }}</p>
     <p v-if="emptyState.help" class="dm-table-state-help">{{ emptyState.help }}</p>
-    <button v-if="empty === 'filtered'" type="button" class="dm-table-state-button" @click="emit('reset-filters')">重置筛选</button>
+    <VBtn size="small" variant="tonal" color="primary" v-if="empty === 'filtered'" type="button" class="dm-table-state-button" @click="emit('reset-filters')">重置筛选</VBtn>
   </div>
 </template>
 
@@ -50,7 +50,6 @@ const emptyState = computed(() => emptyStates[props.empty])
 .dm-table-state-icon { font-size: 20px; line-height: 24px; }
 .dm-table-state-error { color: var(--dm-color-error); }
 .dm-table-state--refresh { min-height: 0; flex-direction: row; flex-wrap: wrap; color: var(--dm-color-warning); }
-.dm-table-state-button { min-height: 32px; padding: 4px 12px; border: 0; border-radius: 4px; color: rgb(var(--v-theme-primary)); background: transparent; cursor: pointer; font-family: inherit; font-size: var(--dm-text-button-size); font-weight: var(--dm-text-button-weight); line-height: var(--dm-text-button-line-height); }
 .dm-table-state-button:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: 2px; }
 .dm-table-skeleton { display: block; width: 100%; height: 24px; border-radius: 4px; background: rgba(var(--v-theme-on-surface), var(--v-hover-opacity)); }
 .dm-table-state-sr { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

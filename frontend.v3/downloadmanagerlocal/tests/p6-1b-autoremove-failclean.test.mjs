@@ -72,7 +72,7 @@ test('P6-1b 自动删种预览：首次骨架、错误重试、刷新失败保�
     await bounded(flush(), 'autoremove loading flush')
     const loading = view.block('autoremove')
     assert.equal(loading.props['aria-busy'], true)
-    assert.equal(walk(loading, node => node.type === 'th').length, 7)
+    assert.equal(walk(loading, node => node.type === 'th').length, 8)
     assert.equal(walk(loading, node => node.props.class?.includes('dm-table-skeleton')).length, 3)
 
     pending.reject(Error('autoremove offline'))

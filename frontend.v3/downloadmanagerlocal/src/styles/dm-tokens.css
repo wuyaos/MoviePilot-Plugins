@@ -1,5 +1,6 @@
 /* Tokens stay inside the plugin and its standalone presentation components. */
-:where(.dm-config, .dm-page, .dm-module-header, .dm-module-table, .dm-table-state) {
+:where(.dm-config, .dm-page, .dm-module-header, .dm-module-table, .dm-table-state, .dm-select-menu, .dm-action-menu) {
+  --dm-font-family: inherit;
   --dm-color-secondary: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   --dm-color-disabled: rgba(var(--v-theme-on-surface), var(--v-disabled-opacity));
   --dm-color-warning: rgb(var(--v-theme-warning));
@@ -106,10 +107,10 @@
   letter-spacing: normal;
   text-transform: none;
 }
-:where(.dm-config, .dm-page) .v-btn--size-small {
+:where(.dm-config) .v-btn--size-small {
   height: 32px;
 }
-:where(.dm-config, .dm-page) .v-btn--icon.v-btn--size-small {
+:where(.dm-config) .v-btn--icon.v-btn--size-small {
   width: 32px;
   min-width: 32px;
 }
@@ -150,4 +151,30 @@
   font-size: var(--dm-text-help-size);
   font-weight: var(--dm-text-help-weight);
   line-height: var(--dm-text-help-line-height);
+}
+
+/* Data-page density is independent of the configuration form. */
+:where(.dm-page, .dm-page .dm-module-header, .dm-page .dm-module-table, .dm-page .dm-table-state) {
+  --dm-text-title-size: 16px;
+  --dm-text-title-line-height: 24px;
+  --dm-text-body-size: 13px;
+  --dm-text-metric-size: 18px;
+  --dm-text-metric-weight: 600;
+  --dm-text-metric-line-height: 24px;
+  --dm-button-height: 28px;
+}
+/* Buttons and chips retain the host Vuetify size, radius and interaction styles. */
+:where(.dm-page) .v-chip + .v-chip { margin-inline-start: 4px; }
+
+/* Teleported menus need their own plugin scope; .dm-page cannot reach them. */
+:where(.dm-select-menu, .dm-action-menu) { --dm-text-body-size: 13px; font-family: var(--dm-font-family); }
+:where(.dm-select-menu, .dm-action-menu) .v-list-item-title {
+  font-family: var(--dm-font-family);
+  font-size: var(--dm-text-body-size);
+  font-weight: var(--dm-text-body-weight);
+  line-height: var(--dm-text-body-line-height);
+  letter-spacing: normal;
+}
+@media (pointer: coarse) {
+  :where(.dm-page, .dm-page .dm-module-header, .dm-page .dm-module-table, .dm-page .dm-table-state) { --dm-button-height: 32px; }
 }

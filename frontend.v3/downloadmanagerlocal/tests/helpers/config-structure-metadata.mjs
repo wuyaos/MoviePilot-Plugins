@@ -1,4 +1,5 @@
 // Read-only evidence for the P2-1d contract fixture update. Run from the frontend directory.
+import { MODULE_ICONS } from '../../src/components/module-icons.js'
 import fs from 'node:fs'
 import { createHash } from 'node:crypto'
 import { parse } from '@vue/compiler-sfc'
@@ -19,7 +20,7 @@ const delta = [...new Set([...Object.keys(before), ...Object.keys(after)])].filt
 }))
 async function inspect(value) {
   const calls = [], scope = effectScope()
-  const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', scriptOf(value).replace(/^import .*$/gm, '') + '\nreturn { defaults, PANE_RESET_KEYS, saveConfig };')
+  const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', scriptOf(value).replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`) + '\nreturn { defaults, PANE_RESET_KEYS, saveConfig };')
   try {
     const state = scope.run(() => setup(reactive, ref, computed, watch, () => {}, () => ({ initialConfig: { enabled: true }, pluginId: 'DownloadManagerLocal', api: { put: async (_path, payload) => { calls.push(payload); return { success: true } } } }), () => () => {}))
     await state.saveConfig()

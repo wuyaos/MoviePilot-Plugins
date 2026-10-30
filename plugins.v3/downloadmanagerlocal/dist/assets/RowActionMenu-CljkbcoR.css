@@ -1,5 +1,6 @@
 /* Tokens stay inside the plugin and its standalone presentation components. */
-:where(.dm-config, .dm-page, .dm-module-header, .dm-module-table, .dm-table-state) {
+:where(.dm-config, .dm-page, .dm-module-header, .dm-module-table, .dm-table-state, .dm-select-menu, .dm-action-menu) {
+  --dm-font-family: inherit;
   --dm-color-secondary: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   --dm-color-disabled: rgba(var(--v-theme-on-surface), var(--v-disabled-opacity));
   --dm-color-warning: rgb(var(--v-theme-warning));
@@ -106,10 +107,10 @@
   letter-spacing: normal;
   text-transform: none;
 }
-:where(.dm-config, .dm-page) .v-btn--size-small {
+:where(.dm-config) .v-btn--size-small {
   height: 32px;
 }
-:where(.dm-config, .dm-page) .v-btn--icon.v-btn--size-small {
+:where(.dm-config) .v-btn--icon.v-btn--size-small {
   width: 32px;
   min-width: 32px;
 }
@@ -152,31 +153,60 @@
   line-height: var(--dm-text-help-line-height);
 }
 
-.dm-downloader-badge[data-v-1ec087bc] {
+/* Data-page density is independent of the configuration form. */
+:where(.dm-page, .dm-page .dm-module-header, .dm-page .dm-module-table, .dm-page .dm-table-state) {
+  --dm-text-title-size: 16px;
+  --dm-text-title-line-height: 24px;
+  --dm-text-body-size: 13px;
+  --dm-text-metric-size: 18px;
+  --dm-text-metric-weight: 600;
+  --dm-text-metric-line-height: 24px;
+  --dm-button-height: 28px;
+}
+/* Buttons and chips retain the host Vuetify size, radius and interaction styles. */
+:where(.dm-page) .v-chip + .v-chip { margin-inline-start: 4px; }
+
+/* Teleported menus need their own plugin scope; .dm-page cannot reach them. */
+:where(.dm-select-menu, .dm-action-menu) { --dm-text-body-size: 13px; font-family: var(--dm-font-family); }
+:where(.dm-select-menu, .dm-action-menu) .v-list-item-title {
+  font-family: var(--dm-font-family);
+  font-size: var(--dm-text-body-size);
+  font-weight: var(--dm-text-body-weight);
+  line-height: var(--dm-text-body-line-height);
+  letter-spacing: normal;
+}
+@media (pointer: coarse) {
+  :where(.dm-page, .dm-page .dm-module-header, .dm-page .dm-module-table, .dm-page .dm-table-state) { --dm-button-height: 32px; }
+}
+
+.dm-downloader-badge[data-v-a487349a] {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   min-width: 0;
 }
-.dm-downloader-badge-mark[data-v-1ec087bc] {
+.dm-downloader-badge-mark[data-v-a487349a] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  border-radius: 26%;
+  border-radius: 50%;
   color: #fff;
   font-weight: 700;
   line-height: 1;
 }
-.dm-downloader-badge-mark--unknown[data-v-1ec087bc] {
+.dm-downloader-badge-mark--unknown[data-v-a487349a] {
   color: var(--dm-color-secondary);
   background: rgba(var(--v-theme-on-surface), 0.08);
 }
-.dm-downloader-badge-name[data-v-1ec087bc] {
+.dm-downloader-badge-name[data-v-a487349a] {
   font-size: var(--dm-text-badge-size);
   font-weight: var(--dm-text-badge-weight);
   line-height: var(--dm-text-badge-line-height);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dm-row-menu[data-v-bb0e98b2] { display: inline-flex; align-items: center; white-space: nowrap;
 }

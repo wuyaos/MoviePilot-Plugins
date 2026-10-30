@@ -1,3 +1,4 @@
+import { MODULE_ICONS } from '../src/components/module-icons.js'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
@@ -14,7 +15,7 @@ assert.deepEqual(compileTemplate({ source: descriptor.template.content, filename
 const Header = await loadSfc('ModuleHeader.vue')
 const setup = new Function('reactive', 'ref', 'computed', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount',
   'defineProps', 'defineEmits', 'getPluginApi', 'postPluginApi', 'postPluginJsonApi',
-  `${descriptor.scriptSetup.content.replace(/^import .*$/gm, '')}\nreturn { overview, diagnostics, transferStatus, hrTasks, autoremoveStatus, failcleanStatus, siteTagStatus, renameStatus, moduleRunning, moduleHeaders, moduleCards, moduleGridCards, activeTab };`)
+  `${descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)}\nreturn { overview, diagnostics, transferStatus, hrTasks, autoremoveStatus, failcleanStatus, siteTagStatus, renameStatus, moduleRunning, moduleHeaders, moduleCards, moduleGridCards, activeTab };`)
 function page(watcher = watch) {
   const noRequest = () => { throw new Error('Header projection must not request API') }
   return setup(reactive, ref, computed, watcher, nextTick, () => {}, () => {},
@@ -29,43 +30,30 @@ function elements(node, found = []) {
 const attribute = (node, name) => node.props.find(prop => prop.type === 6 && prop.name === name)?.value?.content
 const directive = (node, name, arg) => node.props.find(prop => prop.type === 7 && prop.name === name && (!arg || prop.arg?.content === arg))?.exp?.content
 
-test('Page 真实 SFC 编译并接入七模块公共头部；seed 保留旧头部，查看数据只调用原导航', () => {
+test('Page 接入七模块公共头部，seed 不再独立显示，总览只导航不执行业务', () => {
   const p = page()
   assert.deepEqual(Object.keys(p.moduleHeaders.value), ['transfer', 'hr', 'autoremove', 'failclean', 'rename', 'tag', 'upload_limit'])
-  assert.ok(p.moduleCards.value.find(card => card.key === 'seed'))
-  const nodes = elements(parse(source, { filename: 'Page.header-ast.vue' }).descriptor.template.ast)
-  const wrapper = nodes.find(node => attribute(node, 'class') === 'dm-card-heading')
-  assert.equal(directive(wrapper, 'if'), 'moduleHeaders[card.key]')
-  const header = wrapper.children.find(node => node.tag === 'ModuleHeader')
-  assert.equal(directive(header, 'bind'), 'moduleHeaders[card.key]')
-  const link = wrapper.children.find(node => node.tag === 'VBtn')
+  const nodes = elements(parse(source).descriptor.template.ast)
+  const overview = nodes.find(node => attribute(node, 'class') === 'dm-overview-card')
+  assert.equal(directive(overview, 'for'), 'card in sevenCards')
+  assert.equal(overview.children.filter(node => node.tag === 'ModuleHeader').length, 1)
+  const link = overview.children.find(node => node.tag === 'VBtn')
   assert.equal(directive(link, 'on', 'click'), 'openModuleRecords(card.key)')
-  assert.equal(link.children.find(node => node.type === 2).content, '查看数据')
-  const actions = nodes.find(node => attribute(node, 'class') === 'dm-module-actions')
-  const action = actions.children.find(node => directive(node, 'for') === 'action in card.actions')
-  assert.equal(directive(action, 'on', 'click'), 'action.run()')
-  assert.equal(directive(action, 'bind', 'disabled'), "moduleRunning !== '' && moduleRunning !== action.key")
-  const detail = nodes.find(node => attribute(node, 'class') === 'dm-module-detail')
-  assert.ok(elements(detail).some(node => node.tag === 'ModuleDetailPanel'))
+  assert.ok(!elements(overview).some(node => directive(node, 'on', 'click') === 'action.run()'))
 })
 
-test('转移与命名专页各投影一张公共头部，模块标题只出现一次，记录区保留分区标题', async () => {
-  // Test the real computed tab projection without running unrelated navigation watchers.
+test('业务专页仅一处公共头部及动作，转移与命名保留分区标题', async () => {
   const p = page(() => {})
-  const nodes = elements(parse(source, { filename: 'Page.header-tabs-ast.vue' }).descriptor.template.ast)
-  const heading = nodes.find(node => attribute(node, 'class') === 'dm-card-heading')
-  assert.equal(heading.children.filter(node => node.tag === 'ModuleHeader').length, 1)
-  assert.equal(heading.children.filter(node => node.tag === 'VBtn').length, 1)
-  for (const [tab, key, title] of [['transfer', 'transfer', '转移做种'], ['history', 'rename', '种子重命名']]) {
-    p.activeTab.value = tab
-    assert.deepEqual(p.moduleGridCards.value.map(card => card.key), [key])
+  const nodes = elements(parse(source).descriptor.template.ast)
+  const section = nodes.find(node => directive(node, 'if') === 'currentHeader')
+  assert.equal(elements(section).filter(node => node.tag === 'ModuleHeader').length, 1)
+  const action = elements(section).find(node => directive(node, 'for') === 'action in moduleActions')
+  assert.equal(directive(action, 'on', 'click'), 'action.run()')
+  for (const [key, title] of [['transfer', '转移做种'], ['rename', '种子重命名']]) {
     const html = await render(Header, p.moduleHeaders.value[key])
     assert.ok(html.includes('<h2 class="dm-module-title">' + title + '</h2>'))
-    const recordBlocks = nodes.filter(node => directive(node, 'if') === "activeTab === '" + tab + "'" && attribute(node, 'data-record-block'))
-    assert.ok(recordBlocks.length > 0)
-    const recordTitles = recordBlocks.flatMap(block => elements(block)).filter(node => attribute(node, 'class') === 'dm-record-block-title')
-    assert.ok(recordTitles.every(node => node.children.filter(child => child.type === 2).map(child => child.content).join('') !== title))
   }
+  for (const title of ['任务配置', '在途事务', '最近记录', '执行记录', '失败归档']) assert.ok(nodes.some(node => node.tag === 'ModuleTable' && attribute(node, 'title') === title))
 })
 
 test('七模块缺失徽标均为 —；真实零保留，不从列表或本次重命名结果伪造今日统计', () => {
@@ -82,7 +70,7 @@ test('七模块缺失徽标均为 —；真实零保留，不从列表或本次�
   assert.ok(p.moduleHeaders.value.tag.badges.every(badge => badge.value === '—'))
   p.overview.value = { cards: { transfer: { today_success: 0, success_total: 20 } }, archive: { active_failed: 0, archived: 2 } }
   p.transferStatus.value = { summary: { pending: 0 } }
-  assert.deepEqual(values(p.moduleHeaders.value.transfer), { 在途: 0, 今日成功: 0, 累计成功: 20 })
+  assert.deepEqual(values(p.moduleHeaders.value.transfer), { 在途: 0, 今日成功: 0, 今日失败: '—', 累计成功: 20 })
   assert.deepEqual(values(p.moduleHeaders.value.rename), { 今日成功: '—', 今日失败: '—', 待重试: 0, 失败归档: 2 })
 })
 

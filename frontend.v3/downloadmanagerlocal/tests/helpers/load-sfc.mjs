@@ -45,8 +45,16 @@ export async function loadSfc(name, { transformSource = source => source } = {})
   finally { fs.rmSync(dir, { recursive: true, force: true }) }
 }
 
-export const render = (component, props = {}, slots = {}) =>
-  renderToString(createSSRApp({ render: () => h(component, props, slots) }))
+// Contract tests use explicit presentation adapters; real Vuetify styling is verified in Chrome.
+const presentation = {
+  VBtn: { setup: (_, { attrs, slots }) => () => h('button', attrs, slots.default?.()) },
+  VTable: { setup: (_, { attrs, slots }) => () => h('div', attrs, [h('table', slots.default?.())]) },
+}
+export const render = (component, props = {}, slots = {}, { components = {} } = {}) => {
+  const app = createSSRApp({ render: () => h(component, props, slots) })
+  for (const [name, value] of Object.entries({ ...presentation, ...components })) app.component(name, value)
+  return renderToString(app)
+}
 
 // Vue's real renderer with an in-memory host, not a fake component/setup implementation.
 // Event handlers and reactive row expansion can be exercised without DOM dependencies.
@@ -71,7 +79,7 @@ export function mount(component, props = {}, slots = {}, { components = {} } = {
   })
   const root = node('root')
   const app = renderer.createApp({ render: () => h(component, props, slots) })
-  for (const [name, stub] of Object.entries(components)) app.component(name, stub)
+  for (const [name, stub] of Object.entries({ ...presentation, ...components })) app.component(name, stub)
   app.mount(root)
   const findAll = predicate => {
     const found = []

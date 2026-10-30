@@ -16,7 +16,7 @@ const header = parse(read('../src/components/ModuleHeader.vue')).descriptor
 const headerCss = compileStyle({ source: header.styles[0].content, filename: 'ModuleHeader.vue', id: 'layout' })
 assert.deepEqual(headerCss.errors, [])
 const page = parse(read('../src/components/Page.vue')).descriptor
-const gridSelectors = ['.dm-module-grid', '.dm-module-card']
+const gridSelectors = ['.dm-overview-cards', '.dm-overview-card']
 const gridCss = postcss.parse(page.styles.map(style => style.content).join('\n')).nodes
   .filter(node => node.type === 'rule' && gridSelectors.includes(node.selector))
   .map(node => node.toString()).join('\n')
@@ -27,7 +27,7 @@ const chrome = process.env.CHROME_BIN || [
   '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome',
 ].find(file => fs.existsSync(file))
 
-test('真实浏览器布局：214px 徽标行换行，超量/超长徽标不裁切且同排卡等高', async () => {
+test('真实浏览器布局：206px 徽标行换行，超量/超长徽标不裁切且同排卡等高', async () => {
   assert.ok(chrome, 'Layout regression requires Chrome/Chromium; set CHROME_BIN to its executable')
   const badges = [
     { label: '受管种子', value: 0 }, { label: '上传中', value: 0 },
@@ -42,15 +42,17 @@ test('真实浏览器布局：214px 徽标行换行，超量/超长徽标不裁�
     fs.writeFileSync(fixture, `<!doctype html><meta charset="utf-8"><style>
 ${read('../src/styles/dm-tokens.css')}\n${headerCss.code}\n${gridCss}
 .dm-page { --v-border-color: 0, 0, 0; --v-border-opacity: 0.12; }
-.dm-module-grid { grid-template-columns: repeat(2, 240px); }
-</style><div class="dm-page"><div class="dm-module-grid"><article class="dm-module-card">${many}</article><article class="dm-module-card">${few}</article></div></div>
+.dm-overview-cards { grid-template-columns: repeat(2, 240px); }
+.dm-module-header { width: 206px; max-width: 100%; }
+</style><div class="dm-page"><div class="dm-overview-cards"><article class="dm-overview-card">${many}</article><article class="dm-overview-card">${few}</article></div></div>
 <pre id="result"></pre><script>
-const cards = [...document.querySelectorAll('.dm-module-card')];
+const cards = [...document.querySelectorAll('.dm-overview-card')];
 const row = cards[0].querySelector('.dm-module-badges');
 const badges = [...row.children];
 const rect = cards[0].getBoundingClientRect();
 document.getElementById('result').textContent = JSON.stringify({
   wrap: getComputedStyle(row).flexWrap,
+  titleSize: getComputedStyle(cards[0].querySelector('.dm-module-title')).fontSize,
   rowClientWidth: row.clientWidth, rowScrollWidth: row.scrollWidth,
   badgeCount: badges.length, lineCount: new Set(badges.map(b => b.offsetTop)).size,
   overflowRight: badges.map(b => b.getBoundingClientRect().right - rect.right),
@@ -66,8 +68,9 @@ document.getElementById('result').textContent = JSON.stringify({
     const match = result.stdout.match(/<pre id="result">([^<]+)<\/pre>/)
     assert.ok(match, 'Browser must return measurements from the rendered fixture: ' + result.stderr)
     const measured = JSON.parse(match[1])
-    assert.equal(measured.rowClientWidth, 214, JSON.stringify(measured))
+    assert.equal(measured.rowClientWidth, 206, JSON.stringify(measured))
     assert.equal(measured.wrap, 'wrap')
+    assert.equal(measured.titleSize, '16px')
     assert.ok(measured.lineCount > 1, JSON.stringify(measured))
     assert.equal(measured.badgeCount, badges.length)
     assert.ok(measured.rowScrollWidth <= measured.rowClientWidth, JSON.stringify(measured))

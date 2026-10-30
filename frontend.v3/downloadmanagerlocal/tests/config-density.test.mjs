@@ -64,7 +64,7 @@ test('所有短数值控件显式 144px；普通字段最多两列，长模板/�
 
 test('所有简单开关通过 flex 左标签右开关；不依赖无效 reverse 属性或等宽栅格', () => {
   const switches = nodes.filter(node => node.tag === 'VSwitch')
-  assert.equal(switches.length, 47)
+  assert.equal(switches.length, 45)
   for (const node of switches) assert.equal(has(node, 'reverse'), false, node.loc.source)
   assert.equal(declaration(':is(.dm-config, .dm-form-dialog) :deep(.v-switch .v-selection-control)', 'flex-direction'), 'row-reverse')
   assert.equal(declaration('.dm-field--toggle', 'width'), 'fit-content')

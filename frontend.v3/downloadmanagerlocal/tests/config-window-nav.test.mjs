@@ -18,9 +18,9 @@ const components = Object.fromEntries([...new Set([...source.matchAll(/<(V[A-Z]\
   setup(props, { attrs, slots, emit }) {
     return () => {
       if (name === 'VDialog' && !props.modelValue) return null
-      if (name === 'VTextField' || name === 'VTextarea') {
+      if (name === 'VTextField' || name === 'VTextarea' || name === 'VCombobox') {
         return h('input', { ...attrs, 'aria-label': props.label, value: props.modelValue,
-          onInput: event => emit('update:modelValue', event.target.value) })
+          onInput: event => emit('update:modelValue', name === 'VCombobox' ? event.target.value.split(',') : event.target.value) })
       }
       return h(name === 'VBtn' || name === 'VListItem' ? 'button' : 'div', attrs, slots.default?.())
     }
@@ -103,8 +103,8 @@ test('点击保存失败展示 response.data.message/error 样式，保留已编
   const request = deferred()
   const view = await mountConfig({ rename_exclude_tags: 'initial-value' }, () => request.promise)
   try {
-    const field = () => view.findAll(node => node.type === 'input' && node.props['aria-label'] === '排除标签')[0]
-    assert.equal(field().props.value, 'initial-value')
+    const field = () => view.findAll(node => node.type === 'input' && node.props['aria-label'] === '排除标签' && Array.isArray(node.props.value) && node.props.value.some(v => ['initial-value', 'edited-keep-me'].includes(v)))[0]
+    assert.deepEqual([...field().props.value], ['initial-value'])
     field().props.onInput({ target: { value: 'edited-keep-me' } })
     await nextTick()
     await view.click('保存配置')
@@ -119,7 +119,7 @@ test('点击保存失败展示 response.data.message/error 样式，保留已编
     assert.equal(text(status), '后端拒绝保存')
     assert.match(status.props.class, /text-error/)
     assert.equal(status.props['aria-live'], 'polite')
-    assert.equal(field().props.value, 'edited-keep-me')
+    assert.deepEqual([...field().props.value], ['edited-keep-me'])
     assert.equal(view.button('保存配置').props.loading, false)
     assert.equal(view.button('保存配置').props.disabled, false)
     assert.deepEqual(view.events, [])

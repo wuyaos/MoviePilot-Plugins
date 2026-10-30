@@ -3,6 +3,11 @@ import '../styles/dm-tokens.css'
 import { reactive, ref, computed, watch, onMounted } from 'vue'
 import { getPluginApi } from './api'
 import DownloaderBadge from './DownloaderBadge.vue'
+import { MODULE_ICONS } from './module-icons.js'
+import FormSection from './FormSection.vue'
+import MultiValueInput from './MultiValueInput.vue'
+import MultiLineInput from './MultiLineInput.vue'
+import RowActionMenu from './RowActionMenu.vue'
 
 const props = defineProps({
   api: { type: [Object, Function], default: null },
@@ -50,6 +55,7 @@ onMounted(async () => {
       getApi('sites', { feedback: 'silent' }),
       getApi('transfer_status?page=1&page_size=100', { feedback: 'silent' }),
       loadHrPresets(),
+      loadTagCategories(),
     ])
     if (dlResp) {
       downloaderItems.value = dlResp
@@ -171,13 +177,13 @@ function confirmPaneReset() {
 }
 
 const mainTabs = [
-  { key: 'transfer', title: '转移做种', icon: 'mdi-transfer', desc: '监听下载完成事件，延迟后自动转移做种到目标下载器。' },
-  { key: 'hr', title: 'H&R 管理', icon: 'mdi-timer-alert-outline', desc: '按站点规则跟踪 H&R 做种状态，为破坏性操作提供统一保护。' },
-  { key: 'remover', title: '自动删种', icon: 'mdi-delete-clock-outline', desc: '按时间、分享率、体积等条件自动暂停或删除种子。' },
-  { key: 'failclean', title: '失败清理', icon: 'mdi-broom', desc: '整理失败时立即清理源文件与下载历史，并定时清理重复残留。' },
-  { key: 'rename', title: '种子重命名', icon: 'mdi-rename-box', desc: '转移后自动根据 TMDB 信息命名种子，失败记录进定时补查，也可手动补刀。' },
-  { key: 'tag', title: '分类与标签', icon: 'mdi-tag-multiple', desc: '转移后自动根据 tracker 域名打站点标签。' },
-  { key: 'upload', title: '上传限速', icon: 'mdi-upload-network-outline', desc: '设置下载器全局上传上限，并按需限制指定站点的合计上传速度。' },
+  { key: 'transfer', title: '转移做种', icon: MODULE_ICONS.transfer, desc: '监听下载完成事件，延迟后自动转移做种到目标下载器。' },
+  { key: 'hr', title: 'H&R 管理', icon: MODULE_ICONS.hr, desc: '按站点规则跟踪 H&R 做种状态，为破坏性操作提供统一保护。' },
+  { key: 'remover', title: '自动删种', icon: MODULE_ICONS.autoremove, desc: '按时间、分享率、体积等条件自动暂停或删除种子。' },
+  { key: 'failclean', title: '失败清理', icon: MODULE_ICONS.failclean, desc: '整理失败时立即清理源文件与下载历史，并定时清理重复残留。' },
+  { key: 'rename', title: '种子重命名', icon: MODULE_ICONS.rename, desc: '转移后自动根据 TMDB 信息命名种子，失败记录进定时补查，也可手动补刀。' },
+  { key: 'tag', title: '分类与标签', icon: MODULE_ICONS.tag, desc: '转移后自动根据 tracker 域名打站点标签。' },
+  { key: 'upload', title: '上传限速', icon: MODULE_ICONS.upload_limit, desc: '设置下载器全局上传上限，并按需限制指定站点的合计上传速度。' },
 ]
 
 const subTabs = {
@@ -199,7 +205,7 @@ const subTabs = {
   failclean: [{ key: 'failclean_basic', title: '基础设置', icon: 'mdi-tune-variant' }],
   rename: [
     { key: 'rename_basic', title: '基础设置', icon: 'mdi-tune-variant' },
-    { key: 'rename_format', title: '模板与过滤', icon: 'mdi-format-text' },
+    { key: 'rename_format', title: '重命名模板', icon: 'mdi-format-text' },
   ],
   tag: [
     { key: 'tag_basic', title: '基础设置', icon: 'mdi-tune-variant' },
@@ -229,6 +235,18 @@ const uploadSelectedDownloaders = computed(() => {
 const uploadMissingLimits = computed(() => uploadSelectedDownloaders.value.filter(
   item => !uploadDownloaderLimit(item.value),
 ))
+const uploadNewSiteName = ref('')
+const uploadAddError = ref('')
+function addUploadSiteRule() {
+  uploadAddError.value = ''
+  const name = String(uploadNewSiteName.value || '').trim()
+  if (!name) { uploadAddError.value = '请输入或选择站点名称'; return }
+  if (Object.keys(form.upload_limit_site_rules || {}).some(existing => existing.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+    uploadAddError.value = '该站点已存在，请编辑原行'; return
+  }
+  setUploadSiteRule(name, 0)
+  uploadNewSiteName.value = ''
+}
 const uploadSiteRuleRows = computed(() => Object.entries(form.upload_limit_site_rules || {})
   .map(([name, rule]) => ({ name, limit_kib: Number(rule?.limit_kib || 0) || null }))
   .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')))
@@ -238,12 +256,63 @@ const hrNotifyModeItems = [
   { title: '仅异常', value: 'on_error' },
   { title: '全部', value: 'always' },
 ]
+// 通知开关仅映射已有三态，关闭后保留本次编辑选择，避免重开丢失“仅异常”。
+const hrLastNotifyMode = ref('always')
+watch(() => form.hr_notify, mode => {
+  if (mode === 'always' || mode === 'on_error') hrLastNotifyMode.value = mode
+}, { immediate: true })
+const hrNotificationEnabled = computed({
+  get: () => form.hr_notify !== 'none',
+  set: enabled => { form.hr_notify = enabled ? hrLastNotifyMode.value : 'none' },
+})
+const hrEnabledNotifyModeItems = hrNotifyModeItems.filter(item => item.value !== 'none')
 const removerActionItems = [
   { title: '暂停任务', value: 'pause' },
   { title: '删除任务', value: 'delete' },
   { title: '删除任务及文件', value: 'deletefile' },
 ]
 const tagCatPairs = ref([])
+const tagCategoryNames = ref([])
+const tagCategoriesLoading = ref(false)
+const tagCategoriesLoaded = ref(false)
+const tagCategoriesError = ref('')
+// MP 分类仅作为展示候选，载入不回写配置；旧映射完整保留。
+const tagCategoryRows = computed(() => {
+  const names = new Set(tagCategoryNames.value)
+  return [
+    ...tagCategoryNames.value.map(from => ({ from, to: tagCatPairs.value.find(pair => pair.from === from)?.to ?? from, legacy: false })),
+    ...tagCatPairs.value.filter(pair => !names.has(pair.from)).map(pair => ({ ...pair, legacy: true })),
+  ]
+})
+async function loadTagCategories() {
+  if (tagCategoriesLoading.value) return
+  tagCategoriesLoading.value = true
+  tagCategoriesError.value = ''
+  try {
+    if (!props.api?.get) throw new Error('MoviePilot API 未就绪')
+    const response = await props.api.get('media/category', { feedback: 'silent' })
+    if (response?.success === false) throw new Error(response.message || '获取 MP 分类失败')
+    const categories = response?.success === true ? response.data : response
+    if (!categories || Array.isArray(categories) || typeof categories !== 'object'
+        || !Object.values(categories).every(list => Array.isArray(list) && list.every(name => typeof name === 'string'))) {
+      throw new Error('MP 分类接口返回格式不正确')
+    }
+    tagCategoryNames.value = [...new Set(Object.values(categories).flat().filter(name => name.trim()))]
+    tagCategoriesLoaded.value = true
+  } catch (error) {
+    tagCategoriesError.value = error?.message || '获取 MP 分类失败'
+  } finally {
+    tagCategoriesLoading.value = false
+  }
+}
+function setTagCategoryTarget(from, value) {
+  const pair = tagCatPairs.value.find(item => item.from === from)
+  if (pair) pair.to = value ?? ''
+  else tagCatPairs.value.push({ from, to: value ?? '' })
+}
+function removeLegacyCategory(from) {
+  tagCatPairs.value = tagCatPairs.value.filter(pair => pair.from !== from)
+}
 const tagTrackerPairs = ref([])
 
 function parseCatPairs(cats, renames) {
@@ -314,9 +383,6 @@ function parseTrackerEditor() {
     ...p,
     custom: customLabels[String(p.site || p.tracker || '').trim().toLowerCase()] || '',
   }))
-}
-function addCatPair() {
-  tagCatPairs.value.push({ from: '', to: '' })
 }
 
 function addTrackerPair() {
@@ -423,6 +489,8 @@ const transferDeleteTriStateItems = [
   { title: '开启', value: true },
   { title: '关闭', value: false },
 ]
+const transferDeleteItems = defaultEnabled => transferDeleteTriStateItems.map(item => item.value === 'inherit'
+  ? { ...item, title: `默认（${defaultEnabled ? '开启' : '关闭'}）` } : item)
 const transferDeleteOriginLabels = {
   task: '任务覆盖',
   global: '继承全局',
@@ -735,14 +803,17 @@ const hrSiteRows = computed(() => {
       return {
         key: field.key,
         label: field.label,
+        color: `var(--dm-hr-rule-${field.key})`,
         inherited,
-        text: inherited ? `继承 · ${hrGlobalText(field.key)}` : hrFormatSummary(field, value),
+        text: inherited ? hrGlobalText(field.key) : hrFormatSummary(field, value),
         tooltip: inherited
           ? `${field.label}：站点未设置，继承全局（${hrGlobalText(field.key)}）`
           : `${field.label}：${hrFormatSummary(field, value)}（${sourceLabel}）`,
       }
     })
     const visibleCells = hrShowInherited.value ? cells : cells.filter(cell => !cell.inherited)
+    const summaryCells = visibleCells.slice(0, 3)
+    const overflowCells = cells.filter(cell => !summaryCells.includes(cell))
     return {
       name,
       entry,
@@ -753,6 +824,8 @@ const hrSiteRows = computed(() => {
       expanded: hrExpandedSites.value.includes(name),
       cells,
       visibleCells,
+      summaryCells,
+      overflowCells,
       inheritedCount: cells.length - visibleCells.length,
       sourceLabel,
       sourceColor,
@@ -1324,7 +1397,7 @@ Object.keys(form).forEach(k => delete form[k])
 }, { immediate: true, deep: true })
 </script>
 <template>
-  <div class="dm-config">
+  <div class="dm-config dm-config--compact" :class="{ 'dm-config--transfer': activeMain === 'transfer' }">
     <VCard flat class="dm-card">
       <VCardItem class="dm-header">
         <template #prepend>
@@ -1363,41 +1436,28 @@ Object.keys(form).forEach(k => delete form[k])
           <VDivider />
           <div class="dm-window">
             <!-- ═══ 上传限速 · 基础设置 ═══ -->
-            <div v-show="activeSub === 'upload_basic'" class="dm-pane">
-              <div class="dm-section-title">基础设置</div>
+            <div v-show="activeSub === 'upload_basic'" class="dm-pane dm-compact-form dm-unified-form">
+              <div class="dm-switch-group">
+                <VSwitch density="compact" v-model="form.upload_limit_enabled" color="primary" inset hide-details label="启用" />
+                <VSwitch density="compact" v-model="form.upload_limit_observe_only" color="warning" inset hide-details label="观察模式" />
+              </div>
+              <div v-if="form.upload_limit_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />观察模式：不调整上传限速，也不执行恢复。</div>
               <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.upload_limit_enabled" color="primary" inset hide-details label="启用" />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.upload_limit_observe_only" color="warning" inset hide-details label="观察模式" />
-                  <div v-if="form.upload_limit_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" /> 观察模式：不调整任何上传限速，已有额度保持原样，也不执行恢复；诊断页可看预览统计</div>
-                </div>
-                <div class="dm-field">
-                  <VSelect density="compact" v-model="form.upload_limit_downloaders" :error-messages="form.upload_limit_enabled && !uploadSelectedDownloaders.length ? '请至少选择一个下载器' : ''" label="下载器" variant="outlined"
-                    :items="uploadDownloaderItems" multiple chips closable-chips clearable
-                    hint="只扫描和修改这里选中的 qBittorrent / Transmission 实例" persistent-hint />
-                </div>
+                <div class="dm-field"><VSelect density="compact" v-model="form.upload_limit_downloaders" :error-messages="form.upload_limit_enabled && !uploadSelectedDownloaders.length ? '请至少选择一个下载器' : ''" label="下载器" variant="outlined"
+                  :items="uploadDownloaderItems" multiple chips closable-chips clearable /></div>
+                <div class="dm-field"><VTextField density="compact" class="dm-number-input" v-model.number="form.upload_limit_grace_minutes" label="新种宽限（分钟）" type="number" min="0" max="1440" variant="outlined" hide-details /></div>
               </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.upload_limit_grace_minutes" label="新种宽限（分钟）" type="number" min="0" max="1440" variant="outlined" hint="默认 30；填 0 表示完成后立即纳入分配" persistent-hint />
-                </div>
-              </div>
-              <div  class="dm-hint mt-4">
-                单位为 KiB/s（1 Mbps ≈ 122 KiB/s）。宽限期间不做站点和单种分配，但仍受对应下载器总上传上限。
-              </div>
+              <div class="dm-hint dm-upload-grace-hint">宽限期间不做站点和单种分配，但仍受对应下载器总上传上限。</div>
             </div>
 
             <!-- ═══ 上传限速 · 限速规则 ═══ -->
-            <div v-show="activeSub === 'upload_rules'" class="dm-pane">
-              <div class="dm-section-title">下载器总上限</div>
+            <div v-show="activeSub === 'upload_rules'" class="dm-pane dm-compact-form dm-unified-form">
+              <FormSection title="下载器总上限" :icon="MODULE_ICONS.upload_limit">
               <div v-if="uploadSelectedDownloaders.length" class="dm-upload-downloader-list">
                 <div v-for="item in uploadSelectedDownloaders" :key="item.value" class="dm-upload-config-row">
                   <div class="dm-upload-config-name">
-                    <VIcon :icon="item.type === 'transmission' ? 'mdi-transmission-tower' : 'mdi-download-network-outline'" size="19" color="primary" />
+                    <DownloaderBadge :name="item.title" :type="item.type" :size="18" />
                     <div class="min-w-0">
-                      <strong>{{ item.title }}</strong>
                       <div class="dm-hint">
                         {{ item.type === 'transmission' ? 'Transmission Session 上传上限' : 'qB 普通与备用上传上限' }}
                       </div>
@@ -1411,9 +1471,9 @@ Object.keys(form).forEach(k => delete form[k])
               </div>
               <div v-else class="dm-monitor-empty dm-hint">尚未选择限速下载器</div>
 
-              <div class="dm-section-title mt-4">站点限速表</div>
+              </FormSection><FormSection title="站点限速" :icon="MODULE_ICONS.upload_limit">
               <div  class="dm-hint mt-3">
-                仅识别唯一有效的「{{ form.tag_siteprefix || '🏠' }}站点名」标签。上限留空或填 0 时不写单种限速，该站点仍受下载器全局上限约束。
+                支持未收录的自定义站点，可在下方直接输入名称；名称须与种子实际的「{{ form.tag_siteprefix || '🏠' }}站点名」标签一致（填写时不含前缀），且种子只能有一个有效站点标签。留空或 0 不额外写单种限速，仍受下载器总上限约束。
               </div>
               <div v-if="uploadSiteRuleRows.length" class="dm-upload-site-list mt-4">
                 <div v-for="row in uploadSiteRuleRows" :key="row.name" class="dm-upload-site-row">
@@ -1426,7 +1486,7 @@ Object.keys(form).forEach(k => delete form[k])
                   </div>
                   <VTextField density="compact" class="dm-number-input" :model-value="row.limit_kib" @update:model-value="setUploadSiteRule(row.name, $event)"
                     label="合计上限（KiB/s）" type="number" min="0" step="1" clearable variant="outlined"
-                    hint="留空或 0 表示该站点不限速；正数为跨下载器共享的站点合计上限" persistent-hint />
+                    hint="留空或 0 不额外写单种上限；仍受下载器全局上限约束" persistent-hint />
                   <VBtn size="small" aria-label="删除站点" icon="mdi-delete-outline" color="primary" variant="text" title="删除站点"
                     @click="removeUploadSiteRule(row.name)" />
                 </div>
@@ -1435,95 +1495,74 @@ Object.keys(form).forEach(k => delete form[k])
               <div  class="dm-hint mt-4">
                 正数上限限制该站点全部任务的合计上传速度；多个受限站点在下载器全局额度内按实际需求共享可用带宽。
               </div>
+<div class="dm-field-row dm-upload-add-site"><div class="dm-field"><VCombobox v-model="uploadNewSiteName" :items="siteItems.map(site => site.title)" :return-object="false" density="compact" variant="outlined" label="选择或输入站点名称" hide-details @keydown.enter.stop.prevent="addUploadSiteRule" /></div><VBtn size="small" variant="tonal" prepend-icon="mdi-plus" @click="addUploadSiteRule">添加站点</VBtn></div><div v-if="uploadAddError" class="dm-hint text-error" role="alert">{{ uploadAddError }}</div>
+</FormSection>
             </div>
 
             <!-- ═══ 转移做种 · 基础设置 ═══ -->
-            <div v-show="activeSub === 'basic'" class="dm-pane">
-              <div class="dm-section-title">基础设置</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.transfer_enabled" color="primary" inset hide-details label="启用" />
+            <div v-show="activeSub === 'basic'" class="dm-pane dm-transfer-form dm-compact-form">
+              <FormSection title="基础设置" :icon="MODULE_ICONS.transfer">
+                <div class="dm-switch-group">
+                  <div class="dm-field dm-field--toggle">
+                    <VSwitch density="compact" v-model="form.transfer_enabled" color="primary" inset hide-details label="启用" />
+                  </div>
+                  <div class="dm-field dm-field--toggle">
+                    <VSwitch density="compact" v-model="form.transfer_observe_only" color="warning" inset hide-details label="观察模式" />
+                  </div>
+                  <div class="dm-field dm-field--toggle">
+                    <VSwitch density="compact" v-model="form.notify" color="primary" inset hide-details label="发送通知" />
+                  </div>
                 </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.transfer_observe_only" color="warning" inset hide-details label="观察模式" />
-                  <div v-if="form.transfer_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" /> 观察模式：转移任务只统计（诊断页可见），不向目标下载器添加种子、不删除源种子</div>
+                <div v-if="form.transfer_observe_only" class="dm-hint dm-risk">
+                  <VIcon icon="mdi-alert-outline" size="16" />观察模式：转移任务只统计（诊断页可见），不向目标下载器添加种子、不删除源种子。</div>
+              </FormSection>
+              <FormSection title="转移策略" :icon="MODULE_ICONS.transfer">
+                <div class="dm-field-row">
+                  <div class="dm-field dm-field--number">
+                    <VTextField density="compact" class="dm-number-input" v-model.number="form.delay_minutes" label="延迟时间（分钟）" type="number" variant="outlined" hint="下载完成后延迟 N 分钟再转移" persistent-hint />
+                  </div>
+                  <div class="dm-field dm-field--number">
+                    <VTextField density="compact" class="dm-number-input" v-model.number="form.scan_limit" label="源端扫描上限（个）" type="number" min="1" variant="outlined" hint="每轮最多检查的源种子数量，默认 500" persistent-hint />
+                  </div>
                 </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.notify" color="primary" inset hide-details label="发送通知" />
+                <div class="dm-switch-group">
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_fallback_enabled" color="primary" inset hide-details label="兜底扫描" /></div>
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.pause_source" color="primary" inset hide-details label="暂停源任务" /></div>
                 </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.transfer_delete_source_default" color="error" inset hide-details label="删源默认" />
-                  <div class="dm-hint">仅影响新任务的默认值；旧任务保持其原有设置</div>
+                <div class="dm-field-row">
+                  <div class="dm-field dm-field--number">
+                    <VTextField density="compact" class="dm-number-input" v-model.number="form.transfer_fallback_interval_minutes" label="兜底间隔（分钟）" type="number" min="1" variant="outlined" :disabled="!form.transfer_fallback_enabled" hint="事件漏触发时按此间隔扫描，默认60分钟" persistent-hint />
+                  </div>
                 </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.transfer_delete_duplicate_default" color="error" inset hide-details label="删重复默认" />
-                  <div class="dm-hint">仅影响新任务的默认值；旧任务保持其原有设置</div>
+              </FormSection>
+              <FormSection title="转移后操作" :icon="MODULE_ICONS.transfer">
+                <div class="dm-switch-group">
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_rename_enabled" color="primary" inset hide-details label="转移后重命名" /></div>
+                  <div class="dm-field dm-field--toggle">
+                    <VSwitch density="compact" v-model="form.seed_autostart" color="primary" inset hide-details label="自动开始做种" />
+                  </div>
+                  <div class="dm-field dm-field--toggle">
+                    <VSwitch density="compact" v-model="form.seed_skipverify" color="primary" inset hide-details label="跳过校验" />
+                  </div>
                 </div>
-              </div>
-              <div class="dm-section-title mt-4">触发与执行</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.delay_minutes" label="延迟时间（分钟）" type="number" variant="outlined"
-                    hint="下载完成后延迟 N 分钟再转移" persistent-hint />
+                <div class="dm-field-row">
+                  <div class="dm-field dm-field--number">
+                    <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_check_interval" label="检查间隔（秒）" type="number" variant="outlined" hint="建议 60 秒" persistent-hint />
+                  </div>
+                  <div class="dm-field dm-field--number">
+                    <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_max_wait_minutes" label="最长等待（分钟）" type="number" variant="outlined" hint="超时后移出队列" persistent-hint />
+                  </div>
                 </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.transfer_fallback_interval_minutes" label="兜底间隔（分钟）" type="number" min="1" variant="outlined"
-                    :disabled="!form.transfer_fallback_enabled" hint="事件漏触发时按此间隔扫描，默认60分钟" persistent-hint />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.transfer_fallback_enabled" color="primary" inset hide-details label="兜底扫描" />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.scan_limit" label="源端扫描上限（个）" type="number" min="1" variant="outlined"
-                    hint="每轮最多检查的源种子数量，默认 500" persistent-hint />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.pause_source" color="primary" inset hide-details label="暂停源任务" />
-                </div>
-              </div>
-              <div class="dm-section-title mt-4">转移后重命名</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.transfer_rename_enabled" color="primary" inset hide-details label="转移后重命名" />
-                  <div class="dm-hint">仅 qB 目的端生效：修改显示名，不动磁盘文件；Transmission 目的端自动跳过</div>
-                </div>
-              </div>
-            <!-- ═══ 做种校验 v3.0.15 · 基础设置 ═══ -->
-              <div class="dm-section-title mt-4">做种校验</div>
-              <div  class="dm-hint mb-4">做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.seed_autostart" color="primary" inset hide-details label="自动开始做种" />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.seed_skipverify" color="primary" inset hide-details label="跳过校验" />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_check_interval" label="检查间隔（秒）" type="number" variant="outlined" hint="建议 60 秒" persistent-hint />
-                </div>
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_max_wait_minutes" label="最长等待（分钟）" type="number" variant="outlined" hint="超时后移出队列" persistent-hint />
-                </div>
-              </div>
+                <div class="dm-hint">重命名仅 qB 目的端生效：修改显示名，不动磁盘文件；Transmission 目的端自动跳过。</div>
+                <div class="dm-hint">做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。</div>
+              </FormSection>
             </div>
 
             <!-- ═══ 转移做种 · 任务列表 ═══ -->
-            <div v-show="activeSub === 'tasks'" class="dm-pane">
-              <div class="dm-task-toolbar">
-                <div class="min-w-0">
-                  <div class="dm-section-title mb-1">任务列表</div>
-                  <div class="dm-hint">每个任务独立配置源/目的下载器、数据可见性映射、筛选条件与高级选项，保存后写回 transfer_tasks。</div>
-                </div>
-                <VBtn size="small" color="primary" variant="tonal" prepend-icon="mdi-plus" @click="openTransferDialog()">添加任务</VBtn>
-              </div>
+            <div v-show="activeSub === 'tasks'" class="dm-pane dm-transfer-form dm-compact-form">
+              <FormSection title="任务列表" :icon="MODULE_ICONS.transfer">
+                <template #actions><VBtn size="small" color="primary" variant="tonal" prepend-icon="mdi-plus" @click="openTransferDialog()">添加任务</VBtn></template>
+                <div class="dm-hint">每个任务独立配置源/目的下载器、数据可见性映射、筛选条件与高级选项，保存后写回 transfer_tasks。</div>
               <div class="dm-task-table mt-3">
                 <div class="dm-task-row dm-task-row--head">
                   <span>名称</span>
@@ -1578,539 +1617,287 @@ Object.keys(form).forEach(k => delete form[k])
                 </div>
                 <div v-if="!transferTasks.length" class="dm-map-empty dm-hint">暂无转移任务，点击右上角「添加任务」创建。</div>
               </div>
+              </FormSection>
             </div>
 
             <!-- ═══ H&R · 基础设置 ═══ -->
-            <div v-show="activeSub === 'hr_basic'" class="dm-pane">
-              <div class="dm-section-title">基础设置</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.hr_enabled" color="primary" inset hide-details label="启用" />
+            <div v-show="activeSub === 'hr_basic'" class="dm-pane dm-hr-form dm-compact-form dm-hr-basic-form">
+              <FormSection title="基础设置" :icon="MODULE_ICONS.hr">
+                <div class="dm-switch-group">
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.hr_enabled" color="primary" inset hide-details label="启用" /></div>
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="hrNotificationEnabled" color="primary" inset hide-details label="发送通知" /></div>
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.hr_observe_only" color="warning" inset hide-details label="观察模式" /></div>
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.hr_auto_discover" color="primary" inset hide-details label="自动发现" /></div>
                 </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.hr_observe_only" color="warning" inset hide-details label="观察模式" />
-                  <div v-if="form.hr_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" /> 观察模式：检查与统计照常，但不给种子打 H&R 标签、不移除标签</div>
+                <div v-if="form.hr_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" /> 观察模式：检查与统计照常，但不给种子打 H&R 标签、不移除标签</div>
+                <div class="dm-field-row">
+                  <div class="dm-field"><VSelect density="compact" v-model="form.hr_notify" label="通知模式" variant="outlined"
+                    :items="hrEnabledNotifyModeItems" :disabled="!hrNotificationEnabled" hide-details /></div>
+                  <div class="dm-field"><VCronField density="compact" v-model="form.hr_notify_summary_cron" :disabled="form.hr_notify === 'none'" label="汇总计划" variant="outlined" hide-details /></div>
+                  <div class="dm-field dm-field--number"><VTextField density="compact" class="dm-number-input" v-model.number="form.hr_check_period" label="检查间隔（分钟）" type="number" variant="outlined"
+                    hide-details /></div>
                 </div>
-                <div class="dm-field">
-                  <VSelect density="compact" v-model="form.hr_notify" label="通知模式" variant="outlined"
-                    :items="hrNotifyModeItems" hint="不发送 / 仅异常 / 全部" persistent-hint />
+              </FormSection>
+              <FormSection title="跟踪策略" :icon="MODULE_ICONS.hr">
+                <div class="dm-switch-group">
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.hr_enable_site_config" color="primary" inset hide-details label="站点独立规则" /></div>
                 </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.hr_auto_discover" color="primary" inset hide-details label="自动发现" />
+                <div class="dm-field-row">
+                  <div class="dm-field"><VSelect density="compact" v-model="form.hr_downloader" label="下载器" variant="outlined"
+                    :items="downloaderItems" multiple chips closable-chips clearable :menu-props="{ contentClass: 'dm-select-menu' }"
+                    hide-details>
+                    <template #chip="{ props: chipProps, item }"><VChip v-bind="chipProps" size="small" :title="item.title">{{ item.title }}</VChip></template>
+                  </VSelect></div>
+                  <div class="dm-field"><VSelect density="compact" v-model="form.hr_sites" label="站点白名单" variant="outlined"
+                    :items="siteItems" item-title="title" item-value="title" multiple chips closable-chips clearable :menu-props="{ contentClass: 'dm-select-menu' }"
+                    hide-details title="留空表示全部站点">
+                    <template #chip="{ props: chipProps, item }"><VChip v-bind="chipProps" size="small" :title="item.title">{{ item.title }}</VChip></template>
+                  </VSelect></div>
+                  <div class="dm-field"><VSelect density="compact" v-model="form.hr_brush_plugin" label="刷流插件" variant="outlined"
+                    :items="hrBrushPluginItems" hide-details /></div>
                 </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.hr_enable_site_config" color="primary" inset hide-details label="站点独立规则" />
+                <div class="dm-field-row">
+                  <div class="dm-field"><MultiValueInput v-model="form.hr_exclude_tags" label="排除标签"
+                    hide-details /></div>
+                  <div class="dm-field"><MultiValueInput v-model="form.hr_exclude_categories" label="排除分类"
+                    hide-details /></div>
                 </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VSelect density="compact" v-model="form.hr_downloader" label="下载器" variant="outlined"
-                    :items="downloaderItems" multiple chips closable-chips clearable hint="选择需要跟踪 H&R 的下载器" persistent-hint />
+              </FormSection>
+              <FormSection title="保护与记录" :icon="MODULE_ICONS.hr">
+                <div class="dm-switch-group">
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.hr_protection_enabled" color="primary" inset hide-details label="删除保护" /></div>
                 </div>
-                <div class="dm-field">
-                  <VSelect density="compact" v-model="form.hr_sites" label="站点白名单" variant="outlined"
-                    :items="siteItems" item-title="title" item-value="title" multiple chips closable-chips clearable
-                    hint="只跟踪这些站点的种子（按站点名）；留空表示全部站点" persistent-hint />
+                <div v-if="!form.hr_protection_enabled" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />关闭删除保护后，未达标 H&R 任务可能被删除。</div>
+                <div class="dm-field-row">
+                  <div class="dm-field"><VTextField density="compact" v-model="form.hr_hit_and_run_tag" label="H&R 标签" variant="outlined"
+                    hide-details /></div>
+                  <div class="dm-field dm-field--number"><VTextField density="compact" class="dm-number-input" v-model.number="form.hr_auto_cleanup_days" label="记录保留（天）" type="number" variant="outlined"
+                    hide-details /></div>
                 </div>
-              </div>
-              <div class="dm-section-title mt-4">运行调度</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_check_period" label="检查间隔（分钟）" type="number" variant="outlined"
-                    hint="默认 10 分钟" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VCronField density="compact" v-model="form.hr_notify_summary_cron" :disabled="form.hr_notify === 'none'" label="汇总计划" variant="outlined" hide-details />
-                </div>
-              </div>
-              <details class="dm-more mt-4">
-                <summary class="dm-section-title">更多设置</summary>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.hr_hit_and_run_tag" label="H&R 标签" variant="outlined"
-                    hint="未达标任务打上的标签，默认 H&R" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VSelect density="compact" v-model="form.hr_brush_plugin" label="刷流插件" variant="outlined"
-                    :items="hrBrushPluginItems" hint="仅支持 BrushFlow；选择「不启用」表示不使用刷流任务跟踪" persistent-hint />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VCombobox density="compact" v-model="form.hr_exclude_tags" label="排除标签" variant="outlined"
-                    multiple chips closable-chips hint="输入后按回车添加；带这些标签的任务不纳入 H&R" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VCombobox density="compact" v-model="form.hr_exclude_categories" label="排除分类" variant="outlined"
-                    multiple chips closable-chips hint="输入后按回车添加；这些分类的任务不纳入 H&R" persistent-hint />
-                </div>
-              </div>
-
-              <div  class="dm-hint mb-3">
-                H&R 纳管且未达标的任务，会在自动删种、整理失败删源、转移源端删除三条破坏性路径上被统一跳过。
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.hr_protection_enabled" color="primary" inset hide-details label="删除保护" />
-              <div v-if="!form.hr_protection_enabled" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />关闭删除保护后，未达标 H&R 任务可能被删除。</div>
-                </div>
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_auto_cleanup_days" label="记录保留（天）" type="number" variant="outlined"
-                    hint="达标/失效记录保留天数，默认 15" persistent-hint />
-                </div>
-              </div>
-              </details>
+              </FormSection>
             </div>
 
             <!-- ═══ H&R · 站点规则 ═══ -->
-            <div v-show="activeSub === 'hr_sites'" class="dm-pane">
-              <div class="dm-section-title mt-4">考核规则</div>
-              <div class="dm-hr-global-card mt-1">
-                <div class="dm-hr-global-head">
-                  <span class="dm-section-title mb-0">全局规则基准</span>
-                  <span class="dm-hint">站点规则未设置的字段回退到这里；站点规则表中灰字即为此处的值</span>
+            <div v-show="activeSub === 'hr_sites'" class="dm-pane dm-hr-sites-form dm-compact-form">
+              <FormSection title="全局规则" :icon="MODULE_ICONS.hr">
+                <div class="dm-switch-group">
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.hr_upload_gte_download" color="primary" inset hide-details label="上传量≥下载量" /></div>
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.hr_active" color="primary" inset hide-details label="强制纳管" title="将适用范围内任务按本规则强制纳管" /></div>
                 </div>
                 <div class="dm-field-row">
-                  <div class="dm-field dm-field--number">
-                    <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_duration" label="做种时长（小时）" type="number" variant="outlined" hint="默认 48" persistent-hint />
-                  </div>
-                  <div class="dm-field dm-field--number">
-                    <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_deadline_days" label="考核期（天）" type="number" variant="outlined" hint="默认 14" persistent-hint />
-                  </div>
-                  <div class="dm-field dm-field--number">
-                    <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_additional_seed_time" label="额外做种（小时）" type="number" variant="outlined" hint="默认 24" persistent-hint />
-                  </div>
+                  <div class="dm-field dm-field--number"><VTextField density="compact" class="dm-number-input" v-model.number="form.hr_duration" label="做种时长（小时）" type="number" variant="outlined" hide-details /></div>
+                  <div class="dm-field dm-field--number"><VTextField density="compact" class="dm-number-input" v-model.number="form.hr_deadline_days" label="考核期（天）" type="number" variant="outlined" hide-details /></div>
+                  <div class="dm-field dm-field--number"><VTextField density="compact" class="dm-number-input" v-model.number="form.hr_additional_seed_time" label="额外做种（小时）" type="number" variant="outlined" hide-details /></div>
                 </div>
                 <div class="dm-field-row">
-                  <div class="dm-field dm-field--number">
-                    <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_ratio" label="分享率" type="number" variant="outlined" hint="留空表示不校验分享率" persistent-hint />
-                  </div>
-                  <div class="dm-field dm-field--number">
-                    <VTextField density="compact" class="dm-number-input" v-model.number="form.hr_upload_multiplier" label="上传倍数" type="number" variant="outlined" hint="留空表示不校验上传倍数" persistent-hint />
-                  </div>
+                  <div class="dm-field dm-field--number"><VTextField density="compact" class="dm-number-input" v-model.number="form.hr_ratio" label="分享率" type="number" variant="outlined" placeholder="不校验" title="留空表示不校验分享率" hide-details /></div>
+                  <div class="dm-field dm-field--number"><VTextField density="compact" class="dm-number-input" v-model.number="form.hr_upload_multiplier" label="上传倍数" type="number" variant="outlined" placeholder="不校验" title="留空表示不校验上传倍数" hide-details /></div>
                 </div>
-                <div class="dm-field-row">
-                  <div class="dm-field dm-field--toggle">
-                    <VSwitch density="compact" v-model="form.hr_upload_gte_download" color="primary" inset hide-details label="上传量≥下载量" />
-                  </div>
-                  <div class="dm-field dm-field--toggle">
-                    <VSwitch density="compact" v-model="form.hr_active" color="primary" inset hide-details label="强制纳管" />
-                    <div class="dm-hint">将适用范围内任务按本规则强制纳管。</div>
-                  </div>
+              </FormSection>
+              <FormSection title="站点规则" :icon="MODULE_ICONS.hr">
+                <template #actions>
+                  <VBtn size="small" variant="text" prepend-icon="mdi-refresh" :loading="hrPresetsLoading" @click="loadHrPresets(true)">重载预设</VBtn>
+                  <VBtn :disabled="!form.hr_enable_site_config" size="small" color="primary" variant="tonal" prepend-icon="mdi-home-plus-outline" @click="hrOpenAddDialog">添加站点</VBtn>
+                </template>
+                <div class="dm-hr-toolbar">
+                  <span class="dm-hint" title="站点未设置的字段继承全局；同名自定义规则覆盖预设；停用站点规则后回退全局">灰字为继承全局，停用后回退全局</span>
+                  <VSwitch density="compact" v-model="hrShowInherited" color="primary" inset hide-details label="显示继承字段" />
                 </div>
-              </div>
-
-              <div class="dm-section-title">站点规则</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--full">
-                  <div class="dm-hr-toolbar">
-                    <div>
-                      <div class="dm-section-title mb-1">站点规则</div>
-                      <div class="dm-hint">
-                        内置预设为底，自定义站点同名整条覆写；关闭站点开关会写入 enabled: false 影子条目，该站回退全局规则。
-                        <span class="dm-hr-legend">
-                          <span class="dm-hr-chip dm-hr-chip--mini"><span class="dm-hr-chip-value">站点显式设置</span></span>
-                          <span class="dm-hr-chip dm-hr-chip--mini dm-hr-chip--inherit"><span class="dm-hr-chip-value">灰字 = 继承全局</span></span>
-                        </span>
-                      </div>
-                    </div>
-                    <div class="d-flex align-center ga-2 flex-wrap">
-                      <VSwitch density="compact" v-model="hrShowInherited" color="primary" inset hide-details
-                        label="显示继承字段" />
-                      <VBtn size="small" variant="text" prepend-icon="mdi-refresh" :loading="hrPresetsLoading"
-                        @click="loadHrPresets(true)">重载预设</VBtn>
-                      <VBtn :disabled="!form.hr_enable_site_config" size="small" color="primary" variant="tonal" prepend-icon="mdi-home-plus-outline"
-                        @click="hrOpenAddDialog">添加站点</VBtn>
-                    </div>
-                  </div>
-                  <div v-if="!form.hr_enable_site_config" class="dm-hint mt-3">
-                    「站点独立规则」当前关闭：内置预设与自定义规则都不生效，全部站点回退全局规则。
-                  </div>
-                  <VAlert v-if="hrPresetsMessage" type="warning" variant="tonal" density="compact" closable class="mt-3"
-                    @click:close="hrPresetsMessage = ''">{{ hrPresetsMessage }}</VAlert>
-
-                  <div class="dm-hr-table mt-3">
-                    <div class="dm-hr-row dm-hr-row--head">
-                      <span>站点</span>
-                      <span>生效值</span>
-                      <span>来源</span>
-                      <span>启用</span>
-                      <span>操作</span>
-                    </div>
+                <div v-if="!form.hr_enable_site_config" class="dm-hint mt-3">站点独立规则已关闭，全部站点使用全局规则。</div>
+                <VAlert v-if="hrPresetsMessage" type="warning" variant="tonal" density="compact" closable class="mt-3" @click:close="hrPresetsMessage = ''">{{ hrPresetsMessage }}</VAlert>
+                <VTable density="compact" class="dm-hr-site-table mt-3">
+                  <thead><tr><th>站点</th><th>生效规则</th><th>来源</th><th>启用</th><th>操作</th></tr></thead>
+                  <tbody>
                     <template v-for="row in hrSiteRows" :key="row.name">
-                      <div class="dm-hr-row" :class="{ 'dm-hr-row--blocked': row.blocked }">
-                        <div class="dm-hr-site">
-                          <strong class="dm-body-text dm-break-text">{{ row.name }}</strong>
-                          <div v-if="row.blocked" class="dm-hint">已屏蔽，回退全局</div>
-                        </div>
-                        <div class="dm-hr-values">
-                          <template v-if="row.visibleCells.length">
-                            <span v-for="cell in row.visibleCells" :key="cell.key" class="dm-hr-chip"
-                              :class="{ 'dm-hr-chip--inherit': cell.inherited }" :title="cell.tooltip">
-                              <span class="dm-hr-chip-label dm-hint">{{ cell.label }}</span>
-                              <span class="dm-hr-chip-value">{{ cell.text }}</span>
+                      <tr :class="{ 'dm-hr-site-blocked': row.blocked }">
+                        <td><strong class="dm-body-text dm-break-text">{{ row.name }}</strong><div v-if="row.blocked" class="dm-hint">已停用，回退全局</div></td>
+                        <td><div class="dm-hr-values">
+                          <template v-if="row.summaryCells.length">
+                            <span v-for="cell in row.summaryCells" :key="cell.key" class="dm-hr-chip" :class="{ 'dm-hr-chip--inherit': cell.inherited }">
+                              <VChip size="x-small" :variant="cell.inherited ? 'outlined' : 'tonal'" :color="cell.color" :data-rule-key="cell.key" class="dm-hr-rule-badge" :title="cell.tooltip">
+                                <span>{{ cell.label }} {{ cell.text }}</span><span v-if="cell.inherited" class="dm-hr-inherit-mark">· 继承</span>
+                              </VChip>
                             </span>
                           </template>
-                          <span v-else class="dm-hr-values-empty dm-hint">全部字段继承全局规则</span>
-                          <span v-if="row.inheritedCount > 0 && !hrShowInherited" class="dm-hr-chip dm-hr-chip--more"
-                            :title="`还有 ${row.inheritedCount} 项继承全局，打开右上角「显示继承字段」查看`">
-                            +{{ row.inheritedCount }} 项继承
-                          </span>
-                        </div>
-                        <div>
-                          <VChip size="x-small" variant="tonal" :color="row.sourceColor">{{ row.sourceLabel }}</VChip>
-                        </div>
-                        <div>
-                          <VSwitch :disabled="!form.hr_enable_site_config" density="compact" :model-value="row.enabled" color="primary" inset hide-details
-                            :title="row.blocked ? '已停用：该站规则不生效，回退全局规则' : '启用中；关闭会写入影子条目，该站回退全局规则'"
-                            @update:model-value="hrSetSiteEnabled(row.name, $event)" />
+                          <span v-else-if="!row.overflowCells.length" class="dm-hr-values-empty dm-hint">全部字段继承全局规则</span>
+                          <VMenu v-if="row.overflowCells.length" location="bottom start" max-width="440">
+                            <template #activator="{ props: menuProps }">
+                              <VBtn v-bind="menuProps" size="small" density="compact" variant="text" class="dm-hr-rules-more">+{{ row.overflowCells.length }}项</VBtn>
+                            </template>
+                            <div class="dm-hr-rules-overflow">
+                              <VChip v-for="cell in row.overflowCells" :key="cell.key" size="x-small" :variant="cell.inherited ? 'outlined' : 'tonal'" :color="cell.color" :data-rule-key="cell.key" class="dm-hr-rule-badge" :title="cell.tooltip">
+                                <span>{{ cell.label }} {{ cell.text }}</span><span v-if="cell.inherited" class="dm-hr-inherit-mark">· 继承</span>
+                              </VChip>
+                            </div>
+                          </VMenu>
+                        </div></td>
+                        <td><VChip size="x-small" variant="tonal" :color="row.sourceColor">{{ row.sourceLabel }}</VChip></td>
+                        <td><VSwitch :disabled="!form.hr_enable_site_config" density="compact" :model-value="row.enabled" color="primary" inset hide-details :aria-label="row.name + '规则启用'"
+                          :title="row.blocked ? '已停用：该站规则不生效，回退全局规则' : '启用中；关闭后该站回退全局规则'" @update:model-value="hrSetSiteEnabled(row.name, $event)" /></td>
+                        <td><RowActionMenu :label="row.name" :actions="row.custom ? [
+                          { key: 'edit', label: row.expanded ? '收起' : '编辑', icon: row.expanded ? 'mdi-chevron-up' : 'mdi-pencil-outline' },
+                          { key: 'delete', label: row.preset ? '删除覆盖（恢复预设）' : '删除站点', icon: 'mdi-delete-outline', color: 'error', disabled: !form.hr_enable_site_config }
+                        ] : [{ key: 'copy', label: '复制规则', icon: 'mdi-content-copy', disabled: !form.hr_enable_site_config }]"
+                          @select="action => action === 'edit' ? hrToggleExpanded(row.name) : action === 'delete' ? hrRemoveCustomSite(row.name) : hrCopyPresetToCustom(row.name)" /></td>
+                      </tr>
+                      <tr v-if="row.custom && row.expanded"><td colspan="5">
+                        <div class="dm-hr-editor">
+                          <div class="dm-hr-editor-grid">
+                            <VTextField :disabled="!form.hr_enable_site_config" density="compact" class="dm-number-input" v-for="field in hrNumberFields" :key="field.key" :model-value="hrRuleNumber(row.entry, field.key)"
+                              @update:model-value="hrSetRuleNumber(row.name, field.key, $event)" :label="field.label" type="number" variant="outlined" :placeholder="`继承 ${hrGlobalText(field.key)}`" :title="`留空继承全局（${hrGlobalText(field.key)}）`" hide-details />
                           </div>
-                        <div class="dm-hr-actions">
-                          <template v-if="row.custom">
-                            <VBtn size="small" variant="text" :prepend-icon="row.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
-                              @click="hrToggleExpanded(row.name)">{{ row.expanded ? '收起' : '编辑' }}</VBtn>
-                            <VBtn :disabled="!form.hr_enable_site_config" size="small" variant="text" color="primary" prepend-icon="mdi-delete-outline"
-                              :title="row.preset ? '删除自定义条目后该站回退内置预设' : '删除该自定义站点'"
-                              @click="hrRemoveCustomSite(row.name)">删除站点</VBtn>
-                          </template>
-                          <VBtn :disabled="!form.hr_enable_site_config" size="small" v-else variant="text" prepend-icon="mdi-content-copy"
-                            title="把内置预设值复制为自定义条目后逐字段调整" @click="hrCopyPresetToCustom(row.name)">复制规则</VBtn>
-                        </div>
-                      </div>
-                      <div v-if="row.custom && row.expanded" class="dm-hr-editor">
-                        <div class="dm-hr-editor-grid">
-                          <VTextField :disabled="!form.hr_enable_site_config" density="compact" class="dm-number-input" v-for="field in hrNumberFields" :key="field.key" :model-value="hrRuleNumber(row.entry, field.key)"
-                            @update:model-value="hrSetRuleNumber(row.name, field.key, $event)" :label="field.label" type="number" variant="outlined" :hint="`留空表示继承全局（${hrGlobalText(field.key)}）`"
-                            persistent-hint />
-                          <VSelect :disabled="!form.hr_enable_site_config" density="compact" v-for="field in hrFlagFields" :key="field.key" :model-value="hrRuleFlag(row.entry, field.key)"
-                            @update:model-value="hrSetRuleFlag(row.name, field.key, $event)" :items="hrTriStateItems" :label="field.label" variant="outlined" hide-details />
-                        </div>
-                        <div class="dm-hr-trackers">
-                          <VCombobox :disabled="!form.hr_enable_site_config" density="compact" :model-value="hrRuleTrackers(row.entry)" @update:model-value="hrSetRuleTrackers(row.name, $event)"
-                            label="Tracker 域名" variant="outlined" multiple chips
-                            closable-chips clearable placeholder="完整 URL 或裸域名，如 https://tracker.example.com/announce"
-                            hint="MP 站点库识别不出站点时，按这里的域名兜底匹配该自定义站点" persistent-hint />
-                        </div>
-                        <div class="dm-hr-tiers">
-                          <div class="dm-hr-tiers-head">
-                            <span>体积分档</span><span class="dm-hint">按种子 GiB 匹配；上限为 0 表示不限，需置于末位。</span>
-                            <VBtn :disabled="!form.hr_enable_site_config" size="small" variant="text" prepend-icon="mdi-plus" @click="hrAddTier(row.name)">添加分档</VBtn>
+                          <div class="dm-hr-editor-grid mt-3">
+                            <VSelect :disabled="!form.hr_enable_site_config" density="compact" v-for="field in hrFlagFields" :key="field.key" :model-value="hrRuleFlag(row.entry, field.key)"
+                              @update:model-value="hrSetRuleFlag(row.name, field.key, $event)" :items="hrTriStateItems" :label="field.label" variant="outlined" hide-details />
                           </div>
-                          <div v-for="(tier, tierIndex) in row.entry.hr_size_tiers || []" :key="`${row.name}-${tierIndex}`"
-                            class="dm-hr-tier-row">
-                            <VTextField :disabled="!form.hr_enable_site_config" density="compact" class="dm-number-input" v-for="field in hrTierFields" :key="field.key" :model-value="hrTierNumber(tier, field.key)"
-                              @update:model-value="hrSetTierNumber(row.name, tierIndex, field.key, $event)" :label="field.label"
-                              type="number" variant="outlined" hide-details />
-                            <VBtn :disabled="!form.hr_enable_site_config" size="small" aria-label="删除该分档" icon="mdi-delete-outline" variant="text" color="primary" title="删除该分档"
-                              @click="hrRemoveTier(row.name, tierIndex)" />
+                          <div class="dm-hr-trackers">
+                            <MultiLineInput :disabled="!form.hr_enable_site_config" :model-value="hrRuleTrackers(row.entry)" @update:model-value="hrSetRuleTrackers(row.name, $event)" label="Tracker 域名" clearable hide-details placeholder="tracker.example.com" title="站点库识别失败时，按这些域名匹配" />
                           </div>
-                          <div v-if="!(row.entry.hr_size_tiers || []).length" class="dm-hint">
-                            未设置分档：命中分档时以分档的做种时长/考核期为准，未命中时用站点值。
+                          <div class="dm-hr-tiers">
+                            <div class="dm-hr-tiers-head"><span title="按种子 GiB 匹配；上限为 0 表示不限，需置于末位">体积分档</span>
+                              <VBtn :disabled="!form.hr_enable_site_config" size="small" variant="tonal" prepend-icon="mdi-plus" @click="hrAddTier(row.name)">添加分档</VBtn>
+                            </div>
+                            <div v-for="(tier, tierIndex) in row.entry.hr_size_tiers || []" :key="`${row.name}-${tierIndex}`" class="dm-hr-tier-row">
+                              <VTextField :disabled="!form.hr_enable_site_config" density="compact" class="dm-number-input" v-for="field in hrTierFields" :key="field.key" :model-value="hrTierNumber(tier, field.key)"
+                                @update:model-value="hrSetTierNumber(row.name, tierIndex, field.key, $event)" :label="field.label" type="number" variant="outlined" hide-details />
+                              <VBtn :disabled="!form.hr_enable_site_config" size="small" aria-label="删除该分档" icon="mdi-delete-outline" variant="text" color="primary" title="删除该分档" @click="hrRemoveTier(row.name, tierIndex)" />
+                            </div>
+                            <div v-if="!(row.entry.hr_size_tiers || []).length" class="dm-hint">未设置分档</div>
                           </div>
                         </div>
-                      </div>
+                      </td></tr>
                     </template>
-                    <div v-if="!hrSiteRows.length" class="dm-monitor-empty dm-hint">没有可显示的站点规则；可重载预设或新增自定义站点。</div>
-                  </div>
-
-                  <div class="mt-3">
-                    <VBtn size="small" variant="text" :prepend-icon="hrRawOpen ? 'mdi-chevron-up' : 'mdi-code-json'"
-                      @click="hrRawOpen = !hrRawOpen">{{ hrRawOpen ? '收起 YAML' : '编辑 YAML' }}</VBtn>
-                    <template v-if="hrRawOpen">
-                      <VTextarea :disabled="!form.hr_enable_site_config" density="compact" v-model="form.hr_site_config_str" :error-messages="hrRawError" label="站点规则" variant="outlined" rows="8" class="mt-1" hint="YAML 格式；解析失败时合并视图保留上一次可解析的规则" persistent-hint />
-                      <div class="dm-hint">
-                        顶层为列表，每项含 site_name 与 hr_duration / additional_seed_time / hr_deadline_days / hr_ratio / hr_upload_multiplier / hr_upload_gte_download / hr_active / hr_size_tiers / enabled；未设置字段回退全局规则，enabled: false 为影子条目。
-                      </div>
-                    </template>
-                  </div>
+                    <tr v-if="!hrSiteRows.length"><td colspan="5" class="dm-hint">暂无站点规则</td></tr>
+                  </tbody>
+                </VTable>
+                <div class="mt-3">
+                  <VBtn size="small" variant="text" :prepend-icon="hrRawOpen ? 'mdi-chevron-up' : 'mdi-code-json'" @click="hrRawOpen = !hrRawOpen">{{ hrRawOpen ? '收起 YAML' : '编辑 YAML' }}</VBtn>
+                  <template v-if="hrRawOpen">
+                    <div class="dm-field dm-field--full"><VTextarea :disabled="!form.hr_enable_site_config" density="compact" v-model="form.hr_site_config_str" :error-messages="hrRawError" label="站点规则" variant="outlined" rows="8" class="mt-1" /></div>
+                  </template>
                 </div>
-              </div>
+              </FormSection>
             </div>
 
             <!-- ═══ 自动删种 · 基础设置 ═══ -->
-            <div v-show="activeSub === 'remover_basic'" class="dm-pane">
-              <div v-if="form.remover_action === 'deletefile'" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />执行时将删除任务及文件。</div>
-              <div class="dm-section-title">基础设置</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.remover_enabled" color="primary" inset hide-details label="启用" />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.remover_observe_only" color="warning" inset hide-details label="观察模式" />
-                  <div v-if="form.remover_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" /> 观察模式：只列出候选并发通知，不暂停、不删除种子；原「仅观察不执行」开关已迁移到此处</div>
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.remover_notify" color="primary" inset hide-details label="发送通知" />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.remover_mponly" color="primary" inset hide-details label="仅 MoviePilot 任务" />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VSelect density="compact" v-model="form.remover_action" label="动作" variant="outlined"
-                    :items="removerActionItems" hint="暂停 / 删除任务 / 删除任务及文件" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VSelect density="compact" v-model="form.remover_downloaders" label="下载器" variant="outlined"
-                    :items="downloaderItems" multiple chips closable-chips clearable hint="只处理这里选中的下载器" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VCronField density="compact" v-model="form.remover_cron" label="执行计划" variant="outlined" hide-details />
-                </div>
-              </div>
-              <div class="dm-section-title mt-4">普通规则</div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.remover_time" label="做种时长（小时）" variant="outlined" hint="多个以逗号分隔" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.remover_ratio" label="分享率" variant="outlined" hint="低于此分享率时命中；多个以逗号分隔" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.remover_size" label="体积（GB）" variant="outlined" hint="多个以逗号分隔" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.remover_upspeed" label="平均上传速度（KB/s）" variant="outlined" hint="多个以逗号分隔" persistent-hint />
-                </div>
-              </div>
-              <details class="dm-more mt-4">
-                <summary class="dm-section-title">更多条件与连带处理</summary>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.remover_samedata" color="error" inset hide-details label="连带同名同大小任务" />
-              <div v-if="form.remover_samedata" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />命中规则时也处理同名同大小任务；删除动作可能影响文件。</div>
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.remover_labels" label="限定标签" variant="outlined" hint="多个以逗号分隔" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.remover_torrentcategorys" label="限定分类" variant="outlined" hint="多个以逗号分隔" persistent-hint />
-                </div>
-                <div class="dm-field dm-field--full">
-                  <VTextField density="compact" v-model="form.remover_pathkeywords" label="路径关键词" variant="outlined" hint="多个以逗号分隔" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.remover_trackerkeywords" label="tracker 关键词" variant="outlined" hint="多个以逗号分隔" persistent-hint />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.remover_errorkeywords" label="错误关键词" variant="outlined" hint="多个以逗号分隔" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.remover_torrentstates" label="任务状态" variant="outlined" hint="多个以逗号分隔" persistent-hint />
-                </div>
-              </div>
-              </details>
+            <div v-show="activeSub === 'remover_basic'" class="dm-pane dm-compact-form dm-unified-form">
+<FormSection title="基础设置" :icon="MODULE_ICONS.autoremove">
+<div class="dm-switch-group"><VSwitch density="compact" v-model="form.remover_enabled" color="primary" inset hide-details label="启用" />
+<VSwitch density="compact" v-model="form.remover_observe_only" color="warning" inset hide-details label="观察模式" />
+<VSwitch density="compact" v-model="form.remover_notify" color="primary" inset hide-details label="发送通知" /></div><div v-if="form.remover_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />观察模式：只列出候选并通知，不暂停、不删除种子。</div><div class="dm-field-row">
+<div class="dm-field"><VSelect density="compact" v-model="form.remover_action" label="动作" variant="outlined"
+                    :items="removerActionItems" hide-details /></div>
+<div class="dm-field"><VCronField density="compact" v-model="form.remover_cron" label="执行计划" variant="outlined" hide-details /></div>
+<div class="dm-field"><VSelect density="compact" v-model="form.remover_downloaders" label="下载器" variant="outlined"
+                    :items="downloaderItems" multiple chips closable-chips clearable hide-details /></div>
+</div><div v-if="form.remover_action === 'deletefile'" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />删除任务及文件仍受 H&R 和其他删除保护约束。</div>
+</FormSection><FormSection title="清理条件" :icon="MODULE_ICONS.autoremove">
+<div class="dm-field-row">
+<div class="dm-field"><VTextField density="compact" v-model="form.remover_time" label="做种时长（小时）" variant="outlined" hide-details /></div>
+<div class="dm-field"><VTextField density="compact" v-model="form.remover_ratio" label="分享率" variant="outlined" hide-details /></div>
+<div class="dm-field"><VTextField density="compact" v-model="form.remover_size" label="体积（GB）" variant="outlined" hide-details /></div>
+<div class="dm-field"><VTextField density="compact" v-model="form.remover_upspeed" label="平均上传速度（KB/s）" variant="outlined" hide-details /></div>
+</div><div class="dm-hint">做种时长、分享率为大于阈值，平均上传速度为小于阈值；体积填写上下限（GB，逗号分隔）。所有条件同时满足才命中。</div>
+</FormSection><FormSection title="处理范围" :icon="MODULE_ICONS.autoremove">
+<div class="dm-switch-group"><VSwitch density="compact" v-model="form.remover_mponly" color="primary" inset hide-details label="仅 MoviePilot 任务" />
+<VSwitch density="compact" v-model="form.remover_samedata" color="error" inset hide-details label="连带同名同大小任务" /></div><div v-if="form.remover_samedata" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />连带处理同名同大小任务，删除动作可能影响文件。</div><div class="dm-field-row">
+<div class="dm-field"><MultiValueInput density="compact" v-model="form.remover_labels" label="限定标签" variant="outlined" hide-details /></div>
+<div class="dm-field"><MultiValueInput density="compact" v-model="form.remover_torrentcategorys" label="限定分类" variant="outlined" hide-details /></div>
+<div class="dm-field dm-field--full"><VTextField density="compact" v-model="form.remover_pathkeywords" label="路径关键词" variant="outlined" hide-details /></div>
+<div class="dm-field"><VTextField density="compact" v-model="form.remover_trackerkeywords" label="tracker 关键词" variant="outlined" hide-details /></div>
+<div class="dm-field"><VTextField density="compact" v-model="form.remover_errorkeywords" label="错误关键词" variant="outlined" hide-details /></div>
+<div class="dm-field"><MultiValueInput density="compact" v-model="form.remover_torrentstates" label="任务状态" variant="outlined" hide-details /></div>
+</div><div class="dm-hint">路径、Tracker、错误关键词按原正则表达式匹配，不是逗号分隔列表。</div>
+</FormSection>
             </div>
 
-            <!-- ═══ 失败清理 · 基础设置 ═══ -->
-            <div v-show="activeSub === 'failclean_basic'" class="dm-pane">
-              <div v-if="form.failcleanup_enabled && !form.failcleanup_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />真实模式可能删除源文件及下载历史。</div>
-              <div class="dm-section-title">基础设置</div>
-              <div  class="dm-hint mb-3">
-                整理失败事件与重复残留巡检共用本模块设置。
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.failcleanup_enabled" color="primary" inset hide-details label="启用" />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.failcleanup_observe_only" color="warning" inset hide-details label="观察模式" />
-                  <div v-if="form.failcleanup_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" /> 观察模式：只统计将清理的失败文件，不删除文件、不删下载历史</div>
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.failcleanup_clean_repeat" color="primary" inset hide-details label="清理重复残留" />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.failcleanup_notify" color="primary" inset hide-details label="发送通知" />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VCronField density="compact" v-model="form.failcleanup_cron" :disabled="!form.failcleanup_clean_repeat" label="巡检计划" variant="outlined" hide-details />
-                </div>
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.failcleanup_retain_hours" :disabled="!form.failcleanup_clean_repeat" label="残留保留（小时）" type="number" variant="outlined"
-                    hint="仅清理早于该时长的重复残留路径，默认 6" persistent-hint />
-                </div>
-              </div>
+            <div v-show="activeSub === 'failclean_basic'" class="dm-pane dm-compact-form dm-unified-form">
+<div class="dm-switch-group"><VSwitch density="compact" v-model="form.failcleanup_enabled" color="primary" inset hide-details label="启用" />
+<VSwitch density="compact" v-model="form.failcleanup_observe_only" color="warning" inset hide-details label="观察模式" />
+<VSwitch density="compact" v-model="form.failcleanup_notify" color="primary" inset hide-details label="发送通知" />
+<VSwitch density="compact" v-model="form.failcleanup_clean_repeat" color="primary" inset hide-details label="清理重复残留" /></div><div v-if="form.failcleanup_enabled && !form.failcleanup_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />真实模式可能删除源文件及下载历史。</div><div v-if="form.failcleanup_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />观察模式只统计，不删除文件或下载历史。</div><div class="dm-field-row">
+<div class="dm-field"><VCronField density="compact" v-model="form.failcleanup_cron" :disabled="!form.failcleanup_clean_repeat" label="巡检计划" variant="outlined" hide-details /></div>
+<div class="dm-field"><VTextField density="compact" class="dm-number-input" v-model.number="form.failcleanup_retain_hours" :disabled="!form.failcleanup_clean_repeat" label="残留保留（小时）" type="number" variant="outlined"
+                    hide-details /></div>
+</div>
             </div>
 
-            <!-- ═══ 种子重命名 · 基础设置 ═══ -->
-            <div v-show="activeSub === 'rename_basic'" class="dm-pane">
-              <div class="dm-section-title">基础设置</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.rename_enabled" inset hide-details label="启用" />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.rename_observe_only" color="warning" inset hide-details label="观察模式" />
-                  <div v-if="form.rename_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" /> 只预览，不执行写操作。</div>
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.rename_on_download_added" inset hide-details label="入列触发" />
-                </div>
-                <div class="dm-field dm-field--number">
-                  <VTextField density="compact" class="dm-number-input" v-model.number="form.rename_event_debounce_seconds" label="事件防抖（秒）" type="number" min="1" variant="outlined"
-                    :disabled="!form.rename_on_download_added" hint="默认 3 秒" persistent-hint />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.rename_notify" inset hide-details label="发送通知" />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.rename_cron_enabled" inset hide-details label="定时补查" />
-                </div>
-                <div class="dm-field">
-                  <VCronField density="compact" v-model="form.rename_cron" label="补查计划" variant="outlined" hide-details :disabled="!form.rename_cron_enabled" />
-                </div>
-                <div class="dm-field">
-                  <VSelect density="compact" v-model="form.rename_downloaders" label="下载器" variant="outlined"
-                    :items="qbDownloaderItems" multiple chips closable-chips clearable hint="仅 qBittorrent 支持重命名" persistent-hint />
-                </div>
-              </div>
+            <div v-show="activeSub === 'rename_basic'" class="dm-pane dm-compact-form dm-unified-form">
+<div class="dm-switch-group"><VSwitch density="compact" v-model="form.rename_enabled" inset hide-details label="启用" />
+<VSwitch density="compact" v-model="form.rename_observe_only" color="warning" inset hide-details label="观察模式" />
+<VSwitch density="compact" v-model="form.rename_notify" inset hide-details label="发送通知" />
+<VSwitch density="compact" v-model="form.rename_on_download_added" inset hide-details label="入列触发" />
+<VSwitch density="compact" v-model="form.rename_cron_enabled" inset hide-details label="定时补查" /></div><div v-if="form.rename_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />只预览，不执行重命名。</div><div class="dm-field-row">
+<div class="dm-field"><VTextField density="compact" class="dm-number-input" v-model.number="form.rename_event_debounce_seconds" label="事件防抖（秒）" type="number" min="1" variant="outlined"
+                    :disabled="!form.rename_on_download_added" hide-details /></div>
+<div class="dm-field"><VCronField density="compact" v-model="form.rename_cron" label="补查计划" variant="outlined" hide-details :disabled="!form.rename_cron_enabled" /></div>
+<div class="dm-field"><VSelect density="compact" v-model="form.rename_downloaders" label="下载器" variant="outlined"
+                    :items="qbDownloaderItems" multiple chips closable-chips clearable hide-details /></div>
+</div><div class="dm-field-row">
+<div class="dm-field"><MultiValueInput density="compact" v-model="form.rename_include_tags" label="包含标签" variant="outlined" hide-details /></div>
+<div class="dm-field"><MultiValueInput density="compact" v-model="form.rename_exclude_tags" label="排除标签" variant="outlined" hide-details /></div>
+</div><div class="dm-field-row">
+<div class="dm-field dm-field--full"><VTextarea density="compact" v-model="form.rename_exclude_dirs" label="排除目录" variant="outlined" rows="2" hide-details /></div>
+</div><div class="dm-field-row">
+<div class="dm-field dm-field--full"><VTextarea density="compact" v-model="form.rename_hash_white_list" label="Hash 白名单" variant="outlined" rows="2" hide-details /></div>
+</div>
             </div>
 
-            <!-- ═══ 种子重命名 · 模板与过滤 ═══ -->
-            <div v-show="activeSub === 'rename_format'" class="dm-pane">
-              <div class="dm-section-title">模板与过滤</div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.rename_include_tags" label="包含标签" variant="outlined" hint="多个以逗号分隔；留空表示不限制" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.rename_exclude_tags" label="排除标签" variant="outlined" hint="多个以逗号分隔；默认排除已重命名" persistent-hint />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--full">
-                  <VTextarea density="compact" v-model="form.rename_movie_format" label="电影模板" variant="outlined" rows="2" hint="Jinja2 模板" persistent-hint />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--full">
-                  <VTextarea density="compact" v-model="form.rename_tv_format" label="电视剧模板" variant="outlined" rows="2" hint="Jinja2 模板" persistent-hint />
-                </div>
-              </div>
-              <details class="dm-more mt-4">
+            <div v-show="activeSub === 'rename_format'" class="dm-pane dm-compact-form dm-unified-form">
+<div class="dm-field-row">
+<div class="dm-field dm-field--full"><VTextarea density="compact" v-model="form.rename_movie_format" label="电影模板" variant="outlined" rows="2" hide-details /></div>
+</div><div class="dm-field-row">
+<div class="dm-field dm-field--full"><VTextarea density="compact" v-model="form.rename_tv_format" label="电视剧模板" variant="outlined" rows="2" hide-details /></div>
+</div><details class="dm-more mt-4">
                 <summary class="dm-section-title">可用变量与示例</summary>
                 <div class="dm-hint" v-pre>可用变量：{{ title }}、{{ year }}、{{ season_episode }}、{{ original_name }}；示例：{{ title }} ({{ year }}) - {{ original_name }}</div>
               </details>
-              <details class="dm-more mt-4">
-                <summary class="dm-section-title">更多过滤</summary>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--full">
-                  <VTextarea density="compact" v-model="form.rename_exclude_dirs" label="排除目录" variant="outlined" rows="2" hint="每行一个目录" persistent-hint />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--full">
-                  <VTextarea density="compact" v-model="form.rename_hash_white_list" label="Hash 白名单" variant="outlined" rows="2" hint="每行一个种子 Hash" persistent-hint />
-                </div>
-              </div>
-              </details>
             </div>
 
-            <!-- ═══ 站点标签 · 基础设置 ═══ -->
-            <div v-show="activeSub === 'tag_basic'" class="dm-pane">
-              <div class="dm-section-title">基础设置</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.tag_enabled" color="primary" inset hide-details label="启用" />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.tag_observe_only" color="warning" inset hide-details label="观察模式" />
-                  <div v-if="form.tag_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" /> 观察模式：只统计将写入的标签/分类，不修改下载器标签</div>
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.tag_enable_tag" color="primary" inset hide-details label="站点名标签" />
-                </div>
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.tag_enable_media_tag" color="primary" inset hide-details label="剧名标签" />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.tag_enable_category" color="primary" inset hide-details label="TMDB 二级分类" />
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.tag_siteprefix" label="站点标签前缀" variant="outlined" hide-details />
-                </div>
-                <div class="dm-field">
-                  <VSelect density="compact" v-model="form.tag_downloaders" label="下载器" variant="outlined"
-                    :items="downloaderItems" multiple chips closable-chips clearable hint="留空表示全部下载器" persistent-hint />
-                </div>
-                <div class="dm-field">
-                  <VCronField density="compact" v-model="form.tag_interval_cron" label="补全计划" variant="outlined" hide-details />
-                </div>
-              </div>
-              <details class="dm-more mt-4">
-                <summary class="dm-section-title">标签删除权限</summary>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.tag_enable_del_tags" color="error" inset hide-details label="允许删除标签" />
-              <div v-if="form.tag_enable_del_tags" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />允许在标签补全时删除下载器标签。</div>
-                </div>
-              </div>
-              </details>
+            <div v-show="activeSub === 'tag_basic'" class="dm-pane dm-compact-form dm-unified-form">
+<div class="dm-switch-group"><VSwitch density="compact" v-model="form.tag_enabled" color="primary" inset hide-details label="启用" />
+<VSwitch density="compact" v-model="form.tag_observe_only" color="warning" inset hide-details label="观察模式" />
+<VSwitch density="compact" v-model="form.tag_enable_tag" color="primary" inset hide-details label="站点名标签" />
+<VSwitch density="compact" v-model="form.tag_enable_media_tag" color="primary" inset hide-details label="剧名标签" />
+<VSwitch density="compact" v-model="form.tag_enable_category" color="primary" inset hide-details label="下载分类" />
+<VSwitch density="compact" v-model="form.tag_enable_del_tags" color="error" inset hide-details label="允许删除标签" /></div><div v-if="form.tag_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />只预览标签和分类，不修改下载器。</div><div v-if="form.tag_enable_del_tags" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />允许在标签补全时删除下载器标签。</div><div class="dm-field-row">
+<div class="dm-field"><VTextField density="compact" v-model="form.tag_siteprefix" label="站点标签前缀" variant="outlined" hide-details /></div>
+<div class="dm-field"><VSelect density="compact" v-model="form.tag_downloaders" label="下载器" variant="outlined"
+                    :items="downloaderItems" multiple chips closable-chips clearable hide-details /></div>
+<div class="dm-field"><VCronField density="compact" v-model="form.tag_interval_cron" label="补全计划" variant="outlined" hide-details /></div>
+</div>
             </div>
 
-            <!-- ═══ 站点标签 · 映射规则 ═══ -->
-            <div v-show="activeSub === 'mapping'" class="dm-pane">
-              <div class="dm-section-title">映射规则</div>
-              <div class="dm-field-row">
-                <div class="dm-field dm-field--toggle">
-                  <VSwitch density="compact" v-model="form.tag_rename_type" color="primary" inset hide-details label="分类方式" />
-                  <div class="dm-hint">开启：路径关键词；关闭：TMDB 识别。对应规则在映射规则中配置。</div>
-                </div>
-              </div>
-              <div class="dm-field-row">
-                <div class="dm-field">
-                  <VTextField density="compact" v-model="form.tag_catprefix" label="分类前缀" variant="outlined" hint="写入分类名前的前缀，留空不加" persistent-hint />
-                </div>
-              </div>
-
-              <!-- ═══ 分类规则 ═══ -->
-              <div class="dm-section-title mt-2">分类规则</div>
+            <div v-show="activeSub === 'mapping'" class="dm-pane dm-compact-form dm-unified-form">
+<FormSection title="分类规则" :icon="MODULE_ICONS.tag"><div class="dm-field-row"><div class="dm-field"><VSelect density="compact" v-model="form.tag_rename_type" :items="[{title:'TMDB 识别',value:false},{title:'路径关键词',value:true}]" label="分类方式" variant="outlined" hide-details /></div><div class="dm-field"><VTextField density="compact" v-model="form.tag_catprefix" label="分类前缀" variant="outlined" hide-details /></div></div>
               <!-- 分类映射（TMDB 模式）：一行一条 载入分类 -> 写入分类 -->
               <template v-if="!form.tag_rename_type">
+                <div v-if="tagCategoriesLoading" class="dm-hint" role="status">正在读取 MP 分类…</div>
+                <div v-if="tagCategoriesError" class="dm-hint text-error" role="alert">{{ tagCategoriesError }}；已有映射保持不变，可重试。</div>
                 <div class="dm-hr-table mt-3">
                   <div class="dm-cat-row dm-cat-row--head">
-                    <span>载入分类（TMDB / 站点分类）</span>
+                    <span>来源分类（MP 配置）</span>
                     <span />
                     <span>写入分类</span>
                     <span />
                   </div>
-                  <div v-for="(pair, idx) in tagCatPairs" :key="`cat-${idx}`" class="dm-cat-row">
-                    <VTextField density="compact" v-model="pair.from" label="载入分类" variant="outlined" hide-details />
+                  <div v-for="pair in tagCategoryRows" :key="pair.from" class="dm-cat-row">
+                    <div class="dm-cat-source">
+                      <span class="dm-body-text">{{ pair.from }}</span>
+                      <span v-if="pair.legacy && tagCategoriesLoaded" class="dm-hint">旧映射</span>
+                    </div>
                     <span class="dm-map-arrow">→</span>
-                    <VTextField density="compact" v-model="pair.to" label="写入分类" variant="outlined" hide-details />
-                    <VBtn size="small" aria-label="移除映射" icon="mdi-close" variant="text" color="primary" @click="tagCatPairs.splice(idx, 1)" />
+                    <VTextField density="compact" :model-value="pair.to" @update:model-value="setTagCategoryTarget(pair.from, $event)" label="写入分类" variant="outlined" hide-details />
+                    <VBtn v-if="pair.legacy" size="small" aria-label="移除旧映射" icon="mdi-close" variant="text" color="primary" @click="removeLegacyCategory(pair.from)" />
+                    <span v-else />
                   </div>
-                  <div v-if="!tagCatPairs.length" class="dm-map-empty dm-hint">暂无映射，点击下方按钮添加</div>
+                  <div v-if="!tagCategoryRows.length && !tagCategoriesLoading && !tagCategoriesError" class="dm-map-empty dm-hint">MP 暂无分类配置</div>
                 </div>
                 <div class="d-flex justify-end mt-2">
-                  <VBtn size="small" variant="tonal" prepend-icon="mdi-plus" @click="addCatPair">添加映射</VBtn>
+                  <VBtn size="small" variant="tonal" prepend-icon="mdi-refresh" :loading="tagCategoriesLoading" :disabled="tagCategoriesLoading" @click="loadTagCategories">刷新 MP 分类</VBtn>
                 </div>
                 <div class="dm-hint mt-2">
-                  当前模式：按 TMDB 识别结果设置分类，每行「载入分类 → 写入分类」一一对应；改为路径判断后此表不生效。
+                  来源读取 MP 当前分类配置，只需修改写入分类；未设置映射时保持原分类。旧映射保留，不会因刷新消失。切换为路径关键词后此表不生效。
                 </div>
               </template>
 
@@ -2127,7 +1914,7 @@ Object.keys(form).forEach(k => delete form[k])
               </template>
 
               <!-- ═══ 站点规则 ═══ -->
-              <div class="dm-section-title mt-4">站点规则</div>
+              </FormSection><FormSection title="站点规则" :icon="MODULE_ICONS.tag">
               <!-- Tracker 映射（恒显示）：一行一条 tracker域名 -> 站点库域名，并反查站点名 -->
               <div class="dm-hr-table mt-2">
                 <div class="dm-map-row dm-map-row--head">
@@ -2174,6 +1961,7 @@ Object.keys(form).forEach(k => delete form[k])
               <div class="dm-hint mt-2">
                 种子 Tracker 域名按行换算成站点库域名后匹配站点打「站点前缀 + 站点名」标签；站点库未收录的行可填「自定义标签」，按「站点前缀 + 自定义标签」打标，留空则跳过。
               </div>
+</FormSection>
             </div>
 
 
@@ -2182,11 +1970,11 @@ Object.keys(form).forEach(k => delete form[k])
       </div>
       <VDivider />
       <VCardActions class="dm-actions">
-        <VBtn size="small" variant="text" prepend-icon="mdi-table-eye" @click="switchToData">查看数据</VBtn>
+        <VBtn size="small" color="primary" variant="tonal" prepend-icon="mdi-table-eye" @click="switchToData">查看数据</VBtn>
         <span v-if="saveMessage" class="dm-hint" :class="{ 'text-error': saveError }" role="status" aria-live="polite">{{ saveMessage }}</span>
         <VSpacer />
-        <VBtn size="small" variant="text" @click="emit('close')">取消</VBtn>
-        <VBtn size="small" color="primary" variant="flat" prepend-icon="mdi-content-save-outline" :loading="savePending" :disabled="savePending" @click="saveConfig">保存配置</VBtn>
+        <VBtn size="small" color="primary" variant="tonal" @click="emit('close')">取消</VBtn>
+        <VBtn size="small" color="primary" variant="tonal" prepend-icon="mdi-content-save-outline" :loading="savePending" :disabled="savePending" @click="saveConfig">保存配置</VBtn>
       </VCardActions>
     </VCard>
 
@@ -2214,7 +2002,7 @@ Object.keys(form).forEach(k => delete form[k])
     </VDialog>
 
     <VDialog content-class="dm-config" v-model="transferDialog" max-width="780" scrollable>
-      <VCard class="dm-form-dialog">
+      <VCard class="dm-form-dialog dm-transfer-form dm-compact-form">
         <VCardItem>
           <template #prepend>
             <VAvatar color="primary" variant="tonal" size="40" rounded="lg"><VIcon icon="mdi-transfer" /></VAvatar>
@@ -2224,13 +2012,12 @@ Object.keys(form).forEach(k => delete form[k])
         </VCardItem>
         <VDivider />
         <VCardText>
+          <FormSection title="任务信息" :icon="MODULE_ICONS.transfer">
+            <template #actions><VSwitch density="compact" v-model="transferForm.enabled" color="primary" inset hide-details label="启用" /></template>
           <div class="dm-field-row">
             <div class="dm-field">
               <VTextField density="compact" v-model="transferForm.name" label="任务名称" variant="outlined"
                 hint="留空自动命名为「任务N」" persistent-hint />
-            </div>
-            <div class="dm-field dm-field--toggle">
-              <VSwitch density="compact" v-model="transferForm.enabled" color="primary" inset hide-details label="启用" />
             </div>
           </div>
           <div class="dm-field-row">
@@ -2243,6 +2030,8 @@ Object.keys(form).forEach(k => delete form[k])
                 hint="转移目标下载器" persistent-hint />
             </div>
           </div>
+          </FormSection>
+          <FormSection title="数据路径" :icon="MODULE_ICONS.transfer">
           <div class="dm-field-row">
             <div class="dm-field dm-field--full">
               <VTextField density="compact" v-model="transferForm.from_path" :error-messages="transferError && (!!transferForm.from_path !== !!transferForm.to_path) ? transferError : ''" label="源数据路径" variant="outlined"
@@ -2253,41 +2042,41 @@ Object.keys(form).forEach(k => delete form[k])
                 hint="数据可见性映射（可选）：两个都留空 = 不做映射；只填一个视为配置错误" persistent-hint />
             </div>
           </div>
-          <div class="dm-section-title mt-4">筛选条件</div>
+          </FormSection>
+          <FormSection title="筛选条件" :icon="MODULE_ICONS.transfer">
           <div class="dm-field-row">
             <div class="dm-field">
-              <VTextField density="compact" v-model="transferForm.include_category" label="包含分类" variant="outlined" hint="多个以逗号分隔；仅转移这些分类的种子，留空不限制" persistent-hint />
+              <MultiValueInput v-model="transferForm.include_category" label="包含分类" variant="outlined" hint="仅转移这些分类的种子，留空不限制" persistent-hint />
             </div>
             <div class="dm-field">
-              <VTextField density="compact" v-model="transferForm.include_labels" label="包含标签" variant="outlined" hint="多个以逗号分隔；仅转移包含这些标签的种子，留空不限制" persistent-hint />
+              <MultiValueInput v-model="transferForm.include_labels" label="包含标签" variant="outlined" hint="仅转移包含这些标签的种子，留空不限制" persistent-hint />
             </div>
           </div>
           <div class="dm-field-row">
             <div class="dm-field">
-              <VTextField density="compact" v-model="transferForm.exclude_labels" label="排除标签" variant="outlined" hint="多个以逗号分隔；包含这些标签的种子跳过" persistent-hint />
-            </div>
-            <div class="dm-field dm-field--toggle">
-              <VCheckbox density="compact" v-model="transferForm.empty_label_ok" color="info" hide-details label="允许无标签种子" />
+              <MultiValueInput v-model="transferForm.exclude_labels" label="排除标签" variant="outlined" hint="包含这些标签的种子跳过" persistent-hint />
             </div>
           </div>
+          <div class="dm-switch-group"><VCheckbox density="compact" v-model="transferForm.empty_label_ok" color="info" hide-details label="允许无标签种子" /></div>
           <div class="dm-field-row">
             <div class="dm-field dm-field--full">
               <VTextarea density="compact" v-model="transferForm.no_paths" label="排除路径" variant="outlined" rows="3" hint="每行一个路径" persistent-hint />
             </div>
           </div>
-          <div class="dm-section-title mt-4">高级设置</div>
+          </FormSection>
+          <FormSection title="高级设置" :icon="MODULE_ICONS.transfer">
           <div v-if="transferForm.delete_source === true" class="dm-hint dm-risk mb-2"><VIcon icon="mdi-alert-outline" size="16" />
             「删除源任务」受 H&R 保护约束：源种若已纳入 H&amp;R 管理且未达标，源任务会被保留，并计入数据页「转移做种」卡的「H&amp;R 保护」跳过数。放行办法有三种——等它达标（自动放行）、让种子在进入下载器前就带 H&amp;R 排除标签、或关闭 H&amp;R 保护总开关。注意：<strong>已纳管的种子事后补排除标签无效</strong>（排除只在首次纳管时判定）。
           </div>
           <div class="dm-field-row">
             <div class="dm-field">
-              <VSelect density="compact" v-model="transferForm.delete_source" :items="transferDeleteTriStateItems" label="删除源任务" variant="outlined"
-                hint="继承全局 / 开启 / 关闭；来源与生效值见任务列表" persistent-hint />
+              <VSelect density="compact" v-model="transferForm.delete_source" :items="transferDeleteItems(form.transfer_delete_source_default)" label="删除源任务" variant="outlined"
+                hint="使用默认值，或为此任务单独开启/关闭；实际生效值见任务列表" persistent-hint />
               <div v-if="transferForm.delete_source === true" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />转移后删除源任务，仍受 H&R 保护约束。</div>
             </div>
             <div class="dm-field">
-              <VSelect density="compact" v-model="transferForm.delete_duplicate" :items="transferDeleteTriStateItems" label="删除重复任务" variant="outlined"
-                hint="继承全局 / 开启 / 关闭；来源与生效值见任务列表" persistent-hint />
+              <VSelect density="compact" v-model="transferForm.delete_duplicate" :items="transferDeleteItems(form.transfer_delete_duplicate_default)" label="删除重复任务" variant="outlined"
+                hint="使用默认值，或为此任务单独开启/关闭；实际生效值见任务列表" persistent-hint />
               <div v-if="transferForm.delete_duplicate === true" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />转移时删除重复任务，仍受 H&R 保护约束。</div>
             </div>
           </div>
@@ -2305,8 +2094,9 @@ Object.keys(form).forEach(k => delete form[k])
                 hint="默认「已转移」；留空表示不打标签" persistent-hint />
             </div>
           </div>
+          </FormSection>
           <template v-if="transferDialogSourceType === 'rtorrent'">
-            <div class="dm-section-title mt-4">ruTorrent 网络导出</div>
+            <FormSection title="ruTorrent 网络导出" :icon="MODULE_ICONS.transfer">
             <div class="dm-hint mb-2">源端为 rtorrent 时，必须填写 ruTorrent WebUI 地址与 source 插件路径，否则无法导出种子数据。</div>
             <div class="dm-field-row">
               <div class="dm-field dm-field--full">
@@ -2318,6 +2108,7 @@ Object.keys(form).forEach(k => delete form[k])
                   hint="相对 WebUI 地址的 source 插件路径，如 plugins/source/action.php" persistent-hint />
               </div>
             </div>
+            </FormSection>
           </template>
         </VCardText>
         <VDivider />
@@ -2528,22 +2319,48 @@ Object.keys(form).forEach(k => delete form[k])
 .dm-task-filters, .dm-task-settings { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; align-content: center; }
 .dm-task-actions { display: flex; align-items: center; justify-content: flex-end; }
 .dm-hr-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dm-hr-site-table { max-width: 100%; overflow: hidden; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 6px; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color); }
+.dm-hr-site-table :deep(.v-table__wrapper) { overflow-x: auto; }
+.dm-hr-site-table :deep(table) { min-width: 760px; table-layout: fixed; }
+.dm-hr-site-table :deep(th) { font-weight: var(--dm-text-table-head-weight); white-space: nowrap; }
+.dm-hr-site-table :deep(th:first-child) { width: 140px; }
+.dm-hr-site-table :deep(th:nth-child(3)) { width: 104px; }
+.dm-hr-site-table :deep(th:nth-child(4)) { width: 72px; }
+.dm-hr-site-table :deep(th:nth-child(5)) { width: 60px; }
+.dm-hr-site-table :deep(td) { padding-block: 10px; vertical-align: middle; overflow-wrap: anywhere; }
+.dm-hr-site-table :deep(th:nth-child(n+3)), .dm-hr-site-table :deep(td:nth-child(n+3)) { text-align: center; }
+.dm-hr-site-table :deep(td:nth-child(4) .v-selection-control) { justify-content: center; }
+.dm-hr-site-table .dm-hr-site-blocked { background: rgba(var(--v-theme-on-surface), 0.02); }
+.dm-hr-site-table .dm-body-text { font-weight: var(--dm-text-body-weight); }
+.dm-hr-site-table .dm-hr-editor { padding: 12px 0; background: transparent; border: none; }
+.dm-hr-sites-form .dm-hr-editor-grid { max-width: 100%; }
+.dm-hr-sites-form .dm-hr-editor-grid + .dm-hr-editor-grid { margin-top: 12px; }
 .dm-hr-table { display: flex; flex-direction: column; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow-x: auto; }
 .dm-hr-row { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(280px, 2.2fr) minmax(92px, .5fr) 64px minmax(196px, auto); gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); }
 .dm-hr-row:last-child { border-bottom: none; }
 .dm-hr-row--head {background: rgba(var(--v-theme-on-surface), 0.03); font-size: var(--dm-text-table-head-size); font-weight: var(--dm-text-table-head-weight); line-height: var(--dm-text-table-head-line-height); color: var(--dm-text-table-head-color);}
 .dm-hr-row--blocked { background: rgba(var(--v-theme-on-surface), 0.02); }
 .dm-hr-site { min-width: 0; }
-.dm-hr-values { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; align-items: center; }
-.dm-hr-chip {display: inline-flex; flex-direction: column; gap: 0; padding: 2px 8px 3px; border-radius: 6px; background: rgba(var(--v-theme-on-surface), 0.05);  white-space: nowrap; font-size: var(--dm-text-badge-size); font-weight: var(--dm-text-badge-weight); line-height: var(--dm-text-badge-line-height); color: var(--dm-text-badge-color);}
-.dm-hr-chip-label { font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-hr-chip-value {font-variant-numeric: tabular-nums; font-size: var(--dm-text-badge-size); font-weight: var(--dm-text-badge-weight); line-height: var(--dm-text-badge-line-height); color: var(--dm-text-badge-color);}
-.dm-hr-chip--inherit { background: transparent; border: 1px dashed rgba(var(--v-theme-on-surface), 0.18); }
-.dm-hr-chip--inherit .dm-hr-chip-value { color: var(--dm-color-secondary); font-style: italic; font-weight: var(--dm-text-help-weight); }
-.dm-hr-chip--more {justify-content: center; background: transparent; border: 1px dashed rgba(var(--v-theme-on-surface), 0.18);   padding: 4px 8px; cursor: default; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-hr-chip--mini { flex-direction: row; align-items: center; padding: 0 6px; background: rgba(var(--v-theme-on-surface), 0.05); }
-.dm-hr-chip--mini .dm-hr-chip-value { font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-hr-values-empty {font-style: italic; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
+.dm-hr-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 22px; gap: 4px 6px; min-width: 0; max-height: 48px; overflow: hidden; align-items: start; justify-items: start; }
+.dm-hr-chip { display: flex; min-width: 0; max-width: 100%; width: fit-content; }
+.dm-hr-rule-badge { flex: 0 1 auto; width: fit-content; height: 22px; min-height: 22px; max-width: 100%; padding-inline: 6px; font-size: var(--dm-text-badge-size); line-height: var(--dm-text-badge-line-height); font-variant-numeric: tabular-nums; }
+.dm-hr-rule-badge :deep(.v-chip__content) { min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; }
+.dm-hr-rule-badge :deep(.v-chip__content > span:first-child) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dm-hr-inherit-mark { flex-shrink: 0; margin-inline-start: 4px; }
+.dm-hr-rules-more { justify-self: start; min-width: 0; width: fit-content; min-height: 22px; height: 22px; justify-content: flex-start; padding-inline: 6px; font-size: var(--dm-text-badge-size); }
+.dm-hr-rules-overflow { display: flex; flex-wrap: wrap; gap: 6px; max-width: 420px; padding: 8px; background: rgb(var(--v-theme-surface)); color: rgb(var(--v-theme-on-surface)); }
+.dm-hr-sites-form, .dm-hr-rules-overflow {
+  --dm-hr-rule-hr_duration: rgb(var(--v-theme-info));
+  --dm-hr-rule-additional_seed_time: color-mix(in srgb, rgb(var(--v-theme-info)) 60%, rgb(var(--v-theme-success)));
+  --dm-hr-rule-hr_deadline_days: rgb(var(--v-theme-warning));
+  --dm-hr-rule-hr_ratio: rgb(var(--v-theme-success));
+  --dm-hr-rule-hr_upload_multiplier: color-mix(in srgb, rgb(var(--v-theme-primary)) 65%, rgb(var(--v-theme-secondary)));
+  --dm-hr-rule-hr_upload_gte_download: color-mix(in srgb, rgb(var(--v-theme-success)) 75%, rgb(var(--v-theme-info)));
+  --dm-hr-rule-hr_active: rgb(var(--v-theme-secondary));
+  --dm-hr-rule-hr_size_tiers: color-mix(in srgb, rgb(var(--v-theme-secondary)) 70%, rgb(var(--v-theme-error)));
+}
+.dm-hr-chip--more { grid-column: 1 / -1; color: var(--dm-text-help-color); font-size: var(--dm-text-help-size); }
+.dm-hr-values-empty { grid-column: 1 / -1; color: var(--dm-text-help-color); }
 .dm-hr-legend { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
 .dm-hr-global-card { padding: 0; }
 .dm-hr-global-head { display: flex; align-items: baseline; gap: var(--dm-field-gap); margin-bottom: var(--dm-field-gap); flex-wrap: wrap; }
@@ -2557,4 +2374,102 @@ Object.keys(form).forEach(k => delete form[k])
 .dm-hr-tier-row { display: flex; flex-wrap: wrap; gap: var(--dm-field-gap); align-items: flex-start; margin-bottom: var(--dm-field-gap); }
 .dm-upload-config-name, .dm-upload-site-name { flex: 1 1 var(--dm-field-min-width); }
 :is(.dm-config, .dm-form-dialog) :deep(.v-input__details) { padding-inline: 0; }
+/* Shared compact layout, opt-in per confirmed module page. */
+.dm-compact-form { --dm-control-height: 36px; --dm-button-height: 28px; --dm-text-body-size: 13px; --dm-text-label-size: 13px; --dm-number-width: 176px; }
+.dm-compact-form .dm-field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.dm-compact-form .dm-field { min-width: 0; max-width: 100%; width: auto; }
+.dm-compact-form .dm-field--full { grid-column: 1 / -1; }
+.dm-compact-form .dm-number-input { width: 100%; max-width: 220px; }
+.dm-compact-form .dm-switch-group { display: flex; flex-wrap: wrap; gap: 4px 24px; align-items: flex-start; min-width: 0; }
+.dm-compact-form .dm-switch-group + .dm-field-row, .dm-compact-form .dm-field-row + .dm-switch-group { margin-top: 12px; }
+.dm-compact-form .dm-switch-group + .dm-hint, .dm-compact-form .dm-field-row + .dm-hint { margin-top: 8px; }
+.dm-compact-form :deep(.v-field__input) { min-height: var(--dm-control-height); }
+.dm-compact-form :deep(.v-textarea .v-field__input) { min-height: auto; }
+.dm-compact-form :deep(.v-selection-control) { --v-selection-control-size: 32px; min-height: 32px; }
+.dm-compact-form .dm-field--toggle :deep(.v-selection-control) { gap: 8px; }
+.dm-compact-form :deep(.v-switch--inset .v-switch__track) { height: 24px; min-width: 44px; }
+.dm-compact-form :deep(.v-switch--inset .v-switch__thumb) { height: 20px; width: 20px; }
+.dm-compact-form :deep(.dm-form-section-actions .v-switch .v-label) { font-size: var(--dm-text-help-size); }
+.dm-compact-form :deep(.v-select__selection) { min-width: 0; max-width: 100%; }
+.dm-compact-form :deep(.v-chip) { max-width: 100%; }
+.dm-compact-form :deep(.v-chip__content) { overflow: hidden; text-overflow: ellipsis; display: block; }
+@media (pointer: coarse) { .dm-compact-form { --dm-button-height: 32px; } }
+.dm-config--compact, .dm-form-dialog { --dm-text-label-size: 13px; }
+.dm-config--compact { container-type: inline-size; container-name: dm-config-shell; --dm-button-height: 28px; }
+@container dm-config-shell (max-width: 760px) {
+  .dm-body { flex-direction: column; }
+  .dm-nav { width: 100%; min-width: 0; flex: 0 0 auto; border-right: none; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); overflow-x: auto; overflow-y: hidden; }
+  .dm-nav-list { display: flex; flex-wrap: nowrap; gap: 6px; min-width: max-content; }
+  .dm-nav-item { flex: 0 0 auto; min-width: 96px; margin: 0; padding-inline: 10px; }
+  .dm-nav-item :deep(.v-list-item-title) { white-space: nowrap; }
+  .dm-subtabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+  .dm-subtab { flex: 0 0 auto; }
+  .dm-header :deep(.v-card-subtitle) { max-width: 100%; }
+  .dm-task-row { grid-template-columns: 1fr; }
+  .dm-actions { flex-wrap: wrap; gap: 8px; }
+}
+@media (pointer: coarse) { .dm-config--compact { --dm-button-height: 32px; } }
+.dm-hr-basic-form .dm-field-row { max-width: 52rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+.dm-hr-sites-form > .form-section { max-width: 52rem; }
+.dm-hr-sites-form .dm-field-row { max-width: 52rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+.dm-hr-sites-form .dm-hr-editor-grid { width: min(100%, 52rem); max-width: 52rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.dm-hr-sites-form .dm-hr-editor-grid > :deep(.v-select),
+.dm-hr-sites-form .dm-hr-editor-grid > :deep(.v-input) { min-width: 0; width: 100%; max-width: 100%; }
+
+.dm-config .dm-hr-sites-form .dm-hr-editor-grid > :deep(.v-input) { width: min(100%, 220px); max-width: 220px; justify-self: start; }
+@container dm-config-shell (max-width: 600px) {
+  .dm-hr-basic-form .dm-field-row,
+  .dm-hr-sites-form .dm-field-row,
+  .dm-hr-sites-form .dm-hr-editor-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.dm-compact-form .dm-field-row:has(> .dm-field--number) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 176px), 220px)); }
+.dm-config .dm-hr-basic-form .dm-field-row,
+.dm-config .dm-hr-sites-form .dm-field-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 220px)); max-width: 52rem; }
+.dm-config .dm-hr-basic-form .dm-field-row .dm-field > :deep(.v-input) { width: min(100%, 220px); max-width: 220px; }
+@container dm-config-shell (max-width: 600px) {
+  .dm-config .dm-hr-basic-form .dm-field-row,
+  .dm-config .dm-hr-sites-form .dm-field-row,
+  .dm-config .dm-hr-sites-form .dm-hr-editor-grid { width: min(100%, calc(100cqw - 48px)); grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .dm-config .dm-hr-sites-form .dm-hr-editor-grid { width: min(100%, calc(100vw - 48px)); }
+}
+
+/* Same density and responsive field groups across all configuration modules. */
+.dm-unified-form .dm-field-row,
+.dm-unified-form .dm-field-row:has(> .dm-field--number) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 220px)); gap: 12px 16px; align-items: start; }
+.dm-unified-form .dm-field { width: 100%; max-width: 100%; min-width: 0; }
+.dm-unified-form .dm-field:has(> .v-textarea) { grid-column: 1 / -1; }
+.dm-unified-form .dm-field:has(> .v-textarea) > :deep(.v-input) { width: 100%; max-width: 100%; }
+.dm-unified-form .dm-switch-group { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+.dm-unified-form .dm-switch-group > :deep(.v-switch) { flex: 0 0 auto; }
+.dm-unified-form .dm-upload-config-row > :deep(.v-input),
+.dm-unified-form .dm-upload-site-row > :deep(.v-input) { width: min(100%, 220px); flex: 0 1 220px; min-width: 0; }
+.dm-unified-form .dm-upload-add-site { align-items: center; margin-top: 12px; }
+.dm-actions { flex-wrap: wrap; gap: 8px; }
+.dm-actions > [role="status"] { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+@container dm-config-shell (max-width: 760px) {
+  .dm-unified-form .dm-map-row, .dm-unified-form .dm-cat-row { grid-template-columns: minmax(0, 1fr); }
+  .dm-unified-form .dm-map-row--head, .dm-unified-form .dm-cat-row--head { display: none; }
+}
+/* Compact controls include the header/footer, not only the module pane. */
+.dm-config--compact :deep(.v-switch .v-selection-control),
+.dm-form-dialog :deep(.v-switch .v-selection-control) { --v-selection-control-size: 32px; min-height: 32px; gap: 8px; }
+.dm-config--compact :deep(.v-switch .v-label),
+.dm-form-dialog :deep(.v-switch .v-label) { font-size: var(--dm-text-label-size); line-height: var(--dm-text-label-line-height); }
+.dm-config--compact :deep(.v-switch--inset .v-switch__track),
+.dm-form-dialog :deep(.v-switch--inset .v-switch__track) { height: 24px; min-width: 44px; }
+.dm-config--compact :deep(.v-switch--inset .v-switch__thumb),
+.dm-form-dialog :deep(.v-switch--inset .v-switch__thumb) { height: 20px; width: 20px; }
+.dm-config--compact :deep(.v-btn--size-small),
+.dm-form-dialog :deep(.v-btn--size-small) { height: var(--dm-button-height, 28px); font-size: var(--dm-text-button-size); }
+.dm-config--compact :deep(.v-btn--icon.v-btn--size-small),
+.dm-form-dialog :deep(.v-btn--icon.v-btn--size-small) { width: var(--dm-button-height, 28px); min-width: var(--dm-button-height, 28px); }
+.dm-compact-form .dm-risk { margin-block: 8px 16px; }
+.dm-compact-form .dm-risk + .dm-field-row { margin-top: 0; }
+.dm-upload-grace-hint { margin-top: 12px; }
+.dm-cat-source { display: flex; align-items: center; gap: 8px; min-height: 36px; min-width: 0; }
+.dm-cat-source > .dm-body-text { min-width: 0; overflow-wrap: anywhere; }
+.dm-cat-source > :deep(.v-input) { flex: 1 1 auto; min-width: 0; }
+.dm-cat-source > :deep(.v-btn) { flex: 0 0 auto; }
 </style>

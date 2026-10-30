@@ -1,3 +1,4 @@
+import { MODULE_ICONS } from '../src/components/module-icons.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
@@ -10,7 +11,7 @@ globalThis.window = globalThis.window || { setInterval: () => 0, clearInterval()
 // 沿用 config-setup.test.mjs 的执行方式：整份 <script setup> 按源码顺序执行，
 // 只替换 API 与生命周期边界（页面只读展示函数不触发请求），不引入 DOM 依赖。
 const source = readFileSync(new URL('../src/components/Page.vue', import.meta.url), 'utf8')
-const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '')
+const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)
 const setup = new Function(
   'reactive', 'ref', 'computed', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount',
   'defineProps', 'defineEmits', 'getPluginApi', 'postPluginApi', 'postPluginJsonApi',
@@ -62,9 +63,9 @@ test('H&R 任务标题种子名优先，缺失时「名称未记录 + 短 hash�
 
 test('模板使用文本插值渲染名称：无 v-html，三处转移列表 + 两处 H&R 标题，且不再裸渲染 hash', () => {
   assert.ok(!/v-html/.test(source), 'Page.vue 不允许用 v-html 渲染名称')
-  assert.equal((template.match(/transferPrimaryText\(/g) || []).length, 3, '在途事务、最近记录桌面、最近记录移动')
-  assert.equal((template.match(/transferSecondaryText\(/g) || []).length, 3)
-  assert.equal((template.match(/hrTaskTitle\(/g) || []).length, 2, 'H&R 桌面表格与移动卡片')
+  assert.equal((template.match(/transferPrimaryText\(/g) || []).length, 2, '在途事务与最近记录各复用单表')
+  assert.equal((template.match(/transferSecondaryText\(/g) || []).length, 2)
+  assert.equal((template.match(/hrTaskTitle\(/g) || []).length, 2, 'H&R 单表的名称与操作菜单各引用一次')
   assert.ok(!/transferShortHash\(/.test(template), '列表不再直接渲染裸 hash，改由辅助文案函数提供')
 })
 
@@ -173,10 +174,9 @@ test('moduleDetail 带出 total/limit/truncated 并兼容旧响应', () => {
 
 test('条数白名单与后端一致，模板提供选择器与截断提示', () => {
   assert.deepEqual(page.DETAIL_LIMIT_CHOICES, [20, 50, 100, 200], '须与后端 MODULE_DETAIL_LIMIT_CHOICES 一致')
-  assert.equal((template.match(/v-model="detailLimit"/g) || []).length, 1, '条数选择器须绑定 detailLimit')
-  assert.ok(/dm-detail-limit-select/.test(template))
-  assert.ok(/DETAIL_LIMIT_CHOICES/.test(template))
-  assert.ok(/moduleDetail\(card\.key\)\.truncated/.test(template), '截断时必须提示')
+  assert.match(template, /:truncated="moduleDetail\('tagcleanup'\)\.truncated"/)
+  assert.match(template, /:truncated="moduleDetail\('autoremove'\)\.truncated"/)
+  assert.ok(!/moduleDetail\(card\.key\)\.items/.test(template), '总览卡不再展示运行明细')
   assert.ok(!/共 20 条/.test(template), '不得硬编码条数')
 })
 
@@ -219,9 +219,10 @@ test('清理按钮 0 条禁用，数量取自诊断 cleanup_data', () => {
   assert.equal(page.moduleCleanupButtons('failclean')[0].count, 0, '0 条时按钮禁用')
   page.diagnostics.value = null
   assert.deepEqual(page.moduleCleanupButtons('rename').map(item => item.count), [0, 0], '诊断缺失时按 0 处理，不误报有记录')
-  assert.equal((template.match(/:disabled="item\.count === 0"/g) || []).length, 1, '禁用条件必须用计数判定')
-  assert.ok(/openModuleRecords\(card\.key\)/.test(template), '必须有查看记录按钮')
-  assert.ok(/:disabled="item\.count === 0"[\s\S]{0,120}openCleanupDialog\(item\.key\)/.test(template), '清理按钮必须打开现有确认框')
+  assert.match(template, /:cleanup-blocked="!cleanupCounts\.rename_history"/)
+  assert.match(template, /:cleanup-blocked="!cleanupCounts\.rename_archive"/)
+  assert.match(template, /@cleanup="openCleanupDialog\('rename_history'\)"/)
+  assert.match(template, /@cleanup="openCleanupDialog\('rename_archive'\)"/)
 })
 
 test('查看记录只切页签 + 定位：全过程零写请求', async () => {

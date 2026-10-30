@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { h, nextTick, reactive } from 'vue'
-import { loadSfc, mount, render } from './helpers/load-sfc.mjs'
+import { loadSfc, mount as mountSfc, render as renderSfc } from './helpers/load-sfc.mjs'
+import { VSelectStub } from './helpers/select-stub.mjs'
+const render = (component, props, slots) => renderSfc(component, props, slots, { components: { VSelect: VSelectStub } })
+const mount = (component, props, slots) => mountSfc(component, props, slots, { components: { VSelect: VSelectStub } })
 
 const component = await loadSfc('ModuleTable.vue')
 const base = { title: '执行记录', columns: [{ key: 'name', label: '名称' }, { key: 'count', label: '数量' }], rows: [{ id: 'a', name: '保留旧记录', count: 7 }], total: 101 }
@@ -9,7 +12,7 @@ const base = { title: '执行记录', columns: [{ key: 'name', label: '名称' }
 test('ModuleTable 数值表头和正文右对齐，格式化字符串可显式对齐，单一表格', async () => {
   const html = await render(component, base)
   assert.match(html, /<th[^>]*text-align:right[^>]*>数量/)
-  assert.match(html.replace(/<!--[\s\S]*?-->/g, ''), /<td[^>]*text-align:right[^>]*>7/)
+  assert.match(html.replace(/<!--[\s\S]*?-->/g, ''), /<td[^>]*text-align:right[^>]*><div[^>]*>7/ )
   assert.equal((html.match(/<table\b/g) || []).length, 1)
   assert.match(html, /class="dm-table-scroll"[^>]*tabindex="0"/)
   const custom = await render(component, { ...base, columns: [{ key: 'name', label: '占用 (GiB)', align: 'right', width: 144 }] })
@@ -90,7 +93,7 @@ test('ModuleTable 分页/页大小/重试/筛选重置/清理只 emit，无 API'
   assert.deepEqual(events.slice(-2), [['page', 1], ['reset']])
   filtered.unmount()
   const failed = mount(component, { ...base, ...handlers, state: { refreshFailed: true } })
-  failed.findAll(el => el.text === '重试')[0].props.onClick()
+  failed.findAll(el => el.type === 'button' && el.props.onClick)[0].props.onClick()
   assert.deepEqual(events.at(-1), ['retry'])
   failed.unmount()
 })

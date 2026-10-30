@@ -1,3 +1,4 @@
+import { MODULE_ICONS } from '../src/components/module-icons.js'
 import assert from 'node:assert/strict'
 import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
@@ -10,7 +11,7 @@ import { reactive, ref, computed, watch, effectScope, nextTick, defineComponent,
 import { loadSfc, mount as renderMount } from './helpers/load-sfc.mjs'
 
 const source = readFileSync(new URL('../src/components/Config.vue', import.meta.url), 'utf8')
-const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '')
+const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)
 const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi', `${script}\nreturn { form, defaults, PANE_RESET_KEYS, OBSERVE_ONLY_KEYS, selectMain, activeSub, currentSubs, askPaneReset, confirmPaneReset, saveConfig, transferTasks, openTransferDialog, transferForm, confirmTransferTask, tagCatPairs, tagTrackerPairs, hrCustomRules };`)
 function mount(initialConfig) {
   const scope = effectScope()
@@ -167,7 +168,8 @@ test('P2-1d: rendered tabs retain seed checks, H&R baseline/more, remover rules 
     await view.click('H&R 管理'); view.field('检查间隔（分钟）'); view.field('记录保留（天）')
     await view.click('站点规则'); view.field('做种时长（小时）')
     await view.click('自动删种'); view.field('做种时长（小时）'); view.field('错误关键词')
-    await view.click('种子重命名'); await view.click('模板与过滤'); view.field('电影模板'); view.field('Hash 白名单')
+    await view.click('种子重命名'); view.field('Hash 白名单')
+    await view.click('种子重命名'); await view.click('重命名模板'); view.field('电影模板')
     await view.click('分类与标签'); await view.click('映射规则'); view.field('分类方式')
     await view.change('分类方式', true); await view.change('路径映射', '/keep path/#分类')
     await view.change('分类方式', false); await view.click('保存配置')
@@ -202,8 +204,9 @@ test('P2-1d: dependent controls disable/re-enable without clearing values; unrel
     }
     await view.click('H&R 管理')
     const cron = view.field('汇总计划').props.value
-    await view.change('通知模式', 'none'); assert.equal(view.field('汇总计划').props.disabled, true); assert.equal(view.field('汇总计划').props.value, cron)
-    await view.change('通知模式', 'always'); assert.notEqual(view.field('汇总计划').props.disabled, true)
+    await view.change('发送通知', false); assert.equal(view.field('通知模式').props.disabled, true); assert.equal(view.field('汇总计划').props.disabled, true); assert.equal(view.field('汇总计划').props.value, cron)
+    await view.change('发送通知', true); assert.notEqual(view.field('通知模式').props.disabled, true); assert.notEqual(view.field('汇总计划').props.disabled, true)
+    await view.change('通知模式', 'on_error'); assert.notEqual(view.field('汇总计划').props.disabled, true)
     await view.click('站点规则'); await view.click('编辑 YAML')
     const yaml = view.field('站点规则').props.value
     await view.click('基础设置'); await view.change('站点独立规则', false); await view.click('站点规则')
@@ -225,7 +228,7 @@ async function checkNativeFolds() {
   for (const [name, stub] of Object.entries(components)) app.component(name, stub)
   const html = await renderToString(app)
   const folds = [...html.matchAll(/<details\b[\s\S]*?<\/details>/g)].map(match => match[0])
-  assert.equal(folds.length, 5)
+  assert.equal(folds.length, 1, 'Only the independent template variable reference remains collapsible')
   const chrome = process.env.CHROME_BIN || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', '/usr/bin/chromium', '/usr/bin/google-chrome', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(file => existsSync(file))
   assert.ok(chrome, 'Disclosure regression requires Chrome/Chromium; set CHROME_BIN')
   const dir = mkdtempSync(path.join(os.tmpdir(), 'dml-config-folds-'))
@@ -244,7 +247,7 @@ async function checkNativeFolds() {
     const match = result.stdout.match(/<pre id="result">([^<]+)<\/pre>/)
     assert.ok(match, 'Browser must return native disclosure observations')
     const observations = JSON.parse(match[1])
-    assert.deepEqual(observations.map(item => item.title), ['更多设置', '更多条件与连带处理', '可用变量与示例', '更多过滤', '标签删除权限'])
+    assert.deepEqual(observations.map(item => item.title), ['可用变量与示例'])
     for (const item of observations) for (const key of ['closed', 'focusable', 'opened', 'closedAgain', 'retained']) assert.equal(item[key], true, item.title + ':' + key)
     console.log('Config native disclosures:', JSON.stringify(observations))
   } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) }

@@ -7,6 +7,11 @@ import { getPluginApi, postPluginApi, postPluginJsonApi } from './api'
 import DownloaderBadge from './DownloaderBadge.vue'
 import ModuleDetailPanel from './ModuleDetailPanel.vue'
 import ModuleHeader from './ModuleHeader.vue'
+import ConfigSummary from './ConfigSummary.vue'
+import RecordDetails from './RecordDetails.vue'
+import CompactSelect from './CompactSelect.vue'
+import RowActionMenu from './RowActionMenu.vue'
+import { MODULE_ICONS } from './module-icons.js'
 
 const props = defineProps({
   api: { type: [Object, Function], default: null },
@@ -22,15 +27,15 @@ const activeTab = ref('overview')
 const DETAIL_LIMIT_CHOICES = [20, 50, 100, 200]
 const detailLimit = ref(20)
 const tabs = [
-  { key: 'overview', title: '运行总览', icon: 'mdi-view-dashboard-outline' },
-  { key: 'transfer', title: '转移做种', icon: 'mdi-swap-horizontal' },
-  { key: 'history', title: '命名历史', icon: 'mdi-history' },
-  { key: 'hr', title: 'H&R 任务', icon: 'mdi-timer-alert-outline' },
-  { key: 'autoremove', title: '删种记录', icon: 'mdi-delete-clock-outline' },
-  { key: 'failclean', title: '失败清理', icon: 'mdi-broom' },
-  { key: 'sitetag', title: '站点标签', icon: 'mdi-tag-multiple' },
-  { key: 'upload', title: '上传限速', icon: 'mdi-upload-network-outline' },
-  { key: 'diagnostics', title: '运行诊断', icon: 'mdi-stethoscope' },
+  { key: 'overview', title: '运行总览', icon: MODULE_ICONS.overview },
+  { key: 'transfer', title: '转移做种', icon: MODULE_ICONS.transfer },
+  { key: 'history', title: '命名历史', icon: MODULE_ICONS.rename },
+  { key: 'hr', title: 'H&R 任务', icon: MODULE_ICONS.hr },
+  { key: 'autoremove', title: '删种记录', icon: MODULE_ICONS.autoremove },
+  { key: 'failclean', title: '失败清理', icon: MODULE_ICONS.failclean },
+  { key: 'sitetag', title: '站点标签', icon: MODULE_ICONS.tag },
+  { key: 'upload', title: '上传限速', icon: MODULE_ICONS.upload_limit },
+  { key: 'diagnostics', title: '运行诊断', icon: MODULE_ICONS.diagnostics },
 ]
 const tabModuleKeys = {
   transfer: 'transfer',
@@ -66,7 +71,7 @@ function recordTableState(key, rows, empty = 'none', busyWithResult = false) {
   const state = recordStates[key]
   const hasResult = state.loaded || rows.length > 0
   return {
-    loading: state.loading && (!hasResult || busyWithResult),
+    loading: state.loading,
     error: !hasResult ? state.error || false : false,
     refreshFailed: hasResult ? state.error || false : false,
     empty: rows.length ? '' : empty,
@@ -76,7 +81,11 @@ const total = ref(0)
 const archiveTotal = ref(0)
 const page = ref(1)
 const archivePage = ref(1)
-const pageSize = 15
+const pageSize = ref(20)
+const archivePageSize = ref(20)
+const transferPageSize = ref(20)
+const historyResultFilter = ref('all')
+const transferResultFilter = ref('all')
 const loading = ref(false)
 const paging = ref(false)
 const error = ref('')
@@ -196,7 +205,7 @@ function formatUploadRate(value) {
 
 function hrStatusColor(status) {
   return {
-    Pending: 'default',
+    Pending: 'warning',
     'In Progress': 'primary',
     Compliant: 'success',
     'Needs Seeding': 'warning',
@@ -270,8 +279,8 @@ const failcleanEmptyState = computed(() => {
   if (recordStates.failclean.loaded && failcleanStatus.value.enabled === false) return 'disabled'
   return 'not-scanned'
 })
-const totalPages = computed(() => Math.max(1, Math.ceil((total.value || 0) / pageSize)))
-const archiveTotalPages = computed(() => Math.max(1, Math.ceil((archiveTotal.value || 0) / pageSize)))
+const totalPages = computed(() => Math.max(1, Math.ceil((total.value || 0) / pageSize.value)))
+const archiveTotalPages = computed(() => Math.max(1, Math.ceil((archiveTotal.value || 0) / archivePageSize.value)))
 
 const diagnosticsCards = computed(() => {
   const items = Array.isArray(diagnostics.value?.checks) ? diagnostics.value.checks : []
@@ -297,7 +306,7 @@ const uploadLimitStatus = computed(() => {
   const status = uploadLimit.value.service_status
   return {
     disabled: { label: '未启用', color: 'default' },
-    starting: { label: '启动中', color: 'info' },
+    starting: { label: '启动中', color: 'primary' },
     running: { label: '分配中', color: 'primary' },
     degraded: { label: '部分异常', color: 'warning' },
     error: { label: '状态异常', color: 'error' },
@@ -406,7 +415,7 @@ const moduleCards = computed(() => {
     {
       key: 'transfer',
       title: '转移做种',
-      icon: 'mdi-transfer',
+      icon: MODULE_ICONS.transfer,
       color: transfer.active ? 'primary' : (transfer.enabled ? 'warning' : 'default'),
       value: transfer.active ? '运行中' : (transfer.enabled ? '未就绪' : '未启用'),
       desc: `今日成功 ${transfer.today_success || 0} · 今日兜底 ${transfer.today_fallback || 0}`,
@@ -436,7 +445,7 @@ const moduleCards = computed(() => {
     {
       key: 'hr',
       title: 'H&R',
-      icon: 'mdi-timer-alert-outline',
+      icon: MODULE_ICONS.hr,
       color: hr.overdue ? 'warning' : (hr.enabled ? 'primary' : 'default'),
       value: `${hr.total || 0} 条任务`,
       desc: `达标 ${hr.compliant || 0} · 超期 ${hr.overdue || 0} · 需做种 ${hr.needs_seeding || 0}`,
@@ -450,7 +459,7 @@ const moduleCards = computed(() => {
     {
       key: 'autoremove',
       title: '自动删种',
-      icon: 'mdi-delete-clock-outline',
+      icon: MODULE_ICONS.autoremove,
       color: auto.enabled ? 'primary' : 'default',
       value: `${auto.deleted || 0} 个已删除`,
       desc: `候选 ${auto.candidates || 0} · 跳过保护 ${auto.skipped_protected || 0} · 失败 ${auto.failed || 0}`,
@@ -470,7 +479,7 @@ const moduleCards = computed(() => {
     {
       key: 'failclean',
       title: '失败清理',
-      icon: 'mdi-broom',
+      icon: MODULE_ICONS.failclean,
       color: fail.enabled ? 'primary' : 'default',
       value: `巡检清理 ${fail.scan?.cleaned || 0}`,
       desc: `整理失败删源 ${fail.event?.deleted || 0} · 跳过 ${(fail.scan?.skipped || 0) + (fail.event?.skipped || 0)}`,
@@ -487,7 +496,7 @@ const moduleCards = computed(() => {
     {
       key: 'rename',
       title: '种子重命名',
-      icon: 'mdi-auto-fix',
+      icon: MODULE_ICONS.rename,
       color: archive.archived ? 'warning' : 'primary',
       value: `${archive.active_failed || 0} / ${archive.archived || 0}`,
       desc: `待处理 / 已归档 · 阈值 ${archive.threshold || 3} 次`,
@@ -504,7 +513,7 @@ const moduleCards = computed(() => {
     {
       key: 'tag',
       title: '站点标签',
-      icon: 'mdi-tag-multiple',
+      icon: MODULE_ICONS.tag,
       color: tag.completed ? 'primary' : 'default',
       value: `${tag.completed || 0} 个补全`,
       desc: `补全成功 · 跳过 ${tag.skipped || 0}`,
@@ -517,7 +526,7 @@ const moduleCards = computed(() => {
     {
       key: 'upload_limit',
       title: '上传限速',
-      icon: 'mdi-upload-network-outline',
+      icon: MODULE_ICONS.upload_limit,
       color: uploadLimitStatus.value.color,
       value: uploadLimitStatus.value.label,
       desc: `受限 ${up.managed_torrents || 0} · 宽限 ${up.grace_torrents || 0}`,
@@ -531,7 +540,14 @@ const moduleCards = computed(() => {
 })
 
 // Header projections only consume existing snapshots; missing counters are not inferred from rows.
-const headerMetric = (label, value, tone) => ({ label, value: value ?? '—', tone })
+const headerMetric = (label, value, tone) => ({
+  label, value: value ?? '—',
+  tone: value == null ? 'secondary' : tone || (
+    ['今日失败', '失败', '失败归档'].includes(label) ? (Number(value) > 0 ? 'error' : 'secondary') :
+    ['待重试', '待做种', '跳过'].includes(label) ? (Number(value) > 0 ? 'warning' : 'secondary') :
+    ['今日成功', '累计成功', '成功', '清理', '已达标'].includes(label) ? 'success' :
+    ['在途', '做种中', '上传中', '当前上传'].includes(label) ? 'primary' : 'secondary')
+})
 const moduleHeaders = computed(() => {
   const cards = overview.value?.cards || {}
   const config = diagnostics.value?.config || overview.value?.config || {}
@@ -549,6 +565,7 @@ const moduleHeaders = computed(() => {
       badges: [
         headerMetric('在途', transfer.pending),
         headerMetric('今日成功', transfer.today_success ?? cards.transfer?.today_success),
+        headerMetric('今日失败', transfer.today_failed),
         headerMetric('累计成功', transfer.success_total ?? cards.transfer?.success_total),
       ],
     },
@@ -739,8 +756,9 @@ function transferPhaseColor(phase) {
   if (phase === 'rollback' || phase === 'rolled_back' || phase === 'failed') return 'error'
   if (phase === 'verifying' || phase === 'target_ready') return 'primary'
   if (phase === 'source_pausing') return 'warning'
-  if (phase === 'target_added' || phase === 'stopped_after_add') return 'success'
-  return 'grey'
+  if (phase === 'target_added') return 'primary'
+  if (phase === 'stopped_after_add') return 'warning'
+  return 'default'
 }
 
 function transferShortHash(hash) {
@@ -792,7 +810,7 @@ function transferSettingBadges(task) {
   if (!task.keep_category) badges.push({ text: '不保留分类', color: 'secondary' })
   if (!task.keep_tag) badges.push({ text: '不保留标签', color: 'secondary' })
   const tag = String(task.transfer_tag || '').trim()
-  if (tag) badges.push({ text: `标签 ${tag}`, color: 'primary' })
+  if (tag) badges.push({ text: `标签 ${tag}`, color: 'default' })
   return badges
 }
 
@@ -801,7 +819,7 @@ async function loadTransferStatus(request) {
   recordStates.transfer.loading = true
   recordStates.transfer.error = ''
   try {
-    const resp = await getApi(`transfer_status?page=${transferPage.value}&page_size=15`, { feedback: 'silent' })
+    const resp = await getApi(`transfer_status?page=${transferPage.value}&page_size=${transferPageSize.value}&result_filter=${transferResultFilter.value}`, { feedback: 'silent' })
     if (!isCurrentPageRequest(request) || !isCurrentRecordRequest(recordRequest, 'transfer')) return
     if (!resp?.status) throw new Error(resp?.msg || '转移记录加载失败')
     transferStatus.value = resp.status
@@ -852,7 +870,7 @@ async function loadHistory(request) {
   recordStates.history.loading = true
   recordStates.history.error = ''
   try {
-    const resp = await getApi(`rename_history?page=${page.value}&page_size=${pageSize}`)
+    const resp = await getApi(`rename_history?page=${page.value}&page_size=${pageSize.value}&result_filter=${historyResultFilter.value}`)
     if (!isCurrentRecordRequest(request, 'history')) return
     records.value = Array.isArray(resp?.items) ? resp.items : []
     total.value = resp?.total || 0
@@ -868,12 +886,12 @@ async function loadArchive(request) {
   recordStates.archive.loading = true
   recordStates.archive.error = ''
   try {
-    let resp = await getApi(`rename_archive?page=${archivePage.value}&page_size=${pageSize}`)
+    let resp = await getApi(`rename_archive?page=${archivePage.value}&page_size=${archivePageSize.value}`)
     if (!isCurrentRecordRequest(request, 'archive')) return
-    const lastPage = Math.max(1, Math.ceil((resp?.total || 0) / pageSize))
+    const lastPage = Math.max(1, Math.ceil((resp?.total || 0) / archivePageSize.value))
     if (archivePage.value > lastPage) {
       archivePage.value = lastPage
-      resp = await getApi(`rename_archive?page=${archivePage.value}&page_size=${pageSize}`)
+      resp = await getApi(`rename_archive?page=${archivePage.value}&page_size=${archivePageSize.value}`)
     }
     if (!isCurrentRecordRequest(request, 'archive')) return
     archiveRecords.value = Array.isArray(resp?.items) ? resp.items : []
@@ -1347,6 +1365,16 @@ async function restoreArchive(hash) {
   }
 }
 
+function handleHistoryAction(action, row) {
+  if (action === 'retry') return doRetryRename(row.hash)
+  if (action === 'recover') return doRecovery(row.hash)
+  if (action === 'delete') return doDelete(row.hash)
+}
+function handleArchiveAction(action, row) {
+  if (action === 'retry') return doRetryRename(row.hash)
+  if (action === 'restore') return restoreArchive(row.hash)
+  if (action === 'delete' && window.confirm('确认删除“' + (row.name || row.hash) + '”的失败归档记录？仅清理记录，不删除种子或数据。')) return deleteArchive(row.hash)
+}
 async function deleteArchive(hash) {
   actionMsg.value = ''
   actionOk.value = false
@@ -1432,11 +1460,11 @@ function setAllCleanupTags(keep) {
 function cleanupKindMeta(kind) {
   return {
     site: { label: '站点', color: 'primary' },
-    managed: { label: '业务', color: 'success' },
+    managed: { label: '业务', color: 'default' },
     temporary: { label: '临时', color: 'warning' },
     legacy_temporary: { label: '旧临时', color: 'warning' },
     legacy_candidate: { label: '疑似旧临时', color: 'warning' },
-    active_temporary: { label: '使用中', color: 'info' },
+    active_temporary: { label: '使用中', color: 'primary' },
     other: { label: '其他', color: 'default' },
   }[kind] || { label: '其他', color: 'default' }
 }
@@ -1498,6 +1526,173 @@ watch(
   },
 )
 
+// Page owns projections, filters and paging; shared components stay presentation-only.
+const localPages = reactive({ hr: 1, pending: 1, candidates: 1, attention: 1, diagnostics: 1 })
+const localSizes = reactive({ hr: 20, pending: 20, candidates: 20, attention: 20, diagnostics: 20 })
+function visibleRows(key, rows) {
+  const last = Math.max(1, Math.ceil(rows.length / localSizes[key]))
+  const current = Math.min(localPages[key], last)
+  return rows.slice((current - 1) * localSizes[key], current * localSizes[key])
+}
+function setLocalSize(key, size) { localSizes[key] = size; localPages[key] = 1 }
+const autoRunConfirm = ref(false)
+async function runDiagnostics() {
+  const request = beginPageRequest()
+  loading.value = true
+  error.value = ''
+  try {
+    const result = await getApi(`diagnostics?detail_limit=${detailLimit.value}&run=true`)
+    if (!isCurrentPageRequest(request)) return
+    if (result?.code && result.code !== 0) throw new Error(result.msg || '诊断失败')
+    diagnostics.value = result
+  } catch (e) { reportLoadError(request, e, '诊断失败') }
+  finally { if (isCurrentPageRequest(request)) loading.value = false }
+}
+const presenceFilter = ref('all')
+const visibleHrRows = computed(() => hrTaskRows.value.filter(task => presenceFilter.value === 'all'
+  || (typeof task.deleted === 'boolean' && (presenceFilter.value === 'missing' ? task.deleted : !task.deleted))))
+watch([hrStatusFilter, presenceFilter], () => { localPages.hr = 1 })
+const rowIdentity = row => `${row.downloader_id || row.source_downloader || ''}:${row.torrent_hash || row.source_hash || row.hash || row.name || row.id}`
+const columnsOf = labels => labels.map(([key, label]) => ({ key, label, ...(['name', 'original_name', 'after_name', 'reason', 'detail', 'message'].includes(key) ? { lines: 2 } : {}) }))
+const recordColumns = {
+  tasks: columnsOf([['name', '名称'], ['from_downloader', '源下载器'], ['to_downloader', '目的下载器'], ['mapping', '数据映射'], ['filters', '筛选条件'], ['settings', '设置']]),
+  pending: columnsOf([['name', '种子'], ['route', '源 → 目的'], ['phase', '阶段'], ['wait', '已等待'], ['options', '选项']]),
+  transfer: columnsOf([['name', '种子'], ['route', '源 → 目的'], ['phase', '结果'], ['updated', '更新时间']]),
+  history: columnsOf([['time', '时间'], ['downloader', '下载器'], ['original_name', '原始名称'], ['after_name', '命名后'], ['success', '结果']]),
+  archive: columnsOf([['archived_at', '归档时间'], ['downloader', '下载器'], ['name', '名称'], ['category', '分类'], ['fail_count', '失败次数'], ['reason', '原因']]),
+  hr: columnsOf([['name', '种子'], ['downloader_id', '下载器'], ['site', '站点'], ['status', '考核状态'], ['deleted', '存在状态'], ['remain_seconds', '剩余时长'], ['deadline', '截止日期'], ['progress', '做种进度']]),
+  candidates: columnsOf([['downloader_id', '下载器'], ['name', '名称'], ['site', '站点'], ['size_text', '体积'], ['ratio', '分享率'], ['seeding_hours', '做种时长'], ['reason', '命中原因']]),
+  autoHistory: columnsOf([['time', '执行时间'], ['downloader', '下载器'], ['name', '名称'], ['action', '执行动作'], ['result', '结果'], ['reason', '原因']]),
+  failHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['name', '名称'], ['type', '清理类型'], ['source', '触发来源'], ['action', '动作'], ['result', '结果']]),
+  tagHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['name', '种子名称'], ['site', '站点'], ['tags', '标签变更'], ['category', '分类变更'], ['result', '结果']]),
+  cleanupHistory: columnsOf([['time', '时间'], ['scope', '清理范围'], ['tags', '清理标签数'], ['success', '成功'], ['failed', '失败'], ['result', '结果']]),
+  uploadHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['target', '作用对象'], ['action', '动作'], ['before', '调整前'], ['after', '调整后'], ['result', '结果']]),
+  sites: columnsOf([['name', '站点'], ['torrent_count', '受管种子'], ['uploading_torrents', '上传中'], ['upload_rate_bps', '当前上传'], ['allocated_kib', '已分配额度'], ['state', '状态']]),
+  diagnostics: columnsOf([['name', '检查项'], ['module', '所属模块'], ['stateLabel', '状态'], ['message', '检查结果']]),
+  attention: columnsOf([['level', '级别'], ['module', '模块'], ['detail', '问题']]),
+}
+const unavailableHistory = '当前接口未提供逐条执行历史；此处不以候选、汇总或实时快照代替。'
+const currentModule = computed(() => tabModuleKeys[activeTab.value])
+const currentHeader = computed(() => moduleHeaders.value[currentModule.value])
+const settings = () => emit('switch')
+const moduleActions = computed(() => {
+  const card = moduleCards.value.find(item => item.key === currentModule.value)
+  if (!card) return []
+  if (card.key === 'rename') return [{ key: 'rename-scan', label: '扫描重命名', run: doRenameScan }]
+  if (card.key === 'autoremove') return card.actions.filter(action => action.key === 'autoremove-preview')
+  if (card.key === 'upload_limit') return card.actions.filter(action => action.key === 'upload-reallocate')
+  return card.actions
+})
+const enabledValue = value => typeof value === 'boolean' ? (value ? '开启' : '关闭') : null
+const configField = (key, label, value, options = {}) => ({ key, label, value, ...options,
+  color: options.color || (['观察模式', '跳过校验'].includes(value) || (['verify', 'guard'].includes(key) && value === '开启') ? 'warning' :
+    value === '开启' || value === '正常执行' ? 'primary' : 'default'),
+})
+const summaryFields = computed(() => {
+  const config = diagnostics.value?.config || overview.value?.config || {}
+  const mode = currentHeader.value?.observing ? '观察模式' : (currentHeader.value?.enabled ? '正常执行' : null)
+  const field = configField
+  switch (currentModule.value) {
+    case 'transfer': return [field('event', '入列触发', null), field('fallback', '定时兜底', enabledValue(config.transfer_fallback_enabled), { badge: true }), field('start', '自动开始', enabledValue(config.seed_autostart), { badge: true }), field('verify', '跳过校验', enabledValue(config.seed_skipverify), { badge: true }), field('interval', '检查间隔', null)]
+    case 'rename': return [field('event', '入列触发', null), field('cron', '定时补查及周期', null), field('movie', '电影模板', null, { long: true }), field('tv', '剧集模板', null, { long: true })]
+    case 'hr': return [field('downloaders', '下载器范围', null), field('sites', '站点范围', null), field('rules', '规则来源', null), field('interval', '检查周期', null), field('guard', '删除保护', enabledValue(hrSummary.value.protection_enabled), { badge: true })]
+    case 'autoremove': return [field('mode', '运行模式', mode, { badge: true }), field('action', '执行动作', ({ pause: '暂停任务', delete: '删除任务', deletefile: '删除任务及文件' })[autoremoveStatus.value.action]), field('downloaders', '下载器范围', null), field('rules', '命中规则', null), field('cron', '执行周期', null), field('guard', 'H&R保护', enabledValue(autoremoveStatus.value.guard_enabled), { badge: true })]
+    case 'failclean': return [field('scope', '清理范围', null), field('event', '事件触发', '整理失败事件（固有行为）'), field('cron', '定时巡检及周期', null), field('action', '清理动作', null)]
+    case 'tag': return [field('mode', '运行模式', mode, { badge: true }), field('downloaders', '下载器范围', null), field('site', '站点标签', null), field('media', '媒体标签', null), field('category', '下载分类', null), field('cron', '执行周期', null)]
+    case 'upload_limit': return [field('mode', '运行模式', uploadLimitStatus.value.label, { badge: true, color: uploadLimitStatus.value.color }), field('downloaders', '下载器范围', null), field('global', '全局限速', null), field('sites', '站点限速', null), field('dynamic', '动态调速', null), field('interval', '调整周期', null)]
+    default: return []
+  }
+})
+const sevenCards = computed(() => moduleCards.value.filter(card => card.key !== 'seed'))
+const overviewStats = computed(() => {
+  if (!overview.value) return ['已启用模块', '正在执行', '观察模式', '异常模块'].map(label => headerMetric(label))
+  const headers = Object.values(moduleHeaders.value)
+  return [headerMetric('已启用模块', headers.filter(item => item.enabled).length), headerMetric('正在执行', headers.filter(item => item.running).length), headerMetric('观察模式', headers.filter(item => item.observing).length), headerMetric('异常模块', headers.filter(item => item.fault).length)]
+})
+const attentionModuleFilter = ref('all')
+const attentionRows = computed(() => overviewAttentionItems.value.map((item, index) => ({ ...item, id: index,
+  level: item.color === 'error' ? '异常' : '关注', module: moduleHeaders.value[item.target]?.title || item.target || '插件',
+})).filter(item => attentionModuleFilter.value === 'all' || item.target === attentionModuleFilter.value))
+const moduleFilterItems = computed(() => [{ title: '全部模块', value: 'all' }, ...sevenCards.value.map(card => ({ title: moduleHeaders.value[card.key].title, value: card.key }))])
+const diagnosticModuleFilter = ref('all')
+const diagnosticStateFilter = ref('all')
+const selectedDiagnostic = ref(null)
+const diagnosticModule = name => {
+  if (/源下载器|目标下载器|种子文件|转移/.test(name)) return 'transfer'
+  if (/重命名|补刀|命名/.test(name)) return 'rename'
+  if (/H&R/.test(name)) return 'hr'
+  if (/自动删种/.test(name)) return 'autoremove'
+  if (/失败|同步删除/.test(name)) return 'failclean'
+  if (/标签|分类/.test(name)) return 'tag'
+  if (/上传|限速/.test(name)) return 'upload_limit'
+  return 'plugin'
+}
+const diagnosticRows = computed(() => (diagnostics.value?.checks || []).map((item, index) => {
+  const name = item.label || item.name || '未命名检查'
+  const moduleKey = item.target || item.module || diagnosticModule(name)
+  const state = item.status === 'off' ? 'off' : (item.state || ({ ok: 'normal', warn: 'attention', error: 'error' })[item.status] || 'pending')
+  return { ...item, name, message: item.detail || item.message || '—', id: `${index}:${name}`, moduleKey, module: moduleHeaders.value[moduleKey]?.title || '插件', state,
+    stateLabel: ({ normal: '正常', ok: '正常', attention: '需关注', warn: '需关注', error: '异常', pending: '未检查', unchecked: '未检查', off: '不适用' })[state] || '未检查' }
+}))
+const filteredDiagnosticRows = computed(() => diagnosticRows.value.filter(item => (diagnosticModuleFilter.value === 'all' || item.moduleKey === diagnosticModuleFilter.value)
+  && (diagnosticStateFilter.value === 'all' || item.stateLabel === diagnosticStateFilter.value)))
+const diagnosticStats = computed(() => ['正常', '需关注', '异常', '未检查'].map(label => headerMetric(label === '正常' ? '正常项' : label === '异常' ? '异常项' : label,
+  diagnostics.value?.checked === false ? (label === '未检查' ? '尚未执行诊断' : '—') : diagnosticRows.value.filter(item => item.stateLabel === label).length)))
+watch([diagnosticModuleFilter, diagnosticStateFilter], () => { localPages.diagnostics = 1 })
+watch(diagnostics, () => { selectedDiagnostic.value = null })
+watch(attentionModuleFilter, () => { localPages.attention = 1 })
+const uploadDownloaderFilter = ref('all')
+const uploadSiteFilter = ref('')
+const closedUploadGroups = reactive({})
+const uploadGroups = computed(() => {
+  const groups = uploadLimitDownloaderRows.value.filter(item => uploadDownloaderFilter.value === 'all' || String(item.id) === uploadDownloaderFilter.value)
+    .map(item => ({ ...item, key: String(item.id), title: item.name || item.id, rows: [] }))
+  const shared = []
+  for (const site of uploadLimitSiteRows.value) {
+    if (uploadSiteFilter.value && !String(site.name || '').toLowerCase().includes(uploadSiteFilter.value.toLowerCase())) continue
+    const owners = site.downloaders || []
+    const group = owners.length === 1 ? groups.find(item => item.key === String(owners[0])) : null
+    if (group) group.rows.push(site)
+    else if (owners.length !== 1 && (uploadDownloaderFilter.value === 'all' || owners.map(String).includes(uploadDownloaderFilter.value))) shared.push(site)
+  }
+  if (shared.length) groups.push({ key: 'shared', title: '跨下载器站点汇总（当前接口未拆分）', rows: shared, aggregate: true })
+  return groups
+})
+const cleanupPanel = ref(false)
+const cleanupSearch = ref('')
+const cleanupTagMatrix = computed(() => {
+  const merged = new Map()
+  for (const group of cleanupGroups.value) for (const item of group.tags || []) {
+    if (!merged.has(item.tag)) merged.set(item.tag, { tag: item.tag, owners: [], keep: true })
+    const tag = merged.get(item.tag)
+    tag.owners.push(group.name)
+    tag.keep = tag.keep && !!cleanupKeep[tagSelectionKey(group.name, item.tag)]
+  }
+  return [...merged.values()].sort((a, b) => a.tag.localeCompare(b.tag))
+})
+const filteredCleanupTags = computed(() => cleanupTagMatrix.value.filter(item => item.tag.toLowerCase().includes(cleanupSearch.value.toLowerCase())))
+function setMergedTag(tag, keep) { for (const group of cleanupGroups.value) if ((group.tags || []).some(item => item.tag === tag)) cleanupKeep[tagSelectionKey(group.name, tag)] = keep }
+async function openTagCleanup() {
+  cleanupPanel.value = true
+  const request = { revision: pageRequestRevision, pluginId: props.pluginId, tab: activeTab.value }
+  await loadDownloaders(request)
+  if (isCurrentPageRequest(request)) cleanupDownloaders.value = qbDownloaderItems.value.map(item => item.name)
+}
+function pageRecordChange(kind, value) {
+  if (kind === 'history') { page.value = value; void loadHistory(beginRecordRequest(['history'])) }
+  if (kind === 'archive') { archivePage.value = value; void loadArchive(beginRecordRequest(['archive'])) }
+  if (kind === 'transfer') { transferPage.value = value; void loadTransferStatus(beginPageRequest()) }
+}
+function sizeRecordChange(kind, value) {
+  if (kind === 'history') pageSize.value = value
+  if (kind === 'archive') archivePageSize.value = value
+  if (kind === 'transfer') transferPageSize.value = value
+  // ModuleTable emits update:page(1) after size changes, issuing one request.
+}
+function resetHistoryFilter() { historyResultFilter.value = 'all'; pageRecordChange('history', 1) }
+function resetTransferFilter() { transferResultFilter.value = 'all'; pageRecordChange('transfer', 1) }
+function routeText(row) { return `${row.source_downloader || row.from_downloader || '—'} → ${row.target_downloader || row.to_downloader || '—'}` }
+function presentValue(value) { return value == null || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value) }
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
   void refreshActive()
@@ -1517,8 +1712,8 @@ onBeforeUnmount(() => {
       <VIcon icon="mdi-download" class="ms-3 me-2" color="primary" />
       <div class="dm-title">下载中心</div>
       <VSpacer />
-      <VBtn size="small" variant="text" prepend-icon="mdi-refresh" class="text-none me-2" @click="refreshActive()" :loading="loading">刷新数据</VBtn>
-      <VBtn size="small" variant="text" prepend-icon="mdi-cog-outline" class="text-none" @click="emit('switch')">配置插件</VBtn>
+      <VBtn color="primary" size="small" variant="tonal" prepend-icon="mdi-refresh" class="text-none me-2" @click="refreshActive()" :loading="loading">刷新数据</VBtn>
+      <VBtn color="primary" size="small" variant="tonal" prepend-icon="mdi-cog-outline" class="text-none" @click="emit('switch')">配置插件</VBtn>
       <VBtn size="small" aria-label="关闭窗口" icon="mdi-close" variant="text" @click="emit('close')" />
     </VToolbar>
     <VDivider />
@@ -1541,828 +1736,193 @@ onBeforeUnmount(() => {
         </div>
 
         <template v-else>
-          <section v-if="activeTab === 'overview'" class="dm-overview-band">
-            <div class="dm-overview-stat-grid">
-              <div v-for="card in overviewCoreCards" :key="card.title" class="dm-overview-stat" :class="`dm-overview-stat--${card.color}`">
-                <VAvatar :color="card.color" variant="tonal" size="32" rounded="lg"><VIcon :icon="card.icon" size="18" /></VAvatar>
-                <div class="dm-overview-stat-content">
-                  <div class="dm-overview-stat-label dm-hint">{{ card.title }}</div>
-                  <div class="dm-overview-stat-value">{{ card.value }}</div>
-                  <div class="dm-overview-stat-desc dm-hint">{{ card.desc }}</div>
-                </div>
-              </div>
-            </div>
-            <div class="dm-overview-section mt-3">
-              <div class="dm-section-title">运行链路</div>
-              <div class="dm-flow">
-                <div v-for="flow in runtimeFlows" :key="flow.label" class="dm-flow-block">
-                  <div class="dm-flow-label">{{ flow.label }}</div>
-                  <div class="dm-flow-row">
-                    <template v-for="(step, index) in flow.steps" :key="`${flow.label}-${step}`">
-                      <span class="dm-flow-step">{{ step }}</span>
-                      <VIcon v-if="index < flow.steps.length - 1" class="dm-flow-arrow" icon="mdi-arrow-right" size="14" />
-                    </template>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <section v-if="overviewAttentionItems.length" class="dm-attention-panel mt-3">
-              <div class="dm-section-heading">
-                <div>
-                  <div class="dm-section-title">需要关注</div>
-                  <div class="dm-hint">点击条目可展开对应模块卡并定位。</div>
-                </div>
-                <VChip color="warning" size="small" variant="tonal">{{ overviewAttentionItems.length }} 项</VChip>
-              </div>
-              <div class="dm-attention-list">
-                <div
-                  v-for="item in overviewAttentionItems"
-                  :key="`${item.title}-${item.detail}`"
-                  class="dm-attention-item"
-                  :class="{ 'dm-attention-item--linked': !!item.target }"
-                  :role="item.target ? 'button' : null"
-                  :tabindex="item.target ? 0 : null"
-                  @click="focusModule(item.target)"
-                  @keyup.enter="focusModule(item.target)"
-                >
-                  <VIcon :icon="item.icon" :color="item.color" size="18" />
-                  <div class="min-w-0">
-                    <strong>{{ item.title }}</strong>
-                    <div class="dm-hint dm-break-text">{{ item.detail }}</div>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </section>
-
-          <section v-if="moduleGridCards.length" class="dm-module-section" :class="activeTab === 'overview' ? 'mt-4' : 'mt-3'">
-            <div v-if="activeTab === 'overview'" class="dm-section-heading">
-              <div>
-                <div class="dm-section-title">功能状态与操作</div>
-                <div class="dm-hint">每个模块卡给出状态摘要与手动操作，需要时展开查看运行明细，明细条数可调。</div>
-              </div>
-              <VSelect density="compact"
-                v-model="detailLimit"
-                :items="DETAIL_LIMIT_CHOICES"
-                label="明细条数"
-                variant="outlined"
-                hide-details
-                class="dm-detail-limit-select"
-              />
-            </div>
-            <div class="dm-module-grid mt-2">
-              <article v-for="card in moduleGridCards" :key="card.key" :id="`dm-module-${card.key}`" class="dm-module-card">
-                <div v-if="moduleHeaders[card.key]" class="dm-card-heading">
-                  <ModuleHeader v-bind="moduleHeaders[card.key]" />
-                  <VBtn size="small"
-                    v-if="moduleRecordView(card.key)"
-                    variant="text"
-                    class="text-none dm-card-data-link"
-                    prepend-icon="mdi-text-box-search-outline"
-                    @click="openModuleRecords(card.key)"
-                  >查看数据</VBtn>
-                </div>
-                <div v-else class="dm-module-head">
-                  <VAvatar :color="card.color" variant="tonal" size="30" rounded="lg"><VIcon :icon="card.icon" size="17" /></VAvatar>
-                  <div class="min-w-0">
-                    <div class="dm-module-title dm-hint">{{ card.title }}</div>
-                    <div class="dm-module-value">{{ card.value }}</div>
-                  </div>
-                </div>
-                <div class="dm-hint dm-break-text"><span v-if="moduleHeaders[card.key]">{{ card.value }} · </span>{{ card.desc }}</div>
-
-                <div class="dm-module-actions">
-                  <VBtn size="small"
-                    v-for="action in card.actions"
-                    :key="action.key"
-                    variant="tonal"
-                    :color="action.color || 'primary'"
-                    :prepend-icon="action.icon"
-                    class="text-none"
-                    :loading="moduleRunning === action.key"
-                    :disabled="moduleRunning !== '' && moduleRunning !== action.key"
-                    @click="action.run()"
-                  >{{ action.label }}</VBtn>
-                  <VBtn size="small"
-                    v-for="item in moduleCleanupButtons(card.key)"
-                    :key="item.key"
-                    variant="text"
-                    class="text-none"
-                    color="warning"
-                    prepend-icon="mdi-delete-sweep-outline"
-                    :disabled="item.count === 0"
-                    @click="openCleanupDialog(item.key)"
-                  >{{ item.label }}</VBtn>
-                  <VBtn size="small"
-                    variant="text"
-                    class="text-none ml-auto"
-                    :append-icon="expandedModules[card.key] ? 'mdi-chevron-up' : 'mdi-chevron-down'"
-                    @click="expandedModules[card.key] = !expandedModules[card.key]"
-                  >{{ expandedModules[card.key] ? '收起' : '详情' }}</VBtn>
-                </div>
-
-                <VExpandTransition>
-                  <div v-show="expandedModules[card.key]" class="dm-module-detail">
-                    <template v-if="card.key === 'upload_limit'">
-                      <VAlert v-for="runtimeError in uploadLimit.errors || []" :key="runtimeError" type="error" variant="tonal" density="compact" class="mb-2">
-                        {{ runtimeError }}
-                      </VAlert>
-                      <!-- 站点聚合与运行错误已由下方网格和告警展示，本模块不传 items，避免同一数据重复出现 -->
-                      <ModuleDetailPanel class="mt-3" title="运行明细" :rows="moduleDetail('upload_limit').rows" :error="moduleDetail('upload_limit').error">
-                        <template #appendix>
-                          <div class="dm-module-detail-title mt-3">下载器状态</div>
-                          <div v-if="uploadLimitDownloaderRows.length" class="dm-upload-status-grid">
-                            <div v-for="item in uploadLimitDownloaderRows" :key="item.id" class="dm-upload-status-card">
-                              <div class="dm-upload-status-head">
-                                <div class="min-w-0">
-                                  <strong class="dm-body-text">{{ item.id }}</strong>
-                                  <div class="dm-hint">{{ item.type === 'transmission' ? 'Transmission' : 'qBittorrent' }}</div>
-                                </div>
-                                <VChip size="x-small" :color="item.error ? 'warning' : 'success'" variant="tonal">{{ item.error ? '异常' : '正常' }}</VChip>
-                              </div>
-                              <div class="dm-upload-values">
-                                <span>实时 <strong>{{ formatUploadRate(item.upload_rate_bps) }}</strong></span>
-                                <span>{{ item.type === 'transmission' ? 'Session 全局上限' : 'QB 全局上限' }} <strong>{{ item.total_limit_kib }} KiB/s</strong></span>
-                                <span>受限任务 <strong>{{ item.managed_torrents || 0 }}</strong></span>
-                                <span>宽限任务 <strong>{{ item.grace_torrents || 0 }}</strong></span>
-                              </div>
-                              <div v-if="item.error" class="dm-hint text-error mt-2 dm-break-text">{{ item.error }}</div>
-                            </div>
-                          </div>
-                          <div v-else class="dm-monitor-empty dm-hint">当前没有启用的限速下载器</div>
-
-                          <div class="dm-module-detail-title mt-3">受限站点</div>
-                          <div v-if="uploadLimitSiteRows.length" class="dm-upload-site-status">
-                            <div v-for="item in uploadLimitSiteRows" :key="item.key" class="dm-upload-site-status-row">
-                              <div class="min-w-0">
-                                <strong class="dm-body-text">{{ item.name }}</strong>
-                                <div class="dm-hint">{{ item.torrent_count }} 个任务 · {{ item.downloaders?.join('、') }}</div>
-                              </div>
-                              <span class="dm-hint">实时 <strong>{{ formatUploadRate(item.upload_rate_bps) }}</strong></span>
-                              <span class="dm-hint">站点额度 <strong>{{ item.allocated_kib }} KiB/s</strong></span>
-                              <span class="dm-hint">站点上限 <strong>{{ item.limit_kib }} KiB/s</strong></span>
-                            </div>
-                          </div>
-                          <div v-else class="dm-monitor-empty dm-hint">当前没有填写正数上限的受限站点</div>
-                          <div class="dm-hint mt-2">实时速率是下载器当前实际上传流量；站点额度是插件写入单种限速的合计值，两者不是同一指标。</div>
-                        </template>
-                      </ModuleDetailPanel>
-                    </template>
-
-                    <template v-else>
-                      <template v-if="card.detailTitle">
-                        <div class="dm-module-detail-title">{{ card.detailTitle }}</div>
-                      </template>
-                      <div v-if="card.details?.length" class="dm-module-detail-grid">
-                        <div v-for="row in card.details" :key="row.label" class="dm-module-detail-row">
-                          <span>{{ row.label }}</span><strong>{{ detailValue(row.value) }}</strong>
-                        </div>
-                      </div>
-                      <div v-for="note in card.notes || []" :key="note.text" class="dm-hint mt-2" :class="{ 'dm-risk': note.type === 'warning', 'dm-error': note.type === 'error' }"><VIcon v-if="note.type === 'warning' || note.type === 'error'" :icon="note.type === 'error' ? 'mdi-alert-circle-outline' : 'mdi-alert-outline'" size="16" />{{ note.text }}</div>
-                      <template v-if="moduleDetailVisible(card.key)">
-                        <ModuleDetailPanel
-                          class="mt-3"
-                          title="运行明细"
-                          :rows="moduleDetail(card.key).rows"
-                          :items="moduleDetail(card.key).items"
-                          :total="moduleDetail(card.key).total"
-                          :limit="moduleDetail(card.key).limit"
-                          :truncated="moduleDetail(card.key).truncated"
-                          :error="moduleDetail(card.key).error"
-                        />
-                      </template>
-                    </template>
-                  </div>
-                </VExpandTransition>
+          <section v-if="activeTab === 'overview'" class="dm-page-stack" data-page="overview">
+            <div class="dm-page-heading"><ModuleHeader title="运行总览" :icon="MODULE_ICONS.overview" :show-status="false" enabled /></div>
+            <div class="dm-four-stats"><div v-for="stat in overviewStats" :key="stat.label"><span>{{ stat.label }}</span><strong>{{ stat.value }}</strong></div></div>
+            <div class="dm-overview-cards">
+              <article v-for="card in sevenCards" :key="card.key" class="dm-overview-card">
+                <ModuleHeader v-bind="moduleHeaders[card.key]" :badges="moduleHeaders[card.key].badges.slice(0, 2)" />
+                <VBtn size="small" variant="text" :aria-label="'打开' + moduleHeaders[card.key].title" icon="mdi-arrow-top-right" @click="openModuleRecords(card.key)" />
+                <p class="dm-hint">最近时间：{{ moduleDetail(card.key).time || '当前接口未提供' }}</p>
               </article>
             </div>
+            <ModuleTable title="待处理事项" :columns="recordColumns.attention" :rows="visibleRows('attention', attentionRows)" :total="attentionRows.length" :page="localPages.attention" :page-size="localSizes.attention"
+              :state="{ empty: attentionModuleFilter === 'all' ? 'none' : 'filtered' }" @update:page="localPages.attention = $event" @update:page-size="setLocalSize('attention', $event)" @reset-filters="attentionModuleFilter = 'all'">
+              <template #filters><CompactSelect v-model="attentionModuleFilter" :items="moduleFilterItems" label="模块" class="dm-filter" /></template>
+              <template #rowActions="{ row }"><RowActionMenu :label="row.name || row.title || '待处理项'" :actions="[{key:'view',label:'查看',icon:'mdi-open-in-new'}]" @select="openModuleRecords(row.target)" /></template>
+            </ModuleTable>
           </section>
 
-          <div v-if="activeTab === 'history'" class="dm-record-block mt-3" data-record-block="rename-history">
-            <div class="dm-record-block-head">
-              <div>
-                <div class="dm-record-block-title">命名历史</div>
-                <div class="dm-hint">共 {{ total }} 条，逐条可补刀、恢复原始名称或删除记录。</div>
-              </div>
-              <VBtn size="small" variant="tonal" prepend-icon="mdi-auto-fix" class="text-none"
-                :loading="moduleRunning === 'rename-retry' || renameStatus.batch_running" :disabled="(moduleRunning !== '' && moduleRunning !== 'rename-retry') || renameStatus.batch_running" @click="doRetryRenames">{{ renameStatus.batch_running ? '重试中…' : '重试' }}</VBtn>
-              <VBtn size="small" variant="tonal" prepend-icon="mdi-radar" class="text-none ml-2"
-                :loading="moduleRunning === 'rename-scan'" :disabled="moduleRunning !== '' && moduleRunning !== 'rename-scan'" @click="doRenameScan">扫描重命名</VBtn>
-            </div>
-            <div data-record-state="history" :aria-busy="recordStates.history.loading">
-              <p v-if="recordStates.history.loading && (recordStates.history.loaded || records.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
-              <div class="dm-table-scroll dm-desktop-table">
-                <VTable density="compact" class="dm-table">
-                  <thead>
-                    <tr>
-                      <th class="dm-table-head">时间</th>
-                      <th class="dm-table-head">原始名称</th>
-                      <th class="dm-table-head">命名后</th>
-                      <th class="dm-table-head">状态</th>
-                      <th class="dm-table-head">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-if="!records.length || recordStates.history.error"><td colspan="5"><TableState v-bind="recordTableState('history', records)" @retry="loadHistory(beginRecordRequest(['history']))" /></td></tr>
-                    <tr v-for="r in records" :key="r.hash">
-                      <td class="dm-body-text text-no-wrap">{{ r.time }}</td>
-                      <td class="dm-body-text dm-ellipsis" :title="r.original_name">{{ r.original_name }}</td>
-                      <td class="dm-body-text dm-ellipsis" :title="r.after_name">{{ r.after_name }}</td>
-                      <td><VChip size="x-small" :color="r.success ? 'success' : 'error'" variant="tonal">{{ r.success ? '成功' : (r.reason || '失败') }}</VChip></td>
-                      <td>
-                        <div class="d-flex ga-1">
-                          <VBtn size="small" variant="tonal" color="primary" @click="doRetryRename(r.hash)" :loading="retryingHash === r.hash">重试</VBtn>
-                          <VBtn size="small" v-if="r.success" variant="tonal" color="warning" @click="doRecovery(r.hash)">恢复名称</VBtn>
-                          <VBtn size="small" variant="text" color="error" @click="doDelete(r.hash)">删除记录</VBtn>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </VTable>
-              </div>
-              <div class="dm-mobile-list dm-history-list">
-                <TableState v-bind="recordTableState('history', records)" @retry="loadHistory(beginRecordRequest(['history']))" />
-                <article v-for="r in records" :key="r.hash" class="dm-record-card dm-history-card">
-                  <div class="dm-record-head">
-                    <div class="dm-record-title" :title="r.after_name || r.original_name">{{ r.after_name || r.original_name || r.hash }}</div>
-                    <VChip class="dm-record-status" size="x-small" :color="r.success ? 'success' : 'error'" variant="tonal">{{ r.success ? '成功' : (r.reason || '失败') }}</VChip>
-                  </div>
-                  <div class="dm-record-meta">
-                    <div class="dm-record-row">
-                      <span class="dm-record-label">时间</span>
-                      <span class="dm-record-value">{{ r.time || '-' }}</span>
-                    </div>
-                    <div class="dm-record-row">
-                      <span class="dm-record-label">原始</span>
-                      <span class="dm-record-value" :title="r.original_name">{{ r.original_name || '-' }}</span>
-                    </div>
-                    <div class="dm-record-row">
-                      <span class="dm-record-label">命名后</span>
-                      <span class="dm-record-value" :title="r.after_name">{{ r.after_name || '-' }}</span>
-                    </div>
-                  </div>
-                  <div class="dm-record-actions">
-                    <VBtn size="small" variant="tonal" color="primary" prepend-icon="mdi-auto-fix" @click="doRetryRename(r.hash)" :loading="retryingHash === r.hash">重试</VBtn>
-                    <VBtn size="small" v-if="r.success" variant="tonal" color="warning" prepend-icon="mdi-undo" @click="doRecovery(r.hash)">恢复名称</VBtn>
-                    <VBtn size="small" variant="text" color="error" prepend-icon="mdi-delete-outline" @click="doDelete(r.hash)">删除记录</VBtn>
-                  </div>
-                </article>
+          <section v-if="currentHeader" class="dm-page-stack" :data-page="currentModule">
+            <div class="dm-page-heading">
+              <ModuleHeader v-bind="currentHeader" />
+              <div class="dm-page-actions">
+                <VBtn v-for="action in moduleActions" :key="action.key" size="small" variant="tonal" :color="action.color || 'primary'" :loading="moduleRunning === action.key" :disabled="moduleRunning !== '' || (action.key === 'rename-scan' && renameStatus.batch_running)" @click="action.run()">{{ action.label }}</VBtn>
+                <VBtn color="primary" v-if="currentModule === 'tag'" size="small" variant="tonal" @click="openTagCleanup">标签清理</VBtn>
               </div>
             </div>
-            <div v-if="records.length && total > pageSize" class="d-flex align-center justify-center pa-3">
-              <VBtn size="small" aria-label="上一页" variant="tonal" icon="mdi-chevron-left" :disabled="page <= 1 || paging" @click="prevPage" class="mr-2" />
-              <span class="dm-hint mx-1">{{ page }} / {{ totalPages }}（共 {{ total }} 条）</span>
-              <VBtn size="small" aria-label="下一页" variant="tonal" icon="mdi-chevron-right" :disabled="page >= totalPages || paging" @click="nextPage" class="ml-2" />
-            </div>
-          </div>
+            <ConfigSummary :fields="summaryFields" @settings="settings" />
 
-          <div v-if="activeTab === 'history'" class="dm-record-block mt-3" data-record-block="rename-archive">
-            <div class="dm-record-block-head">
-              <div>
-                <div class="dm-record-block-title">重命名归档</div>
-                <div class="dm-hint">共 {{ archiveTotal }} 条连续失败后归档的记录，可补刀、恢复或删除。</div>
-              </div>
-            </div>
-            <div data-record-state="archive" :aria-busy="recordStates.archive.loading">
-              <p v-if="recordStates.archive.loading && (recordStates.archive.loaded || archiveRecords.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
-              <div class="dm-table-scroll dm-desktop-table">
-                <VTable density="compact" class="dm-table">
-                  <thead>
-                    <tr>
-                      <th class="dm-table-head">归档时间</th>
-                      <th class="dm-table-head">名称</th>
-                      <th class="dm-table-head">分类</th>
-                      <th class="dm-table-head">次数</th>
-                      <th class="dm-table-head">原因</th>
-                      <th class="dm-table-head">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-if="!archiveRecords.length || recordStates.archive.error"><td colspan="6"><TableState v-bind="recordTableState('archive', archiveRecords)" @retry="loadArchive(beginRecordRequest(['archive']))" /></td></tr>
-                    <tr v-for="r in archiveRecords" :key="r.hash">
-                      <td class="dm-body-text text-no-wrap">{{ r.archived_at || r.last_failed_at }}</td>
-                      <td class="dm-body-text dm-ellipsis" :title="r.name">{{ r.name || r.hash }}</td>
-                      <td><VChip size="x-small" color="warning" variant="tonal">{{ r.category_label || r.category }}</VChip></td>
-                      <td class="dm-body-text">{{ r.fail_count }}</td>
-                      <td class="dm-body-text dm-ellipsis" :title="r.archive_reason || r.reason">{{ r.archive_reason || r.reason }}</td>
-                      <td>
-                        <div class="d-flex ga-1">
-                          <VBtn size="small" variant="tonal" color="primary" @click="doRetryRename(r.hash)" :loading="retryingHash === r.hash" :disabled="!!retryingHash || restoringHash === r.hash || deletingHash === r.hash">重试</VBtn>
-                          <VBtn size="small" variant="tonal" color="primary" @click="restoreArchive(r.hash)" :loading="restoringHash === r.hash" :disabled="retryingHash === r.hash">恢复记录</VBtn>
-                          <VBtn size="small" variant="text" color="error" @click="deleteArchive(r.hash)" :loading="deletingHash === r.hash" :disabled="retryingHash === r.hash">删除记录</VBtn>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </VTable>
-              </div>
-              <div class="dm-mobile-list dm-archive-list">
-                <TableState v-bind="recordTableState('archive', archiveRecords)" @retry="loadArchive(beginRecordRequest(['archive']))" />
-                <article v-for="r in archiveRecords" :key="r.hash" class="dm-record-card dm-archive-card">
-                  <div class="dm-record-head">
-                    <div class="dm-record-title" :title="r.name || r.hash">{{ r.name || r.hash }}</div>
-                    <VChip class="dm-record-status" size="x-small" color="warning" variant="tonal">{{ r.category_label || r.category }}</VChip>
-                  </div>
-                  <div class="dm-record-meta">
-                    <div class="dm-record-row">
-                      <span class="dm-record-label">归档</span>
-                      <span class="dm-record-value">{{ r.archived_at || r.last_failed_at || '-' }}</span>
-                    </div>
-                    <div class="dm-record-row">
-                      <span class="dm-record-label">次数</span>
-                      <span class="dm-record-value">{{ r.fail_count }}</span>
-                    </div>
-                    <div class="dm-record-row">
-                      <span class="dm-record-label">原因</span>
-                      <span class="dm-record-value">{{ r.archive_reason || r.reason || '-' }}</span>
-                    </div>
-                  </div>
-                  <div class="dm-record-actions">
-                    <VBtn size="small" variant="tonal" color="primary" prepend-icon="mdi-auto-fix" @click="doRetryRename(r.hash)" :loading="retryingHash === r.hash" :disabled="!!retryingHash || restoringHash === r.hash || deletingHash === r.hash">重试</VBtn>
-                    <VBtn size="small" variant="tonal" color="warning" prepend-icon="mdi-undo" @click="restoreArchive(r.hash)" :loading="restoringHash === r.hash" :disabled="retryingHash === r.hash">恢复记录</VBtn>
-                    <VBtn size="small" variant="text" color="error" prepend-icon="mdi-delete-outline" @click="deleteArchive(r.hash)" :loading="deletingHash === r.hash" :disabled="retryingHash === r.hash">删除记录</VBtn>
-                  </div>
-                </article>
-              </div>
-            </div>
-            <div v-if="archiveRecords.length && archiveTotal > pageSize" class="d-flex align-center justify-center pa-3">
-              <VBtn size="small" aria-label="上一页" variant="tonal" icon="mdi-chevron-left" :disabled="archivePage <= 1 || paging" @click="prevArchivePage" class="mr-2" />
-              <span class="dm-hint mx-1">{{ archivePage }} / {{ archiveTotalPages }}（共 {{ archiveTotal }} 条）</span>
-              <VBtn size="small" aria-label="下一页" variant="tonal" icon="mdi-chevron-right" :disabled="archivePage >= archiveTotalPages || paging" @click="nextArchivePage" class="ml-2" />
-            </div>
-          </div>
+            <template v-if="activeTab === 'transfer'">
+              <ModuleTable title="任务配置" data-record-block="transfer-tasks" :columns="recordColumns.tasks" :rows="transferTasks" row-key="name" :pagination="false" :state="recordTableState('transfer', transferTasks)" @retry="refreshActive">
+                <template #cell-from_downloader="{ value }"><DownloaderBadge :name="value" /></template>
+                <template #cell-to_downloader="{ value }"><DownloaderBadge :name="value" /></template>
+                <template #cell-mapping="{ row }"><span>{{ row.from_path || '—' }} → {{ row.to_path || '—' }}</span></template>
+                <template #cell-filters="{ row }">{{ transferFilterText(row) }}</template>
+                <template #cell-settings="{ row }"><VChip v-for="badge in transferSettingBadges(row)" :key="badge.text" :color="badge.color" size="x-small" variant="tonal">{{ badge.text }}</VChip><span v-if="!transferSettingBadges(row).length">默认</span></template>
+                <template #rowActions><RowActionMenu label="转移任务" :actions="[{key:'settings',label:'设置',icon:'mdi-cog-outline'}]" @select="settings" /></template>
+              </ModuleTable>
+              <ModuleTable title="在途事务" :columns="recordColumns.pending" :rows="visibleRows('pending', transferPending)" :total="transferPending.length" :row-key="rowIdentity" :page="localPages.pending" :page-size="localSizes.pending" :state="recordTableState('transfer', transferPending)" @update:page="localPages.pending = $event" @update:page-size="setLocalSize('pending', $event)" @retry="refreshActive">
+                <template #cell-name="{ row }"><span :title="transferSourceName(row)">{{ transferPrimaryText(row) }}</span><div class="dm-hint">{{ transferSecondaryText(row) }}</div></template>
+                <template #cell-route="{ row }">{{ routeText(row) }}</template>
+                <template #cell-phase="{ row }"><VChip size="x-small" :color="transferPhaseColor(row.phase)" variant="tonal">{{ transferPhaseText(row.phase) }}</VChip></template>
+                <template #cell-wait="{ row }">{{ row.wait_seconds != null ? formatDuration(row.wait_seconds) : row.created_at ? formatDuration(Math.max(0, Date.now() / 1000 - Number(row.created_at))) : '当前接口未提供' }}</template>
+                <template #cell-options="{ row }">{{ row.delete_source === true ? '含删源' : row.delete_source === false ? '保留源' : '见详情' }}</template>
+                <template #expand="{ row }"><RecordDetails :record="row" /></template>
+              </ModuleTable>
+              <ModuleTable title="最近记录" data-record-block="transfer-records" data-record-state="transfer" :columns="recordColumns.transfer" :rows="transferRecords" :total="transferStatus.total || 0" :row-key="rowIdentity" :page="transferPage" :page-size="transferPageSize" :state="recordTableState('transfer', transferRecords, transferResultFilter === 'all' ? 'none' : 'filtered')" @retry="refreshActive" @reset-filters="resetTransferFilter" @update:page="pageRecordChange('transfer', $event)" @update:page-size="sizeRecordChange('transfer', $event)">
+                <template #filters><CompactSelect v-model="transferResultFilter" :items="[{title:'全部结果',value:'all'},{title:'成功',value:'success'},{title:'失败',value:'failed'},{title:'源端待处理',value:'source_pending'},{title:'回滚',value:'rollback'}]" label="结果" class="dm-filter" @update:model-value="pageRecordChange('transfer', 1)" /></template>
+                <template #cell-name="{ row }"><span :title="transferSourceName(row)">{{ transferPrimaryText(row) }}</span><div class="dm-hint">{{ transferSecondaryText(row) }}</div></template>
+                <template #cell-route="{ row }">{{ routeText(row) }}</template>
+                <template #cell-phase="{ row }"><VChip size="x-small" :color="transferPhaseColor(row.phase)" variant="tonal">{{ transferPhaseText(row.phase) }}</VChip></template>
+                <template #cell-updated="{ row }">{{ formatTimestamp(row.updated_at || row.timestamp || row.created_at) }}</template>
+                <template #expand="{ row }"><RecordDetails :record="row" /></template>
+              </ModuleTable>
+            </template>
 
-          <div v-if="activeTab === 'autoremove'" class="dm-record-block mt-3" data-record-block="autoremove-preview" data-record-state="autoremove" :aria-busy="recordStates.autoremove.loading">
-            <div class="dm-record-block-head">
-              <div class="dm-record-block-title"><span class="dm-table-sr">删种预览记录</span></div>
-              <div class="dm-hint">自动删种的候选清单；点「预览」重新收集候选，不写下载器。</div>
-            </div>
-            <p v-if="recordStates.autoremove.loading && (recordStates.autoremove.loaded || autoremoveRows.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
-            <ModuleTable title="删种预览记录" :columns="[
-              { key: 'downloader_id', label: '下载器' },
-              { key: 'name', label: '名称' },
-              { key: 'site', label: '站点' },
-              { key: 'size_text', label: '体积', align: 'right' },
-              { key: 'ratio', label: '分享率', align: 'right' },
-              { key: 'seeding_hours', label: '做种时长', align: 'right' },
-              { key: 'reason', label: '原因' },
-            ]" :rows="autoremoveRows" :total="autoremoveRows.length" :state="recordTableState('autoremove', autoremoveRows, autoremoveEmptyState, true)" row-key="torrent_hash" @retry="loadAutoremoveStatus(beginPageRequest())">
-              <template #toolbar>
-                <VChip size="small" variant="tonal" :color="autoremovePreview ? 'primary' : 'default'">
-                  {{ autoremovePreview ? `预览命中 ${autoremoveRows.length} 个候选` : `上轮候选 ${autoremoveRows.length} 个` }}
-                </VChip>
+            <template v-if="activeTab === 'history'">
+              <ModuleTable title="执行记录" data-record-block="rename-history" data-record-state="history" :columns="recordColumns.history" :rows="records" :total="total" row-key="hash" :page="page" :page-size="pageSize" :state="recordTableState('history', records, historyResultFilter === 'all' ? 'none' : 'filtered')" :cleanup-blocked="!cleanupCounts.rename_history" cleanup-label="清历史" @cleanup="openCleanupDialog('rename_history')" @retry="loadHistory(beginRecordRequest(['history']))" @reset-filters="resetHistoryFilter" @update:page="pageRecordChange('history', $event)" @update:page-size="sizeRecordChange('history', $event)">
+                <template #filters><CompactSelect v-model="historyResultFilter" :items="[{title:'全部结果',value:'all'},{title:'成功',value:'success'},{title:'失败',value:'failed'}]" label="结果" class="dm-filter" @update:model-value="pageRecordChange('history', 1)" /></template>
+                <template #toolbar>
+                  <VBtn color="primary" size="small" variant="tonal" :loading="renameStatus.batch_running || moduleRunning === 'rename-retry'" :disabled="!!moduleRunning || renameStatus.batch_running" @click="doRetryRenames">重试失败项</VBtn>
+                </template>
+                <template #cell-downloader="{ row }"><DownloaderBadge :name="row.downloader || row.downloader_id || '未记录'" /></template>
+                <template #cell-success="{ row }"><VChip size="x-small" :color="row.success ? 'success' : 'error'" variant="tonal">{{ row.success ? '成功' : '失败' }}</VChip></template>
+                <template #rowActions="{ row }"><RowActionMenu :label="row.name || row.hash" :busy="retryingHash === row.hash"
+                  :actions="[
+                    {key:'retry',label:'重试',icon:'mdi-refresh',disabled:!!retryingHash || !!moduleRunning},
+                    ...(row.success ? [{key:'recover',label:'恢复原名',icon:'mdi-undo',color:'warning'}] : []),
+                    {key:'delete',label:'删除记录',icon:'mdi-delete-outline',color:'error'},
+                  ]" @select="handleHistoryAction($event, row)" /></template>
+                <template #expand="{ row }"><RecordDetails :record="row" /></template>
+              </ModuleTable>
+              <ModuleTable title="失败归档" data-record-block="rename-archive" data-record-state="archive" :columns="recordColumns.archive" :rows="archiveRecords" :total="archiveTotal" row-key="hash" :page="archivePage" :page-size="archivePageSize" :state="recordTableState('archive', archiveRecords)" :cleanup-blocked="!cleanupCounts.rename_archive" cleanup-label="清归档" @cleanup="openCleanupDialog('rename_archive')" @retry="loadArchive(beginRecordRequest(['archive']))" @update:page="pageRecordChange('archive', $event)" @update:page-size="sizeRecordChange('archive', $event)">
+                <template #cell-archived_at="{ row }">{{ row.archived_at || row.last_failed_at || '—' }}</template>
+                <template #cell-downloader="{ row }"><DownloaderBadge :name="row.downloader || row.downloader_id || '未记录'" /></template>
+                <template #cell-category="{ row }">{{ row.category_label || row.category || '—' }}</template>
+                <template #cell-reason="{ row }"><span :title="row.archive_reason || row.reason">{{ row.archive_reason || row.reason || '—' }}</span></template>
+                <template #rowActions="{ row }">
+                  <RowActionMenu :label="row.name || row.hash" :busy="retryingHash === row.hash || restoringHash === row.hash || deletingHash === row.hash"
+                    :actions="[
+                      { key: 'retry', label: '重试', icon: 'mdi-refresh', disabled: !!retryingHash || restoringHash === row.hash || deletingHash === row.hash },
+                      { key: 'restore', label: '恢复记录', icon: 'mdi-archive-arrow-up-outline', disabled: retryingHash === row.hash },
+                      { key: 'delete', label: '删除记录', icon: 'mdi-delete-outline', color: 'error', disabled: retryingHash === row.hash },
+                    ]" @select="handleArchiveAction($event, row)" />
+                </template>
+                <template #expand="{ row }"><RecordDetails :record="row" /></template>
+              </ModuleTable>
+            </template>
+
+            <template v-if="activeTab === 'hr'">
+              <ModuleTable title="H&R 任务" data-record-block="hr-tasks" data-record-state="hr" :columns="recordColumns.hr" :rows="visibleRows('hr', visibleHrRows)" :total="visibleHrRows.length" :row-key="rowIdentity" :page="localPages.hr" :page-size="localSizes.hr" :state="recordTableState('hr', visibleHrRows, hrStatusFilter === 'all' && presenceFilter === 'all' ? 'none' : 'filtered')" @retry="refreshActive" @reset-filters="hrStatusFilter = 'all'; presenceFilter = 'all'" @update:page="localPages.hr = $event" @update:page-size="setLocalSize('hr', $event)">
+                <template #filters>
+                  <CompactSelect v-model="hrStatusFilter" :items="hrStatusFilterOptions" label="考核状态" class="dm-filter" />
+                  <CompactSelect v-model="presenceFilter" :items="[{title:'全部',value:'all'},{title:'存在',value:'present'},{title:'缺失',value:'missing'}]" label="存在状态" class="dm-filter" />
+                </template>
+                <template #toolbar>
+                  <VBtn color="primary" size="small" variant="tonal" :disabled="hrClearing || !hrSummary.compliant" @click="askHrClear('compliant')">清理达标记录</VBtn>
+                  <VBtn color="primary" size="small" variant="tonal" :disabled="hrClearing || !hrSummary.deleted" @click="askHrClear('missing')">清理缺失记录</VBtn>
+                </template>
+                <template #cell-name="{ row }"><span :title="row.name || row.torrent_hash">{{ hrTaskTitle(row) }}</span></template>
+                <template #cell-downloader_id="{ value }"><DownloaderBadge :name="value || '未记录'" /></template>
+                <template #cell-status="{ row }"><VChip size="x-small" :color="hrStatusColor(row.status)" variant="tonal">{{ row.status_text || row.status }}</VChip></template>
+                <template #cell-deleted="{ value }"><VChip size="x-small" :color="value === true ? 'warning' : 'default'" variant="tonal">{{ value === true ? '缺失' : value === false ? '存在' : '未知' }}</VChip></template>
+                <template #cell-remain_seconds="{ value }">{{ value == null ? '—' : formatDuration(value) }}</template>
+                <template #cell-deadline="{ value }">{{ formatTimestamp(value) }}</template>
+                <template #cell-progress="{ value }">{{ value == null ? '—' : formatPercent(value) }}</template>
+                <template #rowActions="{ row }"><RowActionMenu :label="hrTaskTitle(row)" :busy="hrClearing" :actions="[{key:'clear',label:'清理记录',icon:'mdi-delete-outline',color:'error',disabled:hrClearing}]" @select="askHrClear('task', row)" /></template>
+                <template #expand="{ row }"><RecordDetails :record="row" /></template>
+              </ModuleTable>
+              <details class="dm-runtime-details"><summary>保护跳过统计</summary><dl><template v-for="row in hrSkipRows" :key="row.label"><dt>{{ row.label }}</dt><dd>{{ row.value }}</dd></template></dl></details>
+            </template>
+
+            <template v-if="activeTab === 'autoremove'">
+              <ModuleTable title="候选清单" data-record-block="autoremove-preview" data-record-state="autoremove" :columns="recordColumns.candidates" :rows="visibleRows('candidates', autoremoveRows)" :total="autoremoveRows.length" :row-key="rowIdentity" :page="localPages.candidates" :page-size="localSizes.candidates" :state="recordTableState('autoremove', autoremoveRows, autoremoveEmptyState, true)" @retry="refreshActive" @update:page="localPages.candidates = $event" @update:page-size="setLocalSize('candidates', $event)">
+                <template #toolbar><VChip size="small" variant="tonal">{{ autoremovePreview ? '本次预览' : '上轮候选' }}</VChip><VBtn size="small" :color="autoremoveStatus.observe_only ? 'warning' : autoremoveStatus.action === 'pause' ? 'primary' : 'error'" variant="tonal" :disabled="!!moduleRunning" @click="autoRunConfirm = true">按当前配置执行</VBtn></template>
+                <template #cell-name="{ row }">{{ row.name || '名称未记录' }}</template>
+                <template #cell-downloader_id="{ value }"><DownloaderBadge :name="value || '未记录'" /></template>
+                <template #expand="{ row }"><RecordDetails :record="row" /></template>
+              </ModuleTable>
+              <p class="dm-hint">预览不锁定执行清单；执行时后端会按当前配置重新判断。</p>
+              <ModuleTable title="执行记录" :columns="recordColumns.autoHistory" :unavailable="unavailableHistory" />
+              <details class="dm-runtime-details"><summary>最近运行详情</summary>
+                <VBtn color="primary" size="small" variant="tonal" :disabled="!cleanupCounts.autoremove_state" @click="openCleanupDialog('autoremove_state')">清最近运行记录</VBtn>
+                <ModuleDetailPanel :rows="moduleDetail('autoremove').rows" :items="moduleDetail('autoremove').items" :total="moduleDetail('autoremove').total" :limit="moduleDetail('autoremove').limit" :truncated="moduleDetail('autoremove').truncated" :error="moduleDetail('autoremove').error" />
+              </details>
+            </template>
+
+            <template v-if="activeTab === 'failclean'">
+              <ModuleTable title="执行记录" :columns="recordColumns.failHistory" :unavailable="unavailableHistory" />
+              <details class="dm-runtime-details" data-record-state="failclean" :aria-busy="recordStates.failclean.loading"><summary>事件与最近巡检详情</summary>
+                <VBtn color="primary" size="small" variant="tonal" :disabled="!cleanupCounts.failclean_state" @click="openCleanupDialog('failclean_state')">清最近运行记录</VBtn>
+                <TableState v-if="!failcleanRows.length || recordStates.failclean.error" v-bind="recordTableState('failclean', failcleanRows, failcleanEmptyState)" @retry="refreshActive" />
+                <RecordDetails v-for="row in failcleanRows" :key="row.source" :record="{ source: row.source, scanned: row.scanned, cleaned: row.cleaned, failed: row.failed, skipped: row.skipped }" />
+              </details>
+            </template>
+
+            <template v-if="activeTab === 'sitetag'">
+              <ModuleTable title="补全执行记录" :columns="recordColumns.tagHistory" :unavailable="unavailableHistory" />
+              <ModuleTable title="标签清理记录" data-record-block="tag-cleanup" :columns="recordColumns.cleanupHistory" :unavailable="unavailableHistory" />
+              <details class="dm-runtime-details" data-record-block="tag-cleanup-snapshot"><summary>最近标签清理快照（非逐条历史）</summary>
+                <ModuleDetailPanel :rows="moduleDetail('tagcleanup').rows" :items="moduleDetail('tagcleanup').items" :total="moduleDetail('tagcleanup').total" :limit="moduleDetail('tagcleanup').limit" :truncated="moduleDetail('tagcleanup').truncated" :error="moduleDetail('tagcleanup').error" />
+              </details>
+            </template>
+
+            <template v-if="activeTab === 'upload'">
+              <section class="dm-page-stack" data-record-block="upload-status" data-runtime-section="upload-limit">
+                <div class="dm-page-heading"><h3>实时监控</h3><div class="dm-page-actions">
+                  <CompactSelect v-model="uploadDownloaderFilter" :items="[{title:'全部下载器',value:'all'}, ...uploadLimitDownloaderRows.map(item => ({title:item.name || item.id,value:String(item.id)}))]" label="下载器" class="dm-filter" />
+                  <VTextField v-model="uploadSiteFilter" label="搜索站点" density="compact" variant="outlined" hide-details class="dm-filter" />
+                </div></div>
+                <p v-if="!uploadGroups.length" class="dm-hint">{{ uploadDownloaderFilter !== 'all' || uploadSiteFilter ? '筛选无结果' : '当前快照没有下载器状态' }}</p>
+                <section v-for="group in uploadGroups" :key="group.key" class="dm-upload-group">
+                  <button type="button" class="dm-group-heading" :aria-expanded="!closedUploadGroups[group.key]" @click="closedUploadGroups[group.key] = !closedUploadGroups[group.key]">
+                    <span>{{ closedUploadGroups[group.key] ? '▸' : '▾' }} {{ group.title }}</span>
+                    <template v-if="!group.aggregate"><span>{{ group.error ? '异常：' + group.error : group.connected === false ? '未连接' : '状态：' + (group.status || '当前接口未提供') }}</span><span>当前上传 {{ group.upload_rate_bps == null ? '—' : formatUploadRate(group.upload_rate_bps) }}</span><span>全局限速 {{ group.global_limit_kib == null ? '—' : group.global_limit_kib + ' KiB/s' }}</span><span>受管 {{ group.managed_torrents ?? '—' }}</span><span>更新时间 {{ group.updated_at || '当前接口未提供' }}</span></template>
+                  </button>
+                  <ModuleTable v-if="!closedUploadGroups[group.key]" :title="group.title + ' · 站点额度'" :columns="recordColumns.sites" :rows="group.rows" row-key="key" :pagination="false">
+                    <template #cell-upload_rate_bps="{ value }">{{ value == null ? '—' : formatUploadRate(value) }}</template>
+                    <template #cell-allocated_kib="{ value }">{{ value == null ? '—' : value + ' KiB/s' }}</template>
+                    <template #cell-uploading_torrents="{ value }">{{ value ?? '当前接口未提供' }}</template>
+                    <template #cell-state="{ row }">{{ row.state || '当前接口未提供' }}</template>
+                    <template #expand="{ row }"><p class="dm-hint">关联下载器：{{ row.downloaders?.join('、') || '当前接口未提供' }}；种子级明细当前接口未提供。</p></template>
+                  </ModuleTable>
+                </section>
+              </section>
+              <ModuleTable title="执行记录" :columns="recordColumns.uploadHistory" :unavailable="unavailableHistory" />
+              <p class="dm-hint">实际上传与分配额度是不同指标；MP 或插件离线后，下载器可能保留最后写入的限速。</p>
+              <details class="dm-runtime-details"><summary>站点识别与策略操作</summary><VBtn color="primary" size="small" variant="tonal" :disabled="!!moduleRunning" @click="doUploadScanSites">扫描站点</VBtn><VBtn size="small" variant="tonal" color="error" :disabled="!!moduleRunning" @click="doUploadClearRules">清空策略</VBtn></details>
+            </template>
+          </section>
+
+          <section v-if="activeTab === 'diagnostics'" class="dm-page-stack" data-page="diagnostics">
+            <div class="dm-page-heading"><ModuleHeader title="运行诊断" :icon="MODULE_ICONS.diagnostics" :show-status="false" enabled /><VBtn color="primary" size="small" variant="tonal" :loading="loading" @click="runDiagnostics">刷新诊断</VBtn></div>
+            <div class="dm-four-stats"><div v-for="stat in diagnosticStats" :key="stat.label"><span>{{ stat.label }}</span><strong>{{ stat.value }}</strong></div></div>
+            <p class="dm-hint">最近检查：{{ diagnostics?.time || '未检查' }} · 当前显示最近快照，刷新诊断会进行只读检查（可能访问下载器）。</p>
+            <ModuleTable title="检查结果" :columns="recordColumns.diagnostics" :rows="visibleRows('diagnostics', filteredDiagnosticRows)" :total="filteredDiagnosticRows.length" :page="localPages.diagnostics" :page-size="localSizes.diagnostics" :state="{ empty: diagnosticModuleFilter === 'all' && diagnosticStateFilter === 'all' ? 'none' : 'filtered' }" @update:page="localPages.diagnostics = $event" @update:page-size="setLocalSize('diagnostics', $event)" @reset-filters="diagnosticModuleFilter = 'all'; diagnosticStateFilter = 'all'">
+              <template #filters>
+                <CompactSelect v-model="diagnosticModuleFilter" :items="[...moduleFilterItems, {title:'插件',value:'plugin'}]" label="模块" class="dm-filter" />
+                <CompactSelect v-model="diagnosticStateFilter" :items="['all','正常','需关注','异常','未检查','不适用']" label="状态" class="dm-filter" />
               </template>
-              <template #cell-name="{ row }"><span class="dm-body-text dm-ellipsis" :title="row.name || row.torrent_hash">{{ row.name || row.torrent_hash || '名称未记录' }}</span></template>
-              <template #cell-site="{ value }">{{ detailValue(value) }}</template>
-              <template #cell-size_text="{ value }">{{ detailValue(value) }}</template>
-              <template #cell-ratio="{ value }">{{ detailValue(value) }}</template>
-              <template #cell-seeding_hours="{ value }">{{ value == null || value === '' ? '—' : `${value} 小时` }}</template>
-              <template #cell-reason="{ value }">{{ detailValue(value) }}</template>
-              <template #cell-downloader_id="{ value }">{{ detailValue(value) }}</template>
+              <template #rowActions="{ row }"><RowActionMenu :label="row.name || row.title || '诊断项'" :actions="[{key:'detail',label:'详情',icon:'mdi-text-box-search-outline'}]" @select="selectedDiagnostic = row" /></template>
             </ModuleTable>
-            <!-- ModuleTable is the responsive data surface; no second dm-record-card tree. -->
-          </div>
-
-          <div v-if="activeTab === 'failclean'" class="dm-record-block mt-3" data-record-state="failclean" :aria-busy="recordStates.failclean.loading">
-            <div class="dm-record-block-head">
-              <div class="dm-record-block-title"><span class="dm-table-sr">失败清理明细</span></div>
-              <div class="dm-hint">来源事件与上轮巡检分开展示；事件计数不并入上轮巡检徽标。</div>
-            </div>
-            <p v-if="recordStates.failclean.loading && (recordStates.failclean.loaded || failcleanRows.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
-            <ModuleTable title="失败清理明细" :columns="[
-              { key: 'source', label: '来源' },
-              { key: 'scanned', label: '扫描', align: 'right' },
-              { key: 'cleaned', label: '清理', align: 'right' },
-              { key: 'failed', label: '失败', align: 'right' },
-              { key: 'skipped', label: '跳过', align: 'right' },
-            ]" :rows="failcleanRows" :total="failcleanRows.length" :state="recordTableState('failclean', failcleanRows, failcleanEmptyState, true)" row-key="source" @retry="loadFailcleanStatus(beginPageRequest())">
-              <template #cell-scanned="{ value }">{{ detailValue(value) }}</template>
-              <template #cell-cleaned="{ value }">{{ detailValue(value) }}</template>
-              <template #cell-failed="{ value }">{{ detailValue(value) }}</template>
-              <template #cell-skipped="{ value }">{{ detailValue(value) }}</template>
-            </ModuleTable>
-            <!-- ModuleTable is the responsive data surface; no second dm-record-card tree. -->
-          </div>
-
-          <div v-if="activeTab === 'hr'" class="dm-record-block mt-3" data-record-block="hr-tasks" data-record-state="hr" :aria-busy="recordStates.hr.loading">
-            <div class="dm-record-block-head">
-              <div>
-                <div class="dm-record-block-title">H&R 任务</div>
-                <div class="dm-hint">任务总数 {{ hrSummary.total || 0 }} · 达标 {{ hrSummary.compliant || 0 }} · 超期 {{ hrSummary.overdue || 0 }} · 需做种 {{ hrSummary.needs_seeding || 0 }}</div>
-              </div>
-              <div class="d-flex flex-wrap ga-2 align-center">
-                <VSelect v-model="hrStatusFilter" :items="hrStatusFilterOptions" label="状态筛选" density="compact" variant="outlined" hide-details class="dm-hr-filter" />
-                <VBtn size="small" variant="tonal" prepend-icon="mdi-check-decagram-outline" class="text-none" @click="askHrClear('compliant')" :disabled="hrClearing || !(hrSummary.compliant || 0)">清理达标记录</VBtn>
-                <VBtn size="small" variant="tonal" prepend-icon="mdi-link-off" class="text-none" @click="askHrClear('missing')" :disabled="hrClearing || !(hrSummary.needs_seeding || 0)">清理失效记录</VBtn>
-              </div>
-            </div>
-            <div class="dm-table-scroll dm-desktop-table mt-2">
-              <VTable density="compact" class="dm-table">
-                <thead>
-                  <tr>
-                    <th class="dm-table-head">种子</th>
-                    <th class="dm-table-head">状态</th>
-                    <th class="dm-table-head">剩余时长</th>
-                    <th class="dm-table-head">截止日期</th>
-                    <th class="dm-table-head">做种进度</th>
-                    <th class="dm-table-head">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-if="!hrTaskRows.length || recordStates.hr.error"><td colspan="6"><TableState v-bind="recordTableState('hr', hrTaskRows, hrStatusFilter !== 'all' ? 'filtered' : 'none')" @retry="loadHrStatus(beginPageRequest())" /></td></tr>
-                  <tr v-for="task in hrTaskRows" :key="`${task.downloader_id}-${task.torrent_hash}`">
-                    <td class="dm-body-text dm-ellipsis" :title="task.name || task.torrent_hash">{{ hrTaskTitle(task) }}<span v-if="task.site" class="dm-hint"> · {{ task.site }}</span></td>
-                    <td><VChip size="x-small" :color="hrStatusColor(task.status)" variant="tonal">{{ task.status_text || task.status }}</VChip></td>
-                    <td class="dm-body-text text-no-wrap">{{ formatDuration(task.remain_seconds) }}</td>
-                    <td class="dm-body-text text-no-wrap">{{ formatTimestamp(task.deadline) }}</td>
-                    <td class="dm-body-text">{{ formatPercent(task.progress) }}</td>
-                    <td>
-                      <VBtn size="small" variant="text" color="error" :loading="hrClearing && hrClearKey === `${task.downloader_id}-${task.torrent_hash}`" @click="askHrClear('task', task)">清理记录</VBtn>
-                    </td>
-                  </tr>
-                </tbody>
-              </VTable>
-            </div>
-            <div class="dm-mobile-list mt-2">
-              <TableState v-if="!hrTaskRows.length || recordStates.hr.error" v-bind="recordTableState('hr', hrTaskRows, hrStatusFilter !== 'all' ? 'filtered' : 'none')" @retry="loadHrStatus(beginPageRequest())" />
-              <article v-for="task in hrTaskRows" :key="`${task.downloader_id}-${task.torrent_hash}`" class="dm-record-card">
-                <div class="dm-record-head">
-                  <div class="dm-record-title" :title="task.name || task.torrent_hash">{{ hrTaskTitle(task) }}<span v-if="task.site" class="dm-hint"> · {{ task.site }}</span></div>
-                  <VChip class="dm-record-status" size="x-small" :color="hrStatusColor(task.status)" variant="tonal">{{ task.status_text || task.status }}</VChip>
-                </div>
-                <div class="dm-record-meta">
-                  <div class="dm-record-row"><span class="dm-record-label">剩余</span><span class="dm-record-value">{{ formatDuration(task.remain_seconds) }}</span></div>
-                  <div class="dm-record-row"><span class="dm-record-label">截止</span><span class="dm-record-value">{{ formatTimestamp(task.deadline) }}</span></div>
-                  <div class="dm-record-row"><span class="dm-record-label">进度</span><span class="dm-record-value">{{ formatPercent(task.progress) }}</span></div>
-                </div>
-                <div class="dm-record-actions">
-                  <VBtn size="small" variant="text" color="error" :loading="hrClearing && hrClearKey === `${task.downloader_id}-${task.torrent_hash}`" @click="askHrClear('task', task)">清理记录</VBtn>
-                </div>
-              </article>
-            </div>
-          </div>
-
-          <div v-if="activeTab === 'transfer'" class="dm-record-block mt-3" data-record-block="transfer-tasks">
-            <div class="dm-record-block-head">
-              <div>
-                <div class="dm-record-block-title">任务配置</div>
-                <div class="dm-hint">启用任务 {{ transferTasks.length }} 条 · 在途 {{ transferSummary.pending || 0 }} · 已完成 {{ transferSummary.completed || 0 }} · 累计成功 {{ transferSummary.success_total || 0 }}</div>
-              </div>
-              <div class="d-flex flex-wrap ga-2">
-                <VBtn size="small" variant="text" prepend-icon="mdi-refresh" class="text-none" @click="refreshActive">刷新数据</VBtn>
-              </div>
-            </div>
-
-            <div class="d-flex flex-wrap ga-1 mt-2">
-              <VChip size="small" variant="tonal" color="primary">在途 {{ transferSummary.pending || 0 }}</VChip>
-              <VChip size="small" variant="tonal" :color="transferSummary.rollback ? 'error' : 'grey'">回滚 {{ transferSummary.rollback || 0 }}</VChip>
-              <VChip size="small" variant="tonal" color="success">今日成功 {{ transferSummary.today_success || 0 }}</VChip>
-              <VChip size="small" variant="tonal" color="primary">累计成功 {{ transferSummary.success_total || 0 }}</VChip>
-              <VChip size="small" variant="tonal" color="warning">兜底成功 {{ transferSummary.fallback_success || 0 }}</VChip>
-              <VChip size="small" variant="tonal" color="info">H&R 保护 {{ transferSummary.hr_protected || 0 }}</VChip>
-            </div>
-
-            <div class="dm-section-title mt-4">任务配置</div>
-            <div v-if="!transferTasks.length" class="dm-state text-center dm-hint">
-              <VIcon icon="mdi-swap-horizontal" size="48" color="grey-lighten-1" class="mb-2" />
-              <div>暂无启用的转移任务</div>
-            </div>
-            <div v-else class="dm-table-scroll dm-desktop-table mt-2">
-              <VTable density="compact" class="dm-table">
-                <thead>
-                  <tr>
-                    <th class="dm-table-head">名称</th>
-                    <th class="dm-table-head">源下载器</th>
-                    <th class="dm-table-head">目的下载器</th>
-                    <th class="dm-table-head">数据映射</th>
-                    <th class="dm-table-head">筛选条件</th>
-                    <th class="dm-table-head">设置</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="task in transferTasks" :key="task.name">
-                    <td class="dm-body-text dm-ellipsis" :title="task.name">{{ task.name }}</td>
-                    <td class="dm-body-text">{{ task.from_downloader }}</td>
-                    <td class="dm-body-text">{{ task.to_downloader }}</td>
-                    <td class="dm-body-text dm-ellipsis" :title="`${task.from_path} → ${task.to_path}`">{{ task.from_path }} → {{ task.to_path }}</td>
-                    <td class="dm-body-text dm-ellipsis" :title="transferFilterText(task)">{{ transferFilterText(task) }}</td>
-                    <td>
-                      <div v-if="transferSettingBadges(task).length" class="d-flex flex-wrap ga-1">
-                        <VChip v-for="badge in transferSettingBadges(task)" :key="badge.text" size="x-small" variant="tonal" :color="badge.color">{{ badge.text }}</VChip>
-                      </div>
-                      <span v-else class="dm-hint">默认</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </VTable>
-            </div>
-
-            <div class="dm-section-title mt-4">在途事务</div>
-            <div v-if="!transferPending.length" class="dm-state text-center dm-hint">
-              <VIcon icon="mdi-check-circle-outline" size="48" color="grey-lighten-1" class="mb-2" />
-              <div>暂无在途转移事务</div>
-            </div>
-            <div v-else class="dm-table-scroll dm-desktop-table mt-2">
-              <VTable density="compact" class="dm-table">
-                <thead>
-                  <tr>
-                    <th class="dm-table-head">源 → 目的</th>
-                    <th class="dm-table-head">种子</th>
-                    <th class="dm-table-head">阶段</th>
-                    <th class="dm-table-head">已等待</th>
-                    <th class="dm-table-head">选项</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in transferPending" :key="item.key">
-                    <td class="dm-body-text">{{ item.source_downloader }} → {{ item.downloader }}</td>
-                    <td class="dm-body-text dm-ellipsis" :title="item.source_hash">{{ transferPrimaryText(item) }}<span class="dm-hint"> · {{ transferSecondaryText(item) }}</span></td>
-                    <td><VChip size="x-small" variant="tonal" :color="transferPhaseColor(item.phase)">{{ transferPhaseText(item.phase) }}</VChip></td>
-                    <td class="dm-body-text text-no-wrap">{{ item.waited_minutes }} 分钟</td>
-                    <td>
-                      <div class="d-flex flex-wrap ga-1">
-                        <VChip v-if="item.fallback" size="x-small" variant="tonal" color="warning">兜底</VChip>
-                        <VChip v-if="item.skipverify" size="x-small" variant="tonal" color="info">跳过校验</VChip>
-                        <VChip v-if="item.autostart" size="x-small" variant="tonal" color="primary">自动开始</VChip>
-                        <VChip v-if="item.delete_source" size="x-small" variant="tonal" color="error">删源种</VChip>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </VTable>
-            </div>
-
-            <div class="dm-section-title mt-4">最近记录</div>
-            <div data-record-state="transfer" :aria-busy="recordStates.transfer.loading">
-              <p v-if="recordStates.transfer.loading && (recordStates.transfer.loaded || transferRecords.length)" role="status" class="dm-hint">正在刷新记录，保留上次结果</p>
-              <div class="dm-table-scroll dm-desktop-table mt-2">
-                <VTable density="compact" class="dm-table">
-                  <thead>
-                    <tr>
-                      <th class="dm-table-head">源 → 目的</th>
-                      <th class="dm-table-head">种子</th>
-                      <th class="dm-table-head">状态</th>
-                      <th class="dm-table-head">更新时间</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-if="!transferRecords.length || recordStates.transfer.error"><td colspan="4"><TableState v-bind="recordTableState('transfer', transferRecords)" @retry="refreshActive()" /></td></tr>
-                    <tr v-for="record in transferRecords" :key="`${record.source_downloader}-${record.source_hash}-${record.downloader}`">
-                      <td class="dm-body-text">{{ record.source_downloader }} → {{ record.downloader }}</td>
-                      <td class="dm-body-text dm-ellipsis" :title="record.source_hash">{{ transferPrimaryText(record) }}<span class="dm-hint"> · {{ transferSecondaryText(record) }}</span></td>
-                      <td>
-                        <div class="d-flex flex-wrap ga-1 align-center">
-                          <VChip size="x-small" variant="tonal" :color="transferPhaseColor(record.phase)">{{ transferPhaseText(record.phase) }}</VChip>
-                          <VChip v-if="record.delete_source" size="x-small" variant="tonal" color="error">已删源</VChip>
-                          <VChip v-if="record.hr_protected" size="x-small" variant="tonal" color="info">H&R 保护</VChip>
-                          <VChip v-if="record.fallback" size="x-small" variant="tonal" color="warning">兜底</VChip>
-                        </div>
-                      </td>
-                      <td class="dm-body-text text-no-wrap">{{ formatTimestamp(record.updated_at) }}</td>
-                    </tr>
-                  </tbody>
-                </VTable>
-              </div>
-              <div class="dm-mobile-list mt-2">
-                <TableState v-bind="recordTableState('transfer', transferRecords)" @retry="refreshActive()" />
-                <article v-for="record in transferRecords" :key="`m-${record.source_downloader}-${record.source_hash}-${record.downloader}`" class="dm-record-card">
-                  <div class="d-flex align-center justify-space-between ga-2">
-                    <strong class="dm-body-text dm-ellipsis">{{ record.source_downloader }} → {{ record.downloader }}</strong>
-                    <VChip size="x-small" variant="tonal" :color="transferPhaseColor(record.phase)">{{ transferPhaseText(record.phase) }}</VChip>
-                  </div>
-                  <div class="dm-hint mt-1">{{ transferPrimaryText(record) }} · {{ transferSecondaryText(record) }} · {{ formatTimestamp(record.updated_at) }}</div>
-                </article>
-              </div>
-            </div>
-            <div v-if="transferRecords.length && (transferStatus.total_pages || 1) > 1" class="d-flex align-center justify-center ga-2 mt-2">
-              <VBtn size="small" aria-label="上一页" variant="text" icon="mdi-chevron-left" :disabled="transferPage <= 1" @click="changeTransferPage(transferPage - 1)" />
-              <span class="dm-hint">{{ transferStatus.page || 1 }} / {{ transferStatus.total_pages || 1 }}</span>
-              <VBtn size="small" aria-label="下一页" variant="text" icon="mdi-chevron-right" :disabled="transferPage >= (transferStatus.total_pages || 1)" @click="changeTransferPage(transferPage + 1)" />
-            </div>
-          </div>
-
-          <div v-if="activeTab === 'sitetag'" class="dm-record-block mt-3" data-record-block="tag-cleanup">
-            <div class="dm-record-block-head">
-              <div>
-                <div class="dm-record-block-title">标签清理</div>
-                <div class="dm-hint">扫描所选 qBittorrent 下载器的标签，勾选保留项后清理其余标签。</div>
-              </div>
-            </div>
-            <ModuleDetailPanel v-if="moduleDetailVisible('tagcleanup')" class="mt-3" title="标签清理明细"
-              :rows="moduleDetail('tagcleanup').rows" v-bind="moduleDetail('tagcleanup')"
-            />
-            <div class="dm-cleanup-toolbar mt-2">
-              <VSelect density="compact" v-model="cleanupDownloaders" label="下载器" variant="outlined" hide-details
-                :items="qbDownloaderItems" multiple chips closable-chips class="dm-cleanup-select" />
-              <VBtn size="small" color="primary" variant="tonal" prepend-icon="mdi-radar" :loading="cleanupScanning"
-                :disabled="!cleanupDownloaders.length" @click="scanCleanupTags">扫描标签</VBtn>
-            </div>
-
-            <VAlert v-if="cleanupMessage" :type="cleanupStatus" variant="tonal" density="compact" closable class="mt-3"
-              @click:close="cleanupMessage = ''">{{ cleanupMessage }}</VAlert>
-
-            <div v-if="!cleanupScan && !cleanupMessage" class="dm-state text-center dm-hint">尚未扫描标签，请选择下载器后点击「扫描标签」</div>
-            <div v-if="cleanupScan" class="dm-cleanup-results mt-4">
-              <div class="dm-cleanup-summary">
-                <div>
-                  <div class="dm-section-title">扫描结果</div>
-                  <div class="dm-hint">
-                    {{ cleanupGroups.length }} 个下载器 · 自动清理 {{ cleanupAutoRemovedCount }} 个临时标签
-                  </div>
-                </div>
-                <div class="d-flex ga-1 flex-wrap justify-end">
-                  <VBtn size="small" variant="text" prepend-icon="mdi-check-all" @click="setAllCleanupTags(true)">全部保留</VBtn>
-                  <VBtn size="small" variant="text" color="warning" prepend-icon="mdi-checkbox-blank-outline"
-                    @click="setAllCleanupTags(false)">取消全选</VBtn>
-                </div>
-              </div>
-
-              <VAlert v-for="item in cleanupScan.errors || []" :key="`${item.downloader}-${item.message}`"
-                type="warning" variant="tonal" density="compact" class="mb-2">
-                {{ item.downloader }} · {{ item.message }}
-              </VAlert>
-
-              <div v-for="group in cleanupGroups" :key="group.name" class="dm-tag-group">
-                <div class="dm-tag-group-head">
-                  <div class="d-flex align-center ga-2 min-w-0">
-                    <VIcon icon="mdi-download-network-outline" size="19" color="primary" />
-                    <strong class="dm-body-text">{{ group.name }}</strong>
-                  </div>
-                  <span class="dm-hint">{{ group.task_count }} 个任务 · {{ group.tags.length }} 个标签</span>
-                </div>
-
-                <div v-if="!group.tags.length" class="dm-monitor-empty dm-hint">
-                  <VIcon icon="mdi-tag-check-outline" size="28" color="success" />
-                  <span>没有待选择标签</span>
-                </div>
-                <div v-else class="dm-tag-list">
-                  <label v-for="item in group.tags" :key="`${group.name}-${item.tag}`" class="dm-tag-row">
-                    <VCheckboxBtn v-model="cleanupKeep[tagSelectionKey(group.name, item.tag)]" color="success" />
-                    <div class="dm-tag-content">
-                      <div class="dm-tag-line">
-                        <span class="dm-tag-name" :title="item.tag">{{ item.tag }}</span>
-                        <VChip size="x-small" variant="tonal" :color="cleanupKindMeta(item.kind).color">
-                          {{ cleanupKindMeta(item.kind).label }}
-                        </VChip>
-                        <span class="dm-hint">{{ item.count }} 个任务</span>
-                      </div>
-                      <div class="dm-tag-samples dm-hint" :title="(item.samples || []).join(' · ')">{{ (item.samples || []).join(' · ') }}</div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <div class="dm-cleanup-actions">
-                <div class="dm-hint">
-                  待清理 {{ cleanupRemovals.length }} 个标签 · {{ cleanupRemovalAssociations }} 条任务关联
-                </div>
-                <VBtn size="small" color="warning" variant="tonal" prepend-icon="mdi-eye-outline"
-                  :disabled="!cleanupRemovals.length" @click="previewCleanupTags">预览标签清理</VBtn>
-              </div>
-            </div>
-          </div>
-
-          <section v-if="activeTab === 'diagnostics'" class="dm-runtime-section mt-4" data-runtime-section="upload-limit">
-            <div class="dm-section-heading">
-              <div>
-                <div class="dm-section-title">运行详情</div>
-                <div class="dm-hint">上传限速运行状态；下载器与站点明细见「上传限速」模块卡的展开详情。</div>
-              </div>
-            </div>
-            <div class="dm-runtime-heading mt-2">
-              <div>
-                <div class="dm-runtime-title">上传限速</div>
-                <div class="dm-hint">MP 或插件离线时，下载器继续保留最后一次已写入的限速。</div>
-              </div>
-              <div class="dm-runtime-actions">
-                <VChip size="small" :color="uploadLimitStatus.color" variant="tonal">{{ uploadLimitStatus.label }}</VChip>
-                <VBtn size="small" variant="text" class="text-none" @click="selectTab('upload')">查看明细</VBtn>
-              </div>
-            </div>
-
-            <VAlert v-for="runtimeError in uploadLimit.errors || []" :key="runtimeError" type="error" variant="tonal" density="compact" class="mt-3">
-              {{ runtimeError }}
-            </VAlert>
-            <div class="dm-upload-summary mt-3">
-              <div class="dm-monitor-metric"><span>服务</span><strong>{{ uploadLimitStatus.label }}</strong></div>
-              <div class="dm-monitor-metric"><span>实时速率</span><strong>{{ formatUploadRate(uploadLimit.upload_rate_bps) }}</strong></div>
-              <div class="dm-monitor-metric"><span>受限任务</span><strong>{{ uploadLimit.managed_torrents || 0 }}</strong></div>
-              <div class="dm-monitor-metric"><span>宽限任务</span><strong>{{ uploadLimit.grace_torrents || 0 }}</strong></div>
-            </div>
-            <div class="dm-hint mt-2">实时速率是下载器当前实际上传流量；站点额度是插件写入单种限速的合计值，两者不是同一指标。</div>
-          </section>
-
-          <section v-if="activeTab === 'diagnostics'" class="dm-pane mt-4">
-            <div class="dm-section-heading">
-              <div>
-                <div class="dm-section-title">诊断</div>
-                <div class="dm-hint">按运行链路顺序检查下载器、路径、转移、命名、标签和归档状态。</div>
-              </div>
-            </div>
-            <div v-if="diagnostics" class="dm-diagnostics mt-2">
-              <div class="dm-stat-grid mb-3">
-                <div class="dm-stat">
-                  <div class="dm-hint">版本</div>
-                  <div class="dm-section-title">{{ diagnostics?.plugin?.version }}</div>
-                </div>
-                <div class="dm-stat">
-                  <div class="dm-hint">源下载器</div>
-                  <DownloaderBadge class="dm-section-title" :name="diagnostics?.downloaders?.from?.name || '未配置'"
-                    :type="diagnostics?.downloaders?.from?.type" />
-                  <VChip size="x-small" :color="diagnostics?.downloaders?.from?.available ? 'success' : 'warning'" variant="tonal">{{ diagnostics?.downloaders?.from?.message }}</VChip>
-                </div>
-                <div class="dm-stat">
-                  <div class="dm-hint">目标下载器</div>
-                  <DownloaderBadge class="dm-section-title" :name="diagnostics?.downloaders?.to?.name || '未配置'"
-                    :type="diagnostics?.downloaders?.to?.type" />
-                  <VChip size="x-small" :color="diagnostics?.downloaders?.to?.available ? 'success' : 'warning'" variant="tonal">{{ diagnostics?.downloaders?.to?.message }}</VChip>
-                </div>
-                <div class="dm-stat">
-                  <div class="dm-hint">补刀归档</div>
-                  <div class="dm-section-title">{{ diagnostics?.rename_archive?.archived || 0 }} 条</div>
-                  <div class="dm-hint">连续失败 {{ diagnostics?.rename_archive?.active_failed || 0 }} · 阈值 {{ diagnostics?.rename_archive?.threshold || 3 }}</div>
-                </div>
-              </div>
-
-              <div class="dm-diagnostics-panel mb-3">
-                <div class="dm-diagnostics-head">
-                  <div class="dm-diagnostics-title">
-                    <span class="dm-diagnostics-icon"><VIcon icon="mdi-stethoscope" size="20" /></span>
-                    <span>运行诊断</span>
-                  </div>
-                  <div class="dm-diagnostics-score">
-                    <strong>{{ diagnosticsOkCount }} / {{ diagnosticsCards.length }}</strong>
-                    <span>正常</span>
-                    <span v-if="diagnosticsAttentionCount">· {{ diagnosticsAttentionCount }} 项关注</span>
-                  </div>
-                </div>
-                <div class="dm-diagnostics-grid">
-                  <div v-for="item in diagnosticsCards" :key="item.label" class="dm-diagnostic-card" :class="`dm-diagnostic-card--${item.status || 'off'}`">
-                    <div class="dm-diagnostic-state">
-                      <VIcon :icon="item.icon" size="22" />
-                    </div>
-                    <div class="dm-diagnostic-content">
-                      <div class="dm-diagnostic-name">{{ item.label }}</div>
-                      <div class="dm-diagnostic-value">{{ item.detail }}</div>
-                      <div class="dm-diagnostic-note dm-hint">{{ item.statusText }}</div>
-                    </div>
-                  </div>
-                </div>
-                <div class="dm-diagnostics-footer dm-hint">
-                  <span>按运行链路顺序检查下载器、路径、转移、命名、标签和归档状态。</span>
-                  <span v-if="diagnosticsAttentionCount" class="dm-diagnostics-attention">关注项不阻断运行</span>
-                </div>
-              </div>
-
-              <div>
-                <div class="dm-section-title mb-2">最近失败</div>
-                <div v-if="!diagnostics?.rename_history?.recent_failures?.length" class="dm-hint py-2">暂无失败记录</div>
-                <div v-else class="dm-table-scroll">
-                  <VTable density="compact" class="dm-table">
-                    <thead>
-                      <tr>
-                        <th class="dm-table-head">时间</th>
-                        <th class="dm-table-head">名称</th>
-                        <th class="dm-table-head">原因</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="item in diagnostics.rename_history.recent_failures" :key="item.hash">
-                        <td class="dm-body-text text-no-wrap">{{ item.time }}</td>
-                        <td class="dm-body-text dm-ellipsis" :title="item.name">{{ item.name }}</td>
-                        <td class="dm-body-text">{{ item.reason }}</td>
-                      </tr>
-                    </tbody>
-                  </VTable>
-                </div>
-              </div>
-
-              <div class="dm-record-block mt-3" data-record-block="module-data-cleanup">
-                <div class="dm-record-block-head">
-                  <div>
-                    <div class="dm-record-block-title">数据清理</div>
-                    <div class="dm-hint">
-                      只清理插件自身的历史与统计，不修改下载器任务与文件、H&amp;R 安全状态、活动队列与限速恢复状态。
-                    </div>
-                  </div>
-                </div>
-                <div class="dm-cleanup-list mt-2">
-                  <div v-for="(target, key) in CLEANUP_TARGETS" :key="key" class="dm-cleanup-row">
-                    <div class="dm-cleanup-info">
-                      <span class="dm-body-text">{{ target.label }}</span>
-                      <span class="dm-hint">{{ target.detail }} · {{ cleanupCounts[key] || 0 }} 条</span>
-                    </div>
-                    <VBtn size="small" variant="tonal" color="warning" prepend-icon="mdi-delete-sweep-outline"
-                      :text="`清理`" :disabled="!(cleanupCounts[key] > 0)" @click="openCleanupDialog(key)" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-else class="dm-state text-center dm-hint">
-              <VIcon icon="mdi-stethoscope" size="48" color="grey-lighten-1" class="mb-2" />
-              <div>点击刷新诊断</div>
-            </div>
+            <section v-if="selectedDiagnostic" class="dm-runtime-details"><h3>{{ selectedDiagnostic.name }}</h3><dl>
+              <dt>问题</dt><dd>{{ selectedDiagnostic.reason || selectedDiagnostic.message || '—' }}</dd>
+              <dt>影响范围</dt><dd>{{ selectedDiagnostic.target || selectedDiagnostic.module }}</dd>
+              <dt>建议</dt><dd>{{ selectedDiagnostic.suggestion || '当前检查项未提供建议' }}</dd>
+              <dt>检查时间 / 来源</dt><dd>{{ diagnostics?.time || '未检查' }} / 最近诊断快照</dd>
+            </dl></section>
+            <details class="dm-runtime-details"><summary>环境信息</summary><p>插件版本：{{ diagnostics?.plugin?.version || '—' }}</p><RecordDetails :record="diagnostics?.paths || {}" /></details>
           </section>
         </template>
       </main>
@@ -2380,7 +1940,7 @@ onBeforeUnmount(() => {
           <VDivider />
           <VCardActions>
             <VSpacer />
-            <VBtn size="small" variant="text" :disabled="moduleRunning === 'transfer-run'" @click="transferRunDialog = false">取消</VBtn>
+            <VBtn color="primary" size="small" variant="tonal" :disabled="moduleRunning === 'transfer-run'" @click="transferRunDialog = false">取消</VBtn>
             <VBtn size="small" color="primary" variant="flat" prepend-icon="mdi-play-circle-outline" :loading="moduleRunning === 'transfer-run'" @click="confirmTransferRun">运行转移</VBtn>
           </VCardActions>
         </VCard>
@@ -2404,7 +1964,7 @@ onBeforeUnmount(() => {
           </VCardText>
           <VCardActions>
             <VSpacer />
-            <VBtn size="small" variant="text" :disabled="cleanupRunning" @click="cleanupConfirmDialog = false">取消</VBtn>
+            <VBtn color="primary" size="small" variant="tonal" :disabled="cleanupRunning" @click="cleanupConfirmDialog = false">取消</VBtn>
             <VBtn size="small" color="error" variant="flat" prepend-icon="mdi-delete-sweep-outline" :loading="cleanupRunning"
               :disabled="cleanupTargetCount === 0" @click="confirmCleanupData">清理记录</VBtn>
           </VCardActions>
@@ -2426,7 +1986,7 @@ onBeforeUnmount(() => {
           </VCardText>
           <VCardActions>
             <VSpacer />
-            <VBtn size="small" variant="text" :disabled="hrClearing" @click="hrClearDialog = false">取消</VBtn>
+            <VBtn color="primary" size="small" variant="tonal" :disabled="hrClearing" @click="hrClearDialog = false">取消</VBtn>
             <VBtn size="small" color="error" variant="flat" prepend-icon="mdi-delete-outline" :loading="hrClearing" @click="confirmHrClear">清理记录</VBtn>
           </VCardActions>
         </VCard>
@@ -2452,7 +2012,7 @@ onBeforeUnmount(() => {
           <VDivider />
           <VCardActions>
             <VSpacer />
-            <VBtn size="small" variant="text" :disabled="cleanupExecuting" @click="cleanupDialog = false">取消</VBtn>
+            <VBtn color="primary" size="small" variant="tonal" :disabled="cleanupExecuting" @click="cleanupDialog = false">取消</VBtn>
             <VBtn size="small" color="error" variant="flat" prepend-icon="mdi-tag-remove-outline" :loading="cleanupExecuting"
               @click="executeCleanupTags">删除标签</VBtn>
           </VCardActions>
@@ -2462,417 +2022,56 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.dm-page {
-  height: clamp(760px, calc(100dvh - 48px), 860px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.dm-toolbar { position: sticky; top: 0; z-index: 10; background: transparent; }
+.dm-page { height: clamp(640px, calc(100dvh - 48px), 900px); display: flex; flex-direction: column; overflow: hidden; }
 .dm-layout { flex: 1 1 auto; min-height: 0; display: flex; }
-.dm-side { width: 160px; flex: 0 0 160px; border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-on-surface), 0.02); }
-.dm-side-list { width: 100%; }
+.dm-side { width: 160px; flex: 0 0 160px; border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); overflow-y: auto; }
 .dm-side-item { margin: 2px 8px; }
-.dm-main { flex: 1 1 auto; min-width: 0; min-height: 0; padding: 12px; overflow-y: auto; }
-.dm-pane { min-width: 0; min-height: 100%; }
-.dm-overview-pane { min-height: auto; }
-.dm-state { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.dm-table-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; }
-.dm-table { min-width: 720px; }
-
-.dm-ellipsis { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dm-mobile-list { display: none; }
-.dm-overview-band { min-width: 0; }
-.dm-overview-section { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; padding: 10px 12px; min-width: 0; }
-.dm-flow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 8px; }
-.dm-flow-block { min-width: 0; }
-.dm-flow-block:first-child { grid-column: 1 / -1; }
-.dm-flow-label {margin-bottom: 5px; font-size: var(--dm-text-section-size); font-weight: var(--dm-text-section-weight); line-height: var(--dm-text-section-line-height); color: var(--dm-text-section-color);}
-.dm-flow-row {display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-.dm-flow-step { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 999px; padding: 5px 9px; background: rgba(var(--v-theme-on-surface), 0.02); white-space: nowrap; }
-.dm-flow-arrow { flex: 0 0 auto; color: rgba(var(--v-theme-on-surface), 0.44); }
-.dm-detail-limit-select { flex: 0 0 auto; width: 132px; }
-.dm-overview-stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.dm-overview-stat {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  padding: 11px 12px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 9px;
-  background: rgba(var(--v-theme-on-surface), 0.018);
-}
-.dm-overview-stat--warning { border-color: rgba(var(--v-theme-warning), 0.34); background: rgba(var(--v-theme-warning), 0.065); }
-.dm-overview-stat--error { border-color: rgba(var(--v-theme-error), 0.4); background: rgba(var(--v-theme-error), 0.075); }
-.dm-overview-stat-content { min-width: 0; }
-.dm-overview-stat-label { font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-overview-stat-value {margin-top: 2px; overflow-wrap: anywhere; font-size: var(--dm-text-title-size); font-weight: var(--dm-text-title-weight); line-height: var(--dm-text-title-line-height); color: var(--dm-text-title-color);}
-.dm-overview-stat-desc {margin-top: 3px; overflow-wrap: anywhere; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
-.dm-break-text { overflow-wrap: anywhere; }
-.dm-attention-panel {
-  padding: 12px;
-  border: 1px solid rgba(var(--v-theme-warning), 0.3);
-  border-radius: 9px;
-  background: rgba(var(--v-theme-warning), 0.045);
-}
-.dm-attention-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.dm-attention-item { min-width: 0; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; align-items: start; padding: 9px 10px; border-radius: 8px; background: rgba(var(--v-theme-on-surface), 0.025); }
-.dm-attention-item strong { font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-.dm-attention-item--linked { cursor: pointer; }
-.dm-attention-item--linked:hover { background: rgba(var(--v-theme-warning), 0.14); }
-.dm-module-section { min-width: 0; }
-.dm-module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 8px; align-items: stretch; }
-.dm-module-card {
-  min-width: 0;
-  scroll-margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 11px 12px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 9px;
-  background: rgba(var(--v-theme-on-surface), 0.018);
-}
-/* Composition only: ModuleHeader owns all title, icon, status and badge styles. */
-.dm-card-heading { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; min-width: 0; }
-.dm-card-heading > :first-child { flex: 1 1 200px; min-width: 0; max-width: 100%; }
-.dm-card-data-link { flex: 0 0 auto; white-space: nowrap; }
-.dm-module-head { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; align-items: start; min-width: 0; }
-.dm-module-title {min-width: 0; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-module-value {margin-top: 1px; overflow-wrap: anywhere; font-size: var(--dm-text-title-size); font-weight: var(--dm-text-title-weight); line-height: var(--dm-text-title-line-height); color: var(--dm-text-title-color);}
-.dm-module-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: auto; }
-.dm-module-detail { margin-top: 8px; padding-top: 9px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
-.dm-module-detail-title {margin-bottom: 6px; font-size: var(--dm-text-section-size); font-weight: var(--dm-text-section-weight); line-height: var(--dm-text-section-line-height); color: var(--dm-text-section-color);}
-.dm-module-detail-grid { display: grid; gap: 5px; }
-.dm-module-detail-row {display: grid; grid-template-columns: minmax(72px, auto) minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-.dm-module-detail-row span { color: rgba(var(--v-theme-on-surface), 0.56); }
-.dm-module-detail-row strong {overflow-wrap: anywhere; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-.dm-record-block {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 9px;
-  background: rgba(var(--v-theme-on-surface), 0.018);
-}
-.dm-record-block-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
-.dm-cleanup-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dm-cleanup-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 4px;
-  border-bottom: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
-}
-
-.dm-cleanup-row:last-child {
-  border-bottom: none;
-}
-
-.dm-cleanup-info {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.dm-record-block-title { font-size: var(--dm-text-section-size); font-weight: var(--dm-text-section-weight); line-height: var(--dm-text-section-line-height); color: var(--dm-text-section-color);}
-.dm-record-block .dm-state { min-height: 160px; }
-.dm-runtime-section {
-  padding: 12px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 9px;
-  background: rgba(var(--v-theme-on-surface), 0.018);
-}
-.dm-runtime-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.dm-runtime-title { font-size: var(--dm-text-section-size); font-weight: var(--dm-text-section-weight); line-height: var(--dm-text-section-line-height); color: var(--dm-text-section-color);}
-.dm-runtime-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex: 0 0 auto; }
-.dm-upload-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.dm-monitor-metric { min-width: 0; padding: 10px 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; }
-.dm-monitor-metric span {display: block; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-monitor-metric strong {display: block; margin-top: 3px; overflow-wrap: anywhere; font-size: var(--dm-text-title-size); font-weight: var(--dm-text-title-weight); line-height: var(--dm-text-title-line-height); color: var(--dm-text-title-color);}
-.dm-monitor-empty {display: flex; min-height: 64px; align-items: center; justify-content: center; gap: 8px; border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-upload-status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.dm-upload-status-card { min-width: 0; padding: 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; }
-.dm-upload-status-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; }
-.dm-upload-values {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 12px; margin-top: 10px; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-.dm-upload-values span { min-width: 0; overflow-wrap: anywhere; }
-.dm-upload-site-status { display: grid; gap: 10px; }
-.dm-upload-site-status-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(102px, auto) minmax(112px, auto) minmax(124px, auto); gap: 10px; align-items: center; min-width: 0; padding: 10px 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; }
-.dm-upload-site-status-row > span { min-width: 0; overflow-wrap: anywhere; }
-.dm-record-card {
-  min-width: 0;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 8px;
-  padding: 10px;
-  background: rgba(var(--v-theme-on-surface), 0.02);
-}
-.dm-record-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-.dm-record-title {flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-.dm-record-status {
-  flex: 0 0 auto;
-  max-width: 52%;
-  height: auto;
-  min-height: 22px;
-  align-self: flex-start;
-  white-space: normal;
-}
-.dm-record-status :deep(.v-chip__content) {
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-  line-height: var(--dm-text-badge-line-height);
-  word-break: keep-all;
-}
-.dm-record-meta {
-  display: grid;
-  gap: 7px;
-  margin-top: 10px;
-}
-.dm-record-row {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-}
-.dm-record-label {white-space: nowrap; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-record-value {min-width: 0;
-  overflow-wrap: anywhere; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-.dm-record-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-.dm-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.dm-stat { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; padding: 10px; min-width: 0; }
-.dm-diagnostics-panel {
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 10px;
-  overflow: hidden;
-  background: rgba(var(--v-theme-on-surface), 0.02);
-}
-.dm-diagnostics-head {
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-}
-.dm-diagnostics-title {display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0; font-size: var(--dm-text-section-size); font-weight: var(--dm-text-section-weight); line-height: var(--dm-text-section-line-height); color: var(--dm-text-section-color);}
-.dm-diagnostics-icon {
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  border-radius: 8px;
-  color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.12);
-}
-.dm-diagnostics-score {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  color: rgba(var(--v-theme-on-surface), 0.68);
-  font-size: var(--dm-text-help-size);
-  font-weight: var(--dm-text-help-weight);
-  line-height: var(--dm-text-help-line-height);
-  white-space: nowrap;
-}
-.dm-diagnostics-score strong { font-size: var(--dm-text-title-size); font-weight: var(--dm-text-title-weight); line-height: var(--dm-text-title-line-height); color: var(--dm-text-title-color);}
-.dm-diagnostics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px;
-}
-.dm-diagnostic-card {
-  min-height: 96px;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 8px;
-  background: rgba(var(--v-theme-on-surface), 0.025);
-}
-.dm-diagnostic-card--ok {
-  background: linear-gradient(135deg, rgba(var(--v-theme-success), 0.08), rgba(var(--v-theme-on-surface), 0.025) 54%);
-}
-.dm-diagnostic-card--warn {
-  border-color: rgba(var(--v-theme-warning), 0.28);
-  background: linear-gradient(135deg, rgba(var(--v-theme-warning), 0.12), rgba(var(--v-theme-on-surface), 0.025) 54%);
-}
-.dm-diagnostic-card--error {
-  border-color: rgba(var(--v-theme-error), 0.32);
-  background: linear-gradient(135deg, rgba(var(--v-theme-error), 0.12), rgba(var(--v-theme-on-surface), 0.025) 54%);
-}
-.dm-diagnostic-state {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  color: rgba(var(--v-theme-on-surface), 0.58);
-  background: rgba(var(--v-theme-on-surface), 0.055);
-}
-.dm-diagnostic-card--ok .dm-diagnostic-state {
-  color: rgb(var(--v-theme-success));
-  background: rgba(var(--v-theme-success), 0.14);
-}
-.dm-diagnostic-card--warn .dm-diagnostic-state {
-  color: rgb(var(--v-theme-warning));
-  background: rgba(var(--v-theme-warning), 0.16);
-}
-.dm-diagnostic-card--error .dm-diagnostic-state {
-  color: rgb(var(--v-theme-error));
-  background: rgba(var(--v-theme-error), 0.16);
-}
-.dm-diagnostic-content {
-  min-width: 0;
-}
-.dm-diagnostic-name {overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap; font-size: var(--dm-text-section-size); font-weight: var(--dm-text-section-weight); line-height: var(--dm-text-section-line-height); color: var(--dm-text-section-color);}
-.dm-diagnostic-value {margin-top: 5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-.dm-diagnostic-note {margin-top: 5px; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-diagnostics-footer {min-height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 12px;
-  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-diagnostics-attention {
-  color: rgb(var(--v-theme-warning));
-  white-space: nowrap;
-}
-.dm-cleanup-toolbar { display: flex; align-items: center; gap: 10px; }
-.dm-cleanup-select { flex: 1 1 auto; min-width: 0; }
-.dm-cleanup-results { display: grid; gap: 10px; }
-.dm-cleanup-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.dm-tag-group { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; overflow: hidden; }
-.dm-tag-group-head { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-on-surface), 0.02); }
-.dm-tag-list { max-height: 280px; overflow-y: auto; }
-.dm-tag-row { min-height: 54px; display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7)); cursor: pointer; }
-.dm-tag-row:last-child { border-bottom: none; }
-.dm-tag-row:hover { background: rgba(var(--v-theme-primary), 0.05); }
-.dm-tag-content { flex: 1 1 auto; min-width: 0; }
-.dm-tag-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.dm-tag-name {min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-.dm-tag-samples {margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-.dm-cleanup-actions { position: sticky; bottom: -18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0 0; background: rgb(var(--v-theme-surface)); }
-.dm-cleanup-preview-list { max-height: 360px; overflow-y: auto; }
-@media (max-width: 1100px) {
-  .dm-overview-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .dm-diagnostics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+.dm-main { flex: 1 1 auto; min-width: 0; min-height: 0; padding: 16px; overflow-y: auto; }
+.dm-page-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.dm-page-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.dm-page-heading > :first-child { flex: 1 1 280px; min-width: 0; }
+.dm-page :deep(.v-btn .v-icon) { width: 16px; height: 16px; font-size: var(--dm-text-title-size); }
+.dm-page-heading h2 { margin: 0; font-size: var(--dm-text-title-size); font-weight: var(--dm-text-title-weight); line-height: var(--dm-text-title-line-height); }
+.dm-page-heading h3 { margin: 0; font-size: var(--dm-text-section-size); font-weight: var(--dm-text-section-weight); line-height: var(--dm-text-section-line-height); }
+.dm-page-actions, .dm-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.dm-page-stack :deep(.dm-module-badges) { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dm-page-stack :deep(.dm-module-stat) { flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 6px; }
+.dm-page-stack :deep(.dm-module-stat > span:first-child) { color: var(--dm-text-help-color); font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); }
+.dm-page-stack :deep(.dm-module-stat > span:last-child) { font-size: var(--dm-text-metric-size); font-weight: var(--dm-text-metric-weight); line-height: var(--dm-text-metric-line-height); font-variant-numeric: tabular-nums; }
+.dm-filter { min-width: 140px; max-width: 200px; flex: 1 1 140px; }
+.dm-four-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.dm-four-stats > div { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 6px; }
+.dm-four-stats span, .dm-hint { color: var(--dm-text-help-color); font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); }
+.dm-four-stats strong { overflow-wrap: anywhere; font-size: var(--dm-text-metric-size); font-weight: var(--dm-text-metric-weight); line-height: var(--dm-text-metric-line-height); color: rgb(var(--v-theme-primary)); font-variant-numeric: tabular-nums; }
+.dm-overview-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dm-overview-card { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 6px; }
+.dm-overview-card p { grid-column: 1 / -1; margin: 0; }
+.dm-overview-card :deep(.dm-module-badges) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dm-overview-card :deep(.dm-module-stat) { border: 0; padding: 4px 0; }
+.dm-runtime-details { padding: 8px 0; min-width: 0; }
+.dm-runtime-details summary { cursor: pointer; font-size: var(--dm-text-section-size); color: var(--dm-text-section-color); }
+.dm-runtime-details dl { display: grid; grid-template-columns: minmax(80px, auto) minmax(0, 1fr); gap: 8px 16px; }
+.dm-runtime-details dd { margin: 0; overflow-wrap: anywhere; }
+.dm-group-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; width: 100%; padding: 8px 0; text-align: left; border: 0; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: var(--dm-text-body-color); cursor: pointer; font: inherit; }
+.dm-group-heading:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); }
+.dm-group-heading > :first-child { font-weight: var(--dm-text-section-weight); }
+.dm-tag-matrix { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 12px; margin-top: 8px; }
+.dm-tag-matrix label { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 6px 0; overflow-wrap: anywhere; }
+.dm-tag-matrix input { margin-top: 4px; flex: none; }
+.dm-state { display: flex; justify-content: center; padding: 36px; }
+.dm-risk { white-space: normal; overflow-wrap: anywhere; color: rgb(var(--v-theme-warning)); }
+.dm-title { font-size: var(--dm-text-title-size); font-weight: var(--dm-text-title-weight); }
+@media (min-width: 1400px) { .dm-overview-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) {
-  .dm-page { height: min(860px, calc(100dvh - 16px)); }
   .dm-layout { flex-direction: column; }
-  .dm-side {
-    width: 100%;
-    flex: 0 0 auto;
-    border-right: none;
-    border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-  }
-  .dm-side::-webkit-scrollbar { display: none; }
-  .dm-side-list {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 6px;
-    min-width: max-content;
-    padding: 8px 12px !important;
-  }
-  .dm-side-item {
-    flex: 0 0 auto;
-    min-width: 96px;
-    margin: 0;
-    padding-inline: 10px;
-  }
-  .dm-side-item :deep(.v-list-item-title) { white-space: nowrap; }
-  .dm-main { padding: 10px; }
-  .dm-desktop-table { display: none; }
-  .dm-mobile-list { display: grid; gap: 10px; }
-  .dm-record-title {white-space: normal;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-  .dm-record-actions :deep(.v-btn) {
-    flex: 1 1 72px;
-    max-width: 128px;
-  }
-  .dm-overview-stat-grid { grid-template-columns: 1fr; }
-  .dm-module-grid { grid-template-columns: 1fr; }
-  .dm-attention-list { grid-template-columns: 1fr; }
-  .dm-section-heading { align-items: stretch; flex-direction: column; }
-  .dm-record-block-head { align-items: stretch; flex-direction: column; }
-  .dm-runtime-heading { align-items: stretch; flex-direction: column; }
-  .dm-runtime-actions { justify-content: space-between; }
-  .dm-upload-summary, .dm-upload-status-grid, .dm-upload-site-status-row { grid-template-columns: 1fr; }
-  .dm-upload-values {grid-template-columns: 1fr; font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color);}
-  .dm-stat-grid { grid-template-columns: 1fr; }
-  .dm-cleanup-toolbar { flex-direction: column; align-items: stretch; }
-  .dm-cleanup-summary { flex-direction: column; align-items: flex-start; }
-  .dm-diagnostics-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .dm-diagnostics-score {
-    white-space: normal;
-  }
-  .dm-diagnostics-grid {
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 10px;
-  }
-  .dm-diagnostic-card {
-    min-height: 86px;
-  }
-  .dm-diagnostics-footer {align-items: flex-start;
-    flex-direction: column; font-size: var(--dm-text-help-size); font-weight: var(--dm-text-help-weight); line-height: var(--dm-text-help-line-height); color: var(--dm-text-help-color);}
-  .dm-diagnostics-attention {
-    white-space: normal;
-  }
+  .dm-side { width: auto; flex: none; border-right: 0; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+  .dm-side-list { display: flex; overflow-x: auto; }
+  .dm-side-item { flex: 0 0 auto; margin: 0 2px; }
+  .dm-main { padding: 12px; }
+  .dm-overview-cards { grid-template-columns: minmax(0, 1fr); }
+  .dm-four-stats, .dm-page-stack :deep(.dm-module-badges) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dm-tag-matrix { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dm-page-actions { width: 100%; }
 }
-@media (max-width: 420px) {
-  .dm-overview-stat-grid { gap: 6px; }
-  .dm-module-head { grid-template-columns: 26px minmax(0, 1fr); gap: 7px; }
-}
+@media (max-width: 400px) { .dm-tag-matrix { grid-template-columns: minmax(0, 1fr); } }
 </style>

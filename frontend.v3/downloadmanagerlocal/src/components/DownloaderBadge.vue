@@ -54,7 +54,7 @@ const markSize = computed(() => `${Number(props.size) || 20}px`)
   align-items: center;
   justify-content: center;
   flex: none;
-  border-radius: 26%;
+  border-radius: 50%;
   color: #fff;
   font-weight: 700;
   line-height: 1;

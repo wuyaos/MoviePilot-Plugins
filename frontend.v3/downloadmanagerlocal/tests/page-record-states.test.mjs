@@ -43,14 +43,14 @@ async function viewPage() {
   const block = key => { const node = view.findAll(node => node.props['data-record-state'] === key)[0]; assert.ok(node, key); return node }
   const surfaces = key => {
     const root = block(key)
-    return ['dm-desktop-table', 'dm-mobile-list'].map(cls => { const nodes = walk(root, node => hasClass(node, cls)); assert.equal(nodes.length, 1); return nodes[0] })
+    const nodes = walk(root, node => hasClass(node, 'dm-table-scroll')); assert.equal(nodes.length, 1); return [root]
   }
   return { ...view, handlers, calls, click, block, surfaces }
 }
 const fixtures = [
   { key: 'history', api: 'rename_history', tab: '命名历史', row: { hash: 'history-hash', original_name: '原名.mkv', after_name: '历史样本.mkv', success: true }, title: '历史样本.mkv', response: items => ({ items, total: items.length ? 43 : 0 }) },
   { key: 'archive', api: 'rename_archive', tab: '命名历史', row: { hash: 'archive-hash', name: '归档样本.mkv', fail_count: 3 }, title: '归档样本.mkv', response: items => ({ items, total: items.length ? 27 : 0 }) },
-  { key: 'transfer', api: 'transfer_status', tab: '转移做种', row: { source_downloader: 'QB', downloader: 'TR', source_hash: 'abcdefgh0123456789', source_name: '转移样本.mkv', phase: 'completed' }, title: '转移样本.mkv', response: records => ({ status: { enabled: false, records, page: 1, total_pages: records.length ? 8 : 1 } }) },
+  { key: 'transfer', api: 'transfer_status', tab: '转移做种', row: { source_downloader: 'QB', downloader: 'TR', source_hash: 'abcdefgh0123456789', source_name: '转移样本.mkv', phase: 'completed' }, title: '转移样本.mkv', response: records => ({ status: { enabled: false, records, page: 1, total: records.length ? 151 : 0, total_pages: records.length ? 8 : 1 } }) },
 ]
 for (const f of fixtures) {
   test(`${f.key}: real Page renders first-load skeleton on both surfaces, retains headers, and retries only its block after first failure`, async () => {
@@ -140,12 +140,12 @@ test('tagcleanup diagnostics render in tag cleanup block; missing detail values 
       { label: '空串', value: '' }, { label: '空值', value: null }, { label: '缺失' }, { label: '真实零', value: 0 }, { label: '真实否', value: false },
     ], items: [{ title: '标签清理快照', meta: '下载器 A' }], total: 91, limit: 20, truncated: true } }, cleanup_data: { rename_history: 0, rename_archive: 0 } })
     await view.click('站点标签'); await flush()
-    const block = view.findAll(node => node.props['data-record-block'] === 'tag-cleanup')[0]
+    const block = view.findAll(node => node.props['data-record-block'] === 'tag-cleanup-snapshot')[0]
     assert.ok(text(block).includes('标签清理快照')); assert.ok(text(block).includes('共 91 条'))
     const values = walk(block, node => hasClass(node, 'dm-detail-row')).map(node => text(node))
     assert.deepEqual(values, ['空串—', '空值—', '缺失—', '真实零0', '真实否false'])
     await view.click('命名历史'); await flush()
-    const cleanup = view.findAll(node => node.type === 'button' && ['清理历史', '清理归档'].some(label => text(node).startsWith(label)))
+    const cleanup = view.findAll(node => node.type === 'button' && ['清历史', '清归档'].some(label => text(node).startsWith(label)))
     assert.equal(cleanup.length, 2); assert.ok(cleanup.every(node => node.props.disabled === true))
   } finally { view.unmount() }
 })

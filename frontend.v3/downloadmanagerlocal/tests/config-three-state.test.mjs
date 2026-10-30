@@ -1,3 +1,4 @@
+import { MODULE_ICONS } from '../src/components/module-icons.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -5,8 +6,8 @@ import { reactive, ref, computed, watch, effectScope, nextTick, defineComponent,
 import { loadSfc, mount as renderMount } from './helpers/load-sfc.mjs'
 
 const source = readFileSync(new URL('../src/components/Config.vue', import.meta.url), 'utf8')
-const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '')
-const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi', `${script}\nreturn { form, transferTasks, transferForm, transferStatusTasks, openTransferDialog, confirmTransferTask, transferDeleteMeta, saveConfig };`)
+const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)
+const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi', `${script}\nreturn { form, transferTasks, transferForm, transferStatusTasks, openTransferDialog, confirmTransferTask, transferDeleteMeta, transferDeleteItems, saveConfig };`)
 
 function mountSetup(initialConfig = {}) {
   const scope = effectScope()
@@ -23,6 +24,18 @@ function mountSetup(initialConfig = {}) {
   return { ...state, calls, stop: () => scope.stop() }
 }
 
+test('隐藏默认设置仍保留已存值，新任务用默认开关状态提示且不固化继承', async () => {
+  const state = mountSetup({ transfer_delete_source_default: true, transfer_delete_duplicate_default: false })
+  try {
+    assert.deepEqual(state.transferDeleteItems(state.form.transfer_delete_source_default)[0], { title: '默认（开启）', value: 'inherit' })
+    assert.deepEqual(state.transferDeleteItems(state.form.transfer_delete_duplicate_default)[0], { title: '默认（关闭）', value: 'inherit' })
+    state.openTransferDialog()
+    assert.deepEqual([state.transferForm.delete_source, state.transferForm.delete_duplicate], ['inherit', 'inherit'])
+    await state.saveConfig()
+    assert.equal(state.calls.at(-1).transfer_delete_source_default, true)
+    assert.equal(state.calls.at(-1).transfer_delete_duplicate_default, false)
+  } finally { state.stop() }
+})
 test('删源/删重复三态经过应用与保存 payload 原样保留', async () => {
   const state = mountSetup({
     transfer_tasks: JSON.stringify([

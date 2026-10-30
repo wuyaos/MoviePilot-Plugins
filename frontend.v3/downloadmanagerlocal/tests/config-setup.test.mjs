@@ -1,3 +1,4 @@
+import { MODULE_ICONS } from '../src/components/module-icons.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
@@ -6,9 +7,9 @@ import { reactive, ref, computed, watch, effectScope, nextTick } from 'vue'
 // Execute the entire setup in source order, not extracted parser functions:
 // immediate watchers must see every dependency initialized on first mount.
 const source = readFileSync(new URL('../src/components/Config.vue', import.meta.url), 'utf8')
-const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '')
+const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)
 const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi',
-  `${script}\nreturn { form, transferTasks, hrCustomRules, hrRawError, saveConfig, switchToData };`)
+  `${script}\nreturn { form, transferTasks, hrCustomRules, hrRawError, saveConfig, switchToData, tagCatPairs, tagCategoryRows, tagCategoryNames, tagCategoriesError, tagCategoriesLoaded, loadTagCategories, setTagCategoryTarget, uploadNewSiteName, uploadAddError, addUploadSiteRule, setUploadSiteRule };`)
 
 function mount(initialConfig) {
   const scope = effectScope()
@@ -95,4 +96,71 @@ test('observe-only switches follow decision A defaults and legacy migration', as
     await nextTick()
     assert.equal(upgraded.form.remover_observe_only, false)
   } finally { upgraded.stop() }
+})
+
+test('自定义站点限速和可编辑分类来源保留原配置结构，不要求站点库候选', async () => {
+  const state = mount({ tag_all_cat: ['电影'], tag_all_cat_rename: ['Movies'], upload_limit_site_rules: {} })
+  try {
+    state.uploadNewSiteName.value = 'CustomFixture'
+    state.addUploadSiteRule()
+    state.setUploadSiteRule('CustomFixture', 1024)
+    state.uploadNewSiteName.value = 'customfixture'
+    state.addUploadSiteRule()
+    assert.match(state.uploadAddError.value, /已存在/)
+    assert.equal(Object.keys(state.form.upload_limit_site_rules).length, 1)
+    state.tagCatPairs.value[0].from = '自定义来源'
+    await state.saveConfig()
+    const saved = state.calls[0][1]
+    assert.deepEqual(saved.upload_limit_site_rules, { CustomFixture: { limit_kib: 1024 } })
+    assert.deepEqual(saved.tag_all_cat, ['自定义来源'])
+    assert.deepEqual(saved.tag_all_cat_rename, ['Movies'])
+  } finally { state.stop() }
+})
+
+test('MP 分类加载去重且不修改已保存映射；编辑目标才创建新映射', async () => {
+  const state = mount({ tag_all_cat: ['电影', '旧分类'], tag_all_cat_rename: ['Movies', 'Legacy'] })
+  try {
+    const requests = []
+    state.props.api.get = async path => { requests.push(path); return { success: true, message: '', data: { 电影: ['电影', '动画'], 电视剧: ['动画', '剧集'] } } }
+    await state.loadTagCategories()
+    assert.deepEqual(requests, ['media/category'])
+    assert.equal(state.tagCategoriesLoaded.value, true)
+    assert.deepEqual(state.tagCategoryRows.value.map(row => [row.from, row.to, row.legacy]), [
+      ['电影', 'Movies', false], ['动画', '动画', false], ['剧集', '剧集', false], ['旧分类', 'Legacy', true],
+    ])
+    assert.equal(state.tagCatPairs.value.length, 2)
+    await state.saveConfig()
+    assert.deepEqual(state.calls[0][1].tag_all_cat, ['电影', '旧分类'])
+    state.setTagCategoryTarget('动画', 'Anime')
+    state.setTagCategoryTarget('电影', 'Films')
+    await state.saveConfig()
+    assert.deepEqual(state.calls[1][1].tag_all_cat, ['电影', '旧分类', '动画'])
+    assert.deepEqual(state.calls[1][1].tag_all_cat_rename, ['Films', 'Legacy', 'Anime'])
+    state.props.api.get = async () => ({ 电视剧: ['剧集'] })
+    await state.loadTagCategories()
+    assert.equal(state.tagCategoryRows.value.find(row => row.from === '动画').to, 'Anime')
+    assert.equal(state.tagCategoryRows.value.find(row => row.from === '动画').legacy, true)
+  } finally { state.stop() }
+})
+
+test('MP 分类失败或无分类时不回填固定默认、不清空旧映射', async () => {
+  const state = mount({ tag_all_cat: ['保留来源'], tag_all_cat_rename: ['保留目标'] })
+  try {
+    for (const result of [{ success: false, message: '接口失败', data: null }, { success: true, data: [] }, { 电影: [1] }]) {
+      state.props.api.get = async () => result
+      await state.loadTagCategories()
+      assert.ok(state.tagCategoriesError.value)
+      assert.deepEqual(state.tagCategoryRows.value.map(row => row.from), ['保留来源'])
+    }
+    state.props.api.get = async () => { throw new Error('Network failed') }
+    await state.loadTagCategories()
+    assert.equal(state.tagCategoriesError.value, 'Network failed')
+    state.props.api.get = async () => ({ success: true, message: '', data: { 电影: [], 电视剧: [] } })
+    await state.loadTagCategories()
+    assert.equal(state.tagCategoriesError.value, '')
+    assert.deepEqual(state.tagCategoryNames.value, [])
+    await state.saveConfig()
+    assert.deepEqual(state.calls[0][1].tag_all_cat, ['保留来源'])
+    assert.deepEqual(state.calls[0][1].tag_all_cat_rename, ['保留目标'])
+  } finally { state.stop() }
 })

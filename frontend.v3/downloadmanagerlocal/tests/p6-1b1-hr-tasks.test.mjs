@@ -62,12 +62,12 @@ test('P6-1b-1: H&R 首次加载保留表头并显示骨架，失败后仅本块�
     await bounded(flush(), 'loading flush')
     const loading = view.block()
     assert.equal(loading.props['aria-busy'], true)
-    assert.equal(walk(loading, node => node.type === 'th').length, 6)
-    assert.equal(walk(loading, node => node.props.class?.includes('dm-table-skeleton')).length, 6)
+    assert.equal(walk(loading, node => node.type === 'th').length, 10)
+    assert.equal(walk(loading, node => node.props.class?.includes('dm-table-skeleton')).length, 3)
     tasks.reject(Error('hr offline'))
     await bounded(flush(), 'error flush')
     assert.match(text(view.block()), /hr offline/)
-    assert.equal(walk(view.block(), node => node.props.role === 'alert').length, 2)
+    assert.equal(walk(view.block(), node => node.props.role === 'alert').length, 1)
     view.handlers.tasks = () => ({ tasks: [{ downloader_id: 'QB', torrent_hash: 'abcdef0123456789', name: 'H&R 样本', status: 'Pending' }], summary: { total: 1, compliant: 0, needs_seeding: 1 } })
     const retry = walk(view.block(), node => node.type === 'button' && text(node) === '重试')[0]
     assert.ok(retry)
@@ -83,7 +83,7 @@ test('P6-1b-1: H&R 正常行、筛选空态、清理按钮禁用与刷新失败�
     view.handlers.tasks = () => ({ tasks: [{ downloader_id: 'QB', torrent_hash: 'abcdef0123456789', name: '达标样本', status: 'Compliant' }], summary: { total: 1, compliant: 0, needs_seeding: 0 } })
     view.button('H&R 任务').props.onClick(); await bounded(flush(), 'normal flush')
     assert.match(text(view.block()), /达标样本/)
-    const clearButtons = view.findAll(node => node.type === 'button' && /清理(达标|失效)记录/.test(text(node)))
+    const clearButtons = view.findAll(node => node.type === 'button' && /清理(达标|缺失)记录/.test(text(node)))
     assert.equal(clearButtons.length, 2)
     assert.ok(clearButtons.every(node => node.props.disabled === true))
     const refresh = deferred()
@@ -103,13 +103,13 @@ test('P6-1b-1: H&R 状态筛选无结果显示筛选空态且仍保留表头', a
   try {
     view.handlers.tasks = () => ({ tasks: [{ downloader_id: 'QB', torrent_hash: 'abcdef0123456789', name: '待处理样本', status: 'Pending' }], summary: { total: 1, compliant: 0, needs_seeding: 0 } })
     view.button('H&R 任务').props.onClick(); await bounded(flush(), 'filter flush')
-    const select = view.findAll(node => node.props.class?.includes('dm-hr-filter'))[0]
+    const select = view.findAll(node => node.props['aria-label'] === '考核状态')[0]
     assert.ok(select)
     assert.equal(typeof select.props['onUpdate:modelValue'], 'function')
     select.props['onUpdate:modelValue']('Compliant')
     await bounded(nextTick(), 'filter tick')
     assert.match(text(view.block()), /筛选无结果/)
-    assert.equal(walk(view.block(), node => node.type === 'th').length, 6)
+    assert.equal(walk(view.block(), node => node.type === 'th').length, 10)
     assert.doesNotMatch(text(view.block()), /待处理样本/)
   } finally { view.unmount() }
 })

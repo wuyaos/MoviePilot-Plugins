@@ -28,8 +28,8 @@ test('ModuleHeader 文本转义，未知徽标 tone 不注入 class', async () =
   assert.match(html, /&lt;1&gt;/)
   assert.doesNotMatch(html, /dm-tone-arbitrary/)
 })
-const pluginRoots = ['.dm-config', '.dm-page', '.dm-module-header', '.dm-module-table', '.dm-table-state']
-const tokenRoot = ':where(.dm-config, .dm-page, .dm-module-header, .dm-module-table, .dm-table-state)'
+const pluginRoots = ['.dm-config', '.dm-page', '.dm-module-header', '.dm-module-table', '.dm-table-state', '.dm-select-menu', '.dm-action-menu']
+const tokenRoot = ':where(.dm-config, .dm-page, .dm-module-header, .dm-module-table, .dm-table-state, .dm-select-menu, .dm-action-menu)'
 function isPluginScopedSelector(selector) {
   const match = selector.match(/^:where\(([^)]+)\)(?:\s+[^,]+)?$/)
   return Boolean(match && !selector.includes('*') && match[1].split(',').every(root => pluginRoots.includes(root.trim())))
@@ -52,7 +52,7 @@ test('CSS 静态门禁：token 与规格一致，主题颜色，无全局通配�
   ast.walkRules(rule => {
     assert.ok(!rule.selector.includes('*'))
     if (rule.nodes.some(node => node.type === 'decl' && node.prop.startsWith('--'))) {
-      assert.match(rule.selector, /^:where\(\.dm-config, \.dm-page, \.dm-module-header, \.dm-module-table, \.dm-table-state\)$/)
+      assert.ok(rule.selector === tokenRoot || rule.selector === ':where(.dm-select-menu, .dm-action-menu)' || rule.selector === ':where(.dm-page, .dm-page .dm-module-header, .dm-page .dm-module-table, .dm-page .dm-table-state)', 'token overrides must stay within the data page')
     } else {
       assert.ok(isPluginScopedSelector(rule.selector), '共享规则必须限定在插件根内：' + rule.selector)
     }
@@ -71,7 +71,7 @@ test('CSS 静态门禁：token 与规格一致，主题颜色，无全局通配�
     }
     if (margin) assert.equal(declarations[margin[0]], margin[1], selector)
   }
-  ast.walkDecls(decl => { tokens[decl.prop] = decl.value })
+  ast.nodes.find(node => node.type === 'rule' && node.selector === tokenRoot).walkDecls(decl => { tokens[decl.prop] = decl.value })
   const roles = { title: [16, 600, 24], section: [14, 600, 20], label: [14, 400, 20], body: [14, 400, 20], 'table-head': [12, 600, 18], button: [13, 500, 20], badge: [12, 500, 18], help: [12, 400, 18] }
   for (const [role, [size, weight, line]] of Object.entries(roles)) {
     assert.equal(tokens['--dm-text-' + role + '-size'], size + 'px')
