@@ -114,7 +114,11 @@
   "site_name": "52pt",
   "rule": {
    "hr_duration": 24.0,
-   "hr_deadline_days": 5.0
+   "hr_deadline_days": 5.0,
+   "hr_ratio": 1.0,
+   "hr_active": true,
+   "hr_deadline_from_completion": true,
+   "hr_use_downloader_seeding_time": true
   }
  }
 ]

@@ -34,7 +34,7 @@
 
 ## 配置要点
 
-- H&R 站点规则（v3.6.0 双层模型）：内置 11 站验证预设随代码发布、只读、自动生效；`hr_site_config_str`（YAML，按 site_name 或站点 id 生效）为自定义层，同名站点整条覆写内置；条目加 `enabled: false` 可屏蔽该站（含内置预设），回退全局规则；未设置的字段按全局规则（`hr_duration`/`hr_deadline_days`/`hr_ratio` 等）回填。设置页提供合并视图：来源标注、行级启用开关、未设字段「继承」提示。自定义站点可填 `trackers`（域名/URL 列表）：MP 站点库识别不到的站按 tracker 域名兜底识别，配了规则条目即视为纳入 H&R 白名单（无需加入 `hr_sites`）。
+- H&R 站点规则（v3.6.0 双层模型）：内置 11 站验证预设随代码发布、只读、自动生效；`hr_site_config_str`（YAML，按 site_name 或站点 id 生效）为自定义层，同名站点整条覆写内置；条目加 `enabled: false` 可屏蔽该站（含内置预设），回退全局规则；未设置的字段按全局规则（`hr_duration`/`hr_deadline_days`/`hr_ratio` 等）回填。设置页提供合并视图：来源标注、行级启用开关、未设字段「继承」提示。52pt 内置规则自动纳管命中站点的任务；从下载完成时间起 5 天内，下载器累计做种时长 ≥24 小时（读取 qBittorrent `seeding_time`／Transmission `secondsSeeding`；缺失时不以完成后经过时长代替）或单种分享率 ≥1 任一条件达标。需启用 H&R 与站点独立规则；已有任务的自动补录还需启用自动发现。自定义站点可填 `trackers`（域名/URL 列表）：MP 站点库识别不到的站按 tracker 域名兜底识别，配了规则条目即视为纳入 H&R 白名单（无需加入 `hr_sites`）。
 - 生效口径（v3.5.1 门控）：模块实际生效 = 插件总开关 `enabled` AND 模块开关；总开关关闭时所有模块一律停用，执行类 API 返回 400。
 - 自动删种：`remover_conditions_*` 条件组（AND 语义），`remover_action`（pause/delete/deletefile），`remover_torrentstates` 限定任务状态。
 - 自动删种：条件项 AND 组合（做种时长/体积/比率、标签、tracker、路径关键词、错误关键词、任务状态等），`remover_action`（pause/delete/deletefile），`remover_mponly` 仅处理 MoviePilot 添加的任务。

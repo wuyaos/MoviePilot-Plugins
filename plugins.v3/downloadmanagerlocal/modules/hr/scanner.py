@@ -40,7 +40,9 @@ class HrTorrentSnapshot:
     category: str
     trackers: tuple[str, ...]
 
+    completed_on: float = 0.0
 
+    downloader_seeding_time: Optional[float] = None
 def downloader_services(names: Iterable[str]) -> dict[str, Any]:
     """按名称读取可用下载器服务，跳过未连接或缺少实例的下载器。"""
     selected: list[str] = []
@@ -91,9 +93,12 @@ def torrent_snapshot(
     """把 qBittorrent 字典或 Transmission 对象归一为 H&R 采样快照。"""
     dl_type = str(downloader_type_name or "").lower()
     size = int(get_torrent_size(torrent, dl_type) or 0)
+    raw_seeding_time = _field(torrent, "seeding_time", "seconds_seeding", "secondsSeeding")
+    downloader_seeding_time = _number(raw_seeding_time) if raw_seeding_time is not None else None
     if dl_type == QBITTORRENT:
         completed_at = _number(_field(torrent, "completion_on"))
         seeding_time = now - completed_at if completed_at > 0 else 0.0
+        completed_on = completed_at
         ratio = _number(_field(torrent, "ratio"))
         downloaded = _number(_field(torrent, "downloaded"))
         uploaded = _number(_field(torrent, "uploaded"))
@@ -102,6 +107,7 @@ def torrent_snapshot(
     else:
         done_at = _timestamp(_field(torrent, "done_date", "date_done", "doneDate"))
         seeding_time = now - done_at if done_at > 0 else 0.0
+        completed_on = done_at
         ratio = _number(_field(torrent, "upload_ratio", "uploadRatio", "ratio"))
         percent = _number(_field(torrent, "percent_done", "percentDone", "progress"))
         downloaded = _number(_field(torrent, "downloaded_ever", "downloadedEver")) or size * percent
@@ -124,12 +130,19 @@ def torrent_snapshot(
         tags=tuple(get_label(torrent, dl_type)),
         category=str(get_category(torrent, dl_type) or ""),
         trackers=tuple(get_tracker_urls(torrent, dl_type)),
+        completed_on=completed_on,
+        downloader_seeding_time=downloader_seeding_time,
     )
 
 
 def apply_snapshot(task: HrTask, snapshot: HrTorrentSnapshot) -> None:
     """把下载器采样写入任务，补全缺失的种子体积。"""
     task.seeding_time = snapshot.seeding_time
+    task.completed_on = snapshot.completed_on or None
+    if snapshot.downloader_seeding_time is not None:
+        task.downloader_seeding_time = snapshot.downloader_seeding_time
+    if task.hr_use_downloader_seeding_time:
+        task.seeding_time = task.downloader_seeding_time or 0.0
     task.ratio = snapshot.ratio
     task.uploaded = snapshot.uploaded
     task.downloaded = snapshot.downloaded

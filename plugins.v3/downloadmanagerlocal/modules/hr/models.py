@@ -75,6 +75,8 @@ class HrSiteRule(BaseModel):
     hr_duration: Optional[float] = None
     additional_seed_time: Optional[float] = None
     hr_deadline_days: Optional[float] = None
+    hr_deadline_from_completion: Optional[bool] = None
+    hr_use_downloader_seeding_time: Optional[bool] = None
     hr_ratio: Optional[float] = None
     hr_upload_multiplier: Optional[float] = None
     hr_upload_gte_download: Optional[bool] = None
@@ -100,6 +102,7 @@ class HrTask(BaseModel):
     title: str = ""
     size: float = 0
     added_on: float = Field(default_factory=time.time)
+    completed_on: Optional[float] = None
     task_type: HrTaskType = HrTaskType.NORMAL
     hit_and_run: bool = False
     hr_status: HrStatus = HrStatus.PENDING
@@ -107,12 +110,15 @@ class HrTask(BaseModel):
     additional_seed_time: float = 0
     hr_ratio: Optional[float] = None
     hr_deadline_days: Optional[float] = None
+    hr_deadline_from_completion: bool = False
+    hr_use_downloader_seeding_time: bool = False
     hr_upload_multiplier: Optional[float] = None
     hr_upload_gte_download: Optional[bool] = None
     ratio: float = 0
     downloaded: float = 0
     uploaded: float = 0
     seeding_time: float = 0
+    downloader_seeding_time: Optional[float] = None
     state: str = ""
     deleted: bool = False
     deleted_time: Optional[float] = None
@@ -135,12 +141,15 @@ class HrTask(BaseModel):
 
     @property
     def deadline_time(self) -> float:
-        """返回考核截止时间戳。"""
-        return self.added_on + (self.hr_deadline_days or 0) * 86400
+        """返回考核截止时间戳；规则要求从完成起算但尚未完成时返回 0。"""
+        if self.hr_deadline_from_completion and not self.completed_on:
+            return 0.0
+        start = self.completed_on if self.hr_deadline_from_completion else self.added_on
+        return (start or 0) + (self.hr_deadline_days or 0) * 86400
 
     def formatted_deadline(self) -> str:
         """返回本地时区的截止时间文本，未设考核期时为 '-'。"""
-        if not self.hr_deadline_days or self.hr_deadline_days <= 0:
+        if not self.hr_deadline_days or self.hr_deadline_days <= 0 or (self.hr_deadline_from_completion and not self.completed_on):
             return "-"
         moment = datetime.fromtimestamp(self.deadline_time, pytz.timezone(settings.TZ))
         return moment.strftime("%Y-%m-%d %H:%M")

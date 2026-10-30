@@ -38,7 +38,7 @@ def test_check_tasks_updates_snapshot_and_resets_each_cycle(hr_check):
     module, service, downloader = hr_check
     downloader.instance.get_torrents.return_value = [{
         "hash": "abc", "name": "sample", "size": 1024, "ratio": 1.5,
-        "uploaded": 1536, "downloaded": 1024, "state": "uploading",
+        "uploaded": 1536, "downloaded": 1024, "completion_on": 1234, "seeding_time": 321, "state": "uploading",
     }]
 
     result = service.check_tasks("回归")
@@ -46,6 +46,8 @@ def test_check_tasks_updates_snapshot_and_resets_each_cycle(hr_check):
     assert result["enabled"] is True
     assert result["deleted"] == 0
     assert service._tasks["qb:abc"].ratio == 1.5
+    assert service._tasks["qb:abc"].completed_on == 1234
+    assert service._tasks["qb:abc"].downloader_seeding_time == 321
     assert service._tasks["qb:abc"].uploaded == 1536
     service._save_tasks.assert_called_once()
     service._refresh_guard.assert_called_once()
@@ -71,6 +73,21 @@ def test_check_tasks_empty_or_failed_query(hr_check, failed):
     assert result["deleted"] == (0 if failed else 1)
     assert service._tasks["qb:abc"].deleted is (not failed)
 
+
+
+def test_transmission_snapshot_captures_completion_timestamp(hr_check):
+    module, _, _ = hr_check
+    torrent = SimpleNamespace(
+        hashString="abc", name="sample", total_size=1024,
+        done_date=SimpleNamespace(timestamp=lambda: 1234),
+        upload_ratio=0.5, downloaded_ever=1024, uploaded_ever=512, secondsSeeding=5678,
+        percent_done=1.0, added_date=1000, status="seeding",
+    )
+
+    snapshot = module.torrent_snapshot(torrent, "tr", "transmission", now=2000)
+
+    assert snapshot.completed_on == 1234
+    assert snapshot.downloader_seeding_time == 5678
 
 def test_check_tasks_unavailable_downloader_preserves_task(hr_check, monkeypatch):
     module, service, downloader = hr_check

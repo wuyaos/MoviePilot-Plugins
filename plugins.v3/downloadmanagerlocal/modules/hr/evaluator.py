@@ -27,7 +27,9 @@ def initialize_requirements(task: HrTask, rule: HrSiteRule) -> None:
         task.hr_upload_multiplier = rule.hr_upload_multiplier
     if rule.hr_upload_gte_download is not None:
         task.hr_upload_gte_download = rule.hr_upload_gte_download
+    task.hr_deadline_from_completion = bool(rule.hr_deadline_from_completion)
 
+    task.hr_use_downloader_seeding_time = bool(rule.hr_use_downloader_seeding_time)
 
 def evaluate_task(task: HrTask, rule: HrSiteRule, now: float) -> Optional[HrStatus]:
     """判定任务状态；仅返回发生跃迁后的新状态，终态或状态未变化返回 None。"""
@@ -36,9 +38,15 @@ def evaluate_task(task: HrTask, rule: HrSiteRule, now: float) -> Optional[HrStat
     if task.hr_status not in (HrStatus.PENDING, HrStatus.IN_PROGRESS, HrStatus.NEEDS_SEEDING):
         return None
     initialize_requirements(task, rule)
-    if task.meets_hr():
+    if task.hr_use_downloader_seeding_time:
+        task.seeding_time = task.downloader_seeding_time or 0.0
+    if task.hr_deadline_from_completion and not task.completed_on:
+        new_status = HrStatus.NEEDS_SEEDING if task.deleted else HrStatus.IN_PROGRESS
+    elif task.hr_deadline_from_completion and task.hr_deadline_days and task.hr_deadline_days > 0 and now > task.deadline_time:
+        new_status = HrStatus.OVERDUE
+    elif task.meets_hr():
         new_status = HrStatus.COMPLIANT
-    elif task.hr_deadline_days and task.hr_deadline_days > 0 and now > task.deadline_time:
+    elif task.hr_deadline_days and task.hr_deadline_days > 0 and task.deadline_time > 0 and now > task.deadline_time:
         new_status = HrStatus.OVERDUE
     elif task.deleted:
         new_status = HrStatus.NEEDS_SEEDING

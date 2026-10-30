@@ -4,9 +4,7 @@
 被测对象是真实的 `evaluate_task` / `initialize_requirements` / `seeding_progress` /
 `HrTask.meets_hr` / `match_size_tier`。
 
-为什么走规则侧而不是端到端：H&R 的 `seeding_time` 由扫描器按
-`now - completed_at` 现算（`modules/hr/scanner.py:96`），真实做种时长在测试里造不出来，
-所以按 `hr_duration` / `hr_ratio` / `hr_upload_multiplier` 等规则字段构造判定场景。
+为什么走规则侧而不是端到端：常规 H&R `seeding_time` 由扫描器按 `now - completed_at` 计算；52pt 则读取下载器累计做种秒数。测试分别构造规则条件和下载器快照字段，覆盖两种语义。
 """
 
 from __future__ import annotations
@@ -37,7 +35,53 @@ def test_hr_presets_asset_present_and_loadable(hr):
     assert path.is_file(), f"预设资源缺失（重组时丢过）：{path}"
 
     presets = hr.rules.load_preset_rules()
-    assert isinstance(presets, dict) and presets, "预设资源存在但解析不出任何条目"
+    assert isinstance(presets, dict) and presets, "预设资源存在但可解析不出任何条目"
+
+
+def test_52pt_preset_tracks_all_downloads_and_either_requirement(hr):
+    """52pt 自动纳入考核；5日内累计做种24小时或分享率1即达标。"""
+    rule = hr.rules.load_preset_rules()["52pt"]
+    assert rule.hr_active is True
+    assert rule.hr_duration == 24
+    assert rule.hr_deadline_days == 5
+    assert rule.hr_ratio == 1
+    assert rule.hr_deadline_from_completion is True
+    assert rule.hr_use_downloader_seeding_time is True
+
+    pending_task = _task(hr, added_on=NOW, seeding_time=0, ratio=1.0)
+    assert hr.evaluator.evaluate_task(pending_task, rule, NOW + 20 * 86400) is hr.models.HrStatus.IN_PROGRESS
+
+    # Once the downloader records completion, the five-day deadline starts from that timestamp.
+    completed_on = NOW + 20 * 86400
+    pending_task.completed_on = completed_on
+    pending_task.ratio = 0.2
+    assert pending_task.deadline_time == completed_on + 5 * 86400
+    assert hr.evaluator.evaluate_task(pending_task, rule, completed_on + 4 * 86400) is None
+    assert pending_task.hr_status is hr.models.HrStatus.IN_PROGRESS
+
+    ratio_task = _task(hr, added_on=NOW, completed_on=NOW, seeding_time=0, ratio=1.0)
+    assert hr.evaluator.evaluate_task(ratio_task, rule, NOW + 86400) is hr.models.HrStatus.COMPLIANT
+    late_task = _task(hr, added_on=NOW, completed_on=NOW, seeding_time=0, ratio=1.0)
+    assert hr.evaluator.evaluate_task(late_task, rule, NOW + 5 * 86400 + 1) is hr.models.HrStatus.OVERDUE
+
+    duration_task = _task(
+        hr, added_on=NOW, completed_on=NOW, seeding_time=0,
+        downloader_seeding_time=24 * 3600, ratio=0.5,
+    )
+    assert hr.evaluator.evaluate_task(duration_task, rule, NOW + 4 * 86400) is hr.models.HrStatus.COMPLIANT
+
+    missing_counter_task = _task(
+        hr, added_on=NOW, completed_on=NOW, seeding_time=6 * 86400,
+        downloader_seeding_time=None, ratio=0.5,
+    )
+    assert hr.evaluator.evaluate_task(missing_counter_task, rule, NOW + 4 * 86400) is hr.models.HrStatus.IN_PROGRESS
+    assert missing_counter_task.seeding_time == 0
+
+    unmet_task = _task(
+        hr, added_on=NOW, completed_on=NOW, seeding_time=0,
+        downloader_seeding_time=23 * 3600, ratio=0.99,
+    )
+    assert hr.evaluator.evaluate_task(unmet_task, rule, NOW + 5 * 86400 + 1) is hr.models.HrStatus.OVERDUE
 
 
 def _pkg(monkeypatch, name, path: Path | None = None, **attrs) -> types.ModuleType:
