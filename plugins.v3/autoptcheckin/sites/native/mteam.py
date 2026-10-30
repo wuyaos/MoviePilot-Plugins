@@ -5,15 +5,26 @@ from ...core.models import LoginResult, LoginStatus, SignResult
 from ...core.sitemodel import RecordSpec, SignContext, SiteModule
 
 
+_MTEAM_AUTH_JS = """() => {
+  const ls = window.localStorage;
+  return {authed: !!(ls.getItem('auth') || ls.getItem('token') || ls.getItem('jwt')),
+          logout: !!document.querySelector('a[href*="logout"], [data-testid*="logout"]'),
+          url: location.href};
+}"""
+# 2FA 默认 tab 就是「雙重認證碼」(TOTP)；「郵箱驗證碼」只是同页另一个 tab，不需要 IMAP。
+_MTEAM_OTP_INPUT = '#otp-code, input[autocomplete="one-time-code"], input[name*="otp" i]'
+_MTEAM_2FA_HINTS = ("郵箱驗證碼", "邮箱验证码", "雙重認證", "双重认证", "two-factor", "2FA")
+# 真实按钮优先：`text=` 会命中外层容器，点上去等于点空处（qnap 2026-10-29 实测失败根因）。
 _MTEAM_OTP_SUBMIT_SELECTORS = (
-    'text=登 錄',
-    'text=登录',
-    'text=登錄',
+    'button[type="submit"]',
+    'input[type="submit"]',
+    'button:has-text("登")',
+    '[role=button]:has-text("登")',
+    'text="登 錄"',
+    'text="登錄"',
+    'text="登录"',
     'xpath=//*[self::button or self::div or self::span or self::input or @role="button"]['
     'contains(normalize-space(.), "登") or contains(@value, "登")]',
-    '[role=button]:has-text("登")',
-    'button[type=submit]',
-    'input[type=submit]',
 )
 
 
@@ -26,20 +37,48 @@ def _wait_for_mteam_index(page, timeout):
 
 
 def _submit_mteam_otp(page):
-    """Submit the SPA 2FA form, allowing OTP-only auto-submit first."""
+    """提交 SPA 2FA 表单；点错元素（text= 命中容器）就换下一个候选，直到离开 2FA 页。"""
     if _wait_for_mteam_index(page, timeout=3000):
         return True
     for selector in _MTEAM_OTP_SUBMIT_SELECTORS:
         try:
             locator = page.locator(selector).first
-            if locator.count():
-                locator.click()
-                break
+            if not locator.count():
+                continue
+            before = page.url
+            locator.click()
         except Exception:
             continue
-    else:
+        if _wait_for_mteam_index(page, timeout=4000) or page.url != before:
+            return True
+    try:
         page.keyboard.press("Enter")
+    except Exception:
+        pass
     return _wait_for_mteam_index(page, timeout=15000)
+
+
+def _mteam_logged_in(browser, base):
+    """受保护页 + JWT 双条件判活：只看 localStorage 会把失效 token 当已登录。
+
+    三态实测（qnap 2026-10-30）：无存档时 /index 不跳转且 auth 为空；有效存档 auth
+    为 JWT 且停在 /index；篡改 token 时站点把 /index 弹回 /login。
+    """
+    browser.goto(urljoin(base, "/index"))
+    browser.page.wait_for_timeout(2000)
+    try:
+        signal = browser.evaluate(_MTEAM_AUTH_JS)
+    except Exception:
+        return False
+    if "/login" in str(signal.get("url", "")):
+        return False
+    return bool(signal.get("authed")) or bool(signal.get("logout"))
+
+
+def _needs_manual_2fa(message):
+    """繁体/简体/英文任一 2FA 文案都算「需人工」——繁体站不该被当成普通失败反复重试。"""
+    text = str(message or "")
+    return any(hint in text for hint in _MTEAM_2FA_HINTS)
 
 
 class MTorrent(SiteModule):
@@ -80,14 +119,18 @@ class MTorrent(SiteModule):
         if cooldown.exists():
             age = _time.time() - cooldown.stat().st_mtime
             if age < 86400:
-                return LoginResult(LoginStatus.AUTH_FAILED,
-                                   f"M-Team 需邮箱双重认证，自动化无法完成；{int((86400-age)//3600)} 小时后重试，或浏览器人工登录（40 天有效）")
+                hours = int((86400 - age) // 3600)
+                return LoginResult(LoginStatus.UNCONFIRMED,
+                                   f"M-Team 双重认证 24 小时内已失败一次（{hours} 小时后重试）："
+                                   "请核对配置项 mteam_totp 是否为账号「雙重認證碼」密钥，"
+                                   "或用浏览器人工登录一次（会话约 40 天有效）")
+
+        flags = {"otp_attempted": False}
 
         def launch(state_file):
+            flags["otp_attempted"] = False
             with CloakSession(state=state_file, url=base) as browser:
-                browser.goto(base)
-                active = browser.evaluate("() => !!document.querySelector('a[href*=\"logout\"], [data-testid*=\"logout\"]') || !!localStorage.getItem('token')")
-                if active:
+                if _mteam_logged_in(browser, base):
                     return True, ""
                 browser.goto(urljoin(base, "/login"))
                 browser.fill("#username", username)
@@ -99,20 +142,36 @@ class MTorrent(SiteModule):
                                  pyotp.TOTP(info["mteam_totp"]).now())
                 browser.click('button[type="submit"]')
                 if not _wait_for_mteam_index(browser.page, timeout=15000):
-                    # 双重认证页：#otp-code（6 位验证码，TOTP 密钥可算）——填入后二次提交。
-                    otp = browser.page.locator('#otp-code').first
+                    # 双重认证页：先等输入框渲染出来，避免 DOM 未就绪就判定「无验证码框」。
+                    try:
+                        browser.page.wait_for_selector(_MTEAM_OTP_INPUT, timeout=15000)
+                    except Exception:
+                        pass
+                    otp = browser.page.locator(_MTEAM_OTP_INPUT).first
                     if otp.count() and info.get("mteam_totp"):
                         import pyotp
-                        otp.fill(pyotp.TOTP(info["mteam_totp"]).now())
-                        browser.page.wait_for_timeout(800)
+                        code = pyotp.TOTP(info["mteam_totp"]).now()
+                        try:
+                            otp.click()
+                        except Exception:
+                            pass
+                        otp.fill(code)
+                        browser.page.wait_for_timeout(600)
+                        try:
+                            if (otp.input_value() or "").strip() != code:
+                                otp.fill(code)
+                        except Exception:
+                            pass
+                        flags["otp_attempted"] = True
                         _submit_mteam_otp(browser.page)
-                if "/index" not in browser.page.url and info.get("mteam_totp"):
-                    # OTP 已填仍停留 2FA 页：码被拒（站点发的是邮箱码）或限流——冷却 24h 防反复触发风控
-                    cooldown.parent.mkdir(parents=True, exist_ok=True)
-                    cooldown.write_text("otp-rejected", encoding="utf-8")
                 if "/index" not in browser.page.url:
-                    feature = browser.evaluate("() => document.body.innerText.slice(0,300)")
-                    return False, "登录未到达 /index：" + str(feature)
+                    if flags["otp_attempted"]:
+                        # 已填 TOTP 仍停留 2FA 页：码被拒或限流——冷却 24h 防反复触发风控。
+                        cooldown.parent.mkdir(parents=True, exist_ok=True)
+                        cooldown.write_text("otp-rejected", encoding="utf-8")
+                        return False, ("双重认证未通过（已自动填入 mteam_totp 并提交，仍停留 2FA 页）："
+                                       "请核对配置项 mteam_totp，或用浏览器人工登录一次")
+                    return False, "登录未到达 /index（当前 " + browser.page.url + "）"
                 browser.save_state(state)
                 return True, "M-Team 保活登录成功"
 
@@ -126,11 +185,11 @@ class MTorrent(SiteModule):
                 if ok:
                     return LoginResult(LoginStatus.LOGIN_OK, "已恢复 M-Team 登录态")
                 state.unlink(missing_ok=True)
-                if "邮箱验证码" in message:
+                if _needs_manual_2fa(message):
                     return LoginResult(LoginStatus.UNCONFIRMED, message)
             ok, message = run_isolated(lambda: launch(None))
             status = LoginStatus.LOGIN_OK if ok else (
-                LoginStatus.UNCONFIRMED if "邮箱验证码" in message else LoginStatus.AUTH_FAILED)
+                LoginStatus.UNCONFIRMED if _needs_manual_2fa(message) else LoginStatus.AUTH_FAILED)
             return LoginResult(status, message)
         except Exception as exc:
             return LoginResult(LoginStatus.UNCONFIRMED, "M-Team CloakBrowser 登录异常：" + type(exc).__name__ + "：" + str(exc)[:200])

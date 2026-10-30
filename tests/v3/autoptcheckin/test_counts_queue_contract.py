@@ -167,6 +167,29 @@ def test_paused_site_is_excluded_from_due_summary_and_stats(monkeypatch):
     assert plugin._track_store().entry_of('a', 'sign') == {}
 
 
+def test_paused_site_leftover_round_detail_drops_from_notification(monkeypatch):
+    # 本轮跑过之后才暂停：_last_round_results 会残留一整天，通知不得再列该站明细。
+    from autoptcheckin.core.notify import format_round_notifications
+    plugin = _plugin(monkeypatch, ['a', 'b'])
+    plugin._recompute_track_states()
+    plugin._last_round_results = {
+        ('a', 'sign'): {'status': 'failed', 'message': 'A站点维护中，本轮跳过'},
+        ('b', 'sign'): {'status': 'failed', 'message': 'B本轮失败'},
+    }
+    summary = plugin._round_summary()['sign']
+    assert sorted(label for label, _ in summary['entries']) == ['a', 'b']
+    assert 'A站点维护中' in format_round_notifications(plugin._round_summary())[0][2]
+
+    plugin._config['paused_sites'] = ['a']
+    summary = plugin._round_summary()['sign']
+    assert [label for label, _ in summary['entries']] == ['b']
+    assert [result['status'] for _, result in summary['round_entries']] == ['failed']
+    text = format_round_notifications(plugin._round_summary())[0][2]
+    assert text.splitlines()[:3] == ['全部签到: 1',
+                                     '本次签到: 1（成功 0 · 失败 1 · 待处理 0）',
+                                     '下轮待执行: 1']
+    assert 'B本轮失败' in text and 'A站点维护中' not in text
+
 def test_paused_single_site_apis_refuse_without_state_or_history(monkeypatch):
     import asyncio
     plugin = _plugin(monkeypatch, ['a'])

@@ -5,7 +5,7 @@ SRC = ROOT / "frontend.v3" / "autoptcheckin" / "src"
 
 
 def test_theme_css_defines_status_and_surface_tokens():
-    css = (SRC / "preview.css").read_text()
+    css = (SRC / "preview.css").read_text(encoding="utf-8")
     for token in (
         "--ptc-surface", "--ptc-line", "--ptc-text", "--ptc-text-muted",
         "--ptc-success-bg", "--ptc-success-text", "--ptc-signed-bg",
@@ -21,7 +21,7 @@ def test_theme_css_defines_status_and_surface_tokens():
 
 
 def test_theme_observer_tracks_host_class():
-    source = (SRC / "theme.js").read_text()
+    source = (SRC / "theme.js").read_text(encoding="utf-8")
     assert "MutationObserver" in source
     assert "v-theme--dark" in source and "v-theme--light" in source
     assert "ptcTheme" in source

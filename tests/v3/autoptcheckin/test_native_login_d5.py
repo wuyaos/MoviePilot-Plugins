@@ -292,3 +292,143 @@ def test_mteam_launch_exception_maps_to_unconfirmed(offline, monkeypatch, tmp_pa
                                      {'mteam_username': 'u', 'mteam_password': 'p'}, config={})
     assert result.status == 'unconfirmed'
     assert 'CloakBrowser 登录异常' in result.message
+
+
+class _MTeamInertLocator:
+    def __init__(self, page, selector):
+        self.page = page
+        self.selector = selector
+
+    @property
+    def first(self):
+        return self
+
+    def count(self):
+        return int(self.selector in (self.page.inert, self.page.working))
+
+    def click(self):
+        self.page.clicks.append(self.selector)
+        if self.selector == self.page.working:
+            self.page.url = 'https://kp.m-team.cc/index'
+
+
+class _MTeamInertPage:
+    """命中但点不动（容器）的选择器在前，真正提交的在后的 2FA 页。"""
+
+    url = 'https://kp.m-team.cc/login'
+
+    def __init__(self, inert, working):
+        self.inert = inert
+        self.working = working
+        self.clicks = []
+
+    def wait_for_url(self, _pattern, timeout):
+        raise TimeoutError(timeout)
+
+    def locator(self, selector):
+        return _MTeamInertLocator(self, selector)
+
+    class _Keyboard:
+        def press(self, key):
+            raise AssertionError('不应退化到 Enter：有效按钮存在')
+
+    @property
+    def keyboard(self):
+        return self._Keyboard()
+
+
+def test_mteam_otp_retries_next_selector_when_first_click_is_inert():
+    # qnap 2026-10-29 实况根因：text= 命中外层容器，点了等于点空处，码填了没提交。
+    from autoptcheckin.sites.native.mteam import _MTEAM_OTP_SUBMIT_SELECTORS, _submit_mteam_otp
+
+    inert = next(s for s in _MTEAM_OTP_SUBMIT_SELECTORS if s.startswith('text='))
+    working = next(s for s in _MTEAM_OTP_SUBMIT_SELECTORS if s.startswith('xpath='))
+    assert _MTEAM_OTP_SUBMIT_SELECTORS.index(inert) < _MTEAM_OTP_SUBMIT_SELECTORS.index(working)
+
+    page = _MTeamInertPage(inert=inert, working=working)
+    assert _submit_mteam_otp(page) is True
+    assert page.clicks == [inert, working]
+
+
+def test_mteam_otp_selector_priority_prefers_real_buttons():
+    from autoptcheckin.sites.native.mteam import _MTEAM_OTP_SUBMIT_SELECTORS
+
+    assert _MTEAM_OTP_SUBMIT_SELECTORS[0] == 'button[type="submit"]'
+    assert _MTEAM_OTP_SUBMIT_SELECTORS[1] == 'input[type="submit"]'
+
+
+def test_mteam_otp_input_selector_covers_modal_and_autocomplete():
+    from autoptcheckin.sites.native.mteam import _MTEAM_OTP_INPUT
+
+    assert '#otp-code' in _MTEAM_OTP_INPUT
+    assert 'one-time-code' in _MTEAM_OTP_INPUT
+
+
+@pytest.mark.parametrize('message,expected', [
+    ('登录未到达 /index：检测到邮箱验证码', True),
+    ('双重认证未通过（已自动填入 mteam_totp 并提交，仍停留 2FA 页）', True),
+    ('请输入郵箱驗證碼', True),
+    ('登录未到达 /index（当前 https://kp.m-team.cc/login）', False),
+    ('', False),
+    (None, False),
+])
+def test_mteam_needs_manual_2fa_covers_traditional_and_simplified(message, expected):
+    # 繁体页（郵/驗證碼）曾被当成普通登录失败 → 每轮重试 4 次刷失败记录。
+    from autoptcheckin.sites.native.mteam import _needs_manual_2fa
+
+    assert _needs_manual_2fa(message) is expected
+
+
+class _MTeamSignalBrowser:
+    def __init__(self, signal):
+        self._signal = signal
+        self.gotos = []
+        self.page = SimpleNamespace(wait_for_timeout=lambda _ms: None)
+
+    def goto(self, url):
+        self.gotos.append(url)
+
+    def evaluate(self, _js):
+        return self._signal
+
+
+@pytest.mark.parametrize('signal,expected', [
+    ({'authed': True, 'url': 'https://kp.m-team.cc/index', 'logout': False}, True),
+    ({'authed': True, 'url': 'https://kp.m-team.cc/login', 'logout': False}, False),
+    ({'authed': False, 'url': 'https://kp.m-team.cc/index', 'logout': False}, False),
+    ({'authed': False, 'url': 'https://kp.m-team.cc/index', 'logout': True}, True),
+])
+def test_mteam_logged_in_needs_token_and_no_login_bounce(signal, expected):
+    # 三态实测：未登录访问 /index 不跳转（只看 URL 会误判），失效 token 会被弹回 /login。
+    from autoptcheckin.sites.native.mteam import _mteam_logged_in
+
+    browser = _MTeamSignalBrowser(signal)
+    assert _mteam_logged_in(browser, 'https://kp.m-team.cc/') is expected
+    assert browser.gotos == ['https://kp.m-team.cc/index']
+
+
+def test_mteam_logged_in_false_when_signal_unavailable():
+    from autoptcheckin.sites.native.mteam import _mteam_logged_in
+
+    class _Boom(_MTeamSignalBrowser):
+        def evaluate(self, _js):
+            raise RuntimeError('no js')
+
+    assert _mteam_logged_in(_Boom({}), 'https://kp.m-team.cc/') is False
+
+
+def test_mteam_cooldown_returns_unconfirmed_without_relogin(offline, monkeypatch, tmp_path):
+    # 冷却期不再重试（旧行为 AUTH_FAILED × retry_count = 每轮 4 条同样失败记录）。
+    from autoptcheckin.core import cloak
+
+    site = registry.get_native_module('mteam')
+    monkeypatch.setattr(cloak, 'state_path', lambda sid: tmp_path / f'{sid}.json')
+    (tmp_path / 'mteam.json.cooldown').write_text('otp-rejected', encoding='utf-8')
+    attempts = []
+    monkeypatch.setattr(cloak, 'run_isolated', lambda fn: attempts.append(1) or (True, ''))
+
+    result = native.run_native_login(SignRunner(), site,
+                                     {'mteam_username': 'u', 'mteam_password': 'p'}, config={})
+    assert result.status == 'unconfirmed'
+    assert '双重认证' in result.message and 'mteam_totp' in result.message
+    assert attempts == []

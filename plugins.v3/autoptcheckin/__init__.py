@@ -38,7 +38,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.3.8"
+    plugin_version = "4.3.9"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -806,7 +806,9 @@ class AutoPtCheckin(_PluginBase):
         for track in ("sign", "login"):
             selected = {str(v) for v in self._config.get(f"{track}_sites", [])} - paused
             due = set(self._due_for(track))
-            current = {sid: dict(result) for (sid, action), result in self._last_round_results.items() if action == track}
+            # 暂停站不进明细：本轮跑过之后才暂停的站，其 _last_round_results 会残留一整天。
+            current = {sid: dict(result) for (sid, action), result in self._last_round_results.items()
+                       if action == track and sid not in paused}
             shown = {sid: dict(snapshot.get(sid, {}).get(track, {})) for sid in due
                      if str(snapshot.get(sid, {}).get(track, {}).get("time", "")).startswith(today)}
             shown.update(current)
