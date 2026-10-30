@@ -181,3 +181,36 @@ def test_notify_lock_busy_cancel_and_disabled_not_executed():
     for name in ('Busy', 'Gated', 'Stopped'):
         assert f'【{name}】' not in text
     assert '—— ✅ 已完成 ——' not in text and '—— ❌ 失败 ——' not in text and '—— ⏳ 待处理 ——' not in text
+
+
+def test_notify_skips_all_zero_track():
+    """本轮零执行 + 无明细 + 无待执行队列的轨道整条不发（「全部 X」是启用站点数，恒 >0）。"""
+    rendered = format_round_notifications({
+        'sign': {'total': 131, 'executed': 0, 'next': 0, 'entries': [], 'round_entries': []},
+        'login': {'total': 131, 'executed': 0, 'next': 0, 'entries': [], 'round_entries': []},
+    })
+    assert rendered == []
+
+
+def test_notify_keeps_track_with_leftover_details_only():
+    """本轮没跑但还有当日残留明细时仍发该轨（明细就是这一轨的话说）。"""
+    rendered = format_round_notifications({
+        'login': {'total': 5, 'executed': 0, 'next': 0, 'entries': [
+            ('Old', {'status': 'login_ok', 'message': '页面可达'}),
+        ], 'round_entries': []},
+    })
+    assert len(rendered) == 1
+    assert '【Old】模拟登录成功，页面可达' in rendered[0][2]
+
+
+def test_notify_skips_empty_track_next_to_active_track():
+    """一轨有执行、另一轨三零：只有有话说的那条发出去。"""
+    rendered = format_round_notifications({
+        'sign': {'total': 20, 'executed': 1, 'next': 0, 'entries': [
+            ('Done', {'status': 'success', 'message': '签到成功'}),
+        ], 'round_entries': [
+            ('Done', {'status': 'success', 'message': '签到成功'}),
+        ]},
+        'login': {'total': 131, 'executed': 0, 'next': 0, 'entries': [], 'round_entries': []},
+    })
+    assert [track for track, _, _ in rendered] == ['sign']

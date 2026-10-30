@@ -118,8 +118,6 @@ def format_round_notifications(summary: dict) -> list[tuple[str, str, str]]:
             ("login", "【PT 签到中心】", "全部登录", "本次登录")):
         data = summary.get(track) or {}
         entries = list(data.get("entries", []))
-        if not data.get("total") and not entries:
-            continue
         # round_entries 键存在（即使为空）即为本轮口径；缺失时回退 entries 兼容直调。
         round_entries = data["round_entries"] if "round_entries" in data else entries
         total, executed, success, next_count = _counts(data, round_entries)
@@ -135,5 +133,9 @@ def format_round_notifications(summary: dict) -> list[tuple[str, str, str]]:
             if group:
                 lines.append(header)
                 lines.extend(group)
+        # 「全部签到/登录」是启用站点数，恒大于 0，不能当作“这一轨有没有话说”的判据。
+        # 本轮没跑、也没有明细行和待执行队列时，整条全 0 消息纯噪音，跳过。
+        if not executed and not rows and not next_count:
+            continue
         result.append((track, title, "\n".join(lines)))
     return result
