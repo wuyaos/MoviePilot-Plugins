@@ -58,7 +58,7 @@ def test_bakatest_three_states_and_random_choice(site_id, text, status):
     site = get_native_module(site_id)
     http = Http([QUIZ, message(text)])
     result = site.signin(context(site, http))
-    assert site.hook_implemented and result.status == status
+    assert result.status == status  # hook_implemented 元键已删除（B 项）：能力只看显式声明
     assert result.reward.reported == '12'
     assert [call[0] for call in http.calls] == ['get', 'post', 'get']
     data = dict(http.calls[1][2]['data'])

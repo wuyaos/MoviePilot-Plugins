@@ -7,8 +7,9 @@
 - 凭证与证据来源是两个维度：凭证术语为 cookie/password/api_key，证据来源为 page_message/response_json。OpenCD 使用 cookie + response_json；蜂巢对照为 api_key + response_json，不在本插件添加论坛站。旧凭证枚举 api 的统一改名不在本批范围；集成账密站为 rousi/sunnypt（kind=password，PeerGo 会话失效时账密刷新，SunnyPT JWT 为登录产物；执行分支由 integrations 实现并复用站点锁），mteam 保留 api_key 元数据，独立支持 CloakBrowser 真实登录保活。
 - `RecordSpec.source=page_message` 只匹配唯一消息元素；`response_json` 按 `response_field` 取顶层标量并以类型和值精确匹配 `status_map`，不把任意非空值当成功。
 - `pre_read_spec` 用于安全页面前读及只读核验；`signed_marker` 同时用于安全新页回读；页面 JSON 不冒充动作回执。response_json 声明不继承通用 POST；六站真实动作、回执接线与无条件安全回读已在 C4 实现。
-- `batch2-message-pending-calibration` 是历史合成占位，当前 NexusSignin 默认回退消息链（可由 use_default_message 关闭），不是生产选择器；`未签到` 为合成回归输入。没有证据保持 unconfirmed，不从整个页面、表单消失或未知 JSON 值推断成功。默认链的节点条件同时覆盖简繁（`签到`/`簽到`/`打卡`），繁体站（如老师 NicePT，2026-10-30 线上永远 pending 的根因）无需自定义判据。
+- 判据声明不再用占位符：`RecordSpec.message` 为空即「未声明专用选择器」，由 `NexusSignin.message_spec` 回退默认链（`use_default_message=False` 可关闭），历史上的 `batch2-message-pending-calibration` 合成 XPath 已全部删除；`未签到` 为合成回归输入。回退只对 `source=page_message` 生效（response_json 声明的 status_map 允许非字符串键，不能被默认链改写）。没有证据保持 unconfirmed，不从整个页面、表单消失或未知 JSON 值推断成功。默认链的节点条件同时覆盖简繁（`签到`/`簽到`/`打卡`），繁体站（如老师 NicePT，2026-10-30 线上永远 pending 的根因）无需自定义判据。
 - 本表的 standard-declared 说明证据声明可表达，不表示提交协议已实现；special-hook 说明提交动作需站点钩子。两者与 verified 是独立维度。
+- 执行协议显式化（2026-10-31）：`generic_sites.json` 每条声明必须给出 `protocol`（nexus/form/api/get/page_action/login_only），执行基类由协议键决定，不再按 `action_get`/`form_data`/`cloak_steps` 的存在性推断流程；`safe_read_path` 只对 api/get/form 必填（缺失即声明报错，不再静默回退动作路径）。`hook_implemented` 元键已删除：True 不再声明（默认即 True），False 仅保留在 mteam/hdwing 等无签到站，能力只看显式 `signin_capable`（缺省=True）/`signin_note`；本页历史批次表中的 `hook_implemented=True` 字样读作「该站已适配」。52pt/yema/hdwing/ptzone 的重复声明已收敛为独立模块（原声明与模块冲突字段逐个核对，注册表输出逐字段不变）。
 
 ## B1-6 六站对照（3.6.6）
 

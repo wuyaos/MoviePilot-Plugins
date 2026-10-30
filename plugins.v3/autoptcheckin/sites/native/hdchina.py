@@ -11,7 +11,6 @@ class HDChina(ApiSignin):
     name = '瓷器'
     url = 'https://hdchina.org/'
     attendance_path = '/index.php'
-    hook_implemented = True
     record_spec = RecordSpec(source="response_json", response_field='state', status_map={'success': 'signed'})
     pre_read_spec = RecordSpec('//a[@class="label label-default" and @href="#"]', {"已签到": "signed"})
 

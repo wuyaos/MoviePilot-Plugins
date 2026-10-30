@@ -38,7 +38,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.3.11"
+    plugin_version = "4.3.12"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -356,6 +356,9 @@ class AutoPtCheckin(_PluginBase):
 
     async def api_save_site_config(self, config: dict) -> dict:
         """保存站点级动作与凭据；阶段1不发送站点请求。"""
+        # 入参边界：body 为 null/数组时 set(config) 会抛 TypeError 变 500，与其它配置 API 的结构化失败不一致。
+        if not isinstance(config, dict):
+            return {"success": False, "message": "站点配置必须是键值对象", "data": None}
         if set(config) - set(self.SITE_KEYS):
             return {"success": False, "message": "未知站点配置字段", "data": None}
         return await self.api_save_config({**self._config, **deepcopy(config)})

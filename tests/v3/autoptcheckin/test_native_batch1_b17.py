@@ -166,7 +166,7 @@ def test_login_only_never_invents_signin_or_sends_requests(site_id):
 
 def test_yema_uses_cloak_page_actions_not_api_receipt():
     site = get_native_module('yema')
-    assert site.signin_capable and site.cloak_steps == ['altcha', 'sign_button']
+    assert getattr(site, 'signin_capable', True) and site.cloak_steps == ('altcha', 'sign_button')
     assert site.record_spec.source == 'page_message'
 
 

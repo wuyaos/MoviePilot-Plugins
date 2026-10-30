@@ -80,8 +80,8 @@ def test_record_rejects_document_and_invalid_selectors():
     assert context().read_record(page("已签到"), RecordSpec('//body', {"已签到": "signed"})).status == "unconfirmed"
     assert context().read_record(page("已签到"), RecordSpec('[[[')).status == "unconfirmed"
     assert context().read_record(page("已签到"), RecordSpec(SPEC.message, SPEC.status_map, uid='[[[')).status == "signed"
-    with pytest.raises(ValueError):
-        RecordSpec("")
+    # 空 message＝未声明专用选择器，由 NexusSignin.message_spec 回退默认链。
+    assert RecordSpec("").message == ""
     with pytest.raises(ValueError):
         RecordSpec("//p", {"": "signed"})
 

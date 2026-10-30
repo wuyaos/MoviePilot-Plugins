@@ -12,7 +12,6 @@ from .sitemodel import page_available
 
 class BakatestSignin(NexusSignin):
     attendance_path = '/bakatest.php'
-    hook_implemented = True
     reward_pattern = re.compile(r'(\d+)点魔力值')
 
     def discover_form(self, ctx, page):

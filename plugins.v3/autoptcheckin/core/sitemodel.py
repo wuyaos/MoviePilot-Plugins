@@ -34,10 +34,7 @@ class RecordSpec:
             raise ValueError("unknown record source")
         if self.source == "response_json" and not self.response_field:
             raise ValueError("response_field is required")
-        if self.source == "page_message" and isinstance(self.message, str) and not self.message.strip():
-            raise ValueError("message selector is required")
-        if self.source == "page_message" and isinstance(self.message, tuple) and not self.message:
-            raise ValueError("message selector is required")
+        # message 为空＝未声明专用选择器：由调度侧回退默认链，而不是靠一个虚构的 XPath 占位符。
         if any((not isinstance(key, str) or not key) if self.source == "page_message"
                else type(key) not in {str, int, bool} or key == "" for key in self.status_map):
             raise ValueError("invalid status_map key")

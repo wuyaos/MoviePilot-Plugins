@@ -95,7 +95,6 @@ def test_b13_readback_missing_message_is_unconfirmed(site_cls, error):
 @pytest.mark.parametrize("site_cls,safe_path", [(HDCity, "/")])  # hhanclub 动作页即结果页（见 test_generic_behavior_d1）
 def test_b13_special_pre_read_and_readback_use_safe_page(site_cls, safe_path):
     site = site_cls()
-    assert site.hook_implemented is True
     assert site.attendance_path == safe_path
     http = Http([page(site, "未签到", form=True), page(site, next(iter(site.record_spec.status_map)))])
     site.signin(context(site, http))

@@ -9,10 +9,9 @@ class LaJiDui(NexusSignin):
     name = "垃圾堆"
     url = "https://pt.lajidui.top/"
     attendance_path = "/attendance.php"
-    hook_implemented = True
     # Explicit synthetic placeholder, not a production selector.
     record_spec = RecordSpec(
-        '//*[@id="batch2-message-pending-calibration"]',
+        '',
         {'今天已经签到过': 'signed', '请勿重复刷新': 'signed', '已经签到': 'signed', '签到成功': 'signed', '签到已得': 'signed', '获得': 'signed', '连续签到': 'signed', '未签到': 'unsigned'},
     )
 

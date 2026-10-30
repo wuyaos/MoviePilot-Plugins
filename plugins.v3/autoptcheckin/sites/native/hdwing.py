@@ -13,7 +13,6 @@ class Hdwing(SiteModule):
     url = "https://hdwing.org/"
     # 签到入口在首页右上角（do_signin AJAX），无独立 attendance 页面。
     attendance_path = "/"
-    hook_implemented = True
     record_spec = RecordSpec('//a[contains(@onclick, "do_signin")]', {})
 
     def signin(self, ctx: SignContext) -> SignResult:

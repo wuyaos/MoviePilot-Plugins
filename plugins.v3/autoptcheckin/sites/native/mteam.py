@@ -98,7 +98,7 @@ class MTorrent(SiteModule):
     signin_capable = False
     emulate = False
     hook_implemented = False
-    record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]', {})
+    record_spec = RecordSpec('', {})
 
     def signin(self, ctx: SignContext) -> SignResult:
         result = ctx.result(status="skipped", message="hook_not_implemented")

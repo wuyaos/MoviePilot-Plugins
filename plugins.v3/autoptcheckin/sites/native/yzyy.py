@@ -15,7 +15,6 @@ class Yzyy(NexusSignin):
     name = 'yzyy'
     url = 'https://yzyy.org/'
     attendance_path = '/plugin.php?id=zqlj_sign'
-    hook_implemented = True
     record_spec = RecordSpec('//div[contains(concat(" ", normalize-space(@class), " "), " signbtn ")]', {'今日已打卡': 'signed', '点击打卡': 'unsigned'})
 
     def discover_form(self, ctx, page):

@@ -589,8 +589,12 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
                         persist_cookie_result(result, http, site_id, 'password_login', get_data, save_data)
                     elif action != 'login':
                         result = SignResult(SignStatus(result.status.value), result.message)
-        except Exception:
+        except Exception as exc:
             status = LoginStatus.UNCONFIRMED if action == 'login' else SignStatus.UNCONFIRMED
             result = LoginResult(status, '站点接口执行未确认') if action == 'login' else SignResult(status, '站点接口执行未确认')
+            # 异常类型与受控摘要必须留痕：原先静默折叠成同一句话，协议变更/网络/数据格式错误无法区分。
+            # MP 日志 INFO/WARNING 不落盘，history 与响应里的 metadata 是 qnap 上唯一可靠通道。
+            result.metadata['integration_error'] = f"{type(exc).__name__}: {exc}"[:200]
+            result.message = f"{result.message}（{type(exc).__name__}）"
         result.metadata['cookie_sources'] = attempted_cookie_sources
         return finish(result)

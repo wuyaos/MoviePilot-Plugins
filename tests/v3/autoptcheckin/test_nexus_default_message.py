@@ -61,7 +61,7 @@ def test_after_read_error_explains_post_submit_failure():
     ('<div class="alert"></div><div id="msg">签到成功</div>', '签到成功', 'signed'),
     ('<div class="alert">签到成功</div>' * 2, '', 'unconfirmed'),
     ('<main>签到成功</main>', '', 'unconfirmed'),
-    ('<p id="batch2-message-pending-calibration">签到成功</p>', '', 'unconfirmed'),
+    ('<p id="custom-node">签到成功</p>', '', 'unconfirmed'),
 ])
 def test_default_message_first_unique_nonempty_node(markup, summary, state):
     site = get_native_module('baozi')
@@ -71,7 +71,7 @@ def test_default_message_first_unique_nonempty_node(markup, summary, state):
 
 def test_default_message_preserves_site_mapping_and_success_texts():
     site = NexusSignin()
-    site.record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]',
+    site.record_spec = RecordSpec('',
                                  {'站点已签': 'signed', '已签到': 'unsigned'}, uid='//a', date='//time')
     site.success_texts = ('Custom success',)
     spec = site.message_spec()

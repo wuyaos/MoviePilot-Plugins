@@ -9,8 +9,7 @@ class SiQi(NexusSignin):
     name = '思齐'
     url = 'https://si-qi.xyz/'
     attendance_path = '/attendance.php'
-    hook_implemented = True
-    record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]', {'您今天已经签到过了': 'signed', '未签到': 'unsigned'})
+    record_spec = RecordSpec('', {'您今天已经签到过了': 'signed', '未签到': 'unsigned'})
     signed_marker = '//*[contains(concat(" ", normalize-space(@class), " "), " attend-success-effect ")]'
     # Full V2 reward expression retained for production message calibration.
     reward_pattern = r'这是您的第.*?次签到，已连续签到.*?天'

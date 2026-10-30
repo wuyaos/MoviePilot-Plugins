@@ -20,7 +20,6 @@ class Colapt(SiteModule):
     name = "可乐PT"
     url = "https://www.colapt.com/"
     attendance_path = "/account/cola"
-    hook_implemented = True
     record_spec = RecordSpec('//button[contains(@class,"cola-checkin")]',
                              {"本周已签": "signed"})
 

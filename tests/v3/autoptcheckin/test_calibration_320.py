@@ -92,6 +92,6 @@ def test_slow_and_headful_cloak_declarations_are_preserved():
 
 def test_yema_signin_capability_and_login_are_enabled():
     site = get_native_module('yema')
-    assert site.signin_capable is True
+    assert getattr(site, 'signin_capable', True) is True
     assert site.login_capable is True
-    assert site.cloak_steps == ['altcha', 'sign_button']
+    assert site.cloak_steps == ('altcha', 'sign_button')

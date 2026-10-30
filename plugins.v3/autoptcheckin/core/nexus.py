@@ -146,10 +146,10 @@ class NexusSignin(SiteModule):
 
     def message_spec(self) -> RecordSpec:
         spec = self.record_spec
-        # batch2 占位 → 回退 NexusPHP 默认选择器链（保留站点已有确证关键词并合并默认集）
-        placeholder = isinstance(spec.message, str) and 'batch2-message-pending-calibration' in spec.message
-        if getattr(self, "use_default_message", True) and (
-                placeholder or (isinstance(spec.message, tuple) and not spec.message)):
+        # 只有页面回读声明才回退默认链：response_json 声明的回执不走页面消息，且其
+        # status_map 允许非字符串键（opencd 的 False、zhuque 的 200），套用默认链会在校验处抛错。
+        if (getattr(self, "use_default_message", True) and spec.source == "page_message"
+                and not spec.message):
             states = dict(self.DEFAULT_STATUS_MAP)
             states.update({k: v for k, v in spec.status_map.items() if v != 'signed' or k not in states})
             for text in self.success_texts:
@@ -312,3 +312,34 @@ class NexusSignin(SiteModule):
                                "captcha": trace,
                                "submit": getattr(ctx.http, "last_post", None) or {}}
         return result
+
+class PageActionSignin(NexusSignin):
+    """浏览器页面动作站（protocol=page_action）：无标准表单，动作链由 cloak_steps 驱动。
+
+    动作链自含验证与点击（滑块/Turnstile/altcha）；动作后的落点页本身就是回读证据，
+    因此不需要 safe_read_path/action_path 之类的额外协议键。
+    """
+
+    cloak_steps: tuple[str, ...] = ()
+
+    def discover_form(self, ctx: SignContext, page: LoginPage) -> SigninForm:
+        # 无标准表单；合成提交占位让标准前读/回读流程承载动作。
+        return SigninForm(urljoin(self.url, self.attendance_path), [])
+
+    def submit(self, ctx: SignContext, form: SigninForm) -> None:
+        results = ctx.http.run_page_action(tuple(self.cloak_steps)) or []
+        # steps 明细暂存到 ctx，由 read_after 写进 result.metadata（MP 日志 INFO/WARNING 不落盘，
+        # qnap 诊断唯一可靠通道是 history/响应里的 metadata）。
+        ctx.cloak_steps_result = [list(r) for r in results]
+        # 动作后落点页即回读证据：站点每次进入都可能发新滑块门页，
+        # 二次 GET 会重新拿到门页导致证据丢失（自由农场实证）。
+        content, url = ctx.http.page_snapshot()
+        ctx.cloak_read = LoginPage(content, url, 200)
+
+    def read_after(self, ctx: SignContext, page: LoginPage):
+        stashed = getattr(ctx, "cloak_read", None)
+        if stashed is not None:
+            ctx.cloak_read = None
+            if page_available(stashed):
+                return super().read_after(ctx, stashed)
+        return super().read_after(ctx, page)

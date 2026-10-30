@@ -18,7 +18,6 @@ class Tjupt(NexusSignin):
     name = 'TJUPT'
     url = 'https://www.tjupt.org/'
     attendance_path = '/attendance.php'
-    hook_implemented = True
     # 答题类：误答有账号风险，仅保留模拟登录（配置/数据卡 ⚠ 徽标）。
     signin_capable = False
     signin_note = '答题类签到不建议使用（误答有账号风险），仅保留模拟登录'

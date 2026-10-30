@@ -17,15 +17,16 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 100  # 已移除关闭站点 hares、52movie
-    assert len({row['id'] for row in rows}) == 100
-    assert len({row['url'] for row in rows}) == 100
+    assert len(rows) == 96  # 已移除关闭站点 hares、52movie；52pt/hdwing/ptzone/yema 转独立模块
+    assert len({row['id'] for row in rows}) == 96
+    assert len({row['url'] for row in rows}) == 96
     assert not {'hares', '52movie'} & {row['id'] for row in rows}
-    assert all({'id', 'name', 'url'} <= set(row) for row in rows)
-    base_rows = sum(set(row) == {'id', 'name', 'url', 'attendance_path'} for row in rows)
-    assert base_rows == 48  # dragonhd 声明 signin_capable:false 进 extras（无签到适配）
-    extras = [row for row in rows if set(row) != {'id', 'name', 'url', 'attendance_path'}]
-    assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'login_page_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path', 'browser_login', 'slow', 'slow_timeout', 'headful', 'impersonate', 'reset_hour', 'success_texts'} for row in extras)
+    assert all({'id', 'name', 'url', 'protocol'} <= set(row) for row in rows)
+    base = {'id', 'name', 'url', 'attendance_path', 'protocol'}
+    base_rows = sum(set(row) == base for row in rows)
+    assert base_rows == 46  # dragonhd 声明 signin_capable:false 进 extras（无签到适配）
+    extras = [row for row in rows if set(row) != base]
+    assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'protocol', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'login_page_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path', 'browser_login', 'slow', 'slow_timeout', 'headful', 'impersonate', 'reset_hour', 'success_texts'} for row in extras)
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'iptorrents'} & {row['id'] for row in rows}  # jpopsuki/nebulance/filelist 已转正为仅登录声明
 
 

@@ -103,7 +103,7 @@ def generate(monkeypatch, tmp_path, **fields):
 ])
 @pytest.mark.parametrize('action_error', [False, True])
 def test_generic_response_json_exact_types_and_safe_readback(monkeypatch, tmp_path, mapping, value, expected, action_error):
-    site = generate(monkeypatch, tmp_path, safe_read_path='/', action_path='/action',
+    site = generate(monkeypatch, tmp_path, protocol='api', safe_read_path='/', action_path='/action',
                     response_json={'field': 'status', 'status_map': mapping})
     assert isinstance(site, ApiSignin)
     http = c34.Http(site, receipt=TimeoutError() if action_error else json.dumps({'status': value}))
@@ -114,7 +114,7 @@ def test_generic_response_json_exact_types_and_safe_readback(monkeypatch, tmp_pa
 
 
 def test_generic_login_only_is_skipped_and_registry_honors_capability(monkeypatch, tmp_path):
-    site = generate(monkeypatch, tmp_path, signin_capable=False)
+    site = generate(monkeypatch, tmp_path, protocol='login_only', signin_capable=False)
     http = Mock()
     result = site.signin(c1.context(site, http, None))
     assert result.status == 'skipped' and result.metadata['reason'] == 'signin_not_applicable'
@@ -146,20 +146,21 @@ def test_generic_migrated_module_removed(sid):
     assert get_native_module(sid).__module__ == generic.__name__
 
 
-@pytest.mark.parametrize('fields', [{'action_get': '/attendance.php'}, {'action_path': '/action', 'response_json': {'field': 'status', 'status_map': {'ok': 'signed'}}}])
+@pytest.mark.parametrize('fields', [{'protocol': 'get', 'action_get': '/attendance.php'},
+                                    {'protocol': 'api', 'action_path': '/action', 'response_json': {'field': 'status', 'status_map': {'ok': 'signed'}}}])
 def test_generic_action_requires_explicit_safe_read_path(monkeypatch, tmp_path, fields):
-    with pytest.raises(KeyError, match='safe_read_path'):
+    with pytest.raises(ValueError, match="missing required key 'safe_read_path'"):
         generate(monkeypatch, tmp_path, **fields)
 
 
 def test_generic_response_json_rejects_colliding_keys(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match='colliding'):
-        generate(monkeypatch, tmp_path, safe_read_path='/', action_path='/action',
+        generate(monkeypatch, tmp_path, protocol='api', safe_read_path='/', action_path='/action',
                  response_json={'field': 'status', 'status_map': [[0, 'signed'], [False, 'unsigned']]})
 
 
 def test_generic_success_text_override(monkeypatch, tmp_path):
-    site = generate(monkeypatch, tmp_path, success_texts=['fixture success'])
+    site = generate(monkeypatch, tmp_path, protocol='nexus', success_texts=['fixture success'])
     assert site.message_spec().status_map['fixture success'] == 'signed'
 
 
@@ -197,7 +198,7 @@ def test_cloak_action_readback_prefers_stashed_landing_page(monkeypatch):
 
 def test_vclib_cloak_human_verify_chain(monkeypatch):
     site = get_native_module('vclib')
-    assert site.emulate is True and site.cloak_steps == ['human_verify', 'sign_button']
+    assert site.emulate is True and site.cloak_steps == ('human_verify', 'sign_button')
 
     class Page:
         url = site.url + '/attendance.php'
@@ -229,15 +230,15 @@ def test_vclib_cloak_human_verify_chain(monkeypatch):
         session.page.__class__.content = lambda self: '<div class="ant-message">签到成功</div>'
     monkeypatch.setattr(cloak, 'run_page_action', fake_action)
     result = site.signin(c1.context(site, Http(), None))
-    assert steps == ['human_verify', 'sign_button']
+    assert steps == ['human_verify', 'sign_button']  # 测试侧收集器是 list，站点声明是 tuple
     assert result.status.value in ('success', 'already')
 
 
 def test_yema_signin_executable_and_52pt_declared_uncapable(monkeypatch):
     rows = {row['id']: row for row in json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))}
-    assert rows['yema']['signin_capable'] is True
+    assert getattr(get_native_module('yema'), 'signin_capable', True) is True
     # 52pt 2026-10-28 用户裁决转显式无签到能力（站点入口整体下线+公告反脚本条款）：仅登录。
-    assert rows['52pt']['signin_capable'] is False
+    assert get_native_module('52pt').signin_capable is False
     assert rows['pt_0ff']['signin_capable'] is True
     assert rows['piggo']['cloak_entry_path'] == '/'
     assert 'emulate' not in rows['kamept']
@@ -245,7 +246,7 @@ def test_yema_signin_executable_and_52pt_declared_uncapable(monkeypatch):
     monkeypatch.setattr(cloak, 'run_page_action', lambda session, steps: None)
     # 52pt 声明已转 False，仅验证注册表与模块一致；执行层 skipped 由通用 not_supported 分支覆盖（b17）。
     site = get_native_module('yema')
-    assert site.signin_capable is True
+    assert getattr(site, 'signin_capable', True) is True
     entry = next(row for row in discover_sites()['sites'] if row['id'] == 'yema')
     assert entry['signin_capable'] is True
     site_52 = get_native_module('52pt')

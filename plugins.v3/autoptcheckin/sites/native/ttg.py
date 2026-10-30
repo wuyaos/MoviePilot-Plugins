@@ -10,8 +10,7 @@ class TTG(NexusSignin):
     name = 'TTG'
     url = 'https://totheglory.im/'
     attendance_path = '/'
-    hook_implemented = True
-    record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]', {'亲，您今天已签到过，不要太贪哦': 'signed', '您已连续签到': 'signed', '未签到': 'unsigned'})
+    record_spec = RecordSpec('', {'亲，您今天已签到过，不要太贪哦': 'signed', '您已连续签到': 'signed', '未签到': 'unsigned'})
     pre_read_spec = RecordSpec('//b[@style="color:green;"]', {'已签到': 'signed'})
 
     def discover_form(self, ctx, page):

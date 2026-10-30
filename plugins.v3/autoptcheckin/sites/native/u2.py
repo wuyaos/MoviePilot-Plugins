@@ -17,7 +17,6 @@ class U2(NexusSignin):
     name = 'U2'
     url = 'https://u2.dmhy.org/'
     attendance_path = '/showup.php'
-    hook_implemented = True
     record_spec = RecordSpec('//a[@href="showup.php"]', {'已签到': 'signed', 'Show Up': 'signed', 'Показать': 'signed', '已簽到': 'signed'})
     # 站点每日 9 点重置：重置前读到的已签只改消息归属（昨日已签），不拦提交。
     reset_hour = 9

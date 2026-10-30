@@ -81,7 +81,7 @@ class Page:
 @pytest.mark.parametrize('verify', ['absent', 'token', 'timeout', 'error'])
 def test_human_verify_continues_to_sign_and_stashed_readback(sid, verify, monkeypatch):
     site = get_native_module(sid)
-    assert site.cloak_steps == ['human_verify', 'sign_button']
+    assert site.cloak_steps == ('human_verify', 'sign_button')
     page = Page(sid, verify)
     session = SimpleNamespace(page=page, human_verify_timeout=90000 if sid == 'vclib' else 60000)
     results = []

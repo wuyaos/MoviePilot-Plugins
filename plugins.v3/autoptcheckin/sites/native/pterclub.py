@@ -8,7 +8,6 @@ class PTerClub(ApiSignin):
     name = 'PTerClub'
     url = 'https://pterclub.net/'
     attendance_path = '/'
-    hook_implemented = True
     record_spec = RecordSpec(source="response_json", response_field='status', status_map={'1': 'signed'})
     # GET attendance-ajax.php has side effects; status=0 alone proves nothing.
     action_path = '/attendance-ajax.php'

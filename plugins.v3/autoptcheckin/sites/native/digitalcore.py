@@ -8,9 +8,8 @@ class DigitalCore(SiteModule):
     name = 'DigitalCore'
     url = 'https://digitalcore.club/'
     login_capable = True
-    hook_implemented = True
     signin_capable = False
-    record_spec = RecordSpec('//*[@id="batch2-message-pending-calibration"]', {})
+    record_spec = RecordSpec('', {})
     # api/v1/status user.id or user.username is login evidence, not attendance.
 
     def signin(self, ctx: SignContext) -> SignResult:

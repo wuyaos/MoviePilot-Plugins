@@ -117,6 +117,7 @@ def test_registry_native_overrides_legacy_without_duplicate_ids():
     from autoptcheckin.sites.native.generic import build_generic_sites
     expected_native.discard('generic')
     expected_native.update(cls.id for cls in build_generic_sites())
+    expected_native.add('52pt')  # pt52.py 的站点 id 与文件名不同（52pt / pt52）
     assert expected_native >= batch1
     assert all(row['native'] for row in result['sites'] if row['id'] in expected_native)
     assert all(not row['native'] for row in result['sites']

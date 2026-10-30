@@ -1,18 +1,21 @@
 [
   {
     "id": "13city",
+    "protocol": "nexus",
     "name": "13City",
     "url": "https://13city.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "1ptba",
+    "protocol": "nexus",
     "name": "1PTBA",
     "url": "https://1ptba.com/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "audiences",
+    "protocol": "page_action",
     "name": "观众",
     "url": "https://audiences.me/",
     "attendance_path": "/attendance.php",
@@ -29,36 +32,42 @@
   },
   {
     "id": "bilibili",
+    "protocol": "nexus",
     "name": "RailgunPT",
     "url": "https://bilibili.download/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "cangbao",
+    "protocol": "nexus",
     "name": "藏宝阁",
     "url": "https://cangbao.ge/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "carpt",
+    "protocol": "nexus",
     "name": "CARPT",
     "url": "https://carpt.net/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "cc_mypt",
+    "protocol": "nexus",
     "name": "我的PT",
     "url": "https://cc.mypt.cc/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "crabpt",
+    "protocol": "nexus",
     "name": "蟹黄堡",
     "url": "https://crabpt.vip/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "cspt",
+    "protocol": "nexus",
     "name": "财神",
     "url": "https://cspt.top/",
     "attendance_path": "/attendance.php",
@@ -66,12 +75,14 @@
   },
   {
     "id": "cyanbug",
+    "protocol": "nexus",
     "name": "大青虫",
     "url": "https://cyanbug.net/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "discfan",
+    "protocol": "nexus",
     "name": "蝶粉",
     "url": "https://discfan.net/",
     "attendance_path": "/attendance.php",
@@ -84,6 +95,7 @@
   },
   {
     "id": "dragonhd",
+    "protocol": "login_only",
     "name": "龙之家",
     "url": "https://www.dragonhd.xyz/",
     "attendance_path": "/attendance.php",
@@ -91,18 +103,21 @@
   },
   {
     "id": "dubhe",
+    "protocol": "nexus",
     "name": "天枢",
     "url": "https://dubhe.site/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "duckboobee",
+    "protocol": "nexus",
     "name": "March",
     "url": "https://duckboobee.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "et8",
+    "protocol": "login_only",
     "name": "他吹吹风",
     "url": "https://et8.org/",
     "attendance_path": "/attendance.php",
@@ -110,12 +125,14 @@
   },
   {
     "id": "gamegamept",
+    "protocol": "nexus",
     "name": "GGPT",
     "url": "https://www.gamegamept.com/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "hddolby",
+    "protocol": "nexus",
     "name": "高清杜比",
     "url": "https://www.uhddolby.com/",
     "attendance_path": "/attendance.php",
@@ -123,18 +140,21 @@
   },
   {
     "id": "hdfans",
+    "protocol": "nexus",
     "name": "红豆饭",
     "url": "https://hdfans.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "hdhome",
+    "protocol": "nexus",
     "name": "家园",
     "url": "https://hdhome.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "hdkyl",
+    "protocol": "nexus",
     "name": "麒麟",
     "url": "https://www.hdkyl.in/",
     "attendance_path": "/attendance.php",
@@ -142,54 +162,63 @@
   },
   {
     "id": "hdtime",
+    "protocol": "nexus",
     "name": "高清时间",
     "url": "https://hdtime.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "hdvideo",
+    "protocol": "nexus",
     "name": "HDVIDEO",
     "url": "https://hdvideo.top/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "hitpt",
+    "protocol": "nexus",
     "name": "百川",
     "url": "https://www.hitpt.com/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "hxpt",
+    "protocol": "nexus",
     "name": "好学",
     "url": "https://www.hxpt.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "kufei",
+    "protocol": "nexus",
     "name": "库非",
     "url": "https://kufei.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "lemonhd",
+    "protocol": "nexus",
     "name": "柠檬",
     "url": "https://lemonhd.net/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "longpt",
+    "protocol": "nexus",
     "name": "LongPT",
     "url": "https://longpt.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "momentpt",
+    "protocol": "nexus",
     "name": "Moment",
     "url": "https://www.momentpt.top/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "mua_xloli",
+    "protocol": "page_action",
     "name": "萝莉",
     "url": "https://mua.xloli.cc/",
     "attendance_path": "/attendance.php",
@@ -201,12 +230,14 @@
   },
   {
     "id": "musopia",
+    "protocol": "nexus",
     "name": "音乐乌托邦",
     "url": "https://www.musopia.vip/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "nanyangpt",
+    "protocol": "login_only",
     "name": "南洋",
     "url": "https://nanyangpt.com/",
     "attendance_path": "/attendance.php",
@@ -214,30 +245,35 @@
   },
   {
     "id": "nicept",
+    "protocol": "nexus",
     "name": "老师",
     "url": "https://www.nicept.net/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "njtupt",
+    "protocol": "nexus",
     "name": "浦园PT",
     "url": "https://njtupt.top/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "okpt",
+    "protocol": "nexus",
     "name": "OKPT",
     "url": "https://www.okpt.net/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "pandapt",
+    "protocol": "nexus",
     "name": "熊猫高清",
     "url": "https://pandapt.net/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "pt_0ff",
+    "protocol": "page_action",
     "name": "自由农场",
     "url": "https://pt.0ff.cc/",
     "attendance_path": "/attendance.php",
@@ -250,18 +286,21 @@
   },
   {
     "id": "pt_aling",
+    "protocol": "nexus",
     "name": "AlingPT",
     "url": "https://pt.aling.de/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "pt_daxiangjiao",
+    "protocol": "nexus",
     "name": "大香蕉",
     "url": "https://pt.daxiangjiao.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "pt_eastgame",
+    "protocol": "login_only",
     "name": "吐鲁番",
     "url": "https://pt.eastgame.org/",
     "attendance_path": "/attendance.php",
@@ -269,12 +308,14 @@
   },
   {
     "id": "pt_hdclone",
+    "protocol": "nexus",
     "name": "HDClone",
     "url": "https://pt.hdclone.top/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "pt_itzmx",
+    "protocol": "login_only",
     "name": "ITZMX",
     "url": "https://pt.itzmx.com/",
     "attendance_path": "/attendance.php",
@@ -282,6 +323,7 @@
   },
   {
     "id": "pt_keepfrds",
+    "protocol": "login_only",
     "name": "朋友",
     "url": "https://pt.keepfrds.com/",
     "attendance_path": "/attendance.php",
@@ -289,6 +331,7 @@
   },
   {
     "id": "pt_sjtu_edu",
+    "protocol": "login_only",
     "name": "葡萄",
     "url": "https://pt.sjtu.edu.cn/",
     "attendance_path": "/attendance.php",
@@ -296,30 +339,35 @@
   },
   {
     "id": "pt_tey",
+    "protocol": "nexus",
     "name": "太乙",
     "url": "https://pt.tey.cc/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "pt_xingyungept",
+    "protocol": "nexus",
     "name": "星陨阁",
     "url": "https://pt.xingyungept.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "pt_ying_us",
+    "protocol": "nexus",
     "name": "樱花",
     "url": "https://pt.ying.us.kg/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "ptcafe",
+    "protocol": "nexus",
     "name": "咖啡",
     "url": "https://ptcafe.club/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "ptfans",
+    "protocol": "nexus",
     "name": "PTFans",
     "url": "https://ptfans.cc/",
     "attendance_path": "/attendance.php",
@@ -332,81 +380,86 @@
   },
   {
     "id": "pthome",
+    "protocol": "nexus",
     "name": "铂金家",
     "url": "https://pthome.net/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "ptlgs",
+    "protocol": "nexus",
     "name": "PTLGS",
     "url": "https://ptlgs.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "ptskit",
+    "protocol": "nexus",
     "name": "PTS",
     "url": "https://www.ptskit.org/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "sbpt",
+    "protocol": "nexus",
     "name": "SBPT",
     "url": "https://sbpt.link/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "sewerpt",
+    "protocol": "nexus",
     "name": "下水道",
     "url": "https://sewerpt.com/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "tangpt",
+    "protocol": "nexus",
     "name": "躺平",
     "url": "https://www.tangpt.top/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "ubits",
+    "protocol": "nexus",
     "name": "UBits",
     "url": "https://ubits.club/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "xdypt",
+    "protocol": "nexus",
     "name": "修道院",
     "url": "https://xdypt.vip/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "xingtan",
+    "protocol": "nexus",
     "name": "杏坛",
     "url": "https://xingtan.one/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "xingwan",
+    "protocol": "nexus",
     "name": "星湾",
     "url": "https://xingwan.cc/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "zmpt",
+    "protocol": "nexus",
     "name": "织梦",
     "url": "https://zmpt.cc/",
     "attendance_path": "/attendance.php"
   },
   {
-    "id": "hdwing",
-    "name": "HDWing",
-    "url": "https://hdwing.org/",
-    "attendance_path": "/"
-  },
-  {
     "id": "nexushd",
+    "protocol": "form",
     "name": "NexusHD",
     "url": "https://v6.nexushd.org/",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "本次签到获得": "signed",
       "你今天已经签到过了": "signed",
@@ -421,10 +474,10 @@
   },
   {
     "id": "shaobaoyuan",
+    "protocol": "nexus",
     "name": "烧包乐园",
     "url": "https://ptsbao.club/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "签到成功": "signed",
       "簽到成功": "signed",
@@ -446,13 +499,8 @@
     "captcha": true
   },
   {
-    "id": "ptzone",
-    "name": "PTZone",
-    "url": "https://www.ptzone.xyz/",
-    "attendance_path": "/attendance.php"
-  },
-  {
     "id": "vclib",
+    "protocol": "page_action",
     "name": "VC-Lib",
     "url": "https://pt.vclib.online/",
     "attendance_path": "/attendance.php",
@@ -467,10 +515,10 @@
   },
   {
     "id": "baozi",
+    "protocol": "nexus",
     "name": "包子",
     "url": "https://p.t-baozi.cc/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "签到成功": "signed",
       "簽到成功": "signed",
@@ -494,10 +542,10 @@
   },
   {
     "id": "dongying",
+    "protocol": "nexus",
     "name": "冬樱",
     "url": "https://wintersakura.net/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "签到成功": "signed",
       "簽到成功": "signed",
@@ -520,10 +568,10 @@
   },
   {
     "id": "kelu",
+    "protocol": "nexus",
     "name": "可撸",
     "url": "https://our.kelu.one/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "今天已经签到过": "signed",
       "今天已經簽到過": "signed",
@@ -546,10 +594,10 @@
   },
   {
     "id": "naturept",
+    "protocol": "nexus",
     "name": "NaturePT",
     "url": "https://naturept.top/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "今天已经签到过": "signed",
       "今天已經簽到過": "signed",
@@ -572,10 +620,10 @@
   },
   {
     "id": "novahd",
+    "protocol": "nexus",
     "name": "NovaHD",
     "url": "https://pt.novahd.top/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "今天已经签到过": "signed",
       "今天已經簽到過": "signed",
@@ -598,10 +646,10 @@
   },
   {
     "id": "oshen",
+    "protocol": "nexus",
     "name": "OshenPT",
     "url": "https://www.oshen.win/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "今天已经签到过": "signed",
       "今天已經簽到過": "signed",
@@ -624,10 +672,10 @@
   },
   {
     "id": "phoenixpt",
+    "protocol": "login_only",
     "name": "凤凰PT",
     "url": "https://pt.521.best/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "签到成功": "signed",
       "簽到成功": "signed",
@@ -651,10 +699,10 @@
   },
   {
     "id": "playlet",
+    "protocol": "nexus",
     "name": "PlayLet",
     "url": "https://playlet.cc/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "签到成功": "signed",
       "簽到成功": "signed",
@@ -677,10 +725,10 @@
   },
   {
     "id": "soulvoice",
+    "protocol": "nexus",
     "name": "聆音Club",
     "url": "https://pt.soulvoice.club/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "签到成功": "signed",
       "簽到成功": "signed",
@@ -703,10 +751,10 @@
   },
   {
     "id": "tu88",
+    "protocol": "nexus",
     "name": "TU88",
     "url": "https://pt.tu88.men/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "签到成功": "signed",
       "簽到成功": "signed",
@@ -730,9 +778,9 @@
   },
   {
     "id": "hdupt",
+    "protocol": "get",
     "name": "HDUpt",
     "url": "https://pt.hdupt.com/",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {},
     "signed_marker": "//span[@id='yiqiandao' and not(@style)]",
     "action_get": "/added.php?action=qiandao",
@@ -740,9 +788,9 @@
   },
   {
     "id": "hhanclub",
+    "protocol": "get",
     "name": "憨憨",
     "url": "https://hhanclub.net/",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "今天已经签到过": "signed",
       "今天已签到": "signed",
@@ -760,9 +808,9 @@
   },
   {
     "id": "hdcity",
+    "protocol": "get",
     "name": "城市",
     "url": "https://hdcity.city/",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "本次签到获得魅力": "signed",
       "Got extra": "signed",
@@ -776,6 +824,7 @@
   },
   {
     "id": "haidan",
+    "protocol": "get",
     "name": "海胆",
     "url": "https://www.haidan.cc/",
     "message": "//input[@value=\"已经打卡\"]",
@@ -787,9 +836,9 @@
   },
   {
     "id": "hdarea",
+    "protocol": "form",
     "name": "好大",
     "url": "https://hdarea.club/",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "此次签到您获得": "signed",
       "请不要重复签到哦": "signed",
@@ -804,10 +853,10 @@
   },
   {
     "id": "ourbits",
+    "protocol": "nexus",
     "name": "我堡",
     "url": "https://ourbits.club/",
     "attendance_path": "/attendance.php",
-    "message": "//*[@id=\"batch2-message-pending-calibration\"]",
     "status_map": {
       "今天已经签到过": "signed",
       "今天已签到": "signed",
@@ -819,6 +868,7 @@
   },
   {
     "id": "piggo",
+    "protocol": "page_action",
     "name": "猪猪",
     "url": "https://piggo.me/",
     "attendance_path": "/attendance.php",
@@ -831,34 +881,14 @@
   },
   {
     "id": "kamept",
+    "protocol": "nexus",
     "name": "龟站",
     "url": "https://kamept.com/",
     "attendance_path": "/attendance.php"
   },
   {
-    "id": "52pt",
-    "name": "52PT",
-    "url": "https://52pt.site/",
-    "attendance_path": "/torrents.php",
-    "signin_capable": false,
-    "login_notice": "公告禁止脚本自动签到"
-  },
-  {
-    "id": "yema",
-    "name": "YemaPT",
-    "url": "https://www.yemapt.org/",
-    "attendance_path": "/#/user/growth",
-    "signin_capable": true,
-    "cloak_steps": [
-      "altcha",
-      "sign_button"
-    ],
-    "emulate": true,
-    "slow": true,
-    "slow_timeout": 90000
-  },
-  {
     "id": "dicmusic",
+    "protocol": "login_only",
     "name": "海豚",
     "url": "https://dicmusic.com/",
     "attendance_path": null,
@@ -866,6 +896,7 @@
   },
   {
     "id": "anthelion",
+    "protocol": "login_only",
     "name": "Anthelion",
     "url": "https://anthelion.me/",
     "attendance_path": null,
@@ -874,6 +905,7 @@
   },
   {
     "id": "jpopsuki",
+    "protocol": "login_only",
     "name": "JPopsuki",
     "url": "https://jpopsuki.eu/",
     "attendance_path": null,
@@ -881,6 +913,7 @@
   },
   {
     "id": "nebulance",
+    "protocol": "login_only",
     "name": "Nebulance",
     "url": "https://nebulance.io/",
     "attendance_path": null,
@@ -888,12 +921,14 @@
   },
   {
     "id": "qingwapt",
+    "protocol": "nexus",
     "name": "青蛙",
     "url": "https://www.qingwapt.com/",
     "attendance_path": "/attendance.php"
   },
   {
     "id": "starspace",
+    "protocol": "login_only",
     "name": "星空",
     "url": "https://star-space.net/",
     "attendance_path": null,
@@ -901,6 +936,7 @@
   },
   {
     "id": "aither",
+    "protocol": "login_only",
     "name": "Aither",
     "url": "https://aither.cc/",
     "attendance_path": null,
@@ -908,6 +944,7 @@
   },
   {
     "id": "beyondhd",
+    "protocol": "login_only",
     "name": "BeyondHD",
     "url": "https://beyond-hd.me/",
     "attendance_path": null,
@@ -915,6 +952,7 @@
   },
   {
     "id": "greatposterwall",
+    "protocol": "login_only",
     "name": "海豹",
     "url": "https://greatposterwall.com/",
     "attendance_path": null,
@@ -922,6 +960,7 @@
   },
   {
     "id": "skyeysnow",
+    "protocol": "login_only",
     "name": "天雪",
     "url": "https://skyeysnow.com/",
     "attendance_path": null,
@@ -930,6 +969,7 @@
   },
   {
     "id": "animez",
+    "protocol": "login_only",
     "name": "AnimeZ",
     "url": "https://animez.to/",
     "attendance_path": null,
@@ -937,6 +977,7 @@
   },
   {
     "id": "azusa",
+    "protocol": "login_only",
     "name": "梓喵",
     "url": "https://azusa.wiki/",
     "attendance_path": null,
@@ -944,6 +985,7 @@
   },
   {
     "id": "monikadesign",
+    "protocol": "login_only",
     "name": "莫妮卡",
     "url": "https://monikadesign.uk/",
     "attendance_path": null,
@@ -951,6 +993,7 @@
   },
   {
     "id": "ipt",
+    "protocol": "login_only",
     "name": "IPT",
     "url": "https://iptorrents.com/",
     "attendance_path": null,
@@ -958,6 +1001,7 @@
   },
   {
     "id": "springsunday",
+    "protocol": "login_only",
     "name": "春天",
     "url": "https://springsunday.net/",
     "attendance_path": null,
@@ -965,6 +1009,7 @@
   },
   {
     "id": "filelist",
+    "protocol": "login_only",
     "name": "FileList",
     "url": "https://filelist.io/",
     "attendance_path": null,

@@ -14,7 +14,6 @@ class OpenCD(ApiSignin):
     name = 'OpenCD'
     url = 'https://www.open.cd/'
     attendance_path = '/'
-    hook_implemented = True
     record_spec = RecordSpec(source="response_json", response_field='state', status_map={'success': 'signed', False: 'unsigned'})
     signed_marker = '//a[@href="/plugin_sign-in.php?cmd=show-log" or @href="plugin_sign-in.php?cmd=show-log"]'
 
