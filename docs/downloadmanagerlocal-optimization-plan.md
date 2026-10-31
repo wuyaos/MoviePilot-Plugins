@@ -1,6 +1,5 @@
-# 已取代：仅保留链接兼容
+# 已停用：旧七项优化方案
 
-本文不再包含可执行方案，不要从旧标题推导当前需求。
+本入口仅防止历史链接失效，不提供当前实施指令。既有设计约束见当前布局文档与对应 implemented 笔记；不得从历史方案恢复待办或推导部署权限。
 
-- **当前唯一实施入口：** [最终实施规格 v2](./downloadmanagerlocal-final-implementation-spec.md)。
-- 旧正文仅供追溯：[历史资料](./history/downloadmanagerlocal/pre-final-v2/downloadmanagerlocal-optimization-plan.md)；不得照抄旧待裁决、默认值或回退命令。
+原入口备份：D:/tmp/dml-doc-retired-20261101/docs/downloadmanagerlocal-optimization-plan.md。

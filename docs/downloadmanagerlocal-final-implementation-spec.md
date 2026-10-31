@@ -1,21 +1,19 @@
-# DownloadManagerLocal 最终实施规格（审定整合版 v2）
+# DownloadManagerLocal 历史设计规格（非当前实施任务）
 
-> 状态：方案已整理；代码未按本版实施。本次授权仅为审核、更新文档，不等于立即开发、推送或部署授权；本地Git检查点按第12节执行。
-> 读者：接手执行的模型。先读第 0、1、2、11 节，再按第 12 节逐包实施，不自由发挥。
-> 仓库：`D:/work/project/person/MoviePilot-Plugins`。
-> 核对时源码版本为 `3.9.14`，这不是本版已发布版本；开工时重新读取版本与工作区。
+> 本文保留未被后续布局文档取代的设计约束，不再作为当前实施清单。历史 P0–P8、权限、基线、测试数字及“尚未实施”等表述均绑定当时轮次，不应恢复为待办或执行授权。
+> 配置与数据页以 downloadmanagerlocal-config-layouts.md、downloadmanagerlocal-page-layouts.md 和当前源码为准；本轮交接状态见 downloadmanagerlocal-handoff.md。
+> 原文备份：D:/tmp/dml-doc-retired-20261101/docs/downloadmanagerlocal-final-implementation-spec.md。
 
 ## 0. 唯一入口、适用范围与停止线
 
-本文件统一数据页、配置页、文字层级、表格状态、窗口行为和必要的后端联动。后续实施以本文件为入口：
+以下为当时的设计来源与范围说明，不是本轮执行入口；链接中的旧文档若已停用，不得据此恢复历史计划。
 
 - `docs/downloadmanagerlocal-optimization-plan.md`：旧七项优化的背景与已做工作，冲突内容以本文件为准。
 - `.ralph/dml-page-transfer-plan.md`：早期转移草案，不再执行其中的待裁决、物理删除来源记录、整文件 git 回退、双套移动卡片建议。
 - `.ralph/dml-ui-improvement-report.md`：历史分析资料，不是本轮最终页面规格。
 - `.ralph/dml-seven-optimizations.md`：过程记录与已完成证据，不覆盖本版定稿。
 
-### 权限
-
+### 当时权限（历史，不构成本轮授权）
 1. 当前只交付文档，等待明确开发指令。Ralph 活跃状态不构成继续写业务代码的授权。
 2. 开发只改本插件、其前端、直接相关测试。禁止改其他插件、宿主源码、其他容器或生产下载器。
 3. 不引入 IYUU，不新增独立速度监控模块，不建通用事件总线/任务框架/国际化框架。
