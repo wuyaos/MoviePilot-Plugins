@@ -19,7 +19,7 @@ from .model.state import SEED_RECHECK_QUEUE_KEY
 from .utils.config import build_plugin_config_defaults, is_plugin_active, is_transfer_active
 from .utils.path import convert_save_path
 from .utils.torrent_adapter import get_hash, get_label, get_category, get_save_path, get_torrent_size
-from .controller.handlers import api_downloaders as _api_downloaders, api_sites as _api_sites, api_rename_history as _api_rename_history, api_delete_rename_history as _api_delete_rename_history, api_recovery_torrent as _api_recovery_torrent, api_retry_renames as _api_retry_renames, api_retry_rename as _api_retry_rename, api_diagnostics as _api_diagnostics, api_overview as _api_overview, api_rename_archive as _api_rename_archive, api_restore_rename_archive as _api_restore_rename_archive, api_delete_rename_archive as _api_delete_rename_archive, api_hr_tasks as _api_hr_tasks, api_hr_skip_stats as _api_hr_skip_stats
+from .controller.handlers import api_downloaders as _api_downloaders, api_sites as _api_sites, api_rename_history as _api_rename_history, api_delete_rename_history as _api_delete_rename_history, api_recovery_torrent as _api_recovery_torrent, api_retry_renames as _api_retry_renames, api_retry_rename as _api_retry_rename, api_diagnostics as _api_diagnostics, api_overview as _api_overview, api_rename_archive as _api_rename_archive, api_restore_rename_archive as _api_restore_rename_archive, api_delete_rename_archive as _api_delete_rename_archive, api_hr_tasks as _api_hr_tasks, api_hr_skip_stats as _api_hr_skip_stats, api_module_config_summary as _api_module_config_summary, api_execution_history as _api_execution_history, api_execution_history_clear as _api_execution_history_clear
 from .modules.rename.service import rename_torrent as _rename_torrent_impl, format_torrent_name as _format_torrent_name_impl, save_rename_record as _save_rename_record_impl, get_failed_rename_hashes as _get_failed_rename_hashes_impl, retry_failed_renames as _retry_failed_renames_impl, retry_rename_by_hash as _retry_rename_by_hash_impl
 from .modules.rename.archive import record_rename_failure as _record_rename_failure_impl, clear_rename_retry_state as _clear_rename_retry_state_impl, is_rename_archived as _is_rename_archived_impl, list_rename_archive as _list_rename_archive_impl, restore_rename_archive as _restore_rename_archive_impl, delete_rename_archive as _delete_rename_archive_impl, rename_archive_stats as _rename_archive_stats_impl
 from .modules.diagnostics.service import build_diagnostics as _build_diagnostics_impl
@@ -246,32 +246,49 @@ class DownloadManagerLocal(_PluginBase):
 
     def api_overview(self):
         """返回插件详情页总览数据。"""; return _api_overview(self)
+    def api_module_config_summary(self):
 
-    def api_delete_rename_history(self, hash: str = ""):
-        """删除指定 hash 的重命名历史记录。"""; return _api_delete_rename_history(self, hash)
+        """返回七个模块的只读配置摘要。"""; return _api_module_config_summary(self)
 
+
+    def api_delete_rename_history(self, hash: str = "", downloader: str = ""):
+
+        """删除指定 hash 的重命名历史记录。"""; return _api_delete_rename_history(self, hash, downloader)
     def api_rename_archive(self, page: int = 1, page_size: int = 15):
         """分页返回重命名失败归档记录。"""; return _api_rename_archive(self, page, page_size)
+    def api_restore_rename_archive(self, hash: str = "", downloader: str = ""):
 
-    def api_restore_rename_archive(self, hash: str = ""):
-        """恢复指定 hash 的重命名归档状态。"""; return _api_restore_rename_archive(self, hash)
+        """恢复指定 hash 的重命名归档状态。"""; return _api_restore_rename_archive(self, hash, downloader)
 
-    def api_delete_rename_archive(self, hash: str = ""):
-        """删除指定 hash 的重命名归档状态。"""; return _api_delete_rename_archive(self, hash)
 
+    def api_delete_rename_archive(self, hash: str = "", downloader: str = ""):
+
+        """删除指定 hash 的重命名归档状态。"""; return _api_delete_rename_archive(self, hash, downloader)
     def api_cleanup_module_data(self, payload: CleanupModuleRequest):
         """按白名单清理插件自身历史数据（不触碰下载器数据与安全状态）。"""
         return _controller_handlers.api_cleanup_module_data(self, payload)
+    def api_execution_history(self, module: str = "", page: int = 1, page_size: int = 20, result_filter: str = "all"):
 
-    def api_recovery_torrent(self, hash: str = ""):
-        """按历史记录恢复指定种子的原始名称。"""; return _api_recovery_torrent(self, hash)
+        """分页返回指定模块的展示历史。"""
 
+        return _api_execution_history(self, module, page=page, page_size=page_size, result_filter=result_filter)
+
+
+    def api_execution_history_clear(self, payload: CleanupModuleRequest):
+
+        """清空指定模块的展示历史（不影响业务/保护/恢复数据）。"""
+
+        return _api_execution_history_clear(self, payload)
+
+
+    def api_recovery_torrent(self, hash: str = "", downloader: str = ""):
+
+        """按历史记录恢复指定种子的原始名称。"""; return _api_recovery_torrent(self, hash, downloader)
     def api_retry_renames(self):
         """触发失败和脏名称任务的一键补刮。"""; return _api_retry_renames(self)
+    def api_retry_rename(self, hash: str = "", downloader: str = ""):
 
-    def api_retry_rename(self, hash: str = ""):
-        """对指定 hash 的种子执行单条补刮。"""; return _api_retry_rename(self, hash)
-
+        """对指定 hash 的种子执行单条补刮。"""; return _api_retry_rename(self, hash, downloader)
     def api_diagnostics(self, detail_limit: int = 20, run: bool = False):
         """默认读取最近快照；run=True 才执行新一轮只读诊断。"""; return _api_diagnostics(self, detail_limit, run=run)
 
@@ -420,12 +437,15 @@ class DownloadManagerLocal(_PluginBase):
 
     def _retry_pending_renames(self):
         """重试历史失败和当前脏名称的待补刮任务。"""; return _retry_pending_renames_impl(self)
-
-    def _retry_rename(self, hash: str = ""):
+    def _retry_rename(self, hash: str = "", downloader: str = ""):
         """对指定 hash 执行单条补刮兼容入口。"""
-        from .modules.rename.locator import resolve_record_downloader
-        record = (self.get_data("rename_records") or {}).get(hash) if hash else None
-        located = resolve_record_downloader(self, hash, record if isinstance(record, dict) else None)
+        from .modules.rename.locator import resolve_retry_service
+        located = resolve_retry_service(self, hash, downloader)
+        if located.get("ambiguous"):
+            candidates = ", ".join(located.get("candidates") or [])
+            if located.get("reason") == "downloader_mismatch":
+                raise ValueError(f"指定的下载器没有该种子的记录（记录在：{candidates}），请核对后重试")
+            raise ValueError(f"该种子在多个下载器中存在（{candidates}），请在记录中指定下载器后重试")
         to_service = located["service"] or self.service_info(self._todownloader)
         return _retry_rename_by_hash_impl(self, to_service, hash)
 
@@ -433,24 +453,21 @@ class DownloadManagerLocal(_PluginBase):
         """生成插件详情页只读诊断数据。"""; return _build_diagnostics_impl(self, detail_limit)
 
     def record_rename_failure(self, torrent_hash: str, torrent_name: str,
-                              category: str = "", reason: str = ""):
-        """记录指定种子的重命名失败归档状态。"""; return _record_rename_failure_impl(self, torrent_hash, torrent_name, category, reason)
+                              category: str = "", reason: str = "", downloader: str = ""):
+        """记录指定种子的重命名失败归档状态。"""; return _record_rename_failure_impl(self, torrent_hash, torrent_name, category, reason, downloader=downloader)
 
-    def clear_rename_retry_state(self, torrent_hash: str):
-        """清除指定种子的重命名重试状态。"""; return _clear_rename_retry_state_impl(self, torrent_hash)
+    def clear_rename_retry_state(self, torrent_hash: str, downloader: str = ""):
+        """清除指定种子的重命名重试状态。"""; return _clear_rename_retry_state_impl(self, torrent_hash, downloader)
 
-    def is_rename_archived(self, torrent_hash: str):
-        """判断指定种子是否已进入重命名归档。"""; return _is_rename_archived_impl(self, torrent_hash)
-
+    def is_rename_archived(self, torrent_hash: str, downloader: str = ""):
+        """判断指定种子是否已进入重命名归档。"""; return _is_rename_archived_impl(self, torrent_hash, downloader)
     def list_rename_archive(self, page: int = 1, page_size: int = 15):
         """分页列出重命名归档记录。"""; return _list_rename_archive_impl(self, page, page_size)
+    def restore_rename_archive(self, torrent_hash: str, downloader: str = ""):
+        """恢复指定种子的重命名归档状态。"""; return _restore_rename_archive_impl(self, torrent_hash, downloader)
 
-    def restore_rename_archive(self, torrent_hash: str):
-        """恢复指定种子的重命名归档状态。"""; return _restore_rename_archive_impl(self, torrent_hash)
-
-    def delete_rename_archive(self, torrent_hash: str):
-        """删除指定种子的重命名归档状态。"""; return _delete_rename_archive_impl(self, torrent_hash)
-
+    def delete_rename_archive(self, torrent_hash: str, downloader: str = ""):
+        """删除指定种子的重命名归档状态。"""; return _delete_rename_archive_impl(self, torrent_hash, downloader)
     def rename_archive_stats(self):
         """统计当前重命名归档数量和状态。"""; return _rename_archive_stats_impl(self)
 

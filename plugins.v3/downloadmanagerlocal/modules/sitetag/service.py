@@ -23,6 +23,70 @@ except ImportError:  # 兼容仅加载站点标签模块的旧宿主夹具
     TAG_CLEANUP_STATUS_KEY = "tag_cleanup_status"
 
 
+def _append_history(plugin, module: str, record: dict) -> None:
+    """写入展示历史（tag / tag_cleanup 流）；失败只记日志，不影响业务结果。"""
+    try:
+        from ...model.execution_history import append
+    except Exception as err:
+        logger.warning(f"【PT下载中心:站点标签】展示历史不可用（{module}）：{err}")
+        return
+    try:
+        append(plugin, module, record)
+    except Exception as err:
+        logger.warning(f"【PT下载中心:站点标签】展示历史写入失败（{module}）：{err}")
+
+
+def _complement_change_reason(outcome: dict) -> str:
+    """补全成功的原因摘要（含写入的标签/分类）。"""
+    tags = outcome.get("tags") or []
+    category = outcome.get("category") or ""
+    parts = []
+    if tags:
+        parts.append(f"标签={tags}")
+    if category:
+        parts.append(f"分类={category}")
+    return "已写入 " + "、".join(parts) if parts else "已写入标签/分类"
+
+
+def _record_tag_outcome(plugin, trigger: str, downloader_id: str, torrent, outcome: dict) -> None:
+    """按 _apply_metadata 的四种返回形态写 tag 流展示历史。"""
+    record = {
+        "trigger": trigger,
+        "occurred_at": time.time(),
+        "action": "补全标签",
+        "downloader_id": downloader_id,
+        "torrent_hash": outcome.get("hash"),
+        "name": get_torrent_name(torrent),
+        "site": outcome.get("site"),
+    }
+    if outcome.get("changed"):
+        record["result"] = "success"
+        record["reason"] = _complement_change_reason(outcome)
+    elif not outcome.get("ok"):
+        record["result"] = "failed"
+        record["reason"] = str(outcome.get("reason") or "补全失败")
+    elif outcome.get("observe_only"):
+        record["result"] = "observed"
+        record["reason"] = "观察模式：仅预览未执行"
+    else:
+        record["result"] = "observed"
+        record["reason"] = "无变更"
+    _append_history(plugin, "tag", record)
+
+
+def _record_download_added_failure(plugin, reason: str, downloader: str, torrent_hash: str) -> None:
+    """DownloadAdded 早退分支写一条 tag 流失败记录。"""
+    _append_history(plugin, "tag", {
+        "trigger": "download_added",
+        "occurred_at": time.time(),
+        "action": "补全标签",
+        "result": "failed",
+        "reason": reason,
+        "downloader_id": downloader,
+        "torrent_hash": torrent_hash,
+    })
+
+
 def _active_temporary_tags(plugin) -> set:
     """返回当前进程仍用于确认任务的临时标签集合。"""
     active_tags = getattr(plugin, "_active_temporary_tags", None)
@@ -354,6 +418,13 @@ def execute_tag_cleanup(plugin, removals: Iterable[dict], scan_id: str | None = 
         return {"code": 1, "msg": "没有需要清理的标签", "removed": [], "failed": [],
                 "requested": 0, "processed": 0, "truncated": False}
     if observe_skip(plugin, "tag", "清理站点标签", f"待清理 {len(removal_items)} 项"):
+        _append_history(plugin, "tag_cleanup", {
+            "trigger": "execute_tag_cleanup",
+            "occurred_at": time.time(),
+            "action": "移除标签",
+            "result": "observed",
+            "reason": f"观察模式：仅预览未执行（待清理 {len(removal_items)} 项）",
+        })
         return {"code": 1, "msg": "观察模式：未执行标签清理（仅预览）", "removed": [], "failed": [],
                 "observed": len(removal_items), "requested": len(removal_items),
                 "processed": 0, "truncated": False}
@@ -420,6 +491,26 @@ def execute_tag_cleanup(plugin, removals: Iterable[dict], scan_id: str | None = 
         cleanup = _remove_tag_snapshot(service.instance, tag, current_hashes)
         result = {"downloader": downloader_name, "tag": tag, "hashes": current_hashes, **cleanup}
         (removed if cleanup["ok"] else failed).append(result if cleanup["ok"] else {**result, "message": cleanup.get("error") or "标签移除失败"})
+    for item in removed:
+        _append_history(plugin, "tag_cleanup", {
+            "trigger": "execute_tag_cleanup",
+            "occurred_at": time.time(),
+            "action": "移除标签",
+            "result": "success",
+            "reason": f"移除标签 {item.get('tag')}（{len(item.get('hashes') or [])} 个任务）",
+            "downloader_id": item.get("downloader"),
+            "name": f"tag={item.get('tag')} hashes={len(item.get('hashes') or [])}",
+        })
+    for item in failed:
+        _append_history(plugin, "tag_cleanup", {
+            "trigger": "execute_tag_cleanup",
+            "occurred_at": time.time(),
+            "action": "移除标签",
+            "result": "failed",
+            "reason": str(item.get("message") or "标签移除失败"),
+            "downloader_id": item.get("downloader"),
+            "name": f"tag={item.get('tag')} hashes={len(item.get('hashes') or [])}",
+        })
     logger.info("【PT下载中心:站点标签】标签清理执行：成功标签 %s 个，任务关联 %s 条，失败 %s 个",
                 len(removed), sum(item["removed"] for item in removed), len(failed))
     return {"code": 0 if removed and not failed else (2 if removed else 1),
@@ -745,12 +836,21 @@ def complement_history(plugin, config: dict | None = None) -> dict:
         torrents, error = service.instance.get_torrents()
         if error:
             result["skipped"] += 1
+            _append_history(plugin, "tag", {
+                "trigger": "complement_history",
+                "occurred_at": time.time(),
+                "action": "补全标签",
+                "result": "failed",
+                "reason": f"下载器 {service.name} 获取种子失败：{error}",
+                "downloader_id": service.name,
+            })
             logger.warning(f"【PT下载中心:站点标签】 补全：下载器 {service.name} 获取种子失败，跳过")
             continue
         matched = 0
         for torrent in torrents or []:
             round_stats["checked"] += 1
             outcome = _apply_metadata(plugin, service, torrent, cfg)
+            _record_tag_outcome(plugin, "complement_history", service.name, torrent, outcome)
             if outcome.get("history"):
                 summary["history_hit"] += 1
             if outcome.get("site"):
@@ -798,18 +898,22 @@ def process_download_added(plugin, event, config: dict | None = None) -> dict:
     cfg = build_tag_config(config or getattr(plugin, "_site_tag_config", None))
     if downloader not in cfg["downloaders"] or not torrent_hash:
         _module_state(plugin)["skipped"] += 1
+        _record_download_added_failure(plugin, "downloader_or_hash_missing", downloader, torrent_hash)
         return {"ok": False, "reason": "downloader_or_hash_missing"}
     service = plugin.service_info(downloader)
     if not service or not getattr(service, "instance", None):
         _module_state(plugin)["skipped"] += 1
+        _record_download_added_failure(plugin, "downloader_unavailable", downloader, torrent_hash)
         return {"ok": False, "reason": "downloader_unavailable"}
     torrents, error = service.instance.get_torrents(ids=torrent_hash)
     if error or not torrents:
         _module_state(plugin)["skipped"] += 1
+        _record_download_added_failure(plugin, "torrent_not_found", downloader, torrent_hash)
         return {"ok": False, "reason": "torrent_not_found"}
     outcome = _apply_metadata(plugin, service, torrents[0], cfg, data.get("context"))
     if outcome.get("changed"):
         _module_state(plugin)["completed"] += 1
     else:
         _module_state(plugin)["skipped"] += 1
+    _record_tag_outcome(plugin, "download_added", downloader, torrents[0], outcome)
     return outcome

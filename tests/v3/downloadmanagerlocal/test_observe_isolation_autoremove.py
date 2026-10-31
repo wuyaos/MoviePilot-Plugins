@@ -117,6 +117,7 @@ def _observe_result(candidates=3):
         "skipped_protected": 0,
         "skipped_missing": 0,
         "failed": 0,
+        "failed_operations": 0,
         "config_error": "",
         "candidate_list": [
             {"downloader": "QB1", "name": f"seed-{i}", "size": 1024}

@@ -104,6 +104,7 @@ const transferStatus = ref({})
 const transferPage = ref(1)
 const renameStatus = ref({})
 const autoremovePreview = ref(null)
+const moduleConfigSummary = ref(null)
 
 const retryingHash = ref('')
 const restoringHash = ref('')
@@ -558,6 +559,8 @@ const moduleHeaders = computed(() => {
   const hr = hrSummary.value
   const auto = autoremoveStatus.value
   const fail = failcleanStatus.value
+  const rename = renameStatus.value
+  const tag = siteTagStatus.value
   const up = uploadLimit.value
   const headers = {
     transfer: {
@@ -572,14 +575,15 @@ const moduleHeaders = computed(() => {
     rename: {
       enabled: !!(cards.rename?.enabled ?? config.rename_enabled),
       running: !!renameStatus.value.batch_running,
-      // The current rename snapshot has per-run, not persisted daily counters.
-      badges: [headerMetric('今日成功'), headerMetric('今日失败'),
+      // today_success/today_failed 由后端 rename_status 直接提供（modules/rename/archive.py::today_stats）。
+      badges: [headerMetric('今日成功', rename.today_success), headerMetric('今日失败', rename.today_failed),
         headerMetric('待重试', archive.active_failed), headerMetric('失败归档', archive.archived)],
     },
     tag: {
       enabled: !!config.tag_enabled,
-      // completed/skipped mix event and complement results, not a full round projection.
-      badges: [headerMetric('本轮检查'), headerMetric('成功'), headerMetric('无需更新'), headerMetric('失败')],
+      // round 为本轮补全投影；缺失时不回退到累计 completed/skipped。
+      badges: [headerMetric('本轮检查', tag.round?.checked), headerMetric('成功', tag.round?.success),
+        headerMetric('无需更新', tag.round?.no_update), headerMetric('失败', tag.round?.failed)],
     },
     hr: {
       enabled: !!hr.enabled,
@@ -591,10 +595,10 @@ const moduleHeaders = computed(() => {
       observing: !!auto.observe_only,
       running: !!auto.running,
       fault: !!auto.config_error,
-      // The backend exposes action-specific success counts, but no combined skip count.
+      // skipped 为后端汇总的保护跳过 + 已消失跳过（modules/autoremove/service.py::get_module_status）。
       badges: [headerMetric('上轮候选', auto.candidates),
         headerMetric('成功', auto.observe_only ? undefined : (auto.action === 'pause' ? auto.paused : auto.deleted)),
-        headerMetric('跳过'), headerMetric('失败', auto.failed)],
+        headerMetric('跳过', auto.skipped), headerMetric('失败', auto.failed)],
     },
     failclean: {
       enabled: !!fail.enabled,
@@ -844,6 +848,12 @@ async function loadDownloaders(request) {
   downloaderItems.value = resp
 }
 
+async function loadModuleConfigSummary(request) {
+  const resp = await getApi('module_config_summary', { feedback: 'silent' }).catch(() => null)
+  if (!isCurrentPageRequest(request) || !resp) return
+  moduleConfigSummary.value = resp
+}
+
 async function loadUploadLimitStatus(request) {
   const resp = await getApi('upload_limit_status', { feedback: 'silent' }).catch(error => {
     console.error('上传限速状态刷新失败，保留总览快照:', error)
@@ -857,6 +867,7 @@ async function loadUploadLimitStatus(request) {
 
 async function loadModuleStatuses(request) {
   await Promise.all([
+    loadModuleConfigSummary(request),
     loadRenameStatus(request),
     loadHrStatus(request),
     loadAutoremoveStatus(request),
@@ -1130,6 +1141,7 @@ async function refreshActive() {
       tasks.push(loadUploadLimitStatus(request))
     }
     // 模块页签同样展示模块卡与运行明细：每轮刷新固定取一次诊断
+    tasks.push(loadModuleConfigSummary(request))
     tasks.push(loadDiagnostics(request))
     await Promise.all(tasks)
   } finally {
@@ -1302,11 +1314,11 @@ async function doUploadClearRules() {
   if (resp?.code !== 1) await refreshActive()
 }
 
-async function doRecovery(hash) {
+async function doRecovery(hash, downloader = '') {
   actionMsg.value = ''
   actionOk.value = false
   try {
-    const resp = await postApi('recovery_torrent', { hash })
+    const resp = await postApi('recovery_torrent', { hash, downloader })
     actionMsg.value = resp?.msg || (resp?.code === 0 ? '恢复成功' : '恢复失败')
     actionOk.value = resp?.code === 0
     if (resp?.code === 0) await reloadRecords()
@@ -1316,11 +1328,11 @@ async function doRecovery(hash) {
   }
 }
 
-async function doDelete(hash) {
+async function doDelete(hash, downloader = '') {
   actionMsg.value = ''
   actionOk.value = false
   try {
-    const resp = await postApi('delete_rename_history', { hash })
+    const resp = await postApi('delete_rename_history', { hash, downloader })
     actionOk.value = resp?.code === 0
     actionMsg.value = resp?.msg || '已删除'
     if (resp?.code === 0) await reloadRecords()
@@ -1330,13 +1342,13 @@ async function doDelete(hash) {
   }
 }
 
-async function doRetryRename(hash) {
+async function doRetryRename(hash, downloader = '') {
   if (!hash || retryingHash.value) return
   actionMsg.value = ''
   actionOk.value = false
   retryingHash.value = hash
   try {
-    const resp = await postApi('retry_rename', { hash })
+    const resp = await postApi('retry_rename', { hash, downloader })
     actionMsg.value = resp?.msg || (resp?.code === 0 ? '补刀完成' : '补刀失败')
     actionOk.value = resp?.code === 0
   } catch (e) {
@@ -1348,12 +1360,12 @@ async function doRetryRename(hash) {
   }
 }
 
-async function restoreArchive(hash) {
+async function restoreArchive(hash, downloader = '') {
   actionMsg.value = ''
   actionOk.value = false
   restoringHash.value = hash
   try {
-    const resp = await postApi('restore_rename_archive', { hash })
+    const resp = await postApi('restore_rename_archive', { hash, downloader })
     actionMsg.value = resp?.msg || (resp?.code === 0 ? '已恢复' : '恢复失败')
     actionOk.value = resp?.code === 0
     if (resp?.code === 0) await reloadRecords()
@@ -1366,21 +1378,21 @@ async function restoreArchive(hash) {
 }
 
 function handleHistoryAction(action, row) {
-  if (action === 'retry') return doRetryRename(row.hash)
-  if (action === 'recover') return doRecovery(row.hash)
-  if (action === 'delete') return doDelete(row.hash)
+  if (action === 'retry') return doRetryRename(row.hash, row.downloader)
+  if (action === 'recover') return doRecovery(row.hash, row.downloader)
+  if (action === 'delete') return doDelete(row.hash, row.downloader)
 }
 function handleArchiveAction(action, row) {
-  if (action === 'retry') return doRetryRename(row.hash)
-  if (action === 'restore') return restoreArchive(row.hash)
-  if (action === 'delete' && window.confirm('确认删除“' + (row.name || row.hash) + '”的失败归档记录？仅清理记录，不删除种子或数据。')) return deleteArchive(row.hash)
+  if (action === 'retry') return doRetryRename(row.hash, row.downloader)
+  if (action === 'restore') return restoreArchive(row.hash, row.downloader)
+  if (action === 'delete' && window.confirm('确认删除“' + (row.name || row.hash) + '”的失败归档记录？仅清理记录，不删除种子或数据。')) return deleteArchive(row.hash, row.downloader)
 }
-async function deleteArchive(hash) {
+async function deleteArchive(hash, downloader = '') {
   actionMsg.value = ''
   actionOk.value = false
   deletingHash.value = hash
   try {
-    const resp = await postApi('delete_rename_archive', { hash })
+    const resp = await postApi('delete_rename_archive', { hash, downloader })
     actionMsg.value = resp?.msg || (resp?.code === 0 ? '已删除' : '删除失败')
     actionOk.value = resp?.code === 0
     if (resp?.code === 0) await reloadRecords()
@@ -1588,18 +1600,24 @@ const configField = (key, label, value, options = {}) => ({ key, label, value, .
   color: options.color || (['观察模式', '跳过校验'].includes(value) || (['verify', 'guard'].includes(key) && value === '开启') ? 'warning' :
     value === '开启' || value === '正常执行' ? 'primary' : 'default'),
 })
+const summaryValue = key => {
+  const fields = moduleConfigSummary.value?.modules?.[currentModule.value]?.fields
+  if (!Array.isArray(fields)) return null
+  const item = fields.find(f => f.key === key)
+  return item ? item.value : null
+}
 const summaryFields = computed(() => {
   const config = diagnostics.value?.config || overview.value?.config || {}
   const mode = currentHeader.value?.observing ? '观察模式' : (currentHeader.value?.enabled ? '正常执行' : null)
   const field = configField
   switch (currentModule.value) {
-    case 'transfer': return [field('event', '入列触发', null), field('fallback', '定时兜底', enabledValue(config.transfer_fallback_enabled), { badge: true }), field('start', '自动开始', enabledValue(config.seed_autostart), { badge: true }), field('verify', '跳过校验', enabledValue(config.seed_skipverify), { badge: true }), field('interval', '检查间隔', null)]
-    case 'rename': return [field('event', '入列触发', null), field('cron', '定时补查及周期', null), field('movie', '电影模板', null, { long: true }), field('tv', '剧集模板', null, { long: true })]
-    case 'hr': return [field('downloaders', '下载器范围', null), field('sites', '站点范围', null), field('rules', '规则来源', null), field('interval', '检查周期', null), field('guard', '删除保护', enabledValue(hrSummary.value.protection_enabled), { badge: true })]
-    case 'autoremove': return [field('mode', '运行模式', mode, { badge: true }), field('action', '执行动作', ({ pause: '暂停任务', delete: '删除任务', deletefile: '删除任务及文件' })[autoremoveStatus.value.action]), field('downloaders', '下载器范围', null), field('rules', '命中规则', null), field('cron', '执行周期', null), field('guard', 'H&R保护', enabledValue(autoremoveStatus.value.guard_enabled), { badge: true })]
-    case 'failclean': return [field('scope', '清理范围', null), field('event', '事件触发', '整理失败事件（固有行为）'), field('cron', '定时巡检及周期', null), field('action', '清理动作', null)]
-    case 'tag': return [field('mode', '运行模式', mode, { badge: true }), field('downloaders', '下载器范围', null), field('site', '站点标签', null), field('media', '媒体标签', null), field('category', '下载分类', null), field('cron', '执行周期', null)]
-    case 'upload_limit': return [field('mode', '运行模式', uploadLimitStatus.value.label, { badge: true, color: uploadLimitStatus.value.color }), field('downloaders', '下载器范围', null), field('global', '全局限速', null), field('sites', '站点限速', null), field('dynamic', '动态调速', null), field('interval', '调整周期', null)]
+    case 'transfer': return [field('event', '入列触发', summaryValue('event')), field('fallback', '定时兜底', enabledValue(config.transfer_fallback_enabled), { badge: true }), field('start', '自动开始', enabledValue(config.seed_autostart), { badge: true }), field('verify', '跳过校验', enabledValue(config.seed_skipverify), { badge: true }), field('interval', '检查间隔', summaryValue('interval'))]
+    case 'rename': return [field('event', '入列触发', summaryValue('event')), field('cron', '定时补查及周期', summaryValue('cron')), field('movie', '电影模板', summaryValue('movie'), { long: true }), field('tv', '剧集模板', summaryValue('tv'), { long: true })]
+    case 'hr': return [field('downloaders', '下载器范围', summaryValue('downloaders')), field('sites', '站点范围', summaryValue('sites')), field('rules', '规则来源', summaryValue('rules')), field('interval', '检查周期', summaryValue('interval')), field('guard', '删除保护', enabledValue(hrSummary.value.protection_enabled), { badge: true })]
+    case 'autoremove': return [field('mode', '运行模式', mode, { badge: true }), field('action', '执行动作', ({ pause: '暂停任务', delete: '删除任务', deletefile: '删除任务及文件' })[autoremoveStatus.value.action]), field('downloaders', '下载器范围', summaryValue('downloaders')), field('rules', '命中规则', summaryValue('rules')), field('cron', '执行周期', summaryValue('cron')), field('guard', 'H&R保护', enabledValue(autoremoveStatus.value.guard_enabled), { badge: true })]
+    case 'failclean': return [field('scope', '清理范围', summaryValue('scope')), field('event', '事件触发', '整理失败事件（固有行为）'), field('cron', '定时巡检及周期', summaryValue('cron')), field('action', '清理动作', summaryValue('action'))]
+    case 'tag': return [field('mode', '运行模式', mode, { badge: true }), field('downloaders', '下载器范围', summaryValue('downloaders')), field('site', '站点标签', summaryValue('site')), field('media', '媒体标签', summaryValue('media')), field('category', '下载分类', summaryValue('category')), field('cron', '执行周期', summaryValue('cron'))]
+    case 'upload_limit': return [field('mode', '运行模式', uploadLimitStatus.value.label, { badge: true, color: uploadLimitStatus.value.color }), field('downloaders', '下载器范围', summaryValue('downloaders')), field('global', '全局限速', summaryValue('global')), field('sites', '站点限速', summaryValue('sites')), field('dynamic', '动态调速', summaryValue('dynamic')), field('interval', '调整周期', summaryValue('interval'))]
     default: return []
   }
 })
@@ -1776,7 +1794,7 @@ onBeforeUnmount(() => {
                 <template #cell-name="{ row }"><span :title="transferSourceName(row)">{{ transferPrimaryText(row) }}</span><div class="dm-hint">{{ transferSecondaryText(row) }}</div></template>
                 <template #cell-route="{ row }">{{ routeText(row) }}</template>
                 <template #cell-phase="{ row }"><VChip size="x-small" :color="transferPhaseColor(row.phase)" variant="tonal">{{ transferPhaseText(row.phase) }}</VChip></template>
-                <template #cell-wait="{ row }">{{ row.wait_seconds != null ? formatDuration(row.wait_seconds) : row.created_at ? formatDuration(Math.max(0, Date.now() / 1000 - Number(row.created_at))) : '当前接口未提供' }}</template>
+                <template #cell-wait="{ row }">{{ row.waited_minutes != null ? formatDuration(Number(row.waited_minutes) * 60) : '当前接口未提供' }}</template>
                 <template #cell-options="{ row }">{{ row.delete_source === true ? '含删源' : row.delete_source === false ? '保留源' : '见详情' }}</template>
                 <template #expand="{ row }"><RecordDetails :record="row" /></template>
               </ModuleTable>

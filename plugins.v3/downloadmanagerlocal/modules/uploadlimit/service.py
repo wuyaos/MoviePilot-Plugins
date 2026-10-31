@@ -56,6 +56,85 @@ _LOCK_GUARD = threading.RLock()
 _CURRENT_CYCLE = ContextVar("downloadmanager_upload_cycle", default=None)
 
 
+class _HistoryRecorder:
+    """周期/恢复过程内收集真实调整历史，待脱离协调锁后再统一落库。"""
+
+    def __init__(self, trigger: str, now: float):
+        self._trigger = str(trigger or "")
+        self._now = float(now)
+        self.records: list[dict] = []
+
+    def record(
+        self,
+        *,
+        action: str,
+        result: str,
+        reason: str = "",
+        downloader_id: str | None = None,
+        torrent_hash: str | None = None,
+        site: str | None = None,
+        before: Any = None,
+        after: Any = None,
+    ) -> None:
+        """登记一条历史；before/after 就地浅拷贝，隔离后续状态变更。"""
+        record = {
+            "trigger": self._trigger,
+            "occurred_at": self._now,
+            "action": str(action or ""),
+            "result": result,
+            "reason": str(reason or ""),
+            "downloader_id": str(downloader_id or ""),
+            "torrent_hash": str(torrent_hash or ""),
+            "before": _snapshot_value(before),
+            "after": _snapshot_value(after),
+        }
+        if site:
+            record["site"] = str(site)
+        self.records.append(record)
+
+
+def _snapshot_value(value: Any) -> Any:
+    """浅拷贝历史记录中的前后值，隔离后续状态变更。"""
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return value
+
+
+def _cycle_trigger(reason: str) -> str:
+    """把协调原因映射为历史触发源（只使用代码里真实存在的取值）。"""
+    return "手动重新分配" if str(reason or "") == "manual" else "周期"
+
+
+def _append_upload_limit_history(plugin: Any, record: dict) -> None:
+    """把一条真实调整写入独立历史流；保存失败只记日志，不改变业务结果。"""
+    # 懒导入：避免服务模块加载时强制依赖 execution_history，观察模式等只读测试
+    # 用最小 model.state 替身加载 service 时不应因此失败。
+    try:
+        # 懒导入：避免服务模块加载时强制依赖 execution_history；导入本身失败同样
+        # 不得改变业务结果，故一并放进 try。
+        from ...model.execution_history import append as append_history
+        append_history(plugin, "upload_limit", record)
+    except Exception as error:
+        logger.error("【PT下载中心:上传限速】展示历史写入失败（不影响限速结果）：%s", error)
+
+
+def _flush_upload_limit_history(plugin: Any, records: Iterable[dict]) -> None:
+    """脱离协调锁后统一落库；逐条失败互不影响。"""
+    for record in records:
+        _append_upload_limit_history(plugin, record)
+
+
+@contextmanager
+def _history_flush_guard(plugin: Any, recorder: "_HistoryRecorder"):
+    """把历史落库推迟到协调锁释放之后（with 栈后进先出，锁先于本管理器退出）。"""
+    try:
+        yield
+    finally:
+        _flush_upload_limit_history(plugin, recorder.records)
+
+
 class UploadCycleStopped(RuntimeError):
     """上传限速轮次所属代次已停止。"""
 
@@ -157,7 +236,8 @@ def run_upload_limit_cycle(
             reason,
         )
         return status
-    with _active_cycle_lock(plugin):
+    recorder = _HistoryRecorder(_cycle_trigger(reason), timestamp)
+    with _history_flush_guard(plugin, recorder), _active_cycle_lock(plugin):
         if not is_upload_limit_active(plugin):
             return get_upload_limit_status(plugin)
         state = load_upload_limit_state(plugin)
@@ -187,7 +267,7 @@ def run_upload_limit_cycle(
 
         removed = sorted(set((state.get("downloaders") or {})) - set(selected))
         for downloader_id in removed:
-            restore_result = _restore_one_downloader(plugin, state, downloader_id)
+            restore_result = _restore_one_downloader(plugin, state, downloader_id, recorder=recorder)
             if restore_result["errors"]:
                 errors[downloader_id].extend(restore_result["errors"])
 
@@ -199,6 +279,7 @@ def run_upload_limit_cycle(
 
         for downloader_id in selected:
             _cycle_checkpoint()
+            recorded_failure = False
             try:
                 service = plugin.service_info(downloader_id)
                 if not service or not getattr(service, "instance", None):
@@ -248,8 +329,29 @@ def run_upload_limit_cycle(
                 )
                 if not global_settings_equal(current_global, desired_global):
                     _cycle_checkpoint()
-                    desired_global = write_global_upload_limit(
-                        service.instance, downloader_type, caps[downloader_id]
+                    before_global = global_settings_to_dict(current_global)
+                    try:
+                        desired_global = write_global_upload_limit(
+                            service.instance, downloader_type, caps[downloader_id]
+                        )
+                    except Exception as error:
+                        recorder.record(
+                            action="global_limit",
+                            result="failed",
+                            reason=str(error),
+                            downloader_id=downloader_id,
+                            before=before_global,
+                            after=global_settings_to_dict(desired_global),
+                        )
+                        recorded_failure = True
+                        raise
+                    recorder.record(
+                        action="global_limit",
+                        result="success",
+                        reason="全局限速已写入",
+                        downloader_id=downloader_id,
+                        before=before_global,
+                        after=global_settings_to_dict(desired_global),
                     )
                 entry["last_written_global"] = global_settings_to_dict(desired_global)
                 entry["total_limit_kib"] = caps[downloader_id]
@@ -284,6 +386,7 @@ def run_upload_limit_cycle(
                         instance=service.instance,
                         downloader_type=downloader_type,
                         snapshots=all_snapshots,
+                        recorder=recorder,
                     )
                     if release_result["errors"]:
                         errors[downloader_id].extend(release_result["errors"])
@@ -301,6 +404,7 @@ def run_upload_limit_cycle(
                         snapshot=snapshot,
                         instance=service.instance,
                         downloader_type=downloader_type,
+                        recorder=recorder,
                     )
                     if release_error:
                         errors[downloader_id].append(release_error)
@@ -352,6 +456,7 @@ def run_upload_limit_cycle(
                                 snapshot=snapshot,
                                 instance=service.instance,
                                 downloader_type=downloader_type,
+                                recorder=recorder,
                             )
                             if release_error:
                                 errors[downloader_id].append(release_error)
@@ -378,6 +483,13 @@ def run_upload_limit_cycle(
             except Exception as error:
                 _cycle_checkpoint()
                 errors[downloader_id].append(str(error))
+                if not recorded_failure:
+                    recorder.record(
+                        action="scan",
+                        result="failed",
+                        reason=str(error),
+                        downloader_id=downloader_id,
+                    )
                 logger.exception("【PT下载中心:上传限速】上传限速扫描下载器 %s 失败", downloader_id)
 
         if not site_policy_enabled:
@@ -447,6 +559,7 @@ def run_upload_limit_cycle(
             expected = expected_torrent_upload_settings(
                 snapshot.downloader_type, desired_kib
             )
+            site_key = str((torrent_state.get(task_key) or {}).get("site_key") or "")
             try:
                 applied = expected
                 if not torrent_settings_equal(snapshot.upload_settings, expected):
@@ -456,6 +569,16 @@ def run_upload_limit_cycle(
                         snapshot.downloader_type,
                         snapshot.torrent_hash,
                         desired_kib,
+                    )
+                    recorder.record(
+                        action="torrent_limit",
+                        result="success",
+                        reason="单种限速已写入",
+                        downloader_id=snapshot.downloader_id,
+                        torrent_hash=snapshot.torrent_hash,
+                        site=site_key,
+                        before=settings_to_dict(snapshot.upload_settings),
+                        after=settings_to_dict(applied),
                     )
                 record = torrent_state[task_key]
                 record["last_allocation_kib"] = desired_kib
@@ -467,6 +590,16 @@ def run_upload_limit_cycle(
                 _cycle_checkpoint()
                 errors[snapshot.downloader_id].append(
                     f"{snapshot.torrent_hash}: {error}"
+                )
+                recorder.record(
+                    action="torrent_limit",
+                    result="failed",
+                    reason=str(error),
+                    downloader_id=snapshot.downloader_id,
+                    torrent_hash=snapshot.torrent_hash,
+                    site=site_key,
+                    before=settings_to_dict(snapshot.upload_settings),
+                    after=settings_to_dict(expected),
                 )
                 logger.exception(
                     "【PT下载中心:上传限速】上传限速写入任务 %s/%s 失败",
@@ -516,7 +649,8 @@ def restore_upload_limits(
             "errors": [],
             "observe_only": True,
         }
-    with _cycle_lock(plugin):
+    recorder = _HistoryRecorder("停用恢复", time.time())
+    with _history_flush_guard(plugin, recorder), _cycle_lock(plugin):
         state = load_upload_limit_state(plugin)
         if getattr(plugin, "_upload_limit_state_error", ""):
             return {
@@ -531,7 +665,7 @@ def restore_upload_limits(
         } & available
         reports = []
         for downloader_id in sorted(targets):
-            reports.append(_restore_one_downloader(plugin, state, downloader_id))
+            reports.append(_restore_one_downloader(plugin, state, downloader_id, recorder=recorder))
         if not (state.get("downloaders") or {}):
             state["management_active"] = False
             state["activated_at"] = 0.0
@@ -640,6 +774,83 @@ def persist_upload_limit_site_rules(plugin: Any, site_rules: Any) -> dict[str, d
     return clean_rules
 
 
+def _known_int(value: Any) -> int | None:
+    """把可解析的整数字段返回为 int；缺失或非法返回 None 表示未知。"""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_downloader_site_rows(state: dict) -> list[dict]:
+    """从持久化任务状态构造「下载器 × 站点」只读投影。
+
+    与 last_summary["sites"] 同口径：只统计已退出宽限期的任务（grace_until
+    已过期），同站多下载器的行逐项求和等于站点总量；取不到的字段置 None，
+    不伪造 0，也不因为 allocated_kib > 0 反推其它字段的状态。
+    """
+    torrents = state.get("torrents") or {}
+    last_run_at = float(state.get("last_run_at") or 0)
+    failures = state.get("failures") or {}
+    groups: dict[tuple[str, str], dict] = {}
+    for record in torrents.values():
+        if not isinstance(record, dict):
+            continue
+        downloader_id = str(record.get("downloader_id") or "").strip()
+        site = str(record.get("site_key") or "").strip()
+        if not downloader_id or not site:
+            continue
+        if float(record.get("grace_until") or 0) > last_run_at:
+            continue
+        row = groups.setdefault((downloader_id, site), {
+            "downloader_id": downloader_id,
+            "site": site,
+            "torrent_count": 0,
+            "uploading_torrents": 0,
+            "upload_rate_bps": 0,
+            "allocated_kib": 0,
+            "_rate_unknown": False,
+            "_allocated_unknown": False,
+        })
+        row["torrent_count"] += 1
+        rate = _known_int(record.get("upload_rate_bps"))
+        if rate is None:
+            row["_rate_unknown"] = True
+        else:
+            row["upload_rate_bps"] += rate
+            if rate > 0:
+                row["uploading_torrents"] += 1
+        allocated = _known_int(record.get("last_allocation_kib"))
+        if allocated is None:
+            row["_allocated_unknown"] = True
+        else:
+            row["allocated_kib"] += allocated
+    rows = []
+    for key in sorted(groups, key=lambda item: (item[0].lower(), item[1].lower())):
+        data = groups[key]
+        rate_unknown = bool(data.pop("_rate_unknown"))
+        allocated_unknown = bool(data.pop("_allocated_unknown"))
+        downloader_failed = isinstance(failures.get(key[0]), dict)
+        if rate_unknown or allocated_unknown:
+            status = "partial"
+        elif downloader_failed:
+            status = "degraded"
+        else:
+            status = "ok"
+        rows.append({
+            "downloader_id": data["downloader_id"],
+            "site": data["site"],
+            "torrent_count": data["torrent_count"],
+            "uploading_torrents": None if rate_unknown else data["uploading_torrents"],
+            "upload_rate_bps": None if rate_unknown else data["upload_rate_bps"],
+            "allocated_kib": None if allocated_unknown else data["allocated_kib"],
+            "status": status,
+        })
+    return rows
+
+
 def get_upload_limit_status(plugin: Any, *, state: dict | None = None) -> dict:
     """返回配置页可展示的上传限速持久化状态。"""
     runtime = state if isinstance(state, dict) else load_upload_limit_state(plugin)
@@ -676,6 +887,9 @@ def get_upload_limit_status(plugin: Any, *, state: dict | None = None) -> dict:
     if not configured:
         summary.update(empty_metrics)
         summary["service_status"] = "disabled"
+        summary["downloader_site_rows"] = []
+    else:
+        summary["downloader_site_rows"] = _build_downloader_site_rows(runtime)
     return summary
 
 
@@ -1039,6 +1253,7 @@ def _release_downloader_torrent_limits(
     instance: Any,
     downloader_type: str,
     snapshots: dict[str, Any],
+    recorder: "_HistoryRecorder | None" = None,
 ) -> dict:
     """退出站点策略模式时按 compare-and-set 释放该下载器单种限速。"""
     report = {"restored": 0, "preserved_manual": 0, "errors": []}
@@ -1066,6 +1281,17 @@ def _release_downloader_torrent_limits(
                     settings_from_dict(original),
                 )
                 report["restored"] += 1
+                if recorder is not None:
+                    recorder.record(
+                        action="torrent_restore",
+                        result="success",
+                        reason="退出站点策略模式，恢复单种原值",
+                        downloader_id=downloader_id,
+                        torrent_hash=snapshot.torrent_hash,
+                        site=str(record.get("site_key") or ""),
+                        before=settings_to_dict(snapshot.upload_settings),
+                        after=original,
+                    )
             else:
                 report["preserved_manual"] += 1
             state.get("torrents", {}).pop(task_key, None)
@@ -1074,6 +1300,17 @@ def _release_downloader_torrent_limits(
         except Exception as error:
             _cycle_checkpoint()
             report["errors"].append(f"{snapshot.torrent_hash}: {error}")
+            if recorder is not None:
+                recorder.record(
+                    action="torrent_restore",
+                    result="failed",
+                    reason=str(error),
+                    downloader_id=downloader_id,
+                    torrent_hash=snapshot.torrent_hash,
+                    site=str(record.get("site_key") or ""),
+                    before=settings_to_dict(snapshot.upload_settings),
+                    after=original,
+                )
             logger.exception(
                 "【PT下载中心:上传限速】释放上传限速任务 %s/%s 失败",
                 downloader_id,
@@ -1090,6 +1327,7 @@ def _release_torrent_record(
     snapshot: Any,
     instance: Any,
     downloader_type: str,
+    recorder: "_HistoryRecorder | None" = None,
 ) -> str:
     """任务退出受限站点时按 compare-and-set 恢复其原始单种设置。"""
     last_written = record.get("last_written_settings")
@@ -1106,6 +1344,17 @@ def _release_torrent_record(
                 snapshot.torrent_hash,
                 settings_from_dict(original),
             )
+            if recorder is not None:
+                recorder.record(
+                    action="torrent_restore",
+                    result="success",
+                    reason="任务退出受限站点，恢复单种原值",
+                    downloader_id=snapshot.downloader_id,
+                    torrent_hash=snapshot.torrent_hash,
+                    site=str(record.get("site_key") or ""),
+                    before=settings_to_dict(snapshot.upload_settings),
+                    after=original,
+                )
         state.get("torrents", {}).pop(task_key, None)
         return ""
     except UploadCycleStopped:
@@ -1117,10 +1366,26 @@ def _release_torrent_record(
             snapshot.downloader_id,
             snapshot.torrent_hash,
         )
+        if recorder is not None:
+            recorder.record(
+                action="torrent_restore",
+                result="failed",
+                reason=str(error),
+                downloader_id=snapshot.downloader_id,
+                torrent_hash=snapshot.torrent_hash,
+                site=str(record.get("site_key") or ""),
+                before=settings_to_dict(snapshot.upload_settings),
+                after=original,
+            )
         return f"{snapshot.torrent_hash}: {error}"
 
 
-def _restore_one_downloader(plugin: Any, state: dict, downloader_id: str) -> dict:
+def _restore_one_downloader(
+    plugin: Any,
+    state: dict,
+    downloader_id: str,
+    recorder: "_HistoryRecorder | None" = None,
+) -> dict:
     """恢复一个下载器及其仍存在任务的接管前上传设置。"""
     entry = (state.get("downloaders") or {}).get(downloader_id)
     report = {
@@ -1151,6 +1416,15 @@ def _restore_one_downloader(plugin: Any, state: dict, downloader_id: str) -> dic
                 global_settings_from_dict(original_global, downloader_type),
             )
             report["global_restored"] = True
+            if recorder is not None:
+                recorder.record(
+                    action="global_restore",
+                    result="success",
+                    reason="恢复接管前全局上传设置",
+                    downloader_id=downloader_id,
+                    before=dict(last_global),
+                    after=dict(original_global),
+                )
         else:
             report["preserved_manual"] += 1
 
@@ -1182,6 +1456,17 @@ def _restore_one_downloader(plugin: Any, state: dict, downloader_id: str) -> dic
                     settings_from_dict(original),
                 )
                 report["torrent_restored"] += 1
+                if recorder is not None:
+                    recorder.record(
+                        action="torrent_restore",
+                        result="success",
+                        reason="恢复接管前单种上传设置",
+                        downloader_id=downloader_id,
+                        torrent_hash=snapshot.torrent_hash,
+                        site=str(record.get("site_key") or ""),
+                        before=settings_to_dict(snapshot.upload_settings),
+                        after=dict(original),
+                    )
             else:
                 report["preserved_manual"] += 1
     except UploadCycleStopped:
@@ -1189,6 +1474,13 @@ def _restore_one_downloader(plugin: Any, state: dict, downloader_id: str) -> dic
     except Exception as error:
         _cycle_checkpoint()
         report["errors"].append(str(error))
+        if recorder is not None:
+            recorder.record(
+                action="restore",
+                result="failed",
+                reason=str(error),
+                downloader_id=downloader_id,
+            )
         logger.exception("【PT下载中心:上传限速】恢复上传限速下载器 %s 失败", downloader_id)
         return report
 

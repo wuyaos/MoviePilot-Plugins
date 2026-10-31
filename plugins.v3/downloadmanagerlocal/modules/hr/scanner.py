@@ -7,6 +7,10 @@ from typing import Any, Iterable, Optional
 
 from app.sdk.logging import logger
 
+from ...adapter.downloader import (
+    downloader_type as _downloader_type,
+    read_torrents as _query_torrents,
+)
 from ...adapter.moviepilot import get_downloader_services, get_site_indexer, get_url_domain
 from ...utils.torrent_adapter import (
     get_category,
@@ -65,23 +69,16 @@ def downloader_services(names: Iterable[str]) -> dict[str, Any]:
 
 def downloader_type(service: Any) -> str:
     """返回下载器类型标识（qbittorrent / transmission）。"""
-    return str(getattr(service, "type", "") or "").strip().lower()
+    return _downloader_type(service)
 
 
 def read_torrents(service: Any, ids: Optional[Iterable[str]] = None) -> tuple[list, str]:
     """读取下载器任务；返回 (任务列表, 错误信息)，查询失败与成功空列表区分。"""
-    id_list = [str(item) for item in ids] if ids else None
-    try:
-        response = service.instance.get_torrents(ids=id_list)
-    except Exception as error:
-        return [], str(error)
-    if isinstance(response, tuple) and len(response) == 2:
-        items, failed = response
-    else:
-        items, failed = response, None
-    if failed:
-        return [], "下载器查询失败"
-    return list(items or []), ""
+    id_list = [str(item) for item in ids] if ids is not None else None
+    result = _query_torrents(service, ids=id_list)
+    if result.success:
+        return list(result.items), ""
+    return [], result.error or "下载器查询失败"
 
 
 def torrent_snapshot(

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...adapter.downloader import (
+    downloader_type as _downloader_type,
+    read_torrents as _query_torrents,
+)
 from ...adapter.moviepilot import get_url_domain
 from ...utils.torrent_adapter import (
     get_category,
@@ -19,24 +23,26 @@ QBITTORRENT = "qbittorrent"
 TRANSMISSION = "transmission"
 
 
+class _ServiceView:
+    """把下载器客户端对象包装为适配层读取所需的 service 形态视图。"""
+
+    __slots__ = ("instance",)
+
+    def __init__(self, instance: Any) -> None:
+        self.instance = instance
+
+
 def downloader_type(service: Any) -> str:
     """返回下载器类型标识（qbittorrent / transmission）。"""
-    return str(getattr(service, "type", "") or "").strip().lower()
+    return _downloader_type(service)
 
 
 def read_torrents(instance: Any) -> tuple[list, str]:
     """读取下载器全部任务；返回 (任务列表, 错误信息)，查询失败与成功空列表区分。"""
-    try:
-        response = instance.get_torrents()
-    except Exception as error:
-        return [], str(error)
-    if isinstance(response, tuple) and len(response) == 2:
-        items, failed = response
-    else:
-        items, failed = response, None
-    if failed:
-        return [], "下载器查询失败"
-    return list(items or []), ""
+    result = _query_torrents(_ServiceView(instance), ids=None)
+    if result.success:
+        return list(result.items), ""
+    return [], result.error or "下载器查询失败"
 
 
 def torrent_hash(torrent: Any, downloader_type_name: str) -> str:

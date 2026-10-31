@@ -66,3 +66,40 @@ def record_endpoint(handler, plugin):
             result_filter=result_filter if result_filter is not None else body.get("result_filter", "all"),
         )
     return query
+
+
+def record_history_endpoint(handler, plugin):
+    """查询端点 GET/POST 适配：显式 query 优先，module 必填，未知字段拒绝。
+
+    与 record_endpoint 相同的「query 优先 / data 包裹 / detail_limit 兼容」语义，
+    额外转发必填的 module，并拒绝未知 body 字段。
+    """
+    allowed_body_keys = {"module", "page", "page_size", "result_filter", "detail_limit"}
+
+    def query(
+        module: str | None = None,
+        page: str | None = None,
+        page_size: str | None = None,
+        result_filter: str | None = None,
+        detail_limit: str | None = None,
+        payload: dict | None = None,
+    ):
+        body = payload if isinstance(payload, dict) else {}
+        if "data" in body:
+            if not isinstance(body["data"], dict):
+                raise HTTPException(status_code=400, detail="data 必须是查询对象")
+            body = body["data"]
+        unknown = sorted(set(body) - allowed_body_keys)
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"未知字段：{', '.join(unknown)}")
+        resolved_module = module if module is not None else body.get("module")
+        if resolved_module is None or str(resolved_module).strip() == "":
+            raise HTTPException(status_code=400, detail="module 必填")
+        return handler(
+            plugin,
+            module=str(resolved_module),
+            page=page if page is not None else body.get("page", 1),
+            page_size=page_size if page_size is not None else body.get("page_size", 20),
+            result_filter=result_filter if result_filter is not None else body.get("result_filter", "all"),
+        )
+    return query

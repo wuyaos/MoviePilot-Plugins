@@ -94,7 +94,7 @@ def _load(relpath, name):
 MODEL_NAMES = (
     'CleanupModuleRequest', 'CleanupModuleResult', 'DiagnosticsResult', 'EmptyRequest',
     'HashActionResult', 'HrActionResult', 'HrClearTaskRequest', 'HrPresetsResult',
-    'HrSkipStatsResult', 'HrTasksResult', 'ModuleActionResult', 'ModuleStatusResult',
+    'HrSkipStatsResult', 'HrTasksResult', 'ModuleActionResult', 'ModuleConfigSummaryResult', 'ModuleStatusResult',
     'OverviewResult', 'RenamePageResult', 'RetryRenamesResult', 'SelectionItem',
     'TagCleanupExecuteRequest', 'TagCleanupExecuteResult', 'TagCleanupScanRequest',
     'TagCleanupScanResult', 'UploadLimitDisableResult', 'UploadLimitReallocateResult',
@@ -111,7 +111,9 @@ def archive(monkeypatch):
     _module(monkeypatch, 'app.sdk.logging', logger=Mock())
     _module(monkeypatch, 'app.schemas')
     _module(monkeypatch, 'app.schemas.types')
-    _module(monkeypatch, PREFIX)
+    _module(monkeypatch, PREFIX, __path__=[str(PLUGIN)])
+    _module(monkeypatch, PREFIX + '.modules', __path__=[str(PLUGIN / 'modules')])
+    _module(monkeypatch, PREFIX + '.modules.rename', __path__=[str(PLUGIN / 'modules' / 'rename')])
     _module(monkeypatch, PREFIX + '.model')
     _module(monkeypatch, PREFIX + '.model.state',
             RENAME_RECORDS_KEY='rename_records', RENAME_RETRY_STATE_KEY=ARCHIVE_STATE)

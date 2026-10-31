@@ -8,6 +8,7 @@ from app import schemas
 from ..model.api import (
     CleanupModuleResult,
     DiagnosticsResult,
+    ExecutionHistoryPageResult,
     HashActionResult,
     HrActionResult,
     HrPresetsResult,
@@ -20,6 +21,7 @@ from ..model.api import (
     TagCleanupExecuteResult,
     TagCleanupScanResult,
     ModuleActionResult,
+    ModuleConfigSummaryResult,
     ModuleStatusResult,
     UploadLimitDisableResult,
     UploadLimitReallocateResult,
@@ -27,7 +29,7 @@ from ..model.api import (
     UploadLimitSiteTagsResult,
     UploadLimitStatusResult,
 )
-from .records import record_endpoint
+from .records import record_endpoint, record_history_endpoint
 from .handlers import (
     api_rename_history,
     api_rename_archive,
@@ -35,6 +37,9 @@ from .handlers import (
     api_autoremove_run,
     api_autoremove_status,
     api_cleanup_module_data,
+    api_execution_history,
+    api_execution_history_clear,
+    api_module_config_summary,
     api_failclean_scan,
     api_failclean_status,
     api_hr_check,
@@ -84,6 +89,14 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
             "methods": ["GET"],
             "summary": "获取下载中心总览",
             "response_model": OverviewResult,
+        },
+        {
+            "path": "/module_config_summary",
+            "endpoint": plugin.api_module_config_summary,
+            "auth": "bear",
+            "methods": ["GET"],
+            "summary": "获取模块配置摘要",
+            "response_model": ModuleConfigSummaryResult,
         },
         {
             "path": "/upload_limit_status",
@@ -373,5 +386,21 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
             "methods": ["POST"],
             "summary": "手动执行站点标签历史补全",
             "response_model": schemas.Response[ModuleActionResult],
+        },
+        {
+            "path": "/execution_history",
+            "endpoint": record_history_endpoint(api_execution_history, plugin),
+            "auth": "bear",
+            "methods": ["GET", "POST"],
+            "summary": "获取模块展示历史",
+            "response_model": ExecutionHistoryPageResult,
+        },
+        {
+            "path": "/execution_history_clear",
+            "endpoint": plugin.api_execution_history_clear,
+            "auth": "bear",
+            "methods": ["POST"],
+            "summary": "清空模块展示历史",
+            "response_model": schemas.Response[CleanupModuleResult],
         },
     ]

@@ -19,6 +19,7 @@ _EMPTY_TEMPLATE: dict[str, Any] = {
     "skipped_missing": 0,
     "skipped": 0,
     "failed": 0,
+    "failed_operations": 0,
     "config_error": "",
     "candidate_list": [],
     "details": [],

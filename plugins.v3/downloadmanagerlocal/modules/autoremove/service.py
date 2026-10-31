@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from threading import Lock, RLock
 from typing import Any, Optional
@@ -34,6 +35,7 @@ _COUNTER_KEYS = (
     "skipped_missing",
     "skipped",
     "failed",
+    "failed_operations",
 )
 
 
@@ -124,7 +126,8 @@ class AutoRemoveService:
             logger.info(f"{REMOVER_LOG_PREFIX}已有任务在运行，跳过重叠触发：{trigger_source}")
             return self._empty_result(trigger_source)
         try:
-            with self._lock:
+            records: list[dict[str, Any]] = []
+            with self._history_flush_guard(records), self._lock:
                 scan = self._collect(trigger_source)
                 result = scan.result
                 if result["config_error"]:
@@ -144,7 +147,7 @@ class AutoRemoveService:
                             suffix="观察模式",
                         )
                 else:
-                    self._execute(scan)
+                    self._execute(scan, records)
                 self._record_status(result)
                 return result
         finally:
@@ -267,7 +270,7 @@ class AutoRemoveService:
         )
         return _CycleScan(result=result, candidates=candidates, conditions=conditions)
 
-    def _execute(self, scan: _CycleScan) -> None:
+    def _execute(self, scan: _CycleScan, records: list[dict[str, Any]]) -> None:
         """按候选执行下载器动作：先回读身份，再查询 H&R 保护。"""
         conditions = scan.conditions
         if conditions is None:
@@ -280,7 +283,8 @@ class AutoRemoveService:
             if not candidates:
                 continue
             detail = next(item for item in result["details"] if item["downloader"] == name)
-            executed = self._execute_downloader(name, candidates, detail, conditions)
+            executed = self._execute_downloader(
+                name, candidates, detail, conditions, result["trigger"], records)
             if executed and self._config.notify:
                 self._notify(name, executed, conditions.action)
         self._sync_totals(result)
@@ -296,21 +300,40 @@ class AutoRemoveService:
         candidates: list[RemoveCandidate],
         detail: dict[str, Any],
         conditions: CompiledConditions,
+        trigger_source: str,
+        records: list[dict[str, Any]],
     ) -> list[RemoveCandidate]:
-        """执行单个下载器的候选动作，返回实际执行成功的候选。"""
+        """执行单个下载器的候选动作，返回实际执行成功的候选，并把历史追加进本轮收集列表。"""
+        action = conditions.action
         service = self._plugin.service_info(downloader)
         instance = getattr(service, "instance", None) if service else None
         if instance is None:
             detail["failed"] += len(candidates)
+            detail["failed_operations"] += 1
             detail["error"] = "执行前下载器不可用"
             logger.warning(f"{REMOVER_LOG_PREFIX}执行前下载器 {downloader} 不可用，跳过 {len(candidates)} 个候选")
+            self._record_history(records,
+                trigger=trigger_source,
+                action=action,
+                result="failed",
+                reason=f"执行前下载器 {downloader} 不可用，整批 {len(candidates)} 个候选未执行",
+                downloader=downloader,
+            )
             return []
         dl_type = downloader_type(service)
         torrents, error = read_torrents(instance)
         if error:
             detail["failed"] += len(candidates)
+            detail["failed_operations"] += 1
             detail["error"] = error
             logger.warning(f"{REMOVER_LOG_PREFIX}执行前回读 {downloader} 失败，本轮不处理其候选：{error}")
+            self._record_history(records,
+                trigger=trigger_source,
+                action=action,
+                result="failed",
+                reason=f"执行前回读 {downloader} 失败，整批 {len(candidates)} 个候选未执行：{error}",
+                downloader=downloader,
+            )
             return []
         fresh = {torrent_hash(torrent, dl_type) for torrent in torrents}
         executed: list[RemoveCandidate] = []
@@ -322,27 +345,134 @@ class AutoRemoveService:
             if snapshot.torrent_hash not in fresh:
                 detail["skipped_missing"] += 1
                 logger.info(f"{REMOVER_LOG_PREFIX}候选已不在下载器中，跳过：{downloader} {label}")
+                self._record_history(records,
+                    trigger=trigger_source,
+                    action=action,
+                    result="skipped",
+                    reason="候选已不在下载器中",
+                    downloader=downloader,
+                    torrent_hash=snapshot.torrent_hash,
+                    name=label,
+                    site=snapshot.site or None,
+                )
                 continue
-            if self._skip_for_protection(conditions.action, downloader, snapshot.torrent_hash):
+            if self._skip_for_protection(action, downloader, snapshot.torrent_hash):
                 detail["skipped_protected"] += 1
+                self._record_history(records,
+                    trigger=trigger_source,
+                    action=action,
+                    result="skipped",
+                    reason="H&R 保护跳过",
+                    downloader=downloader,
+                    torrent_hash=snapshot.torrent_hash,
+                    name=label,
+                    site=snapshot.site or None,
+                )
                 continue
             try:
-                success = self._apply_action(instance, snapshot.torrent_hash, conditions.action)
+                success = self._apply_action(instance, snapshot.torrent_hash, action)
             except Exception as error:
                 detail["failed"] += 1
-                logger.error(f"{REMOVER_LOG_PREFIX}{conditions.action} 执行失败：{downloader} {label}: {error}")
+                detail["failed_operations"] += 1
+                logger.error(f"{REMOVER_LOG_PREFIX}{action} 执行失败：{downloader} {label}: {error}")
+                self._record_history(records,
+                    trigger=trigger_source,
+                    action=action,
+                    result="failed",
+                    reason=f"执行异常：{error}",
+                    downloader=downloader,
+                    torrent_hash=snapshot.torrent_hash,
+                    name=label,
+                    site=snapshot.site or None,
+                )
                 continue
             if not success:
                 detail["failed"] += 1
-                logger.warning(f"{REMOVER_LOG_PREFIX}{conditions.action} 未获下载器确认：{downloader} {label}")
+                detail["failed_operations"] += 1
+                logger.warning(f"{REMOVER_LOG_PREFIX}{action} 未获下载器确认：{downloader} {label}")
+                self._record_history(records,
+                    trigger=trigger_source,
+                    action=action,
+                    result="failed",
+                    reason="下载器未确认执行结果",
+                    downloader=downloader,
+                    torrent_hash=snapshot.torrent_hash,
+                    name=label,
+                    site=snapshot.site or None,
+                )
                 continue
-            _count_action(detail, conditions.action)
+            _count_action(detail, action)
             executed.append(candidate)
             logger.info(
-                f"{REMOVER_LOG_PREFIX}{conditions.action} 完成：{downloader} {label} "
+                f"{REMOVER_LOG_PREFIX}{action} 完成：{downloader} {label} "
                 f"来自站点：{snapshot.site or '-'} 大小：{format_bytes(snapshot.size)}"
             )
+            self._record_history(records,
+                trigger=trigger_source,
+                action=action,
+                result="success",
+                reason="执行成功",
+                downloader=downloader,
+                torrent_hash=snapshot.torrent_hash,
+                name=label,
+                site=snapshot.site or None,
+            )
         return executed
+
+    def _record_history(
+        self,
+        records: list[dict[str, Any]],
+        *,
+        trigger: str,
+        action: str,
+        result: str,
+        reason: str,
+        downloader: Optional[str] = None,
+        torrent_hash: Optional[str] = None,
+        name: Optional[str] = None,
+        site: Optional[str] = None,
+    ) -> None:
+        """把一条展示历史追加进本轮收集列表；落库由 :meth:`_flush_history` 在模块锁外完成。"""
+        record: dict[str, Any] = {
+            "trigger": trigger,
+            "occurred_at": time.time(),
+            "action": action,
+            "result": result,
+            "reason": reason,
+        }
+        if downloader is not None:
+            record["downloader_id"] = downloader
+        if torrent_hash is not None:
+            record["torrent_hash"] = torrent_hash
+        if name is not None:
+            record["name"] = name
+        if site is not None:
+            record["site"] = site
+        records.append(record)
+
+    @contextmanager
+    def _history_flush_guard(self, records: list[dict[str, Any]]):
+        """收集本轮展示历史，退出时（模块锁已释放）统一落库。
+
+        `with self._history_flush_guard(records), self._lock:` 的 with 栈后进先出
+        ——先释放模块锁，再 flush，避免持锁做 `save_data`。落库失败只记日志：
+        历史不可用不得改变业务结果，因此导入与调用都在 try 内。
+        """
+        try:
+            yield records
+        finally:
+            self._flush_history(records)
+
+    def _flush_history(self, records: list[dict[str, Any]]) -> None:
+        """逐条写入共享展示历史；每条独立 try/except，失败不影响其他记录与业务结果。"""
+        pending, records[:] = list(records), []
+        for record in pending:
+            try:
+                from ...model import execution_history
+
+                execution_history.append(self._plugin, "autoremove", record)
+            except Exception as error:
+                logger.error(f"{REMOVER_LOG_PREFIX}写入展示历史失败（不影响业务结果）：{error}")
 
     def _skip_for_protection(self, action: str, downloader: str, torrent_hash: str) -> bool:
         """破坏性删除前查询 H&R 保护；命中时 guard 自身已计数，这里不重复计数。"""
@@ -406,6 +536,7 @@ class AutoRemoveService:
             "skipped_missing": result["skipped_missing"],
             "skipped": result["skipped_protected"] + result["skipped_missing"],
             "failed": result["failed"],
+            "failed_operations": result["failed_operations"],
             "config_error": result["config_error"],
             "observe_only": self._observe_only,
             "action": self._config.action,
@@ -441,6 +572,7 @@ class AutoRemoveService:
             "skipped_missing": 0,
             "skipped": 0,
             "failed": 0,
+            "failed_operations": 0,
             "config_error": self._config_error,
             "candidate_list": [],
             "details": [],
@@ -459,6 +591,7 @@ def _downloader_detail(downloader: str) -> dict[str, Any]:
         "skipped_missing": 0,
         "skipped": 0,
         "failed": 0,
+        "failed_operations": 0,
         "error": "",
     }
 

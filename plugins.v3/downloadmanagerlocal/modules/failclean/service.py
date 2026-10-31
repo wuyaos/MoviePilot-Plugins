@@ -124,6 +124,12 @@ class FailCleanService:
         path = _text(_field(fileitem, "path"))
         if fileitem is None or not path:
             logger.warning(f"{FAILCLEAN_LOG_PREFIX}整理失败事件缺少 fileitem，跳过源文件清理")
+            self._record_history(
+                trigger=FAILCLEAN_TRANSFER_FAILED_TRIGGER,
+                action="删除源文件",
+                result="failed",
+                reason="整理失败事件缺少 fileitem",
+            )
             return result
 
         fail_reason = _text(_field(_field(event_data, "transferinfo"), "message")) or UNKNOWN_FAIL_REASON
@@ -141,6 +147,13 @@ class FailCleanService:
         self._record_result(
             scope="event",
             **counters_of(delete_result),
+        )
+        self._record_delete_history(
+            trigger=FAILCLEAN_TRANSFER_FAILED_TRIGGER,
+            delete_result=delete_result,
+            downloader_id=downloader_id,
+            torrent_hash=download_hash,
+            name=path,
         )
         result.update({key: delete_result[key] for key in ("deleted", "history_deleted", "skipped", "duplicate")})
         result["path"] = path
@@ -252,6 +265,13 @@ class FailCleanService:
                     )
                     failed_paths.append(file_path.as_posix())
                     failed += 1
+                    self._record_history(
+                        trigger=trigger_source,
+                        action="删除源文件",
+                        result="failed",
+                        reason=f"巡检异常：{error}",
+                        name=file_path.as_posix(),
+                    )
                     continue
 
                 if delete_result is None:
@@ -260,6 +280,13 @@ class FailCleanService:
                 cleaned += counts["deleted"]
                 failed += counts["failed"]
                 skipped += counts["skipped"]
+                self._record_delete_history(
+                    trigger=trigger_source,
+                    delete_result=delete_result,
+                    downloader_id=delete_result.get("downloader_id", ""),
+                    torrent_hash=delete_result.get("torrent_hash", ""),
+                    name=file_path.as_posix(),
+                )
                 if delete_result["deleted"]:
                     cleaned_paths.append(file_path.as_posix())
                 elif counts["failed"]:
@@ -303,14 +330,19 @@ class FailCleanService:
         fileitem = hostapi.get_local_file_item(file_path)
         if fileitem is None:
             return None
-        return self._delete_source_file(
+        downloader_id = _text(_field(transfer_history, "downloader"))
+        download_hash = hostapi.get_download_hash_by_fullpath(file_path.as_posix())
+        result = self._delete_source_file(
             fileitem=fileitem,
             path=file_path.as_posix(),
-            download_hash=hostapi.get_download_hash_by_fullpath(file_path.as_posix()),
-            downloader_id=_text(_field(transfer_history, "downloader")),
+            download_hash=download_hash,
+            downloader_id=downloader_id,
             reason=REPEAT_RESIDUAL_REASON,
             send_notify=False,
         )
+        result["downloader_id"] = downloader_id
+        result["torrent_hash"] = download_hash
+        return result
 
     def _delete_source_file(
         self,
@@ -398,6 +430,91 @@ class FailCleanService:
     def _mark_recent_delete(self, path: str, download_hash: str) -> None:
         """登记一次已执行的删除操作。"""
         self._recent_deletes[_delete_key(path, download_hash)] = time.time()
+
+    def _record_delete_history(
+        self,
+        *,
+        trigger: str,
+        delete_result: dict[str, Any],
+        downloader_id: str,
+        torrent_hash: str,
+        name: str,
+    ) -> None:
+        """把一次删除结果映射为展示历史并逐条写入（duplicate 不写；写入失败只记日志）。
+
+        delete_result 的 duplicate/skipped/deleted 语义与 counters_of 一致：
+        duplicate 表示窗口内重复请求（不写，与既有「不计入任何计数」口径一致），
+        skipped 需区分观察模式（observed）与 H&R 保护（skipped）。
+        """
+        if delete_result.get("duplicate"):
+            return
+        if delete_result.get("deleted"):
+            result = "success"
+            reason = "源文件已删除"
+        elif delete_result.get("skipped"):
+            if self._observe_only():
+                result = "observed"
+                reason = "观察模式：未执行删除"
+            else:
+                result = "skipped"
+                reason = "H&R 保护跳过"
+        else:
+            result = "failed"
+            reason = "删除源文件失败"
+        self._record_history(
+            trigger=trigger,
+            action="删除源文件",
+            result=result,
+            reason=reason,
+            downloader=downloader_id,
+            torrent_hash=torrent_hash,
+            name=name,
+        )
+
+    def _record_history(
+        self,
+        *,
+        trigger: str,
+        action: str,
+        result: str,
+        reason: str,
+        downloader: Optional[str] = None,
+        torrent_hash: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> None:
+        """写一条展示历史；写入失败只记日志，绝不改变业务结果或既有计数。"""
+        record: dict[str, Any] = {
+            "trigger": trigger,
+            "occurred_at": time.time(),
+            "action": action,
+            "result": result,
+            "reason": reason,
+        }
+        if downloader is not None:
+            record["downloader_id"] = downloader
+        if torrent_hash is not None:
+            record["torrent_hash"] = torrent_hash
+        if name is not None:
+            record["name"] = name
+        try:
+            from ...model import execution_history
+
+            execution_history.append(self._plugin, "failclean", record)
+        except Exception as error:
+            logger.error(f"{FAILCLEAN_LOG_PREFIX}写入展示历史失败（不影响业务结果）：{error}")
+
+    def _observe_only(self) -> bool:
+        """只读判断本轮是否处于观察模式（用于区分 observed/skipped 记录）。
+
+        延迟导入：观察模式快照由 utils.config 提供，但既有测试桩只导出了
+        module_active/observe_skip；缺失时按「非观察」处理——该环境下
+        observe_skip 恒返回 False，skipped 结果只能来自 H&R 保护。
+        """
+        try:
+            from ...utils.config import observe_only
+        except ImportError:
+            return False
+        return bool(observe_only(self._plugin, "failclean"))
 
     def _record_result(
         self,

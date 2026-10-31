@@ -15,7 +15,7 @@ assert.deepEqual(compileTemplate({ source: descriptor.template.content, filename
 const Header = await loadSfc('ModuleHeader.vue')
 const setup = new Function('reactive', 'ref', 'computed', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount',
   'defineProps', 'defineEmits', 'getPluginApi', 'postPluginApi', 'postPluginJsonApi',
-  `${descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)}\nreturn { overview, diagnostics, transferStatus, hrTasks, autoremoveStatus, failcleanStatus, siteTagStatus, renameStatus, moduleRunning, moduleHeaders, moduleCards, moduleGridCards, activeTab };`)
+  `${descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)}\nreturn { overview, diagnostics, transferStatus, hrTasks, autoremoveStatus, failcleanStatus, siteTagStatus, renameStatus, moduleRunning, moduleHeaders, moduleCards, moduleGridCards, formatDuration, activeTab };`)
 function page(watcher = watch) {
   const noRequest = () => { throw new Error('Header projection must not request API') }
   return setup(reactive, ref, computed, watcher, nextTick, () => {}, () => {},
@@ -72,6 +72,46 @@ test('七模块缺失徽标均为 —；真实零保留，不从列表或本次�
   p.transferStatus.value = { summary: { pending: 0 } }
   assert.deepEqual(values(p.moduleHeaders.value.transfer), { 在途: 0, 今日成功: 0, 今日失败: '—', 累计成功: 20 })
   assert.deepEqual(values(p.moduleHeaders.value.rename), { 今日成功: '—', 今日失败: '—', 待重试: 0, 失败归档: 2 })
+})
+
+test('F09 重命名徽标直读今日成功/失败：非零、真实零、字段缺失均不伪造', () => {
+  const p = page()
+  p.renameStatus.value = { today_success: 5, today_failed: 2 }
+  assert.deepEqual(values(p.moduleHeaders.value.rename), { 今日成功: 5, 今日失败: 2, 待重试: '—', 失败归档: '—' })
+  p.renameStatus.value = { today_success: 0, today_failed: 0 }
+  assert.deepEqual(values(p.moduleHeaders.value.rename), { 今日成功: 0, 今日失败: 0, 待重试: '—', 失败归档: '—' })
+  p.renameStatus.value = { renamed: 32, failed: 7 }
+  assert.equal(values(p.moduleHeaders.value.rename)['今日成功'], '—')
+  assert.equal(values(p.moduleHeaders.value.rename)['今日失败'], '—')
+})
+
+test('F10 站点标签徽标只读 round：有 round 用本轮投影，无 round 不回退累计 completed', () => {
+  const p = page()
+  p.siteTagStatus.value = { completed: 900, skipped: 6, round: { checked: 100, success: 80, no_update: 15, failed: 5 } }
+  assert.deepEqual(values(p.moduleHeaders.value.tag), { 本轮检查: 100, 成功: 80, 无需更新: 15, 失败: 5 })
+  p.siteTagStatus.value = { completed: 0, round: { checked: 0, success: 0, no_update: 0, failed: 0 } }
+  assert.deepEqual(values(p.moduleHeaders.value.tag), { 本轮检查: 0, 成功: 0, 无需更新: 0, 失败: 0 })
+  p.siteTagStatus.value = { completed: 900, skipped: 6, round: null }
+  assert.deepEqual(values(p.moduleHeaders.value.tag), { 本轮检查: '—', 成功: '—', 无需更新: '—', 失败: '—' }, '无 round 不得拿累计 completed 顶替')
+})
+
+test('F11 自动删种跳过徽标读汇总 skipped：非零、真实零、字段缺失', () => {
+  const p = page()
+  p.autoremoveStatus.value = { enabled: true, action: 'delete', candidates: 12, deleted: 3, skipped: 5, failed: 1 }
+  assert.deepEqual(values(p.moduleHeaders.value.autoremove), { 上轮候选: 12, 成功: 3, 跳过: 5, 失败: 1 })
+  p.autoremoveStatus.value = { enabled: true, action: 'delete', candidates: 0, deleted: 0, skipped: 0, failed: 0 }
+  assert.deepEqual(values(p.moduleHeaders.value.autoremove), { 上轮候选: 0, 成功: 0, 跳过: 0, 失败: 0 })
+  p.autoremoveStatus.value = { enabled: true, action: 'delete', candidates: 12, deleted: 3, skipped_protected: 5, failed: 1 }
+  assert.equal(values(p.moduleHeaders.value.autoremove)['跳过'], '—')
+})
+
+test('F12 在途等待时长：waited_minutes 显式乘 60 后按秒格式化，2 分钟显示 2 分而非 2 秒', () => {
+  const p = page()
+  assert.equal(p.formatDuration(120), '2 分', '2 分钟 = 120 秒')
+  assert.equal(p.formatDuration(0), '—')
+  assert.equal(p.formatDuration(2), '0 分', '直接喂分钟值 2 会被当成 2 秒得 0 分，故必须乘 60')
+  assert.match(source, /row\.waited_minutes != null \? formatDuration\(Number\(row\.waited_minutes\) \* 60\)/)
+  assert.doesNotMatch(source, /formatDuration\(row\.wait_seconds\)/)
 })
 
 test('启停取配置而非活跃/历史计数；观察/故障/执行中独立，真实头部渲染有文字', async () => {

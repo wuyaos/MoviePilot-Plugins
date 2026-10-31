@@ -23,6 +23,10 @@ TRANSFER_SCHEDULE_SCHEMA_VERSION = 1
 
 UPLOAD_LIMIT_STATE_KEY = "upload_limit_state"
 
+EXECUTION_HISTORY_KEY = "execution_history"
+EXECUTION_HISTORY_SCHEMA_VERSION = 1
+_HISTORY_LOCK = RLock()
+
 PERSISTED_STATE_KEYS = {
     "rename_history": RENAME_RECORDS_KEY,
     "rename_retry_state": RENAME_RETRY_STATE_KEY,
@@ -34,6 +38,7 @@ PERSISTED_STATE_KEYS = {
     "hr_notify_events": HR_NOTIFY_EVENTS_DATA_KEY,
     "sitetag_status": SITE_TAG_STATUS_KEY,
     "tag_cleanup_status": TAG_CLEANUP_STATUS_KEY,
+    "execution_history": EXECUTION_HISTORY_KEY,
 }
 
 

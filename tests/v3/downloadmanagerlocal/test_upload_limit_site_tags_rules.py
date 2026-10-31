@@ -61,7 +61,7 @@ class FakeBaseModel:
 MODEL_NAMES = (
     'CleanupModuleRequest', 'CleanupModuleResult', 'DiagnosticsResult', 'EmptyRequest', 'HashActionResult', 'HrActionResult',
     'HrClearTaskRequest', 'HrPresetsResult', 'HrSkipStatsResult', 'HrTasksResult',
-    'ModuleActionResult', 'ModuleStatusResult', 'OverviewResult', 'RenamePageResult',
+    'ModuleActionResult', 'ModuleConfigSummaryResult', 'ModuleStatusResult', 'OverviewResult', 'RenamePageResult',
     'RetryRenamesResult', 'SelectionItem', 'TagCleanupExecuteRequest',
     'TagCleanupExecuteResult', 'TagCleanupScanRequest', 'TagCleanupScanResult',
     'UploadLimitDisableResult', 'UploadLimitReallocateResult', 'UploadLimitRulesRequest',

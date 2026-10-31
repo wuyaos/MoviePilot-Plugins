@@ -267,3 +267,38 @@ class ModuleActionResult(ApiBusinessModel):
     code: int = 0
     msg: str = ""
     result: dict[str, JsonData] = Field(default_factory=dict)
+
+
+class ModuleConfigSummaryResult(ApiBusinessModel):
+    """七个模块的只读配置摘要（反映已生效配置，不随表单临时态变化）。"""
+
+    code: int = 0
+    modules: dict[str, JsonData] = Field(default_factory=dict)
+
+
+class ExecutionHistoryRecord(ApiBusinessModel):
+    """展示历史统一记录结构（schema v1）。"""
+    record_id: str = ""
+    module: str = ""
+    trigger: str = ""
+    occurred_at: float = 0
+    action: str = ""
+    result: str = ""
+    reason: str = ""
+    downloader_id: Optional[str] = None
+    torrent_hash: Optional[str] = None
+    name: Optional[str] = None
+    site: Optional[str] = None
+
+
+class ExecutionHistoryPageResult(ApiBusinessModel):
+    """展示历史分页结果（含初始化状态区分「空」与「尚无记录」）。"""
+    items: list[ExecutionHistoryRecord] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+    total_pages: int = 1
+    result_filter: str = "all"
+    stream: str = ""
+    initialized: bool = False
+    note: str = ""

@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from ..adapter.moviepilot import get_downloader_service, get_url_domain, list_builtin_sites
 from ..modules.rename.locator import resolve_record_downloader
+from ..modules.rename.record_keys import downloader_of_key, hash_of_key, lookup as lookup_record
 from ..model.api import (
     ApiBusinessModel,
     CleanupModuleRequest,
@@ -26,6 +27,7 @@ from ..model.api import (
     HrSkipStatsResult,
     HrTasksResult,
     ModuleActionResult,
+    ModuleConfigSummaryResult,
     ModuleStatusResult,
     OverviewResult,
     RetryRenamesResult,
@@ -68,8 +70,7 @@ from ..modules.uploadlimit.service import (
 )
 
 from .records import record_page, record_query
-
-
+from .config_summary import build_module_config_summary
 BusinessModelT = TypeVar("BusinessModelT", bound=ApiBusinessModel)
 
 
@@ -161,13 +162,11 @@ def api_rename_scan(plugin):
         {"code": 0, "msg": "扫描已开始，正在后台处理，结果见重命名历史", "running": True},
         RetryRenamesResult,
     )
-
-
-def api_retry_rename(plugin, hash: str = ""):
-    """对指定种子 hash 手动重试重命名和站点标签。"""
+def api_retry_rename(plugin, hash: str = "", downloader: str = ""):
+    """对指定种子 hash（可带下载器身份）手动重试重命名和站点标签。"""
     _require_module(plugin, "rename", "命名补刀")
     try:
-        return _operation_response(plugin._retry_rename(hash), HashActionResult)
+        return _operation_response(plugin._retry_rename(hash, downloader), HashActionResult)
     except Exception as e:
         logger.error(f"【PT下载中心】单条补刀失败: {e}")
         return _operation_response(
@@ -246,8 +245,17 @@ def api_overview(plugin):
         })
     except Exception as e:
         _raise_query_error("总览信息生成失败", e)
+def api_module_config_summary(plugin):
 
+    """返回七个模块的只读配置摘要（已生效配置，不含表单临时态）。"""
 
+    try:
+
+        return ModuleConfigSummaryResult.model_validate(build_module_config_summary(plugin))
+
+    except Exception as e:
+
+        _raise_query_error("模块配置摘要生成失败", e)
 def api_upload_limit_status(plugin):
     """返回上传限速配置页状态。"""
     try:
@@ -410,20 +418,32 @@ def api_rename_history(plugin, page: int = 1, page_size: int = 20, result_filter
         page, page_size, result_filter, ("all", "success", "failed"))
     records = plugin.get_data(RENAME_RECORDS_KEY) or {}
     retry_state = plugin.get_data(RENAME_RETRY_STATE_KEY) or {}
-    archived_hashes = {
-        record_hash
-        for record_hash, state in retry_state.items()
+    archived_keys = {
+        state_key
+        for state_key, state in retry_state.items()
         if isinstance(state, dict) and state.get("archived")
     } if isinstance(retry_state, dict) else set()
+    archived_pairs = {
+        (hash_of_key(state_key), downloader_of_key(state_key) or str(state.get("downloader") or "").strip())
+        for state_key, state in retry_state.items()
+        if state_key in archived_keys and isinstance(state, dict)
+    }
     items = []
     for record_hash, record in records.items():
         if not isinstance(record, dict):
             continue
-        if record.get("history_hidden") or record_hash in archived_hashes:
+        record_hash_part = hash_of_key(record_hash)
+        record_dl = str(record.get("downloader") or "").strip() or downloader_of_key(record_hash)
+        # 归档按 (hash, 下载器) 隔离；任一侧下载器未知（旧数据）保持旧行为（按 hash 隐藏）
+        archived_hit = any(
+            archived_hash == record_hash_part and (not record_dl or not archived_dl or archived_dl == record_dl)
+            for archived_hash, archived_dl in archived_pairs)
+        if record.get("history_hidden") or archived_hit:
             continue
         item = dict(record)
         item["_record_key"] = record_hash
-        item["hash"] = item.get("hash") or record_hash
+        item["hash"] = item.get("hash") or hash_of_key(record_hash)
+        item["downloader"] = str(item.get("downloader") or "").strip()
         items.append(item)
     if result_filter != "all":
         items = [item for item in items if bool(item.get("success")) == (result_filter == "success")]
@@ -435,11 +455,18 @@ def api_rename_history(plugin, page: int = 1, page_size: int = 20, result_filter
 
 
 @serialized_rename_state
-def api_delete_rename_history(plugin, hash: str = ""):
-    """仅隐藏指定历史，保留补刀与恢复原名依据。"""
+def api_delete_rename_history(plugin, hash: str = "", downloader: str = ""):
+    """仅隐藏指定历史，保留补刀与恢复依据；同 hash 多下载器时须指明下载器。"""
     records = plugin.get_data(RENAME_RECORDS_KEY) or {}
-    if hash in records:
-        records[hash]["history_hidden"] = True
+    found = lookup_record(records, hash, downloader)
+    if found["status"] == "ambiguous" or (downloader and found["status"] == "other_downloader"):
+        candidates = ", ".join(found.get("candidates") or [])
+        return _operation_response(
+            {"code": 1, "msg": f"该种子存在多个下载器的记录（{candidates}），请指定下载器", "hash": hash},
+            HashActionResult,
+        )
+    if found["key"] and isinstance(found["record"], dict):
+        records[found["key"]]["history_hidden"] = True
         plugin.save_data(RENAME_RECORDS_KEY, records)
         return _operation_response(
             {"code": 0, "msg": "已删除", "hash": hash},
@@ -459,24 +486,25 @@ def api_rename_archive(plugin, page: int = 1, page_size: int = 20, result_filter
     page, page_size, result_filter = record_query(
         page, page_size, result_filter, ("all", "failed"))
     state = plugin.get_data(RENAME_RETRY_STATE_KEY) or {}
-    items = [dict(item, hash=key) for key, item in state.items()
-             if isinstance(item, dict) and item.get("archived") and not item.get("display_hidden")]
+    items = []
+    for key, item in state.items():
+        if isinstance(item, dict) and item.get("archived") and not item.get("display_hidden"):
+            entry = dict(item)
+            entry["hash"] = hash_of_key(key)
+            entry["downloader"] = str(entry.get("downloader") or "").strip() or downloader_of_key(key)
+            items.append(entry)
     items.sort(key=lambda item: str(item["hash"]))
     items.sort(key=lambda item: str(item.get("archived_at") or item.get("last_failed_at") or ""), reverse=True)
     items = items[:1000]
     return record_page(items, page, page_size, result_filter)
-
-
-def api_restore_rename_archive(plugin, hash: str = ""):
+def api_restore_rename_archive(plugin, hash: str = "", downloader: str = ""):
     """恢复归档记录，使其继续参与补刀。"""
-    return _operation_response(plugin.restore_rename_archive(hash), HashActionResult)
+    return _operation_response(plugin.restore_rename_archive(hash, downloader), HashActionResult)
 
 
-def api_delete_rename_archive(plugin, hash: str = ""):
+def api_delete_rename_archive(plugin, hash: str = "", downloader: str = ""):
     """仅隐藏归档展示，保留自动补刀排除状态。"""
-    return _operation_response(plugin.delete_rename_archive(hash), HashActionResult)
-
-
+    return _operation_response(plugin.delete_rename_archive(hash, downloader), HashActionResult)
 def _cleanup_actions(plugin) -> dict:
     """数据页清理白名单：对象标识 → 清理动作。
 
@@ -569,7 +597,7 @@ def api_cleanup_module_data(plugin, payload: CleanupModuleRequest):
 
 
 @serialized_rename_state
-def api_recovery_torrent(plugin, hash: str = ""):
+def api_recovery_torrent(plugin, hash: str = "", downloader: str = ""):
     """恢复种子原始名称"""
     _require_module(plugin, "rename", "命名补刀")
     if not hash:
@@ -578,7 +606,15 @@ def api_recovery_torrent(plugin, hash: str = ""):
             HashActionResult,
         )
     records = plugin.get_data(RENAME_RECORDS_KEY) or {}
-    record = records.get(hash)
+    found = lookup_record(records, hash, downloader)
+    if found["status"] == "ambiguous" or (downloader and found["status"] == "other_downloader"):
+        candidates = ", ".join(found.get("candidates") or [])
+        return _operation_response(
+            {"code": 1, "msg": f"该种子存在多个下载器的记录（{candidates}），请指定下载器", "hash": hash},
+            HashActionResult,
+        )
+    record_key_hit = found["key"]
+    record = found["record"] if isinstance(found["record"], dict) else None
     if not record or not record.get("success"):
         return _operation_response(
             {"code": 1, "msg": "未找到成功的重命名记录", "hash": hash},
@@ -623,8 +659,9 @@ def api_recovery_torrent(plugin, hash: str = ""):
         record["success"] = True
         record["downloader"] = getattr(to_service, "name", "") or record.get("downloader", "")
         record["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        records[hash] = record
-        plugin.save_data(RENAME_RECORDS_KEY, records)
+        if record_key_hit:
+            records[record_key_hit] = record
+            plugin.save_data(RENAME_RECORDS_KEY, records)
         logger.info(f"【PT下载中心】种子恢复成功: {hash} → {original_name}")
         return _operation_response(
             {"code": 0, "msg": f"已恢复为: {original_name}", "hash": hash},
@@ -1048,3 +1085,69 @@ def api_rename_status(plugin):
     status = rename_module_status(plugin)
     status["batch_running"] = bool(getattr(plugin, "_rename_batch_running", False))
     return ModuleStatusResult(code=0, status=status)
+def api_execution_history(plugin, module: str = "", page: int = 1, page_size: int = 20, result_filter: str = "all", detail_limit=None):
+
+    """分页返回指定模块的展示历史；未初始化（尚无新记录）与空结果可区分。"""
+
+    from ..model import execution_history
+
+    page, page_size, result_filter = record_query(
+
+        page, page_size, result_filter, execution_history.HISTORY_FILTERS)
+
+    try:
+
+        snapshot = execution_history.query(plugin, module, result_filter)
+
+    except execution_history.HistoryRecordError as error:
+
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    except Exception as error:
+
+        _raise_query_error("展示历史查询失败", error)
+
+    result = record_page(snapshot["items"], page, page_size, result_filter)
+
+    result["stream"] = module
+
+    result["initialized"] = snapshot["initialized"]
+
+    result["note"] = "" if snapshot["initialized"] else "尚无新记录"
+
+    return result
+
+
+def api_execution_history_clear(plugin, payload: CleanupModuleRequest):
+
+    """清空指定模块的展示历史（不影响业务/保护/恢复数据）。"""
+
+    from ..model import execution_history
+
+    body = _request_dict(payload)
+
+    try:
+
+        request = CleanupModuleRequest.model_validate(body)
+
+    except Exception as error:
+
+        raise HTTPException(status_code=400, detail=f"清理请求不合法：{error}") from error
+
+    try:
+
+        removed = execution_history.clear(plugin, request.module)
+
+    except execution_history.HistoryRecordError as error:
+
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    logger.info(f"【PT下载中心】展示历史清理[{request.module}]：清理 {removed} 条")
+
+    return _operation_response(
+
+        {"code": 0, "msg": f"已清理 {removed} 条", "removed": removed, "module": request.module},
+
+        CleanupModuleResult,
+
+    )

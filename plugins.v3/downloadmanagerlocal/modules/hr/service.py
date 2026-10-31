@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from contextlib import contextmanager
 from threading import Lock, RLock
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from app.sdk.logging import logger
 from pydantic import ValidationError
@@ -132,7 +132,8 @@ class HrService:
         """返回 H&R 任务列表与汇总，任务字段含 downloader_id/torrent_hash/name/site/status/
         progress/remain_seconds/deadline/type，deadline 为截止时间戳（0 表示未设考核期）。"""
         with self._lock:
-            tasks = [self._task_view(task) for task in self._tasks.values()]
+            resolver = self._rule_source_resolver()
+            tasks = [self._task_view(task, resolver) for task in self._tasks.values()]
             summary = self._summary_view()
         tasks.sort(key=lambda item: (item["deadline"] or float("inf"), item["name"]))
         return {"tasks": tasks, "summary": summary}
@@ -554,8 +555,98 @@ class HrService:
             ):
                 remove_hr_tag(service, task.hash, tag)
 
-    def _task_view(self, task: HrTask) -> dict[str, Any]:
-        """构造单个任务的对外字段视图。"""
+    def _saved_config(self) -> dict:
+        """读取已保存配置；`get_config` 不可用或非 dict 时返回空 dict。"""
+        try:
+            raw = self._plugin.get_config()
+        except Exception:
+            return {}
+        return raw if isinstance(raw, dict) else {}
+
+    def _custom_site_names(self, config: dict) -> set[str]:
+        """已保存配置中站点自定义 YAML 的站点名集合（来源 hr_site_config_str）。"""
+        raw_yaml = str(config.get("hr_site_config_str") or "").strip()
+        if not raw_yaml:
+            return set()
+        from .rules import _load_yaml_list
+
+        items = _load_yaml_list(raw_yaml)
+        if not isinstance(items, list):
+            return set()
+        names = set()
+        for item in items:
+            if isinstance(item, dict):
+                name = str(item.get("site_name") or "").strip()
+                if name:
+                    names.add(name)
+        return names
+
+    def _rule_source_resolver(self) -> Callable[[Any], str]:
+        """构造一次批量投影内复用的规则来源判定。
+
+        站点自定义 YAML 与内置预设只在首次命中站点规则时读取一次：`get_service_infos()`
+        逐任务投影，若逐个任务现读会造成「任务数 N → N 次配置读取 + N 次预设解析」。
+        """
+        site_rules = self._config.site_rules
+        cache: dict[str, Any] = {}
+
+        def resolve(site_name: Any) -> str:
+            name = str(site_name or "").strip()
+            if not name or name not in site_rules:
+                return "global"
+            if "custom" not in cache:
+                from .rules import load_preset_rules
+
+                cache["custom"] = self._custom_site_names(self._saved_config())
+                cache["presets"] = set(load_preset_rules().keys())
+            if name in cache["custom"]:
+                return "site"
+            if name in cache["presets"]:
+                return "builtin"
+            return "unknown"
+
+        return resolve
+
+    def _rule_source(self, site_name: Optional[str],
+                     resolver: Optional[Callable[[Any], str]] = None) -> str:
+        """判定任务规则来源：global / site（站点自定义）/ builtin（内置预设）/ unknown。"""
+        return (resolver or self._rule_source_resolver())(site_name)
+
+    def _requirement_view(self, task: HrTask) -> dict[str, Any]:
+        """任务考核要求（已按站点规则初始化）。"""
+        return {
+            "seeding_hours": task.required_hours(),
+            "hr_duration": task.hr_duration,
+            "additional_seed_time": task.additional_seed_time,
+            "ratio": task.hr_ratio,
+            "upload_multiplier": task.hr_upload_multiplier,
+            "upload_gte_download": task.hr_upload_gte_download,
+            "deadline_days": task.hr_deadline_days,
+            "deadline_from_completion": task.hr_deadline_from_completion,
+        }
+
+    def _accumulated_view(self, task: HrTask) -> dict[str, Any]:
+        """任务累计实际值（做种时长/分享率/上下行等）。"""
+        return {
+            "seeding_hours": round((task.seeding_time or 0) / 3600, 4),
+            "ratio": task.ratio,
+            "uploaded": task.uploaded,
+            "downloaded": task.downloaded,
+            "downloader_seeding_time": task.downloader_seeding_time,
+        }
+
+    def _deadline_basis_view(self, task: HrTask) -> dict[str, Any]:
+        """任务期限起点（完成时间/添加时间/截止时间）。"""
+        return {
+            "added_on": task.added_on,
+            "completed_on": task.completed_on,
+            "deadline_from_completion": task.hr_deadline_from_completion,
+            "deadline_time": task.deadline_time,
+        }
+
+    def _task_view(self, task: HrTask,
+                   resolver: Optional[Callable[[Any], str]] = None) -> dict[str, Any]:
+        """构造单个任务的对外字段视图（含规则来源与考核/累计/期限投影）。"""
         return {
             "downloader_id": task.downloader,
             "torrent_hash": task.hash,
@@ -568,6 +659,10 @@ class HrService:
             "deadline": task.deadline_time if task.hr_deadline_days and task.hr_deadline_days > 0 else 0,
             "type": task.task_type.value,
             "deleted": task.deleted,
+            "rule_source": self._rule_source(task.site_name, resolver),
+            "requirements": self._requirement_view(task),
+            "accumulated": self._accumulated_view(task),
+            "deadline_basis": self._deadline_basis_view(task),
         }
 
     def _summary_view(self) -> dict[str, Any]:
