@@ -89,6 +89,13 @@ def tr(monkeypatch):
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.adapter", __path__=[])
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.adapter.moviepilot",
             is_downloader_type=Mock(return_value=False))
+    # T04-t：service.py 迁移后 from ...adapter.downloader import read_torrents，按真实实现加载。
+    _dl_spec = importlib.util.spec_from_file_location(
+        "app.plugins.downloadmanagerlocal.adapter.downloader",
+        PLUGIN / "adapter" / "downloader.py")
+    _dl_mod = importlib.util.module_from_spec(_dl_spec)
+    monkeypatch.setitem(sys.modules, _dl_spec.name, _dl_mod)
+    _dl_spec.loader.exec_module(_dl_mod)
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.utils", __path__=[str(UTILS)])
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.utils.name_cleaner",
             is_dirty_renamed_torrent_name=Mock(return_value=False))
@@ -392,3 +399,23 @@ class TestRetryPendingRenamesDownloaders:
         assert result["code"] == 0
         assert result["total"] == 2
         assert result["history"] == 2
+
+
+def test_retry_dirty_scan_invalid_dict_records_error(tr):
+    """A7 反例（T04-t）：补刀扫描返回非法 dict → 记录 errors、attempted 不增。
+
+    迁移前 dict truthy 静默漏扫（error 被丢弃）；迁移后公共层判非法结构
+    → success=False → logger.error + result["errors"] 记录。
+    """
+    plugin = MagicMock()
+    plugin._rename_enabled = True
+    dl = MagicMock()
+    dl.get_torrents.return_value = {"bad": 1}
+    service = MagicMock()
+    service.instance = dl
+    service.type = "qbittorrent"
+
+    result = tr.retry_dirty_torrent_names(plugin, service)
+
+    assert result["attempted"] == 0
+    assert result["errors"], "查询失败必须进入 errors，不得静默返回"

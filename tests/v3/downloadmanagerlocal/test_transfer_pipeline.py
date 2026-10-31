@@ -70,6 +70,16 @@ def runtime(monkeypatch):
     monkeypatch.setitem(sys.modules, adapter_spec.name, adapter)
     adapter_spec.loader.exec_module(adapter)
 
+    # T04-t：pipeline/recheck/service 迁移到 adapter.downloader.read_torrents（无相对
+    # 依赖、纯标准库），与 torrent_adapter 同法真实加载。
+    module('app.plugins.downloadmanagerlocal.adapter', __path__=[])
+    dl_spec = importlib.util.spec_from_file_location(
+        'app.plugins.downloadmanagerlocal.adapter.downloader',
+        plugin_root / 'adapter' / 'downloader.py',
+    )
+    dl_mod = importlib.util.module_from_spec(dl_spec)
+    monkeypatch.setitem(sys.modules, dl_spec.name, dl_mod)
+    dl_spec.loader.exec_module(dl_mod)
     def load(name):
         spec = importlib.util.spec_from_file_location(PREFIX + '.' + name, SERVICE / (name + '.py'))
         result = importlib.util.module_from_spec(spec)
@@ -543,3 +553,92 @@ def test_skip_stats_increment_holds_recheck_lock(runtime):
 
     assert r.data['transfer_skip_stats']['hr_protected'] == 1
     assert owned_seen and all(owned_seen)
+
+
+def test_pause_poll_invalid_dict_rolls_back_without_target_add(runtime):
+    """A1 反例（T04-t）：暂停轮询返回非法 dict 必须明确失败回滚，不得误入活动判定。
+
+    迁移前 dict 为 truthy，会被当「任务仍在活动」一路等到暂停超时；迁移后公共层
+    判非法结构 → success=False → RuntimeError → rollback，且目标未添加、不删源。
+    """
+    r = runtime
+    r.source.get_torrents.return_value = {'bad': 1}
+    result = begin(r)
+
+    assert result is False
+    item = r.data['queue']['target::abc']
+    assert item['phase'] == 'rollback'
+    assert '暂停状态查询失败' in item['error']
+    r.target.delete_torrents.assert_not_called()  # 目标未添加，无删除发生
+    r.source.delete_torrents.assert_not_called()  # 回滚永不删源
+
+
+def test_rollback_confirm_invalid_dict_retries_without_resuming_source(runtime):
+    """A2 反例（T04-t）：回滚确认返回非法 dict 视为查询失败重试，不得恢复源。
+
+    迁移前 dict truthy → `remaining` 恒真 → return False（不可观测的重试）；迁移后
+    公共层 success=False → warning + return False，源保持暂停，等待下一轮重试。
+    """
+    r = runtime
+    begin(r)
+    # 绕开 delete_target side_effect（它会把 get_torrents 重置回合法二元组），
+    # 让确认查询本身拿到非法 dict。
+    r.target.delete_torrents.side_effect = None
+    r.target.delete_torrents.return_value = True
+    r.target.get_torrents.return_value = {'bad': 1}
+    r.recheck.process_seed_recheck_once(r.plugin, r.recheck.load_seed_recheck_queue(r.plugin))
+
+    r.source.start_torrents.assert_not_called()  # 查询失败不得恢复源（防双端做种）
+    assert r.data['queue']  # 队列保留等待重试
+
+
+def test_recheck_query_raise_keeps_queue_without_rollback(runtime, monkeypatch):
+    """A4 反例1（T04-t）：查询抛异常由公共层吞掉，只保留队列续办。
+
+    查询已移出事务 try：下载器异常不得触发 rollback 策略（迁移前查询与事务共用
+    except，查询异常会误把 target_added 事务标成 rollback）。
+    """
+    r = runtime
+    begin(r)
+    r.target.get_torrents.side_effect = RuntimeError('downloader boom')
+    r.recheck.process_seed_recheck_once(r.plugin, r.recheck.load_seed_recheck_queue(r.plugin))
+
+    item = r.data['queue']['target::abc']
+    assert item['phase'] == 'target_added'  # 事务状态未被查询异常污染
+    assert item.get('error') in (None, '')  # 未写入事务错误
+    r.target.delete_torrents.assert_not_called()
+    r.source.start_torrents.assert_not_called()
+
+
+def test_recheck_invalid_dict_keeps_queue_without_rollback(runtime):
+    """A4 反例2（T04-t）：非法 dict 判查询失败，保留队列，不删目标。
+
+    迁移前 dict 成功返回 → task=None → advance_transfer「目标丢失」→ rollback
+    删目标（数据丢失洞）；迁移后公共层 success=False → continue。
+    """
+    r = runtime
+    begin(r)
+    r.target.get_torrents.return_value = {'bad': 1}
+    r.recheck.process_seed_recheck_once(r.plugin, r.recheck.load_seed_recheck_queue(r.plugin))
+
+    assert r.data['queue']['target::abc']['phase'] == 'target_added'
+    r.target.delete_torrents.assert_not_called()
+    r.source.start_torrents.assert_not_called()
+
+
+def test_recheck_transaction_error_still_rolls_back(runtime, monkeypatch):
+    """A4 反例3（T04-t）：事务内部异常的回滚策略保持不变。
+
+    save_transaction 抛异常属于事务异常，仍按 phase∈{target_added,verifying}
+    → rollback 处理——证明 try 收窄没有误伤原有事务保护。
+    """
+    r = runtime
+    begin(r)
+    tx_error = Mock(side_effect=RuntimeError('tx write failed'))
+    monkeypatch.setattr(r.pipeline, 'save_transaction', tx_error)
+    r.recheck.process_seed_recheck_once(r.plugin, r.recheck.load_seed_recheck_queue(r.plugin))
+
+    item = r.data['queue']['target::abc']
+    assert item['phase'] == 'rollback'
+    assert 'tx write failed' in (item.get('error') or '')
+    assert r.data['queue']  # 队列保留，回滚在下一轮执行

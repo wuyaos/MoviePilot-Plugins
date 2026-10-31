@@ -10,6 +10,8 @@ from app.schemas.types import MessageType
 from app.sdk.config import settings
 from app.sdk.logging import logger
 
+from ...adapter.downloader import read_torrents
+
 from ...adapter.moviepilot import is_downloader_type
 from ...utils.name_cleaner import is_dirty_renamed_torrent_name
 from ...utils.torrent_adapter import get_label, get_save_path, get_torrent_name, get_tracker_urls
@@ -192,11 +194,14 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
     dl_type = to_service.type
 
     try:
-        torrents, error = dl.get_torrents(ids=[torrent_hash])
-        if error or not torrents:
+        result = read_torrents(to_service, [torrent_hash])
+        if not result.success:
+            logger.warning(f"【PT下载中心:转移做种】转移后处理：查询目标种子失败 hash={torrent_hash}: {result.error}")
+            return False
+        if not result.items:
             logger.warning(f"【PT下载中心:转移做种】转移后处理：无法获取种子信息 hash={torrent_hash}")
             return False
-        torrent = torrents[0]
+        torrent = result.items[0]
         # 宿主下载器模块对 qB 返回 dict、对 TR/rt 在部分版本返回对象或 dict，
         # 统一走适配器读取，避免 `.name` 直接取属性在 dict 形态下抛 AttributeError。
         torrent_name = get_torrent_name(torrent)
@@ -435,13 +440,14 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
             skip += 1
             continue
 
-        torrent_info, poll_error = to_downloader.get_torrents(ids=[source_hash])
+        poll_result = read_torrents(to_service, [source_hash])
         if _transfer_stopped(plugin, generation):
             break
-        if poll_error or torrent_info is None:
-            logger.warning(f"【PT下载中心:转移做种】任务「{task_name}」目标任务查询失败，保留源任务：{source_hash[:8]}")
+        if not poll_result.success:
+            logger.warning(f"【PT下载中心:转移做种】任务「{task_name}」目标任务查询失败，保留源任务：{source_hash[:8]}：{poll_result.error}")
             fail += 1
             continue
+        torrent_info = poll_result.items
         if torrent_info:
             # 历史记录只在目的下载器确实仍持有该任务时才算完成：目标被删后必须能重新转移。
             if previous.get("to_download") == to_service.name and previous.get("transfer_state") in ("completed", "stopped_after_add"):
@@ -603,13 +609,13 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
     result = {"attempted": 0, "success": 0, "failed": 0, "skipped": 0, "errors": []}
     if not plugin._rename_enabled or not to_service or not to_service.instance:
         return result
-    dl = to_service.instance
     dl_type = to_service.type
-    try:
-        torrents, _ = dl.get_torrents()
-    except Exception as e:
-        logger.error(f"【PT下载中心:转移做种】转移做种兜底服务：获取目标下载器任务失败: {e}")
+    scan_result = read_torrents(to_service, None)
+    if not scan_result.success:
+        logger.error(f"【PT下载中心:转移做种】转移做种兜底服务：获取目标下载器任务失败: {scan_result.error}")
+        result["errors"].append(scan_result.error)
         return result
+    torrents = scan_result.items
     if not torrents:
         return result
 
@@ -648,7 +654,7 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
                 result["errors"].append(f"{torrent_hash}: 无可信原始名称")
                 continue
             renamed = plugin._rename_torrent(
-                dl, dl_type, torrent_hash, retry_name, save_path
+                to_service.instance, dl_type, torrent_hash, retry_name, save_path
             )
             if renamed is None:
                 result["attempted"] -= 1

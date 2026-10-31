@@ -212,3 +212,38 @@ def test_pipeline_delete_decision_uses_resolved_snapshot(runtime, tt, value, glo
     assert r.source.delete_torrents.call_count == int(effective)
     if effective:
         r.source.delete_torrents.assert_called_once_with(delete_file=False, ids=["abc"])
+
+
+def test_target_poll_invalid_dict_counts_fail_and_keeps_source(tr, monkeypatch):
+    """A6 反例（T04-t）：目标判重查询返回非法 dict → fail+1，源任务保留。
+
+    迁移前 dict truthy 可能被误判「目的仍在」进 skip；迁移后公共层判非法结构
+    → success=False → warning+fail+continue，与查询失败同路径。
+    """
+    source, target = Mock(), Mock()
+    source.get_completed_torrents.return_value = [{"hash": "abc", "state": "pausedUP"}]
+    target.get_torrents.return_value = {"bad": 1}
+    services = {"A": SimpleNamespace(name="A", type="qbittorrent", instance=source),
+                "B": SimpleNamespace(name="B", type="qbittorrent", instance=target)}
+    plugin = SimpleNamespace(service_info=services.get, _scan_limit=500,
+                             _transfer_delete_source_default=False,
+                             _transfer_delete_duplicate_default=False,
+                             get_hash=lambda *a: "abc", get_save_path=lambda *a: "/data",
+                             get_label=lambda *a: [], get_category=lambda *a: "",
+                             get_data=lambda *a: {}, convert_save_path=lambda *a: "/data")
+    task = dict(name="决策", from_downloader="A", to_downloader="B", no_paths="",
+                include_category="", include_labels="", exclude_labels="", empty_label_ok=True,
+                from_path="", to_path="")
+    monkeypatch.setattr(tr, "_transfer_stopped", lambda *a: False)
+    monkeypatch.setattr(tr, "_transfer_delay_status", lambda *a: (False, 0, 0))
+    monkeypatch.setattr(tr, "get_torrent_payloads", Mock(return_value={"abc": b"payload"}))
+    monkeypatch.setattr(tr, "delete_source", Mock(return_value="deleted"))
+    monkeypatch.setattr(tr, "begin_transfer", Mock(return_value=True))
+
+    totals = dict(success=0, fail=0, skip=0, del_dup=0)
+    tr._run_task(plugin, task, "手动", 0, totals)
+
+    assert totals["fail"] == 1
+    assert totals["skip"] == 0          # 不误判「目的仍在」
+    source.delete_torrents.assert_not_called()  # 源任务保留
+    target.delete_torrents.assert_not_called()  # 不进转移/判重删除

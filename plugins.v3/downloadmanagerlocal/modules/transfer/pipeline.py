@@ -17,6 +17,7 @@ from ...utils.torrent_adapter import (
     get_torrent_state, is_torrent_active, normalize_hash, skipverify_applies,
     get_torrent_name, supports_recheck, torrent_is_complete,
 )
+from ...adapter.downloader import read_torrents
 
 # 同一颗源种子最多尝试 3 次：计数跨事务累计（存进来源记录，见 save_source_record），
 # 在**回滚完成后**加一——回滚本体的重试不算失败次数。
@@ -190,12 +191,12 @@ def begin_transfer(
             while True:
                 if stopped():
                     return False
-                tasks, error = from_service.instance.get_torrents(ids=[source_hash])
-                if error or tasks is None:
-                    raise RuntimeError("源下载器暂停状态查询失败")
-                if not tasks:
+                result = read_torrents(from_service, [source_hash])
+                if not result.success:
+                    raise RuntimeError(f"源下载器暂停状态查询失败: {result.error}")
+                if not result.items:
                     raise RuntimeError("源任务消失")
-                if not source_is_active(tasks[0], from_service.type):
+                if not source_is_active(result.items[0], from_service.type):
                     break
                 if time.monotonic() >= deadline:
                     raise RuntimeError("源任务暂停超时")
@@ -233,8 +234,11 @@ def rollback_transfer(plugin, item, target_service, stopped):
     if item["target_added"]:
         if target_service.instance.delete_torrents(delete_file=False, ids=[item["hash"]]) is False:
             return False
-        remaining, error = target_service.instance.get_torrents(ids=[item["hash"]])
-        if error or remaining is None or remaining:
+        result = read_torrents(target_service, [item["hash"]])
+        if not result.success:
+            logger.warning(f"【PT下载中心:转移做种】回滚确认查询失败: {result.error}")
+            return False
+        if result.items:
             return False
         item["target_added"] = False
         save_transaction(plugin, item)

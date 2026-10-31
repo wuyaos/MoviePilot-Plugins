@@ -10,6 +10,8 @@ from app.sdk.logging import logger
 
 from ...model.state import SEED_RECHECK_QUEUE_KEY
 
+from ...adapter.downloader import read_torrents
+
 from ...utils.torrent_adapter import get_torrent_state, torrent_is_complete
 
 
@@ -188,16 +190,18 @@ def process_seed_recheck_once(plugin, queue, stop_event=None):
             service = plugin.service_info(item["downloader"])
             if not service or not service.instance:
                 continue
+            # 查询走公共只读边界（内部吞异常、区分成功空集合与失败），移出事务 try：
+            # 查询失败只保留队列续办，不再误触事务异常的回滚策略。
+            result = read_torrents(service, [item["hash"]])
+            if not result.success:
+                continue
             try:
-                torrents, error = service.instance.get_torrents(ids=[item["hash"]])
-                if error or torrents is None:
-                    continue
-                task = next((t for t in torrents if str(plugin.get_hash(t, service.type)).lower() == item["hash"].lower()), None)
+                task = next((t for t in result.items if str(plugin.get_hash(t, service.type)).lower() == item["hash"].lower()), None)
                 if advance_transfer(plugin, item, service, task, stopped):
                     queue.pop(key, None)
                 changed = True
             except Exception as exc:
-                if item["phase"] in ("target_added", "verifying"):
+                if item.get("phase") in ("target_added", "verifying"):
                     item["phase"] = "rollback"
                     item["error"] = str(exc)
                 logger.error(f"【PT下载中心:做种校验】转移流水线：{key} 推进失败，保留续办: {exc}")

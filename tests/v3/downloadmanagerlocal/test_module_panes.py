@@ -89,6 +89,13 @@ def svc(monkeypatch):
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.adapter", __path__=[])
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.adapter.moviepilot",
             is_downloader_type=Mock(return_value=False))
+    # T04-t：pipeline 迁移后 from ...adapter.downloader import read_torrents，按真实实现加载。
+    _dl_spec = importlib.util.spec_from_file_location(
+        "app.plugins.downloadmanagerlocal.adapter.downloader",
+        PLUGIN / "adapter" / "downloader.py")
+    _dl_mod = importlib.util.module_from_spec(_dl_spec)
+    monkeypatch.setitem(sys.modules, _dl_spec.name, _dl_mod)
+    _dl_spec.loader.exec_module(_dl_mod)
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.utils", __path__=[str(UTILS)])
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.utils.name_cleaner",
             is_dirty_renamed_torrent_name=Mock(return_value=False))
