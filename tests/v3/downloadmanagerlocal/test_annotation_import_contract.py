@@ -28,17 +28,28 @@ def _module_import_names(tree: ast.Module) -> set:
 
 
 def _assigned_names(tree: ast.Module) -> set:
-    names = set()
-    for node in tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            continue
-        for sub in ast.walk(node):
-            if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Store):
-                names.add(sub.id)
-            elif isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                names.add(sub.name)
-    return names
+    """收集导入期可见的名字来源：顶层赋值（含 if/try 分支，导入期会执行）与 def/class 名。
 
+    不下钻函数/类**体**——那里的赋值不在导入期求值，若计入会掩盖签名里
+    真正未导入的名字（旧版 ast.walk 全下钻导致的假阴性）。
+    """
+    names = set()
+
+    def visit(node) -> None:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            return
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+            return
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            names.add(node.id)
+            return
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+
+    for node in tree.body:
+        visit(node)
+    return names
 
 def _annotation_names(node):
     out = set()

@@ -9,7 +9,7 @@ from ...model.state import record_transfer_success
 from ..hr.guard import SKIP_PATH_TRANSFER_SOURCE, HrGuard
 
 from .recheck import (
-    _queue_key, load_seed_recheck_queue, save_seed_recheck_queue,
+    _queue_key, _queue_lock, load_seed_recheck_queue, save_seed_recheck_queue,
     ensure_seed_recheck_worker, seed_is_checking, seed_is_ready, seed_is_error,
     seed_is_timeout,
 )
@@ -110,8 +110,8 @@ def delete_source(plugin, downloader_id, torrent_hash, *, authorized=False,
             logger.info(f"【PT下载中心:转移做种】H&R 删源拒绝：{error}")
             denied = True
     if guard.should_skip(SKIP_PATH_TRANSFER_SOURCE, downloader_id, torrent_hash):
-        # 读改写与并发轮次互斥，避免并发 transfer 轮次丢计数（与 record_transfer_* 同锁）。
-        with plugin._seed_recheck_lock:
+        # 读改写与并发轮次互斥，避免并发 transfer 轮次丢计数（锁与 seed_recheck 的轮次读改写同一把，取法需容错旧实例）。
+        with _queue_lock(plugin):
             stats = plugin.get_data("transfer_skip_stats") or {"hr_protected": 0}
             stats["hr_protected"] += 1
             plugin.save_data("transfer_skip_stats", stats)

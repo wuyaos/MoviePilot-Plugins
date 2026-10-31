@@ -1517,15 +1517,25 @@ function previewCleanupTags() {
 
 async function executeCleanupTags() {
   cleanupExecuting.value = true
+  let response = null
   try {
-    const response = await postJsonApi('tag_cleanup_execute', { removals: cleanupRemovals.value })
+    response = await postJsonApi('tag_cleanup_execute', { removals: cleanupRemovals.value })
+  } catch (error) {
+    if (error?.code === 2) {
+      // 部分失败（success=false 抛错）：按 warning 收尾，弹窗照常关闭并刷新列表
+      response = { code: 2, msg: error.message }
+    } else {
+      cleanupStatus.value = 'error'
+      cleanupMessage.value = error?.message || '清理失败'
+      cleanupExecuting.value = false
+      return
+    }
+  }
+  try {
     cleanupDialog.value = false
     await scanCleanupTags()
     cleanupStatus.value = response?.code === 0 ? 'success' : (response?.code === 2 ? 'warning' : 'error')
     cleanupMessage.value = response?.msg || '清理完成'
-  } catch (error) {
-    cleanupStatus.value = 'error'
-    cleanupMessage.value = error?.message || '清理失败'
   } finally {
     cleanupExecuting.value = false
   }

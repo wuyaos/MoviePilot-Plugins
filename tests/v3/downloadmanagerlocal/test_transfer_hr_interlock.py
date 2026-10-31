@@ -19,6 +19,7 @@ def wiring(interlock, monkeypatch):
     env.plugin.service_info.return_value = SimpleNamespace(instance=env.instance)
     from threading import RLock
     env.plugin._seed_recheck_lock = RLock()
+    env.plugin._seed_recheck_queue_lock = env.plugin._seed_recheck_lock
     env.instance.delete_torrents.return_value = True
     env.pipeline = pipeline
     return env
@@ -95,6 +96,7 @@ def test_advance_transfer_passes_only_config_authorization_and_real_verification
     pipeline = env.pipeline
     from threading import RLock
     env.plugin._seed_recheck_lock = RLock()
+    env.plugin._seed_recheck_queue_lock = env.plugin._seed_recheck_lock
     transfer = ModuleType("app.plugins.downloadmanagerlocal.modules.transfer.service")
     transfer.post_transfer_process = Mock(return_value=True)
     monkeypatch.setitem(sys.modules, transfer.__name__, transfer)
@@ -134,6 +136,7 @@ def test_real_verification_progression_controls_protected_source_release(wiring,
     pipeline = env.pipeline
     from threading import RLock
     env.plugin._seed_recheck_lock = RLock()
+    env.plugin._seed_recheck_queue_lock = env.plugin._seed_recheck_lock
     transfer = ModuleType("app.plugins.downloadmanagerlocal.modules.transfer.service")
     transfer.post_transfer_process = Mock(return_value=True)
     monkeypatch.setitem(sys.modules, transfer.__name__, transfer)

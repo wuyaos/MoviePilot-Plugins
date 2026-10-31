@@ -413,7 +413,7 @@ def api_tag_cleanup_execute(plugin, payload: TagCleanupExecuteRequest):
         )
 
 
-def api_rename_history(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all", detail_limit=None):
+def api_rename_history(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all"):
     """返回未归档重命名历史；success/failed 沿用 success 布尔值。"""
     page, page_size, result_filter = record_query(
         page, page_size, result_filter, ("all", "success", "failed"))
@@ -919,7 +919,7 @@ def _iter_transfer_records(plugin):
             yield key, value
 
 
-def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all", detail_limit=None):
+def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all"):
     """返回转移任务、在途事务与记录；统计保持全量口径。
 
     互斥结果分类：success 为 completed 且不属于删源未完成；failed 仅 failed
@@ -1085,7 +1085,7 @@ def api_rename_status(plugin):
     status = rename_module_status(plugin)
     status["batch_running"] = bool(getattr(plugin, "_rename_batch_running", False))
     return ModuleStatusResult(code=0, status=status)
-def api_execution_history(plugin, module: str = "", page: int = 1, page_size: int = 20, result_filter: str = "all", detail_limit=None):
+def api_execution_history(plugin, module: str = "", page: int = 1, page_size: int = 20, result_filter: str = "all"):
 
     """分页返回指定模块的展示历史；未初始化（尚无新记录）与空结果可区分。"""
 

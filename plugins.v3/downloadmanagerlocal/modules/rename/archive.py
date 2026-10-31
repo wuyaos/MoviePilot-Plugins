@@ -286,12 +286,12 @@ def clear_rename_archive(plugin) -> dict:
 
 
 @serialized_rename_state
-def list_rename_archive(plugin, page: int = 1, page_size: int = 15) -> dict:
+def list_rename_archive(plugin, page: int = 1, page_size: int = 20) -> dict:
     """返回补刀归档记录分页。"""
     state = get_rename_retry_state(plugin)
     all_items = archive_display_items(state)
     page = max(1, int(page or 1))
-    page_size = max(1, int(page_size or 15))
+    page_size = max(1, int(page_size or 20))
     total = len(all_items)
     start = (page - 1) * page_size
     return {

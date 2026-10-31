@@ -736,9 +736,15 @@ def scan_upload_limit_site_tags(
             **item,
             "downloaders": sorted(item["downloaders"]),
         })
+    if errors and items:
+        msg = f"站点标签扫描部分完成（{len(errors)} 个下载器失败）"
+    elif errors:
+        msg = "站点标签扫描失败"
+    else:
+        msg = "站点标签扫描完成"
     return {
         "code": 0 if not errors else (2 if items else 1),
-        "msg": "站点标签扫描完成" if items or not errors else "站点标签扫描失败",
+        "msg": msg,
         "items": items,
         "errors": errors,
     }
