@@ -60,6 +60,29 @@ def test_read_torrents_preserves_raw_objects_and_is_readonly(modules, wrapped):
         result.success = False
 
 
+def test_userlist_sequence_is_accepted_not_unknown(modules):
+    """qbittorrent-api TorrentInfoList 继承 UserList 而非 list，序列判定必须放行。"""
+    from collections import UserList
+
+    class TorrentInfoListFake(UserList):
+        pass
+
+    torrents = TorrentInfoListFake([{"hash": "qb-seq"}])
+    for response in (torrents, (torrents, False)):
+        result = modules.adapter.read_torrents(SimpleNamespace(instance=ReadOnlyInstance(response)))
+        assert result.success is True
+        assert result.error == ""
+        assert len(result.items) == 1
+        assert result.items[0] is torrents[0]
+
+
+@pytest.mark.parametrize("response", ["text", b"bytes", ({"k": 1}, False), ("text", False)])
+def test_non_sequence_items_rejected_with_error(modules, response):
+    result = modules.adapter.read_torrents(SimpleNamespace(instance=ReadOnlyInstance(response)))
+    assert result.success is False
+    assert result.error == "无法识别的返回结构"
+
+
 @pytest.mark.parametrize("failed", [True, ["failed-id"], "private detail"])
 def test_tuple_failed_discards_partial_items(modules, failed):
     instance = ReadOnlyInstance(([{"hash": "partial"}], failed))

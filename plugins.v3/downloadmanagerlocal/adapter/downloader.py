@@ -1,5 +1,6 @@
 """下载器公共只读查询边界；返回原始客户端对象，不创建业务快照。"""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
@@ -46,13 +47,13 @@ def read_torrents(service: Any, ids: Optional[Iterable[str]] = None) -> TorrentQ
             items, failed = response
             if failed:
                 return TorrentQueryResult(False, (), "下载器查询失败")
-        elif isinstance(response, list) or response is None:
+        elif (isinstance(response, Sequence) and not isinstance(response, (str, bytes, tuple))) or response is None:
             items = response
         else:
             return TorrentQueryResult(False, (), "无法识别的返回结构")
         if items is None:
             return TorrentQueryResult(False, (), "下载器返回空响应")
-        if not isinstance(items, (list, tuple)):
+        if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
             return TorrentQueryResult(False, (), "无法识别的返回结构")
         return TorrentQueryResult(True, tuple(items))
     except Exception as error:
