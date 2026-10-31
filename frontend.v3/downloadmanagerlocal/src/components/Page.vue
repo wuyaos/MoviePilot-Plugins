@@ -90,7 +90,23 @@ const loading = ref(false)
 const paging = ref(false)
 const error = ref('')
 const actionMsg = ref('')
-const actionOk = ref(false)
+const actionLevel = ref('') // '' | 'success' | 'partial' | 'error'：code=0 成功 / code=2 部分完成（warning） / 其余失败
+
+// 统一动作反馈格式：所有模块动作共用同一套 success/partial/error 判定与兜底文案。
+function applyActionResp(resp, fallback) {
+  const code = resp?.code
+  actionLevel.value = code === 0 ? 'success' : (code === 2 ? 'partial' : 'error')
+  const verb = fallback.replace(/完成$|已触发$/, '')
+  actionMsg.value = resp?.msg
+    || (code === 0 ? fallback : (code === 2 ? `${verb}部分完成` : `${verb}失败`))
+}
+
+function applyActionError(e, fallback) {
+  // unwrapResponse 抛错时 e.code 携带业务 code：code=2 部分完成按 warning 收尾
+  if (e?.code === 2) return applyActionResp({ code: 2, msg: e?.message }, fallback)
+  actionLevel.value = 'error'
+  actionMsg.value = e?.message || `${fallback.replace(/完成$|已触发$/, '')}失败`
+}
 
 const moduleRunning = ref('')
 const expandedModules = reactive({})
@@ -1063,8 +1079,7 @@ async function confirmCleanupData() {
   cleanupRunning.value = true
   try {
     const resp = await postJsonApi('cleanup_module_data', { module: key })
-    actionOk.value = !!resp && resp.code !== 1
-    actionMsg.value = resp?.msg || (actionOk.value ? '清理完成' : '清理失败')
+    applyActionResp(resp, '清理完成')
     cleanupConfirmDialog.value = false
     const request = beginPageRequest()
     await loadDiagnostics(request)
@@ -1084,8 +1099,7 @@ async function confirmCleanupData() {
       await loadFailcleanStatus(request)
     }
   } catch (e) {
-    actionOk.value = false
-    actionMsg.value = e?.message || '清理失败'
+    applyActionError(e, '清理完成')
   } finally {
     cleanupRunning.value = false
   }
@@ -1190,16 +1204,14 @@ function handleVisibilityChange() {
 
 async function runModuleAction(key, handler, fallback) {
   actionMsg.value = ''
-  actionOk.value = false
+  actionLevel.value = ''
   moduleRunning.value = key
   try {
     const resp = await handler()
-    actionOk.value = !!resp && resp.code !== 1
-    actionMsg.value = resp?.msg || (actionOk.value ? fallback : `${fallback.replace(/完成$|已触发$/, '')}失败`)
+    applyActionResp(resp, fallback)
     return resp
   } catch (e) {
-    actionOk.value = false
-    actionMsg.value = e?.message || `${fallback.replace(/完成$|已触发$/, '')}失败`
+    applyActionError(e, fallback)
     return null
   } finally {
     moduleRunning.value = ''
@@ -1238,7 +1250,7 @@ async function confirmHrClear() {
   hrClearDialog.value = false
   if (!kind) return
   actionMsg.value = ''
-  actionOk.value = false
+  actionLevel.value = ''
   hrClearing.value = true
   hrClearKey.value = target ? `${target.downloader_id}-${target.torrent_hash}` : ''
   try {
@@ -1246,12 +1258,10 @@ async function confirmHrClear() {
       ? { downloader_id: target?.downloader_id || '', torrent_hash: target?.torrent_hash || '' }
       : {}
     const resp = await postApi(`hr_clear_${kind}`, payload)
-    actionOk.value = resp?.code === 0
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '清除完成' : '清除失败')
+    applyActionResp(resp, '清除完成')
     if (resp?.code !== 1) await refreshActive()
   } catch (e) {
-    actionOk.value = false
-    actionMsg.value = e?.message || '清除失败'
+    applyActionError(e, '清除完成')
   } finally {
     hrClearing.value = false
     hrClearKey.value = ''
@@ -1316,44 +1326,38 @@ async function doUploadClearRules() {
 
 async function doRecovery(hash, downloader = '') {
   actionMsg.value = ''
-  actionOk.value = false
+  actionLevel.value = ''
   try {
     const resp = await postApi('recovery_torrent', { hash, downloader })
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '恢复成功' : '恢复失败')
-    actionOk.value = resp?.code === 0
+    applyActionResp(resp, '恢复成功')
     if (resp?.code === 0) await reloadRecords()
   } catch (e) {
-    actionOk.value = false
-    actionMsg.value = e?.message || '恢复失败'
+    applyActionError(e, '恢复成功')
   }
 }
 
 async function doDelete(hash, downloader = '') {
   actionMsg.value = ''
-  actionOk.value = false
+  actionLevel.value = ''
   try {
     const resp = await postApi('delete_rename_history', { hash, downloader })
-    actionOk.value = resp?.code === 0
-    actionMsg.value = resp?.msg || '已删除'
+    applyActionResp(resp, '已删除')
     if (resp?.code === 0) await reloadRecords()
   } catch (e) {
-    actionOk.value = false
-    actionMsg.value = e?.message || '删除失败'
+    applyActionError(e, '已删除')
   }
 }
 
 async function doRetryRename(hash, downloader = '') {
   if (!hash || retryingHash.value) return
   actionMsg.value = ''
-  actionOk.value = false
+  actionLevel.value = ''
   retryingHash.value = hash
   try {
     const resp = await postApi('retry_rename', { hash, downloader })
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '补刀完成' : '补刀失败')
-    actionOk.value = resp?.code === 0
+    applyActionResp(resp, '补刀完成')
   } catch (e) {
-    actionOk.value = false
-    actionMsg.value = e?.message || '补刀失败'
+    applyActionError(e, '补刀完成')
   } finally {
     await reloadRecords()
     retryingHash.value = ''
@@ -1362,16 +1366,14 @@ async function doRetryRename(hash, downloader = '') {
 
 async function restoreArchive(hash, downloader = '') {
   actionMsg.value = ''
-  actionOk.value = false
+  actionLevel.value = ''
   restoringHash.value = hash
   try {
     const resp = await postApi('restore_rename_archive', { hash, downloader })
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '已恢复' : '恢复失败')
-    actionOk.value = resp?.code === 0
+    applyActionResp(resp, '已恢复')
     if (resp?.code === 0) await reloadRecords()
   } catch (e) {
-    actionOk.value = false
-    actionMsg.value = e?.message || '恢复失败'
+    applyActionError(e, '已恢复')
   } finally {
     restoringHash.value = ''
   }
@@ -1389,16 +1391,14 @@ function handleArchiveAction(action, row) {
 }
 async function deleteArchive(hash, downloader = '') {
   actionMsg.value = ''
-  actionOk.value = false
+  actionLevel.value = ''
   deletingHash.value = hash
   try {
     const resp = await postApi('delete_rename_archive', { hash, downloader })
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '已删除' : '删除失败')
-    actionOk.value = resp?.code === 0
+    applyActionResp(resp, '已删除')
     if (resp?.code === 0) await reloadRecords()
   } catch (e) {
-    actionOk.value = false
-    actionMsg.value = e?.message || '删除失败'
+    applyActionError(e, '已删除')
   } finally {
     deletingHash.value = ''
   }
@@ -1757,7 +1757,7 @@ onBeforeUnmount(() => {
       </nav>
 
       <main class="dm-main">
-        <VAlert v-if="actionMsg" :type="actionOk ? 'success' : 'error'" variant="tonal" class="mb-3" closable density="compact">{{ actionMsg }}</VAlert>
+        <VAlert v-if="actionMsg" :type="actionLevel === 'success' ? 'success' : (actionLevel === 'partial' ? 'warning' : 'error')" variant="tonal" class="mb-3" closable density="compact">{{ actionMsg }}</VAlert>
         <VAlert v-if="error" type="error" variant="tonal" class="mb-3" density="compact">{{ error }}</VAlert>
         <div v-if="loading && !['history', 'transfer', 'hr', 'autoremove', 'failclean'].includes(activeTab)" class="dm-state">
           <VProgressCircular indeterminate color="primary" />

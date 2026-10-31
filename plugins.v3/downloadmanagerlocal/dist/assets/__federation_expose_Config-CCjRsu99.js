@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { _ as _export_sfc, M as MODULE_ICONS, D as DownloaderBadge, R as RowActionMenu, g as getPluginApi } from './RowActionMenu-Dk9dO4G3.js';
+import { _ as _export_sfc, M as MODULE_ICONS, D as DownloaderBadge, R as RowActionMenu, g as getPluginApi } from './RowActionMenu-Dvq7t7J-.js';
 
 const {resolveComponent:_resolveComponent$3,openBlock:_openBlock$3,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$1,toDisplayString:_toDisplayString$2,createElementVNode:_createElementVNode$1,createVNode:_createVNode$2,renderSlot:_renderSlot,createElementBlock:_createElementBlock$1} = await importShared('vue');
 
@@ -723,12 +723,6 @@ const subTabs = {
     { key: 'mapping', title: '映射规则', icon: 'mdi-link-variant' },
   ],
 };
-
-// 历史子页跳转仍落在保留内容的新位置。
-const legacySubTabs = { seed_basic: 'basic', hr_advanced: 'hr_basic', remover_conditions: 'remover_basic' };
-watch(activeSub, key => {
-  if (legacySubTabs[key]) activeSub.value = legacySubTabs[key];
-}, { flush: 'sync' });
 
 const currentMain = computed(() => mainTabs.find(i => i.key === activeMain.value) || mainTabs[0]);
 const currentSubs = computed(() => subTabs[activeMain.value] || []);
@@ -4951,6 +4945,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-65e5d0c0"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-164f9fb5"]]);
 
 export { Config as default };

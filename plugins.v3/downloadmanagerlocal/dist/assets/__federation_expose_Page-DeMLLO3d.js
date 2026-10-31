@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { _ as _export_sfc, M as MODULE_ICONS, R as RowActionMenu, D as DownloaderBadge, g as getPluginApi, p as postPluginApi, a as postPluginJsonApi } from './RowActionMenu-Dk9dO4G3.js';
+import { _ as _export_sfc, M as MODULE_ICONS, R as RowActionMenu, D as DownloaderBadge, g as getPluginApi, p as postPluginApi, a as postPluginJsonApi } from './RowActionMenu-Dvq7t7J-.js';
 
 const {createElementVNode:_createElementVNode$6,renderList:_renderList$6,Fragment:_Fragment$5,openBlock:_openBlock$7,createElementBlock:_createElementBlock$6,createCommentVNode:_createCommentVNode$5,toDisplayString:_toDisplayString$6,createTextVNode:_createTextVNode$4,resolveComponent:_resolveComponent$5,withCtx:_withCtx$4,createVNode:_createVNode$4,normalizeClass:_normalizeClass$2,createBlock:_createBlock$5} = await importShared('vue');
 
@@ -1077,7 +1077,23 @@ const loading = ref(false);
 const paging = ref(false);
 const error = ref('');
 const actionMsg = ref('');
-const actionOk = ref(false);
+const actionLevel = ref(''); // '' | 'success' | 'partial' | 'error'：code=0 成功 / code=2 部分完成（warning） / 其余失败
+
+// 统一动作反馈格式：所有模块动作共用同一套 success/partial/error 判定与兜底文案。
+function applyActionResp(resp, fallback) {
+  const code = resp?.code;
+  actionLevel.value = code === 0 ? 'success' : (code === 2 ? 'partial' : 'error');
+  const verb = fallback.replace(/完成$|已触发$/, '');
+  actionMsg.value = resp?.msg
+    || (code === 0 ? fallback : (code === 2 ? `${verb}部分完成` : `${verb}失败`));
+}
+
+function applyActionError(e, fallback) {
+  // unwrapResponse 抛错时 e.code 携带业务 code：code=2 部分完成按 warning 收尾
+  if (e?.code === 2) return applyActionResp({ code: 2, msg: e?.message }, fallback)
+  actionLevel.value = 'error';
+  actionMsg.value = e?.message || `${fallback.replace(/完成$|已触发$/, '')}失败`;
+}
 
 const moduleRunning = ref('');
 const expandedModules = reactive({});
@@ -2014,8 +2030,7 @@ async function confirmCleanupData() {
   cleanupRunning.value = true;
   try {
     const resp = await postJsonApi('cleanup_module_data', { module: key });
-    actionOk.value = !!resp && resp.code !== 1;
-    actionMsg.value = resp?.msg || (actionOk.value ? '清理完成' : '清理失败');
+    applyActionResp(resp, '清理完成');
     cleanupConfirmDialog.value = false;
     const request = beginPageRequest();
     await loadDiagnostics(request);
@@ -2035,8 +2050,7 @@ async function confirmCleanupData() {
       await loadFailcleanStatus(request);
     }
   } catch (e) {
-    actionOk.value = false;
-    actionMsg.value = e?.message || '清理失败';
+    applyActionError(e, '清理完成');
   } finally {
     cleanupRunning.value = false;
   }
@@ -2141,16 +2155,14 @@ function handleVisibilityChange() {
 
 async function runModuleAction(key, handler, fallback) {
   actionMsg.value = '';
-  actionOk.value = false;
+  actionLevel.value = '';
   moduleRunning.value = key;
   try {
     const resp = await handler();
-    actionOk.value = !!resp && resp.code !== 1;
-    actionMsg.value = resp?.msg || (actionOk.value ? fallback : `${fallback.replace(/完成$|已触发$/, '')}失败`);
+    applyActionResp(resp, fallback);
     return resp
   } catch (e) {
-    actionOk.value = false;
-    actionMsg.value = e?.message || `${fallback.replace(/完成$|已触发$/, '')}失败`;
+    applyActionError(e, fallback);
     return null
   } finally {
     moduleRunning.value = '';
@@ -2189,7 +2201,7 @@ async function confirmHrClear() {
   hrClearDialog.value = false;
   if (!kind) return
   actionMsg.value = '';
-  actionOk.value = false;
+  actionLevel.value = '';
   hrClearing.value = true;
   hrClearKey.value = target ? `${target.downloader_id}-${target.torrent_hash}` : '';
   try {
@@ -2197,12 +2209,10 @@ async function confirmHrClear() {
       ? { downloader_id: target?.downloader_id || '', torrent_hash: target?.torrent_hash || '' }
       : {};
     const resp = await postApi(`hr_clear_${kind}`, payload);
-    actionOk.value = resp?.code === 0;
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '清除完成' : '清除失败');
+    applyActionResp(resp, '清除完成');
     if (resp?.code !== 1) await refreshActive();
   } catch (e) {
-    actionOk.value = false;
-    actionMsg.value = e?.message || '清除失败';
+    applyActionError(e, '清除完成');
   } finally {
     hrClearing.value = false;
     hrClearKey.value = '';
@@ -2265,91 +2275,81 @@ async function doUploadClearRules() {
   if (resp?.code !== 1) await refreshActive();
 }
 
-async function doRecovery(hash) {
+async function doRecovery(hash, downloader = '') {
   actionMsg.value = '';
-  actionOk.value = false;
+  actionLevel.value = '';
   try {
-    const resp = await postApi('recovery_torrent', { hash });
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '恢复成功' : '恢复失败');
-    actionOk.value = resp?.code === 0;
+    const resp = await postApi('recovery_torrent', { hash, downloader });
+    applyActionResp(resp, '恢复成功');
     if (resp?.code === 0) await reloadRecords();
   } catch (e) {
-    actionOk.value = false;
-    actionMsg.value = e?.message || '恢复失败';
+    applyActionError(e, '恢复成功');
   }
 }
 
-async function doDelete(hash) {
+async function doDelete(hash, downloader = '') {
   actionMsg.value = '';
-  actionOk.value = false;
+  actionLevel.value = '';
   try {
-    const resp = await postApi('delete_rename_history', { hash });
-    actionOk.value = resp?.code === 0;
-    actionMsg.value = resp?.msg || '已删除';
+    const resp = await postApi('delete_rename_history', { hash, downloader });
+    applyActionResp(resp, '已删除');
     if (resp?.code === 0) await reloadRecords();
   } catch (e) {
-    actionOk.value = false;
-    actionMsg.value = e?.message || '删除失败';
+    applyActionError(e, '已删除');
   }
 }
 
-async function doRetryRename(hash) {
+async function doRetryRename(hash, downloader = '') {
   if (!hash || retryingHash.value) return
   actionMsg.value = '';
-  actionOk.value = false;
+  actionLevel.value = '';
   retryingHash.value = hash;
   try {
-    const resp = await postApi('retry_rename', { hash });
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '补刀完成' : '补刀失败');
-    actionOk.value = resp?.code === 0;
+    const resp = await postApi('retry_rename', { hash, downloader });
+    applyActionResp(resp, '补刀完成');
   } catch (e) {
-    actionOk.value = false;
-    actionMsg.value = e?.message || '补刀失败';
+    applyActionError(e, '补刀完成');
   } finally {
     await reloadRecords();
     retryingHash.value = '';
   }
 }
 
-async function restoreArchive(hash) {
+async function restoreArchive(hash, downloader = '') {
   actionMsg.value = '';
-  actionOk.value = false;
+  actionLevel.value = '';
   restoringHash.value = hash;
   try {
-    const resp = await postApi('restore_rename_archive', { hash });
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '已恢复' : '恢复失败');
-    actionOk.value = resp?.code === 0;
+    const resp = await postApi('restore_rename_archive', { hash, downloader });
+    applyActionResp(resp, '已恢复');
     if (resp?.code === 0) await reloadRecords();
   } catch (e) {
-    actionOk.value = false;
-    actionMsg.value = e?.message || '恢复失败';
+    applyActionError(e, '已恢复');
   } finally {
     restoringHash.value = '';
   }
 }
 
 function handleHistoryAction(action, row) {
-  if (action === 'retry') return doRetryRename(row.hash)
-  if (action === 'recover') return doRecovery(row.hash)
-  if (action === 'delete') return doDelete(row.hash)
+  if (action === 'retry') return doRetryRename(row.hash, row.downloader)
+  if (action === 'recover') return doRecovery(row.hash, row.downloader)
+  if (action === 'delete') return doDelete(row.hash, row.downloader)
 }
 function handleArchiveAction(action, row) {
-  if (action === 'retry') return doRetryRename(row.hash)
-  if (action === 'restore') return restoreArchive(row.hash)
-  if (action === 'delete' && window.confirm('确认删除“' + (row.name || row.hash) + '”的失败归档记录？仅清理记录，不删除种子或数据。')) return deleteArchive(row.hash)
+  if (action === 'retry') return doRetryRename(row.hash, row.downloader)
+  if (action === 'restore') return restoreArchive(row.hash, row.downloader)
+  if (action === 'delete' && window.confirm('确认删除“' + (row.name || row.hash) + '”的失败归档记录？仅清理记录，不删除种子或数据。')) return deleteArchive(row.hash, row.downloader)
 }
-async function deleteArchive(hash) {
+async function deleteArchive(hash, downloader = '') {
   actionMsg.value = '';
-  actionOk.value = false;
+  actionLevel.value = '';
   deletingHash.value = hash;
   try {
-    const resp = await postApi('delete_rename_archive', { hash });
-    actionMsg.value = resp?.msg || (resp?.code === 0 ? '已删除' : '删除失败');
-    actionOk.value = resp?.code === 0;
+    const resp = await postApi('delete_rename_archive', { hash, downloader });
+    applyActionResp(resp, '已删除');
     if (resp?.code === 0) await reloadRecords();
   } catch (e) {
-    actionOk.value = false;
-    actionMsg.value = e?.message || '删除失败';
+    applyActionError(e, '已删除');
   } finally {
     deletingHash.value = '';
   }
@@ -2416,15 +2416,25 @@ async function scanCleanupTags() {
 
 async function executeCleanupTags() {
   cleanupExecuting.value = true;
+  let response = null;
   try {
-    const response = await postJsonApi('tag_cleanup_execute', { removals: cleanupRemovals.value });
+    response = await postJsonApi('tag_cleanup_execute', { removals: cleanupRemovals.value });
+  } catch (error) {
+    if (error?.code === 2) {
+      // 部分失败（success=false 抛错）：按 warning 收尾，弹窗照常关闭并刷新列表
+      response = { code: 2, msg: error.message };
+    } else {
+      cleanupStatus.value = 'error';
+      cleanupMessage.value = error?.message || '清理失败';
+      cleanupExecuting.value = false;
+      return
+    }
+  }
+  try {
     cleanupDialog.value = false;
     await scanCleanupTags();
     cleanupStatus.value = response?.code === 0 ? 'success' : (response?.code === 2 ? 'warning' : 'error');
     cleanupMessage.value = response?.msg || '清理完成';
-  } catch (error) {
-    cleanupStatus.value = 'error';
-    cleanupMessage.value = error?.message || '清理失败';
   } finally {
     cleanupExecuting.value = false;
   }
@@ -2734,7 +2744,7 @@ return (_ctx, _cache) => {
         (actionMsg.value)
           ? (_openBlock(), _createBlock(_component_VAlert, {
               key: 0,
-              type: actionOk.value ? 'success' : 'error',
+              type: actionLevel.value === 'success' ? 'success' : (actionLevel.value === 'partial' ? 'warning' : 'error'),
               variant: "tonal",
               class: "mb-3",
               closable: "",
@@ -4042,6 +4052,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-7f934d6c"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-cdf4b31f"]]);
 
 export { Page as default };

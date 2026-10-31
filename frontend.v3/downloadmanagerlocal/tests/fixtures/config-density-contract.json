@@ -1,5 +1,5 @@
 {
-  "scriptSha256": "8c436be0ab98b74b1e75240265a4b667c904d2c90e6eabd6547bbcdd6bb8ab56",
+  "scriptSha256": "dbaa4fd822578426e379ea7b985d8afb566288464180f4d11a74a30c87a26065",
   "directives": [
     ":actions=\"row.custom ? [\r\n                          { key: 'edit', label: row.expanded ? '收起' : '编辑', icon: row.expanded ? 'mdi-chevron-up' : 'mdi-pencil-outline' },\r\n                          { key: 'delete', label: row.preset ? '删除覆盖（恢复预设）' : '删除站点', icon: 'mdi-delete-outline', color: 'error', disabled: !form.hr_enable_site_config }\r\n                        ] : [{ key: 'copy', label: '复制规则', icon: 'mdi-content-copy', disabled: !form.hr_enable_site_config }]\"",
     ":active=\"activeMain === item.key\"",

@@ -19,7 +19,11 @@ function pluginPath(pluginId, path = '') {
 
 function unwrapResponse(response) {
   if (!isStandardEnvelope(response)) return response
-  if (!response.success) throw new Error(response.message || '请求失败')
+  if (!response.success) {
+    const error = new Error(response.message || '请求失败');
+    error.code = response.data?.code;
+    throw error
+  }
   return response.data
 }
 async function postPluginApi(api, pluginId, path, payload = {}, options = {}) {
