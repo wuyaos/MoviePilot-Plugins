@@ -192,7 +192,7 @@ def test_retry_failed_renames_observed_skips_without_retry(mods):
     """观察模式下补刀扫描不消耗重试：skipped 计数、不触达下载器、不写记录。"""
     dl = Mock()
     to_service = SimpleNamespace(type="qbittorrent", instance=dl)
-    dl.get_torrents.return_value = ([_torrent(HASH_A)], True)
+    dl.get_torrents.return_value = ([_torrent(HASH_A)], None)
     plugin = SimpleNamespace(
         _rename_enabled=True, _tag_enabled=False,
         _module_observe_only={"rename": True}, _observe_previews={},
@@ -217,7 +217,7 @@ def test_retry_failed_renames_unobserved_attempts_retry(mods, monkeypatch):
     """未观察时补刀照常进入尝试路径（attempted 计数、rename_torrent 被调用）。"""
     dl = Mock()
     to_service = SimpleNamespace(type="qbittorrent", instance=dl)
-    dl.get_torrents.return_value = ([_torrent(HASH_A)], True)
+    dl.get_torrents.return_value = ([_torrent(HASH_A)], None)
     plugin = SimpleNamespace(
         _rename_enabled=True, _tag_enabled=False,
         _module_observe_only={"rename": False}, _observe_previews={},

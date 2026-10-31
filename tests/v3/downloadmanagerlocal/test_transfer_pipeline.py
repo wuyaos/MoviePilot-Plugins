@@ -502,3 +502,44 @@ def test_source_name_survives_rollback(runtime):
     cycle(r)
     assert r.data['source-abc']['transfer_state'] == 'rolled_back'
     assert r.data['source-abc']['source_name'] == '回滚名.mkv'
+
+
+
+def test_skip_stats_increment_holds_recheck_lock(runtime):
+    """transfer_skip_stats 读改写必须在 _seed_recheck_lock 内（防并发轮次丢计数）。"""
+    r = runtime
+    owned_seen = []
+    inner = threading.RLock()
+
+    class _Proxy:
+        """完整代理 RLock：保留 acquire/release 语义，同时记录临界区持锁。"""
+
+        def acquire(self, blocking=True, timeout=-1):
+            got = inner.acquire(blocking, timeout)
+            if got:
+                owned_seen.append(inner._is_owned())
+            return got
+
+        def release(self):
+            inner.release()
+
+        def _is_owned(self):
+            return inner._is_owned()
+
+        def __enter__(self):
+            self.acquire()
+            return self
+
+        def __exit__(self, *exc):
+            self.release()
+            return False
+
+    r.plugin._seed_recheck_lock = _Proxy()
+    r.guard.is_protected.return_value = True
+    r.plugin._seed_autostart = False
+    assert begin(r)
+    cycle(r)
+    cycle(r)
+
+    assert r.data['transfer_skip_stats']['hr_protected'] == 1
+    assert owned_seen and all(owned_seen)

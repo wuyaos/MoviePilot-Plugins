@@ -1,6 +1,7 @@
 """转移事务：持久记录源状态，目标确认完整后才允许删源。"""
 
 import time
+from typing import Optional
 
 from app.sdk.logging import logger
 
@@ -109,9 +110,11 @@ def delete_source(plugin, downloader_id, torrent_hash, *, authorized=False,
             logger.info(f"【PT下载中心:转移做种】H&R 删源拒绝：{error}")
             denied = True
     if guard.should_skip(SKIP_PATH_TRANSFER_SOURCE, downloader_id, torrent_hash):
-        stats = plugin.get_data("transfer_skip_stats") or {"hr_protected": 0}
-        stats["hr_protected"] += 1
-        plugin.save_data("transfer_skip_stats", stats)
+        # 读改写与并发轮次互斥，避免并发 transfer 轮次丢计数（与 record_transfer_* 同锁）。
+        with plugin._seed_recheck_lock:
+            stats = plugin.get_data("transfer_skip_stats") or {"hr_protected": 0}
+            stats["hr_protected"] += 1
+            plugin.save_data("transfer_skip_stats", stats)
         reason = "H&R 保护状态无法确认" if guard.unconfirmed else "H&R 保护"
         logger.info(f"【PT下载中心:转移做种】{reason}，保留源任务 {downloader_id}/{torrent_hash}")
         return "protected"

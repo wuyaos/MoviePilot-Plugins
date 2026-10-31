@@ -25,6 +25,8 @@ import copy
 import uuid
 from typing import Any
 
+from app.sdk.logging import logger
+
 from .state import (
     EXECUTION_HISTORY_KEY,
     EXECUTION_HISTORY_SCHEMA_VERSION,
@@ -125,8 +127,9 @@ def _extract_stream_items(raw: Any, module: str) -> list[dict]:
 def append(plugin, module: str, record: dict) -> dict:
     """追加一条展示历史记录，超限裁掉最旧，返回写入记录（深拷贝）。
 
-    保存失败原样抛给调用方：调用方据此单独记录「历史写入失败」，
-    不得把已成功的业务动作改判为失败或重试。
+    保存失败（save_data 返回 False）记 warning 并继续，不抛异常：
+    展示历史属旁路数据，写入失败不得影响已成功的业务动作；
+    save_data 抛异常时原样上抛，由调用方决定是否记录。
     """
     module = _ensure_module(module)
     normalized = _normalize_record(module, record)
@@ -140,7 +143,8 @@ def append(plugin, module: str, record: dict) -> dict:
         items.append(normalized)
         if len(items) > HISTORY_MAX_ITEMS:
             del items[: len(items) - HISTORY_MAX_ITEMS]
-        plugin.save_data(EXECUTION_HISTORY_KEY, payload)
+        if plugin.save_data(EXECUTION_HISTORY_KEY, payload) is False:
+            logger.warning(f"【PT下载中心】展示历史保存失败（save_data 返回 False）：{module} 本条仅在内存，重启后丢失")
     return copy.deepcopy(normalized)
 
 
@@ -174,5 +178,6 @@ def clear(plugin, module: str) -> int:
         items = streams.get(module)
         removed = len(items) if isinstance(items, list) else 0
         streams[module] = []
-        plugin.save_data(EXECUTION_HISTORY_KEY, payload)
+        if plugin.save_data(EXECUTION_HISTORY_KEY, payload) is False:
+            logger.warning(f"【PT下载中心】展示历史保存失败（save_data 返回 False）：{module} 清理未落盘")
     return removed

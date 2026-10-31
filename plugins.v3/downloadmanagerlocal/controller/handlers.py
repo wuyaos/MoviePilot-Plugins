@@ -90,7 +90,7 @@ def _operation_response(
     code = int(getattr(data, "code", 0) or 0)
     message = str(getattr(data, "msg", "") or "")
     return schemas.Response[model_type](
-        success=code != 1,
+        success=code == 0,
         message=message,
         data=data,
     )
@@ -272,7 +272,8 @@ def api_upload_limit_reallocate(plugin, payload: EmptyRequest | None = None):
     try:
         result = run_upload_limit_cycle(plugin, reason="manual")
         return _operation_response(
-            {"code": 0 if not result.get("errors") else 2, "msg": "上传额度已重新分配", **result},
+            {"code": 0 if not result.get("errors") else 2,
+             "msg": "上传额度已重新分配" if not result.get("errors") else f"部分下载器限速写入失败（{len(result['errors'])}项）", **result},
             UploadLimitReallocateResult,
         )
     except Exception as e:
@@ -479,7 +480,7 @@ def api_delete_rename_history(plugin, hash: str = "", downloader: str = ""):
 
 
 @serialized_rename_state
-def api_rename_archive(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all", detail_limit=None):
+def api_rename_archive(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all"):
     """返回失败归档；归档本身均为失败，不推导新的成功状态。"""
     if result_filter == "success":
         raise HTTPException(status_code=400, detail="归档记录仅表示失败归档状态，不能推导为成功；result_filter 只支持 all/failed")
@@ -495,7 +496,6 @@ def api_rename_archive(plugin, page: int = 1, page_size: int = 20, result_filter
             items.append(entry)
     items.sort(key=lambda item: str(item["hash"]))
     items.sort(key=lambda item: str(item.get("archived_at") or item.get("last_failed_at") or ""), reverse=True)
-    items = items[:1000]
     return record_page(items, page, page_size, result_filter)
 def api_restore_rename_archive(plugin, hash: str = "", downloader: str = ""):
     """恢复归档记录，使其继续参与补刀。"""
@@ -894,7 +894,7 @@ def _iter_transfer_records(plugin):
     """遍历插件持久化的转移事务记录。
 
     记录以 `f"{源下载器}-{源种子哈希}"` 为 key 分散保存（见
-    ``modules/transfer_pipeline.save_source_record``），没有聚合索引，
+    ``modules/transfer/pipeline.py 的 save_source_record``），没有聚合索引，
     因此需要枚举插件全部数据后按字段筛选。`get_data()` 无参调用在不同
     MoviePilot 版本返回 dict 或 ORM 行列表，这里两种形态都兼容。
     """

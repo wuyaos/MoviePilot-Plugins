@@ -112,8 +112,6 @@ def _append_upload_limit_history(plugin: Any, record: dict) -> None:
     # 懒导入：避免服务模块加载时强制依赖 execution_history，观察模式等只读测试
     # 用最小 model.state 替身加载 service 时不应因此失败。
     try:
-        # 懒导入：避免服务模块加载时强制依赖 execution_history；导入本身失败同样
-        # 不得改变业务结果，故一并放进 try。
         from ...model.execution_history import append as append_history
         append_history(plugin, "upload_limit", record)
     except Exception as error:
@@ -747,31 +745,37 @@ def scan_upload_limit_site_tags(
 
 
 def persist_upload_limit_site_rules(plugin: Any, site_rules: Any) -> dict[str, dict]:
-    """立即持久化站点策略并同步当前运行态。"""
-    config = dict(plugin.get_config() or {})
-    config["upload_limit_site_rules"] = site_rules if isinstance(site_rules, dict) else {}
-    normalized = normalize_upload_limit_config(config)
-    clean_rules = normalized["upload_limit_site_rules"]
-    config["upload_limit_site_rules"] = clean_rules
-    if plugin.update_config(config=config) is False:
-        raise RuntimeError("站点策略保存失败")
-    plugin._upload_limit_site_rules = clean_rules
-    if not any(int(rule.get("limit_kib") or 0) > 0 for rule in clean_rules.values()):
-        state = load_upload_limit_state(plugin)
-        for entry in (state.get("downloaders") or {}).values():
-            if not isinstance(entry, dict):
-                continue
-            entry["initial_scan_complete"] = False
-            entry["per_torrent_management_active"] = False
-            for key in (
-                "auto_probe_count",
-                "probe_low_utilization_cycles",
-                "probe_reduction_pending",
-                "last_probe_keys",
-            ):
-                entry.pop(key, None)
-        save_upload_limit_state(plugin, state)
-    return clean_rules
+    """立即持久化站点策略并同步当前运行态。
+
+    与限速周期共享 `_cycle_lock`：保存会重置下载器的逐种管理标记，若与
+    周期执行并发，可能出现「保存读旧状态→周期写新状态→保存覆盖」丢更新，
+    因此整个读-改-写序列必须在锁内完成。
+    """
+    with _cycle_lock(plugin):
+        config = dict(plugin.get_config() or {})
+        config["upload_limit_site_rules"] = site_rules if isinstance(site_rules, dict) else {}
+        normalized = normalize_upload_limit_config(config)
+        clean_rules = normalized["upload_limit_site_rules"]
+        config["upload_limit_site_rules"] = clean_rules
+        if plugin.update_config(config=config) is False:
+            raise RuntimeError("站点策略保存失败")
+        plugin._upload_limit_site_rules = clean_rules
+        if not any(int(rule.get("limit_kib") or 0) > 0 for rule in clean_rules.values()):
+            state = load_upload_limit_state(plugin)
+            for entry in (state.get("downloaders") or {}).values():
+                if not isinstance(entry, dict):
+                    continue
+                entry["initial_scan_complete"] = False
+                entry["per_torrent_management_active"] = False
+                for key in (
+                    "auto_probe_count",
+                    "probe_low_utilization_cycles",
+                    "probe_reduction_pending",
+                    "last_probe_keys",
+                ):
+                    entry.pop(key, None)
+            save_upload_limit_state(plugin, state)
+        return clean_rules
 
 
 def _known_int(value: Any) -> int | None:

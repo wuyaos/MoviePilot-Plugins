@@ -430,7 +430,6 @@ def test_remote_path_check_stays_pending_with_target(service):
         suggestion="请在该路径所属的下载器/主机上自行核对；本诊断不做跨主机存在性判定",
         target="/remote/not-present",
     )
-    assert service._path_exists("/remote/not-present") is False
     assert item["state"] == "pending" and item["target"] == "/remote/not-present"
     assert item["status"] == "warn"
 

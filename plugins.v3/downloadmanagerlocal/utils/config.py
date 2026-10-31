@@ -102,7 +102,6 @@ PLUGIN_CONFIG_DEFAULTS = {
     "seed_check_interval": 60,
     "seed_max_wait_minutes": 120,
     **TRANSFER_DEFAULTS,
-    "transfer_tasks": "[]",
     "transfer_rename_enabled": False,
     "downloader_ext": "{}",
     **build_rename_flat_defaults(),

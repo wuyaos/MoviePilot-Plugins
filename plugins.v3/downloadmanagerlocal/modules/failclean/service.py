@@ -104,7 +104,8 @@ class FailCleanService:
         # FailCleanConfig 是 frozen dataclass，用 dataclasses.replace 构造新实例。
         self._config = replace(parsed, enabled=module_active(config or {}, "failclean"))
         self._status = self._load_status()
-        self._recent_deletes.clear()
+        with self._status_lock:
+            self._recent_deletes.clear()
         self._stopped = False
         logger.info(
             f"{FAILCLEAN_LOG_PREFIX}初始化完成：开关={self._config.enabled} "
@@ -421,15 +422,17 @@ class FailCleanService:
     def _is_recent_delete(self, path: str, download_hash: str) -> bool:
         """判断同一 (hash, 路径) 是否刚处理过，避免事件重发重复删除。"""
         now = time.time()
-        for key, timestamp in list(self._recent_deletes.items()):
-            if now - float(timestamp or 0) > FAILCLEAN_RECENT_WINDOW_SECONDS:
-                self._recent_deletes.pop(key, None)
-        last = float(self._recent_deletes.get(_delete_key(path, download_hash)) or 0)
+        with self._status_lock:
+            for key, timestamp in list(self._recent_deletes.items()):
+                if now - float(timestamp or 0) > FAILCLEAN_RECENT_WINDOW_SECONDS:
+                    self._recent_deletes.pop(key, None)
+            last = float(self._recent_deletes.get(_delete_key(path, download_hash)) or 0)
         return bool(last and now - last <= FAILCLEAN_RECENT_WINDOW_SECONDS)
 
     def _mark_recent_delete(self, path: str, download_hash: str) -> None:
         """登记一次已执行的删除操作。"""
-        self._recent_deletes[_delete_key(path, download_hash)] = time.time()
+        with self._status_lock:
+            self._recent_deletes[_delete_key(path, download_hash)] = time.time()
 
     def _record_delete_history(
         self,

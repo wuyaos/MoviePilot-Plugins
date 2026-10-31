@@ -105,10 +105,6 @@ def _cleanup_stats(plugin, archive_stats: dict) -> dict:
     }
 
 
-def _path_exists(path_text: str) -> bool:
-    """兼容旧调用名；本函数不再用于判定下载器侧路径。"""
-    return False
-
 
 def _check(label: str, status: str, detail: str, *, state: str = "", reason: str = "",
            suggestion: str = "", target: str = "") -> dict:

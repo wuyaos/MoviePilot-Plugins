@@ -1,6 +1,6 @@
 # DownloadManagerLocal 插件上下文（AI 交接文档）
 
-面向后续维护本插件的 AI agent / 开发者。只记录代码不能可靠推断的事实、真实路径与边界；版本、路径、键名以当前工作树代码为准；配置平铺键共 111 个（`utils/config.py::build_plugin_config_defaults` 实测）。
+面向后续维护本插件的 AI agent / 开发者。只记录代码不能可靠推断的事实、真实路径与边界；版本、路径、键名以当前工作树代码为准；配置平铺键共 117 个（`utils/config.py::build_plugin_config_defaults` 实测）。
 
 ## 1. 插件概览
 

@@ -561,7 +561,11 @@ def retry_failed_renames(plugin, to_service):
     dl = to_service.instance
     dl_type = to_service.type
     try:
-        torrents, _ = dl.get_torrents(ids=list(failed_hashes))
+        torrents, get_err = dl.get_torrents(ids=list(failed_hashes))
+        if get_err:
+            summary["failed"] = len(failed_hashes)
+            summary["errors"].append(f"补刀查询失败: {get_err}")
+            return summary
         if not torrents:
             return summary
         for torrent in torrents:
@@ -624,15 +628,6 @@ def _retry_summary() -> dict:
     return {"attempted": 0, "success": 0, "failed": 0, "skipped": 0, "errors": [], "warnings": []}
 
 
-def _get_torrent_name(torrent, dl_type):
-    """按下载器类型读取当前种子名称。"""
-    return get_torrent_name(torrent)
-
-
-def _get_tracker_urls(torrent, dl_type):
-    """按下载器类型提取有效 tracker URL 列表。"""
-    return get_tracker_urls(torrent, dl_type)
-
 
 def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
     """对目标下载器中的单个种子执行补刀（重命名+站点标签）。"""
@@ -666,13 +661,13 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
             if current_hash != hash_text:
                 continue
 
-            torrent_name = _get_torrent_name(torrent, dl_type)
+            torrent_name = get_torrent_name(torrent)
             if not torrent_name:
                 return {"code": 1, "msg": "种子名称为空，无法补刀", "hash": hash_text}
 
             save_path = get_save_path(torrent, dl_type)
             torrent_tags = get_label(torrent, dl_type)
-            trackers = _get_tracker_urls(torrent, dl_type)
+            trackers = get_tracker_urls(torrent, dl_type)
             logger.info(f"【PT下载中心:重命名】单条补刀处理: hash={hash_text} name={torrent_name}")
 
             if observe_skip(plugin, "rename", "补刀重命名", f"{torrent_name}（{hash_text[:8]}）"):
@@ -992,7 +987,7 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     torrent_hash = get_hash(torrent, dl_type)
     if not torrent_hash:
         return "skipped"
-    torrent_name = _get_torrent_name(torrent, dl_type)
+    torrent_name = get_torrent_name(torrent)
     save_path = get_save_path(torrent, dl_type)
     torrent_tags = get_label(torrent, dl_type)
     if _is_already_renamed(plugin, torrent_hash, torrent_name, str(getattr(service, "name", "") or "")):
@@ -1097,7 +1092,6 @@ def scan_renames(plugin) -> dict:
 __all__ = (
     "DEFAULT_RENAME_CONFIG",
     "RENAME_FLAT_CONFIG_KEYS",
-    "RENAME_QNAP_CONFIG",
     "RENAME_TAG",
     "add_rename_tag",
     "build_rename_config",

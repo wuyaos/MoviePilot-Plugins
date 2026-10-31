@@ -20,6 +20,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from unittest.mock import Mock
 
 PLUGIN = Path(__file__).resolve().parents[3] / "plugins.v3/downloadmanagerlocal"
 PREFIX = "app.plugins.downloadmanagerlocal"
@@ -79,11 +80,14 @@ def svc(monkeypatch):
         monkeypatch,
         PREFIX + ".utils.config",
         is_upload_limit_active=_is_upload_limit_active,
-        normalize_upload_limit_config=lambda config: {},
+        normalize_upload_limit_config=lambda config: {"upload_limit_site_rules": dict(config.get("upload_limit_site_rules") or {})},
         observe_only=lambda plugin, module: False,
     )
 
     upload_model = _load(monkeypatch, "model/upload_limit.py", PREFIX + ".model.upload_limit")
+    for _name in ("app", "app.sdk"):
+        _module(monkeypatch, _name, __path__=[])
+    _module(monkeypatch, "app.sdk.logging", logger=Mock())  # execution_history 现依赖 logger
     exec_history = _load(monkeypatch, "model/execution_history.py", PREFIX + ".model.execution_history")
     adapter = _load(monkeypatch, "adapter/upload_limit.py", PREFIX + ".adapter.upload_limit")
     allocator = _load(monkeypatch, "modules/uploadlimit/allocator.py", PREFIX + ".modules.uploadlimit.allocator")
@@ -107,10 +111,17 @@ class FakeQb:
         self._prefs = {"alt_up_limit": alt_up_limit}
         self.torrents = list(torrents or [])
         self.set_prefs_calls = []
+        self.global_limit_calls = []
         self.torrent_limit_calls = []
         self.write_global_error = None
         self.write_torrent_error = None
         self.get_torrents_error = None
+
+    def transfer_set_upload_limit(self, limit=None):
+        if self.write_global_error is not None:
+            raise self.write_global_error
+        self.global_limit_calls.append({"limit": limit})
+        self.transfer.upload_limit = limit
 
     def app_preferences(self):
         return dict(self._prefs)
@@ -170,6 +181,14 @@ class FakePlugin:
             self.state_lock_held = owned
         self.save_calls.append(key)
         self._data[key] = value
+
+    def get_config(self):
+        return dict(getattr(self, "_config", {}))
+
+    def update_config(self, config=None):
+        self._config = dict(config or {})
+        self._data.update(self._config)
+        return True
 
     def service_info(self, name):
         return self.services.get(name)
@@ -340,7 +359,7 @@ def test_global_write_records_history(svc):
     # 历史绝不覆盖 original_global（仍为接管前原值）
     state = plugin.get_data("upload_limit_state")
     assert state["downloaders"]["QB1"]["original_global"]["upload_limit_bps"] == 0
-    assert qb.transfer.upload_limit == 100 * 1024
+    assert qb.global_limit_calls == [{"limit": 100 * 1024}]
 
 
 def test_torrent_write_records_history(svc):
@@ -471,7 +490,7 @@ def test_restore_records_history_and_preserves_behavior(svc):
     # 恢复行为不变：状态被清空、下载器值还原
     assert plugin._upload_limit_state["downloaders"] == {}
     assert plugin._upload_limit_state["torrents"] == {}
-    assert qb.transfer.upload_limit == 0
+    assert qb.global_limit_calls == [{"limit": 0}]
     assert qb.torrent_limit_calls == [{"limit": 0, "hashes": "aaa111"}]
     assert result["code"] == 0
 
@@ -510,7 +529,7 @@ def test_history_save_failure_does_not_change_business(svc):
     result = svc.service.run_upload_limit_cycle(plugin, now=1000.0)
 
     # 限速写入照常成功、状态照常落盘、异常不冒泡
-    assert qb.transfer.upload_limit == 100 * 1024
+    assert qb.global_limit_calls == [{"limit": 100 * 1024}]
     assert "upload_limit_state" in plugin.save_calls
     assert result["service_status"] == "running"
     assert svc.exec_history.query(plugin, "upload_limit")["items"] == []
@@ -580,4 +599,31 @@ def test_clear_history_does_not_break_restore(svc):
     assert result["code"] == 0
     assert plugin._upload_limit_state["downloaders"] == {}
     assert plugin._upload_limit_state["torrents"] == {}
-    assert qb.transfer.upload_limit == 0
+    assert qb.global_limit_calls == [{"limit": 0}]
+
+
+def test_persist_site_rules_holds_cycle_lock(svc):
+    """保存站点策略必须持有 _cycle_lock：与限速周期共享读改写状态。"""
+    qb = FakeQb(upload_limit_bps=0, alt_up_limit=0)
+    state = _empty_state()
+    state["downloaders"]["QB1"] = _seed_downloader()
+    entry = state["downloaders"]["QB1"]
+    entry["initial_scan_complete"] = True
+    entry["per_torrent_management_active"] = True
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_site_rules = {}
+    plugin.add_downloader("QB1", qb)
+
+    # 正限速规则：只写配置与运行态字段，不触发周期标记重置
+    svc.service.persist_upload_limit_site_rules(
+        plugin, {"site-a": {"limit_kib": 1024}}
+    )
+    assert plugin._upload_limit_site_rules == {"site-a": {"limit_kib": 1024}}
+    assert plugin.state_lock_held is None  # 未走状态重置分支
+
+    # 空规则：重置周期标记，且重置写回发生在 _cycle_lock 内
+    plugin.state_lock_held = None
+    svc.service.persist_upload_limit_site_rules(plugin, {})
+    assert plugin.state_lock_held is True  # save_data 在锁内执行，与周期互斥
+    assert plugin._upload_limit_state["downloaders"]["QB1"]["per_torrent_management_active"] is False
+    assert plugin._upload_limit_state["downloaders"]["QB1"]["initial_scan_complete"] is False

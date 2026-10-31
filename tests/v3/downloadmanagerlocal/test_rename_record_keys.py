@@ -352,3 +352,23 @@ def test_migrate_keys_conflict_keeps_newer_time(env):
     }
     migrated2, _ = k.migrate_keys(state2)
     assert migrated2[composite]['original_name'] == 'Original abc'
+
+
+def test_retry_failed_renames_get_torrents_error_recorded(env, monkeypatch):
+    """补刀查询失败必须计入 summary：failed=候选数、errors 带原因，不静默成功。"""
+    r, p = env.rename, env.plugin
+    r.save_rename_record(p, 'abc', 'O', 'A', False, '失败', downloader='target')
+    r.save_rename_record(p, 'def', 'O2', 'B2', False, '失败', downloader='target')
+
+    class ErrInstance:
+        def get_torrents(self, ids=None):
+            return [], "下载器连接失败"
+
+    service = SimpleNamespace(name='target', type='qbittorrent', instance=ErrInstance())
+    monkeypatch.setattr(r, 'get_failed_rename_hashes', lambda plugin: ['abc', 'def'])
+
+    summary = r.retry_failed_renames(p, service)
+
+    assert summary['failed'] == 2
+    assert summary['attempted'] == 0
+    assert any('补刀查询失败' in e and '下载器连接失败' in e for e in summary['errors'])

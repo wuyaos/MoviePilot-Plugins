@@ -17,6 +17,8 @@ def wiring(interlock, monkeypatch):
     env.plugin._hr_service = env.service
     env.plugin._hr_enabled = True
     env.plugin.service_info.return_value = SimpleNamespace(instance=env.instance)
+    from threading import RLock
+    env.plugin._seed_recheck_lock = RLock()
     env.instance.delete_torrents.return_value = True
     env.pipeline = pipeline
     return env

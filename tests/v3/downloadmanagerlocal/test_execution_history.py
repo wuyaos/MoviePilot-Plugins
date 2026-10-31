@@ -87,7 +87,13 @@ def history(monkeypatch):
         EXECUTION_HISTORY_SCHEMA_VERSION=1,
         _HISTORY_LOCK=threading.RLock(),
     )
-    return _load(monkeypatch, "model/execution_history.py", PREFIX + ".model.execution_history")
+    logger = Mock()
+    _mk_module(monkeypatch, "app", __path__=[])
+    _mk_module(monkeypatch, "app.sdk", __path__=[])
+    _mk_module(monkeypatch, "app.sdk.logging", logger=logger)
+    module = _load(monkeypatch, "model/execution_history.py", PREFIX + ".model.execution_history")
+    module._logger_stub = logger  # 测试断言 warning 用
+    return module
 
 
 @pytest.fixture
@@ -254,6 +260,39 @@ def test_save_failure_no_downloader_action_and_no_side_effects(history):
 
     assert plugin.downloader.method_calls == []
     assert plugin._data == before
+
+
+def test_save_data_false_logs_warning_and_append_still_returns(history):
+    """save_data 返回 False 时记 warning，append 仍返回记录且不改判业务动作。"""
+
+    class _FalseSavePlugin(FakePlugin):
+        def save_data(self, key, value):
+            self.save_calls.append(key)
+            self._data[key] = value
+            return False
+
+    plugin = _FalseSavePlugin()
+    stored = history.append(plugin, "tag", _record())
+
+    assert stored["action"] == "delete"
+    assert history._logger_stub.warning.call_count == 1
+    assert "保存失败" in str(history._logger_stub.warning.call_args)
+
+
+def test_clear_save_data_false_logs_warning(history):
+    """clear 在 save_data 返回 False 时记 warning，返回值仍为清理条数。"""
+
+    class _FalseSavePlugin(FakePlugin):
+        def save_data(self, key, value):
+            self.save_calls.append(key)
+            self._data[key] = value
+            return False
+
+    plugin = _FalseSavePlugin(
+        data={"execution_history": {"schema_version": 1, "streams": {"tag": [{"k": 1}]}}}
+    )
+    assert history.clear(plugin, "tag") == 1
+    assert history._logger_stub.warning.call_count == 1
 
 
 # ── 端点层：分页 / 三态 / 清理 / 路由 ──────────────────────────────

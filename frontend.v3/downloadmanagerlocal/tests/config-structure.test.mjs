@@ -106,13 +106,9 @@ test('P2-1d: unvisited/hidden values and unknown compatibility keys survive save
   } finally { reopened?.stop(); state.stop() }
 })
 
-test('P2-1d: legacy subpage destinations land on retained content, and pane reset refreshes mapping/rule editors', async () => {
+test('P2-1d: pane reset refreshes mapping/rule editors', async () => {
   const state = mount({ tag_all_cat: ['old'], tag_all_cat_rename: ['旧'], hr_site_config_str: "- site_name: 'Old'\n  hr_duration: 72" })
   try {
-    for (const [pane, old, target] of [['transfer', 'seed_basic', 'basic'], ['hr', 'hr_advanced', 'hr_basic'], ['remover', 'remover_conditions', 'remover_basic']]) {
-      state.selectMain(pane); state.activeSub.value = old; await nextTick()
-      assert.equal(state.activeSub.value, target)
-    }
     state.askPaneReset('tag'); state.confirmPaneReset(); await nextTick()
     assert.deepEqual(state.tagCatPairs.value, [])
     state.askPaneReset('hr'); state.confirmPaneReset(); await nextTick()

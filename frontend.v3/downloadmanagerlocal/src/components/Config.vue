@@ -213,12 +213,6 @@ const subTabs = {
   ],
 }
 
-// 历史子页跳转仍落在保留内容的新位置。
-const legacySubTabs = { seed_basic: 'basic', hr_advanced: 'hr_basic', remover_conditions: 'remover_basic' }
-watch(activeSub, key => {
-  if (legacySubTabs[key]) activeSub.value = legacySubTabs[key]
-}, { flush: 'sync' })
-
 const currentMain = computed(() => mainTabs.find(i => i.key === activeMain.value) || mainTabs[0])
 const currentSubs = computed(() => subTabs[activeMain.value] || [])
 /** 下载器下拉统一展示「名称 (类型)」；value 仍是下载器名，后端只认名字。 */

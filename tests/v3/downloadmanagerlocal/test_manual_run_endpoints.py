@@ -487,3 +487,31 @@ def test_diagnostics_default_matches_service_whitelist(endpoints):
 
     assert service.MODULE_DETAIL_LIMIT_CHOICES == (20, 50, 100, 200)
     assert default == service.MODULE_DETAIL_ITEM_LIMIT == 20
+
+
+def test_upload_limit_reallocate_partial_failure_is_not_success(endpoints):
+    """code=2（部分失败）必须映射 success=False 且 msg 明示部分失败，不得伪装完全成功。"""
+    service = importlib.import_module(PREFIX + '.modules.uploadlimit.service')
+    service.run_upload_limit_cycle.return_value = {'errors': ['QB1: timeout'], 'downloaders': []}
+
+    plugin = _fake_plugin(_upload_limit_enabled=True)
+    response = endpoints.handlers.api_upload_limit_reallocate(plugin)
+
+    assert response.success is False, 'code=2 是部分失败，success 必须为 False'
+    assert '部分下载器限速写入失败' in response.message
+    assert response.data.code == 2 and response.data.errors == ['QB1: timeout']
+
+
+def test_upload_limit_disable_restore_partial_failure_is_not_success(endpoints):
+    """停用恢复 code=2 同样不得报 success=True（service 已给「部分限速恢复失败」msg）。"""
+    service = importlib.import_module(PREFIX + '.modules.uploadlimit.service')
+    service.restore_upload_limits.return_value = {
+        'code': 2, 'msg': '部分限速恢复失败', 'downloaders': [], 'errors': ['TR1: offline'],
+    }
+
+    plugin = _fake_plugin(_upload_limit_enabled=True, get_config=lambda: {'upload_limit_enabled': True},
+                          update_config=lambda config=None: True, _upload_limit_state_error=None)
+    response = endpoints.handlers.api_upload_limit_disable_restore(plugin)
+
+    assert response.success is False
+    assert response.message == '部分限速恢复失败'

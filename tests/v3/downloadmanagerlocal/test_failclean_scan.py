@@ -428,3 +428,37 @@ def test_module_status_exposes_scan_and_event_counters(fc, tmp_path):
     assert status["event"]["deleted"] == 1
     assert status["total"]["cleaned"] == 1
     assert "cron" in status and "last_scan_trigger" in status
+
+
+def test_recent_deletes_access_holds_status_lock(fc):
+    """_recent_deletes 的读写/清理必须在 _status_lock 内（防事件与扫描并发竞态）。"""
+    service = fc.build()
+    owned_seen: list[bool] = []
+
+    class _InstrumentedLock:
+        """包一层 RLock，记录临界区内是否真的持有锁。"""
+
+        def __init__(self, inner):
+            self._inner = inner
+
+        def __enter__(self):
+            self._inner.acquire()
+            owned_seen.append(self._inner._is_owned())
+            return self
+
+        def __exit__(self, *exc):
+            self._inner.release()
+            return False
+
+    service._status_lock = _InstrumentedLock(service._status_lock)
+
+    service._mark_recent_delete("/data/a.mkv", "h1")
+    assert service._is_recent_delete("/data/a.mkv", "h1") is True
+    assert service._is_recent_delete("/data/b.mkv", "h2") is False
+    # 三次进入临界区时全部处于持锁状态
+    assert owned_seen == [True, True, True]
+
+    # 过期条目在锁内清理
+    service._recent_deletes["stale"] = 0.0
+    service._is_recent_delete("/data/c.mkv", "h3")
+    assert "stale" not in service._recent_deletes

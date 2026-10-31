@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 
 
-_BRACKET_PREFIX_RE = re.compile(r"\[.*?\][\s.]*")
 _LEADING_BRACKET_PREFIX_RE = re.compile(r"^\s*\[[^\]]+\]\s*(?:-\s*)*")
 _LEADING_RENAME_SEPARATOR_RE = re.compile(r"^(?:-\s*)+")
 _TORRENT_SUFFIX_RE = re.compile(r"\.torrent$", re.IGNORECASE)
@@ -77,14 +76,3 @@ def is_dirty_renamed_torrent_name(value: str) -> bool:
         return True
     trimmed_part = original_part.rstrip(" ]")
     return bool(trimmed_part) and clean_torrent_original_name(trimmed_part) != trimmed_part
-
-
-def collect_retry_rename_hashes(records: dict) -> set:
-    """收集需要补刮的失败记录和脏名称成功记录 hash。"""
-    retry_hashes = set()
-    for torrent_hash, record in (records or {}).items():
-        if not isinstance(record, dict):
-            continue
-        if not record.get("success") or is_dirty_renamed_torrent_name(record.get("after_name", "")):
-            retry_hashes.add(torrent_hash)
-    return retry_hashes

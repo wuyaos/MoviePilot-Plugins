@@ -95,7 +95,6 @@ class RetryRenamesResult(ActionResult):
     attempted: int = 0
     failed: int = 0
     skipped: int = 0
-    skipped: int = 0
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     running: bool = False

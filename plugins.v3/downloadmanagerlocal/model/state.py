@@ -27,20 +27,6 @@ EXECUTION_HISTORY_KEY = "execution_history"
 EXECUTION_HISTORY_SCHEMA_VERSION = 1
 _HISTORY_LOCK = RLock()
 
-PERSISTED_STATE_KEYS = {
-    "rename_history": RENAME_RECORDS_KEY,
-    "rename_retry_state": RENAME_RETRY_STATE_KEY,
-    "seed_recheck_queue": SEED_RECHECK_QUEUE_KEY,
-    "transfer_stats": TRANSFER_STATS_KEY,
-    "transfer_schedule": TRANSFER_SCHEDULE_KEY,
-    "upload_limit_state": UPLOAD_LIMIT_STATE_KEY,
-    "hr_tasks": HR_TASKS_DATA_KEY,
-    "hr_notify_events": HR_NOTIFY_EVENTS_DATA_KEY,
-    "sitetag_status": SITE_TAG_STATUS_KEY,
-    "tag_cleanup_status": TAG_CLEANUP_STATUS_KEY,
-    "execution_history": EXECUTION_HISTORY_KEY,
-}
-
 
 def _non_negative_int(value: Any) -> int:
     """把不可信计数规范为非负整数。"""

@@ -81,7 +81,7 @@ def write_global_upload_limit(
     limit_bps = normalized_limit * 1024
     if normalized == "qbittorrent":
         client = _require_attr(instance, "qbc")
-        client.transfer.upload_limit = limit_bps
+        client.transfer_set_upload_limit(limit=limit_bps)
         client.app_set_preferences({"alt_up_limit": limit_bps})
         return GlobalUploadSettings(
             downloader_type=normalized,
@@ -130,7 +130,7 @@ def restore_global_upload_settings(
         client = _require_attr(instance, "qbc")
         normal_bps = max(0, int(settings.upload_limit_bps or 0))
         alternate_bps = max(0, int(settings.alternate_upload_limit_bps or 0))
-        client.transfer.upload_limit = normal_bps
+        client.transfer_set_upload_limit(limit=normal_bps)
         client.app_set_preferences({"alt_up_limit": alternate_bps})
         return GlobalUploadSettings(
             downloader_type=normalized,

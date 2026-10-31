@@ -262,7 +262,7 @@ def _failclean_service(boundaries, observe: bool):
     service._config = SimpleNamespace(enabled=True, notify=False, retain_hours=6)
     service._guard = Mock(should_skip=Mock(return_value=False))
     service._recent_deletes = {}
-    service._lock = Lock()
+    service._status_lock = RLock()
     service._run_lock = RLock()
     service._stopped = False
     return service
