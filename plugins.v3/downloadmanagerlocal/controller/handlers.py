@@ -55,7 +55,7 @@ from ..modules.rename.archive import serialized_rename_state
 from ..modules.hr.guard import HrGuard
 from ..modules.hr.rules import load_preset_rules
 from ..utils.config import observe_skip
-from ..modules.sitetag.service import complement_history, execute_tag_cleanup
+from ..modules.sitetag.service import complement_history, execute_tag_cleanup, scan_tag_candidates
 from ..modules.uploadlimit.worker import stop_upload_limit_worker
 from ..modules.uploadlimit.service import (
     get_upload_limit_status,

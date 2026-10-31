@@ -16,6 +16,7 @@ import importlib.util
 import sys
 import threading
 import types
+from collections import UserList
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -827,9 +828,18 @@ def _tr_instance(payload):
                      id="qb-tuple-empty-items"),
         pytest.param("qbittorrent", _list_instance([]), 0,
                      id="qb-bare-empty-list"),
+        # UserList 序列形态：qB TorrentInfoList 继承 UserList 而非 list（0b27d698 边界）
+        pytest.param("qbittorrent", _list_instance(UserList([{"hash": "a"}])), 1,
+                     id="qb-bare-userlist"),
+        pytest.param("qbittorrent", _list_instance((UserList([{"hash": "a"}]), None)), 1,
+                     id="qb-tuple-userlist"),
+        pytest.param("qbittorrent", _list_instance(UserList([])), 0,
+                     id="qb-empty-userlist"),
         # Transmission 专用：裸列表与合法空列表
         pytest.param("transmission", _tr_instance([_tr_torrent()]), 1,
                      id="tr-bare-list"),
+        pytest.param("transmission", _tr_instance(UserList([_tr_torrent()])), 1,
+                     id="tr-bare-userlist"),
         pytest.param("transmission", _tr_instance([]), 0,
                      id="tr-empty-list"),
     ],

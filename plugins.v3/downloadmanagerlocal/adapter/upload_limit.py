@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import Any, Iterable
 
 from ..model.upload_limit import (
@@ -418,8 +419,8 @@ def global_settings_to_dict(value: GlobalUploadSettings) -> dict:
 
 
 def _validate_trc_torrents(raw_items: Any) -> tuple[Iterable[Any], Any]:
-    """校验 Transmission 专用查询返回，仅接受列表（含空列表）。"""
-    if isinstance(raw_items, list):
+    """校验 Transmission 专用查询返回，接受裸序列（UserList 在内，tuple 仍拒绝）。"""
+    if isinstance(raw_items, Sequence) and not isinstance(raw_items, (str, bytes, tuple)):
         return raw_items, None
     if raw_items is None:
         return [], "downloader returned no result"
@@ -436,12 +437,12 @@ def _unwrap_torrent_response(response: Any) -> tuple[Iterable[Any], Any]:
             if error:
                 return [], error
             return None, "downloader returned null items"
-        if not isinstance(items, (list, tuple)):
+        if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
             return None, f"unsupported torrent payload: {type(items).__name__}"
         return items, error
     if response is None:
         return [], "downloader returned no result"
-    if not isinstance(response, (list, tuple)):
+    if not isinstance(response, Sequence) or isinstance(response, (str, bytes)):
         return None, f"unsupported torrent payload: {type(response).__name__}"
     return response, None
 

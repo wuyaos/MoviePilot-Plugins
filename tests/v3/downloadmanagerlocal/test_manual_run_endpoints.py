@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+from pydantic import BaseModel, Field
 
 PLUGIN = Path(__file__).resolve().parents[3] / 'plugins.v3/downloadmanagerlocal'
 PREFIX = 'app.plugins.downloadmanagerlocal'
@@ -514,3 +515,29 @@ def test_upload_limit_disable_restore_partial_failure_is_not_success(endpoints):
 
     assert response.success is False
     assert response.message == '部分限速恢复失败'
+
+
+class _ScanRequest(BaseModel):
+    """本地请求替身：fixture 的 model.api 动态模型无字段，不能承载 downloaders。"""
+
+    downloaders: list[str] = Field(default_factory=list)
+
+
+def test_tag_cleanup_scan_invokes_module_scan(endpoints):
+    """回归锁：api_tag_cleanup_scan 必须从真实 handler 调到模块层 scan_tag_candidates。
+
+    T03-b 曾把 handlers.py 的模块级导入误删，端点进入 NameError except 后恒返回
+    「扫描失败」；服务层只读测试覆盖不到该 handler 故障，这里直接锁调用链。
+    """
+    plugin = _fake_plugin(_tag_enabled=True)
+    scan_mock = endpoints.site_tag.scan_tag_candidates
+    scan_mock.return_value = {'downloaders': [], 'auto_removed': [], 'errors': []}
+    # fixture 的 model.api 是动态生成的无字段替身，model_dump() 为空 dict；
+    # 用本地真实 pydantic 模型构造，锁定 downloaders 透传链路。
+    payload = _ScanRequest(downloaders=['qb'])
+    response = endpoints.handlers.api_tag_cleanup_scan(plugin, payload)
+
+    assert response.success is True, f'扫描端点不应进入异常兜底: {response.message}'
+    scan_mock.assert_called_once()
+    assert scan_mock.call_args[0][0] is plugin
+    assert scan_mock.call_args[0][1] == ['qb']
