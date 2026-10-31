@@ -29,9 +29,9 @@ class Plugin:
 def env(mods):
     archive = sys.modules[PREFIX + '.modules.rename.archive']
     plugin = Plugin()
-    plugin.is_rename_archived = lambda h: archive.is_rename_archived(plugin, h)
+    plugin.is_rename_archived = lambda h, downloader="": archive.is_rename_archived(plugin, h, downloader)
     plugin.record_rename_failure = lambda *a, **kw: archive.record_rename_failure(plugin, *a, **kw)
-    plugin.clear_rename_retry_state = lambda h: archive.clear_rename_retry_state(plugin, h)
+    plugin.clear_rename_retry_state = lambda h, downloader="": archive.clear_rename_retry_state(plugin, h, downloader)
     return SimpleNamespace(rename=mods.rename, archive=archive, plugin=plugin)
 
 

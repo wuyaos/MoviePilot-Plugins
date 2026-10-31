@@ -9,6 +9,14 @@ from threading import RLock
 
 from app.sdk.logging import logger
 from ...model.state import RENAME_RECORDS_KEY, RENAME_RETRY_STATE_KEY
+from .record_keys import (
+    downloader_of_key,
+    hash_of_key,
+    lookup,
+    migrate_keys,
+    needs_migration,
+    record_key,
+)
 
 _LOCK_INIT = RLock()
 
@@ -95,12 +103,30 @@ def classify_rename_failure(reason: str = "") -> str:
 
 @serialized_rename_state
 def get_rename_retry_state(plugin) -> dict:
-    """读取补刀失败状态。"""
+    """读取补刀失败状态；存在可归位的旧裸键记录时在锁内做一次幂等迁移。"""
     state = read_state(plugin, RETRY_STATE_KEY)
     state = state if isinstance(state, dict) else {}
-    if limit_archive_display(state):
+    migrated = False
+    if needs_migration(state):
+        state, moved = migrate_keys(state)
+        if moved:
+            logger.info(f"【PT下载中心:重命名】补刀状态旧键迁移完成：{moved} 条记录归位到「下载器:hash」")
+            migrated = True
+    if limit_archive_display(state) or migrated:
         write_state(plugin, RETRY_STATE_KEY, state)
     return state
+
+
+def retry_item_lookup(state, torrent_hash: str, downloader: str = "") -> dict:
+    """按 (hash, 下载器) 定位补刀状态记录；存在歧义时明确告警，绝不任取一条。"""
+    found = lookup(state, torrent_hash, downloader)
+    if found["status"] == "ambiguous":
+        logger.warning(
+            "【PT下载中心:重命名】补刀状态存在多个下载器同名记录，无法确定归属：hash=%s candidates=%s",
+            torrent_hash,
+            ",".join(found["candidates"]),
+        )
+    return found
 
 
 @serialized_rename_state
@@ -110,24 +136,26 @@ def save_rename_retry_state(plugin, state: dict) -> None:
     write_state(plugin, RETRY_STATE_KEY, state or {})
 
 
-def is_rename_archived(plugin, torrent_hash: str) -> bool:
-    """判断种子是否已归档，不再参与自动补刀。"""
+def is_rename_archived(plugin, torrent_hash: str, downloader: str = "") -> bool:
+    """判断指定下载器中的种子是否已归档，不再参与自动补刀。"""
     hash_text = str(torrent_hash or "").strip()
     if not hash_text:
         return False
-    item = get_rename_retry_state(plugin).get(hash_text) or {}
+    found = retry_item_lookup(get_rename_retry_state(plugin), hash_text, downloader)
+    item = found["record"] if isinstance(found["record"], dict) else {}
     return bool(item.get("archived"))
 
 
 @serialized_rename_state
-def clear_rename_retry_state(plugin, torrent_hash: str) -> None:
-    """清理指定种子的补刀失败状态。"""
+def clear_rename_retry_state(plugin, torrent_hash: str, downloader: str = "") -> None:
+    """清理指定下载器中该种子的补刀失败状态。"""
     hash_text = str(torrent_hash or "").strip()
     if not hash_text:
         return
     state = get_rename_retry_state(plugin)
-    if hash_text in state:
-        del state[hash_text]
+    found = retry_item_lookup(state, hash_text, downloader)
+    if found["key"]:
+        del state[found["key"]]
         save_rename_retry_state(plugin, state)
 
 
@@ -139,8 +167,9 @@ def record_rename_failure(
     category: str = "",
     reason: str = "",
     threshold: int = DEFAULT_ARCHIVE_THRESHOLD,
+    downloader: str = "",
 ) -> dict:
-    """记录一次补刀失败，达到阈值后自动归档。"""
+    """记录一次补刀失败，达到阈值后自动归档；同 hash 不同下载器互不影响。"""
     hash_text = str(torrent_hash or "").strip()
     if not hash_text:
         return {}
@@ -148,11 +177,15 @@ def record_rename_failure(
     category_text = str(category or "").strip() or classify_rename_failure(reason_text)
     threshold = max(1, int(threshold or DEFAULT_ARCHIVE_THRESHOLD))
     state = get_rename_retry_state(plugin)
-    item = dict(state.get(hash_text) or {})
+    found = retry_item_lookup(state, hash_text, downloader)
+    key = found["key"] or record_key(hash_text, downloader) or hash_text
+    item = dict(state.get(key) or {})
+    downloader_text = str(downloader or "").strip() or str(item.get("downloader") or "")
     fail_count = int(item.get("fail_count") or 0) + 1
     archived = bool(item.get("archived")) or fail_count >= threshold
     item.update({
         "hash": hash_text,
+        "downloader": downloader_text,
         "name": str(torrent_name or item.get("name") or ""),
         "category": category_text,
         "category_label": FAILURE_CATEGORY_LABELS.get(category_text, "未归类异常"),
@@ -164,7 +197,13 @@ def record_rename_failure(
     if archived:
         item["archived_at"] = item.get("archived_at") or now_text()
         item["archive_reason"] = f"连续补刀失败 {fail_count} 次：{reason_text}"
-    state[hash_text] = item
+    if found["status"] == "legacy":
+        # 旧裸键归位到复合键，避免同一记录留下两份；downloader 为空时保持裸键
+        relocated = record_key(hash_text, downloader_text)
+        if relocated != key:
+            state.pop(key, None)
+            key = relocated
+    state[key] = item
     save_rename_retry_state(plugin, state)
     record_daily_result(plugin, False)
     log_rename_failure_state(item, reason_text)
@@ -172,14 +211,19 @@ def record_rename_failure(
 
 
 @serialized_rename_state
-def restore_rename_archive(plugin, torrent_hash: str) -> dict:
-    """从归档中恢复指定种子，使其重新参与补刀。"""
+def restore_rename_archive(plugin, torrent_hash: str, downloader: str = "") -> dict:
+    """从归档中恢复指定下载器中的种子，使其重新参与补刀。"""
     hash_text = str(torrent_hash or "").strip()
     if not hash_text:
         return {"code": 1, "msg": "缺少 hash 参数", "hash": ""}
     state = get_rename_retry_state(plugin)
-    item = dict(state.get(hash_text) or {})
-    if not item:
+    found = retry_item_lookup(state, hash_text, downloader)
+    if found["status"] == "ambiguous":
+        candidates = ", ".join(found.get("candidates") or [])
+        return {"code": 1, "msg": f"该种子存在多个下载器的归档记录（{candidates}），请指定下载器", "hash": hash_text}
+    key = found["key"]
+    item = found["record"] if isinstance(found["record"], dict) else {}
+    if not key or not item:
         return {"code": 1, "msg": "归档记录不存在", "hash": hash_text}
     restored_at = now_text()
     item.update({
@@ -189,30 +233,38 @@ def restore_rename_archive(plugin, torrent_hash: str) -> dict:
     })
     item.pop("archived_at", None)
     item.pop("display_hidden", None)
-    state[hash_text] = item
+    if found["status"] == "legacy":
+        # 旧裸键归位到复合键，避免同一记录留下两份；downloader 为空时保持裸键
+        relocated = record_key(hash_text, str(downloader or "").strip())
+        if relocated != key:
+            state.pop(key, None)
+            key = relocated
+    state[key] = item
     save_rename_retry_state(plugin, state)
 
-    records = plugin.get_data(RENAME_RECORDS_KEY) or {}
-    record = records.get(hash_text)
-    if isinstance(record, dict):
+    from .service import get_rename_records
+    records = get_rename_records(plugin)
+    record_found = lookup(records, hash_text, downloader)
+    if record_found["key"] and isinstance(record_found["record"], dict):
+        record = dict(record_found["record"])
         record["time"] = restored_at
-        plugin.save_data(RENAME_RECORDS_KEY, records)
+        records[record_found["key"]] = record
+        write_state(plugin, RENAME_RECORDS_KEY, records)
     return {"code": 0, "msg": "已恢复，后续将重新参与补刀", "hash": hash_text}
 
-
 @serialized_rename_state
-def delete_rename_archive(plugin, torrent_hash: str) -> dict:
+def delete_rename_archive(plugin, torrent_hash: str, downloader: str = "") -> dict:
     """仅删除归档展示，不解除自动补刀排除状态。"""
     hash_text = str(torrent_hash or "").strip()
     if not hash_text:
         return {"code": 1, "msg": "缺少 hash 参数", "hash": ""}
     state = get_rename_retry_state(plugin)
-    if hash_text not in state:
+    found = retry_item_lookup(state, hash_text, downloader)
+    if not found["key"]:
         return {"code": 1, "msg": "归档记录不存在", "hash": hash_text}
-    state[hash_text]["display_hidden"] = True
+    state[found["key"]]["display_hidden"] = True
     save_rename_retry_state(plugin, state)
     return {"code": 0, "msg": "已删除归档记录", "hash": hash_text}
-
 
 @serialized_rename_state
 def clear_rename_archive(plugin) -> dict:
@@ -282,25 +334,39 @@ __all__ = (
     "record_rename_failure",
     "rename_archive_stats",
     "restore_rename_archive",
+    "retry_item_lookup",
 )
 
 
+def _archive_display_pairs(state: dict) -> list[tuple[str, dict]]:
+    """(存储键, 展示条目) 列表：时间降序、hash 升序；缺失时间视为最旧。"""
+    pairs = [
+        (key, dict(item))
+        for key, item in state.items()
+        if isinstance(item, dict) and item.get("archived") and not item.get("display_hidden")
+    ]
+    pairs.sort(key=lambda pair: hash_of_key(pair[0]))
+    pairs.sort(key=lambda pair: str(pair[1].get("archived_at") or pair[1].get("last_failed_at") or ""), reverse=True)
+    return pairs
+
+
 def archive_display_items(state: dict) -> list[dict]:
-    """时间降序、hash 升序；缺失时间视为最旧，重载与插入顺序无关。"""
-    items = [dict(item, hash=key) for key, item in state.items()
-             if isinstance(item, dict) and item.get("archived") and not item.get("display_hidden")]
-    items.sort(key=lambda item: str(item["hash"]))
-    items.sort(key=lambda item: str(item.get("archived_at") or item.get("last_failed_at") or ""), reverse=True)
+    """归档展示条目：hash 为纯种子 hash，并标注记录所属下载器（裸键为空串）。"""
+    items = []
+    for key, item in _archive_display_pairs(state):
+        entry = dict(item)
+        entry["hash"] = hash_of_key(key)
+        entry["downloader"] = str(entry.get("downloader") or "").strip() or downloader_of_key(key)
+        items.append(entry)
     return items
 
 
 def limit_archive_display(state: dict) -> bool:
     """只裁展示记录，不删除不自动重试的安全依据。"""
-    overflow = archive_display_items(state)[1000:]
-    for item in overflow:
-        state[item["hash"]]["display_hidden"] = True
+    overflow = _archive_display_pairs(state)[1000:]
+    for key, _ in overflow:
+        state[key]["display_hidden"] = True
     return bool(overflow)
-
 
 DAILY_STATS_KEY = "rename_daily_stats"
 

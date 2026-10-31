@@ -15,9 +15,18 @@ from ...adapter.moviepilot import get_download_history_by_hash
 from ...model.state import RENAME_RECORDS_KEY
 from .archive import serialized_rename_state
 from .archive import read_state, write_state, rename_write_batch, record_daily_result, today_stats
+from .record_keys import (
+    downloader_of_key,
+    hash_of_key,
+    lookup,
+    migrate_keys,
+    needs_migration,
+    record_key,
+    split_record_key,
+)
 from ...utils.name_cleaner import (
     clean_torrent_original_name,
-    collect_retry_rename_hashes,
+    is_dirty_renamed_torrent_name,
     is_polluted_original_name,
 )
 from ...utils.tag_cleanup import normalize_tags
@@ -105,15 +114,16 @@ def format_torrent_name(template_string: str, meta: MetaBase, mediainfo) -> Opti
 @serialized_rename_state
 def save_rename_record(plugin, torrent_hash: str, original_name: str, after_name: str,
                        success: bool, reason: str = "", downloader: str = ""):
-    """保存重命名记录（downloader：记录所属下载器，供单条补刀/恢复原名定位）"""
-    records = read_state(plugin, RENAME_RECORDS_KEY)
-    records[torrent_hash] = {
+    """保存重命名记录（键为「下载器:hash」复合键；downloader 供单条补刀/恢复原名定位）"""
+    records = get_rename_records(plugin)
+    downloader_text = str(downloader or "").strip()
+    records[record_key(torrent_hash, downloader_text)] = {
         "hash": torrent_hash,
         "original_name": original_name,
         "after_name": after_name,
         "success": success,
         "reason": reason,
-        "downloader": str(downloader or "").strip(),
+        "downloader": downloader_text,
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     write_state(plugin, RENAME_RECORDS_KEY, records)
@@ -121,21 +131,82 @@ def save_rename_record(plugin, torrent_hash: str, original_name: str, after_name
         record_daily_result(plugin, True)
         clear_state = getattr(plugin, "clear_rename_retry_state", None)
         if callable(clear_state):
-            clear_state(torrent_hash)
+            clear_state(torrent_hash, downloader_text)
     elif reason:
         record_failure = getattr(plugin, "record_rename_failure", None)
         if callable(record_failure):
-            record_failure(torrent_hash, after_name or original_name, reason=reason)
+            record_failure(torrent_hash, after_name or original_name, reason=reason,
+                           downloader=downloader_text)
+
+
+def get_rename_records(plugin) -> dict:
+    """读取重命名记录；存在可归位的旧裸键记录时在锁内做一次幂等迁移。"""
+    records = read_state(plugin, RENAME_RECORDS_KEY)
+    if not isinstance(records, dict):
+        records = {}
+    if not needs_migration(records):
+        return records
+    return _migrate_rename_records(plugin)
+
+
+@serialized_rename_state
+def _migrate_rename_records(plugin) -> dict:
+    """把带 downloader 字段的裸键记录归位到「下载器:hash」；只改键，不改业务字段。"""
+    records = read_state(plugin, RENAME_RECORDS_KEY)
+    if not isinstance(records, dict):
+        records = {}
+    migrated, moved = migrate_keys(records)
+    if moved:
+        write_state(plugin, RENAME_RECORDS_KEY, migrated)
+        logger.info(f"【PT下载中心:重命名】旧键迁移完成：{moved} 条记录归位到「下载器:hash」")
+    return migrated
+
+
+def collect_retry_rename_keys(records: dict) -> set:
+    """收集需补刀记录的存储键：失败记录 + 原名仍被副标题污染的成功记录。"""
+    retry_keys = set()
+    for key, record in (records or {}).items():
+        if not isinstance(record, dict):
+            continue
+        if not record.get("success") or is_dirty_renamed_torrent_name(record.get("after_name", "")):
+            retry_keys.add(str(key))
+    return retry_keys
 
 
 def get_failed_rename_hashes(plugin) -> set:
-    """获取所有需补刀的种子 hash：失败记录 + 已成功但 original_name 被副标题污染的记录"""
-    records = read_state(plugin, RENAME_RECORDS_KEY)
-    retry_hashes = collect_retry_rename_hashes(records)
+    """兼容入口：返回需补刀的种子 hash 集合（不区分下载器，排除已归档）。"""
+    retry_hashes = {hash_of_key(key) for key in collect_retry_rename_keys(get_rename_records(plugin))}
     is_archived = getattr(plugin, "is_rename_archived", None)
     if not callable(is_archived):
         return retry_hashes
     return {torrent_hash for torrent_hash in retry_hashes if not is_archived(torrent_hash)}
+
+
+def get_failed_rename_targets(plugin) -> set:
+    """获取需补刀目标 (下载器, hash)：失败记录 + 已成功但原名被副标题污染的记录。
+
+    旧记录下载器未知时以空串表示，补刀方按「不排除」处理以保持既有补刀范围。
+    """
+    is_archived = getattr(plugin, "is_rename_archived", None)
+    targets = set()
+    for key in collect_retry_rename_keys(get_rename_records(plugin)):
+        downloader, torrent_hash = split_record_key(key)
+        if not torrent_hash:
+            continue
+        if callable(is_archived) and is_archived(torrent_hash, downloader):
+            continue
+        targets.add((downloader, torrent_hash))
+    return targets
+
+
+def _failed_hashes_for_downloader(plugin, downloader: str) -> set:
+    """按下载器过滤补刀目标；旧记录（下载器未知）不排除，保持既有补刀范围。"""
+    name = str(downloader or "").strip()
+    return {
+        torrent_hash
+        for target, torrent_hash in get_failed_rename_targets(plugin)
+        if target in ("", name)
+    }
 
 
 def _get_bencoded_value(mapping, key: str):
@@ -219,13 +290,14 @@ def _add_torrent_file_candidates(candidates: list, seen: set, plugin, torrent_ha
         logger.warning(f"【PT下载中心:重命名】读取原始种子名失败 hash={hash_text} file={torrent_file}: {e}")
 
 
-def _add_rename_record_candidates(candidates: list, seen: set, plugin, torrent_hash: str) -> None:
-    """从重命名历史中添加原始名候选。"""
+def _add_rename_record_candidates(candidates: list, seen: set, plugin, torrent_hash: str,
+                                  downloader: str = "") -> None:
+    """从重命名历史中添加原始名候选（按下载器取记录，避免跨下载器取错名）。"""
     try:
-        records = read_state(plugin, RENAME_RECORDS_KEY)
+        records = get_rename_records(plugin)
     except Exception:
         return
-    record = records.get(str(torrent_hash or ""))
+    record = lookup(records, torrent_hash, downloader).get("record") or {}
     if not isinstance(record, dict):
         return
     _add_original_name_candidate(candidates, seen, record.get("original_name"), "rename_record_original", 4)
@@ -272,13 +344,14 @@ def _build_original_name_candidate_items(
     torrent_hash: str,
     current_name: str = "",
     content_name: str = "",
+    downloader: str = "",
 ) -> list:
     """收集补刀可用的原始发布名候选。"""
     candidates = []
     seen = set()
     _add_torrent_file_candidates(candidates, seen, plugin, torrent_hash)
     _add_download_history_candidates(candidates, seen, str(torrent_hash or ""))
-    _add_rename_record_candidates(candidates, seen, plugin, torrent_hash)
+    _add_rename_record_candidates(candidates, seen, plugin, torrent_hash, downloader)
     _add_original_name_candidate(candidates, seen, content_name, "content_path", 20)
     _add_original_name_candidate(candidates, seen, current_name, "current_torrent", 0)
     return candidates
@@ -320,9 +393,12 @@ def _get_original_torrent_name(
     torrent_hash: str,
     current_name: str = "",
     content_name: str = "",
+    downloader: str = "",
 ) -> str:
     """读取源 .torrent 中最适合用于识别的原始发布名。"""
-    candidates = _build_original_name_candidate_items(plugin, torrent_hash, current_name, content_name)
+    candidates = _build_original_name_candidate_items(
+        plugin, torrent_hash, current_name, content_name, downloader
+    )
     if not candidates:
         return ""
     best = max(candidates, key=_score_original_name_candidate)
@@ -340,9 +416,10 @@ def resolve_retry_original_name(
     torrent_hash: str,
     current_name: str,
     content_name: str = "",
+    downloader: str = "",
 ) -> str:
     """为补刀解析可信原始发布名，无法确认时返回空字符串。"""
-    candidate = _get_original_torrent_name(plugin, torrent_hash, current_name, content_name)
+    candidate = _get_original_torrent_name(plugin, torrent_hash, current_name, content_name, downloader)
     if candidate:
         return candidate
     if is_polluted_original_name(current_name):
@@ -492,7 +569,7 @@ def retry_failed_renames(plugin, to_service):
             if th not in failed_hashes:
                 continue
             is_archived = getattr(plugin, "is_rename_archived", None)
-            if callable(is_archived) and is_archived(th):
+            if callable(is_archived) and is_archived(th, getattr(to_service, "name", "")):
                 logger.info(f"【PT下载中心:重命名】补刀跳过归档记录 hash={th}")
                 summary["skipped"] += 1
                 continue
@@ -507,7 +584,7 @@ def retry_failed_renames(plugin, to_service):
             logger.info(f"【PT下载中心:重命名】补刀处理: hash={th} name={tn}")
             item_success = True
             if plugin._rename_enabled:
-                retry_name = resolve_retry_original_name(plugin, th, tn, _get_torrent_content_name(torrent, dl_type))
+                retry_name = resolve_retry_original_name(plugin, th, tn, _get_torrent_content_name(torrent, dl_type), getattr(to_service, "name", ""))
                 if retry_name:
                     rename_success = rename_torrent(plugin, dl, dl_type, th, retry_name, sp)
                     if rename_success is None:
@@ -559,6 +636,7 @@ def _get_tracker_urls(torrent, dl_type):
 
 def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
     """对目标下载器中的单个种子执行补刀（重命名+站点标签）。"""
+    downloader_name = str(getattr(to_service, "name", "") or "")
     # 懒导入避免与 utils.config（顶层导入本模块）循环
     from ...utils.config import observe_skip
     hash_text = str(torrent_hash or "").strip()
@@ -570,7 +648,7 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
     if not to_service or not to_service.instance:
         record_failure = getattr(plugin, "record_rename_failure", None)
         if callable(record_failure):
-            record_failure(hash_text, "", "DOWNLOADER_UNAVAILABLE", "目标下载器不可用")
+            record_failure(hash_text, "", "DOWNLOADER_UNAVAILABLE", "目标下载器不可用", downloader=downloader_name)
         return {"code": 1, "msg": "目标下载器不可用，已跳过补刀", "hash": hash_text}
 
     dl = to_service.instance
@@ -580,7 +658,7 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
         if not torrents:
             record_failure = getattr(plugin, "record_rename_failure", None)
             if callable(record_failure):
-                record_failure(hash_text, "", "TASK_NOT_FOUND", "未在目标下载器找到该种子")
+                record_failure(hash_text, "", "TASK_NOT_FOUND", "未在目标下载器找到该种子", downloader=downloader_name)
             return {"code": 1, "msg": "未在目标下载器找到该种子", "hash": hash_text}
 
         for torrent in torrents:
@@ -606,11 +684,12 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
                     hash_text,
                     torrent_name,
                     _get_torrent_content_name(torrent, dl_type),
+                    downloader_name,
                 )
                 if not retry_name:
                     record_failure = getattr(plugin, "record_rename_failure", None)
                     if callable(record_failure):
-                        record_failure(hash_text, torrent_name, "NO_TRUSTED_SOURCE", "原始发布名污染，无法可靠补刀")
+                        record_failure(hash_text, torrent_name, "NO_TRUSTED_SOURCE", "原始发布名污染，无法可靠补刀", downloader=downloader_name)
                     return {"code": 1, "msg": "原始发布名污染，无法可靠补刀", "hash": hash_text}
                 rename_succeeded = plugin._rename_torrent(
                         dl, dl_type, hash_text,
@@ -629,24 +708,25 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
                     warnings.append(f"{hash_text[:8]}: 站点标签写入失败")
 
             if not rename_succeeded:
-                record = (read_state(plugin, RENAME_RECORDS_KEY)).get(hash_text) or {}
+                found = lookup(get_rename_records(plugin), hash_text, downloader_name)
+                record = found["record"] if isinstance(found["record"], dict) else {}
                 reason = record.get("reason") or "重命名未完成"
                 return {"code": 1, "msg": f"补刀失败：{reason}", "hash": hash_text}
 
             clear_state = getattr(plugin, "clear_rename_retry_state", None)
             if callable(clear_state):
-                clear_state(hash_text)
+                clear_state(hash_text, downloader_name)
             return {"code": 0, "msg": "补刀完成", "hash": hash_text, "warnings": warnings}
 
         record_failure = getattr(plugin, "record_rename_failure", None)
         if callable(record_failure):
-            record_failure(hash_text, "", "TASK_NOT_FOUND", "未在目标下载器找到该种子")
+            record_failure(hash_text, "", "TASK_NOT_FOUND", "未在目标下载器找到该种子", downloader=downloader_name)
         return {"code": 1, "msg": "未在目标下载器找到该种子", "hash": hash_text}
     except Exception as e:
         logger.error(f"【PT下载中心:重命名】单条补刀失败 hash={hash_text}: {e}")
         record_failure = getattr(plugin, "record_rename_failure", None)
         if callable(record_failure):
-            record_failure(hash_text, "", "UNKNOWN_ERROR", str(e))
+            record_failure(hash_text, "", "UNKNOWN_ERROR", str(e), downloader=downloader_name)
         return {"code": 1, "msg": f"补刀失败: {e}", "hash": hash_text}
 
 
@@ -915,7 +995,7 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     torrent_name = _get_torrent_name(torrent, dl_type)
     save_path = get_save_path(torrent, dl_type)
     torrent_tags = get_label(torrent, dl_type)
-    if _is_already_renamed(plugin, torrent_hash, torrent_name):
+    if _is_already_renamed(plugin, torrent_hash, torrent_name, str(getattr(service, "name", "") or "")):
         logger.info(f"【PT下载中心:重命名】重命名跳过 hash={torrent_hash}：当前名称已是本插件重命名结果")
         return "skipped"
     allowed, reason = passes_rename_filters(rename_config, torrent_hash, torrent_tags, save_path)
@@ -934,27 +1014,28 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     return "failed"
 
 
-def _get_renamed_hashes(plugin) -> set:
-    """读取已成功重命名的 hash 集合，用于跳过已处理种子。"""
-    records = read_state(plugin, RENAME_RECORDS_KEY)
-    if not isinstance(records, dict):
-        return set()
-    return {
-        str(torrent_hash)
-        for torrent_hash, record in records.items()
-        if isinstance(record, dict) and record.get("success")
-    }
+def _get_renamed_hashes(plugin, downloader: str = "") -> set:
+    """读取指定下载器已成功重命名的 hash 集合，用于跳过已处理种子。"""
+    records = get_rename_records(plugin)
+    hashes = set()
+    for key, record in list(records.items()):
+        if not isinstance(record, dict) or not record.get("success"):
+            continue
+        if downloader and downloader_of_key(key) not in ("", downloader):
+            continue
+        hashes.add(hash_of_key(key))
+    return hashes
 
 
-def _is_already_renamed(plugin, torrent_hash: str, torrent_name: str) -> bool:
+def _is_already_renamed(plugin, torrent_hash: str, torrent_name: str, downloader: str = "") -> bool:
     """判断当前名称是否已是本插件上一次成功重命名的结果。
 
     下载器重复添加同一种子（MoviePilot 侧会再次尝试加入并广播下载新增事件）时，
     事件路径若不判断，会把已改名的名称再当作 original_name 套一次模板，
     导致标题等前缀叠加两次。手动补刀走 rename_torrent，不受该判断限制。
     """
-    records = read_state(plugin, RENAME_RECORDS_KEY)
-    record = records.get(str(torrent_hash)) if isinstance(records, dict) else None
+    found = lookup(get_rename_records(plugin), str(torrent_hash), downloader)
+    record = found["record"]
     if not isinstance(record, dict) or not record.get("success"):
         return False
     after_name = str(record.get("after_name") or "").strip()
@@ -969,10 +1050,8 @@ def scan_renames(plugin) -> dict:
     if not rename_config["enabled"]:
         return result
 
-    processed = _get_renamed_hashes(plugin)
     # 失败项重试开关（rename_retry）已移除：定时扫描沿用发布默认语义——不重试失败项，
     # 重试走数据页「一键补刀」（POST /retry_renames）。
-    pending = get_failed_rename_hashes(plugin)
     is_archived = getattr(plugin, "is_rename_archived", None)
 
     for downloader_name in rename_config["downloader"]:
@@ -992,6 +1071,8 @@ def scan_renames(plugin) -> dict:
             }
             continue
         bucket = {"renamed": 0, "failed": 0, "skipped": 0}
+        processed = _get_renamed_hashes(plugin, downloader_name)
+        pending = _failed_hashes_for_downloader(plugin, downloader_name)
         for torrent in torrents or []:
             torrent_hash = get_hash(torrent, service.type)
             if not torrent_hash:
@@ -999,7 +1080,7 @@ def scan_renames(plugin) -> dict:
             if torrent_hash in processed or torrent_hash in pending:
                 bucket["skipped"] += 1
                 continue
-            if callable(is_archived) and is_archived(torrent_hash):
+            if callable(is_archived) and is_archived(torrent_hash, downloader_name):
                 bucket["skipped"] += 1
                 continue
             bucket[rename_candidate(plugin, service, rename_config, torrent)] += 1

@@ -19,6 +19,7 @@ from ...adapter.moviepilot import get_downloader_services
 from ...utils.torrent_adapter import get_hash
 from ..transfer.tasks import load_transfer_tasks
 
+from .record_keys import lookup
 RETRY_LOG_PREFIX = "【PT下载中心:重命名】"
 
 
@@ -89,3 +90,38 @@ def resolve_record_downloader(plugin, torrent_hash: str, record: dict | None = N
         return {"service": None, "candidates": candidates, "ambiguous": True, "reason": "ambiguous"}
     service = get_downloader_services(name_filters=[candidates[0]]).get(candidates[0])
     return {"service": service, "candidates": candidates, "ambiguous": False, "reason": "searched"}
+
+
+def resolve_retry_service(plugin, torrent_hash: str, downloader: str = "") -> dict:
+    """单条补刀入口的下载器定位：复合键记录优先，其次按 hash 唯一搜索。
+
+    - 复合键精确命中 → 直接用该记录的下载器；
+    - 同 hash 多条记录且无法定位 → ambiguous（绝不任取）；
+    - 记录缺失或下载器不可用 → 回退到逐实例搜索。
+    """
+    from .service import get_rename_records
+
+    hash_text = str(torrent_hash or "").strip()
+    if not hash_text:
+        return {"service": None, "candidates": [], "ambiguous": False, "reason": "not_found"}
+    try:
+        records = get_rename_records(plugin)
+    except Exception:
+        records = {}
+    found = lookup(records, hash_text, downloader)
+    if found["status"] == "ambiguous":
+        return {
+            "service": None,
+            "candidates": found["candidates"],
+            "ambiguous": True,
+            "reason": "ambiguous",
+        }
+    record = found["record"] if isinstance(found["record"], dict) else {}
+    if downloader and found["status"] == "other_downloader":
+        return {
+            "service": None,
+            "candidates": found["candidates"],
+            "ambiguous": True,
+            "reason": "downloader_mismatch",
+        }
+    return resolve_record_downloader(plugin, hash_text, record)

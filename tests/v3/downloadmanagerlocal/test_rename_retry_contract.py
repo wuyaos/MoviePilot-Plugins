@@ -68,6 +68,7 @@ def _ensure_loaded():
     _load_real("utils/torrent_adapter.py", f"{PREFIX}.utils.torrent_adapter")
     _load_real("modules/hr/constants.py", f"{PREFIX}.modules.hr.constants")
     _load_real("model/state.py", f"{PREFIX}.model.state")
+    sys.modules[f"{PREFIX}.modules.rename"].__path__ = [str(PLUGIN / "modules" / "rename")]
     _load_real("modules/rename/archive.py", f"{PREFIX}.modules.rename.archive")
     _rename = _load_real("modules/rename/service.py", f"{PREFIX}.modules.rename.service")
     _IS_LOADED = True
