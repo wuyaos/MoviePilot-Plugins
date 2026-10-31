@@ -389,11 +389,6 @@ def scan_tag_candidates(plugin, downloader_names: Iterable[str]) -> dict:
     return result
 
 
-def scan_and_clean_tags(plugin, downloader_names: Iterable[str]) -> dict:
-    """兼容旧调用名：标签扫描现在统一采用只读流程。"""
-    return scan_tag_candidates(plugin, downloader_names)
-
-
 def _snapshot_candidates(snapshot: dict | None) -> set[tuple[str, str, str]]:
     candidates = set()
     for downloader in (snapshot or {}).get("downloaders", []):
@@ -589,7 +584,6 @@ __all__ = (
     "find_site_by_domain",
     "forget_temporary_tag",
     "release_temporary_tag",
-    "scan_and_clean_tags",
     "scan_tag_candidates",
     "tag_torrent",
     "DEFAULT_ALL_CAT",
@@ -886,7 +880,7 @@ def complement_history(plugin, config: dict | None = None) -> dict:
     # 结果出口单次保存最近快照；旧数据缺键时读取仍返回 None。
     plugin.save_data(SITE_TAG_STATUS_KEY, dict(state))
     if cfg["enable_del_tags"]:
-        scan_and_clean_tags(plugin, cfg["downloaders"])
+        scan_tag_candidates(plugin, cfg["downloaders"])
     return result
 
 

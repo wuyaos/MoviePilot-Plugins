@@ -8,11 +8,11 @@ from typing import Any, Iterable
 from app.schemas.types import MessageType
 from app.sdk.logging import logger
 
-from ...utils.notify import module_title
+from ...utils.notify import notify_module_result
 from .constants import HR_LOG_PREFIX, HR_NOTIFY_EVENTS_DATA_KEY, HR_NOTIFY_MODES
 from .models import HrStatus, HrTask
 
-SUMMARY_TITLE = module_title("hr")
+SUMMARY_TITLE_SUFFIX = "hr"
 SUMMARY_GROUPS = (
     ("【已完成】", HrStatus.COMPLIANT),
     ("【已过期】", HrStatus.OVERDUE),
@@ -59,14 +59,24 @@ def record_task_event(plugin: Any, task: HrTask, title: str, notify: str, warn: 
 
 
 def send_summary(plugin: Any, notify: str) -> bool:
-    """按状态分组发送汇总通知，投递后清空队列；关闭通知或队列为空时返回 False。"""
+    """按状态分组发送汇总通知；发送成功才清空队列，失败保留待下次重发。"""
     if str(notify or "").strip().lower() == "none":
         return False
     events = dedupe_events(load_events(plugin))
     if not events:
         return False
     text = build_summary_text(events)
-    plugin.post_message(mtype=MessageType.SiteMessage, title=SUMMARY_TITLE, parse_mode="plain", text=text)
+    sent = notify_module_result(
+        plugin,
+        SUMMARY_TITLE_SUFFIX,
+        text=text,
+        mtype=MessageType.SiteMessage,
+    )
+    if not sent:
+        logger.warning(
+            f"{HR_LOG_PREFIX}汇总通知发送失败，保留 {len(events)} 条事件待下次重发"
+        )
+        return False
     save_events(plugin, [])
     logger.info(f"{HR_LOG_PREFIX}已发送汇总通知，共 {len(events)} 条状态变更")
     return True

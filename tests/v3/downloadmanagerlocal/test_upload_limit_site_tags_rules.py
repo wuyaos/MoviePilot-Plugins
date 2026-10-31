@@ -115,7 +115,7 @@ def endpoints(monkeypatch):
     _module(monkeypatch, PREFIX + '.modules.hr.guard', HrGuard=Mock())
     _module(monkeypatch, PREFIX + '.modules.hr.rules', load_preset_rules=Mock(return_value={}))
     _module(monkeypatch, PREFIX + '.modules.sitetag.service',
-            execute_tag_cleanup=Mock(), scan_and_clean_tags=Mock(), complement_history=Mock())
+            execute_tag_cleanup=Mock(), scan_tag_candidates=Mock(), complement_history=Mock())
     _module(monkeypatch, PREFIX + '.modules.uploadlimit.worker', stop_upload_limit_worker=Mock())
     upload_limiter = _module(
         monkeypatch, PREFIX + '.modules.uploadlimit.service',

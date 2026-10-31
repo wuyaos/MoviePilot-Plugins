@@ -161,20 +161,19 @@ def list_upload_torrents(
     normalized = _normalize_type(downloader_type)
     try:
         if normalized == "transmission" and getattr(instance, "trc", None):
-            raw_items = instance.trc.get_torrents(arguments=TRANSMISSION_UPLOAD_ARGUMENTS)
-            error = None
+            raw_items, error = _validate_trc_torrents(
+                instance.trc.get_torrents(arguments=TRANSMISSION_UPLOAD_ARGUMENTS)
+            )
         else:
-            response = instance.get_torrents()
-            raw_items, error = _unwrap_torrent_response(response)
+            raw_items, error = _unwrap_torrent_response(instance.get_torrents())
         if error:
             return [], str(error)
         return [
             normalize_upload_torrent(item, downloader_id, normalized)
-            for item in raw_items or []
+            for item in raw_items
         ], ""
     except Exception as error:
         return [], str(error)
-
 
 def normalize_upload_torrent(
     torrent: Any,
@@ -418,14 +417,33 @@ def global_settings_to_dict(value: GlobalUploadSettings) -> dict:
     }
 
 
+def _validate_trc_torrents(raw_items: Any) -> tuple[Iterable[Any], Any]:
+    """校验 Transmission 专用查询返回，仅接受列表（含空列表）。"""
+    if isinstance(raw_items, list):
+        return raw_items, None
+    if raw_items is None:
+        return [], "downloader returned no result"
+    return None, f"unsupported torrent payload: {type(raw_items).__name__}"
+
+
 def _unwrap_torrent_response(response: Any) -> tuple[Iterable[Any], Any]:
-    """兼容 MoviePilot 下载器返回的列表或二元组。"""
-    if isinstance(response, tuple) and len(response) == 2:
-        return response[0] or [], response[1]
+    """兼容 MoviePilot 下载器返回的列表或二元组，非法结构返回错误。"""
+    if isinstance(response, tuple):
+        if len(response) != 2:
+            return None, f"unsupported torrent payload: tuple of length {len(response)}"
+        items, error = response
+        if items is None:
+            if error:
+                return [], error
+            return None, "downloader returned null items"
+        if not isinstance(items, (list, tuple)):
+            return None, f"unsupported torrent payload: {type(items).__name__}"
+        return items, error
     if response is None:
         return [], "downloader returned no result"
+    if not isinstance(response, (list, tuple)):
+        return None, f"unsupported torrent payload: {type(response).__name__}"
     return response, None
-
 
 def _normalize_type(value: str) -> str:
     """校验并返回受支持的下载器类型。"""

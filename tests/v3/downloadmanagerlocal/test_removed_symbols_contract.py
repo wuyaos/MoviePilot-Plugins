@@ -24,6 +24,14 @@ CASES = [
         PLUGIN / "modules" / "diagnostics" / "service.py",
         ["def _path_exists"],
     ),
+    (
+        PLUGIN / "modules" / "sitetag" / "service.py",
+        ["def scan_and_clean_tags"],
+    ),
+    (
+        PLUGIN / "controller" / "handlers.py",
+        ["scan_and_clean_tags"],
+    ),
 ]
 
 

@@ -627,3 +627,293 @@ def test_persist_site_rules_holds_cycle_lock(svc):
     assert plugin.state_lock_held is True  # save_data 在锁内执行，与周期互斥
     assert plugin._upload_limit_state["downloaders"]["QB1"]["per_torrent_management_active"] is False
     assert plugin._upload_limit_state["downloaders"]["QB1"]["initial_scan_complete"] is False
+
+
+# ---------------------------------------------------------------------------
+# T08-a：迁移幂等与未知版本拒写（行为测试，直接使用真实迁移函数）
+# ---------------------------------------------------------------------------
+
+
+def _persisted_unknown_version():
+    """构造一个未知 schema_version=99 的持久化状态（未来版本数据）。"""
+    return {
+        "schema_version": 99,
+        "management_active": True,
+        "activated_at": 123.0,
+        "cycle": 7,
+        "last_run_at": 456.0,
+        "downloaders": {"QB1": {"limit_kib": 100}},
+        "torrents": {"QB1:abc": {"rate": 512}},
+        "failures": {"QB1": 1},
+        "last_summary": {"runs": 3},
+    }
+
+
+class _LoadCountingPlugin(FakePlugin):
+    """在 FakePlugin 上记录 get_data 调用，证明 load 真的读了持久化数据。"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.get_data_calls = []
+
+    def get_data(self, key=None):
+        self.get_data_calls.append(key)
+        return super().get_data(key)
+
+
+def test_migrate_none_and_empty_return_safe_empty_state(svc):
+    """None 与空 dict 都迁移为当前 schema 的空状态。"""
+    fresh = svc.upload_model.empty_upload_limit_state()
+    assert svc.upload_model.migrate_upload_limit_state(None) == fresh
+    assert svc.upload_model.migrate_upload_limit_state({}) == fresh
+
+
+def test_migrate_supported_versions_preserve_valid_values(svc):
+    """缺失版本、0、1 三种已支持输入：有效原值逐字段保真，版本归一到 1。"""
+    for raw_version in (None, 0, 1):
+        raw = {
+            "management_active": True,
+            "activated_at": 12.5,
+            "cycle": 5,
+            "last_run_at": 99.5,
+            "downloaders": {"QB1": {"limit_kib": 100}},
+            "torrents": {"QB1:abc": {"rate": 512}},
+            "failures": {"QB1": 1},
+            "last_summary": {"runs": 3},
+        }
+        if raw_version is not None:
+            raw["schema_version"] = raw_version
+        result = svc.upload_model.migrate_upload_limit_state(raw)
+        assert result == {
+            "schema_version": 1,
+            "management_active": True,
+            "activated_at": 12.5,
+            "cycle": 5,
+            "last_run_at": 99.5,
+            "downloaders": {"QB1": {"limit_kib": 100}},
+            "torrents": {"QB1:abc": {"rate": 512}},
+            "failures": {"QB1": 1},
+            "last_summary": {"runs": 3},
+        }
+
+
+def test_migrate_rejects_non_dict_and_unknown_version(svc):
+    """非 dict 与未知 schema_version 一律 ValueError，绝不静默清空。"""
+    for bad in ("junk", 123, [], {"schema_version": 99}, {"schema_version": "1"}):
+        with pytest.raises(ValueError):
+            svc.upload_model.migrate_upload_limit_state(bad)
+
+
+def test_migrate_corrupted_fields_fall_back_safely(svc):
+    """损坏字段回退安全默认值：非负数值、非 dict 集合字段清空。"""
+    result = svc.upload_model.migrate_upload_limit_state(
+        {
+            "schema_version": 1,
+            "activated_at": "abc",
+            "cycle": None,
+            "last_run_at": -5,
+            "downloaders": "junk",
+            "torrents": 42,
+            "failures": [1, 2],
+            "last_summary": None,
+        }
+    )
+    assert result == svc.upload_model.empty_upload_limit_state()
+
+
+def test_migrate_is_idempotent(svc):
+    """迁移两次等价：正常数据与损坏数据（均已支持）各自收敛到同一结果。"""
+    migrate = svc.upload_model.migrate_upload_limit_state
+    valid = _persisted_unknown_version()
+    valid["schema_version"] = 1
+    corrupted = {"schema_version": 1, "cycle": "bad", "downloaders": 1}
+    for raw in (valid, corrupted):
+        first = migrate(copy.deepcopy(raw))
+        second = migrate(copy.deepcopy(first))
+        assert first == second
+        # 再冻结一次：多次迁移不再漂移
+        assert migrate(copy.deepcopy(second)) == first
+
+def test_load_unknown_version_rejects_writeback_and_keeps_original(svc):
+    """未知版本：load 走持久化读取返回安全空态并记录错误；save 拒写保原值。"""
+    persisted = _persisted_unknown_version()
+    guard = copy.deepcopy(persisted)
+    plugin = _LoadCountingPlugin(state=None)  # dict 缓存会绕过持久化读取，必须 None
+    plugin._data["upload_limit_state"] = persisted
+
+    state = svc.service.load_upload_limit_state(plugin)
+
+    # 确实经过 load（get_data 真读了该键），而不是返回缓存
+    assert plugin.get_data_calls == ["upload_limit_state"]
+    # 安全空态 + 错误已记录（含未知版本号）
+    assert state == svc.upload_model.empty_upload_limit_state()
+    assert "99" in plugin._upload_limit_state_error
+    # load 阶段不回写：原始持久化对象原样保留
+    assert plugin._data["upload_limit_state"] == guard
+
+    # save 阶段：目标键拒写，原始对象不变
+    svc.service.save_upload_limit_state(plugin, svc.upload_model.empty_upload_limit_state())
+    assert plugin._data["upload_limit_state"] == guard
+    assert plugin.save_calls == []
+
+    # 拒写只针对 upload_limit_state 键：其他数据保存不受影响
+    plugin.save_data("some_other_key", {"a": 1})
+    assert plugin._data["some_other_key"] == {"a": 1}
+
+
+def test_load_valid_state_saves_normally_positive_control(svc):
+    """正控：无迁移错误时 save 正常落盘，证明上一条拒写断言非空转。"""
+    raw = _persisted_unknown_version()
+    raw["schema_version"] = 1  # 已支持版本
+    plugin = _LoadCountingPlugin(state=None)
+    plugin._data["upload_limit_state"] = raw
+
+    state = svc.service.load_upload_limit_state(plugin)
+    assert state["schema_version"] == 1
+    assert state["cycle"] == 7  # 有效字段保真
+    assert plugin._upload_limit_state_error == ""
+
+    svc.service.save_upload_limit_state(plugin, state)
+    assert plugin.save_calls == ["upload_limit_state"]
+    saved = plugin._data["upload_limit_state"]
+    assert saved["schema_version"] == 1
+    assert saved["cycle"] == 7
+
+
+# ── T04-u：限速查询非法返回不冒充成功空集 ────────────────────────────
+
+
+def _tr_torrent(name="tr"):
+    """Transmission 专用查询的最小合法任务对象。"""
+    return SimpleNamespace(
+        name=name,
+        hashString="abc123",
+        status="seeding",
+        labels=["site-a"],
+        percentDone=1.0,
+        leftUntilDone=0,
+        totalSize=1024,
+        addedDate=1000.0,
+        doneDate=1000.0,
+        rateUpload=0,
+        peersGettingFromUs=0,
+        peersConnected=0,
+        uploadLimit=0,
+        uploadLimited=False,
+    )
+
+
+def _list_instance(payload):
+    """普通下载器替身：get_torrents 直接返回注入的负载。"""
+    return SimpleNamespace(get_torrents=lambda: payload)
+
+
+def _tr_instance(payload):
+    """Transmission 替身：trc.get_torrents 返回注入的负载。"""
+    return SimpleNamespace(
+        trc=SimpleNamespace(get_torrents=lambda arguments=None: payload)
+    )
+
+
+@pytest.mark.parametrize(
+    "downloader_type,instance,expected",
+    [
+        # 普通客户端：裸列表 / 二元组 / 合法空集
+        pytest.param("qbittorrent", _list_instance([{"hash": "a"}]), 1,
+                     id="qb-bare-list"),
+        pytest.param("qbittorrent", _list_instance(([{"hash": "a"}], None)), 1,
+                     id="qb-tuple-with-items"),
+        pytest.param("qbittorrent", _list_instance(([], None)), 0,
+                     id="qb-tuple-empty-items"),
+        pytest.param("qbittorrent", _list_instance([]), 0,
+                     id="qb-bare-empty-list"),
+        # Transmission 专用：裸列表与合法空列表
+        pytest.param("transmission", _tr_instance([_tr_torrent()]), 1,
+                     id="tr-bare-list"),
+        pytest.param("transmission", _tr_instance([]), 0,
+                     id="tr-empty-list"),
+    ],
+)
+def test_adapter_list_accepts_legal_payloads(svc, downloader_type, instance, expected):
+    snapshots, error = svc.adapter.list_upload_torrents(
+        instance, "QB1", downloader_type
+    )
+    assert error == ""
+    assert len(snapshots) == expected
+
+
+@pytest.mark.parametrize(
+    "downloader_type,instance,expect_fragment",
+    [
+        # 普通客户端：None（既有语义）/ dict / string / bytes / 单元素 tuple / (None, False)
+        pytest.param("qbittorrent", _list_instance(None), "no result",
+                     id="qb-none"),
+        pytest.param("qbittorrent", _list_instance({"hash": "a"}), "unsupported",
+                     id="qb-dict"),
+        pytest.param("qbittorrent", _list_instance("hash-a"), "unsupported",
+                     id="qb-string"),
+        pytest.param("qbittorrent", _list_instance(b"hash-a"), "unsupported",
+                     id="qb-bytes"),
+        pytest.param("qbittorrent", _list_instance(("solo",)), "unsupported",
+                     id="qb-singleton-tuple"),
+        pytest.param("qbittorrent", _list_instance((None, False)), "null items",
+                     id="qb-null-items-no-error"),
+        # Transmission 专用：None / dict / string / bytes / 单元素 tuple / 二元组
+        pytest.param("transmission", _tr_instance(None), "no result",
+                     id="tr-none"),
+        pytest.param("transmission", _tr_instance({"a": 1}), "unsupported",
+                     id="tr-dict"),
+        pytest.param("transmission", _tr_instance("abc"), "unsupported",
+                     id="tr-string"),
+        pytest.param("transmission", _tr_instance(b"abc"), "unsupported",
+                     id="tr-bytes"),
+        pytest.param("transmission", _tr_instance(("solo",)), "unsupported",
+                     id="tr-singleton-tuple"),
+        pytest.param("transmission", _tr_instance(([{"hash": "a"}], None)),
+                     "unsupported", id="tr-tuple"),
+    ],
+)
+def test_adapter_list_rejects_illegal_payloads(svc, downloader_type, instance, expect_fragment):
+    snapshots, error = svc.adapter.list_upload_torrents(
+        instance, "QB1", downloader_type
+    )
+    assert snapshots == []
+    assert expect_fragment in error
+
+
+def test_illegal_poll_keeps_restore_state_and_writes_nothing(svc):
+    """轮次遇非法查询返回：业务照常返回，失败入账，恢复原值保留，零限速写入。"""
+    qb = FakeQb(upload_limit_bps=100 * 1024, alt_up_limit=100 * 1024)
+    qb.get_torrents = lambda: {"bad": "payload"}  # 非法 dict
+    state = _empty_state()
+    state["management_active"] = True
+    state["cycle"] = 1
+    state["last_run_at"] = 1000.0
+    state["downloaders"] = {"QB1": _seed_downloader()}
+    original_global = copy.deepcopy(state["downloaders"]["QB1"]["original_global"])
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_site_rules = {}
+    plugin.add_downloader("QB1", qb)
+
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    # 没有新写限速：全局与单种写入函数 0 次
+    assert qb.global_limit_calls == []
+    assert qb.torrent_limit_calls == []
+    # 查询失败被记录：下载器失败态 + 历史含 scan failed + 摘要 errors
+    failures = state.get("failures") or {}
+    assert "unsupported torrent payload: dict" in str(failures.get("QB1"))
+    items = svc.exec_history.query(plugin, "upload_limit")["items"]
+    failed = [r for r in items if r["result"] == "failed"]
+    assert len(failed) == 1
+    assert failed[0]["action"] == "scan"
+    assert "unsupported torrent payload: dict" in failed[0]["reason"]
+    assert any("unsupported torrent payload" in e for e in result.get("errors", []))
+    # 恢复原值仍保留，失败未被错误清理冲掉
+    assert state["downloaders"]["QB1"]["original_global"] == original_global
+    saved = plugin.get_data("upload_limit_state")
+    assert saved is not None
+    assert saved["downloaders"]["QB1"]["original_global"] == original_global
+    assert "unsupported torrent payload: dict" in str(
+        (saved.get("failures") or {}).get("QB1")
+    )

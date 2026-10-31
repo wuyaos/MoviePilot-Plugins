@@ -37,12 +37,16 @@ def notify_scan_result(plugin: Any, cleaned_paths: list[str]) -> None:
 
 
 def _send(plugin: Any, title: str, text: str) -> None:
-    """按来源语义以“手动处理”类型发送纯文本通知（统一标题前缀）。"""
-    from ...utils.notify import module_title
+    """按来源语义以“手动处理”类型发送纯文本通知（统一标题前缀）。
 
-    plugin.post_message(
-        mtype=MessageType.Manual, title=module_title("failclean", title),
-        text=text, parse_mode="plain",
+    经统一出口 notify_module_result 安全发送：宿主不可用或发送异常只告警，
+    不得让通知失败中断删除与计数主流程（真实反例见 test_failclean_notify_isolation.py）。
+    """
+    from ...utils.notify import notify_module_result
+
+    notify_module_result(
+        plugin, "failclean",
+        text=text, suffix=title, mtype=MessageType.Manual,
     )
 
 

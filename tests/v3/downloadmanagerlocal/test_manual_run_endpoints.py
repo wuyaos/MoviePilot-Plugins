@@ -116,7 +116,7 @@ def endpoints(monkeypatch):
     _module(monkeypatch, PREFIX + '.modules.hr.guard', HrGuard=Mock())
     _module(monkeypatch, PREFIX + '.modules.hr.rules', load_preset_rules=Mock(return_value={}))
     site_tag = _module(monkeypatch, PREFIX + '.modules.sitetag.service',
-                       execute_tag_cleanup=Mock(), scan_and_clean_tags=Mock(),
+                       execute_tag_cleanup=Mock(), scan_tag_candidates=Mock(),
                        complement_history=Mock(return_value={'completed': 0, 'skipped': 0,
                                                              'downloaders': {}}))
     _module(monkeypatch, PREFIX + '.modules.uploadlimit.worker', stop_upload_limit_worker=Mock())
@@ -382,7 +382,6 @@ def test_hr_manual_actions_reject_isolated_service(endpoints):
             assert "初始化失败" in e.detail, name
             continue
         raise AssertionError(f"{name} 未拒绝，返回 {result!r}")
-        assert "初始化失败" in excinfo.value.detail, name
 
 
 # ── 转移记录名称（P7-2c 需求④）：GET /transfer_status 带出源种子名 ────────────

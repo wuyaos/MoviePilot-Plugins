@@ -56,10 +56,6 @@ from ..modules.hr.guard import HrGuard
 from ..modules.hr.rules import load_preset_rules
 from ..utils.config import observe_skip
 from ..modules.sitetag.service import complement_history, execute_tag_cleanup
-try:
-    from ..modules.sitetag.service import scan_tag_candidates
-except ImportError:  # 兼容旧测试夹具
-    from ..modules.sitetag.service import scan_and_clean_tags as scan_tag_candidates
 from ..modules.uploadlimit.worker import stop_upload_limit_worker
 from ..modules.uploadlimit.service import (
     get_upload_limit_status,
