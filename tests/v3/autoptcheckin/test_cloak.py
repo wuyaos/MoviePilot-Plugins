@@ -92,7 +92,7 @@ def test_turnstile_timeout_is_reported_without_submission():
     assert page.waits == [1500] * 40 + [8000]
 
 
-def test_piggo_round_site_opens_headful_cloak_without_vclib(monkeypatch):
+def test_vclib_round_site_opens_headful_cloak_independently(monkeypatch):
     from types import SimpleNamespace
     from autoptcheckin import AutoPtCheckin
     from autoptcheckin.core import cloak
@@ -105,10 +105,10 @@ def test_piggo_round_site_opens_headful_cloak_without_vclib(monkeypatch):
 
     monkeypatch.setattr(cloak, 'CloakSession', FakeSession)
     plugin = AutoPtCheckin()
-    plugin._config = {'site_browserless': ['piggo', 'yema']}
+    plugin._config = {'site_browserless': ['vclib', 'yema']}
     plugin._recompute_track_states = lambda: None
     plugin._track_store = lambda: SimpleNamespace(rollover=lambda: None)
-    plugin._due_for = lambda action: ['piggo', 'yema'] if action == 'sign' else []
+    plugin._due_for = lambda action: ['vclib', 'yema'] if action == 'sign' else []
     def execute(site_id, *args):
         client = cloak.CloakHttpClient(
             SimpleNamespace(cookies={}), {},

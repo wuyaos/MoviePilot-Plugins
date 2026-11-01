@@ -87,7 +87,7 @@ def test_slow_and_headful_cloak_declarations_are_preserved():
     piggo = get_native_module('piggo')
     vclib = get_native_module('vclib')
     assert yema.slow is True and yema.slow_timeout == 90000
-    assert piggo.headful is True and vclib.headful is True
+    assert piggo.emulate is False and piggo.headful is False and vclib.headful is True
 
 
 def test_yema_signin_capability_and_login_are_enabled():

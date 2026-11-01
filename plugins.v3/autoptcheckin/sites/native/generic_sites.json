@@ -867,19 +867,6 @@
     "emulate": true
   },
   {
-    "id": "piggo",
-    "protocol": "page_action",
-    "name": "猪猪",
-    "url": "https://piggo.me/",
-    "attendance_path": "/attendance.php",
-    "cloak_entry_path": "/",
-    "cloak_steps": [
-      "sign_button"
-    ],
-    "headful": true,
-    "emulate": true
-  },
-  {
     "id": "kamept",
     "protocol": "nexus",
     "name": "龟站",

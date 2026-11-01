@@ -38,7 +38,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.3.13"
+    plugin_version = "4.3.14"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -46,6 +46,7 @@ class AutoPtCheckin(_PluginBase):
                  "site_cloudsign", "custom_sites_data",
                  "rousi_username", "rousi_password", "sunnypt_username",
                  "sunnypt_password", "sunnypt_token", "mteam_username", "mteam_password", "mteam_totp",
+                 "piggo_username", "piggo_password", "piggo_totp",
                  "yzyy_username", "yzyy_password",
                  "ourbits_username", "ourbits_password", "ourbits_totp")
 

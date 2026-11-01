@@ -240,7 +240,8 @@ def test_yema_signin_executable_and_52pt_declared_uncapable(monkeypatch):
     # 52pt 2026-10-28 用户裁决转显式无签到能力（站点入口整体下线+公告反脚本条款）：仅登录。
     assert get_native_module('52pt').signin_capable is False
     assert rows['pt_0ff']['signin_capable'] is True
-    assert rows['piggo']['cloak_entry_path'] == '/'
+    assert "piggo" not in rows  # 新版猪猪改为独立 SPA 账密适配
+    assert get_native_module("piggo").credential.kind == "password"
     assert 'emulate' not in rows['kamept']
     from autoptcheckin.core import cloak
     monkeypatch.setattr(cloak, 'run_page_action', lambda session, steps: None)

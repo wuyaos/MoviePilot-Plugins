@@ -233,6 +233,18 @@ def off_loop(fn):
     return wrapper
 
 
+def _piggo_flow(runner, site, info, config, *, action, read_only=False, get_data=None, save_data=None):
+    from types import SimpleNamespace
+    from ..integrations.piggo import run_piggo
+    get_data = get_data or getattr(runner, "get_data", None)
+    save_data = save_data or getattr(runner, "save_data", None)
+    def authenticated(result, cookies):
+        persist_cookie_result(result, SimpleNamespace(cookies=cookies), site.id,
+                              "password_login", get_data, save_data)
+    return run_piggo(site, info, action=action, config=config, cancel=runner.stop,
+                     read_only=read_only, authenticated=authenticated)
+
+
 @off_loop
 def run_native(runner, site, info, *, read_only=False, trigger='manual', context_factory=native_context, get_data=None, save_data=None, custom_cookie='', config=None):
     """Same site-level lock as legacy/login; every outcome gets one history entry."""
@@ -270,6 +282,9 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
         get_data = get_data or getattr(runner, 'get_data', None)
         save_data = save_data or getattr(runner, 'save_data', None)
+        if site.id == "piggo":
+            return finish(_piggo_flow(runner, site, info, config, action="sign",
+                                      read_only=read_only, get_data=get_data, save_data=save_data))
         attempted_cookie_sources = []
         result = SignResult(SignStatus.AUTH_FAILED, '缺少可用 Cookie')
         if flags['cloudsign_selected'] and not read_only:
@@ -491,6 +506,8 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             return finish(SignResult.skipped())
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
+        if site.id == "piggo":
+            return finish(_piggo_flow(runner, site, info, config, action="login"))
         if site.id == "mteam":
             # M-Team keeps browser storage_state, never the shared Cookie table.
             try:

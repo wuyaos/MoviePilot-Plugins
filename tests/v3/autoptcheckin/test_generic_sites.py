@@ -17,9 +17,9 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 96  # 已移除关闭站点 hares、52movie；52pt/hdwing/ptzone/yema 转独立模块
-    assert len({row['id'] for row in rows}) == 96
-    assert len({row['url'] for row in rows}) == 96
+    assert len(rows) == 95  # piggo 新版 SPA 改为独立模块，其余站点数量不变
+    assert len({row["id"] for row in rows}) == 95
+    assert len({row["url"] for row in rows}) == 95
     assert not {'hares', '52movie'} & {row['id'] for row in rows}
     assert all({'id', 'name', 'url', 'protocol'} <= set(row) for row in rows)
     base = {'id', 'name', 'url', 'attendance_path', 'protocol'}
@@ -34,7 +34,7 @@ def test_generic_dynamic_registry_and_default_message_chain():
     rows = registry.discover_sites()['sites']
     native = [row for row in rows if row['native']]
     # Baseline includes GTK and LP-Bits in addition to the original 46 declarations.
-    assert len(list(generic._DECLARATIONS.parent.glob('*.py'))) - 2 == 31  # +hdwing AJAX + colapt JSON API
+    assert len(list(generic._DECLARATIONS.parent.glob("*.py"))) - 2 == 32  # +piggo 新版 SPA
     assert len(native) == 127  # Native package discovery includes all declarations.
     assert len({row['id'] for row in rows}) == len(rows)
     for cls in generic.build_generic_sites():
