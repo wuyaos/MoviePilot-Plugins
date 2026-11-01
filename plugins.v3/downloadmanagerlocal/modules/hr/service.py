@@ -206,7 +206,7 @@ class HrService:
             logger.debug(f"{HR_LOG_PREFIX}下载器 {downloader} 不在 H&R 下载器列表，跳过纳管 {target_hash}")
             return False
         existing = self.get_task(downloader, target_hash)
-        if existing and existing.interlock_state:
+        if existing and (existing.interlock_state or not existing.deleted):
             return False
         service = downloader_services([downloader]).get(downloader)
         if service is None:
@@ -270,7 +270,7 @@ class HrService:
             set_hr_tag(service, task.hash, self._config.hit_and_run_tag)
         with self._lock:
             previous = self._tasks.get(task.key)
-            if previous and previous.interlock_state:
+            if previous and (previous.interlock_state or not previous.deleted):
                 return False
             self._tasks[task.key] = task
             self._save_tasks()

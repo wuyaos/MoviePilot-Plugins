@@ -48,7 +48,7 @@ class _Recorder:
 
 
 @pytest.fixture
-def fc(mp_stubs, monkeypatch):
+def fc(mp_stubs, monkeypatch, tmp_path):
     """加载真实 hostapi + service，并把宿主边界换成可控替身。"""
 
     def stub(name: str, **attrs):
@@ -111,7 +111,7 @@ def fc(mp_stubs, monkeypatch):
         def delete_file_by_fullpath(self, fullpath: str) -> None:
             recorder.history_deleted.append(fullpath)
 
-    dir_state: dict = {"paths": []}
+    dir_state: dict = {"paths": [str(tmp_path)]}
     history_state: dict = {"record": None, "hash": ""}
     recorder = _Recorder()
 

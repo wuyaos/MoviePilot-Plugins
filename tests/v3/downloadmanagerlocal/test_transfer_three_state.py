@@ -147,12 +147,13 @@ def test_transfer_status_additive_raw_and_effective(endpoints, monkeypatch, glob
     assert status["total"] == 0 and status["page_size"] == 20
 
 
-def _service_case(tr, monkeypatch, value, global_default, duplicate):
+def _service_case(tr, monkeypatch, value, global_default, duplicate, target_type="qbittorrent"):
     source, target = Mock(), Mock()
     source.get_completed_torrents.return_value = [{"hash": "abc", "state": "pausedUP"}]
-    target.get_torrents.return_value = ([{"state": "pausedUP"}] if duplicate else [], None)
+    target_row = {"state": "pausedUP"} if target_type == "qbittorrent" else {"state": 1, "complete": 1, "progress": 100}
+    target.get_torrents.return_value = ([target_row] if duplicate else [], None)
     services = {"A": SimpleNamespace(name="A", type="qbittorrent", instance=source),
-                "B": SimpleNamespace(name="B", type="qbittorrent", instance=target)}
+                "B": SimpleNamespace(name="B", type=target_type, instance=target)}
     plugin = SimpleNamespace(service_info=services.get, _scan_limit=500,
                              _transfer_delete_source_default=global_default,
                              _transfer_delete_duplicate_default=global_default,
@@ -172,6 +173,12 @@ def _service_case(tr, monkeypatch, value, global_default, duplicate):
     totals = dict(success=0, fail=0, skip=0, del_dup=0)
     tr._run_task(plugin, task, "手动", 0, totals)
     return totals
+
+def test_rtorrent_duplicate_uses_dict_state(tr, monkeypatch):
+    totals = _service_case(tr, monkeypatch, True, True, duplicate=True, target_type="rtorrent")
+    assert totals["del_dup"] == 1
+    assert totals["fail"] == 0
+
 
 
 @pytest.mark.parametrize("value", VALUES[:10])

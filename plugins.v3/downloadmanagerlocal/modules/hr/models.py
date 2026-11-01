@@ -97,7 +97,7 @@ class HrTask(BaseModel):
 
     hash: str = ""
     downloader: str = ""
-    site: Optional[int] = None
+    site: Optional[int | str] = None
     site_name: Optional[str] = None
     title: str = ""
     size: float = 0
@@ -204,6 +204,7 @@ class HrConfig(BaseModel):
     notify_summary_cron: str = "0 8 * * *"
     global_rule: HrSiteRule = Field(default_factory=HrSiteRule)
     site_rules: dict[str, HrSiteRule] = Field(default_factory=dict)
+    custom_sites: Optional[set[str]] = None  # 解析器填入显式 YAML 范围，预设本身不得扩大白名单。
 
     def get_site_rule(self, site_name: Optional[str]) -> HrSiteRule:
         """返回站点独立规则；站点未配置时回退全局规则。"""
@@ -220,7 +221,8 @@ class HrConfig(BaseModel):
         name = str(site_name or "").strip()
         if not name:
             return False
-        return name in self.sites or name in self.site_rules
+        custom = self.custom_sites if self.custom_sites is not None else self.site_rules
+        return name in self.sites or name in custom
 
 __all__ = (
     "HrConfig",

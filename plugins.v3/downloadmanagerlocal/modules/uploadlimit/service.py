@@ -202,9 +202,10 @@ def load_upload_limit_state(plugin: Any) -> dict:
     return state
 
 
-def save_upload_limit_state(plugin: Any, state: dict) -> None:
-    """保存当前上传限速运行态并更新插件实例缓存。"""
-    _cycle_checkpoint()
+def save_upload_limit_state(plugin: Any, state: dict, *, committed_write: bool = False) -> None:
+    """保存运行态；已完成外部写入的恢复账本必须先提交，再响应取消。"""
+    if not committed_write:
+        _cycle_checkpoint()
     state["schema_version"] = 1
     plugin._upload_limit_state = state
     if getattr(plugin, "_upload_limit_state_error", ""):
@@ -325,14 +326,22 @@ def run_upload_limit_cycle(
                 desired_global = expected_global_upload_settings(
                     downloader_type, caps[downloader_id]
                 )
-                wrote_global = False
                 if not global_settings_equal(current_global, desired_global):
-                    wrote_global = True
                     _cycle_checkpoint()
                     before_global = global_settings_to_dict(current_global)
+                    progress = dict(before_global)
+
+                    def commit_global_progress(changes):
+                        # qB 普通/备用限速是独立 RPC，每一步成功后都保留恢复证据。
+                        progress.update(changes)
+                        entry["last_written_global"] = dict(progress)
+                        entry["total_limit_kib"] = caps[downloader_id]
+                        entry["last_seen_at"] = timestamp
+                        save_upload_limit_state(plugin, state, committed_write=True)
                     try:
                         desired_global = write_global_upload_limit(
-                            service.instance, downloader_type, caps[downloader_id]
+                            service.instance, downloader_type, caps[downloader_id],
+                            on_written=commit_global_progress,
                         )
                     except Exception as error:
                         recorder.record(
@@ -356,9 +365,6 @@ def run_upload_limit_cycle(
                 entry["last_written_global"] = global_settings_to_dict(desired_global)
                 entry["total_limit_kib"] = caps[downloader_id]
                 entry["last_seen_at"] = timestamp
-                if wrote_global:
-                    # S1：全局写入成功即落盘（与单种同策略），缩小停止+重启的孤儿窗口到毫秒级。
-                    save_upload_limit_state(plugin, state)
 
 
                 snapshots, poll_error = list_upload_torrents(
@@ -591,9 +597,8 @@ def run_upload_limit_cycle(
                 record["last_written_settings"] = settings_to_dict(applied)
                 record["last_applied_at"] = timestamp
                 if wrote_torrent:
-                    # S1：写下载器成功即落盘，把 last_written 与下载器实际值绑在同一窗口内，
-                    # 停止+重启不再把插件写入误判为 preserved_manual 或漏掉单种恢复。
-                    save_upload_limit_state(plugin, state)
+                    # 与全局写入一致：先提交已完成 IO 的账本，再终止轮次。
+                    save_upload_limit_state(plugin, state, committed_write=True)
 
             except UploadCycleStopped:
                 raise
@@ -1428,29 +1433,42 @@ def _restore_one_downloader(
         current_global = read_global_upload_settings(service.instance, downloader_type)
         last_global = entry.get("last_written_global")
         original_global = entry.get("original_global")
-        if last_global and original_global and global_settings_equal(
-            current_global,
-            global_settings_from_dict(last_global, downloader_type),
-        ):
-            _cycle_checkpoint()
-            restore_global_upload_settings(
-                service.instance,
-                downloader_type,
-                global_settings_from_dict(original_global, downloader_type),
-            )
-            report["global_restored"] = True
+        if last_global and original_global:
+            restore_target = global_settings_from_dict(original_global, downloader_type)
+            manual_change = False
+            if downloader_type == "qbittorrent":
+                # 两个 RPC 可部分成功。已回到 original 的字段也是自身恢复进度，
+                # 不得整组误判为手动修改；真正被用户改动的字段保留当前值。
+                current_values = global_settings_to_dict(current_global)
+                for value_key, enabled_key in (
+                    ("upload_limit_bps", "upload_enabled"),
+                    ("alternate_upload_limit_bps", "alternate_upload_enabled"),
+                ):
+                    if current_values[value_key] not in (last_global.get(value_key), original_global.get(value_key)):
+                        manual_change = True
+                    else:
+                        current_values[value_key] = original_global.get(value_key)
+                        current_values[enabled_key] = original_global.get(enabled_key)
+                restore_target = global_settings_from_dict(current_values, downloader_type)
+            elif not global_settings_equal(current_global, global_settings_from_dict(last_global, downloader_type)):
+                restore_target = current_global
+                manual_change = True
+            if not global_settings_equal(current_global, restore_target):
+                _cycle_checkpoint()
+                restore_global_upload_settings(service.instance, downloader_type, restore_target)
+            report["global_restored"] = not manual_change
+            report["preserved_manual"] += int(manual_change)
             if recorder is not None:
                 recorder.record(
                     action="global_restore",
                     result="success",
-                    reason="恢复接管前全局上传设置",
+                    reason="恢复接管前全局上传设置（保留手动修改字段）" if manual_change else "恢复接管前全局上传设置",
                     downloader_id=downloader_id,
-                    before=dict(last_global),
-                    after=dict(original_global),
+                    before=global_settings_to_dict(current_global),
+                    after=global_settings_to_dict(restore_target),
                 )
         else:
             report["preserved_manual"] += 1
-
         snapshots, poll_error = list_upload_torrents(
             service.instance, downloader_id, downloader_type
         )

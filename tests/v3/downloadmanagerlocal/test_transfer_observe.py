@@ -301,7 +301,7 @@ def test_rename_none_result_is_skipped_without_failure_or_tags(observed, monkeyp
         assert result["observed"] is True
     else:
         monkeypatch.setattr(env.transfer, "is_dirty_renamed_torrent_name", lambda name: True)
-        monkeypatch.setattr(env.transfer, "resolve_retry_original_name", lambda *args: "Original")
+        monkeypatch.setattr(env.transfer, "resolve_retry_original_name", lambda *args, **kwargs: "Original")
         result = env.transfer.retry_dirty_torrent_names(env.plugin, env.services["target"])
         assert result["attempted"] == result["failed"] == 0 and result["skipped"] == 1
     env.rename.add_rename_tag.assert_not_called()
@@ -310,3 +310,58 @@ def test_rename_none_result_is_skipped_without_failure_or_tags(observed, monkeyp
     env.plugin.record_rename_failure.assert_not_called()
     env.plugin.clear_rename_retry_state.assert_not_called()
     env.plugin.save_data.assert_not_called()
+
+
+@pytest.mark.parametrize("caller", ["post_transfer", "dirty_retry"])
+def test_transfer_rename_keeps_target_identity_in_real_history(observed, monkeypatch, caller):
+    env = observed
+    env.plugin._module_observe_only["transfer"] = False
+    env.plugin._tag_enabled = False
+    source_name = "Source.Movie.2024.1080p.WEB-DL"
+    target_name = "Target.Movie.2024.1080p.WEB-DL"
+    for downloader, original in (("source", source_name), ("target", target_name)):
+        env.rename.save_rename_record(env.plugin, "abc", original, "dirty", False, "retry", downloader=downloader)
+    before = env.rename.get_rename_records(env.plugin)
+    source_key = env.rename.record_key("abc", "source")
+    target_key = env.rename.record_key("abc", "target")
+    env.plugin.is_rename_archived.side_effect = lambda h, downloader="": downloader == "source"
+    monkeypatch.setattr(env.rename, "_add_torrent_file_candidates", lambda *a: None)
+    monkeypatch.setattr(env.rename, "_add_download_history_candidates", lambda *a: None)
+    monkeypatch.setattr(env.transfer, "is_dirty_renamed_torrent_name", lambda name: True)
+    row = {"hash": "abc", "name": target_name if caller == "post_transfer" else "dirty", "save_path": "/data"}
+    env.target.get_torrents.return_value = ([row], None)
+
+    def rename_and_save(dl, kind, h, original, path, downloader=""):
+        env.rename.save_rename_record(env.plugin, h, original, "Renamed", True, downloader=downloader)
+        return True
+
+    env.plugin._rename_torrent.side_effect = rename_and_save
+    if caller == "post_transfer":
+        assert env.transfer.post_transfer_process(env.plugin, env.services["target"], "abc") is True
+    else:
+        result = env.transfer.retry_dirty_torrent_names(env.plugin, env.services["target"])
+        assert result["success"] == 1 and result["failed"] == 0
+        env.plugin.is_rename_archived.assert_called_once_with("abc", downloader="target")
+    env.plugin._rename_torrent.assert_called_once()
+    assert env.plugin._rename_torrent.call_args.kwargs["downloader"] == "target"
+    records = env.rename.get_rename_records(env.plugin)
+    assert records[source_key] == before[source_key]
+    assert records[target_key]["original_name"] == target_name
+    assert records[target_key]["success"] is True
+    assert "abc" not in records
+
+
+@pytest.mark.parametrize("failure", ["no_source", "exception"])
+def test_dirty_retry_failure_is_recorded_for_target_only(observed, monkeypatch, failure):
+    env = observed
+    env.plugin.is_rename_archived.return_value = False
+    env.target.get_torrents.return_value = ([{"hash": "abc", "name": "dirty", "save_path": "/data"}], None)
+    monkeypatch.setattr(env.transfer, "is_dirty_renamed_torrent_name", lambda name: True)
+    resolver = Mock(return_value="" if failure == "no_source" else "Original")
+    monkeypatch.setattr(env.transfer, "resolve_retry_original_name", resolver)
+    env.plugin._rename_torrent.side_effect = RuntimeError("rename unavailable")
+    result = env.transfer.retry_dirty_torrent_names(env.plugin, env.services["target"])
+    assert result["failed"] == 1 and result["success"] == 0
+    assert resolver.call_args.kwargs["downloader"] == "target"
+    env.plugin.record_rename_failure.assert_called_once()
+    assert env.plugin.record_rename_failure.call_args.kwargs["downloader"] == "target"

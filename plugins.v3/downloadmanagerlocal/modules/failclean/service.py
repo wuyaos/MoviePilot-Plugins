@@ -136,6 +136,29 @@ class FailCleanService:
         fail_reason = _text(_field(_field(event_data, "transferinfo"), "message")) or UNKNOWN_FAIL_REASON
         download_hash = _text(_field(event_data, "download_hash"))
         downloader_id = _text(_field(event_data, "downloader"))
+        # TransferFailed 也可能来自手工整理或其他存储；只清理本地下载根下的源文件。
+        rejection = ""
+        storage = _text(_field(fileitem, "storage")) or "local"
+        try:
+            source_path = Path(path).resolve()
+            roots = [Path(root).resolve() for root in hostapi.local_download_paths()]
+            if storage != "local" or not any(root in source_path.parents for root in roots):
+                rejection = "整理失败源文件不属于配置的本地下载目录"
+        except (OSError, ValueError) as err:
+            rejection = f"无法确认整理失败源文件范围：{err}"
+        if not rejection and not download_hash:
+            try:
+                download_hash = hostapi.get_download_hash_by_fullpath(source_path.as_posix())
+            except Exception:
+                download_hash = ""
+            if not download_hash:
+                rejection = "整理失败事件缺少下载 hash，无法确认 H&R 保护身份"
+        if rejection:
+            logger.warning(f"{FAILCLEAN_LOG_PREFIX}{rejection}，跳过删除：{path}")
+            self._record_history(trigger=FAILCLEAN_TRANSFER_FAILED_TRIGGER, action="删除源文件",
+                                 result="skipped", reason=rejection, name=path)
+            result.update({"skipped": True, "path": path, "hash": download_hash})
+            return result
         logger.info(f"{FAILCLEAN_LOG_PREFIX}整理失败，准备删除源文件：{path}，原因：{fail_reason}")
         delete_result = self._delete_source_file(
             fileitem=fileitem,

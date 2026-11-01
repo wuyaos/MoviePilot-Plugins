@@ -110,7 +110,7 @@ def notify_env(mp_stubs, monkeypatch, tmp_path):
         def delete_file_by_fullpath(self, fullpath: str) -> None:
             recorder.history_deleted.append(fullpath)
 
-    dir_state: dict = {"paths": []}
+    dir_state: dict = {"paths": [str(tmp_path)]}
     history_state: dict = {"record": None, "hash": ""}
     recorder = types.SimpleNamespace(
         unlinked=[],

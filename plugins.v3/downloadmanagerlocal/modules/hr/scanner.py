@@ -152,7 +152,7 @@ def resolve_site(
     tracker_mappings: Optional[dict],
     trackers: Iterable[str],
     site_rules: Optional[dict] = None,
-) -> tuple[Optional[int], Optional[str]]:
+) -> tuple[Optional[int | str], Optional[str]]:
     """按 tracker 解析站点 ID 与名称：用户域名映射优先，其次 MoviePilot 站点库，
     最后按站点规则条目的 trackers 字段兜底（覆盖 MP 站点库未收录的自定义站点）。"""
     rule_trackers = _rule_domain_map(site_rules)
@@ -180,7 +180,12 @@ def resolve_site(
         site_id = indexer.get("id")
         site_name = indexer.get("name")
         if site_id or site_name:
-            return (int(site_id) if site_id else None), (str(site_name) if site_name else None)
+            # 站点模板 ID（如 dmhy）并非数据库数字主键；旧数字 ID 继续归一为 int。
+            if isinstance(site_id, str):
+                site_id = site_id.strip()
+                if site_id.isdecimal():
+                    site_id = int(site_id)
+            return (site_id if site_id is not None and site_id != "" else None), (str(site_name) if site_name else None)
     return None, None
 
 

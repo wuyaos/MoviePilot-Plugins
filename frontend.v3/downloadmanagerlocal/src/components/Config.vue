@@ -403,6 +403,20 @@ function normalizeTransferDeleteState(value, legacyDefault) {
   return value === true || value === false || value === 'inherit' ? value : legacyDefault
 }
 
+function legacyTransferTasks(config) {
+  if (config?.transfer_tasks !== undefined && config?.transfer_tasks !== null) return parseTransferTasks(config.transfer_tasks)
+  const from = String(config?.fromdownloader || "").trim()
+  const to = String(config?.todownloader || "").trim()
+  if (!from || !to || from === to || config?.transfer_tasks_migrated) return []
+  return [{ ...transferTaskDefaults, name: "默认任务（旧配置迁移）",
+    from_downloader: from, to_downloader: to,
+    include_category: config.includecategory || "", include_labels: config.includelabels || "",
+    exclude_labels: config.nolabels || "", empty_label_ok: config.transferemptylabel ?? true,
+    no_paths: config.nopaths || "", from_path: config.frompath || "", to_path: config.topath || "",
+    delete_source: config.deletesource ?? false, delete_duplicate: config.deleteduplicate ?? true,
+    keep_category: config.remainoldcat ?? true, keep_tag: config.remainoldtag ?? true, transfer_tag: "",
+  }]
+}
 function parseTransferTasks(raw) {
   let parsed
   try {
@@ -1386,7 +1400,7 @@ Object.keys(form).forEach(k => delete form[k])
   tagCatPairs.value = parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename)
   tagTrackerPairs.value = parseTrackerEditor()
   syncHrSiteRulesFromForm()
-  transferTasks.value = parseTransferTasks(form.transfer_tasks)
+  transferTasks.value = legacyTransferTasks(v)
   transferExt.value = parseDownloaderExt(form.downloader_ext)
 }, { immediate: true, deep: true })
 </script>

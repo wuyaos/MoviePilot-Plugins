@@ -46,7 +46,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.9.20"
+    plugin_version = "3.9.21"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页
@@ -407,8 +407,8 @@ class DownloadManagerLocal(_PluginBase):
     def _post_transfer_process(self, to_service: ServiceInfo, torrent_hash: str):
         """执行转移完成后的重命名、标签和复查登记。"""; return _post_transfer_process_impl(self, to_service, torrent_hash)
 
-    def _rename_torrent(self, dl, dl_type: str, torrent_hash: str, torrent_name: str, save_path: str):
-        """委托重命名服务处理单个种子名称。"""; return _rename_torrent_impl(self, dl, dl_type, torrent_hash, torrent_name, save_path)
+    def _rename_torrent(self, dl, dl_type: str, torrent_hash: str, torrent_name: str, save_path: str, downloader: str = ""):
+        """委托重命名服务处理单个种子名称。"""; return _rename_torrent_impl(self, dl, dl_type, torrent_hash, torrent_name, save_path, downloader=downloader)
 
     def _tag_torrent(self, dl, dl_type: str, torrent_hash: str, torrent_tags: list, trackers: list):
         """委托站点标签服务更新单个种子标签。"""; return _tag_torrent_impl(self, dl, dl_type, torrent_hash, torrent_tags, trackers)

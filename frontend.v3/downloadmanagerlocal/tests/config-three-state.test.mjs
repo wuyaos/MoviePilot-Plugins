@@ -165,3 +165,24 @@ test('任务列表渲染来源与生效值文本，并对缺失投影显示破�
     view.unmount()
   }
 })
+
+
+test("旧单链路缺任务键时迁移，显式空列表与迁移标记不复活旧任务", async () => {
+  const legacy = { fromdownloader: "QB", todownloader: "TR", deletesource: false, deleteduplicate: true, frompath: "/old", topath: "/new" }
+  for (const [extra, count] of [[{}, 1], [{ transfer_tasks: "[]" }, 0], [{ transfer_tasks_migrated: true }, 0]]) {
+    const state = mountSetup({ ...legacy, ...extra })
+    try {
+      assert.equal(state.transferTasks.value.length, count)
+      await state.saveConfig()
+      const saved = JSON.parse(state.calls.at(-1).transfer_tasks)
+      assert.equal(saved.length, count)
+      if (count) {
+        assert.equal(saved[0].from_downloader, "QB")
+        assert.equal(saved[0].to_downloader, "TR")
+        assert.equal(saved[0].delete_source, false)
+        assert.equal(saved[0].delete_duplicate, true)
+        assert.equal(saved[0].from_path, "/old")
+      }
+    } finally { state.stop() }
+  }
+})

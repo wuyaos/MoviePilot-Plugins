@@ -129,5 +129,5 @@ test('H&R layout retains the approved configuration business script byte-for-byt
   const adapterEnd = script.indexOf('const removerActionItems', adapterStart)
   const businessScript = (script.slice(0, adapterStart) + script.slice(adapterEnd))
     .split('\n').filter(line => !line.startsWith('        color: `var(--dm-hr-rule-')).join('\n')
-  assert.equal(createHash('sha256').update(businessScript).digest('hex'),'7664a4bc5fd17f5f2aafe352822e3bf90d30351979e3efb0c375d4f96d213aca')
+  assert.equal(createHash('sha256').update(businessScript).digest('hex'),'ced2745b6ae45e51cf15fa5846cf70ca61fdc03d4eb2d37c4177b8d8126b93b1')
 })

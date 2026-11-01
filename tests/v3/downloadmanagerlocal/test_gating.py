@@ -389,3 +389,18 @@ def test_initialize_runtime_config_records_observe_snapshot(gating):
     assert plugin._module_observe_only['transfer'] is True
     assert plugin._module_observe_only['upload_limit'] is False
     assert set(plugin._module_observe_only) == set(u.OBSERVE_ONLY_KEYS)
+
+
+def test_legacy_transfer_missing_tasks_is_not_masked_by_new_default(gating):
+    from importlib import import_module
+    tasks = import_module(PREFIX + ".modules.transfer.tasks")
+    plugin = _Recorder()
+    gating.service.initialize_runtime_config(plugin, {"enabled": True, "transfer_enabled": True,
+        "fromdownloader": "QB", "todownloader": "TR", "deletesource": False})
+    migrated = tasks.load_transfer_tasks(plugin)
+    assert len(migrated) == 1
+    assert migrated[0]["from_downloader"] == "QB"
+    assert migrated[0]["to_downloader"] == "TR"
+    gating.service.initialize_runtime_config(plugin, {"enabled": True, "transfer_enabled": True,
+        "fromdownloader": "QB", "todownloader": "TR", "transfer_tasks": "[]"})
+    assert tasks.load_transfer_tasks(plugin) == []

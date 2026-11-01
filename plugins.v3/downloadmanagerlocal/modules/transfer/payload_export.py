@@ -62,29 +62,18 @@ def _qb_export(instance: Any, info_hash: str, service: Any = None) -> Optional[b
             data = None
         if data:
             return data
-    if service is None:
-        logger.warning("【PT下载中心:转移做种】qB 网络导出缺少下载器配置，无法兜底")
-        return None
-    cred = _downloader_credentials(service)
-    if not cred["host"]:
-        logger.warning("【PT下载中心:转移做种】qB 下载器缺少 host 配置，无法网络导出")
+    # 宿主已登录的 qB 客户端持有 SID；HTTP Basic 不能替代 WebUI 会话。
+    client = getattr(instance, "qbc", None)
+    export = getattr(client, "torrents_export", None)
+    if not callable(export):
+        logger.warning("【PT下载中心:转移做种】qB 客户端未提供已认证的 torrents_export")
         return None
     try:
-        resp = requests.post(
-            f"{cred['host']}/api/v2/torrents/export",
-            data={"hash": info_hash},
-            auth=(cred["username"], cred["password"]) if cred["username"] else None,
-            timeout=_SOURCE_HTTP_TIMEOUT,
-        )
+        data = export(torrent_hash=info_hash)
+        return data if isinstance(data, bytes) and data else None
     except Exception as err:
-        logger.warning(f"【PT下载中心:转移做种】qB WebUI 导出失败 {info_hash[:8]}：{err}")
+        logger.warning(f"【PT下载中心:转移做种】qB 会话导出失败 {info_hash[:8]}：{err}")
         return None
-    if resp.status_code != 200 or not resp.content:
-        logger.warning(
-            f"【PT下载中心:转移做种】qB WebUI 导出失败 {info_hash[:8]}：HTTP {resp.status_code}"
-        )
-        return None
-    return resp.content
 
 
 def _tr_rpc(service: Any, method: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -129,6 +118,8 @@ def _tr_rpc(service: Any, method: str, arguments: Dict[str, Any]) -> Dict[str, A
 
 def _tr_first_field(rows: Any, name: str) -> Any:
     """从 transmission_rpc 对象取字段值（兼容 fields 字典与属性两种形态）。"""
+    if isinstance(rows, dict):
+        return rows.get(name)
     fields = getattr(rows, "fields", None) or getattr(rows, "_fields", None)
     if isinstance(fields, dict):
         raw = fields.get(name)

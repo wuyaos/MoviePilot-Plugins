@@ -108,16 +108,17 @@ def cleanup_by_hash(plugin, source_hash: str, downloader: str = "", trigger: str
             plugin._sync_delete_lock = lock
             plugin._sync_delete_inflight = set()
     source_hash = _clean_text(source_hash)
+    identity = (_clean_text(downloader), source_hash)
     with lock:
-        if source_hash in plugin._sync_delete_inflight:
+        if identity in plugin._sync_delete_inflight:
             result = _empty_result(trigger=trigger)
             result["skipped"] = True
             return result
-        plugin._sync_delete_inflight.add(source_hash)
+        plugin._sync_delete_inflight.add(identity)
         try:
             return _cleanup_by_hash(plugin, source_hash, downloader, trigger)
         finally:
-            plugin._sync_delete_inflight.discard(source_hash)
+            plugin._sync_delete_inflight.discard(identity)
 
 
 def _cleanup_by_hash(plugin, source_hash: str, downloader: str = "", trigger: str = "") -> Dict[str, Any]:
@@ -127,30 +128,27 @@ def _cleanup_by_hash(plugin, source_hash: str, downloader: str = "", trigger: st
     result["source_hash"] = source_hash
     if not source_hash:
         return result
-    if _skip_recent_duplicate(plugin, source_hash):
+    # 只有事件明确携带的下载器才构成身份；旧单链路配置只是查找候选。
+    source_downloader = _clean_text(downloader)
+    identity = (source_downloader, source_hash)
+    if _skip_recent_duplicate(plugin, identity):
         result["skipped"] = True
         return result
 
-    source_downloader = _clean_text(downloader or getattr(plugin, "_fromdownloader", ""))
     transfer_deleted = _cleanup_transfer_target(plugin, source_hash, source_downloader)
     if transfer_deleted is None:
-        # 确定了目标但删除调用失败（或 H&R 保护跳过且需要显式反馈时）不记录去重，
-        # 允许下一轮重试；result 保持 0 让上层按未删除处理。
-        transfer_deleted = 0
-    if transfer_deleted >= 0:
-        plugin._sync_delete_recent[source_hash] = time.time()
-    result["transfer_deleted"] = max(0, transfer_deleted)
+        # 查询/删除失败或保护跳过都不缓存，让下一次事件可以重试。
+        return result
+    if transfer_deleted > 0:
+        plugin._sync_delete_recent[identity] = time.time()
+    result["transfer_deleted"] = transfer_deleted
     if transfer_deleted:
         logger.info(f"【PT下载中心:失败清理】{trigger or '事件'} 已按源 hash={source_hash} 删除转种 {transfer_deleted} 个（含文件）")
     return result
 
 
-def _cleanup_transfer_target(plugin, source_hash: str, source_downloader: str) -> int:
-    """删除源 hash 对应的转种目标任务。
-
-    返回：删除的目标数量；0 = 无记录/无目标/H&R 保护跳过/删除失败；
-    记录存在但事件未提供下载器时返回 -1（由调用方决定是否重试，不写入去重表）。
-    """
+def _cleanup_transfer_target(plugin, source_hash: str, source_downloader: str) -> int | None:
+    """返回成功删除数；失败/保护/身份歧义返回 None，缺记录不写去重。"""
     if not source_downloader:
         # 多任务配置下旧单链路键可能为空：遍历已知源下载器找记录。
         record, source_downloader = _find_transfer_record_any_source(plugin, source_hash)
@@ -166,23 +164,23 @@ def _cleanup_transfer_target(plugin, source_hash: str, source_downloader: str) -
         return 0
     if HrGuard().should_skip(SKIP_PATH_SYNC_DELETE, target_downloader, target_hash):
         logger.info(f"【PT下载中心:失败清理】H&R 保护跳过转种目标 {target_downloader} / {target_hash}")
-        return 0
+        return None
     try:
         service = get_downloader_services(name_filters=[target_downloader]).get(target_downloader)
         instance = getattr(service, "instance", None)
         if instance is None or instance.is_inactive():
             logger.warning(f"【PT下载中心:失败清理】转种目标下载器 {target_downloader} 不可用，跳过删除 {target_hash}")
-            return 0
+            return None
     except Exception as err:
         logger.error(f"【PT下载中心:失败清理】查询转种目标下载器 {target_downloader} 失败：{err}")
-        return 0
+        return None
     try:
         if instance.delete_torrents(delete_file=True, ids=[target_hash]) is False:
             logger.error(f"【PT下载中心:失败清理】删除转种目标失败：{target_downloader} / {target_hash}")
-            return 0
+            return None
     except Exception as err:
         logger.error(f"【PT下载中心:失败清理】删除转种目标异常：{target_downloader} / {target_hash} {err}")
-        return 0
+        return None
     logger.info(f"【PT下载中心:失败清理】已删除转种目标 {target_downloader} / {target_hash}")
     return 1
 
@@ -190,6 +188,9 @@ def _cleanup_transfer_target(plugin, source_hash: str, source_downloader: str) -
 def _find_transfer_record_any_source(plugin, source_hash: str):
     """旧键为空时，在全部配置下载器里查源记录（找不到返回 (None, "")）。"""
     names = set()
+    legacy_source = _clean_text(getattr(plugin, "_fromdownloader", ""))
+    if legacy_source:
+        names.add(legacy_source)
     try:
         for task in load_transfer_tasks(plugin):
             name = str(task.get("from_downloader") or "").strip()
@@ -200,10 +201,15 @@ def _find_transfer_record_any_source(plugin, source_hash: str):
     for name in getattr(plugin, "_selected_downloaders", lambda: [])():
         if str(name or "").strip():
             names.add(str(name).strip())
+    matches = []
     for name in sorted(names):
         record = plugin.get_data(f"{name}-{source_hash}") or {}
         if isinstance(record, dict) and record.get("to_download"):
-            return record, name
+            matches.append((record, name))
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        logger.warning(f"【PT下载中心:失败清理】同 hash 跨下载器记录不唯一，等待带下载器身份的删除事件：{source_hash}")
     return None, ""
 
 

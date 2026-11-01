@@ -375,18 +375,19 @@ def test_rtorrent_target_completes_after_verification(runtime):
     assert not r.data['queue']
 
 
-def test_rtorrent_skipverify_starts_without_waiting_for_completion(runtime):
-    """跳过校验时 rt 目的端不等校验完成：启动后以活动状态作为做种证据。"""
+def test_rtorrent_skipverify_preserves_source_until_complete(runtime):
+    """启动状态不是完整证据；未完整即使活动也不能删源。"""
     r = runtime
     r.services['target'].type = 'rtorrent'
     r.plugin._seed_skipverify = True
     begin(r)
     r.target.get_torrents.return_value = (rt_task(complete=0, active=1), None)
-    rt_cycle(r)  # 不触发校验，进入 verifying
-    r.target.start_torrents.assert_not_called()
+    rt_cycle(r)
+    rt_cycle(r)
     r.source.delete_torrents.assert_not_called()
-    rt_cycle(r)  # 未完成也放行：启动 + 活动状态即确认做种
-    r.target.start_torrents.assert_called_once_with(ids=['abc'])
+    assert r.data['queue']
+    r.target.get_torrents.return_value = (rt_task(complete=1, active=1), None)
+    rt_cycle(r)
     r.source.delete_torrents.assert_called_once_with(delete_file=False, ids=['abc'])
     assert not r.data['queue']
 

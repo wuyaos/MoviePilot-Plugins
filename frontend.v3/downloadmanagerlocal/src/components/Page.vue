@@ -1700,11 +1700,12 @@ const cleanupTagMatrix = computed(() => {
 })
 const filteredCleanupTags = computed(() => cleanupTagMatrix.value.filter(item => item.tag.toLowerCase().includes(cleanupSearch.value.toLowerCase())))
 function setMergedTag(tag, keep) { for (const group of cleanupGroups.value) if ((group.tags || []).some(item => item.tag === tag)) cleanupKeep[tagSelectionKey(group.name, tag)] = keep }
+function renameRowKey(row) { return `${row.downloader || row.downloader_id || ""}:${row.hash}` }
 async function openTagCleanup() {
   cleanupPanel.value = true
   const request = { revision: pageRequestRevision, pluginId: props.pluginId, tab: activeTab.value }
   await loadDownloaders(request)
-  if (isCurrentPageRequest(request)) cleanupDownloaders.value = qbDownloaderItems.value.map(item => item.name)
+  if (isCurrentPageRequest(request)) cleanupDownloaders.value = qbDownloaderItems.value.map(item => item.value)
 }
 function pageRecordChange(kind, value) {
   if (kind === 'history') { page.value = value; void loadHistory(beginRecordRequest(['history'])) }
@@ -1819,7 +1820,7 @@ onBeforeUnmount(() => {
             </template>
 
             <template v-if="activeTab === 'history'">
-              <ModuleTable title="执行记录" data-record-block="rename-history" data-record-state="history" :columns="recordColumns.history" :rows="records" :total="total" row-key="hash" :page="page" :page-size="pageSize" :state="recordTableState('history', records, historyResultFilter === 'all' ? 'none' : 'filtered')" :cleanup-blocked="!cleanupCounts.rename_history" cleanup-label="清历史" @cleanup="openCleanupDialog('rename_history')" @retry="loadHistory(beginRecordRequest(['history']))" @reset-filters="resetHistoryFilter" @update:page="pageRecordChange('history', $event)" @update:page-size="sizeRecordChange('history', $event)">
+              <ModuleTable title="执行记录" data-record-block="rename-history" data-record-state="history" :columns="recordColumns.history" :rows="records" :total="total" :row-key="renameRowKey" :page="page" :page-size="pageSize" :state="recordTableState('history', records, historyResultFilter === 'all' ? 'none' : 'filtered')" :cleanup-blocked="!cleanupCounts.rename_history" cleanup-label="清历史" @cleanup="openCleanupDialog('rename_history')" @retry="loadHistory(beginRecordRequest(['history']))" @reset-filters="resetHistoryFilter" @update:page="pageRecordChange('history', $event)" @update:page-size="sizeRecordChange('history', $event)">
                 <template #filters><CompactSelect v-model="historyResultFilter" :items="[{title:'全部结果',value:'all'},{title:'成功',value:'success'},{title:'失败',value:'failed'}]" label="结果" class="dm-filter" @update:model-value="pageRecordChange('history', 1)" /></template>
                 <template #toolbar>
                   <VBtn color="primary" size="small" variant="tonal" :loading="renameStatus.batch_running || moduleRunning === 'rename-retry'" :disabled="!!moduleRunning || renameStatus.batch_running" @click="doRetryRenames">重试失败项</VBtn>
@@ -1834,7 +1835,7 @@ onBeforeUnmount(() => {
                   ]" @select="handleHistoryAction($event, row)" /></template>
                 <template #expand="{ row }"><RecordDetails :record="row" /></template>
               </ModuleTable>
-              <ModuleTable title="失败归档" data-record-block="rename-archive" data-record-state="archive" :columns="recordColumns.archive" :rows="archiveRecords" :total="archiveTotal" row-key="hash" :page="archivePage" :page-size="archivePageSize" :state="recordTableState('archive', archiveRecords)" :cleanup-blocked="!cleanupCounts.rename_archive" cleanup-label="清归档" @cleanup="openCleanupDialog('rename_archive')" @retry="loadArchive(beginRecordRequest(['archive']))" @update:page="pageRecordChange('archive', $event)" @update:page-size="sizeRecordChange('archive', $event)">
+              <ModuleTable title="失败归档" data-record-block="rename-archive" data-record-state="archive" :columns="recordColumns.archive" :rows="archiveRecords" :total="archiveTotal" :row-key="renameRowKey" :page="archivePage" :page-size="archivePageSize" :state="recordTableState('archive', archiveRecords)" :cleanup-blocked="!cleanupCounts.rename_archive" cleanup-label="清归档" @cleanup="openCleanupDialog('rename_archive')" @retry="loadArchive(beginRecordRequest(['archive']))" @update:page="pageRecordChange('archive', $event)" @update:page-size="sizeRecordChange('archive', $event)">
                 <template #cell-archived_at="{ row }">{{ row.archived_at || row.last_failed_at || '—' }}</template>
                 <template #cell-downloader="{ row }"><DownloaderBadge :name="row.downloader || row.downloader_id || '未记录'" /></template>
                 <template #cell-category="{ row }">{{ row.category_label || row.category || '—' }}</template>
@@ -2020,6 +2021,31 @@ onBeforeUnmount(() => {
         </VCard>
       </VDialog>
 
+      <VDialog content-class="dm-page" v-model="cleanupPanel" max-width="760">
+        <VCard>
+          <VCardTitle class="dm-title">标签清理</VCardTitle>
+          <VCardText>
+            <CompactSelect v-model="cleanupDownloaders" :items="qbDownloaderItems" multiple label="下载器" />
+            <VBtn size="small" variant="tonal" :loading="cleanupScanning" :disabled="cleanupExecuting" @click="scanCleanupTags">扫描标签</VBtn>
+            <VAlert v-if="cleanupMessage" :type="cleanupStatus" variant="tonal" class="mt-3">{{ cleanupMessage }}</VAlert>
+            <template v-if="cleanupScan">
+              <VTextField v-model="cleanupSearch" label="搜索标签" density="compact" hide-details class="mt-3" />
+              <div class="dm-hint">勾选保留，取消勾选后点击预览；扫描可能回收已失效的临时标签。</div>
+              <div class="dm-tag-matrix">
+                <label v-for="item in filteredCleanupTags" :key="item.tag">
+                  <input type="checkbox" :checked="item.keep" :disabled="cleanupExecuting" @change="setMergedTag(item.tag, $event.target.checked)" />
+                  <span>{{ item.tag }} · {{ item.owners.join("、") }}</span>
+                </label>
+              </div>
+            </template>
+          </VCardText>
+          <VCardActions>
+            <VSpacer />
+            <VBtn size="small" variant="tonal" @click="cleanupPanel = false">关闭</VBtn>
+            <VBtn size="small" color="warning" variant="tonal" :disabled="!cleanupRemovals.length || cleanupScanning || cleanupExecuting" @click="previewCleanupTags">预览清理</VBtn>
+          </VCardActions>
+        </VCard>
+      </VDialog>
       <VDialog content-class="dm-page" v-model="cleanupDialog" max-width="620">
         <VCard>
           <VCardItem>

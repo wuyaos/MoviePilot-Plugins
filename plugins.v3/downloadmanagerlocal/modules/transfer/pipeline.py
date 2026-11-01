@@ -333,10 +333,8 @@ def advance_transfer(plugin, item, service, task, stopped):
     # 实测（2026-10-28，qB 5.x）：跳过校验**不会谎报字节数**——元数据声明 4MiB、磁盘只有 1MiB 时
     # 报 stalledDL / progress=0.25 / completed=1048576 / amount_left=3145728，即 progress 与
     # completed 都基于真实磁盘字节。故 qB 侧无需再自行比对元数据长度。
-    # 例外：rt 跳过校验时 rt 不触发哈希校验，d.complete 恒为 0、不能当完整度证据；该组合的完整度
-    # 改由「自动开始 + 回读活动状态」承担（见判据二与下面的零证据兜底）。
-    rt_unchecked = bool(item["skipverify"] and service.type == "rtorrent")
-    if not rt_unchecked and not seed_is_ready(state, service.type, task):
+    # 跳过主动校验不等于允许使用未完成的目标替代源做种任务。
+    if not seed_is_ready(state, service.type, task):
         # 「校验中/排队」是正常等待而非异常，按 info 记；只有真未完整才值得 warning。
         if seed_is_checking(state, service.type):
             logger.info(
@@ -358,18 +356,6 @@ def advance_transfer(plugin, item, service, task, stopped):
         # 开始命令不是做种证据，下一轮回读目标活动状态才允许删源。
         if not _target_seeding(item, task, state, service):
             return False
-    elif rt_unchecked and not seed_is_ready(state, service.type, task):
-        # 跳过校验旁路的是「等待校验」，不是「完整度」：rt 若已自行报完整（d.complete 成立），
-        # 上面的兜底不触发，按正常路径确认删源。
-        # 兜底条件：rt 跳过校验（不触发校验 → d.complete 不成立）且未自动开始（活动状态证据
-        # 不可用）。两个开关同开时没有任何可信的完整度来源，宁可不删源并说清怎么放行。
-        logger.warning(
-            f"【PT下载中心:转移做种】目的端数据未确认完整，暂不删源 hash={item['hash'][:8]} "
-            f"type=rtorrent skipverify=True autostart=False（该组合无可信完整度证据："
-            f"rt 跳过校验则不触发哈希校验，未自动开始则无法以活动状态为证据）；"
-            f"放行办法：打开该任务的「自动开始」，或关闭「跳过校验」让 rt 启动触发校验"
-        )
-        return False
     item["target_confirmed"] = True
     # Count confirmed target once, independently of source deletion and its retries.
     with plugin._seed_recheck_lock:
@@ -409,15 +395,11 @@ def _target_seeding(item, task, state, service):
 
     三种下载器的活动口径集中在这里，调用点不再内联分支：
     - qB：uploading / stalledUP / forcedUP（DL 后缀与暂停态都不算）
-    - rt：没有 uploading/seeding 文本状态，用「活动 + 已完成」；跳过校验时 rt 不触发哈希
-      校验、d.complete 不成立，此时只能以活动状态为证据（原式里的 skipverify_applies("rtorrent")
-      恒为 True，已去）
+    - rt：同时要求活动与完整，state=1 也可能是正在下载。
     - TR：seeding
     """
     if service.type == "qbittorrent":
         return state in ("uploading", "stalledUP", "forcedUP")
     if service.type == "rtorrent":
-        return is_torrent_active(task, "rtorrent") and (
-            torrent_is_complete(task, "rtorrent") or bool(item["skipverify"])
-        )
+        return is_torrent_active(task, "rtorrent") and torrent_is_complete(task, "rtorrent")
     return str(state) == "seeding"

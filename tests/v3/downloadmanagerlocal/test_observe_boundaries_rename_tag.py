@@ -247,3 +247,79 @@ def test_tag_cleanup_execute_blocked_when_observed(mods):
     assert "观察模式" in result["msg"]
     assert result.get("observed") == 1
     assert result.get("removed") == []
+
+
+def test_transfer_linked_site_tag_respects_observe_mode(mods):
+    plugin = SimpleNamespace(_module_observe_only={"tag": True}, _observe_previews={})
+    dl = Mock()
+    assert mods.tag.tag_torrent(plugin, dl, "qbittorrent", HASH_A, [], []) is None
+    assert dl.mock_calls == []
+    assert mods.config.observe_previews(plugin)["tag"]["count"] == 1
+
+
+def test_transmission_rename_tag_preserves_existing_labels(mods):
+    dl = Mock()
+    result = mods.rename.add_rename_tag(SimpleNamespace(), dl, "transmission", HASH_A, ["keep"], {"add_tag_after_rename": True})
+    assert result is True
+    assert set(dl.set_torrent_tag.call_args.kwargs["tags"]) == {"keep", mods.rename.RENAME_TAG}
+
+
+def test_transmission_metadata_merges_labels_as_set(mods, monkeypatch):
+    plugin = SimpleNamespace(_module_observe_only={"tag": False})
+    dl = Mock()
+    dl.get_trackers.return_value = []
+    monkeypatch.setattr(mods.tag, "_history_for_hash", lambda *a, **k: SimpleNamespace(title="media"))
+    torrent = {**_torrent(HASH_B), "labels": ["keep"]}
+    result = mods.tag._apply_metadata(plugin, SimpleNamespace(type="transmission", instance=dl), torrent, _tag_config())
+    assert result["changed"] is True
+    assert set(dl.set_torrent_tag.call_args.kwargs["tags"]) == {"keep", "media"}
+
+
+def test_path_category_does_not_require_download_history(mods, monkeypatch):
+    plugin = SimpleNamespace(_module_observe_only={"tag": False})
+    dl = Mock()
+    dl.get_trackers.return_value = []
+    monkeypatch.setattr(mods.tag, "_history_for_hash", lambda *a, **k: None)
+    config = {**_tag_config(), "enable_category": True, "rename_type": True, "path_rename": "/data/show#series"}
+    class QbTorrent(dict):
+        setCategory = Mock()
+    torrent = QbTorrent(_torrent(HASH_B))
+    result = mods.tag._apply_metadata(plugin, SimpleNamespace(type="qbittorrent", instance=dl), torrent, config)
+    assert result["changed"] is True
+    torrent.setCategory.assert_called_once_with(category="series")
+
+
+@pytest.mark.parametrize("stop_at", ["recognition", "query", "after_first_write"])
+def test_rename_scan_old_generation_never_resumes_after_reload(mods, monkeypatch, stop_at):
+    from threading import Event
+    data = {}
+    dl = Mock()
+    plugin = SimpleNamespace(
+        _event=Event(), _transfer_stop_generation=0, _module_observe_only={"rename": False},
+        _rename_config={"enabled": True, "downloader": ["qb"], "add_tag_after_rename": True},
+        _rename_exclude_dirs=None, _rename_tv_format="name", _rename_movie_format="name",
+        get_data=lambda key: data.get(key, {}), save_data=lambda key, value: data.__setitem__(key, value),
+        chain=SimpleNamespace(recognize_media=Mock()),
+    )
+    plugin.service_info = lambda name: SimpleNamespace(name=name, type="qbittorrent", instance=dl)
+    def reload_plugin():
+        plugin._event.set()
+        plugin._transfer_stop_generation += 1
+        plugin._event.clear()  # 新配置已启动，旧调用仍不得写。
+    def query():
+        if stop_at == "query": reload_plugin()
+        return [_torrent(HASH_A), _torrent(HASH_B)], None
+    dl.get_torrents.side_effect = query
+    def recognize(**kwargs):
+        if stop_at == "recognition": reload_plugin()
+        return SimpleNamespace(type="movie")
+    plugin.chain.recognize_media.side_effect = recognize
+    monkeypatch.setattr(mods.rename, "get_download_history_by_hash", lambda h: None)
+    monkeypatch.setattr(mods.rename, "format_torrent_name", lambda *a: "New")
+    if stop_at == "after_first_write": dl.qbc.torrents_rename.side_effect = lambda **kwargs: reload_plugin()
+
+    result = mods.rename.scan_renames(plugin)
+
+    assert dl.qbc.torrents_rename.call_count == (1 if stop_at == "after_first_write" else 0)
+    dl.set_torrents_tag.assert_not_called()
+    assert result["failed"] == 0

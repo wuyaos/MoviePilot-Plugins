@@ -943,10 +943,10 @@ def test_global_write_persists_state_immediately(svc, monkeypatch):
     real_save = svc.service.save_upload_limit_state
     saved = []
 
-    def spy(plugin_, state):
+    def spy(plugin_, state, **kwargs):
         entry = (state.get("downloaders") or {}).get("QB1") or {}
         saved.append(bool(entry.get("last_written_global")))
-        real_save(plugin_, state)
+        real_save(plugin_, state, **kwargs)
 
     monkeypatch.setattr(svc.service, "save_upload_limit_state", spy)
     svc.service.run_upload_limit_cycle(plugin, now=1000.0)
@@ -989,10 +989,10 @@ def test_torrent_write_persists_state_immediately(svc, monkeypatch):
     real_save = svc.service.save_upload_limit_state
     saved = []
 
-    def spy(plugin_, state):
+    def spy(plugin_, state, **kwargs):
         record = (state.get("torrents") or {}).get("QB1:aaa111") or {}
         saved.append(bool(record.get("last_written_settings")))
-        real_save(plugin_, state)
+        real_save(plugin_, state, **kwargs)
 
     monkeypatch.setattr(svc.service, "save_upload_limit_state", spy)
     svc.service.run_upload_limit_cycle(plugin, now=2000.0)
@@ -1017,9 +1017,9 @@ def test_no_change_cycle_keeps_single_save(svc, monkeypatch):
     real_save = svc.service.save_upload_limit_state
     saved = []
 
-    def spy(plugin_, state):
+    def spy(plugin_, state, **kwargs):
         saved.append(True)
-        real_save(plugin_, state)
+        real_save(plugin_, state, **kwargs)
 
     monkeypatch.setattr(svc.service, "save_upload_limit_state", spy)
     result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)

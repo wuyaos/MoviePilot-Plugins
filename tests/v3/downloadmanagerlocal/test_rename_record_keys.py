@@ -372,3 +372,26 @@ def test_retry_failed_renames_get_torrents_error_recorded(env, monkeypatch):
     assert summary['failed'] == 2
     assert summary['attempted'] == 0
     assert any('补刀查询失败' in e and '下载器连接失败' in e for e in summary['errors'])
+
+
+def test_single_retry_persists_only_target_downloader_record(env, monkeypatch):
+    r, p = env.rename, env.plugin
+    r.save_rename_record(p, "abc", "SourceOriginal", "SourceAfter", True, downloader="source")
+    source_before = copy.deepcopy(r.get_rename_records(p)[env.keys.record_key("abc", "source")])
+    p._rename_enabled, p._tag_enabled = True, False
+    p._rename_exclude_dirs = None
+    p._rename_movie_format, p._rename_tv_format = "name", "name"
+    p.chain = SimpleNamespace(recognize_media=Mock(return_value=SimpleNamespace(type="movie")))
+    p._rename_torrent = lambda *a, **kw: r.rename_torrent(p, *a, **kw)
+    dl = Mock()
+    dl.get_torrents.return_value = ([{"hash": "abc", "name": "Original.2024.mkv", "save_path": "/data"}], None)
+    monkeypatch.setattr(r, "get_download_history_by_hash", lambda h: None)
+    monkeypatch.setattr(r, "format_torrent_name", lambda *a: "TargetNewName")
+
+    result = r.retry_rename_by_hash(p, SimpleNamespace(name="target", type="qbittorrent", instance=dl), "abc")
+
+    assert result["code"] == 0
+    records = r.get_rename_records(p)
+    assert records[env.keys.record_key("abc", "source")] == source_before
+    assert records[env.keys.record_key("abc", "target")]["after_name"] == "TargetNewName"
+    assert "abc" not in records

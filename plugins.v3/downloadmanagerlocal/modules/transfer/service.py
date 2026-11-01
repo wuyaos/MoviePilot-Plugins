@@ -14,7 +14,7 @@ from ...adapter.downloader import read_torrents
 
 from ...adapter.moviepilot import is_downloader_type
 from ...utils.name_cleaner import is_dirty_renamed_torrent_name
-from ...utils.torrent_adapter import get_label, get_save_path, get_torrent_name, get_tracker_urls
+from ...utils.torrent_adapter import get_label, get_save_path, get_torrent_name, get_tracker_urls, get_torrent_state
 from .recheck import _queue_lock, load_seed_recheck_queue, ensure_seed_recheck_worker, seed_is_ready, seed_is_error
 from .pipeline import (
     MAX_TRANSFER_ATTEMPTS, begin_transfer, delete_source, transfer_is_abandoned,
@@ -222,7 +222,8 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
     elif dl_type != "qbittorrent":
         logger.info(f"【PT下载中心:转移做种】目的端 {dl_type} 不适用转移后重命名（仅支持 qB 显示名改名），跳过补刀")
     elif plugin._rename_enabled:
-        plugin._rename_torrent(dl, dl_type, torrent_hash, torrent_name, save_path)
+        plugin._rename_torrent(dl, dl_type, torrent_hash, torrent_name, save_path,
+                               downloader=str(getattr(to_service, "name", "") or ""))
 
     if _transfer_stopped(plugin, generation):
         return False
@@ -456,7 +457,7 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
                 continue
             if delete_duplicate_effective:
                 target = torrent_info[0]
-                state = target.get("state") if to_service.type == "qbittorrent" else target.status
+                state = get_torrent_state(target, to_service.type)
                 if not seed_is_ready(state, to_service.type, target) or seed_is_error(state, to_service.type) or (to_service.type == "transmission" and getattr(target, "error", 0)):
                     skip += 1
                     continue
@@ -609,6 +610,7 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
     result = {"attempted": 0, "success": 0, "failed": 0, "skipped": 0, "errors": []}
     if not plugin._rename_enabled or not to_service or not to_service.instance:
         return result
+    downloader = str(getattr(to_service, "name", "") or "").strip()
     dl_type = to_service.type
     scan_result = read_torrents(to_service, None)
     if not scan_result.success:
@@ -628,7 +630,7 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
             logger.warning(f"【PT下载中心:转移做种】转移做种兜底服务：发现副标题污染任务但无 hash，跳过重命名 name={torrent_name}")
             continue
         is_archived = getattr(plugin, "is_rename_archived", None)
-        if callable(is_archived) and is_archived(torrent_hash):
+        if callable(is_archived) and is_archived(torrent_hash, downloader=downloader):
             result["skipped"] += 1
             continue
         from ...utils.config import observe_skip
@@ -644,17 +646,18 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
                 torrent_hash,
                 torrent_name,
                 _get_torrent_content_name(torrent, dl_type),
+                downloader=downloader,
             )
             if not retry_name:
                 logger.warning(f"【PT下载中心:转移做种】转移做种兜底服务：原始发布名污染且无可信候选，跳过重命名 hash={torrent_hash}")
                 record_failure = getattr(plugin, "record_rename_failure", None)
                 if callable(record_failure):
-                    record_failure(torrent_hash, torrent_name, "NO_TRUSTED_SOURCE", "原始发布名污染且无可信候选")
+                    record_failure(torrent_hash, torrent_name, "NO_TRUSTED_SOURCE", "原始发布名污染且无可信候选", downloader=downloader)
                 result["failed"] += 1
                 result["errors"].append(f"{torrent_hash}: 无可信原始名称")
                 continue
             renamed = plugin._rename_torrent(
-                to_service.instance, dl_type, torrent_hash, retry_name, save_path
+                to_service.instance, dl_type, torrent_hash, retry_name, save_path, downloader=downloader
             )
             if renamed is None:
                 result["attempted"] -= 1
@@ -671,7 +674,7 @@ def retry_dirty_torrent_names(plugin, to_service: ServiceInfo):
             result["errors"].append(f"{torrent_hash}: {e}")
             record_failure = getattr(plugin, "record_rename_failure", None)
             if callable(record_failure):
-                record_failure(torrent_hash, torrent_name, "RENAME_API_FAILED", str(e))
+                record_failure(torrent_hash, torrent_name, "RENAME_API_FAILED", str(e), downloader=downloader)
     if result["success"]:
         logger.info(f"【PT下载中心:转移做种】转移做种兜底服务：脏种子名补刀完成，成功 {result['success']} 个，失败 {result['failed']} 个")
     if result["skipped"]:

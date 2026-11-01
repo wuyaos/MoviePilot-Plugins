@@ -63,8 +63,9 @@ def parse_hr_config(config: Optional[dict] = None,
     )
     enable_site_config = _as_bool(_pick(source, "hr_enable_site_config"), False)
     site_rules = {}
+    custom_sites: set[str] = set()
     if enable_site_config:
-        site_rules = build_site_rules(_pick(source, "hr_site_config_str"), global_rule)
+        site_rules = build_site_rules(_pick(source, "hr_site_config_str"), global_rule, custom_sites)
 
     return HrConfig(
         enabled=_as_bool(_pick(source, "hr_enabled"), False),
@@ -82,10 +83,12 @@ def parse_hr_config(config: Optional[dict] = None,
         notify_summary_cron=str(_pick(source, "hr_notify_summary_cron") or "").strip(),
         global_rule=global_rule,
         site_rules=site_rules,
+        custom_sites=custom_sites,
     )
 
 
-def build_site_rules(site_config_str: Optional[str], global_rule: HrSiteRule) -> dict[str, HrSiteRule]:
+def build_site_rules(site_config_str: Optional[str], global_rule: HrSiteRule,
+                     custom_sites: Optional[set[str]] = None) -> dict[str, HrSiteRule]:
     """合并内置预设与站点独立配置 YAML，并按全局规则回填未设置字段。
 
     合并语义（v3.6.0）：以内置预设为底，自定义 YAML 同名整条覆写；
@@ -124,6 +127,8 @@ def build_site_rules(site_config_str: Optional[str], global_rule: HrSiteRule) ->
             rules.pop(name, None)
             continue
         rules[name] = apply_global_defaults(rule, global_rule)
+        if custom_sites is not None:
+            custom_sites.add(name)
     return rules
 
 

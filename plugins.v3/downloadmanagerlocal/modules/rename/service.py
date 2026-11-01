@@ -1,6 +1,8 @@
 """种子重命名服务实现。"""
 
 import re
+from contextvars import ContextVar
+from functools import wraps
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -33,6 +35,31 @@ from ...utils.tag_cleanup import normalize_tags
 from ...utils.torrent_adapter import get_hash, get_label, get_save_path, get_torrent_name, get_tracker_urls
 
 
+
+_RENAME_CYCLE = ContextVar("dml_rename_cycle", default=None)
+
+def _rename_generation(plugin):
+    value = getattr(plugin, "_transfer_stop_generation", 0)
+    return value if isinstance(value, int) else 0
+
+def _rename_stopped(plugin):
+    cycle = _RENAME_CYCLE.get()
+    event = getattr(plugin, "_event", None)
+    return ((cycle is not None and cycle[0] is plugin and cycle[1] != _rename_generation(plugin))
+            or (event is not None and event.is_set() is True))
+
+def _rename_cycle(callback):
+    """批次快照贯穿媒体识别和下载器查询，reload 清除 event 也不能复活旧批次。"""
+    @wraps(callback)
+    def run(plugin, *args, **kwargs):
+        parent = _RENAME_CYCLE.get()
+        token = _RENAME_CYCLE.set(parent if parent is not None and parent[0] is plugin
+                                  else (plugin, _rename_generation(plugin)))
+        try:
+            return callback(plugin, *args, **kwargs)
+        finally:
+            _RENAME_CYCLE.reset(token)
+    return run
 def _tr_rename(dl, torrent_hash: str, torrent_name: str, new_name) -> None:
     """Transmission 重命名：rename_torrent_path 会联动顶层目录/文件名，与 qB torrents_rename 语义一致。
 
@@ -429,9 +456,12 @@ def resolve_retry_original_name(
 
 
 
+@_rename_cycle
 def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: str, save_path: str,
                    downloader: str = "") -> Optional[bool]:
     """返回 True=成功、False=失败；None=观察跳过，不得据此记录失败或推进重试/归档计数。"""
+    if _rename_stopped(plugin):
+        return None
     from ...utils.config import observe_skip
     if observe_skip(plugin, "rename", "重命名种子", f"{torrent_name}（{torrent_hash[:8]}）"):
         return None
@@ -470,6 +500,8 @@ def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: st
                     media_id=media_id,
                 )
             media_info = plugin.chain.recognize_media(**recognize_kwargs)
+            if _rename_stopped(plugin):
+                return None
             if media_info:
                 template = plugin._rename_movie_format if media_info.type == MediaType.MOVIE else plugin._rename_tv_format
                 new_name = format_torrent_name(template, meta, media_info)
@@ -502,6 +534,8 @@ def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: st
 
         # TMDB 识别
         media_info = plugin.chain.recognize_media(meta=meta)
+        if _rename_stopped(plugin):
+            return None
         if not media_info:
             logger.warning(f"【PT下载中心:重命名】媒体识别失败 hash={torrent_hash} name={torrent_name}")
             save_rename_record(plugin, torrent_hash, torrent_name, torrent_name, False, "媒体识别失败", downloader=downloader)
@@ -520,6 +554,8 @@ def rename_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_name: st
             return True
 
         # 执行重命名
+        if _rename_stopped(plugin):
+            return None
         if dl_type == "qbittorrent":
             dl.qbc.torrents_rename(torrent_hash=torrent_hash, new_torrent_name=str(new_name))
         elif dl_type == "transmission":
@@ -590,7 +626,7 @@ def retry_failed_renames(plugin, to_service):
             if plugin._rename_enabled:
                 retry_name = resolve_retry_original_name(plugin, th, tn, _get_torrent_content_name(torrent, dl_type), getattr(to_service, "name", ""))
                 if retry_name:
-                    rename_success = rename_torrent(plugin, dl, dl_type, th, retry_name, sp)
+                    rename_success = rename_torrent(plugin, dl, dl_type, th, retry_name, sp, downloader=getattr(to_service, "name", "") or "")
                     if rename_success is None:
                         summary["attempted"] -= 1
                         summary["skipped"] += 1
@@ -689,7 +725,7 @@ def retry_rename_by_hash(plugin, to_service, torrent_hash: str):
                 rename_succeeded = plugin._rename_torrent(
                         dl, dl_type, hash_text,
                         retry_name,
-                        save_path
+                        save_path, downloader=downloader_name
                     )
             if rename_succeeded is None:
                 return {"code": 1, "msg": "观察模式：未执行补刀（仅预览）", "hash": hash_text, "observed": True}
@@ -950,7 +986,7 @@ def add_rename_tag(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags,
         if dl_type == "qbittorrent":
             dl.set_torrents_tag(ids=torrent_hash, tags=[RENAME_TAG])
         else:
-            merged = list(dict.fromkeys(normalize_tags(torrent_tags) + [RENAME_TAG]))
+            merged = sorted(normalize_tags(torrent_tags) | {RENAME_TAG})
             dl.set_torrent_tag(ids=torrent_hash, tags=merged)
         return True
     except Exception as err:  # noqa: BLE001  # 下载器写入结果由其实现决定
@@ -975,6 +1011,7 @@ def notify_rename_result(plugin, trigger: str, rename_config: dict, result: dict
     return notify_module_result(plugin, "rename", text=text, mtype=MessageType.SiteMessage)
 
 
+@_rename_cycle
 def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     """对单个候选种子执行过滤与重命名，返回 renamed / failed / skipped。"""
     # 懒导入避免与 utils.config（顶层导入本模块）循环
@@ -1004,6 +1041,8 @@ def rename_candidate(plugin, service, rename_config: dict, torrent) -> str:
     if renamed is None:
         return "skipped"
     if renamed:
+        if _rename_stopped(plugin):
+            return "renamed"
         add_rename_tag(plugin, dl, dl_type, torrent_hash, torrent_tags, rename_config)
         return "renamed"
     return "failed"
@@ -1037,6 +1076,7 @@ def _is_already_renamed(plugin, torrent_hash: str, torrent_name: str, downloader
     return bool(after_name) and after_name == str(torrent_name or "").strip()
 
 
+@_rename_cycle
 @rename_write_batch
 def scan_renames(plugin) -> dict:
     """周期扫描来源下载器，按模板重命名尚未处理的种子。"""
@@ -1050,6 +1090,8 @@ def scan_renames(plugin) -> dict:
     is_archived = getattr(plugin, "is_rename_archived", None)
 
     for downloader_name in rename_config["downloader"]:
+        if _rename_stopped(plugin):
+            break
         service = plugin.service_info(downloader_name)
         if not service or not getattr(service, "instance", None):
             logger.warning(f"【PT下载中心:重命名】重命名跳过：下载器不可用 {downloader_name}")
@@ -1059,6 +1101,8 @@ def scan_renames(plugin) -> dict:
             result["skipped"] += 1
             continue
         torrents, error = service.instance.get_torrents()
+        if _rename_stopped(plugin):
+            break
         if error:
             logger.warning(f"【PT下载中心:重命名】重命名跳过：读取任务失败 {downloader_name}: {error}")
             result["downloaders"][downloader_name] = {
@@ -1069,6 +1113,8 @@ def scan_renames(plugin) -> dict:
         processed = _get_renamed_hashes(plugin, downloader_name)
         pending = _failed_hashes_for_downloader(plugin, downloader_name)
         for torrent in torrents or []:
+            if _rename_stopped(plugin):
+                break
             torrent_hash = get_hash(torrent, service.type)
             if not torrent_hash:
                 continue

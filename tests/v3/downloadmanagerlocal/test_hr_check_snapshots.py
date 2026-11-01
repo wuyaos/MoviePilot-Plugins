@@ -101,3 +101,33 @@ def test_check_tasks_unavailable_downloader_preserves_task(hr_check, monkeypatch
     assert result["failed_downloaders"] == ["unavailable"]
     assert result["deleted"] == 1
     assert task.deleted is False
+
+
+@pytest.mark.parametrize("site_id, expected_id", [("dmhy", "dmhy"), ("42", 42), (42, 42)])
+def test_discover_preserves_string_indexer_ids(hr_check, monkeypatch, site_id, expected_id):
+    """站点模板 ID 可以是 dmhy；不得把它当数据库整数主键而中断发现。"""
+    module, service, downloader = hr_check
+    scanner = sys.modules[module.resolve_site.__module__]
+    monkeypatch.setattr(scanner, "get_site_indexer", lambda domain: {"id": site_id, "name": "DMHY"})
+    monkeypatch.setattr(scanner, "get_url_domain", lambda tracker: "dmhy.example")
+    monkeypatch.setattr(service, "_tracker_mappings", lambda: {})
+    monkeypatch.setattr(module, "set_hr_tag", Mock())
+    service._config.auto_discover = True
+    service._config.sites = ["DMHY"]
+    service._tasks = {}
+    downloader.instance.get_torrents.return_value = [{
+        "hash": "new", "name": "sample", "size": 1024,
+        "trackers": [{"url": "https://dmhy.example/announce", "tier": 0}], "state": "uploading",
+    }]
+
+    result = service.discover_tasks("字符串站点ID反例")
+
+    assert result["discovered"] == 1
+    task = service._tasks["qb:new"]
+    assert task.site == expected_id
+    assert task.site_name == "DMHY"
+    # 持久化后的任务再次解析仍保留身份；旧整数记录也可继续读取。
+    restored = module.HrTask.model_validate(task.model_dump(mode="json"))
+    assert restored.site == expected_id
+    service._save_tasks.assert_called_once()
+    service._refresh_guard.assert_called_once()

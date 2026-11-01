@@ -536,6 +536,9 @@ def find_site_by_domain(domain: str) -> Optional[str]:
 
 def tag_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags: list, trackers: list):
     """给种子打站点标签，返回三态：True 已打标/已存在，None 站点未识别（跳过，非失败），False 写入失败。"""
+    from ...utils.config import observe_skip
+    if observe_skip(plugin, "tag", "联动站点标签", torrent_hash):
+        return None
     try:
         # 通过 tracker 解析站点
         site_name = None
@@ -787,7 +790,7 @@ def _apply_metadata(plugin, service, torrent, config: dict, context=None) -> dic
         tags.append(str(title))
     category = None
     if config["enable_category"] and service.type == "qbittorrent":
-        category = _category_from_media(plugin, history, config, _torrent_value(torrent, "save_path")) if history else None
+        category = _category_from_media(plugin, history, config, _torrent_value(torrent, "save_path"))
     tags = [tag for tag in dict.fromkeys(tags) if tag and tag not in current_tags]
     current_category = _torrent_value(torrent, "category", "")
     if category == current_category:
@@ -802,7 +805,7 @@ def _apply_metadata(plugin, service, torrent, config: dict, context=None) -> dic
         if service.type == "qbittorrent":
             service.instance.set_torrents_tag(ids=torrent_hash, tags=tags)
         else:
-            service.instance.set_torrent_tag(ids=torrent_hash, tags=list(dict.fromkeys(current_tags + tags)))
+            service.instance.set_torrent_tag(ids=torrent_hash, tags=sorted(current_tags | set(tags)))
     if category and service.type == "qbittorrent":
         try:
             torrent.setCategory(category=category)

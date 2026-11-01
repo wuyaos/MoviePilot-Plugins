@@ -128,6 +128,8 @@ def fc(monkeypatch):
     # hostapi 完全替身：每测试按需赋函数可控行为
     hostapi = module(
         PREFIX + ".modules.failclean.hostapi",
+        local_download_paths=Mock(return_value=[Path("/tmp")]),
+        get_download_hash_by_fullpath=Mock(return_value=""),
         delete_media_file=Mock(return_value=True),
         delete_download_history_file=Mock(),
         send_download_file_deleted=Mock(),

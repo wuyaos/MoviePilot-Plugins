@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from ..model.upload_limit import (
     GlobalUploadSettings,
@@ -75,6 +75,7 @@ def write_global_upload_limit(
     instance: Any,
     downloader_type: str,
     limit_kib: int,
+    on_written: Callable[[dict[str, Any]], None] | None = None,
 ) -> GlobalUploadSettings:
     """写入插件总上传上限；qB 同时覆盖普通与备用上传上限。"""
     normalized = _normalize_type(downloader_type)
@@ -83,7 +84,11 @@ def write_global_upload_limit(
     if normalized == "qbittorrent":
         client = _require_attr(instance, "qbc")
         client.transfer_set_upload_limit(limit=limit_bps)
+        if on_written is not None:
+            on_written({"upload_limit_bps": limit_bps, "upload_enabled": True})
         client.app_set_preferences({"alt_up_limit": limit_bps})
+        if on_written is not None:
+            on_written({"alternate_upload_limit_bps": limit_bps, "alternate_upload_enabled": True})
         return GlobalUploadSettings(
             downloader_type=normalized,
             upload_limit_bps=limit_bps,
@@ -96,6 +101,8 @@ def write_global_upload_limit(
         speed_limit_up=normalized_limit,
         speed_limit_up_enabled=True,
     )
+    if on_written is not None:
+        on_written({"upload_limit_bps": limit_bps, "upload_enabled": True})
     return GlobalUploadSettings(
         downloader_type=normalized,
         upload_limit_bps=limit_bps,
