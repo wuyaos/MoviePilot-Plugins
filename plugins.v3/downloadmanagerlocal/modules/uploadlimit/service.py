@@ -325,7 +325,9 @@ def run_upload_limit_cycle(
                 desired_global = expected_global_upload_settings(
                     downloader_type, caps[downloader_id]
                 )
+                wrote_global = False
                 if not global_settings_equal(current_global, desired_global):
+                    wrote_global = True
                     _cycle_checkpoint()
                     before_global = global_settings_to_dict(current_global)
                     try:
@@ -354,6 +356,10 @@ def run_upload_limit_cycle(
                 entry["last_written_global"] = global_settings_to_dict(desired_global)
                 entry["total_limit_kib"] = caps[downloader_id]
                 entry["last_seen_at"] = timestamp
+                if wrote_global:
+                    # S1：全局写入成功即落盘（与单种同策略），缩小停止+重启的孤儿窗口到毫秒级。
+                    save_upload_limit_state(plugin, state)
+
 
                 snapshots, poll_error = list_upload_torrents(
                     service.instance, downloader_id, downloader_type
@@ -559,9 +565,11 @@ def run_upload_limit_cycle(
             )
             site_key = str((torrent_state.get(task_key) or {}).get("site_key") or "")
             try:
+                wrote_torrent = False
                 applied = expected
                 if not torrent_settings_equal(snapshot.upload_settings, expected):
                     _cycle_checkpoint()
+                    wrote_torrent = True
                     applied = write_torrent_upload_limit(
                         context["service"].instance,
                         snapshot.downloader_type,
@@ -582,6 +590,11 @@ def run_upload_limit_cycle(
                 record["last_allocation_kib"] = desired_kib
                 record["last_written_settings"] = settings_to_dict(applied)
                 record["last_applied_at"] = timestamp
+                if wrote_torrent:
+                    # S1：写下载器成功即落盘，把 last_written 与下载器实际值绑在同一窗口内，
+                    # 停止+重启不再把插件写入误判为 preserved_manual 或漏掉单种恢复。
+                    save_upload_limit_state(plugin, state)
+
             except UploadCycleStopped:
                 raise
             except Exception as error:

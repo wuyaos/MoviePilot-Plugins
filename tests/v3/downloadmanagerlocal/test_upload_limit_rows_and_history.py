@@ -927,3 +927,103 @@ def test_illegal_poll_keeps_restore_state_and_writes_nothing(svc):
     assert "unsupported torrent payload: dict" in str(
         (saved.get("failures") or {}).get("QB1")
     )
+
+
+def test_global_write_persists_state_immediately(svc, monkeypatch):
+    """S1 回归：全局限速写入成功后立即落盘，不等轮次末。
+
+    旧行为只在轮次末 save——写后停止+重启，磁盘旧快照把插件自己写的
+    限速误判为 preserved_manual，全局限额永不恢复。
+    """
+    qb = FakeQb(upload_limit_bps=0, alt_up_limit=0)
+    plugin = FakePlugin()
+    plugin._upload_limit_site_rules = {}
+    plugin.add_downloader("QB1", qb)
+
+    real_save = svc.service.save_upload_limit_state
+    saved = []
+
+    def spy(plugin_, state):
+        entry = (state.get("downloaders") or {}).get("QB1") or {}
+        saved.append(bool(entry.get("last_written_global")))
+        real_save(plugin_, state)
+
+    monkeypatch.setattr(svc.service, "save_upload_limit_state", spy)
+    svc.service.run_upload_limit_cycle(plugin, now=1000.0)
+
+    assert qb.global_limit_calls == [{"limit": 100 * 1024}]
+    assert len(saved) >= 2, "全局写入后必须额外 save 一次（写后 + 轮末）"
+    assert any(saved), "写后 save 必须携带已回填的 last_written_global"
+
+
+def test_torrent_write_persists_state_immediately(svc, monkeypatch):
+    """S1 回归：单种限速写入成功后立即落盘。
+
+    旧行为轮末才 save——写后停止+重启，磁盘无该任务记录，恢复/释放
+    直接漏掉，种子带插件限额永久留在下载器。
+    """
+    qb = FakeQb(upload_limit_bps=100 * 1024, alt_up_limit=100 * 1024)
+    qb.torrents = [_qb_torrent("aaa111", tags="🏠site-a", up_limit=0, upspeed=5120, num_leechs=1)]
+    state = _empty_state()
+    state["management_active"] = True
+    state["cycle"] = 1
+    state["last_run_at"] = 1000.0
+    state["downloaders"] = {"QB1": _seed_downloader()}
+    state["torrents"] = {
+        "QB1:aaa111": {
+            "downloader_id": "QB1",
+            "downloader_type": "qbittorrent",
+            "torrent_hash": "aaa111",
+            "site_key": "site-a",
+            "grace_until": 0.0,
+            "original_settings": {"limit_bps": 0, "enabled": False},
+            "upload_rate_bps": 5120,
+            "upload_demand_peers": 1,
+            "last_seen_at": 1000.0,
+        }
+    }
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+
+    real_save = svc.service.save_upload_limit_state
+    saved = []
+
+    def spy(plugin_, state):
+        record = (state.get("torrents") or {}).get("QB1:aaa111") or {}
+        saved.append(bool(record.get("last_written_settings")))
+        real_save(plugin_, state)
+
+    monkeypatch.setattr(svc.service, "save_upload_limit_state", spy)
+    svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert len(qb.torrent_limit_calls) == 1
+    assert len(saved) >= 2, "单种写入后必须额外 save 一次（写后 + 轮末）"
+    assert any(saved), "写后 save 必须携带已回填的 last_written_settings"
+
+
+def test_no_change_cycle_keeps_single_save(svc, monkeypatch):
+    """S1 回归的反向约束：没有实际写入时不多发 save（保持只在轮末一次）。"""
+    qb = FakeQb(upload_limit_bps=100 * 1024, alt_up_limit=100 * 1024)
+    state = _empty_state()
+    state["management_active"] = True
+    state["cycle"] = 1
+    state["last_run_at"] = 1000.0
+    state["downloaders"] = {"QB1": _seed_downloader()}
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_site_rules = {}
+    plugin.add_downloader("QB1", qb)
+
+    real_save = svc.service.save_upload_limit_state
+    saved = []
+
+    def spy(plugin_, state):
+        saved.append(True)
+        real_save(plugin_, state)
+
+    monkeypatch.setattr(svc.service, "save_upload_limit_state", spy)
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert result["service_status"] == "running"
+    assert qb.set_prefs_calls == [] and qb.torrent_limit_calls == []
+    assert len(saved) == 1, "无写入时不应有写后 save，仍只保留轮末一次"
