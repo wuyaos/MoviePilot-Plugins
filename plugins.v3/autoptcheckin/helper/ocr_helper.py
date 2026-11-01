@@ -2,6 +2,7 @@
 # output: 识别结果字符串
 # pos: helper 层，ddddocr 优先，MoviePilot OcrHelper 回退
 
+import base64
 from collections import Counter
 import re
 from app.log import logger
@@ -40,7 +41,7 @@ def recognize_captcha(
     """识别验证码
 
     Args:
-        image_url: 验证码图片 URL（与 image_bytes 二选一，OcrHelper 必须有 URL）
+        image_url: 验证码图片 URL（与 image_bytes 二选一）
         image_bytes: 验证码图片二进制（优先使用）
         cookie: 下载图片用的 cookie
         ua: User-Agent
@@ -58,7 +59,7 @@ def recognize_captcha(
             'alnum'  — 结果仅保留字母数字
             'digits' — 数字验证码，使用 ddddocr 数字模式
     """
-    # 获取图片数据（ocrhelper 直接传 URL，不需要预下载）
+    # 字节优先；OcrHelper 也可通过 base64 识别同一份图片。
     if engine != 'ocrhelper':
         if image_bytes is None and image_url:
             image_bytes = _download_image(image_url, cookie, ua, referer, proxy, timeout)
@@ -100,11 +101,12 @@ def recognize_captcha(
             # auto 模式继续尝试 OcrHelper
 
     # 2. OcrHelper
-    if engine in ('auto', 'ocrhelper') and OcrHelper is not None and image_url:
+    if engine in ('auto', 'ocrhelper') and OcrHelper is not None and (image_bytes or image_url):
         try:
-            result = OcrHelper().get_captcha_text(
-                image_url=image_url, cookie=cookie, ua=ua
-            )
+            # 与 ddddocr 识别同一份图片，不让远端 OCR 重新访问受会话保护的 URL。
+            image_args = ({'image_b64': base64.b64encode(image_bytes).decode('ascii')}
+                          if image_bytes else {'image_url': image_url, 'cookie': cookie, 'ua': ua})
+            result = OcrHelper().get_captcha_text(**image_args)
             result = _normalize_code(result, charset)
             if _is_valid_code(result, min_len=min_len, max_len=max_len):
                 logger.info(f"OcrHelper 识别结果: {result} (charset={charset})")
@@ -112,8 +114,8 @@ def recognize_captcha(
             logger.warning("OcrHelper 识别结果无效")
         except Exception as e:
             logger.warning(f"OcrHelper 识别失败: {e}")
-    elif engine == 'ocrhelper' and not image_url:
-        logger.warning("OcrHelper 需要 image_url，但未提供")
+    elif engine == 'ocrhelper' and not (image_bytes or image_url):
+        logger.warning('OcrHelper 未取得验证码图片')
 
     return None
 

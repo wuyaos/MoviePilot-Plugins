@@ -12,6 +12,7 @@ class BTSchool(GetSignin):
     url = 'https://pt.btschool.club/'
     attendance_path = '/'
     action_path = '/index.php?action=addbonus'
+    impersonate = True
     use_default_message = False
     record_spec = RecordSpec('//a[contains(@href,"action=addbonus")]', {})
     entry = '//a[contains(@href,"action=addbonus")]'

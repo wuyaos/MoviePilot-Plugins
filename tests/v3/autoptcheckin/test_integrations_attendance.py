@@ -35,10 +35,10 @@ def test_rousi_claimed_today_avoids_submit():
 
 def test_rousi_signs_with_csrf_idempotency_and_headers():
     client = Client([Response(200, {'user': {'id': 7}, 'csrf_token': 'csrf'}),
-                     Response(200, {'claimed_today': False}),
-                     Response(200, {'success': True})])
+                     Response(200, {'claimed_today': False, 'policy': {'settings': {'enabled': True, 'fixed_enabled': True}}}),
+                     Response(200, {'success': True}), Response(200, {'claimed_today': True})])
     assert rousi.signin(client, {}).status == 'success'
-    headers = client.calls[-1][2]['headers']
+    headers = client.calls[-2][2]['headers']
     assert headers['Origin'] == rousi.BASE
     assert headers['Referer'] == rousi.BASE + '/account/economy'
     assert headers['X-CSRF-Token'] == 'csrf' and headers['Idempotency-Key']
@@ -48,7 +48,8 @@ def test_rousi_refreshes_invalid_session_then_signs():
     client = Client([Response(401, {}), Response(401, {}),
                      Response(200, {'user': {'id': 7}, 'csrf_token': 'csrf'}),
                      Response(200, {'user': {'id': 7}, 'csrf_token': 'csrf'}),
-                     Response(200, {'claimed_today': False}), Response(200, {'success': True})])
+                     Response(200, {'claimed_today': False, 'policy': {'settings': {'enabled': True, 'fixed_enabled': True}}}),
+                     Response(200, {'success': True}), Response(200, {'claimed_today': True})])
     result = rousi.signin(client, {'rousi_username': 'u', 'rousi_password': 'p'})
     assert result.status == 'success'
     assert client.calls[2][2]['headers']['Origin'] == rousi.BASE

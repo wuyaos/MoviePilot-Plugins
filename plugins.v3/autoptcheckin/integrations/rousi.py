@@ -12,7 +12,8 @@ ROUSI_CREDENTIALS = CredentialSpec(kind="password", refresh="password")
 
 def _body(response):
     try:
-        return json.loads(response.text)
+        data = json.loads(getattr(response, 'text', ''))
+        return data if isinstance(data, dict) else {}
     except (TypeError, ValueError):
         return {}
 
@@ -53,15 +54,51 @@ def signin(http, info):
         return SignResult(SignStatus.UNCONFIRMED, "PeerGo 签到状态未确认")
     if body.get("claimed_today") is True:
         return SignResult(SignStatus.ALREADY, "今日已签到")
-    result = http.post(BASE + "/api/v1/me/attendance", json={"mode": "fixed"}, headers={"Origin": BASE, "Referer": BASE + "/account/economy", "X-CSRF-Token": csrf, "Idempotency-Key": str(uuid4())})
-    data = _body(result)
-    if result.status_code in (401, 403):
-        return SignResult(SignStatus.AUTH_FAILED, "PeerGo 会话认证失败")
-    if result.status_code == 200 and (data.get("claimed_today") is True or data.get("success") is True):
-        return SignResult(SignStatus.SUCCESS, "PeerGo 签到成功")
-    if result.status_code == 409 or data.get("code") in ("already_claimed", "already_attended"):
-        return SignResult(SignStatus.ALREADY, "今日已签到")
-    return SignResult(SignStatus.UNCONFIRMED, "PeerGo 签到结果未确认")
+    settings = ((body.get('policy') or {}).get('settings') or {})
+    if not settings:
+        return SignResult(SignStatus.PROTOCOL_PENDING, 'PeerGo 未读到签到活动配置，未提交')
+    if not settings.get('enabled', False):
+        return SignResult(SignStatus.PROTOCOL_PENDING, 'PeerGo 签到活动当前未开放')
+    if settings.get('fixed_enabled'):
+        mode = 'fixed'
+    elif settings.get('random_enabled'):
+        mode = 'random'
+    else:
+        return SignResult(SignStatus.PROTOCOL_PENDING, 'PeerGo 当前没有可用的签到奖励模式')
+
+    # 提交只尝试一次；即使超时，也先回读，不能因回包缺字段就重放奖励请求。
+    result = None
+    submit_error = None
+    try:
+        result = http.post(BASE + '/api/v1/me/attendance', json={'mode': mode}, headers={
+            'Origin': BASE, 'Referer': BASE + '/account/economy',
+            'X-CSRF-Token': csrf, 'Idempotency-Key': str(uuid4())})
+    except Exception as exc:
+        submit_error = type(exc).__name__
+    verified = None
+    try:
+        verified = http.get(BASE + '/api/v1/me/attendance')
+        fresh = _body(verified)
+    except Exception:
+        fresh = {}
+    status = getattr(result, 'status_code', None)
+    metadata = {'attendance': {'mode': mode, 'submit_http': status,
+                               'read_http': getattr(verified, 'status_code', None)}}
+    if submit_error:
+        metadata['attendance']['submit_error'] = submit_error
+    if getattr(verified, 'status_code', None) == 200 and fresh.get('claimed_today') is True:
+        record = fresh.get('today_record') or {}
+        reward = record.get('total_reward')
+        message = 'PeerGo 签到成功（已回读确认）'
+        if isinstance(reward, (int, float)) and not isinstance(reward, bool):
+            message += f'；获得 {reward} 魔力值'
+        return SignResult(SignStatus.SUCCESS, message, metadata=metadata)
+    if status in (401, 403) or getattr(verified, 'status_code', None) in (401, 403):
+        return SignResult(SignStatus.AUTH_FAILED, 'PeerGo 会话认证失败', metadata=metadata)
+    message = ('PeerGo 提交后回读仍未签到'
+               if getattr(verified, 'status_code', None) == 200 and fresh.get('claimed_today') is False
+               else 'PeerGo 签到回读未确认')
+    return SignResult(SignStatus.UNCONFIRMED, message, metadata=metadata)
 
 
 class RousiProtocol(CredentialLoginProtocol):

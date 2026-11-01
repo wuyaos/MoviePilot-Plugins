@@ -43,7 +43,11 @@ def custom_client(credential, info, config, proxy=None):
     """
     http = NativeHttpClient(credential, info)
     if not info.get("emulate"):
-        yield http
+        try:
+            yield http
+        finally:
+            if hasattr(http, "close"):
+                http.close()
         return
     from types import SimpleNamespace
     from .cloak import CloakHttpClient

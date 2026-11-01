@@ -89,6 +89,7 @@ def response_note(page):
 class NativeHttpClient:
     def __init__(self, credential, site_info, session=None):
         self.session = session
+        self._owned_session = None
         self.credential = credential
         self.info = site_info
         self.last_post = None
@@ -98,38 +99,71 @@ class NativeHttpClient:
 
     def retain_cookies(self, names):
         self.cookies = {key: value for key, value in self.cookies.items() if key in names}
+        for session in (self.session, self._owned_session):
+            if session is not None:
+                session.cookies.clear()
+                session.cookies.update(self.cookies)
 
-    def _request(self, method, url, **kwargs):
+    def _fetch(self, method, url, **kwargs):
+        """页面、表单与验证码共用 Cookie/指纹；请求异常不换通道重放。"""
         from app.sdk.config import settings
         from app.sdk.network import RequestUtils
-        # 浏览器指纹绑定站（如 FileList）：普通 requests 的 TLS 指纹会被判非法会话，
-        # 与 MP 站点连通性测试同口径走 curl_cffi chrome 仿真。
+        referer = kwargs.pop('referer', self.info.get('url'))
+        headers = dict(kwargs.pop('headers', None) or {})
         use_cffi = getattr(self.credential, 'impersonate', None) or self.info.get('impersonate')
         if use_cffi:
-            try:
-                from curl_cffi import requests as cffi_requests
-                m = {'get': cffi_requests.get, 'post': cffi_requests.post}[method]
-                resp = m(url, headers={'User-Agent': browser_ua(self.info.get('ua')),
-                                       'Referer': kwargs.pop('referer', self.info.get('url') or '')},
-                         cookies=self.cookies, timeout=20, impersonate='chrome',
-                         allow_redirects=True, proxies=({'https': settings.PROXY, 'http': settings.PROXY} if self.info.get('proxy') and settings.PROXY else None))
-                self.cookies.update(resp.cookies.get_dict())
-                return LoginPage(decode_response(resp), str(resp.url), resp.status_code)
-            except Exception:
-                pass  # cffi 失败退回普通通道
-        session_args = {"session": self.session} if self.session is not None else {}
-        request = RequestUtils(**session_args, cookies=self.cookies, ua=browser_ua(self.info.get('ua')),
-                               referer=kwargs.pop('referer', self.info.get('url')), timeout=20,
-                               headers=kwargs.pop('headers', None),
-                               content_type='application/json; charset=UTF-8' if 'json' in kwargs else 'application/x-www-form-urlencoded; charset=UTF-8',
-                               proxies=settings.PROXY if self.info.get('proxy') else None)
-        response = getattr(request, method + '_res')(url=url, **kwargs)
+            from curl_cffi import requests as cffi_requests
+            if self._owned_session is None:
+                self._owned_session = cffi_requests.Session(impersonate='chrome')
+            proxy = settings.PROXY if self.info.get('proxy') else None
+            if isinstance(proxy, str):
+                proxy = {'http': proxy, 'https': proxy}
+            request_headers = {'User-Agent': browser_ua(self.info.get('ua'))}
+            if referer:
+                request_headers['Referer'] = referer
+            request_headers.update(headers)
+            response = getattr(self._owned_session, method)(
+                url, headers=request_headers, cookies=self.cookies, timeout=20,
+                allow_redirects=True,
+                proxies=proxy,
+                **kwargs)
+            session = self._owned_session
+        else:
+            if self.session is None:
+                if self._owned_session is None:
+                    import requests
+                    self._owned_session = requests.Session()
+                session = self._owned_session
+            else:
+                session = self.session
+            request = RequestUtils(session=session, cookies=self.cookies,
+                                   ua=browser_ua(self.info.get('ua')), referer=referer,
+                                   timeout=20, headers=headers or None,
+                                   content_type='application/json; charset=UTF-8' if 'json' in kwargs else 'application/x-www-form-urlencoded; charset=UTF-8',
+                                   proxies=settings.PROXY if self.info.get('proxy') else None)
+            response = getattr(request, method + '_res')(url=url, **kwargs)
+        # Session 包含跳转中间响应的 Set-Cookie；后续取图/提交必须使用新 Cookie。
+        self.cookies.update(session.cookies.get_dict())
+        if response is not None:
+            self.cookies.update(response.cookies.get_dict())
+        return response
+
+    def _request(self, method, url, **kwargs):
+        response = self._fetch(method, url, **kwargs)
         if response is None:
             return None
-        self.cookies.update(response.cookies.get_dict())
-        if self.session is not None:
-            self.cookies.update(self.session.cookies.get_dict())
-        return LoginPage(decode_response(response), response.url, response.status_code)
+        return LoginPage(decode_response(response), str(response.url), response.status_code)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+    def close(self):
+        if self._owned_session is not None:
+            self._owned_session.close()
+            self._owned_session = None
 
     def get(self, url, *, referer=None, headers=None):
         kwargs = {'referer': referer} if referer is not None else {}
@@ -137,11 +171,8 @@ class NativeHttpClient:
             kwargs['headers'] = headers
         return self._request('get', url, **kwargs)
 
-    def get_bytes(self, url):
-        from app.sdk.config import settings
-        from app.sdk.network import RequestUtils
-        response = RequestUtils(cookies=self.cookies, ua=browser_ua(self.info.get('ua')), timeout=20,
-                                proxies=settings.PROXY if self.info.get('proxy') else None).get_res(url=url)
+    def get_bytes(self, url, *, referer=None):
+        response = self._fetch('get', url, referer=referer)
         if response is None or response.status_code != 200:
             raise ValueError('image unavailable')
         return response.content
@@ -162,17 +193,26 @@ class NativeHttpClient:
 
 def native_context(site, credential, info, lock, cancel):
     http = NativeHttpClient(credential, info)
+    image_cache = {}
     def ocr(**kwargs):
-        # Reuse the existing engines, but never an adapter's submission/retry loop.
+        # 图片只取一次：识别引擎复用同一份字节，不另建会话下载。
         from ..helper.ocr_helper import recognize_captcha
-        cookie = "; ".join(f"{key}={value}" for key, value in http.cookies.items())
+        image_url = kwargs.pop('image_url', None)
+        if image_url:
+            key = (image_url, kwargs.get('referer'))
+            if kwargs.get('engine') != 'ocrhelper' or key not in image_cache:
+                image_cache.clear()
+                image_cache[key] = ctx.http.get_bytes(image_url, referer=kwargs.get('referer'))
+            kwargs['image_bytes'] = image_cache[key]
+        cookie = '; '.join(f"{key}={value}" for key, value in http.cookies.items())
         return recognize_captcha(cookie=cookie, ua=browser_ua(info.get('ua')),
                                  proxy=info.get('proxy', False), timeout=20, **kwargs)
     def public_get(url, *, referer=None):
         from app.sdk.network import RequestUtils
         return RequestUtils(timeout=20, referer=referer).get_res(url=url)
-    return SignContext(site.id, credential, http,
-                       page=None, ocr=ocr, site_lock=lock, cancel=cancel, public_get=public_get)
+    ctx = SignContext(site.id, credential, http,
+                      page=None, ocr=ocr, site_lock=lock, cancel=cancel, public_get=public_get)
+    return ctx
 
 def off_loop(fn):
     """宿主可能在带事件循环的线程调用执行器；Playwright Sync 拒绝 loop 线程（探测复现）。
@@ -217,6 +257,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
         result.metadata['reason'] = 'signin_not_applicable'
         return finish(result)
 
+    info = {**info, 'impersonate': bool(getattr(site, 'impersonate', False) or info.get('impersonate'))}
     # 有效执行配置与 /sites、/stats 同源（siteconf.resolve）；云签能力来自显式声明，
     # 只有用户选择（site_cloudsign）且非只读核验才走云签；登录/核验永远走本地通道。
     flags = resolve_site_flags(site.id, config or {},
@@ -281,7 +322,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
             except Exception as exc:
                 result = SignResult(SignStatus.UNCONFIRMED, f'原生签到执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])
             finally:
-                if ctx is not None and isinstance(ctx.http, CloakHttpClient):
+                if ctx is not None and isinstance(ctx.http, (NativeHttpClient, CloakHttpClient)):
                     try:
                         ctx.http.close()
                     except Exception:
@@ -298,6 +339,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
         if password_hook and not read_only and result.status == SignStatus.AUTH_FAILED:
             attempted_cookie_sources.append('password_login')
             session = None
+            ctx = None
             try:
                 ctx = context_factory(site, Credential('password_login', ''), info, runner.locks, runner.stop)
                 ctx.get_data, ctx.save_data = get_data, save_data
@@ -319,11 +361,10 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
             except Exception as exc:
                 result = SignResult(SignStatus.UNCONFIRMED, f'原生签到执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])
             finally:
+                if ctx is not None and isinstance(ctx.http, (NativeHttpClient, CloakHttpClient)):
+                    ctx.http.close()
                 if session is not None:
-                    try:
-                        session.close()
-                    except Exception:
-                        pass
+                    session.close()
         result.metadata['cookie_sources'] = attempted_cookie_sources
         return finish(result)
 
@@ -480,6 +521,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
                 return finish(LoginResult(LoginStatus.UNCONFIRMED, f'浏览器登录核验异常：{type(exc).__name__}'))
         get_data = getattr(runner, 'get_data', None)
         save_data = getattr(runner, 'save_data', None)
+        info = {**info, 'impersonate': bool(getattr(site, 'impersonate', False) or info.get('impersonate'))}
         attempted_cookie_sources = []
         result = LoginResult(LoginStatus.AUTH_FAILED, '缺少可用 Cookie')
         try:
@@ -498,7 +540,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
                         result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, site.credential)
                     persist_cookie_result(result, client, site.id, credential.source, get_data, save_data)
                 finally:
-                    if isinstance(client, CloakHttpClient):
+                    if isinstance(client, (NativeHttpClient, CloakHttpClient)):
                         try:
                             client.close()
                         except Exception:
@@ -508,9 +550,9 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
             password_hook = _password_login_hook(site.id)
             if password_hook and result.status == LoginStatus.AUTH_FAILED:
                 attempted_cookie_sources.append('password_login')
-                client = NativeHttpClient(Credential('password_login', ''), info)
-                result = password_hook(client, {**info, **(config or {})})
-                persist_cookie_result(result, client, site.id, 'password_login', get_data, save_data)
+                with NativeHttpClient(Credential('password_login', ''), info) as client:
+                    result = password_hook(client, {**info, **(config or {})})
+                    persist_cookie_result(result, client, site.id, 'password_login', get_data, save_data)
         except Exception as exc:
             result = LoginResult(LoginStatus.UNCONFIRMED, f'原生登录执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])
         result.metadata['cookie_sources'] = attempted_cookie_sources
@@ -560,11 +602,13 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
                     save_data('cookies.refreshed.migrated', True)
         attempted_cookie_sources = []
         credentials = {**info, **config}
+        clients = []
         result = LoginResult(LoginStatus.AUTH_FAILED, '缺少可用 Cookie')
         try:
             if site_id == 'sunnypt':
                 # SunnyPT authenticates with JWT, not Cookies; retain its protocol.
                 http = NativeHttpClient(Credential('password_login', ''), info)
+                clients.append(http)
                 result = integration.login(http, credentials) if action == 'login' else integration.signin(http, credentials)
                 if http.cookies:
                     attempted_cookie_sources.append('password_login')
@@ -574,6 +618,7 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
                 for credential in candidates:
                     attempted_cookie_sources.append(credential.source)
                     http = NativeHttpClient(credential, info)
+                    clients.append(http)
                     # Exhaust Cookie sources before allowing account/password login.
                     result = integration.login(http, {}) if action == 'login' else integration.signin(http, {})
                     persist_cookie_result(result, http, site_id, credential.source, get_data, save_data)
@@ -582,6 +627,7 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
                 if result.status == LoginStatus.AUTH_FAILED:
                     attempted_cookie_sources.append('password_login')
                     http = NativeHttpClient(Credential('password_login', ''), info)
+                    clients.append(http)
                     result = integration.login(http, credentials)
                     persist_cookie_result(result, http, site_id, 'password_login', get_data, save_data)
                     if result.status == LoginStatus.LOGIN_OK and action != 'login':
@@ -596,5 +642,8 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
             # MP 日志 INFO/WARNING 不落盘，history 与响应里的 metadata 是 qnap 上唯一可靠通道。
             result.metadata['integration_error'] = f"{type(exc).__name__}: {exc}"[:200]
             result.message = f"{result.message}（{type(exc).__name__}）"
+        finally:
+            for client in clients:
+                client.close()
         result.metadata['cookie_sources'] = attempted_cookie_sources
         return finish(result)

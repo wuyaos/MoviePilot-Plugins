@@ -38,7 +38,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.3.12"
+    plugin_version = "4.3.13"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -536,7 +536,7 @@ class AutoPtCheckin(_PluginBase):
         # 否则门控站停留 FAILED 会被当场重试并在每轮重复执行。
         gate_skip = status in ("skipped", "cancelled") and (reason or "") in GATE_SKIPS
         if not metadata.get("read_only") and (status not in ("skipped", "cancelled") or gate_skip):
-            diag = {k: metadata[k] for k in ("page_action", "steps", "error", "raw_status") if k in metadata}
+            diag = {k: metadata[k] for k in ("page_action", "steps", "error", "raw_status", "success_expires_at") if k in metadata}
             self._track_store().apply_result(
                 str(result.site_id), metadata.get("action", "sign"), status,
                 message=getattr(result, "message", "") or "", reason=reason or None,

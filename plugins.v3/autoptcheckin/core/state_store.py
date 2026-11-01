@@ -107,19 +107,24 @@ class TrackStateStore:
         return self._data["sites"].setdefault(str(site), {}).setdefault(track, {})
 
     def rollover(self) -> None:
-        """日切：跨天后 success 失效为 pending（签到/登录均为每日任务）。"""
+        """日切或站点重置点后，旧成功失效；同一天也必须检查有效期。"""
         self.ensure()
-        today = self._clock().date().isoformat()
+        now = self._clock()
+        today = now.date().isoformat()
         with self._lock:
-            if self._data.get("day") == today:
-                return
-            for tracks in self._data["sites"].values():
+            new_day = self._data.get('day') != today
+            changed = new_day
+            for tracks in self._data['sites'].values():
                 for entry in tracks.values():
-                    if entry.get("state") == SUCCESS:
+                    expiry = (entry.get('metadata') or {}).get('success_expires_at')
+                    expired = isinstance(expiry, (int, float)) and now.timestamp() >= expiry
+                    if entry.get('state') == SUCCESS and (new_day or expired):
                         entry.clear()
-                        entry["state"] = PENDING
-            self._data["day"] = today
-            self._flush()
+                        entry['state'] = PENDING
+                        changed = True
+            if changed:
+                self._data['day'] = today
+                self._flush()
 
     def _compat_legacy_entries(self) -> None:
         """旧 track.state 条目兼容读取（读取时归一，不批量重写历史）：

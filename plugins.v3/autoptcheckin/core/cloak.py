@@ -196,7 +196,22 @@ class CloakHttpClient:
         self._sync_cookies()
         return LoginPage(result.get("text", ""), result.get("url") or url, result.get("status") or 0)
 
-    def get_bytes(self, url): return self.http.get_bytes(url)
+    def get_bytes(self, url, *, referer=None):
+        import base64
+        def fetch():
+            options = {'credentials': 'include'}
+            if referer:
+                options['referrer'] = referer
+            result = self.session.page.evaluate(
+                "async ({url, options}) => { const r = await fetch(url, {...options, signal:AbortSignal.timeout(20000)}); "
+                "const data = new Uint8Array(await r.arrayBuffer()); "
+                "return {status:r.status, body:btoa(Array.from(data, b=>String.fromCharCode(b)).join(''))}; }",
+                {'url': url, 'options': options})
+            self._sync_cookies()
+            if result['status'] != 200:
+                raise ValueError('image unavailable')
+            return base64.b64decode(result['body'])
+        return self._run(fetch)
     def retain_cookies(self, names): return self.http.retain_cookies(names)
     def close(self):
         pool = getattr(self, "_pool", None)
@@ -206,7 +221,11 @@ class CloakHttpClient:
         try:
             pool.submit(lambda: self.session.close()).result()
         finally:
-            pool.shutdown(wait=False)
+            try:
+                if hasattr(self.http, 'close'):
+                    self.http.close()
+            finally:
+                pool.shutdown(wait=False)
 
 
 def _wait_for_slider_page_exit(page):

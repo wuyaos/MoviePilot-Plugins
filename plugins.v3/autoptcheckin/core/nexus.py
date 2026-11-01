@@ -64,11 +64,15 @@ class NexusSignin(SiteModule):
         return ctx.record_result(page, spec, before_submit=True)
 
     def note_daily_reset(self, result: SignResult) -> SignResult:
-        """重置小时之前读到的已签属昨日残留：只改消息归属，不拦提交。"""
-        if self.reset_hour is None or result.status != SignStatus.ALREADY:
+        """保留重置前已签结论，但它只在本站重置点之前有效。"""
+        if self.reset_hour is None or result.status not in (SignStatus.ALREADY, SignStatus.SUCCESS):
             return result
-        if datetime.now().hour < self.reset_hour:
-            result.message = f"昨日已签，站点 {self.reset_hour} 点后刷新"
+        now = datetime.now()
+        if now.hour < self.reset_hour:
+            result.metadata['success_expires_at'] = now.replace(
+                hour=self.reset_hour, minute=0, second=0, microsecond=0).timestamp()
+            if result.status == SignStatus.ALREADY:
+                result.message = f'昨日已签，站点 {self.reset_hour} 点后刷新'
         return result
 
     @staticmethod
@@ -304,7 +308,7 @@ class NexusSignin(SiteModule):
                 fresh = None
                 ctx.post_read_error = type(exc).__name__
         out["fresh"] = fresh
-        result = self.read_after(ctx, fresh)
+        result = self.note_daily_reset(self.read_after(ctx, fresh))
         trace = getattr(ctx, "captcha_trace", None)
         if trace:
             # 验证码站的失败现场：识别结果/原因 + 提交响应切片，供 history 复盘。
