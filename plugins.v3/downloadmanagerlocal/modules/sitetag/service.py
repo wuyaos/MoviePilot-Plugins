@@ -3,6 +3,7 @@
 import time
 import uuid
 
+from collections.abc import Sequence
 from typing import Dict, Iterable, List, Optional
 
 from app.sdk.config import settings
@@ -284,7 +285,7 @@ def _managed_tag_anchors(plugin) -> set:
 def _read_qb_torrents(service) -> tuple:
     """读取 qBittorrent 全量任务并统一错误结果。"""
     torrents, error = service.instance.get_torrents()
-    if error or not isinstance(torrents, (list, tuple)):
+    if error or not isinstance(torrents, Sequence) or isinstance(torrents, (str, bytes)):
         return [], "下载器任务读取失败"
     for torrent in torrents:
         if not isinstance(torrent, dict) or not str(torrent.get("hash") or "").strip():
@@ -355,7 +356,7 @@ def scan_tag_candidates(plugin, downloader_names: Iterable[str]) -> dict:
             if error:
                 raise ValueError(error)
             definitions = service.instance.qbc.torrents_tags()
-            if not isinstance(definitions, (list, tuple, set)) or any(not isinstance(t, str) for t in definitions):
+            if not isinstance(definitions, (Sequence, set)) or isinstance(definitions, (str, bytes)) or any(not isinstance(t, str) for t in definitions):
                 raise ValueError("全局标签读取失败")
             grouped, _ = _group_tags(torrents)
             active = _active_temporary_tags(plugin)

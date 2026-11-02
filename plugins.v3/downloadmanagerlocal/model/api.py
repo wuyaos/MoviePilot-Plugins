@@ -145,7 +145,7 @@ class TagCleanupScanResult(ActionResult):
 
     downloaders: list[dict[str, JsonData]] = Field(default_factory=list)
     auto_removed: list[dict[str, JsonData]] = Field(default_factory=list)
-    errors: list[str] = Field(default_factory=list)
+    errors: list[dict[str, str]] = Field(default_factory=list)
     scan_id: Optional[str] = None
     generated_at: Optional[str] = None
 

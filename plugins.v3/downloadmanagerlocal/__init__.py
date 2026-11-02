@@ -46,7 +46,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.9.23"
+    plugin_version = "3.9.24"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页

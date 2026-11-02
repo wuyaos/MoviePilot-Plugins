@@ -2,11 +2,13 @@
 import importlib.util
 import sys
 import types
+from collections import UserList
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from qbittorrentapi import TagList, TorrentInfoList
 ROOT = Path(__file__).resolve().parents[3] / "plugins.v3" / "downloadmanagerlocal"
 PREFIX = "app.plugins.downloadmanagerlocal"
 
@@ -139,3 +141,53 @@ def test_unavailable_and_non_qb_are_errors(tag_service):
     plugin.service_info = lambda name: None if name == "missing" else SimpleNamespace(type="transmission")
     result = tag_service.scan_tag_candidates(plugin, ["missing", "tr"])
     assert len(result["errors"]) == 2 and result["code"] == 1
+
+
+@pytest.mark.parametrize("collection", [list, tuple, pytest.param(UserList, id="qb-userlist"),
+                                        pytest.param(TorrentInfoList, id="qb-TorrentInfoList")])
+def test_client_collections_scan_and_recheck(tag_service, collection):
+    from unittest.mock import Mock
+    service = fake_service(collection([{"hash": "a", "tags": "used"}]))
+    service.instance.qbc = SimpleNamespace(torrents_tags=lambda: TagList(["empty", "used"]))
+    service.instance.delete_torrents_tag = Mock(return_value=True)
+    plugin = fake_plugin(service)
+    scan = tag_service.scan_tag_candidates(plugin, ["qb"])
+    assert scan["code"] == 0 and scan["errors"] == []
+    tags = {item["tag"]: item for item in scan["downloaders"][0]["tags"]}
+    assert tags["empty"]["count"] == 0 and tags["empty"]["removable"]
+    assert tags["used"]["count"] == 1 and not tags["used"]["removable"]
+    service.instance.delete_torrents_tag.assert_not_called()
+    result = tag_service.execute_tag_cleanup(plugin, [{"downloader": "qb", "tag": "empty"}], scan["scan_id"])
+    assert result["code"] == 0
+    service.instance.delete_torrents_tag.assert_called_once_with(ids=None, tag="empty")
+
+
+@pytest.mark.parametrize("tasks", [None, "not-a-list", b"data", {}, [{"tags": "used"}]])
+def test_invalid_task_collection_fails_closed(tag_service, tasks):
+    service = fake_service(tasks)
+    service.instance.qbc = SimpleNamespace(torrents_tags=lambda: ["empty"])
+    scan = tag_service.scan_tag_candidates(fake_plugin(service), ["qb"])
+    assert scan["code"] == 1 and not scan["downloaders"]
+    assert scan["errors"][0]["downloader"] == "qb"
+
+
+@pytest.mark.parametrize("mode", ["success", "failure", "partial"])
+def test_scan_response_validates_real_service_result(tag_service, mp_stubs, monkeypatch, mode):
+    import json
+    from typing import Any
+    common = types.ModuleType("app.schemas.common")
+    common.JsonData = Any
+    monkeypatch.setitem(sys.modules, common.__name__, common)
+    models = mp_stubs("model/api.py", "model.api")
+    service = fake_service([])
+    service.instance.qbc = SimpleNamespace(torrents_tags=lambda: ["empty"])
+    plugin = fake_plugin(service)
+    plugin.service_info = lambda name: service if name == "qb" else None
+    names = {"success": ["qb"], "failure": ["offline"], "partial": ["qb", "offline"]}[mode]
+    raw = tag_service.scan_tag_candidates(plugin, names)
+    wire = json.loads(models.TagCleanupScanResult.model_validate(raw).model_dump_json())
+    assert wire["errors"] == raw["errors"]
+    assert wire["downloaders"] == raw["downloaders"]
+    if mode != "success":
+        assert wire["errors"][0]["downloader"] == "offline"
+        assert wire["errors"][0]["message"]
