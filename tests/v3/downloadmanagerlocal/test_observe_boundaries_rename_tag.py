@@ -275,6 +275,20 @@ def test_transmission_metadata_merges_labels_as_set(mods, monkeypatch):
     assert set(dl.set_torrent_tag.call_args.kwargs["tags"]) == {"keep", "media"}
 
 
+
+@pytest.mark.parametrize("write_result", [True, False])
+def test_transfer_site_tag_preserves_business_and_existing_labels(mods, monkeypatch, write_result):
+    plugin = SimpleNamespace(_module_observe_only={"tag": False}, _tracker_mappings={},
+                             _custom_site_labels={}, _tag_siteprefix="🏠")
+    monkeypatch.setattr(mods.tag, "find_site_by_domain", lambda domain: "PTS")
+    monkeypatch.setattr(mods.tag, "get_url_domain", lambda url: "tracker.example")
+    dl = Mock()
+    dl.set_torrent_tag.return_value = write_result
+    result = mods.tag.tag_torrent(plugin, dl, "transmission", HASH_A,
+                                  ["收藏", "已转移"], ["https://tracker.example/announce"])
+    assert result is write_result
+    assert set(dl.set_torrent_tag.call_args.kwargs["tags"]) == {"收藏", "已转移", "🏠PTS"}
+
 def test_path_category_does_not_require_download_history(mods, monkeypatch):
     plugin = SimpleNamespace(_module_observe_only={"tag": False})
     dl = Mock()

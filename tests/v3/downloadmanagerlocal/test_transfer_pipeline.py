@@ -87,6 +87,7 @@ def runtime(monkeypatch):
         spec.loader.exec_module(result)
         return result
 
+    load('tasks')
     recheck = load('recheck')
     pipeline = load('pipeline')
     monkeypatch.setattr(pipeline, 'ensure_seed_recheck_worker', Mock())
@@ -111,6 +112,8 @@ def runtime(monkeypatch):
     plugin = types.SimpleNamespace(
         _seed_recheck_lock=threading.RLock(), _seed_max_wait_minutes=120,
         _pause_source=True, _deletesource=True, _seed_autostart=True, _seed_skipverify=False,
+        _transfer_delete_source_default=True,
+        _fromdownloader='source', _todownloader='target',
         _event=threading.Event(), service_info=services.get,
         get_hash=lambda task, kind: task['hash'] if isinstance(task, dict) else task.hashString,
         get_data=lambda key: copy.deepcopy(data.get(key)),
@@ -643,3 +646,27 @@ def test_recheck_transaction_error_still_rolls_back(runtime, monkeypatch):
     assert item['phase'] == 'rollback'
     assert 'tx write failed' in (item.get('error') or '')
     assert r.data['queue']  # 队列保留，回滚在下一轮执行
+
+
+@pytest.mark.parametrize('current, global_delete, expected', [
+    (False, True, False), (True, False, True), ('inherit', False, False),
+    ('inherit', True, True), ('removed', True, False), ('disabled', True, False),
+    ('ambiguous', True, False),
+])
+def test_pending_transfer_uses_current_delete_intent(runtime, current, global_delete, expected):
+    import json
+    r = runtime
+    assert begin(r)  # transaction initially requests deletion
+    cycle(r)  # verification has actually started
+    r.plugin._transfer_delete_source_default = global_delete
+    r.plugin._deletesource = not global_delete  # legacy key must not override the current UI setting
+    task = dict(name='current', from_downloader='source', to_downloader='target',
+                delete_source=current, enabled=current != 'disabled')
+    tasks = [] if current == 'removed' else [task]
+    if current == 'ambiguous':
+        tasks = [dict(task, delete_source=True), dict(task, name='other', delete_source=False)]
+    r.plugin._transfer_tasks = json.dumps(tasks)
+    cycle(r, 'stalledUP')
+    assert r.source.delete_torrents.called is expected
+    assert r.data['source-abc']['delete_source_requested'] is expected
+    r.target.delete_torrents.assert_not_called()

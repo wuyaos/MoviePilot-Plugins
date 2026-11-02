@@ -960,44 +960,45 @@ const _hoisted_15 = ["title"];
 const _hoisted_16 = { class: "dm-hint" };
 const _hoisted_17 = ["title"];
 const _hoisted_18 = { class: "dm-hint" };
-const _hoisted_19 = ["title"];
+const _hoisted_19 = { class: "dm-hint" };
 const _hoisted_20 = ["title"];
-const _hoisted_21 = { class: "dm-runtime-details" };
+const _hoisted_21 = ["title"];
 const _hoisted_22 = { class: "dm-runtime-details" };
-const _hoisted_23 = ["aria-busy"];
-const _hoisted_24 = {
+const _hoisted_23 = { class: "dm-runtime-details" };
+const _hoisted_24 = ["aria-busy"];
+const _hoisted_25 = {
   class: "dm-runtime-details",
   "data-record-block": "tag-cleanup-snapshot"
 };
-const _hoisted_25 = {
+const _hoisted_26 = {
   class: "dm-page-stack",
   "data-record-block": "upload-status",
   "data-runtime-section": "upload-limit"
 };
-const _hoisted_26 = { class: "dm-page-heading" };
-const _hoisted_27 = { class: "dm-page-actions" };
-const _hoisted_28 = {
+const _hoisted_27 = { class: "dm-page-heading" };
+const _hoisted_28 = { class: "dm-page-actions" };
+const _hoisted_29 = {
   key: 0,
   class: "dm-hint"
 };
-const _hoisted_29 = ["aria-expanded", "onClick"];
-const _hoisted_30 = { class: "dm-hint" };
-const _hoisted_31 = { class: "dm-runtime-details" };
-const _hoisted_32 = {
+const _hoisted_30 = ["aria-expanded", "onClick"];
+const _hoisted_31 = { class: "dm-hint" };
+const _hoisted_32 = { class: "dm-runtime-details" };
+const _hoisted_33 = {
   key: 2,
   class: "dm-page-stack",
   "data-page": "diagnostics"
 };
-const _hoisted_33 = { class: "dm-page-heading" };
-const _hoisted_34 = { class: "dm-four-stats" };
-const _hoisted_35 = { class: "dm-hint" };
-const _hoisted_36 = {
+const _hoisted_34 = { class: "dm-page-heading" };
+const _hoisted_35 = { class: "dm-four-stats" };
+const _hoisted_36 = { class: "dm-hint" };
+const _hoisted_37 = {
   key: 0,
   class: "dm-runtime-details"
 };
-const _hoisted_37 = { class: "dm-runtime-details" };
-const _hoisted_38 = { class: "dm-tag-matrix" };
-const _hoisted_39 = ["checked", "disabled", "onChange"];
+const _hoisted_38 = { class: "dm-runtime-details" };
+const _hoisted_39 = { class: "dm-tag-matrix" };
+const _hoisted_40 = ["checked", "disabled", "onChange"];
 const {computed,nextTick,onBeforeUnmount,onMounted,reactive,ref,watch} = await importShared('vue');
 
 const OVERVIEW_REFRESH_INTERVAL_MS = 30_000;
@@ -2629,7 +2630,16 @@ function sizeRecordChange(kind, value) {
 }
 function resetHistoryFilter() { historyResultFilter.value = 'all'; pageRecordChange('history', 1); }
 function resetTransferFilter() { transferResultFilter.value = 'all'; pageRecordChange('transfer', 1); }
-function routeText(row) { return `${row.source_downloader || row.from_downloader || '—'} → ${row.target_downloader || row.to_downloader || '—'}` }
+function routeText(row) { return `${row.source_downloader || row.from_downloader || '源下载器未知'} → ${row.target_downloader || row.to_downloader || row.downloader || row.to_download || '目的下载器未知'}` }
+function transferOutcomeText(row) {
+  const sourceResults = { disabled: '保留源：删除关闭', deleted: '已删源任务，不含文件', hr_protected: 'H&R 保护或状态未确认，保留源；无有效校验证据不解除保护', delete_failed: '删源失败，详见 H&R 联动记录', target_not_ready: '目标未就绪，保留源', identity_unconfirmed: '身份或路径未确认，保留源', query_failed: '查询失败，保留源', start_requested: '已请求启动，待确认做种', start_failed: '启动失败，保留源' };
+  const parts = [row.reuse_target ? '复用已有目的任务' : ''];
+  if (row.tag_result === 'failed' || row.site_tag_result === 'failed') parts.push('补标签失败');
+  else if (row.tag_result === 'ok') parts.push('转移标签已核对');
+  if (row.site_tag_result === 'unknown_site') parts.push('站点未识别');
+  if (row.source_result) parts.push(sourceResults[row.source_result] || row.source_result);
+  return parts.filter(Boolean).join(' · ')
+}
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
   void refreshActive();
@@ -3051,7 +3061,8 @@ return (_ctx, _cache) => {
                                   _createTextVNode(_toDisplayString(transferPhaseText(row.phase)), 1)
                                 ]),
                                 _: 2
-                              }, 1032, ["color"])
+                              }, 1032, ["color"]),
+                              _createElementVNode("div", _hoisted_19, _toDisplayString(transferOutcomeText(row)), 1)
                             ]),
                             "cell-updated": _withCtx(({ row }) => [
                               _createTextVNode(_toDisplayString(formatTimestamp(row.updated_at || row.timestamp || row.created_at)), 1)
@@ -3177,7 +3188,7 @@ return (_ctx, _cache) => {
                             "cell-reason": _withCtx(({ row }) => [
                               _createElementVNode("span", {
                                 title: row.archive_reason || row.reason
-                              }, _toDisplayString(row.archive_reason || row.reason || '—'), 9, _hoisted_19)
+                              }, _toDisplayString(row.archive_reason || row.reason || '—'), 9, _hoisted_20)
                             ]),
                             rowActions: _withCtx(({ row }) => [
                               _createVNode(RowActionMenu, {
@@ -3261,7 +3272,7 @@ return (_ctx, _cache) => {
                             "cell-name": _withCtx(({ row }) => [
                               _createElementVNode("span", {
                                 title: row.name || row.torrent_hash
-                              }, _toDisplayString(hrTaskTitle(row)), 9, _hoisted_20)
+                              }, _toDisplayString(hrTaskTitle(row)), 9, _hoisted_21)
                             ]),
                             "cell-downloader_id": _withCtx(({ value }) => [
                               _createVNode(DownloaderBadge, {
@@ -3314,7 +3325,7 @@ return (_ctx, _cache) => {
                             ]),
                             _: 1
                           }, 8, ["columns", "rows", "total", "page", "page-size", "state"]),
-                          _createElementVNode("details", _hoisted_21, [
+                          _createElementVNode("details", _hoisted_22, [
                             _cache[61] || (_cache[61] = _createElementVNode("summary", null, "保护跳过统计", -1)),
                             _createElementVNode("dl", null, [
                               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(hrSkipRows.value, (row) => {
@@ -3388,7 +3399,7 @@ return (_ctx, _cache) => {
                             columns: recordColumns.autoHistory,
                             unavailable: unavailableHistory
                           }, null, 8, ["columns"]),
-                          _createElementVNode("details", _hoisted_22, [
+                          _createElementVNode("details", _hoisted_23, [
                             _cache[64] || (_cache[64] = _createElementVNode("summary", null, "最近运行详情", -1)),
                             _createVNode(_component_VBtn, {
                               color: "primary",
@@ -3447,7 +3458,7 @@ return (_ctx, _cache) => {
                                 record: { source: row.source, scanned: row.scanned, cleaned: row.cleaned, failed: row.failed, skipped: row.skipped }
                               }, null, 8, ["record"]))
                             }), 128))
-                          ], 8, _hoisted_23)
+                          ], 8, _hoisted_24)
                         ], 64))
                       : _createCommentVNode("", true),
                     (activeTab.value === 'sitetag')
@@ -3463,7 +3474,7 @@ return (_ctx, _cache) => {
                             columns: recordColumns.cleanupHistory,
                             unavailable: unavailableHistory
                           }, null, 8, ["columns"]),
-                          _createElementVNode("details", _hoisted_24, [
+                          _createElementVNode("details", _hoisted_25, [
                             _cache[68] || (_cache[68] = _createElementVNode("summary", null, "最近标签清理快照（非逐条历史）", -1)),
                             _createVNode(ModuleDetailPanel, {
                               rows: moduleDetail('tagcleanup').rows,
@@ -3478,10 +3489,10 @@ return (_ctx, _cache) => {
                       : _createCommentVNode("", true),
                     (activeTab.value === 'upload')
                       ? (_openBlock(), _createElementBlock(_Fragment, { key: 6 }, [
-                          _createElementVNode("section", _hoisted_25, [
-                            _createElementVNode("div", _hoisted_26, [
+                          _createElementVNode("section", _hoisted_26, [
+                            _createElementVNode("div", _hoisted_27, [
                               _cache[69] || (_cache[69] = _createElementVNode("h3", null, "实时监控", -1)),
-                              _createElementVNode("div", _hoisted_27, [
+                              _createElementVNode("div", _hoisted_28, [
                                 _createVNode(CompactSelect, {
                                   modelValue: uploadDownloaderFilter.value,
                                   "onUpdate:modelValue": _cache[35] || (_cache[35] = $event => ((uploadDownloaderFilter).value = $event)),
@@ -3501,7 +3512,7 @@ return (_ctx, _cache) => {
                               ])
                             ]),
                             (!uploadGroups.value.length)
-                              ? (_openBlock(), _createElementBlock("p", _hoisted_28, _toDisplayString(uploadDownloaderFilter.value !== 'all' || uploadSiteFilter.value ? '筛选无结果' : '当前快照没有下载器状态'), 1))
+                              ? (_openBlock(), _createElementBlock("p", _hoisted_29, _toDisplayString(uploadDownloaderFilter.value !== 'all' || uploadSiteFilter.value ? '筛选无结果' : '当前快照没有下载器状态'), 1))
                               : _createCommentVNode("", true),
                             (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(uploadGroups.value, (group) => {
                               return (_openBlock(), _createElementBlock("section", {
@@ -3524,7 +3535,7 @@ return (_ctx, _cache) => {
                                         _createElementVNode("span", null, "更新时间 " + _toDisplayString(group.updated_at || '当前接口未提供'), 1)
                                       ], 64))
                                     : _createCommentVNode("", true)
-                                ], 8, _hoisted_29),
+                                ], 8, _hoisted_30),
                                 (!closedUploadGroups[group.key])
                                   ? (_openBlock(), _createBlock(ModuleTable, {
                                       key: 0,
@@ -3547,7 +3558,7 @@ return (_ctx, _cache) => {
                                         _createTextVNode(_toDisplayString(row.state || '当前接口未提供'), 1)
                                       ]),
                                       expand: _withCtx(({ row }) => [
-                                        _createElementVNode("p", _hoisted_30, "关联下载器：" + _toDisplayString(row.downloaders?.join('、') || '当前接口未提供') + "；种子级明细当前接口未提供。", 1)
+                                        _createElementVNode("p", _hoisted_31, "关联下载器：" + _toDisplayString(row.downloaders?.join('、') || '当前接口未提供') + "；种子级明细当前接口未提供。", 1)
                                       ]),
                                       _: 1
                                     }, 8, ["title", "columns", "rows"]))
@@ -3561,7 +3572,7 @@ return (_ctx, _cache) => {
                             unavailable: unavailableHistory
                           }, null, 8, ["columns"]),
                           _cache[73] || (_cache[73] = _createElementVNode("p", { class: "dm-hint" }, "实际上传与分配额度是不同指标；MP 或插件离线后，下载器可能保留最后写入的限速。", -1)),
-                          _createElementVNode("details", _hoisted_31, [
+                          _createElementVNode("details", _hoisted_32, [
                             _cache[72] || (_cache[72] = _createElementVNode("summary", null, "站点识别与策略操作", -1)),
                             _createVNode(_component_VBtn, {
                               color: "primary",
@@ -3593,8 +3604,8 @@ return (_ctx, _cache) => {
                   ], 8, _hoisted_11))
                 : _createCommentVNode("", true),
               (activeTab.value === 'diagnostics')
-                ? (_openBlock(), _createElementBlock("section", _hoisted_32, [
-                    _createElementVNode("div", _hoisted_33, [
+                ? (_openBlock(), _createElementBlock("section", _hoisted_33, [
+                    _createElementVNode("div", _hoisted_34, [
                       _createVNode(ModuleHeader, {
                         title: "运行诊断",
                         icon: _unref(MODULE_ICONS).diagnostics,
@@ -3614,7 +3625,7 @@ return (_ctx, _cache) => {
                         _: 1
                       }, 8, ["loading"])
                     ]),
-                    _createElementVNode("div", _hoisted_34, [
+                    _createElementVNode("div", _hoisted_35, [
                       (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(diagnosticStats.value, (stat) => {
                         return (_openBlock(), _createElementBlock("div", {
                           key: stat.label
@@ -3624,7 +3635,7 @@ return (_ctx, _cache) => {
                         ]))
                       }), 128))
                     ]),
-                    _createElementVNode("p", _hoisted_35, "最近检查：" + _toDisplayString(diagnostics.value?.time || '未检查') + " · 当前显示最近快照，刷新诊断会进行只读检查（可能访问下载器）。", 1),
+                    _createElementVNode("p", _hoisted_36, "最近检查：" + _toDisplayString(diagnostics.value?.time || '未检查') + " · 当前显示最近快照，刷新诊断会进行只读检查（可能访问下载器）。", 1),
                     _createVNode(ModuleTable, {
                       title: "检查结果",
                       columns: recordColumns.diagnostics,
@@ -3663,7 +3674,7 @@ return (_ctx, _cache) => {
                       _: 1
                     }, 8, ["columns", "rows", "total", "page", "page-size", "state"]),
                     (selectedDiagnostic.value)
-                      ? (_openBlock(), _createElementBlock("section", _hoisted_36, [
+                      ? (_openBlock(), _createElementBlock("section", _hoisted_37, [
                           _createElementVNode("h3", null, _toDisplayString(selectedDiagnostic.value.name), 1),
                           _createElementVNode("dl", null, [
                             _cache[75] || (_cache[75] = _createElementVNode("dt", null, "问题", -1)),
@@ -3677,7 +3688,7 @@ return (_ctx, _cache) => {
                           ])
                         ]))
                       : _createCommentVNode("", true),
-                    _createElementVNode("details", _hoisted_37, [
+                    _createElementVNode("details", _hoisted_38, [
                       _cache[79] || (_cache[79] = _createElementVNode("summary", null, "环境信息", -1)),
                       _createElementVNode("p", null, "插件版本：" + _toDisplayString(diagnostics.value?.plugin?.version || '—'), 1),
                       _createVNode(RecordDetails, {
@@ -4007,7 +4018,7 @@ return (_ctx, _cache) => {
                         class: "mt-3"
                       }, null, 8, ["modelValue"]),
                       _cache[92] || (_cache[92] = _createElementVNode("div", { class: "dm-hint" }, "勾选保留，取消勾选后点击预览；扫描可能回收已失效的临时标签。", -1)),
-                      _createElementVNode("div", _hoisted_38, [
+                      _createElementVNode("div", _hoisted_39, [
                         (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(filteredCleanupTags.value, (item) => {
                           return (_openBlock(), _createElementBlock("label", {
                             key: item.tag
@@ -4017,7 +4028,7 @@ return (_ctx, _cache) => {
                               checked: item.keep,
                               disabled: cleanupExecuting.value,
                               onChange: $event => (setMergedTag(item.tag, $event.target.checked))
-                            }, null, 40, _hoisted_39),
+                            }, null, 40, _hoisted_40),
                             _createElementVNode("span", null, _toDisplayString(item.tag) + " · " + _toDisplayString(item.owners.join("、")), 1)
                           ]))
                         }), 128))
@@ -4179,6 +4190,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-3e7aede8"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-04242441"]]);
 
 export { Page as default };

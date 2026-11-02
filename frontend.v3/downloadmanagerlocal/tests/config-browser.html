@@ -38,7 +38,7 @@ const fixture = {
 }
 const errors = []
 let saved
-const api = { get: async path => path.endsWith('/hr_presets') ? { presets: [] } : path.endsWith('/downloaders') ? [{ value: 'QB-test', title: 'QB-test', type: 'qbittorrent' }, { value: 'TR-test', title: 'TR-test', type: 'transmission' }] : [] }
+const api = { put: async (path, payload) => { saved = payload; return { success: true } }, get: async path => path.endsWith('/hr_presets') ? { presets: [] } : path.endsWith('/downloaders') ? [{ value: 'QB-test', title: 'QB-test', type: 'qbittorrent' }, { value: 'TR-test', title: 'TR-test', type: 'transmission' }] : [] }
 const app = createApp({ render: () => h(Config, { initialConfig: fixture, api, onSave: value => { saved = value } }) })
 app.config.errorHandler = error => errors.push(String(error))
 app.use(createVuetify({ components, directives }))
@@ -53,7 +53,9 @@ const clickText = async text => {
 try {
   await clickText('任务列表')
   if (!document.querySelector('.dm-config').textContent.includes('seed-test')) throw new Error('Transfer task missing')
-  await clickText('保存')
+  const taskRow = [...document.querySelectorAll('.dm-task-row')].find(el => el.textContent.includes('seed-test'))
+  if (!taskRow?.textContent.includes('QB-test') || !taskRow?.textContent.includes('TR-test')) throw new Error('Downloader route missing')
+  await clickText('保存配置')
   if (JSON.parse(saved.transfer_tasks)[0].name !== 'seed-test') throw new Error('Save lost transfer task')
   if (saved.hr_site_config_str !== fixture.hr_site_config_str) throw new Error('Save changed H&R YAML')
   if (errors.length) throw new Error(errors.join('; '))
@@ -62,9 +64,23 @@ try {
   const field = pane.querySelector('.v-field')
   const row = pane.querySelector('.v-row, .dm-field-row')
   const sanity = { version: vuetifyPackage.version, fieldDisplay: getComputedStyle(field).display, rowDisplay: getComputedStyle(row).display, numericWidth: pane.querySelector('input[type="number"]').closest('.v-field').getBoundingClientRect().width }
-  if (sanity.fieldDisplay !== 'grid' || sanity.rowDisplay !== 'flex' || sanity.numericWidth >= 742) throw new Error(`Vuetify CSS sanity failed: ${JSON.stringify(sanity)}`)
+  if (sanity.fieldDisplay !== 'grid' || sanity.rowDisplay !== 'grid' || sanity.numericWidth >= 742) throw new Error(`Vuetify CSS sanity failed: ${JSON.stringify(sanity)}`)
   window.dmlDensitySanity = sanity
-  document.querySelector('#result').textContent = 'PASS: tiered H&R + rendered transfer task + save preservation; 958px density harness (not host acceptance)'
+  const toggle = label => [...document.querySelectorAll('.v-input')].find(el => el.textContent.includes(label))?.querySelector('input[type="checkbox"]')
+  const source = toggle('删除源任务（全局）')
+  const duplicate = toggle('目的端已有时删源（全局）')
+  if (!source || !duplicate) throw new Error('Global deletion controls missing')
+  source.click(); duplicate.click(); await nextTick()
+  await clickText('保存配置')
+  if (saved.transfer_delete_source_default !== true || saved.transfer_delete_duplicate_default !== true) throw new Error('Global controls did not save')
+  await clickText('任务列表')
+  await clickText('添加任务')
+  const dialog = document.querySelector('.v-dialog .v-card')
+  if (!dialog?.textContent.includes('继承全局（当前：开启）')) throw new Error('New task lacks live inheritance wording')
+  const cancel = [...dialog.querySelectorAll('button')].find(el => el.textContent.trim() === '取消')
+  if (!cancel) throw new Error('Dialog cancel missing')
+  cancel.click(); await nextTick()
+  document.querySelector('#result').textContent = 'PASS: rendered QB-test → TR-test; global deletion toggles saved; new task inherits current defaults; H&R YAML retained; density 220px (isolated consumer, not host acceptance)'
 } catch (error) {
   document.querySelector('#result').textContent = `FAIL: ${error}`
 }

@@ -498,7 +498,7 @@ const transferDeleteTriStateItems = [
   { title: '关闭', value: false },
 ]
 const transferDeleteItems = defaultEnabled => transferDeleteTriStateItems.map(item => item.value === 'inherit'
-  ? { ...item, title: `默认（${defaultEnabled ? '开启' : '关闭'}）` } : item)
+  ? { ...item, title: `继承全局（当前：${defaultEnabled ? '开启' : '关闭'}）` } : item)
 const transferDeleteOriginLabels = {
   task: '任务覆盖',
   global: '继承全局',
@@ -1553,6 +1553,10 @@ Object.keys(form).forEach(k => delete form[k])
                     <VSwitch density="compact" v-model="form.seed_skipverify" color="primary" inset hide-details label="跳过校验" />
                   </div>
                 </div>
+                <div class="dm-switch-group">
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_delete_source_default" color="primary" inset hide-details label="删除源任务（全局）" /></div>
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_delete_duplicate_default" color="primary" inset hide-details label="目的端已有时删源（全局）" /></div>
+                </div>
                 <div class="dm-field-row">
                   <div class="dm-field dm-field--number">
                     <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_check_interval" label="检查间隔（秒）" type="number" variant="outlined" hint="建议 60 秒" persistent-hint />
@@ -1561,6 +1565,7 @@ Object.keys(form).forEach(k => delete form[k])
                     <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_max_wait_minutes" label="最长等待（分钟）" type="number" variant="outlined" hint="超时后移出队列" persistent-hint />
                   </div>
                 </div>
+                <div class="dm-hint">全局删除设置仅作用于选择“继承全局”的任务；仅删源任务，不删文件。旧任务缺字段时保留升级前行为，保存时显式记录原生效值；改为继承需手动选择。</div>
                 <div class="dm-hint">重命名仅 qB 目的端生效：修改显示名，不动磁盘文件；Transmission 目的端自动跳过。</div>
                 <div class="dm-hint">做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。</div>
               </FormSection>
@@ -2074,18 +2079,18 @@ Object.keys(form).forEach(k => delete form[k])
           </FormSection>
           <FormSection title="高级设置" :icon="MODULE_ICONS.transfer">
           <div v-if="transferForm.delete_source === true" class="dm-hint dm-risk mb-2"><VIcon icon="mdi-alert-outline" size="16" />
-            「删除源任务」受 H&R 保护约束：源种若已纳入 H&amp;R 管理且未达标，源任务会被保留，并计入数据页「转移做种」卡的「H&amp;R 保护」跳过数。放行办法有三种——等它达标（自动放行）、让种子在进入下载器前就带 H&amp;R 排除标签、或关闭 H&amp;R 保护总开关。注意：<strong>已纳管的种子事后补排除标签无效</strong>（排除只在首次纳管时判定）。
+            仅删除源任务，不删除文件。目的端真实校验完成后可通过 H&amp;R 管理联动解除源保护；只有“完整／做种中”状态不构成解除证据。联动失败保留源，删源失败恢复保护。
           </div>
           <div class="dm-field-row">
             <div class="dm-field">
               <VSelect density="compact" v-model="transferForm.delete_source" :items="transferDeleteItems(form.transfer_delete_source_default)" label="删除源任务" variant="outlined"
-                hint="使用默认值，或为此任务单独开启/关闭；实际生效值见任务列表" persistent-hint />
+                hint="继承全局或单独覆盖；仅删除源任务，不删除文件；历史转移也按当前设置重新检查" persistent-hint />
               <div v-if="transferForm.delete_source === true" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />转移后删除源任务，仍受 H&R 保护约束。</div>
             </div>
             <div class="dm-field">
-              <VSelect density="compact" v-model="transferForm.delete_duplicate" :items="transferDeleteItems(form.transfer_delete_duplicate_default)" label="删除重复任务" variant="outlined"
-                hint="使用默认值，或为此任务单独开启/关闭；实际生效值见任务列表" persistent-hint />
-              <div v-if="transferForm.delete_duplicate === true" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />转移时删除重复任务，仍受 H&R 保护约束。</div>
+              <VSelect density="compact" v-model="transferForm.delete_duplicate" :items="transferDeleteItems(form.transfer_delete_duplicate_default)" label="目的端已有任务时删除源任务" variant="outlined"
+                hint="适用于非本插件转移的已有目的任务；校验身份、路径与完整性，仍受 H&R 保护" persistent-hint />
+              <div v-if="transferForm.delete_duplicate === true" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />删除的是源任务，不删除目的任务或文件。</div>
             </div>
           </div>
           <div class="dm-field-row">

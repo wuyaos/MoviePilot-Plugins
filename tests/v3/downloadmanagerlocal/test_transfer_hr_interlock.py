@@ -22,6 +22,7 @@ def wiring(interlock, monkeypatch):
     env.plugin._seed_recheck_queue_lock = env.plugin._seed_recheck_lock
     env.instance.delete_torrents.return_value = True
     env.pipeline = pipeline
+    env.plugin._transfer_tasks = '[{"name":"current","from_downloader":"qb","to_downloader":"target","delete_source":true}]'
     return env
 
 

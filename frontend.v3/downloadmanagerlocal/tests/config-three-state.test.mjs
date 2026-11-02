@@ -24,11 +24,11 @@ function mountSetup(initialConfig = {}) {
   return { ...state, calls, stop: () => scope.stop() }
 }
 
-test('隐藏默认设置仍保留已存值，新任务用默认开关状态提示且不固化继承', async () => {
+test('全局删除设置仍保留已存值，新任务用默认开关状态提示且不固化继承', async () => {
   const state = mountSetup({ transfer_delete_source_default: true, transfer_delete_duplicate_default: false })
   try {
-    assert.deepEqual(state.transferDeleteItems(state.form.transfer_delete_source_default)[0], { title: '默认（开启）', value: 'inherit' })
-    assert.deepEqual(state.transferDeleteItems(state.form.transfer_delete_duplicate_default)[0], { title: '默认（关闭）', value: 'inherit' })
+    assert.deepEqual(state.transferDeleteItems(state.form.transfer_delete_source_default)[0], { title: '继承全局（当前：开启）', value: 'inherit' })
+    assert.deepEqual(state.transferDeleteItems(state.form.transfer_delete_duplicate_default)[0], { title: '继承全局（当前：关闭）', value: 'inherit' })
     state.openTransferDialog()
     assert.deepEqual([state.transferForm.delete_source, state.transferForm.delete_duplicate], ['inherit', 'inherit'])
     await state.saveConfig()

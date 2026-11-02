@@ -570,9 +570,11 @@ def tag_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags: list,
 
         # 设置标签
         if dl_type == "qbittorrent":
-            dl.set_torrents_tag(ids=torrent_hash, tags=[site_tag])
+            if dl.set_torrents_tag(ids=torrent_hash, tags=[site_tag]) is False:
+                return False
         else:
-            dl.set_torrent_tag(ids=torrent_hash, tags=[site_tag])
+            if dl.set_torrent_tag(ids=torrent_hash, tags=sorted(set(torrent_tags or []) | {site_tag})) is False:
+                return False
         logger.info(f"【PT下载中心:站点标签】转移后标签成功: hash={torrent_hash} tag={site_tag}")
         return True
     except Exception as e:

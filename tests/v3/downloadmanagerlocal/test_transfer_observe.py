@@ -223,6 +223,7 @@ def test_nonobserved_real_rename_failure_still_records_failure(observed, monkeyp
 def test_legacy_transfer_without_created_at_still_reaches_delete(observed, monkeypatch):
     env = observed
     env.plugin._module_observe_only["transfer"] = False
+    env.plugin._transfer_tasks = '[{"name":"current","from_downloader":"source","to_downloader":"target","delete_source":true}]'
     monkeypatch.setattr(env.transfer, "post_transfer_process", Mock(return_value=True))
     delete = Mock(return_value="deleted")
     monkeypatch.setattr(env.pipeline, "delete_source", delete)

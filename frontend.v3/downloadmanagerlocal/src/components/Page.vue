@@ -1720,7 +1720,16 @@ function sizeRecordChange(kind, value) {
 }
 function resetHistoryFilter() { historyResultFilter.value = 'all'; pageRecordChange('history', 1) }
 function resetTransferFilter() { transferResultFilter.value = 'all'; pageRecordChange('transfer', 1) }
-function routeText(row) { return `${row.source_downloader || row.from_downloader || '—'} → ${row.target_downloader || row.to_downloader || '—'}` }
+function routeText(row) { return `${row.source_downloader || row.from_downloader || '源下载器未知'} → ${row.target_downloader || row.to_downloader || row.downloader || row.to_download || '目的下载器未知'}` }
+function transferOutcomeText(row) {
+  const sourceResults = { disabled: '保留源：删除关闭', deleted: '已删源任务，不含文件', hr_protected: 'H&R 保护或状态未确认，保留源；无有效校验证据不解除保护', delete_failed: '删源失败，详见 H&R 联动记录', target_not_ready: '目标未就绪，保留源', identity_unconfirmed: '身份或路径未确认，保留源', query_failed: '查询失败，保留源', start_requested: '已请求启动，待确认做种', start_failed: '启动失败，保留源' }
+  const parts = [row.reuse_target ? '复用已有目的任务' : '']
+  if (row.tag_result === 'failed' || row.site_tag_result === 'failed') parts.push('补标签失败')
+  else if (row.tag_result === 'ok') parts.push('转移标签已核对')
+  if (row.site_tag_result === 'unknown_site') parts.push('站点未识别')
+  if (row.source_result) parts.push(sourceResults[row.source_result] || row.source_result)
+  return parts.filter(Boolean).join(' · ')
+}
 function presentValue(value) { return value == null || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value) }
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -1813,7 +1822,7 @@ onBeforeUnmount(() => {
                 <template #filters><CompactSelect v-model="transferResultFilter" :items="[{title:'全部结果',value:'all'},{title:'成功',value:'success'},{title:'失败',value:'failed'},{title:'源端待处理',value:'source_pending'},{title:'回滚',value:'rollback'}]" label="结果" class="dm-filter" @update:model-value="pageRecordChange('transfer', 1)" /></template>
                 <template #cell-name="{ row }"><span :title="transferSourceName(row)">{{ transferPrimaryText(row) }}</span><div class="dm-hint">{{ transferSecondaryText(row) }}</div></template>
                 <template #cell-route="{ row }">{{ routeText(row) }}</template>
-                <template #cell-phase="{ row }"><VChip size="x-small" :color="transferPhaseColor(row.phase)" variant="tonal">{{ transferPhaseText(row.phase) }}</VChip></template>
+                <template #cell-phase="{ row }"><VChip size="x-small" :color="transferPhaseColor(row.phase)" variant="tonal">{{ transferPhaseText(row.phase) }}</VChip><div class="dm-hint">{{ transferOutcomeText(row) }}</div></template>
                 <template #cell-updated="{ row }">{{ formatTimestamp(row.updated_at || row.timestamp || row.created_at) }}</template>
                 <template #expand="{ row }"><RecordDetails :record="row" /></template>
               </ModuleTable>

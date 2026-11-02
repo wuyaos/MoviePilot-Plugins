@@ -232,7 +232,10 @@ def seed_is_ready(state, downloader_type, torrent=None):
     if downloader_type == "rtorrent":
         # rt 无显式 recheck：以 d.complete 或完成度作为校验完成证据。
         return torrent_is_complete(torrent, "rtorrent")
-    percent_done = getattr(torrent, "percent_done", getattr(state, "percent_done", 0))
+    if isinstance(torrent, dict):
+        percent_done = torrent.get("percent_done", torrent.get("percentDone", 0))
+    else:
+        percent_done = getattr(torrent, "percent_done", getattr(state, "percent_done", 0))
     return str(state) in ("stopped", "seeding", "seed pending") and percent_done == 1
 
 

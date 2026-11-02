@@ -150,7 +150,7 @@ def test_transfer_status_additive_raw_and_effective(endpoints, monkeypatch, glob
 def _service_case(tr, monkeypatch, value, global_default, duplicate, target_type="qbittorrent"):
     source, target = Mock(), Mock()
     source.get_completed_torrents.return_value = [{"hash": "abc", "state": "pausedUP"}]
-    target_row = {"state": "pausedUP"} if target_type == "qbittorrent" else {"state": 1, "complete": 1, "progress": 100}
+    target_row = {"hash": "abc", "save_path": "/data", "state": "pausedUP"} if target_type == "qbittorrent" else {"hash": "abc", "save_path": "/data", "state": 1, "complete": 1, "progress": 100}
     target.get_torrents.return_value = ([target_row] if duplicate else [], None)
     services = {"A": SimpleNamespace(name="A", type="qbittorrent", instance=source),
                 "B": SimpleNamespace(name="B", type=target_type, instance=target)}
@@ -159,7 +159,7 @@ def _service_case(tr, monkeypatch, value, global_default, duplicate, target_type
                              _transfer_delete_duplicate_default=global_default,
                              get_hash=lambda *a: "abc", get_save_path=lambda *a: "/data",
                              get_label=lambda *a: [], get_category=lambda *a: "",
-                             get_data=lambda *a: {}, convert_save_path=lambda *a: "/data")
+                             get_data=lambda *a: {}, save_data=Mock(), _seed_autostart=False, convert_save_path=lambda *a: "/data")
     task = dict(name="决策", from_downloader="A", to_downloader="B", no_paths="",
                 include_category="", include_labels="", exclude_labels="", empty_label_ok=True,
                 from_path="", to_path="")
@@ -170,6 +170,7 @@ def _service_case(tr, monkeypatch, value, global_default, duplicate, target_type
     monkeypatch.setattr(tr, "get_torrent_payloads", Mock(return_value={"abc": b"payload"}))
     monkeypatch.setattr(tr, "delete_source", Mock(return_value="deleted"))
     monkeypatch.setattr(tr, "begin_transfer", Mock(return_value=True))
+    monkeypatch.setattr(tr, "post_transfer_process", Mock(return_value=True))
     totals = dict(success=0, fail=0, skip=0, del_dup=0)
     tr._run_task(plugin, task, "手动", 0, totals)
     return totals
@@ -203,10 +204,14 @@ def test_service_submission_passes_resolved_bool(tr, monkeypatch, value, global_
 
 @pytest.mark.parametrize("value", VALUES[:10])
 @pytest.mark.parametrize("global_default", [False, True])
-def test_pipeline_delete_decision_uses_resolved_snapshot(runtime, tt, value, global_default):
+def test_pipeline_delete_decision_uses_current_task(runtime, tt, value, global_default):
     r = runtime
     task = {} if value is MISSING else {"delete_source": value}
     effective, _ = tt.resolve_task_flag(task, "delete_source", global_default)
+    r.plugin._transfer_delete_source_default = global_default
+    r.plugin._deletesource = not global_default
+    r.plugin._transfer_tasks = json.dumps([dict(task, name="current", from_downloader="source",
+                                                to_downloader="target")])
     assert r.pipeline.begin_transfer(r.plugin, r.services["source"], r.services["target"],
                                      "abc", {"state": "uploading"}, lambda: "abc", lambda: False,
                                      delete_source=effective)

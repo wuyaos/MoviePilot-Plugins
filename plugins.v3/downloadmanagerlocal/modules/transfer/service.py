@@ -18,7 +18,7 @@ from ...utils.torrent_adapter import get_label, get_save_path, get_torrent_name,
 from .recheck import _queue_lock, load_seed_recheck_queue, ensure_seed_recheck_worker, seed_is_ready, seed_is_error
 from .pipeline import (
     MAX_TRANSFER_ATTEMPTS, begin_transfer, delete_source, transfer_is_abandoned,
-    transfer_observe_skip,
+    transfer_observe_skip, save_source_record, _target_seeding,
 )
 from ..rename.service import _get_torrent_content_name, build_rename_config, resolve_retry_original_name
 from ..sitetag.service import create_temporary_tag, forget_temporary_tag, release_temporary_tag
@@ -180,7 +180,7 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
 
 
 def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
-                          stop_generation: Optional[int] = None):
+                          stop_generation: Optional[int] = None, outcome: Optional[dict] = None):
     """目标任务后处理逐步响应停止信号。"""
     if transfer_observe_skip(plugin, "转移后重命名及标签", torrent_hash):
         return False
@@ -229,11 +229,103 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
         return False
     if plugin._tag_enabled:
         tag_result = plugin._tag_torrent(dl, dl_type, torrent_hash, torrent_tags, trackers)
+        if outcome is not None:
+            outcome["site_tag_result"] = "failed" if tag_result is False else ("unknown_site" if tag_result is None else "ok")
         if tag_result is False:
             logger.error(f"【PT下载中心:转移做种】站点标签写入失败 hash={torrent_hash}")
         elif tag_result is None:
             logger.warning(f"【PT下载中心:转移做种】站点未识别，跳过站点标签 hash={torrent_hash}")
     return True
+
+
+def _reconcile_existing(plugin, task, from_service, to_service, source, targets, previous, delete_requested, generation):
+    """复用现场任务；不暂停、不删除或重加目的种子，也不继承旧校验许可。"""
+    if transfer_observe_skip(plugin, "复用目标及协调源任务", source["hash"]):
+        return "observed"
+    item = {
+        **previous, "source": "transfer", "task": task["name"],
+        "source_downloader": from_service.name, "source_hash": source["hash"],
+        "source_name": get_torrent_name(source["torrent"]),
+        "downloader": to_service.name, "hash": source["hash"],
+        "created_at": previous.get("created_at") or time.time(), "updated_at": time.time(),
+        "phase": "target_ready", "reuse_target": True, "source_deleted": False,
+        "delete_source_requested": bool(delete_requested), "hr_protected": False,
+        "tag_result": "pending", "source_result": "retained", "error": "",
+    }
+    def finish(result, reason):
+        item["source_result"] = reason
+        item["delete_source_pending"] = bool(delete_requested and not item["source_deleted"])
+        save_source_record(plugin, item)
+        return result
+
+    if _transfer_stopped(plugin, generation):
+        return "protected"
+    expected_path = plugin.convert_save_path(source["save_path"], task["from_path"], task["to_path"])
+    if len(targets) != 1 or not expected_path:
+        return finish("protected", "identity_unconfirmed")
+    target = targets[0]
+    actual_hash = plugin.get_hash(target, to_service.type)
+    actual_path = get_save_path(target, to_service.type)
+    if (str(actual_hash or "").lower() != str(source["hash"]).lower() or not actual_path
+            or os.path.normpath(actual_path) != os.path.normpath(expected_path)):
+        return finish("protected", "identity_unconfirmed")
+    state = get_torrent_state(target, to_service.type)
+    if not seed_is_ready(state, to_service.type, target) or seed_is_error(state, to_service.type):
+        return finish("protected", "target_not_ready")
+    if to_service.type == "transmission" and (target.get("error", 0) if isinstance(target, dict) else getattr(target, "error", 0)):
+        return finish("protected", "target_not_ready")
+
+    # 目标读取失败不允许用空标签覆盖；后处理再读现场，避免站点标签抹掉本轮业务标签。
+    business_tag = str(task.get("transfer_tag") or "").strip()
+    tags = set(get_label(target, to_service.type) or [])
+    try:
+        if business_tag and business_tag not in tags:
+            if _transfer_stopped(plugin, generation):
+                return "protected"
+            dl = to_service.instance
+            write = dl.set_torrents_tag if to_service.type == "qbittorrent" else dl.set_torrent_tag
+            if write(ids=source["hash"], tags=sorted(tags | {business_tag})) is False:
+                raise RuntimeError("目的端拒绝写入转移标签")
+        item["tag_result"] = "ok"
+    except Exception:
+        item["tag_result"] = "failed"
+        logger.warning(f"【PT下载中心:转移做种】补转移标签失败 hash={source['hash'][:8]}")
+    if not post_transfer_process(plugin, to_service, source["hash"], stop_generation=generation, outcome=item):
+        if _transfer_stopped(plugin, generation):
+            return "protected"
+        return finish("retry", "query_failed")
+    if _transfer_stopped(plugin, generation):
+        return "protected"
+    item["phase"] = "completed"
+    # 仅现场做种/100% 不构成真实校验证据；H&R 管理决定是否放行，不能借旧记录解除保护。
+    fresh = read_torrents(to_service, [source["hash"]])
+    if _transfer_stopped(plugin, generation):
+        return "protected"
+    if not fresh.success or len(fresh.items) != 1:
+        item["phase"] = "target_ready"
+        return finish("retry", "query_failed")
+    target = fresh.items[0]
+    state = get_torrent_state(target, to_service.type)
+    if (not seed_is_ready(state, to_service.type, target) or seed_is_error(state, to_service.type)
+            or get_save_path(target, to_service.type) != actual_path
+            or (to_service.type == "transmission" and (target.get("error", 0) if isinstance(target, dict) else getattr(target, "error", 0)))):
+        item["phase"] = "target_ready"
+        return finish("protected", "target_not_ready")
+    if bool(plugin._seed_autostart) and not _target_seeding(item, target, state, to_service):
+        if _transfer_stopped(plugin, generation):
+            return "protected"
+        if to_service.instance.start_torrents(ids=[source["hash"]]) is False:
+            return finish("retry", "start_failed")
+        item["phase"] = "target_ready"
+        return finish("retained", "start_requested")
+    if not delete_requested:
+        return finish("retained", "disabled")
+    if _transfer_stopped(plugin, generation):
+        return "protected"
+    result = delete_source(plugin, from_service.name, source["hash"])
+    item["source_deleted"] = result == "deleted"
+    item["hr_protected"] = result == "protected"
+    return finish(result, {"deleted": "deleted", "protected": "hr_protected", "retry": "delete_failed"}[result])
 
 
 def transfer(plugin, trigger_source: str = "手动/定时"):
@@ -413,11 +505,6 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
         if _transfer_stopped(plugin, generation):
             break
         source_hash = torrent_item["hash"]
-        content = payloads.get(source_hash)
-        if not content:
-            logger.warning(f"【PT下载中心:转移做种】任务「{task_name}」种子 {source_hash[:8]} 网络导出失败，跳过")
-            fail += 1
-            continue
 
         pending = load_seed_recheck_queue(plugin)
         if any(item.get("source_downloader") == from_service.name and
@@ -450,32 +537,29 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
             continue
         torrent_info = poll_result.items
         if torrent_info:
-            # 历史记录只在目的下载器确实仍持有该任务时才算完成：目标被删后必须能重新转移。
-            if previous.get("to_download") == to_service.name and previous.get("transfer_state") in ("completed", "stopped_after_add"):
-                logger.info(f"【PT下载中心:转移做种】任务「{task_name}」{source_hash[:8]} 已转移过且目的仍在（{previous.get('transfer_state')}），跳过")
-                skip += 1
-                continue
-            if delete_duplicate_effective:
-                target = torrent_info[0]
-                state = get_torrent_state(target, to_service.type)
-                if not seed_is_ready(state, to_service.type, target) or seed_is_error(state, to_service.type) or (to_service.type == "transmission" and getattr(target, "error", 0)):
-                    skip += 1
-                    continue
-                if _transfer_stopped(plugin, generation):
-                    break
-                logger.info(f"【PT下载中心:转移做种】任务「{task_name}」删除重复的源下载器任务（不含文件）：{source_hash[:8]} ...")
-                result = delete_source(plugin, from_service.name, source_hash)
-                if result == "retry":
-                    fail += 1
-                elif result == "protected":
-                    skip += 1
-                else:
-                    del_dup += 1
+            owned = (previous.get("to_download") == to_service.name
+                     and previous.get("target_origin", "transfer") == "transfer"
+                     and previous.get("transfer_state") in ("completed", "stopped_after_add", "target_ready"))
+            if previous.get("to_download") != to_service.name:
+                previous = {}
+            previous = {**previous, "target_origin": "transfer" if owned else "external"}
+            result = _reconcile_existing(
+                plugin, task, from_service, to_service, torrent_item, torrent_info, previous,
+                delete_source_effective if owned else delete_duplicate_effective, generation,
+            )
+            if result == "deleted":
+                del_dup += 1
+            elif result == "retry":
+                fail += 1
             else:
-                logger.info(f"【PT下载中心:转移做种】任务「{task_name}」{source_hash[:8]} 已在目的下载器中，跳过 ...")
                 skip += 1
             continue
 
+        content = payloads.get(source_hash)
+        if not content:
+            logger.warning(f"【PT下载中心:转移做种】任务「{task_name}」种子 {source_hash[:8]} 网络导出失败，跳过")
+            fail += 1
+            continue
         download_dir = plugin.convert_save_path(torrent_item.get('save_path'),
                                                 task["from_path"],
                                                 task["to_path"])
@@ -498,6 +582,7 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
             stopped=lambda: _transfer_stopped(plugin, generation),
             fallback=trigger_source in _AUTOMATIC_DELAY_TRIGGER_SOURCES,
             delete_source=delete_source_effective,
+            task_name=task_name,
             # 手动触发视为用户明确要求重试 → 计数清零；自动轮次带着历史计数继续累计。
             attempts=0 if manual else int(previous.get("attempts", 0) or 0),
         )

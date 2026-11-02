@@ -157,6 +157,7 @@ def begin_transfer(
     fallback: bool = False,
     delete_source: Optional[bool] = None,
     attempts: Optional[int] = None,
+    task_name: str = "",
 ):
     """先落盘源状态再暂停/添加；异常统一进入可续办回滚。"""
     if transfer_observe_skip(plugin, "暂停源并添加目标", str(source_hash)):
@@ -168,12 +169,13 @@ def begin_transfer(
     item = {
         "source": "transfer", "source_downloader": from_service.name,
         "source_hash": source_hash, "downloader": to_service.name, "hash": source_hash,
+        "task": task_name,
         # 转移发起时的源种子名：仅供数据页展示，缺失时为空串（不参与任何业务判定）。
         "source_name": get_torrent_name(torrent),
         "created_at": time.time(), "max_wait_minutes": plugin._seed_max_wait_minutes,
         "source_was_active": source_is_active(torrent, from_service.type),
         "pause_source": bool(getattr(plugin, "_pause_source", True)),
-        "delete_source_requested": (plugin._deletesource if delete_source is None else delete_source) is True,
+        "delete_source_requested": (getattr(plugin, "_transfer_delete_source_default", False) if delete_source is None else delete_source) is True,
         "autostart": bool(plugin._seed_autostart), "skipverify": bool(plugin._seed_skipverify),
         "phase": "source_pausing", "target_added": False,
         # 失败次数跨事务累计。未显式传入（None）时从来源记录续算——不能默认 0，否则调用方
@@ -369,6 +371,16 @@ def advance_transfer(plugin, item, service, task, stopped):
     from .service import post_transfer_process
     if stopped() or not post_transfer_process(plugin, service, item["hash"]):
         return False
+    # 删除是不可逆写边界：续办必须重读当前任务意图，不能消费开始时的旧快照。
+    from .tasks import load_transfer_tasks, resolve_task_flag
+    current_tasks = [t for t in load_transfer_tasks(plugin)
+                     if t["from_downloader"] == item["source_downloader"]
+                     and t["to_downloader"] == item["downloader"]
+                     and (not item.get("task") or t["name"] == item["task"])]
+    item["delete_source_requested"] = (
+        len(current_tasks) == 1
+        and resolve_task_flag(current_tasks[0], "delete_source", getattr(plugin, "_transfer_delete_source_default", False))[0]
+    )
     if item["delete_source_requested"]:
         if stopped():
             return False
