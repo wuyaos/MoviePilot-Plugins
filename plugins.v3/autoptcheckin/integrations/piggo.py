@@ -26,13 +26,14 @@ _LOCK = RLock()
 _SIGN = re.compile(r'[0-9a-fA-F]{64}\Z')
 _ALLOWED = {('GET', '/auth/guest-config'), ('POST', '/auth/srp/challenge'),
             ('POST', '/auth/srp/login'), ('GET', '/auth/sign'),
-            ('GET', '/calendar'), ('POST', '/calendar/attendance')}
+            ('GET', '/calendar'), ('POST', '/calendar/attendance'),
+            ('POST', '/me/lab-unlock/srp/challenge'), ('POST', '/me/lab-unlock/srp')}
 
 
 class PiggoError(Exception):
-    def __init__(self, message, *, auth=False, signature=False):
+    def __init__(self, message, *, auth=False, signature=False, locked=False):
         super().__init__(message)
-        self.auth, self.signature = auth, signature
+        self.auth, self.signature, self.locked = auth, signature, locked
 
 
 def state_path():
@@ -87,10 +88,11 @@ def save_state(path, account, client):
 
 
 class PiggoClient:
-    def __init__(self, session, cancel=None):
+    def __init__(self, session, cancel=None, diagnostics=None):
         self.session, self.cancel = session, cancel
-        self.token, self.sign = '', ''
+        self.token, self.sign = "", ""
         self.visitor = secrets.token_hex(16)
+        self.diagnostics = diagnostics if diagnostics is not None else []
 
     def check_cancel(self):
         if self.cancel is not None and self.cancel.is_set():
@@ -114,6 +116,16 @@ class PiggoClient:
         self.check_cancel()
         if (method, path) not in _ALLOWED:
             raise PiggoError('拒绝未登记的猪猪请求')
+        event = {'phase': {'/auth/guest-config': 'guest_config', '/auth/srp/challenge': 'srp_challenge',
+                           '/auth/srp/login': 'srp_login', '/auth/sign': 'sign_key',
+                           '/calendar': 'calendar_read', '/calendar/attendance': 'attendance_submit',
+                           '/me/lab-unlock/srp/challenge': 'unlock_challenge',
+                           '/me/lab-unlock/srp': 'unlock_proof'}[path],
+                 'method': method, 'path': BASE + path}
+        self.diagnostics.append(event)
+        def reject(message, category, *, auth=False, signature=False, locked=False):
+            event['category'] = category
+            raise PiggoError(message, auth=auth, signature=signature, locked=locked)
         timestamp = str(int(time.time()))
         headers = {'Accept': 'application/json', 'Origin': ORIGIN, 'Referer': ORIGIN + '/calendar',
                    'X-Requested-With': 'XMLHttpRequest', 'visitorId': self.visitor,
@@ -122,34 +134,49 @@ class PiggoClient:
             headers['Authorization'] = 'Bearer ' + self.token
         if signed:
             if not _SIGN.fullmatch(self.sign):
-                raise PiggoError('猪猪请求签名不可用')
+                reject('猪猪请求签名不可用', 'signature')
             headers.update(signed_headers(self.sign, method, BASE + path, timestamp, secrets.token_hex(16)))
-        response = self.session.request(method, ORIGIN + BASE + path, json=payload, headers=headers,
-                                        timeout=25, allow_redirects=False)
+        try:
+            response = self.session.request(method, ORIGIN + BASE + path, json=payload, headers=headers,
+                                            timeout=25, allow_redirects=False)
+        except Exception as exc:
+            event.update(category='network', exception_type=type(exc).__name__)
+            raise PiggoError('猪猪请求异常，未重复登录或提交') from None
         status = response.status_code
-        if status == 401:
-            raise PiggoError('猪猪认证已失效', auth=True)
+        event['http'] = status
         if status >= 500 or status == 429 or 300 <= status < 400:
-            raise PiggoError(f'猪猪接口 HTTP {status}，未重复登录或提交')
+            reject(f'猪猪接口 HTTP {status}，未重复登录或提交', 'network')
         try:
             body = response.json()
-        except (ValueError, TypeError):
-            raise PiggoError('猪猪接口不是有效 JSON') from None
+        except (ValueError, TypeError) as exc:
+            event['exception_type'] = type(exc).__name__
+            if status == 401:
+                reject('猪猪认证已失效', 'auth', auth=True)
+            reject('猪猪接口不是有效 JSON', 'invalid_json')
         if not isinstance(body, dict):
-            raise PiggoError('猪猪接口结构未确认')
+            if status == 401:
+                reject('猪猪认证已失效', 'auth', auth=True)
+            reject('猪猪接口结构未确认', 'structure')
         code = body.get('code')
-        if code in (401, '401'):
-            raise PiggoError('猪猪认证已失效', auth=True)
+        # 只记录数字或已知锁屏码，不反射任意远端字符串/凭据。
+        event['api_code'] = (code if type(code) is int else str(code)
+                             if isinstance(code, str) and re.fullmatch(r'-?\d{1,12}|idle_locked', code) else None)
+        if status == 401 and code == 'idle_locked':
+            reject('猪猪会话已锁定，需要当前密码解锁', 'idle_locked', locked=True)
+        if status == 401 or code in (401, '401'):
+            reject('猪猪认证已失效', 'auth', auth=True)
         if status != 200 or code != 0:
-            # 错误原文可能反射账号/Token，只有错误类别可进入日志或通知。
             message = str(body.get('msg') or body.get('message') or '')
             signature = signed and status == 403 and bool(re.search(r'签名|signature|hmac', message, re.I))
             if re.search(r'验证码|驗證碼|captcha|two.factor|双重|雙重|totp', message, re.I):
-                raise PiggoError('猪猪需要验证码或额外认证，已停止本轮登录')
-            raise PiggoError('猪猪接口拒绝请求，未重复提交', signature=signature)
+                reject('猪猪需要验证码或额外认证，已停止本轮登录', 'challenge')
+            reject('猪猪接口拒绝请求，未重复提交',
+                   'signature' if signature else 'access_denied' if status in (403, 423) else 'business',
+                   signature=signature)
         data = body.get('data')
         if not isinstance(data, dict):
-            raise PiggoError('猪猪接口数据未确认')
+            reject('猪猪接口数据未确认', 'structure')
+        event['category'] = 'ok'
         return data
 
     def get_sign(self):
@@ -173,6 +200,20 @@ class PiggoClient:
         if not state:
             raise PiggoError('猪猪今日签到状态回读未确认')
         return state
+
+    def unlock(self, username, password):
+        """空闲锁屏不是登录失效：保留现有 JWT/Cookie，单次 SRP 二次验证。"""
+        challenge = self.request('POST', '/me/lab-unlock/srp/challenge')
+        if not all(isinstance(challenge.get(k), str) and challenge[k] for k in ('s', 'B', 'ticket')):
+            raise PiggoError('猪猪解锁 SRP 挑战未确认')
+        if len(challenge['B']) > 512 or len(challenge['s']) > 512:
+            raise PiggoError('猪猪解锁 SRP 挑战长度异常')
+        calculated = proof(str(challenge.get('i') or username), password, challenge['s'], challenge['B'])
+        verified = self.request('POST', '/me/lab-unlock/srp', payload={
+            'ticket': challenge['ticket'], 'a': calculated['a'], 'm1': calculated['m1']})
+        if not hmac.compare_digest(str(verified.get('m2') or '').lower(), calculated['m2']):
+            self.diagnostics[-1]['category'] = 'proof_mismatch'
+            raise PiggoError('猪猪服务端解锁证据校验失败，未保存凭据')
 
     def login(self, username, password):
         self.token = self.sign = ''
@@ -199,12 +240,15 @@ class PiggoClient:
 
 def run_piggo(site, info, *, action, config=None, cancel=None, read_only=False, authenticated=None):
     config = config or {}
+    diagnostics = []
+    submit_error = None
     def pending(message):
         return (LoginResult(LoginStatus.UNCONFIRMED, message) if action == 'login'
                 else SignResult(SignStatus.UNCONFIRMED, message))
     def cancelled():
         return cancel is not None and cancel.is_set()
     def execute():
+        nonlocal submit_error
         username = str(config.get('piggo_username') or info.get('piggo_username') or '').strip()
         password = str(config.get('piggo_password') or info.get('piggo_password') or '')
         if cancelled():
@@ -218,27 +262,38 @@ def run_piggo(site, info, *, action, config=None, cancel=None, read_only=False, 
             return pending('猪猪无匹配的 HTTP 登录态，请先执行登录；只读核验不提交账号密码')
         flags = resolve(site.id, config, mp_proxy=bool(info.get('proxy')))
         with new_session(cloak_proxy(flags['proxy'], config)) as session:
-            client = PiggoClient(session, cancel)
+            client = PiggoClient(session, cancel, diagnostics=diagnostics)
             restored = state is not None
-            if restored:
-                client.restore(state)
-                try:
-                    before = client.calendar()
-                except PiggoError as exc:
-                    if not exc.auth or read_only:
-                        raise
-                    # 每次执行最多一次完整 SRP 登录；未知响应/5xx/超时不会进入这里。
+            unlocked = False
+            # 仅首次读状态允许恢复登录/解锁；提交后的回读不经过这里。
+            try:
+                if restored:
+                    client.restore(state)
+                    try:
+                        before = client.calendar()
+                    except PiggoError as exc:
+                        if not exc.auth or read_only:
+                            raise
+                        before = client.login(username, password)
+                        restored = False
+                else:
                     before = client.login(username, password)
-                    restored = False
-            else:
-                before = client.login(username, password)
+            except PiggoError as exc:
+                if not exc.locked or read_only or not client.token:
+                    raise
+                client.unlock(username, password)
+                unlocked = True
+                # 解锁完成仍须新 GET 确认；再次锁定不循环解锁/重登。
+                before = client.calendar()
             if not read_only:
                 save_state(path, account, client)
                 if authenticated is not None:
                     authenticated(LoginResult(LoginStatus.LOGIN_OK, '猪猪会话已确认'),
                                   {c.name: c.value for c in session.cookies.jar})
             if action == 'login':
-                return LoginResult(LoginStatus.LOGIN_OK, '已恢复猪猪登录态' if restored else '猪猪账号密码登录成功')
+                message = ('猪猪会话已解锁' if unlocked else
+                           '已恢复猪猪登录态' if restored else '猪猪账号密码登录成功')
+                return LoginResult(LoginStatus.LOGIN_OK, message)
             if before['status'] == 'checked':
                 return SignResult(SignStatus.ALREADY, '今日已签到', evidence=Evidence(
                     date=before['date'], status='checked', source='calendar'))
@@ -247,8 +302,8 @@ def run_piggo(site, info, *, action, config=None, cancel=None, read_only=False, 
             # 写请求永远不自动重放；即使连接在服务端受理后中断也必须新 GET 判定。
             try:
                 client.request('POST', '/calendar/attendance', payload={'ymd': before['date']}, signed=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                submit_error = type(exc).__name__
             if cancelled():
                 return SignResult(SignStatus.CANCELLED, '已停止，签到结果待下轮回读')
             after = client.calendar()
@@ -266,5 +321,13 @@ def run_piggo(site, info, *, action, config=None, cancel=None, read_only=False, 
         else:
             # 第三方异常可能包含密码/Token/签名，不拼接异常文本。
             result = pending(str(exc) if isinstance(exc, PiggoError) else '猪猪 HTTP 执行未确认：' + type(exc).__name__)
+    if diagnostics:
+        result.metadata["piggo"] = diagnostics
+        if result.status in (LoginStatus.UNCONFIRMED, SignStatus.UNCONFIRMED):
+            last = diagnostics[-1]
+            result.message += (f"（{last['phase']} {last['path']}"
+                               f"；HTTP {last.get('http', '-')}；code {last.get('api_code', '-')}）")
+    if submit_error:
+        result.metadata["submit_error"] = submit_error
     result.metadata['transport'] = 'http'
     return result

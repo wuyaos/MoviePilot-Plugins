@@ -53,6 +53,8 @@ def custom_client(credential, info, config, proxy=None):
     from .cloak import CloakHttpClient
     client = CloakHttpClient(http, info, SimpleNamespace(id=info.get("id", "custom"), url=info["url"]), proxy=proxy)
     class ReadHttpSubmit:
+        @property
+        def cookies(self): return http.cookies
         def get(self, url): return client.get(url)
         def post(self, url, **kwargs): return http.post(url, **kwargs)
         def get_bytes(self, url): return http.get_bytes(url)
@@ -94,46 +96,56 @@ def run_custom(runner, site_id, info, *, enabled, selected=False, config=None,
             return finish(SignResult.skipped())
         if runner.stop.is_set():
             return finish(SignResult(SignStatus.CANCELLED, '已停止，未访问'))
-        cookie = info.get('cookie') or ''
-        credential_source = 'local_cookie'
-        if not cookie.strip():
-            # 条目 Cookie 为空时走统一候选链：Cookie 表 → CookieCloud（按站点域名取同域 Cookie）。
-            for candidate in cookie_candidates(site_id, info, '', getattr(runner, 'get_data', None),
-                                               info.get('url') or ''):
-                cookie, credential_source = candidate.value, candidate.source
+        url = info.get('url') or ''
+        info['id'] = site_id
+        if urlsplit(url).scheme not in {'http', 'https'} or not urlsplit(url).netloc:
+            return finish(SignResult(SignStatus.UNCONFIRMED, '自定义站点地址无效'))
+        # 条目 Cookie 是 local_cookie，不冒充宿主管理站来源；统一表始终优先。
+        candidate_info = {**info, 'cookie': ''}
+        sources = []
+        result = SignResult(SignStatus.AUTH_FAILED, '缺少 Cookie')
+        for credential in cookie_candidates(site_id, candidate_info, info.get('cookie') or '',
+                                            getattr(runner, 'get_data', None), url):
+            if runner.stop.is_set():
+                result = SignResult(SignStatus.CANCELLED, '已停止，未访问')
                 break
-        if not cookie.strip():
-            return finish(SignResult(SignStatus.AUTH_FAILED, '缺少 Cookie'))
-        try:
-            url = info.get('url') or ''
-            info["id"] = site_id
-            if urlsplit(url).scheme not in {'http', 'https'} or not urlsplit(url).netloc:
-                return finish(SignResult(SignStatus.UNCONFIRMED, '自定义站点地址无效'))
-            credential = Credential(credential_source, cookie)
-            # 仿真对签到与登录一致生效（旧「custom 登录不走仿真」契约由 site_emulate 取代）。
-            client_info = {**info, "emulate": flags['emulate'], "proxy": flags['proxy']}
-            with custom_client(credential, client_info, config,
-                               proxy=cloak_proxy(flags['proxy'], config)) as client:
-                if not read_only and action == 'sign':
-                    ctx = SignContext(site_id, credential, client, site_lock=runner.locks, cancel=runner.stop)
-                    result = CustomNexusSignin(site_id, info).signin(ctx)
-                elif action == 'login':
-                    result = read_login_twice(lambda: client.get(url), CustomNexusSignin(site_id, info))
-                else:
-                    page = client.get(url)
-                    if page is not None and login_redirect(page):
-                        # custom 条目凭据固定为本条目 Cookie，跳登录页即 Cookie 失效。
-                        result = LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效（跳转登录页）')
-                    elif not page_available(page):
-                        result = LoginResult(LoginStatus.UNCONFIRMED, '站点页面不可达')
-                    elif html.fromstring(page.text).xpath('//input[translate(@type,"PASSWORD","password")="password"]'):
-                        result = LoginResult(LoginStatus.AUTH_FAILED, '页面包含登录表单')
+            sources.append(credential.source)
+            submitted = False
+            try:
+                client_info = {**info, 'emulate': flags['emulate'], 'proxy': flags['proxy']}
+                with custom_client(credential, client_info, config,
+                                   proxy=cloak_proxy(flags['proxy'], config)) as client:
+                    if not read_only and action == 'sign':
+                        # 一旦尝试提交，认证失败也不能换源重放动作。
+                        class SubmitGuard:
+                            def __getattr__(self, name):
+                                return getattr(client, name)
+
+                            def post(self, *args, **kwargs):
+                                nonlocal submitted
+                                submitted = True
+                                return client.post(*args, **kwargs)
+
+                        ctx = SignContext(site_id, credential, SubmitGuard(), site_lock=runner.locks, cancel=runner.stop)
+                        result = CustomNexusSignin(site_id, info).signin(ctx)
+                    elif action == 'login':
+                        result = read_login_twice(lambda: client.get(url), CustomNexusSignin(site_id, info))
                     else:
-                        result = LoginResult(LoginStatus.LOGIN_OK, '已登录')
-                # 成功路径把会话 Cookie 回写统一 Cookie 表（下次优先于 CookieCloud）。
-                persist_cookie_result(result, client, site_id, credential.source,
-                                      getattr(runner, 'get_data', None), getattr(runner, 'save_data', None))
-        except Exception as exc:
-            result = SignResult(SignStatus.UNCONFIRMED,
-                                f'自定义站点执行未确认：{type(exc).__name__} {str(exc)[:80]}'[:100])
+                        page = client.get(url)
+                        if page is not None and login_redirect(page):
+                            result = LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效（跳转登录页）')
+                        elif not page_available(page):
+                            result = LoginResult(LoginStatus.UNCONFIRMED, '站点页面不可达')
+                        elif html.fromstring(page.text).xpath('//input[translate(@type,"PASSWORD","password")="password"]'):
+                            result = LoginResult(LoginStatus.AUTH_FAILED, '页面包含登录表单')
+                        else:
+                            result = LoginResult(LoginStatus.LOGIN_OK, '已登录')
+                    persist_cookie_result(result, client, site_id, credential.source,
+                                          getattr(runner, 'get_data', None), getattr(runner, 'save_data', None))
+            except Exception as exc:
+                result = SignResult(SignStatus.UNCONFIRMED,
+                                    f'自定义站点执行未确认：{type(exc).__name__}')
+            if submitted or result.status != SignStatus.AUTH_FAILED:
+                break
+        result.metadata['cookie_sources'] = sources
         return finish(result)

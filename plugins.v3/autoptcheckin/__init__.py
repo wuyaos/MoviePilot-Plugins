@@ -38,7 +38,7 @@ class AutoPtCheckin(_PluginBase):
     plugin_id = "AutoPtCheckin"
     plugin_name = "PT 签到中心"
     plugin_desc = "PT 站点自动签到与模拟登录"
-    plugin_version = "4.3.14"
+    plugin_version = "4.3.15"
     plugin_author = "wuyaos"
     plugin_config_prefix = "autoptcheckin_"
 
@@ -788,10 +788,13 @@ class AutoPtCheckin(_PluginBase):
 
     def _run_with_retry(self, site_id, action, trigger):
         result = self._execute_site(site_id, trigger=trigger, action=action)
-        if (result or {}).get("status") in ("skipped", "cancelled"):
+        if ((result or {}).get("status") in ("skipped", "cancelled")
+                or (result or {}).get("reason") == "auth_failed"):
             return result
         attempts = max(0, int(self._config.get("retry_count", 3) or 0))
         for _ in range(attempts):
+            if (result or {}).get("reason") == "auth_failed":
+                break
             if self._track_store().state_of(str(site_id), action) != FAILED:
                 break
             result = self._execute_site(site_id, trigger=trigger, action=action)

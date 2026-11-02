@@ -5,6 +5,8 @@ from email.message import Message
 from http.cookies import SimpleCookie
 from uuid import uuid4
 from threading import RLock
+from http.cookiejar import CookieJar
+from requests.cookies import create_cookie
 
 from .cloak import native_cloak_client, CloakHttpClient, run_isolated
 from . import cloudsign
@@ -96,13 +98,52 @@ class NativeHttpClient:
         parsed = SimpleCookie()
         parsed.load(credential.value)
         self.cookies = {key: morsel.value for key, morsel in parsed.items()}
+        self._cookie_jar = None
+        self._cookie_snapshot = {}
+
+    def _prepare_cookies(self, session, url):
+        # Seed once with host scope; per-request dict cookies create unscoped duplicates
+        # and resurrect values that the server deleted from its real cookie jar.
+        cookies = session.cookies
+        jar = cookies.jar if isinstance(getattr(cookies, 'jar', None), CookieJar) else cookies
+        self._cookie_url = getattr(self, '_cookie_url', None) or self.info.get('url') or url
+        host = urlsplit(self._cookie_url).hostname
+        previous = self._cookie_snapshot if self._cookie_jar is jar else {}
+        for name in previous.keys() - self.cookies.keys():
+            for cookie in list(jar):
+                if cookie.name == name and cookie.domain.lstrip('.') == host and cookie.path == '/':
+                    jar.clear(cookie.domain, cookie.path, cookie.name)
+        for name, value in self.cookies.items():
+            if previous.get(name) != value:
+                cookie = create_cookie(name, value, domain=host, path='/')
+                cookie.domain_specified = False
+                jar.set_cookie(cookie)
+        self._cookie_jar = jar
+        self._cookie_snapshot = dict(self.cookies)
+
+    def _refresh_cookies(self):
+        # The persisted string has no domain/path fields: expose only this site's
+        # root cookies. Private-path/foreign cookies stay scoped in the live jar.
+        host = urlsplit(self._cookie_url).hostname
+        secure = urlsplit(self._cookie_url).scheme == 'https'
+        values = {}
+        for cookie in sorted(self._cookie_jar, key=lambda item: len(item.domain)):
+            domain = cookie.domain.lstrip('.')
+            matches = host == domain or (cookie.domain_specified and host.endswith('.' + domain))
+            if matches and cookie.path == '/' and not cookie.is_expired() and (secure or not cookie.secure):
+                values[cookie.name] = cookie.value
+        self.cookies = values
+        self._cookie_snapshot = dict(values)
 
     def retain_cookies(self, names):
         self.cookies = {key: value for key, value in self.cookies.items() if key in names}
         for session in (self.session, self._owned_session):
             if session is not None:
-                session.cookies.clear()
-                session.cookies.update(self.cookies)
+                cookies = session.cookies
+                jar = cookies.jar if isinstance(getattr(cookies, 'jar', None), CookieJar) else cookies
+                for cookie in list(jar):
+                    if cookie.name not in names:
+                        jar.clear(cookie.domain, cookie.path, cookie.name)
 
     def _fetch(self, method, url, **kwargs):
         """页面、表单与验证码共用 Cookie/指纹；请求异常不换通道重放。"""
@@ -122,8 +163,9 @@ class NativeHttpClient:
             if referer:
                 request_headers['Referer'] = referer
             request_headers.update(headers)
+            self._prepare_cookies(self._owned_session, url)
             response = getattr(self._owned_session, method)(
-                url, headers=request_headers, cookies=self.cookies, timeout=20,
+                url, headers=request_headers, timeout=20,
                 allow_redirects=True,
                 proxies=proxy,
                 **kwargs)
@@ -136,16 +178,15 @@ class NativeHttpClient:
                 session = self._owned_session
             else:
                 session = self.session
-            request = RequestUtils(session=session, cookies=self.cookies,
+            self._prepare_cookies(session, url)
+            request = RequestUtils(session=session, cookies=None,
                                    ua=browser_ua(self.info.get('ua')), referer=referer,
                                    timeout=20, headers=headers or None,
                                    content_type='application/json; charset=UTF-8' if 'json' in kwargs else 'application/x-www-form-urlencoded; charset=UTF-8',
                                    proxies=settings.PROXY if self.info.get('proxy') else None)
             response = getattr(request, method + '_res')(url=url, **kwargs)
-        # Session 包含跳转中间响应的 Set-Cookie；后续取图/提交必须使用新 Cookie。
-        self.cookies.update(session.cookies.get_dict())
-        if response is not None:
-            self.cookies.update(response.cookies.get_dict())
+        # The transport jar owns Set-Cookie updates/deletions across redirects.
+        self._refresh_cookies()
         return response
 
     def _request(self, method, url, **kwargs):
@@ -304,7 +345,8 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
                     cloud = cloudsign.sign(site.id, site.url, credential.value, config or {})
                     result = SignResult(SignStatus(cloud.status), cloud.message)
                     result.metadata['transport'] = 'cloud'
-                    persist_cookie_result(result, None, site.id, credential.source, get_data, save_data)
+                    # 只保存本次被云端验证的输入，不搬运绑定云端出口的挑战 Cookie。
+                    persist_cookie_value(result, credential.value, site.id, credential.source, get_data, save_data)
                     if result.status != SignStatus.AUTH_FAILED:
                         break
                     continue
@@ -453,9 +495,16 @@ def persist_cookie_result(result, http, site_id, cookie_source, get_data, save_d
     if not cookie_jar:
         return
     refreshed_cookie = '; '.join(f"{name}={value}" for name, value in cookie_jar.items())
+    persist_cookie_value(result, refreshed_cookie, site_id, cookie_source, get_data, save_data)
+
+
+def persist_cookie_value(result, cookie, site_id, cookie_source, get_data, save_data):
+    """Persist only proven credentials; uncertain/failed results never overwrite the table."""
+    if not callable(save_data) or result.status not in ("login_ok", "success", "signed", "already") or not cookie:
+        return
     with _COOKIE_TABLE_LOCK:
         cookie_table = load_cookie_table(get_data)
-        record_cookie(cookie_table, site_id, refreshed_cookie, cookie_source)
+        record_cookie(cookie_table, site_id, cookie, cookie_source)
         save_cookie_table(save_data, cookie_table)
 
 
@@ -648,7 +697,7 @@ def run_integration(runner, site_id, name, info, config, action='sign', trigger=
                     result = integration.login(http, credentials)
                     persist_cookie_result(result, http, site_id, 'password_login', get_data, save_data)
                     if result.status == LoginStatus.LOGIN_OK and action != 'login':
-                        result = integration.signin(http, credentials)
+                        result = integration.signin(http, {})
                         persist_cookie_result(result, http, site_id, 'password_login', get_data, save_data)
                     elif action != 'login':
                         result = SignResult(SignStatus(result.status.value), result.message)

@@ -106,7 +106,7 @@ class CloudSignError(Exception):
 
 @dataclass
 class CloudResult:
-    status: str  # success / failed / protocol_pending / network_error
+    status: str  # success / failed / auth_failed (pre-submit only) / protocol_pending / network_error
     message: str
 
 
@@ -375,6 +375,25 @@ def inject_script(token: str, rule: dict) -> str:
 })()""" % (json.dumps(token or ""), pending, int(rule.get("auto_wait") or 30000))
 
 
+def _pre_submit_auth_failed(page_html: str) -> bool:
+    """Only a real login form proves authentication loss, never a generic 403/challenge."""
+    from lxml import html as parser
+    try:
+        tree = parser.fromstring(page_html)
+    except (ValueError, parser.etree.ParserError):
+        return False
+    for form in tree.xpath("//form"):
+        action = urllib.parse.urlsplit(form.get("action") or "").path.lower().rstrip("/").rsplit("/", 1)[-1]
+        if action not in {"login", "login.php", "takelogin", "takelogin.php"}:
+            continue
+        inputs = form.xpath(".//input[not(@hidden) and not(ancestor::*[@hidden])]")
+        password = any((node.get("type") or "").lower() == "password" for node in inputs)
+        identity = any((node.get("name") or "").lower() in {"username", "email", "identifier"}
+                       and (node.get("type") or "text").lower() != "hidden" for node in inputs)
+        if password and identity:
+            return True
+    return False
+
 def _classify(html: str, rule: dict) -> str:
     """按 success → already → pending 顺序匹配关键词（成功页常带「已连续签到 N 天」，先判成功）。"""
     text = html or ""
@@ -478,6 +497,8 @@ def _sign_auto(endpoint: str, token: str, target: str, cookies: list, rule: dict
             continue
         # Every attempt checks page state before deciding whether to retry or submit.
         html = str((stage1.get("after") or {}).get("html") or "")
+        if _pre_submit_auth_failed(html):
+            return _result("auth_failed", "云签 Cookie 已失效（提交前发现登录表单，未提交）")
         state = _classify(html, rule)
         if state in ("success", "already"):
             return _state_result(state, rule)
@@ -513,7 +534,7 @@ def _sign_auto(endpoint: str, token: str, target: str, cookies: list, rule: dict
     if state == "unknown":
         diag = _diag_hint(stage2.get("autoDiag"))
         err = _error_suffix(stage2)
-        return _result("failed", f"云签提交后未确认签到：页面未见成功/已签标记{'；' + diag if diag else ''}{err}")
+        return _result("protocol_pending", f"云签提交后未确认签到：页面未见成功/已签标记{'；' + diag if diag else ''}{err}")
     return _state_result(state, rule)
 
 
@@ -557,7 +578,7 @@ def _state_result(state: str, rule: dict, clicked: bool = False, page_html: str 
     verb = "点击提交" if clicked else "提交"
     snippet = _page_text(page_html)
     suffix = f"，片段「{snippet}」" if snippet else ""
-    return _result("failed", f"云签{verb}后未确认签到：页面未见成功/已签标记{suffix}")
+    return _result("protocol_pending", f"云签{verb}后未确认签到：页面未见成功/已签标记{suffix}")
 
 __all__ = ["CLOUD_SITES", "CloudResult", "CloudSignError", "bql_endpoint", "configured",
            "cookie_objects", "enabled", "session_endpoint", "sign"]

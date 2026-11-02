@@ -35,10 +35,18 @@ def host_stubs(monkeypatch):
 
 @pytest.fixture
 def cffi(monkeypatch):
+    import requests
     session = Mock()
-    session.cookies.get_dict.return_value = {'rotated': 'fixture'}
-    session.get.return_value = response(cookies={'image': 'fixture'})
-    session.post.return_value = response()
+    session.cookies = requests.cookies.RequestsCookieJar()
+    def get(*args, **kwargs):
+        session.cookies.set('rotated', 'fixture', domain='fixture.invalid', path='/')
+        session.cookies.set('image', 'fixture', domain='fixture.invalid', path='/')
+        return response()
+    def post(*args, **kwargs):
+        session.cookies.set('rotated', 'fixture', domain='fixture.invalid', path='/')
+        return response()
+    session.get.side_effect = get
+    session.post.side_effect = post
     factory = Mock(return_value=session)
     monkeypatch.setitem(sys.modules, 'curl_cffi', SimpleNamespace(requests=SimpleNamespace(Session=factory)))
     import app.sdk.network as network
@@ -62,7 +70,8 @@ def test_cffi_forwards_body_headers_and_referer(cffi, payload):
         assert all(args[k] == v for k, v in payload.items())
         assert args['headers']['X-CSRF-Token'] == 'fixture'
         assert args['headers']['Referer'] == 'https://fixture.invalid/form'
-        assert args['cookies']['rotated'] == 'fixture'
+        assert 'cookies' not in args  # the scoped session jar, not an unscoped dict
+        assert http.cookies['rotated'] == 'fixture'
     factory.assert_called_once_with(impersonate='chrome')
     session.close.assert_called_once()
     fallback.assert_not_called()
@@ -193,7 +202,7 @@ def test_rousi_uses_available_reward_mode_or_stops_before_post(settings, expecte
 
 def test_rousi_account_refresh_then_claim_has_final_get():
     auth = {'user': {'id': 1}, 'csrf_token': 'fixture'}
-    http = PeerClient([peer_body({}, 401), peer_body({}, 401), peer_body(auth), peer_body(auth),
+    http = PeerClient([peer_body({}, 401), peer_body(auth), peer_body(auth),
                        peer_body({'claimed_today': False, 'policy': {'settings': {'enabled': True, 'fixed_enabled': True}}}), peer_body({'success': True}),
                        peer_body({'claimed_today': True})])
     result = rousi.signin(http, {'rousi_username': 'fixture', 'rousi_password': 'fixture'})

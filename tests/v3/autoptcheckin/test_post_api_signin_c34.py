@@ -248,9 +248,12 @@ def test_native_http_cookie_refresh_json_headers(monkeypatch):
     monkeypatch.setitem(sys.modules, 'app.sdk.network', network)
     monkeypatch.setitem(sys.modules, 'app.sdk.config', config)
     response = Mock(text='{}', url='https://fixture.invalid/', status_code=200)
-    response.cookies.get_dict.return_value = {'refreshed': 'synthetic'}
-    network.RequestUtils.return_value.get_res.return_value = response
-    network.RequestUtils.return_value.post_res.return_value = response
+    def refresh(**kwargs):
+        session = network.RequestUtils.call_args.kwargs['session']
+        session.cookies.set('refreshed', 'synthetic', domain='fixture.invalid', path='/')
+        return response
+    network.RequestUtils.return_value.get_res.side_effect = refresh
+    network.RequestUtils.return_value.post_res.side_effect = refresh
     client = NativeHttpClient(Credential('managed_site', 'hdchina=synthetic; stale=synthetic'), {})
     other = NativeHttpClient(Credential('managed_site', 'other=synthetic'), {})
     client.retain_cookies({'hdchina'})

@@ -67,7 +67,7 @@ def test_migrate_local_store_moves_host_keys(tmp_path, monkeypatch):
     """宿主 plugindata 的 history/icon/按日 key → 本地库，源 key 删除，标记置位。"""
     import autoptcheckin as module
 
-    data = {'history.records': [{'time': '2026-10-19T12:00:00+00:00', 'site': 'fixture', 'status': 'success'}],
+    data = {'history.records': [{'time': datetime.now(timezone.utc).isoformat(), 'site': 'fixture', 'status': 'success'}],
             'icon.cache': {'hdsky': 'AAA'},
             '7月29日': '[{"site": "legacy"}]', '10月25日': '[{"site": "legacy2"}]'}
     deleted = []

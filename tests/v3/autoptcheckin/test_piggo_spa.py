@@ -82,6 +82,14 @@ def server(monkeypatch, tmp_path):
                 assert 'password' not in kwargs['json']
                 self.cookies.set('pigo_np_web_session', 'fixture-cookie', domain='piggo.me', path='/')
                 data = {'token': 'fixture-token', 'm2': 'fixture-m2', 'sign': 'a' * 64}
+            elif path == '/me/lab-unlock/srp/challenge':
+                assert kwargs['headers']['Authorization'] == 'Bearer fixture-token'
+                assert self.cookies.get('pigo_np_web_session') == 'fixture-cookie'
+                data = {'i': 'fixture-user', 's': 'ab', 'B': 'cd', 'ticket': 'unlock-ticket'}
+            elif path == '/me/lab-unlock/srp':
+                assert kwargs['json'] == {'ticket': 'unlock-ticket', 'a': 'fixture-a', 'm1': 'fixture-m1'}
+                assert kwargs['headers']['Authorization'] == 'Bearer fixture-token'
+                data = {'m2': 'fixture-m2'}
             elif path == '/auth/sign':
                 assert kwargs['headers']['Authorization'] == 'Bearer fixture-token'
                 assert self.cookies.get('pigo_np_web_session') == 'fixture-cookie'
@@ -264,3 +272,160 @@ def test_dispatch_does_not_require_cookie_or_browser(monkeypatch, action):
 def test_srp_rejects_invalid_server_public(public):
     with pytest.raises(ValueError):
         srp.proof('fixture-user', 'fixture-password', '001122', public)
+
+
+@pytest.mark.parametrize("path,phase", [("/auth/guest-config", "guest_config"),
+    ("/auth/srp/challenge", "srp_challenge"), ("/auth/srp/login", "srp_login"),
+    ("/calendar", "calendar_read")])
+def test_diagnostic_records_stage_without_remote_secrets(server, path, phase):
+    server.errors[path] = [response(423, "secret-token", msg="fixture-password fixture-token visitorId=private")]
+    result = run(server)
+    last = result.metadata["piggo"][-1]
+    assert last["phase"] == phase and last["path"] == flow.BASE + path
+    assert last["http"] == 423 and last["api_code"] is None
+    assert last["category"] == "access_denied"
+    assert phase in result.message and "HTTP 423" in result.message
+    for secret in ("fixture-password", "fixture-token", "secret-token", "private"):
+        assert secret not in str(result)
+    assert not calls(server, "/calendar/attendance")
+
+
+def test_submit_failure_diagnostic_survives_successful_readback(server):
+    server.post_error = True
+    result = run(server)
+    assert result.status == SignStatus.SUCCESS
+    submit = [e for e in result.metadata["piggo"] if e["phase"] == "attendance_submit"]
+    assert len(submit) == 1 and submit[0]["category"] == "network"
+    assert submit[0]["exception_type"] == "TimeoutError"
+    assert result.metadata["submit_error"] == "PiggoError"
+    assert result.metadata["piggo"][-1]["category"] == "ok"
+
+
+def test_sign_key_failure_is_not_srp_reauthentication(server):
+    assert run(server, action="login").status == LoginStatus.LOGIN_OK
+    server.errors["/auth/sign"] = [response(503)]
+    result = run(server)
+    assert result.status == SignStatus.UNCONFIRMED
+    assert result.metadata["piggo"][-1]["phase"] == "sign_key"
+    assert len(calls(server, "/auth/srp/login")) == 1
+
+
+UNLOCK_CHALLENGE = '/me/lab-unlock/srp/challenge'
+UNLOCK_PROOF = '/me/lab-unlock/srp'
+
+
+@pytest.mark.parametrize('path', ['/auth/sign', '/calendar'])
+@pytest.mark.parametrize('action', ['login', 'sign'])
+def test_idle_lock_preserves_session_and_unlocks_before_action(server, path, action):
+    run(server, action='login')
+    server.errors[path] = [response(401, 'idle_locked')]
+    result = run(server, action=action)
+    assert result.status == (LoginStatus.LOGIN_OK if action == 'login' else SignStatus.SUCCESS)
+    assert len(calls(server, '/auth/srp/login')) == 1
+    assert len(calls(server, UNLOCK_CHALLENGE)) == len(calls(server, UNLOCK_PROOF)) == 1
+    assert len(calls(server, '/calendar/attendance')) == (action == 'sign')
+    proof_request = calls(server, UNLOCK_PROOF)[0][2]
+    assert 'X-Spa-Hmac' not in proof_request['headers']  # 前端 F9 明确豁免解锁端点
+    assert 'password' not in proof_request['json']
+    assert any(e['api_code'] == 'idle_locked' and e['category'] == 'idle_locked'
+               for e in result.metadata['piggo'])
+    assert json.loads(server.path.read_text())['token'] == 'fixture-token'
+
+
+def test_idle_lock_on_first_login_can_unlock_without_second_login(server):
+    server.errors['/calendar'] = [response(401, 'idle_locked')]
+    assert run(server, action='login').status == LoginStatus.LOGIN_OK
+    assert len(calls(server, '/auth/srp/login')) == 1
+    assert len(calls(server, UNLOCK_PROOF)) == 1
+
+
+@pytest.mark.parametrize('path', ['/auth/sign', '/calendar'])
+def test_read_only_idle_lock_does_not_unlock_relogin_or_save(server, path):
+    run(server, action='login')
+    before = server.path.read_bytes()
+    server.errors[path] = [response(401, 'idle_locked')]
+    result = run(server, read_only=True)
+    assert result.status == SignStatus.UNCONFIRMED and '锁定' in result.message
+    assert not calls(server, UNLOCK_CHALLENGE) and not calls(server, UNLOCK_PROOF)
+    assert not calls(server, '/calendar/attendance')
+    assert len(calls(server, '/auth/srp/login')) == 1 and server.path.read_bytes() == before
+
+
+@pytest.mark.parametrize('path,fault', [
+    (UNLOCK_CHALLENGE, response(503)),
+    (UNLOCK_CHALLENGE, response(401, 401)),
+    (UNLOCK_CHALLENGE, response(401, 'idle_locked')),
+    (UNLOCK_CHALLENGE, response(data={'s': 'ab', 'B': 'cd'})),
+    (UNLOCK_CHALLENGE, response(data={'s': 'ab', 'B': 'a' * 513, 'ticket': 'fixture'})),
+    (UNLOCK_PROOF, response(403, 403, msg='fixture-password fixture-token')),
+    (UNLOCK_PROOF, response(401, 'idle_locked')),
+    (UNLOCK_PROOF, response(data={'m2': 'wrong'})),
+    (UNLOCK_PROOF, TimeoutError('fixture-password fixture-token')),
+])
+def test_failed_unlock_stops_without_login_submit_save_or_callback(server, path, fault):
+    run(server, action='login')
+    before = server.path.read_bytes()
+    server.errors['/calendar'] = [response(401, 'idle_locked')]
+    server.errors[path] = [fault]
+    result = run(server, authenticated=lambda *a: pytest.fail('unverified session'))
+    assert result.status == SignStatus.UNCONFIRMED
+    assert len(calls(server, UNLOCK_CHALLENGE)) == 1
+    assert len(calls(server, UNLOCK_PROOF)) <= 1
+    assert not calls(server, '/calendar/attendance')
+    assert len(calls(server, '/auth/srp/login')) == 1 and server.path.read_bytes() == before
+    assert 'fixture-password' not in str(result) and 'fixture-token' not in str(result)
+
+
+def test_repeated_idle_lock_does_not_loop(server):
+    run(server, action='login')
+    before = server.path.read_bytes()
+    server.errors['/calendar'] = [response(401, 'idle_locked')] * 2
+    assert run(server).status == SignStatus.UNCONFIRMED
+    assert len(calls(server, UNLOCK_PROOF)) == 1
+    assert len(calls(server, '/auth/srp/login')) == 1
+    assert not calls(server, '/calendar/attendance') and server.path.read_bytes() == before
+
+
+@pytest.mark.parametrize('stage', ['submit', 'readback'])
+def test_idle_lock_after_submission_never_unlocks_or_replays(server, stage):
+    run(server, action='login')
+    if stage == 'submit':
+        server.errors['/calendar/attendance'] = [response(401, 'idle_locked')]
+    else:
+        server.errors['/calendar'] = [response(data=calendar()), response(401, 'idle_locked')]
+    assert run(server).status == SignStatus.UNCONFIRMED
+    assert len(calls(server, '/calendar/attendance')) == 1
+    assert len(calls(server, '/auth/srp/login')) == 1
+    assert not calls(server, UNLOCK_CHALLENGE) and not calls(server, UNLOCK_PROOF)
+
+
+def test_cancel_between_unlock_steps_does_not_submit_proof(server):
+    run(server, action='login')
+    before = server.path.read_bytes()
+    stop = Event()
+    def challenge():
+        stop.set()
+        return {'code': 0, 'data': {'s': 'ab', 'B': 'cd', 'ticket': 'unlock-ticket'}}
+    server.errors['/calendar'] = [response(401, 'idle_locked')]
+    server.errors[UNLOCK_CHALLENGE] = [SimpleNamespace(status_code=200, json=challenge)]
+    assert run(server, cancel=stop).status == SignStatus.CANCELLED
+    assert not calls(server, UNLOCK_PROOF) and not calls(server, '/calendar/attendance')
+    assert server.path.read_bytes() == before
+
+
+@pytest.mark.parametrize('path', ['/auth/guest-config', '/auth/srp/challenge', '/auth/srp/login'])
+def test_idle_response_before_authentication_does_not_attempt_unlock(server, path):
+    server.errors[path] = [response(401, 'idle_locked')]
+    assert run(server).status == SignStatus.UNCONFIRMED
+    assert not calls(server, UNLOCK_CHALLENGE) and not calls(server, UNLOCK_PROOF)
+    assert not calls(server, '/calendar/attendance') and not server.path.exists()
+
+
+def test_auth_failure_after_unlock_does_not_relogin(server):
+    run(server, action='login')
+    before = server.path.read_bytes()
+    server.errors['/calendar'] = [response(401, 'idle_locked'), response(401, 401)]
+    assert run(server).status == SignStatus.UNCONFIRMED
+    assert len(calls(server, UNLOCK_PROOF)) == 1
+    assert len(calls(server, '/auth/srp/login')) == 1
+    assert not calls(server, '/calendar/attendance') and server.path.read_bytes() == before

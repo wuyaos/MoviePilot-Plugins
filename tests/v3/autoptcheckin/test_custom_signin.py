@@ -172,6 +172,7 @@ def test_cloak_custom_client_lifecycle(probe, monkeypatch):
     with custom.custom_client(Credential("local_cookie", "synthetic-cookie"), info,
                               {"site_emulate": {}}) as client:
         assert client.get(URL).text == SIGNED
+        assert client.cookies == {"session": "refreshed"}  # sid is absent from the authoritative browser snapshot
     assert events == ["cookies", "goto", "close"]
 
 

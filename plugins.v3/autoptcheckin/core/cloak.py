@@ -149,8 +149,14 @@ class CloakHttpClient:
         return self._run(lambda: (self.session.page.content(), self.session.page.url))
 
     def _sync_cookies(self):
-        for cookie in self.session.context.cookies(self.url):
-            self.http.cookies[cookie["name"]] = cookie["value"]
+        target = urlsplit(self.url)
+        root = f'{target.scheme}://{target.netloc}/'
+        # Only this origin's root Cookie view can be represented by the flat table.
+        # A fresh browser snapshot also reflects removals instead of resurrecting them.
+        cookies = self.session.context.cookies(root)
+        self.http.cookies = {cookie['name']: cookie['value']
+                             for cookie in sorted(cookies, key=lambda item: len(item.get('domain', '')))
+                             if cookie.get('path', '/') == '/'}
 
     def get(self, url, *, referer=None):
         return self._run(lambda: self._get_impl(url, referer))

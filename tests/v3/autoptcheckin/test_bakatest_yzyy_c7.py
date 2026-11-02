@@ -154,13 +154,15 @@ def test_yzyy_session_lifecycle_inside_site_lock(monkeypatch, raises):
 
 def test_yzyy_session_cookie_refresh(monkeypatch):
     import sys
-    jar = SimpleNamespace(get_dict=lambda: {'sid': 'fresh'})
+    from requests.cookies import RequestsCookieJar
+    jar = RequestsCookieJar()
     session = SimpleNamespace(cookies=jar)
     seen = []
     class Request:
         def __init__(self, **kwargs):
             seen.append(kwargs)
         def get_res(self, **kwargs):
+            jar.set('sid', 'fresh', domain='example.invalid', path='/')
             return SimpleNamespace(content=b'page', headers={}, url=kwargs['url'], status_code=200, cookies=jar)
     monkeypatch.setitem(sys.modules, 'app.sdk.network', SimpleNamespace(RequestUtils=Request))
     monkeypatch.setitem(sys.modules, 'app.sdk.config', SimpleNamespace(settings=SimpleNamespace(PROXY=None)))

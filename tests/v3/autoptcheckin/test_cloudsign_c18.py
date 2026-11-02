@@ -149,7 +149,7 @@ def test_sign_failed_definitive_after_submit(bql):
                            'response': 'null', 'after': {'html': ''}}}),
     ])
     result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
-    assert result.status == 'failed'
+    assert result.status == 'protocol_pending'
     assert '未确认签到' in result.message
 
 
@@ -175,7 +175,7 @@ def test_sign_bql_step_error_appended_to_failed_message(bql):
                  'errors': [{'message': 'Inspected target navigated or closed', 'path': ['submit']}]}),
     ])
     result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
-    assert result.status == 'failed'
+    assert result.status == 'protocol_pending'
     assert 'BQL步骤失败' in result.message and 'submit' in result.message
 
 

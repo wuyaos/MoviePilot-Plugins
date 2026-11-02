@@ -18,37 +18,51 @@ def _body(response):
         return {}
 
 
-def login(http, info):
-    """Validate configured Cookie, then refresh it with account credentials if needed."""
-    page = http.get(BASE + "/api/v1/session")
+def _session_result(page):
+    code = getattr(page, 'status_code', None)
     data = _body(page)
-    if page.status_code == 200 and isinstance(data.get("user"), dict) and data.get("csrf_token"):
-        return LoginResult(LoginStatus.LOGIN_OK, "PeerGo 会话有效")
-    username, password = info.get("rousi_username", ""), info.get("rousi_password", "")
-    if not username or not password:
-        return LoginResult(LoginStatus.AUTH_FAILED, "Cookie 已失效，且未配置完整账号密码")
-    page = http.post(BASE + "/api/v1/session", json={"identifier": username, "password": password, "remember_me": True}, headers={"Origin": BASE, "Referer": BASE + "/login"})
-    data = _body(page)
-    if page.status_code == 200 and isinstance(data.get("user"), dict) and data.get("csrf_token"):
-        return LoginResult(LoginStatus.LOGIN_OK, "PeerGo 登录成功")
-    return LoginResult(LoginStatus.AUTH_FAILED, "PeerGo 账号认证失败")
+    if code == 200 and isinstance(data.get('user'), dict) and data.get('csrf_token'):
+        return LoginResult(LoginStatus.LOGIN_OK, 'PeerGo 会话有效')
+    if code == 401:
+        return LoginResult(LoginStatus.AUTH_FAILED, 'PeerGo 会话认证失败（HTTP 401）')
+    detail = f'HTTP {code}' if code is not None else '无响应'
+    return LoginResult(LoginStatus.UNCONFIRMED, f'PeerGo 会话未确认（{detail}；未重复登录）')
 
+
+def login(http, info, *, session=None):
+    """Only an explicit unauthenticated response permits account/password refresh."""
+    page = session if session is not None else http.get(BASE + '/api/v1/session')
+    checked = _session_result(page)
+    if checked.status != LoginStatus.AUTH_FAILED:
+        return checked
+    username, password = info.get('rousi_username', ''), info.get('rousi_password', '')
+    if not username or not password:
+        return LoginResult(LoginStatus.AUTH_FAILED, 'Cookie 已失效，且未配置完整账号密码')
+    page = http.post(BASE + '/api/v1/session', json={
+        'identifier': username, 'password': password, 'remember_me': True},
+        headers={'Origin': BASE, 'Referer': BASE + '/login'})
+    checked = _session_result(page)
+    if checked.status == LoginStatus.LOGIN_OK:
+        checked.message = 'PeerGo 登录成功'
+    return checked
 
 def signin(http, info):
     session = http.get(BASE + "/api/v1/session")
     auth = _body(session)
-    if session.status_code in (401, 403) or not isinstance(auth.get("user"), dict) or not auth.get("csrf_token"):
-        refreshed = login(http, info)
+    checked = _session_result(session)
+    if checked.status == LoginStatus.AUTH_FAILED:
+        refreshed = login(http, info, session=session)
         if refreshed.status != LoginStatus.LOGIN_OK:
-            return SignResult(SignStatus.AUTH_FAILED, refreshed.message)
+            return SignResult(SignStatus(refreshed.status.value), refreshed.message)
         session = http.get(BASE + "/api/v1/session")
+        checked = _session_result(session)
         auth = _body(session)
-        if session.status_code != 200 or not isinstance(auth.get("user"), dict) or not auth.get("csrf_token"):
-            return SignResult(SignStatus.AUTH_FAILED, "PeerGo 会话未登录")
+    if checked.status != LoginStatus.LOGIN_OK:
+        return SignResult(SignStatus(checked.status.value), checked.message)
     csrf = auth["csrf_token"]
     page = http.get(BASE + "/api/v1/me/attendance")
     body = _body(page)
-    if page.status_code in (401, 403):
+    if page.status_code == 401:
         return SignResult(SignStatus.AUTH_FAILED, "PeerGo 会话未登录")
     if page.status_code != 200:
         return SignResult(SignStatus.UNCONFIRMED, "PeerGo 签到状态未确认")
@@ -93,8 +107,9 @@ def signin(http, info):
         if isinstance(reward, (int, float)) and not isinstance(reward, bool):
             message += f'；获得 {reward} 魔力值'
         return SignResult(SignStatus.SUCCESS, message, metadata=metadata)
-    if status in (401, 403) or getattr(verified, 'status_code', None) in (401, 403):
-        return SignResult(SignStatus.AUTH_FAILED, 'PeerGo 会话认证失败', metadata=metadata)
+    if status == 401 or getattr(verified, "status_code", None) == 401:
+        # 已尝试提交，不能返回会触发换源的 AUTH_FAILED 再领一次。
+        return SignResult(SignStatus.UNCONFIRMED, "PeerGo 提交后会话失效，签到结果待确认", metadata=metadata)
     message = ('PeerGo 提交后回读仍未签到'
                if getattr(verified, 'status_code', None) == 200 and fresh.get('claimed_today') is False
                else 'PeerGo 签到回读未确认')

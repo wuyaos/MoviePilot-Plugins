@@ -1,4 +1,5 @@
 import json
+import pytest
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parents[3] / "plugins.v3"))
@@ -45,14 +46,43 @@ def test_rousi_signs_with_csrf_idempotency_and_headers():
 
 
 def test_rousi_refreshes_invalid_session_then_signs():
-    client = Client([Response(401, {}), Response(401, {}),
+    client = Client([Response(401, {}),
                      Response(200, {'user': {'id': 7}, 'csrf_token': 'csrf'}),
                      Response(200, {'user': {'id': 7}, 'csrf_token': 'csrf'}),
                      Response(200, {'claimed_today': False, 'policy': {'settings': {'enabled': True, 'fixed_enabled': True}}}),
                      Response(200, {'success': True}), Response(200, {'claimed_today': True})])
     result = rousi.signin(client, {'rousi_username': 'u', 'rousi_password': 'p'})
     assert result.status == 'success'
-    assert client.calls[2][2]['headers']['Origin'] == rousi.BASE
+    assert client.calls[1][2]['headers']['Origin'] == rousi.BASE
+
+
+
+
+@pytest.mark.parametrize('status,payload', [(503, {}), (403, {}), (423, {}), (200, {}),
+                                           (200, {'user': {'id': 1}}), (200, ['unexpected'])])
+@pytest.mark.parametrize('action', ['login', 'signin'])
+def test_rousi_unknown_session_never_refreshes_credentials(status, payload, action):
+    client = Client([Response(status, payload)])
+    result = getattr(rousi, action)(client, {'rousi_username': 'fixture', 'rousi_password': 'fixture-secret'})
+    assert result.status == 'unconfirmed'
+    assert [call[0] for call in client.calls] == ['GET']
+    assert 'fixture-secret' not in str(result)
+
+
+def test_rousi_explicit_401_allows_only_one_password_post():
+    client = Client([Response(401, {}), Response(403, {})])
+    result = rousi.login(client, {'rousi_username': 'fixture', 'rousi_password': 'fixture-secret'})
+    assert result.status == 'unconfirmed'
+    assert [call[0] for call in client.calls] == ['GET', 'POST']
+
+
+def test_rousi_post_submit_auth_failure_is_not_a_rotation_signal():
+    client = Client([Response(200, {'user': {'id': 7}, 'csrf_token': 'fixture'}),
+                     Response(200, {'claimed_today': False, 'policy': {'settings': {'enabled': True, 'fixed_enabled': True}}}),
+                     Response(401, {}), Response(401, {})])
+    result = rousi.signin(client, {'rousi_username': 'fixture', 'rousi_password': 'fixture-secret'})
+    assert result.status == 'unconfirmed'
+    assert [call[0] for call in client.calls] == ['GET', 'GET', 'POST', 'GET']
 
 
 def test_rousi_login_without_credentials_is_auth_failed():
