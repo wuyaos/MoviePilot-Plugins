@@ -23,7 +23,7 @@ from autoptcheckin.sites.native.piggo import Piggo
 def test_http_login_restore_and_today_only(monkeypatch, tmp_path, mode):
     from curl_cffi import CurlOpt, requests
     config = {'piggo_username': 'fixture-user', 'piggo_password': 'fixture-password'}
-    server = {'checked': mode == 'checked', 'login': 0, 'claim': 0, 'calendar': 0, 'errors': []}
+    server = {'checked': mode == 'checked', 'login': 0, 'claim': 0, 'calendar': 0, 'me': 0, 'errors': []}
     salt, private = bytes.fromhex('00112233445566778899aabbccddeeff'), 987654321
     H = lambda *args: hashlib.sha256(b''.join(args)).digest()
     pad = lambda n: n.to_bytes(256, 'big')
@@ -67,17 +67,22 @@ def test_http_login_restore_and_today_only(monkeypatch, tmp_path, mode):
                         canonical = '\n'.join((method, self.path.strip('/').lower(), self.headers['ts'], self.headers['X-Spa-Nonce']))
                         expected = hmac.new(b'a' * 64, canonical.encode(), hashlib.sha256).hexdigest()
                         assert self.headers['X-Spa-Hmac'] == expected
-                        if path == '/calendar/attendance':
-                            assert method == 'POST' and payload == {'ymd': '2026-11-01'}
-                            server['claim'] += 1
-                            if mode != 'rejected':
-                                server['checked'] = True
+                        if path == '/me':
+                            assert method == 'GET'
+                            server['me'] += 1
+                            data = {'user': {'id': 1}}
                         else:
-                            assert path == '/calendar' and method == 'GET'
-                            server['calendar'] += 1
-                        data = {'selected': '2026-11-01',
-                                'cells': [{'ymd': '2026-11-01', 'is_today': True, 'checked': server['checked']}],
-                                'detail': {'ymd': '2026-11-01', 'attendance': {'status': 'checked' if server['checked'] else 'today'}}}
+                            if path == '/calendar/attendance':
+                                assert method == 'POST' and payload == {'ymd': '2026-11-01'}
+                                server['claim'] += 1
+                                if mode != 'rejected':
+                                    server['checked'] = True
+                            else:
+                                assert path == '/calendar' and method == 'GET'
+                                server['calendar'] += 1
+                            data = {'selected': '2026-11-01',
+                                    'cells': [{'ymd': '2026-11-01', 'is_today': True, 'checked': server['checked']}],
+                                    'detail': {'ymd': '2026-11-01', 'attendance': {'status': 'checked' if server['checked'] else 'today'}}}
                 encoded = json.dumps({'code': 0, 'data': data}).encode()
                 self.send_response(200)
                 if cookie:
@@ -101,6 +106,11 @@ def test_http_login_restore_and_today_only(monkeypatch, tmp_path, mode):
     try:
         login = flow.run_piggo(Piggo(), {}, config=config, action='login')
         assert login.status == LoginStatus.LOGIN_OK, login.message
+        assert server['me'] == 1 and server['calendar'] == server['claim'] == 0
+        restored = flow.run_piggo(Piggo(), {}, config=config, action='login')
+        assert restored.status == LoginStatus.LOGIN_OK
+        assert server['login'] == 1 and server['me'] == 2
+        assert server['calendar'] == server['claim'] == 0
         saved = json.loads((tmp_path / 'piggo.json').read_text())
         assert saved['token'] == 'fixture-token'
         assert saved['cookies'][0]['rest'].get('http_only') == 'True'
@@ -109,7 +119,8 @@ def test_http_login_restore_and_today_only(monkeypatch, tmp_path, mode):
                     'read_only': SignStatus.UNCONFIRMED, 'rejected': SignStatus.UNCONFIRMED}
         assert result.status == expected[mode], result.message
         assert server['login'] == 1 and server['claim'] == (1 if mode in ('today', 'rejected') else 0)
-        assert server['calendar'] >= 2 and not server['errors']
+        assert server['calendar'] == (2 if mode in ('today', 'rejected') else 1)
+        assert not server['errors']
     finally:
         http.shutdown()
         http.server_close()

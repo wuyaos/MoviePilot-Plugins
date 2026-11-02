@@ -94,7 +94,7 @@ def server(monkeypatch, tmp_path):
                 assert kwargs['headers']['Authorization'] == 'Bearer fixture-token'
                 assert self.cookies.get('pigo_np_web_session') == 'fixture-cookie'
                 data = {'sign': 'a' * 64}
-            elif path in ('/calendar', '/calendar/attendance'):
+            elif path in ('/me', '/calendar', '/calendar/attendance'):
                 headers = kwargs['headers']
                 assert headers['Authorization'] == 'Bearer fixture-token'
                 expected = flow.signed_headers('a' * 64, method, target.path, headers['ts'], headers['X-Spa-Nonce'])
@@ -107,7 +107,8 @@ def server(monkeypatch, tmp_path):
                         state.checked = True
                     if state.post_error:
                         raise TimeoutError('fixture accepted, response interrupted')
-                data = {} if state.malformed else calendar('checked' if state.checked else 'today')
+                data = ({} if state.malformed else {'user': {'id': 1}} if path == '/me'
+                        else calendar('checked' if state.checked else 'today'))
             else:
                 pytest.fail('unexpected request: ' + path)
             return response(data=data)
@@ -171,7 +172,7 @@ def test_network_or_unknown_is_not_auth_and_preserves_file(server, fault):
 
 def test_expired_signature_refreshes_get_only_once(server):
     run(server, action='login')
-    server.errors['/calendar'] = [response(403, 403, msg='invalid HMAC signature')]
+    server.errors['/me'] = [response(403, 403, msg='invalid HMAC signature')]
     assert run(server, action='login').status == LoginStatus.LOGIN_OK
     assert len(calls(server, '/auth/sign')) == 2
     assert len(calls(server, '/auth/srp/login')) == 1
@@ -318,6 +319,7 @@ UNLOCK_PROOF = '/me/lab-unlock/srp'
 @pytest.mark.parametrize('action', ['login', 'sign'])
 def test_idle_lock_preserves_session_and_unlocks_before_action(server, path, action):
     run(server, action='login')
+    path = '/me' if action == 'login' and path == '/calendar' else path
     server.errors[path] = [response(401, 'idle_locked')]
     result = run(server, action=action)
     assert result.status == (LoginStatus.LOGIN_OK if action == 'login' else SignStatus.SUCCESS)
@@ -333,7 +335,7 @@ def test_idle_lock_preserves_session_and_unlocks_before_action(server, path, act
 
 
 def test_idle_lock_on_first_login_can_unlock_without_second_login(server):
-    server.errors['/calendar'] = [response(401, 'idle_locked')]
+    server.errors['/me'] = [response(401, 'idle_locked')]
     assert run(server, action='login').status == LoginStatus.LOGIN_OK
     assert len(calls(server, '/auth/srp/login')) == 1
     assert len(calls(server, UNLOCK_PROOF)) == 1
@@ -429,3 +431,81 @@ def test_auth_failure_after_unlock_does_not_relogin(server):
     assert len(calls(server, UNLOCK_PROOF)) == 1
     assert len(calls(server, '/auth/srp/login')) == 1
     assert not calls(server, '/calendar/attendance') and server.path.read_bytes() == before
+
+
+@pytest.mark.parametrize('mode', ['fresh', 'restored', 'expired', 'unlocked'])
+def test_login_never_requests_calendar_or_attendance(server, mode):
+    if mode != 'fresh':
+        assert run(server, action='login').status == LoginStatus.LOGIN_OK
+    if mode == 'expired':
+        server.errors['/me'] = [response(401, 401)]
+    if mode == 'unlocked':
+        server.errors['/me'] = [response(423, 0, data={'code': 'idle_locked'})]
+    result = run(server, action='login')
+    assert result.status == LoginStatus.LOGIN_OK
+    assert calls(server, '/me')
+    assert not calls(server, '/calendar') and not calls(server, '/calendar/attendance')
+
+
+@pytest.mark.parametrize('fault', [
+    response(423, 0, data={'code': 'idle_locked'}),
+    response(401, 0, data={'code': 'idle_locked'}),
+    response(403, 'idle_locked'),
+    response(200, 'idle_locked'),
+])
+@pytest.mark.parametrize('action', ['login', 'sign'])
+def test_precise_lock_business_code_unlocked_once_without_relogin(server, fault, action):
+    run(server, action='login')
+    path = '/me' if action == 'login' else '/calendar'
+    server.errors[path] = [fault]
+    result = run(server, action=action)
+    assert result.status == (LoginStatus.LOGIN_OK if action == 'login' else SignStatus.SUCCESS)
+    assert len(calls(server, UNLOCK_PROOF)) == 1
+    assert len(calls(server, '/auth/srp/login')) == 1
+    assert any(e['api_code'] == 'idle_locked' for e in result.metadata['piggo'])
+
+
+@pytest.mark.parametrize('fault', [
+    response(423, 0), response(423, 0, data={'code': 'unrelated'}),
+    response(503, 'idle_locked'), response(429, 'idle_locked'),
+    response(200, 0, data={'code': 'idle_locked'}),
+    response(data={'user': {'id': 0}}), response(data={'user': {'id': True}}),
+    response(data={'user': {'id': -1}}), response(data={'user': {}}),
+    response(data={'user': []}), response(data={'unknown': True}),
+])
+def test_unknown_or_malformed_me_does_not_unlock_relogin_or_save(server, fault):
+    run(server, action='login')
+    before = server.path.read_bytes()
+    server.errors['/me'] = [fault]
+    result = run(server, action='login')
+    assert result.status == LoginStatus.UNCONFIRMED
+    assert '登录态核验未确认' in result.message and '提交' not in result.message
+    assert not calls(server, UNLOCK_PROOF) and not calls(server, UNLOCK_CHALLENGE)
+    assert len(calls(server, '/auth/srp/login')) == 1 and server.path.read_bytes() == before
+    assert not calls(server, '/calendar') and not calls(server, '/calendar/attendance')
+
+
+@pytest.mark.parametrize('action', ['login', 'sign'])
+def test_nested_lock_read_only_never_unlocks(server, action):
+    run(server, action='login')
+    before = server.path.read_bytes()
+    path = '/me' if action == 'login' else '/calendar'
+    server.errors[path] = [response(423, 0, data={'code': 'idle_locked'})]
+    result = run(server, action=action, read_only=True)
+    assert result.status in (LoginStatus.UNCONFIRMED, SignStatus.UNCONFIRMED)
+    assert not calls(server, UNLOCK_PROOF) and not calls(server, UNLOCK_CHALLENGE)
+    assert server.path.read_bytes() == before
+
+
+@pytest.mark.parametrize('stage', ['submit', 'readback'])
+def test_nested_lock_after_post_never_unlocks_or_replays(server, stage):
+    run(server, action='login')
+    fault = response(423, 0, data={'code': 'idle_locked'})
+    if stage == 'submit':
+        server.errors['/calendar/attendance'] = [fault]
+    else:
+        server.errors['/calendar'] = [response(data=calendar()), fault]
+    assert run(server).status == SignStatus.UNCONFIRMED
+    assert len(calls(server, '/calendar/attendance')) == 1
+    assert not calls(server, UNLOCK_PROOF) and not calls(server, UNLOCK_CHALLENGE)
+    assert len(calls(server, '/auth/srp/login')) == 1
