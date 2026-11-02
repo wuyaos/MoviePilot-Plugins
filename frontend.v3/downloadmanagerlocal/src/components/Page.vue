@@ -490,7 +490,7 @@ const moduleCards = computed(() => {
         : (auto.config_error ? [{ type: 'error', text: auto.config_error }] : []),
       actions: [
         { key: 'autoremove-preview', label: '预览候选', icon: 'mdi-eye-outline', color: 'primary', run: doAutoremovePreview },
-        { key: 'autoremove-run', label: auto.action === 'deletefile' ? '删除任务及文件' : (auto.action === 'delete' ? '删除任务' : '暂停任务'), icon: 'mdi-delete-clock-outline', color: auto.observe_only ? 'warning' : (auto.action === 'delete' || auto.action === 'deletefile' ? 'error' : 'primary'), run: doAutoremoveRun },
+        { key: 'autoremove-run', label: auto.action === 'deletefile' ? '删除任务及文件' : (auto.action === 'delete' ? '删除任务' : '暂停任务'), icon: 'mdi-delete-clock-outline', color: auto.observe_only ? 'warning' : (auto.action === 'delete' || auto.action === 'deletefile' ? 'error' : 'primary'), run: () => { autoRunConfirm.value = true } },
       ],
     },
     {
@@ -1274,6 +1274,12 @@ async function doAutoremoveRun() {
   if (resp?.code !== 1) await refreshActive()
 }
 
+function confirmAutoremoveRun() {
+  if (moduleRunning.value) return
+  autoRunConfirm.value = false
+  void doAutoremoveRun()
+}
+
 async function doAutoremovePreview() {
   const resp = await runModuleAction('autoremove-preview', async () => {
     const previewResp = await postApi('autoremove_preview', {})
@@ -1441,7 +1447,7 @@ const cleanupRemovals = computed(() => {
   const removals = []
   for (const group of cleanupGroups.value) {
     for (const item of group.tags || []) {
-      if (!cleanupKeep[tagSelectionKey(group.name, item.tag)]) {
+      if (item.removable && item.count === 0 && !cleanupKeep[tagSelectionKey(group.name, item.tag)]) {
         removals.push({ downloader: group.name, tag: item.tag, hashes: [...(item.hashes || [])] })
       }
     }
@@ -1458,7 +1464,7 @@ function resetCleanupKeep(groups) {
   Object.keys(cleanupKeep).forEach(key => delete cleanupKeep[key])
   for (const group of groups || []) {
     for (const item of group.tags || []) {
-      cleanupKeep[tagSelectionKey(group.name, item.tag)] = item.kind !== 'legacy_candidate'
+      cleanupKeep[tagSelectionKey(group.name, item.tag)] = true
     }
   }
 }
@@ -1496,7 +1502,7 @@ async function scanCleanupTags() {
     const errorCount = response?.errors?.length || 0
     cleanupStatus.value = response?.code === 0 ? (errorCount ? 'warning' : 'success') : 'error'
     cleanupMessage.value = response?.code === 0
-      ? `扫描完成 · 自动清理 ${response?.auto_removed?.length || 0} 个临时标签`
+      ? `扫描完成 · ${(response?.downloaders || []).flatMap(group => group.tags || []).filter(item => item.removable).length} 个空标签可清理（未删除）`
       : (response?.msg || '扫描失败')
   } catch (error) {
     cleanupStatus.value = 'error'
@@ -1519,7 +1525,7 @@ async function executeCleanupTags() {
   cleanupExecuting.value = true
   let response = null
   try {
-    response = await postJsonApi('tag_cleanup_execute', { removals: cleanupRemovals.value })
+    response = await postJsonApi('tag_cleanup_execute', { removals: cleanupRemovals.value, scan_id: cleanupScan.value?.scan_id })
   } catch (error) {
     if (error?.code === 2) {
       // 部分失败（success=false 抛错）：按 warning 收尾，弹窗照常关闭并刷新列表
@@ -1691,9 +1697,11 @@ const cleanupSearch = ref('')
 const cleanupTagMatrix = computed(() => {
   const merged = new Map()
   for (const group of cleanupGroups.value) for (const item of group.tags || []) {
-    if (!merged.has(item.tag)) merged.set(item.tag, { tag: item.tag, owners: [], keep: true })
+    if (!merged.has(item.tag)) merged.set(item.tag, { tag: item.tag, owners: [], keep: true, count: 0, removable: true })
     const tag = merged.get(item.tag)
     tag.owners.push(group.name)
+    tag.count += Number(item.count || 0)
+    tag.removable = tag.removable && !!item.removable
     tag.keep = tag.keep && !!cleanupKeep[tagSelectionKey(group.name, item.tag)]
   }
   return [...merged.values()].sort((a, b) => a.tag.localeCompare(b.tag))
@@ -2030,6 +2038,22 @@ onBeforeUnmount(() => {
         </VCard>
       </VDialog>
 
+      <VDialog content-class="dm-page" v-model="autoRunConfirm" max-width="620">
+        <VCard>
+          <VCardTitle class="dm-title">确认自动删种操作</VCardTitle>
+          <VCardText>
+            <VAlert :type="autoremoveStatus.observe_only ? 'warning' : 'error'" variant="tonal">
+              {{ autoremoveStatus.observe_only ? '观察模式：仅扫描候选并按通知设置发送预览，不暂停、不删除。' : autoremoveStatus.action === 'pause' ? '将暂停当前条件命中的任务，不删除任务或文件。' : autoremoveStatus.action === 'delete' ? '将删除当前条件命中的任务，保留文件。' : '将删除当前条件命中的任务及文件，文件删除不可撤销。' }}
+            </VAlert>
+            <div class="dm-hint mt-3">执行时后端重新扫描当前配置，不按上次预览清单直接处理；删除仍受 H&amp;R 保护。</div>
+          </VCardText>
+          <VCardActions>
+            <VSpacer />
+            <VBtn size="small" variant="tonal" @click="autoRunConfirm = false">取消</VBtn>
+            <VBtn size="small" :color="autoremoveStatus.observe_only ? 'warning' : 'error'" variant="flat" :disabled="!!moduleRunning" @click="confirmAutoremoveRun">确认执行</VBtn>
+          </VCardActions>
+        </VCard>
+      </VDialog>
       <VDialog content-class="dm-page" v-model="cleanupPanel" max-width="760">
         <VCard>
           <VCardTitle class="dm-title">标签清理</VCardTitle>
@@ -2039,11 +2063,11 @@ onBeforeUnmount(() => {
             <VAlert v-if="cleanupMessage" :type="cleanupStatus" variant="tonal" class="mt-3">{{ cleanupMessage }}</VAlert>
             <template v-if="cleanupScan">
               <VTextField v-model="cleanupSearch" label="搜索标签" density="compact" hide-details class="mt-3" />
-              <div class="dm-hint">勾选保留，取消勾选后点击预览；扫描可能回收已失效的临时标签。</div>
+              <div class="dm-hint">仅清理关联种子数为 0 的标签定义；扫描不删除标签。取消勾选空标签后预览确认，使用中的标签不可清理。</div>
               <div class="dm-tag-matrix">
                 <label v-for="item in filteredCleanupTags" :key="item.tag">
-                  <input type="checkbox" :checked="item.keep" :disabled="cleanupExecuting" @change="setMergedTag(item.tag, $event.target.checked)" />
-                  <span>{{ item.tag }} · {{ item.owners.join("、") }}</span>
+                  <input type="checkbox" :checked="item.keep" :disabled="cleanupExecuting || !item.removable" @change="setMergedTag(item.tag, $event.target.checked)" />
+                  <span>{{ item.tag }} · {{ item.owners.join("、") }} · {{ item.count }} 个任务{{ item.removable ? "（可清理）" : "（保留）" }}</span>
                 </label>
               </div>
             </template>
@@ -2062,7 +2086,7 @@ onBeforeUnmount(() => {
               <VAvatar color="warning" variant="tonal" size="40" rounded="lg"><VIcon icon="mdi-tag-remove-outline" /></VAvatar>
             </template>
             <VCardTitle class="dm-title">确认标签清理</VCardTitle>
-            <VCardSubtitle class="dm-hint">{{ cleanupRemovals.length }} 个标签 · {{ cleanupRemovalAssociations }} 条任务关联</VCardSubtitle>
+            <VCardSubtitle class="dm-hint">{{ cleanupRemovals.length }} 个空标签 · 不改动种子标签</VCardSubtitle>
           </VCardItem>
           <VDivider />
           <VList density="compact" class="dm-cleanup-preview-list">

@@ -67,8 +67,8 @@ try {
   if (sanity.fieldDisplay !== 'grid' || sanity.rowDisplay !== 'grid' || sanity.numericWidth >= 742) throw new Error(`Vuetify CSS sanity failed: ${JSON.stringify(sanity)}`)
   window.dmlDensitySanity = sanity
   const toggle = label => [...document.querySelectorAll('.v-input')].find(el => el.textContent.includes(label))?.querySelector('input[type="checkbox"]')
-  const source = toggle('删除源任务（全局）')
-  const duplicate = toggle('目的端已有时删源（全局）')
+  const source = toggle('删除源任务')
+  const duplicate = toggle('目的端已有时删源')
   if (!source || !duplicate) throw new Error('Global deletion controls missing')
   source.click(); duplicate.click(); await nextTick()
   await clickText('保存配置')

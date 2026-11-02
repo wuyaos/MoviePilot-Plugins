@@ -239,10 +239,12 @@ def test_retry_failed_renames_unobserved_attempts_retry(mods, monkeypatch):
 
 def test_tag_cleanup_execute_blocked_when_observed(mods):
     """观察模式下人工标签清理直接返回预览回执，不触达下载器。"""
-    plugin = SimpleNamespace(_module_observe_only={"tag": True}, _observe_previews={})
-
-    result = mods.tag.execute_tag_cleanup(
-        plugin, [{"downloader": "QB1", "tag": "legacy", "hashes": [HASH_C]}])
+    dl = SimpleNamespace(get_torrents=lambda: ([], None))
+    plugin = SimpleNamespace(_module_observe_only={"tag": True}, _observe_previews={},
+        _active_temporary_tags=set(),
+        _tag_cleanup_status={"scan_id": "s", "downloaders": [{"name": "QB1", "tags": [{"tag": "legacy", "count": 0, "removable": True}]}]},
+        service_info=lambda name: SimpleNamespace(type="qbittorrent", instance=dl))
+    result = mods.tag.execute_tag_cleanup(plugin, [{"downloader": "QB1", "tag": "legacy"}], "s")
 
     assert "观察模式" in result["msg"]
     assert result.get("observed") == 1

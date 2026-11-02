@@ -2452,7 +2452,7 @@ return (_ctx, _cache) => {
                           color: "primary",
                           inset: "",
                           "hide-details": "",
-                          label: "删除源任务（全局）"
+                          label: "删除源任务"
                         }, null, 8, ["modelValue"])
                       ]),
                       _createElementVNode("div", _hoisted_49, [
@@ -2463,7 +2463,7 @@ return (_ctx, _cache) => {
                           color: "primary",
                           inset: "",
                           "hide-details": "",
-                          label: "目的端已有时删源（全局）"
+                          label: "目的端已有时删源"
                         }, null, 8, ["modelValue"])
                       ])
                     ]),
@@ -2497,9 +2497,9 @@ return (_ctx, _cache) => {
                         }, null, 8, ["modelValue"])
                       ])
                     ]),
-                    _cache[136] || (_cache[136] = _createElementVNode("div", { class: "dm-hint" }, "全局删除设置仅作用于选择“继承全局”的任务；仅删源任务，不删文件。旧任务缺字段时保留升级前行为，保存时显式记录原生效值；改为继承需手动选择。", -1)),
-                    _cache[137] || (_cache[137] = _createElementVNode("div", { class: "dm-hint" }, "重命名仅 qB 目的端生效：修改显示名，不动磁盘文件；Transmission 目的端自动跳过。", -1)),
-                    _cache[138] || (_cache[138] = _createElementVNode("div", { class: "dm-hint" }, "做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。", -1))
+                    _cache[136] || (_cache[136] = _createElementVNode("div", { class: "dm-hint" }, "选择“继承全局”的任务使用以上设置，仅删源任务，不删文件。旧任务保留原设置，需手动改为继承。", -1)),
+                    _cache[137] || (_cache[137] = _createElementVNode("div", { class: "dm-hint" }, "重命名仅支持 qB 目的端，只改显示名，不改文件；Transmission 自动跳过。", -1)),
+                    _cache[138] || (_cache[138] = _createElementVNode("div", { class: "dm-hint" }, "转移或手动补刀添加种子后启动校验，队列清空后自动停止。", -1))
                   ]),
                   _: 1
                 }, 8, ["icon"])
@@ -4985,6 +4985,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-9a696604"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-91945928"]]);
 
 export { Config as default };

@@ -284,9 +284,12 @@ def _managed_tag_anchors(plugin) -> set:
 def _read_qb_torrents(service) -> tuple:
     """读取 qBittorrent 全量任务并统一错误结果。"""
     torrents, error = service.instance.get_torrents()
-    if error:
+    if error or not isinstance(torrents, (list, tuple)):
         return [], "下载器任务读取失败"
-    return torrents or [], ""
+    for torrent in torrents:
+        if not isinstance(torrent, dict) or not str(torrent.get("hash") or "").strip():
+            return [], "下载器任务数据不完整，无法确认标签无关联"
+    return torrents, ""
 
 
 def _group_tags(torrents: Iterable[dict]) -> tuple:
@@ -338,180 +341,102 @@ def _remove_tag_snapshot(dl, tag: str, hashes: Iterable[str]) -> dict:
 
 
 def scan_tag_candidates(plugin, downloader_names: Iterable[str]) -> dict:
-    """只读扫描所选下载器的标签候选，不做任何下载器写入。"""
+    """只读扫描 qB 全局标签；仅零任务关联且非活动临时标签可清理。"""
     names = list(dict.fromkeys(normalize_tags(downloader_names)))
-    generated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    scan_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
-    if not names:
-        return {"code": 1, "msg": "请至少选择一个下载器", "downloaders": [],
-                "auto_removed": [], "errors": [], "scan_id": scan_id,
-                "generated_at": generated_at}
-
-    active_tags = set(_active_temporary_tags(plugin))
-    managed_tags = _managed_tag_anchors(plugin)
-    site_prefix = str(getattr(plugin, "_tag_siteprefix", "") or "")
-    downloader_results = []
-    errors = []
-    for downloader_name in names:
-        service = plugin.service_info(downloader_name)
-        if not service:
-            errors.append({"downloader": downloader_name, "message": "下载器不可用"})
-            continue
-        if service.type != "qbittorrent":
-            errors.append({"downloader": downloader_name, "message": "仅支持 qBittorrent 标签清理"})
-            continue
-        torrents, error_message = _read_qb_torrents(service)
-        if error_message:
-            errors.append({"downloader": downloader_name, "message": error_message})
-            continue
-        grouped, torrent_tags_by_hash = _group_tags(torrents)
-        tags = []
-        for tag in sorted(grouped, key=str.casefold):
-            snapshot = grouped[tag]
-            kind = classify_tag(tag=tag, hashes=snapshot["hashes"],
-                                torrent_tags_by_hash=torrent_tags_by_hash,
-                                managed_tags=managed_tags, active_tags=active_tags,
-                                site_prefix=site_prefix)
-            tags.append({"tag": tag, "kind": kind,
-                         "count": len(set(snapshot["hashes"])),
-                         "hashes": sorted(set(snapshot["hashes"])),
-                         "samples": snapshot["samples"],
-                         "auto_removable": is_auto_removable(kind)})
-        downloader_results.append({"name": downloader_name, "type": service.type,
-                                   "task_count": len(torrents), "tags": tags})
-
-    code = 0 if downloader_results else 1
-    result = {"code": code, "msg": "扫描完成" if code == 0 else "未能扫描所选下载器",
-              "downloaders": downloader_results, "auto_removed": [], "errors": errors,
-              "scan_id": scan_id, "generated_at": generated_at}
+    result = {"code": 0, "msg": "扫描完成（只读，未删除标签）", "downloaders": [],
+              "auto_removed": [], "errors": [], "scan_id": uuid.uuid4().hex,
+              "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    for name in names:
+        try:
+            service = plugin.service_info(name)
+            if not service or service.type != "qbittorrent":
+                raise ValueError("下载器不可用或不支持（仅支持 qBittorrent）")
+            torrents, error = _read_qb_torrents(service)
+            if error:
+                raise ValueError(error)
+            definitions = service.instance.qbc.torrents_tags()
+            if not isinstance(definitions, (list, tuple, set)) or any(not isinstance(t, str) for t in definitions):
+                raise ValueError("全局标签读取失败")
+            grouped, _ = _group_tags(torrents)
+            active = _active_temporary_tags(plugin)
+            tags = []
+            for tag in sorted(set(definitions) | set(grouped), key=str.casefold):
+                hashes = sorted(set(grouped.get(tag, {}).get("hashes", [])))
+                empty = not hashes and tag not in active
+                tags.append({"tag": tag, "kind": "empty" if empty else "in_use",
+                             "count": len(hashes), "hashes": hashes,
+                             "samples": grouped.get(tag, {}).get("samples", []),
+                             "auto_removable": False, "removable": empty})
+            result["downloaders"].append({"name": name, "type": service.type,
+                                          "task_count": len(torrents), "tags": tags})
+        except Exception as err:
+            result["errors"].append({"downloader": name, "message": str(err)})
+    if not result["downloaders"]:
+        result.update(code=1, msg="未能扫描所选下载器" if names else "请至少选择一个下载器")
     plugin._tag_cleanup_status = result
     plugin.save_data(TAG_CLEANUP_STATUS_KEY, result)
     return result
 
 
-def _snapshot_candidates(snapshot: dict | None) -> set[tuple[str, str, str]]:
-    candidates = set()
-    for downloader in (snapshot or {}).get("downloaders", []):
-        name = str(downloader.get("name") or "")
-        for item in downloader.get("tags", []):
-            tag = str(item.get("tag") or "")
-            candidates.update((name, tag, str(torrent_hash))
-                              for torrent_hash in item.get("hashes", []) or [])
-    return candidates
-
-
 def execute_tag_cleanup(plugin, removals: Iterable[dict], scan_id: str | None = None) -> dict:
-    """按扫描快照与权限范围复核后执行人工清理。"""
+    """只删除仍无种子使用的全局标签定义，绝不移除种子上的标签。"""
     from ...utils.config import observe_skip
-    removal_items = [item for item in removals or [] if isinstance(item, dict)]
-    snapshot = get_cleanup_status(plugin)
-    current_scan_id = (snapshot or {}).get("scan_id")
-    if scan_id is not None and (not snapshot or scan_id != current_scan_id):
+    items_all = [item for item in removals or [] if isinstance(item, dict)]
+    snapshot = get_cleanup_status(plugin) or {}
+    if not scan_id or scan_id != snapshot.get("scan_id"):
         return {"code": 1, "msg": "扫描快照已过期，请重新扫描", "removed": [], "failed": [],
-                "requested": len(removal_items), "processed": 0, "truncated": False}
-    if not removal_items:
-        return {"code": 1, "msg": "没有需要清理的标签", "removed": [], "failed": [],
+                "requested": len(items_all), "processed": 0, "truncated": False}
+    if not items_all:
+        return {"code": 1, "msg": "没有需要清理的空标签", "removed": [], "failed": [],
                 "requested": 0, "processed": 0, "truncated": False}
-    if observe_skip(plugin, "tag", "清理站点标签", f"待清理 {len(removal_items)} 项"):
-        _append_history(plugin, "tag_cleanup", {
-            "trigger": "execute_tag_cleanup",
-            "occurred_at": time.time(),
-            "action": "移除标签",
-            "result": "observed",
-            "reason": f"观察模式：仅预览未执行（待清理 {len(removal_items)} 项）",
-        })
-        return {"code": 1, "msg": "观察模式：未执行标签清理（仅预览）", "removed": [], "failed": [],
-                "observed": len(removal_items), "requested": len(removal_items),
-                "processed": 0, "truncated": False}
-
-    requested = len(removal_items)
-    items = removal_items[:1000]
-    truncated = requested > len(items)
-    active_tags = set(_active_temporary_tags(plugin))
-    managed_tags = _managed_tag_anchors(plugin)
-    protected_tags = {"H&R", str(getattr(plugin, "_hr_hit_and_run_tag", "") or "")}
-    config = plugin.get_config() if callable(getattr(plugin, "get_config", None)) else {}
-    if isinstance(config, dict):
-        protected_tags.add(str(config.get("hr_hit_and_run_tag") or ""))
-    hr_config = getattr(getattr(plugin, "_hr_service", None), "_config", None)
-    protected_tags.add(str(getattr(hr_config, "hit_and_run_tag", "") or ""))
-    protected_tags.discard("")
-    snapshot_candidates = _snapshot_candidates(snapshot)
-    removed, failed, service_cache = [], [], {}
+    allowed = {(group["name"], item["tag"]) for group in snapshot.get("downloaders", [])
+               for item in group.get("tags", []) if item.get("removable") and item.get("count") == 0}
+    removed, failed, observed = [], [], 0
+    items = items_all[:1000]
     for item in items:
-        downloader_name = str(item.get("downloader") or "").strip()
-        tag = str(item.get("tag") or "").strip()
-        requested_hashes_all = sorted(normalize_tags(item.get("hashes") or []))
-        requested_hashes = requested_hashes_all[:5000]
-        if not downloader_name or not tag or not requested_hashes:
-            failed.append({"downloader": downloader_name, "tag": tag, "message": "清理参数不完整"})
-            continue
-        if tag in active_tags:
-            failed.append({"downloader": downloader_name, "tag": tag, "message": "临时标签仍在使用"})
-            continue
-        allowed_hashes = [h for h in requested_hashes if (downloader_name, tag, h) in snapshot_candidates]
-        if len(allowed_hashes) != len(requested_hashes):
-            failed.append({"downloader": downloader_name, "tag": tag, "hashes": requested_hashes,
-                           "message": "不在扫描快照内"})
-            continue
-        service = service_cache.get(downloader_name)
-        if service is None:
-            service = plugin.service_info(downloader_name)
-            service_cache[downloader_name] = service
-        if not service or service.type != "qbittorrent":
-            failed.append({"downloader": downloader_name, "tag": tag, "message": "下载器不可用或类型不支持"})
-            continue
-        torrents, error = service.instance.get_torrents(ids=allowed_hashes)
-        if error:
-            failed.append({"downloader": downloader_name, "tag": tag, "message": "任务快照复核失败"})
-            continue
-        current_hashes = []
-        protected = False
-        for torrent in torrents or []:
-            torrent_hash = get_hash(torrent, "qbittorrent")
-            current_tags = normalize_tags(get_label(torrent, "qbittorrent"))
-            if tag in current_tags:
-                current_hashes.append(torrent_hash)
-                kind = classify_tag(tag=tag, hashes=[torrent_hash],
-                                    torrent_tags_by_hash={torrent_hash: current_tags},
-                                    managed_tags=managed_tags, active_tags=active_tags)
-                protected = protected or kind == "managed" or tag in protected_tags
-        if protected:
-            failed.append({"downloader": downloader_name, "tag": tag, "hashes": current_hashes,
-                           "message": "受管或 H&R 保护标签不可移除"})
-            continue
-        if not current_hashes:
-            failed.append({"downloader": downloader_name, "tag": tag, "message": "标签不再存在于任务中"})
-            continue
-        cleanup = _remove_tag_snapshot(service.instance, tag, current_hashes)
-        result = {"downloader": downloader_name, "tag": tag, "hashes": current_hashes, **cleanup}
-        (removed if cleanup["ok"] else failed).append(result if cleanup["ok"] else {**result, "message": cleanup.get("error") or "标签移除失败"})
-    for item in removed:
+        name, tag = str(item.get("downloader") or ""), str(item.get("tag") or "")
+        try:
+            if not name or not tag:
+                raise ValueError("清理参数不完整")
+            if (name, tag) not in allowed or item.get("hashes"):
+                raise ValueError("不在空标签扫描快照内（使用中或保护标签不可移除）")
+            if tag in _active_temporary_tags(plugin):
+                raise ValueError("临时标签仍在使用")
+            service = plugin.service_info(name)
+            if not service or service.type != "qbittorrent":
+                raise ValueError("下载器不可用或类型不支持")
+            torrents, error = _read_qb_torrents(service)
+            if error:
+                raise ValueError(error)
+            if any(tag in normalize_tags(get_label(t, "qbittorrent")) for t in torrents):
+                raise ValueError("标签已被种子使用，未删除")
+            if observe_skip(plugin, "tag", "删除空标签定义", f"{name}：{tag}"):
+                observed += 1
+                continue
+            if service.instance.delete_torrents_tag(ids=None, tag=tag) is not True:
+                raise ValueError("下载器未确认删除标签")
+            removed.append({"downloader": name, "tag": tag, "hashes": [], "removed": 0,
+                            "ok": True, "definition_deleted": True})
+        except Exception as err:
+            failed.append({"downloader": name, "tag": tag, "message": str(err)})
+    for outcome, entries in (("success", removed), ("failed", failed)):
+        for item in entries:
+            _append_history(plugin, "tag_cleanup", {
+                "trigger": "execute_tag_cleanup", "occurred_at": time.time(),
+                "action": "删除空标签定义", "result": outcome,
+                "reason": item.get("message") or f"删除空标签 {item['tag']}（0 个任务）",
+                "downloader_id": item["downloader"], "name": item["tag"],
+            })
+    if observed:
         _append_history(plugin, "tag_cleanup", {
-            "trigger": "execute_tag_cleanup",
-            "occurred_at": time.time(),
-            "action": "移除标签",
-            "result": "success",
-            "reason": f"移除标签 {item.get('tag')}（{len(item.get('hashes') or [])} 个任务）",
-            "downloader_id": item.get("downloader"),
-            "name": f"tag={item.get('tag')} hashes={len(item.get('hashes') or [])}",
+            "trigger": "execute_tag_cleanup", "occurred_at": time.time(),
+            "action": "删除空标签定义", "result": "observed",
+            "reason": f"观察模式：仅预览 {observed} 个空标签，未删除",
         })
-    for item in failed:
-        _append_history(plugin, "tag_cleanup", {
-            "trigger": "execute_tag_cleanup",
-            "occurred_at": time.time(),
-            "action": "移除标签",
-            "result": "failed",
-            "reason": str(item.get("message") or "标签移除失败"),
-            "downloader_id": item.get("downloader"),
-            "name": f"tag={item.get('tag')} hashes={len(item.get('hashes') or [])}",
-        })
-    logger.info("【PT下载中心:站点标签】标签清理执行：成功标签 %s 个，任务关联 %s 条，失败 %s 个",
-                len(removed), sum(item["removed"] for item in removed), len(failed))
-    return {"code": 0 if removed and not failed else (2 if removed else 1),
-            "msg": f"已清理 {len(removed)} 个标签，失败 {len(failed)} 个",
-            "removed": removed, "failed": failed, "requested": requested,
-            "processed": len(items), "truncated": truncated}
+    msg = f"已清理 {len(removed)} 个空标签，观察模式 {observed} 个，失败 {len(failed)} 个"
+    return {"code": (2 if removed or observed else 1) if failed else 0, "msg": msg,
+            "removed": removed, "failed": failed, "observed": observed,
+            "requested": len(items_all), "processed": len(items), "truncated": len(items_all) > len(items)}
 
 def find_site_by_domain(domain: str) -> Optional[str]:
     """通过域名从 V3 站点数据库查找名称，索引模板作为回退。"""

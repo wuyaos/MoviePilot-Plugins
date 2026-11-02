@@ -1554,8 +1554,8 @@ Object.keys(form).forEach(k => delete form[k])
                   </div>
                 </div>
                 <div class="dm-switch-group">
-                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_delete_source_default" color="primary" inset hide-details label="删除源任务（全局）" /></div>
-                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_delete_duplicate_default" color="primary" inset hide-details label="目的端已有时删源（全局）" /></div>
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_delete_source_default" color="primary" inset hide-details label="删除源任务" /></div>
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_delete_duplicate_default" color="primary" inset hide-details label="目的端已有时删源" /></div>
                 </div>
                 <div class="dm-field-row">
                   <div class="dm-field dm-field--number">
@@ -1565,9 +1565,9 @@ Object.keys(form).forEach(k => delete form[k])
                     <VTextField density="compact" class="dm-number-input" v-model.number="form.seed_max_wait_minutes" label="最长等待（分钟）" type="number" variant="outlined" hint="超时后移出队列" persistent-hint />
                   </div>
                 </div>
-                <div class="dm-hint">全局删除设置仅作用于选择“继承全局”的任务；仅删源任务，不删文件。旧任务缺字段时保留升级前行为，保存时显式记录原生效值；改为继承需手动选择。</div>
-                <div class="dm-hint">重命名仅 qB 目的端生效：修改显示名，不动磁盘文件；Transmission 目的端自动跳过。</div>
-                <div class="dm-hint">做种校验采用按需触发：仅在转移做种或手动补刀添加种子后启动。队列为空后自动停止。</div>
+                <div class="dm-hint">选择“继承全局”的任务使用以上设置，仅删源任务，不删文件。旧任务保留原设置，需手动改为继承。</div>
+                <div class="dm-hint">重命名仅支持 qB 目的端，只改显示名，不改文件；Transmission 自动跳过。</div>
+                <div class="dm-hint">转移或手动补刀添加种子后启动校验，队列清空后自动停止。</div>
               </FormSection>
             </div>
 

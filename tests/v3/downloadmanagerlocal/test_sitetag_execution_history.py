@@ -259,47 +259,15 @@ def test_execute_tag_cleanup_records_per_plan_item(sitetag_history, monkeypatch)
     tag = sitetag_history.tag
     history = sitetag_history.history
 
-    snapshot = {
-        "scan_id": "s1",
-        "downloaders": [
-            {
-                "name": "QB1",
-                "tags": [
-                    {"tag": "user", "hashes": [HASH_1, HASH_2, HASH_3]},
-                    {"tag": "bad", "hashes": [HASH_4]},
-                ],
-            }
-        ],
-    }
     plugin = FakePlugin()
-    plugin._tag_cleanup_status = snapshot
-    service = SimpleNamespace(name="QB1", type="qbittorrent", instance=Mock())
-    service.instance.get_torrents.return_value = (
-        [
-            {"hash": HASH_1, "tags": ["user"]},
-            {"hash": HASH_2, "tags": ["user"]},
-            {"hash": HASH_3, "tags": ["user"]},
-            {"hash": HASH_4, "tags": ["bad"]},
-        ],
-        None,
-    )
-    plugin._services = {"QB1": service}
-
-    def fake_remove(dl, tag_name, hashes):
-        if tag_name == "user":
-            return {"ok": True, "removed": len(list(hashes)), "definition_deleted": False}
-        return {"ok": False, "removed": 0, "definition_deleted": False, "error": "boom"}
-
-    monkeypatch.setattr(tag, "_remove_tag_snapshot", fake_remove)
-
-    result = tag.execute_tag_cleanup(
-        plugin,
-        [
-            {"downloader": "QB1", "tag": "user", "hashes": [HASH_1, HASH_2, HASH_3]},
-            {"downloader": "QB1", "tag": "bad", "hashes": [HASH_4]},
-        ],
-        "s1",
-    )
+    plugin._tag_cleanup_status = {"scan_id": "s1", "downloaders": [{"name": "QB1", "tags": [
+        {"tag": "user", "count": 0, "removable": True}, {"tag": "bad", "count": 0, "removable": True}]}]}
+    dl = Mock()
+    dl.get_torrents.return_value = ([], None)
+    dl.delete_torrents_tag.side_effect = [True, False]
+    plugin._services = {"QB1": SimpleNamespace(type="qbittorrent", instance=dl)}
+    result = tag.execute_tag_cleanup(plugin, [
+        {"downloader": "QB1", "tag": "user"}, {"downloader": "QB1", "tag": "bad"}], "s1")
 
     assert len(result["removed"]) == 1
     assert len(result["failed"]) == 1
@@ -309,8 +277,8 @@ def test_execute_tag_cleanup_records_per_plan_item(sitetag_history, monkeypatch)
     by_result = {item["result"]: item for item in items}
     assert set(by_result) == {"success", "failed"}
     assert by_result["success"]["downloader_id"] == "QB1"
-    assert "3" in by_result["success"]["reason"]
-    assert by_result["failed"]["reason"] == "boom"
+    assert "0 个任务" in by_result["success"]["reason"]
+    assert "未确认删除" in by_result["failed"]["reason"]
 
 
 def test_execute_tag_cleanup_early_returns_no_success(sitetag_history):
@@ -334,11 +302,11 @@ def test_execute_tag_cleanup_observe_mode(sitetag_history, monkeypatch):
     tag = sitetag_history.tag
     history = sitetag_history.history
     plugin = FakePlugin()
-    plugin._tag_cleanup_status = {"scan_id": "s1", "downloaders": []}
-
+    plugin._tag_cleanup_status = {"scan_id": "s1", "downloaders": [{"name": "QB1", "tags": [{"tag": "x", "count": 0, "removable": True}]}]}
+    plugin._services = {"QB1": SimpleNamespace(type="qbittorrent", instance=SimpleNamespace(get_torrents=lambda: ([], None)))}
     monkeypatch.setattr(sitetag_history.config, "observe_skip", lambda *a, **k: True)
 
-    result = tag.execute_tag_cleanup(plugin, [{"downloader": "QB1", "tag": "x", "hashes": [HASH_1]}], "s1")
+    result = tag.execute_tag_cleanup(plugin, [{"downloader": "QB1", "tag": "x"}], "s1")
 
     assert result.get("observed") == 1
     items = _items(history, plugin, "tag_cleanup")
@@ -406,7 +374,7 @@ def test_history_write_failure_does_not_change_business(sitetag_history, monkeyp
     plugin2 = FakePlugin(fail_save_keys={"execution_history"})
     plugin2._tag_cleanup_status = {
         "scan_id": "s1",
-        "downloaders": [{"name": "QB1", "tags": [{"tag": "user", "hashes": [HASH_1]}]}],
+        "downloaders": [{"name": "QB1", "tags": [{"tag": "user", "count": 0, "removable": True}]}],
     }
     dl2 = Mock()
     dl2.get_torrents.side_effect = lambda ids=None: (
@@ -418,12 +386,13 @@ def test_history_write_failure_does_not_change_business(sitetag_history, monkeyp
     plugin2._services = {"QB1": service2}
 
     result2 = tag.execute_tag_cleanup(
-        plugin2, [{"downloader": "QB1", "tag": "user", "hashes": [HASH_1]}], "s1"
+        plugin2, [{"downloader": "QB1", "tag": "user"}], "s1"
     )
 
     assert result2["code"] == 0
     assert len(result2["removed"]) == 1
-    assert dl2.remove_torrents_tag.call_count == 1  # 标签已移除
+    assert dl2.delete_torrents_tag.call_count == 1
+    dl2.remove_torrents_tag.assert_not_called()
     assert _items(history, plugin2, "tag_cleanup") == []  # 历史未写入
 
 
@@ -475,9 +444,10 @@ def test_streams_do_not_pollute_each_other(sitetag_history, monkeypatch):
     tag.complement_history(plugin, {"downloaders": ["QB1"]})
 
     # tag_cleanup 流：观察模式 → observed
-    plugin._tag_cleanup_status = {"scan_id": "s1", "downloaders": []}
+    plugin._tag_cleanup_status = {"scan_id": "s1", "downloaders": [{"name": "QB1", "tags": [{"tag": "x", "count": 0, "removable": True}]}]}
+    service.instance.get_torrents.return_value = ([], None)
     monkeypatch.setattr(sitetag_history.config, "observe_skip", lambda *a, **k: True)
-    tag.execute_tag_cleanup(plugin, [{"downloader": "QB1", "tag": "x", "hashes": [HASH_1]}], "s1")
+    tag.execute_tag_cleanup(plugin, [{"downloader": "QB1", "tag": "x"}], "s1")
 
     tag_items = _items(history, plugin, "tag")
     cleanup_items = _items(history, plugin, "tag_cleanup")

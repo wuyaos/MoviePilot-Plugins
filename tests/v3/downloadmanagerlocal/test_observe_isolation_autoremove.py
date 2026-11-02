@@ -179,3 +179,29 @@ def test_run_cycle_unobserved_executes(autoremove):
     assert out is result
     assert out["observe_only"] is False
     service._execute.assert_called_once()
+
+
+@pytest.mark.parametrize("candidates,failures,config_error", [(0, 0, ""), (3, 0, ""), (0, 1, ""), (0, 0, "invalid thresholds")])
+def test_observe_notifies_even_zero_candidates_or_scan_failure(autoremove, monkeypatch, candidates, failures, config_error):
+    spec = importlib.util.spec_from_file_location(PREFIX + ".utils.notify", PLUGIN / "utils/notify.py")
+    notify = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, notify)
+    spec.loader.exec_module(notify)
+    plugin = SimpleNamespace(get_data=Mock(return_value=None), save_data=Mock(), post_message=Mock())
+    service = autoremove.service.AutoRemoveService(plugin)
+    service._config = SimpleNamespace(enabled=True, action="delete", downloaders=[], cron="", notify=True)
+    service._observe_only = True
+    result = _observe_result(candidates=candidates)
+    result.update(failed=failures, config_error=config_error)
+    service._collect = Mock(return_value=SimpleNamespace(result=result, candidates={}, conditions=None))
+    service._execute = Mock()
+    service.run_cycle("manual")
+    service._execute.assert_not_called()
+    plugin.post_message.assert_called_once()
+    message = plugin.post_message.call_args.kwargs
+    assert "观察模式" in message["title"]
+    assert f"预览：{candidates} 个候选，未执行" in message["text"]
+    assert "manual" in message["text"]
+    assert f"读取失败：{failures}" in message["text"]
+    if config_error:
+        assert config_error in message["text"]

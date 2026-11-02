@@ -130,23 +130,22 @@ class AutoRemoveService:
             with self._history_flush_guard(records), self._lock:
                 scan = self._collect(trigger_source)
                 result = scan.result
-                if result["config_error"]:
-                    self._record_status(result)
-                    return result
                 if self._observe_only:
                     logger.info(
                         f"{REMOVER_LOG_PREFIX}{trigger_source}：观察期仅列出 {result['candidates']} 个候选，"
                         f"不执行 {result['action']}"
                     )
-                    if self._config.notify and result["candidates"]:
+                    if self._config.notify:
                         from ...utils.notify import notify_module_result, result_text
 
                         notify_module_result(
                             self._plugin, "autoremove",
-                            text=result_text(observe=True, preview_count=result["candidates"]),
+                            text=result_text(observe=True, preview_count=result["candidates"],
+                                             failed=result["failed"],
+                                             extra=f"触发：{trigger_source}\n读取失败：{result['failed']}；配置错误：{result.get('config_error') or '无'}"),
                             suffix="观察模式",
                         )
-                else:
+                elif not result["config_error"]:
                     self._execute(scan, records)
                 self._record_status(result)
                 return result

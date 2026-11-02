@@ -300,11 +300,13 @@ test("标签清理入口以 value 选择下载器，扫描结果进入确认预�
   assert.deepEqual(instance.cleanupDownloaders.value, ["QB"])
   await instance.scanCleanupTags()
   assert.deepEqual(calls.find(call => call.path === "tag_cleanup_scan").payload, { downloaders: ["QB"] })
-  instance.cleanupScan.value = { downloaders: [{ name: "QB", tags: [{ tag: "obsolete", hashes: [HASH40] }] }] }
+  instance.cleanupScan.value = { downloaders: [{ name: "QB", tags: [{ tag: "obsolete", hashes: [], count: 0, removable: true }, { tag: "inuse", hashes: [HASH40], count: 1, removable: false }] }] }
   instance.setMergedTag("obsolete", false)
   instance.previewCleanupTags()
   assert.equal(instance.cleanupDialog.value, true)
-  assert.deepEqual(instance.cleanupRemovals.value, [{ downloader: "QB", tag: "obsolete", hashes: [HASH40] }])
+  assert.deepEqual(instance.cleanupRemovals.value, [{ downloader: "QB", tag: "obsolete", hashes: [] }])
+  instance.setMergedTag("inuse", false)
+  assert.equal(instance.cleanupRemovals.value.length, 1, "used tag is never a removal candidate")
   assert.match(template, /v-model="cleanupPanel"/)
   assert.notEqual(instance.renameRowKey({ downloader: "QB1", hash: HASH40 }), instance.renameRowKey({ downloader: "QB2", hash: HASH40 }))
 })

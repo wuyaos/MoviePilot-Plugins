@@ -51,70 +51,91 @@ def fake_service(torrents):
     return Download()
 
 
-def test_scan_is_readonly_and_keeps_auto_candidate(tag_service, monkeypatch):
-    writes = []
-    service = fake_service([{"hash": "a", "tags": ["DML_TMP_x"]}])
-    plugin = fake_plugin(service)
-    monkeypatch.setattr(tag_service, "_read_qb_torrents", lambda service: ([{"hash": "a", "tags": ["DML_TMP_x"]}], None))
-    monkeypatch.setattr(tag_service, "_remove_tag_snapshot", lambda *args: writes.append(args))
-    result = tag_service.scan_tag_candidates(plugin, ["qb"])
-    assert writes == []
+def test_scan_reads_global_definitions_and_never_writes(tag_service):
+    service = fake_service([{"hash": "a", "tags": ["used", "DML_TMP_x"]}])
+    service.instance.qbc = SimpleNamespace(torrents_tags=lambda: ["used", "DML_TMP_x", "empty", "H&R"])
+    result = tag_service.scan_tag_candidates(fake_plugin(service), ["qb"])
+    tags = {item["tag"]: item for item in result["downloaders"][0]["tags"]}
     assert result["auto_removed"] == []
-    assert result["downloaders"][0]["tags"][0]["auto_removable"] is True
+    assert tags["empty"]["removable"] and tags["H&R"]["removable"]
+    assert not tags["used"]["removable"] and not tags["DML_TMP_x"]["removable"]
+    assert tags["empty"]["count"] == 0
 
 
-def test_scan_id_round_trip_and_persisted_fallback(tag_service, monkeypatch):
-    service = fake_service([])
+def ready(tag_service, torrents=None):
+    from unittest.mock import Mock
+    service = fake_service(torrents or [])
+    service.instance.qbc = SimpleNamespace(torrents_tags=lambda: ["empty"])
+    service.instance.delete_torrents_tag = Mock(return_value=True)
+    service.instance.remove_torrents_tag = Mock(side_effect=AssertionError("must not strip torrent tags"))
     plugin = fake_plugin(service)
-    monkeypatch.setattr(tag_service, "_read_qb_torrents", lambda service: ([], None))
-    result = tag_service.scan_tag_candidates(plugin, ["qb"])
+    scan = tag_service.scan_tag_candidates(plugin, ["qb"])
+    return plugin, service, scan["scan_id"]
+
+
+def test_execute_empty_definition_only(tag_service):
+    plugin, service, scan_id = ready(tag_service)
+    result = tag_service.execute_tag_cleanup(plugin, [{"downloader": "qb", "tag": "empty"}], scan_id)
+    assert result["code"] == 0 and len(result["removed"]) == 1
+    service.instance.delete_torrents_tag.assert_called_once_with(ids=None, tag="empty")
+    service.instance.remove_torrents_tag.assert_not_called()
+
+
+@pytest.mark.parametrize("change", ["in_use", "read_error", "active", "outside", "old", "no_id", "hashes"])
+def test_execute_rechecks_live_state_and_snapshot(tag_service, change):
+    plugin, service, scan_id = ready(tag_service)
+    item = {"downloader": "qb", "tag": "empty"}
+    if change == "in_use":
+        service.instance.get_torrents = lambda: ([{"hash": "new", "tags": ["empty"]}], None)
+    elif change == "read_error":
+        service.instance.get_torrents = lambda: ([], "offline")
+    elif change == "active":
+        plugin._active_temporary_tags.add("empty")
+    elif change == "outside":
+        item["tag"] = "unknown"
+    elif change == "old":
+        scan_id = "old"
+    elif change == "no_id":
+        scan_id = None
+    else:
+        item["hashes"] = ["a"]
+    result = tag_service.execute_tag_cleanup(plugin, [item], scan_id)
+    assert result["code"] == 1 and not result["removed"]
+    service.instance.delete_torrents_tag.assert_not_called()
+
+
+def test_observe_mode_does_not_delete(tag_service, monkeypatch):
+    plugin, service, scan_id = ready(tag_service)
+    monkeypatch.setattr(sys.modules[PREFIX + ".utils.config"], "observe_skip", lambda *a: True)
+    result = tag_service.execute_tag_cleanup(plugin, [{"downloader": "qb", "tag": "empty"}], scan_id)
+    assert result["observed"] == 1 and result["code"] == 0
+    service.instance.delete_torrents_tag.assert_not_called()
+
+
+@pytest.mark.parametrize("definitions", [None, "empty", [None]])
+def test_scan_invalid_definition_response_fails_closed(tag_service, definitions):
+    service = fake_service([])
+    service.instance.qbc = SimpleNamespace(torrents_tags=lambda: definitions)
+    result = tag_service.scan_tag_candidates(fake_plugin(service), ["qb"])
+    assert result["code"] == 1 and not result["downloaders"]
+
+
+def test_scan_id_round_trip_and_persisted_fallback(tag_service):
+    plugin, _, scan_id = ready(tag_service)
+    saved = plugin._tag_cleanup_status
     plugin._tag_cleanup_status = None
-    plugin.get_data = lambda key: result
-    assert tag_service.get_cleanup_status(plugin)["scan_id"] == result["scan_id"]
-
-
-def test_wrong_scan_id_rejects_batch_without_delete(tag_service):
-    calls = []
-    plugin = fake_plugin(fake_service([]))
-    plugin._tag_cleanup_status = {"scan_id": "current", "downloaders": []}
-    tag_service._remove_tag_snapshot = lambda *args: calls.append(args)
-    result = tag_service.execute_tag_cleanup(plugin, [{"downloader": "qb", "tag": "x", "hashes": ["a"]}], "old")
-    assert result["code"] == 1 and calls == []
-
-
-def test_outside_snapshot_is_failed(tag_service):
-    plugin = fake_plugin(fake_service([]))
-    plugin._tag_cleanup_status = {"scan_id": "s", "downloaders": [{"name": "qb", "tags": [{"tag": "x", "hashes": ["a"]}]}]}
-    result = tag_service.execute_tag_cleanup(plugin, [{"downloader": "qb", "tag": "x", "hashes": ["b"]}], "s")
-    assert "不在扫描快照内" in result["failed"][0]["message"]
-
-
-def test_new_candidate_after_scan_is_not_added(tag_service):
-    plugin = fake_plugin(fake_service([]))
-    plugin._tag_cleanup_status = {"scan_id": "s", "downloaders": [{"name": "qb", "tags": []}]}
-    result = tag_service.execute_tag_cleanup(plugin, [{"downloader": "qb", "tag": "new", "hashes": ["b"]}], "s")
-    assert result["failed"] and not result["removed"]
-
-
-def test_managed_tag_is_protected(tag_service):
-    plugin = fake_plugin(fake_service([{"hash": "a", "tags": ["managed"]}]))
-    plugin._tag_cleanup_status = {"scan_id": "s", "downloaders": [{"name": "qb", "tags": [{"tag": "managed", "hashes": ["a"]}]}]}
-    plugin._torrent_tags = ["managed"]
-    result = tag_service.execute_tag_cleanup(plugin, [{"downloader": "qb", "tag": "managed", "hashes": ["a"]}], "s")
-    assert "保护标签" in result["failed"][0]["message"]
+    plugin.get_data = lambda key: saved
+    assert tag_service.get_cleanup_status(plugin)["scan_id"] == scan_id
 
 
 def test_execute_truncation_is_explicit(tag_service):
-    plugin = fake_plugin(fake_service([]))
-    plugin._tag_cleanup_status = {"scan_id": "s", "downloaders": []}
-    removals = [{"downloader": "missing", "tag": "x", "hashes": ["a"]}] * 1001
-    result = tag_service.execute_tag_cleanup(plugin, removals, "s")
-    assert result["truncated"] is True and result["requested"] == 1001 and result["processed"] == 1000
+    plugin, _, scan_id = ready(tag_service)
+    result = tag_service.execute_tag_cleanup(plugin, [{"downloader": "qb", "tag": "outside"}] * 1001, scan_id)
+    assert result["truncated"] and result["requested"] == 1001 and result["processed"] == 1000
 
 
-def test_unavailable_and_non_qb_are_errors(tag_service, monkeypatch):
+def test_unavailable_and_non_qb_are_errors(tag_service):
     plugin = fake_plugin(None)
     plugin.service_info = lambda name: None if name == "missing" else SimpleNamespace(type="transmission")
-    monkeypatch.setattr(tag_service, "_read_qb_torrents", lambda service: ([], None))
     result = tag_service.scan_tag_candidates(plugin, ["missing", "tr"])
     assert len(result["errors"]) == 2 and result["code"] == 1
