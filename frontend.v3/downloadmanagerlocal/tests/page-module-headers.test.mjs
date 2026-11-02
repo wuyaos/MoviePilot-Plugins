@@ -148,7 +148,7 @@ test('自动删种不以预览冒充成功，不以单项保护跳过冒充跳�
   assert.equal(values(p.moduleHeaders.value.autoremove)['成功'], '—')
   assert.deepEqual(Object.fromEntries(p.moduleCards.value.map(card => [card.key, card.actions.map(action => action.key)])), {
     transfer: ['transfer-run'], seed: [], hr: ['hr-check', 'hr-scan'], autoremove: ['autoremove-preview', 'autoremove-run'],
-    failclean: ['failclean-scan'], rename: ['rename-retry'], tag: ['tag-complement'],
+    failclean: ['failclean-scan'], rename: ['rename-retry'], tag: ['tag-complement', 'tag-cleanup-run'],
     upload_limit: ['upload-reallocate', 'upload-scan-sites', 'upload-clear-rules'],
   })
 })

@@ -35,6 +35,8 @@ from ..model.api import (
     TagCleanupExecuteRequest,
     TagCleanupExecuteResult,
     TagCleanupScanRequest,
+    TagCleanupRunRequest,
+    TagCleanupRunResult,
     TagCleanupScanResult,
     UploadLimitDisableResult,
     UploadLimitReallocateResult,
@@ -55,7 +57,7 @@ from ..modules.rename.archive import serialized_rename_state
 from ..modules.hr.guard import HrGuard
 from ..modules.hr.rules import load_preset_rules
 from ..utils.config import observe_skip
-from ..modules.sitetag.service import complement_history, execute_tag_cleanup, scan_tag_candidates
+from ..modules.sitetag.service import complement_history, execute_tag_cleanup, run_tag_cleanup, scan_tag_candidates
 from ..modules.uploadlimit.worker import stop_upload_limit_worker
 from ..modules.uploadlimit.service import (
     get_upload_limit_status,
@@ -408,6 +410,19 @@ def api_tag_cleanup_execute(plugin, payload: TagCleanupExecuteRequest):
             TagCleanupExecuteResult,
         )
 
+def api_tag_cleanup_run(plugin, payload: TagCleanupRunRequest):
+    """一键清理：重新扫描并只删除零任务关联的全局标签定义。"""
+    _require_module(plugin, "tag", "站点标签")
+    try:
+        request = _request_dict(payload)
+        result = run_tag_cleanup(plugin, request.get("downloaders"), trigger="手动")
+        return _operation_response(result, TagCleanupRunResult)
+    except Exception as e:
+        logger.error(f"【PT下载中心】标签一键清理失败: {e}")
+        return _operation_response(
+            {"code": 1, "msg": f"清理失败: {e}", "removed": [], "failed": []},
+            TagCleanupRunResult,
+        )
 
 def api_rename_history(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all"):
     """返回未归档重命名历史；success/failed 沿用 success 布尔值。"""

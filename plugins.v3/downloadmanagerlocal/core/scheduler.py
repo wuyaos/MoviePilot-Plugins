@@ -22,7 +22,7 @@ from ..modules.hr.constants import (
     HR_SUMMARY_SERVICE_NAME,
 )
 from ..modules.rename.service import scan_renames
-from ..modules.sitetag.service import complement_history
+from ..modules.sitetag.service import complement_history, run_tag_cleanup
 
 from ..utils.config import module_faults
 
@@ -42,6 +42,7 @@ def build_plugin_services(plugin) -> List[Dict[str, Any]]:
         ("autoremove", _build_autoremove_services),
         ("failclean", _build_failclean_services),
         ("tag", _build_site_tag_services),
+        ("tag", _build_tag_cleanup_services),
         ("rename", _build_rename_services),
     ):
         if module in faults:
@@ -125,6 +126,29 @@ def _build_site_tag_services(plugin) -> List[Dict[str, Any]]:
         "func_kwargs": {"plugin": plugin},
     }]
 
+
+def _build_tag_cleanup_services(plugin) -> List[Dict[str, Any]]:
+    """按标签清理配置构造空标签定时清理服务声明（手动与定时共用 run_tag_cleanup）。"""
+    config = getattr(plugin, "_site_tag_config", None)
+    if not isinstance(config, dict) or not config.get("enable"):
+        return []
+    if not config.get("cleanup_enabled") or not config.get("cleanup_downloaders"):
+        return []
+    cron = str(config.get("cleanup_cron") or "")
+    if not cron:
+        return []
+    try:
+        trigger = CronTrigger.from_crontab(cron)
+    except ValueError as error:
+        logger.error(f"【PT下载中心:站点标签】清理计划无效，已禁用该服务：{cron}（{error}）")
+        return []
+    return [{
+        "id": "DownloadCenterTagCleanup",
+        "name": "空标签清理",
+        "trigger": trigger,
+        "func": run_tag_cleanup,
+        "func_kwargs": {"plugin": plugin, "trigger": "定时"},
+    }]
 
 def _build_rename_services(plugin) -> List[Dict[str, Any]]:
     """按命名补刀配置构造周期扫描重命名服务声明。"""

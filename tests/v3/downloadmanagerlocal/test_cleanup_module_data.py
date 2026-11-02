@@ -96,7 +96,7 @@ MODEL_NAMES = (
     'HashActionResult', 'HrActionResult', 'HrClearTaskRequest', 'HrPresetsResult',
     'HrSkipStatsResult', 'HrTasksResult', 'ModuleActionResult', 'ModuleConfigSummaryResult', 'ModuleStatusResult',
     'OverviewResult', 'RenamePageResult', 'RetryRenamesResult', 'SelectionItem',
-    'TagCleanupExecuteRequest', 'TagCleanupExecuteResult', 'TagCleanupScanRequest',
+    'TagCleanupExecuteRequest', 'TagCleanupExecuteResult', 'TagCleanupScanRequest', 'TagCleanupRunRequest', 'TagCleanupRunResult',
     'TagCleanupScanResult', 'UploadLimitDisableResult', 'UploadLimitReallocateResult',
     'UploadLimitRulesRequest', 'UploadLimitRulesResult', 'UploadLimitSiteTagsRequest',
     'UploadLimitSiteTagsResult', 'UploadLimitStatusResult',
@@ -161,7 +161,7 @@ def cleanup(monkeypatch, archive):
     _module(monkeypatch, PREFIX + '.modules.hr.guard', HrGuard=Mock())
     _module(monkeypatch, PREFIX + '.modules.hr.rules', load_preset_rules=Mock(return_value={}))
     _module(monkeypatch, PREFIX + '.modules.sitetag.service',
-            execute_tag_cleanup=Mock(), scan_tag_candidates=Mock(),
+            execute_tag_cleanup=Mock(), scan_tag_candidates=Mock(), run_tag_cleanup=Mock(),
             complement_history=Mock(return_value={'completed': 0, 'skipped': 0, 'downloaders': {}}))
     _module(monkeypatch, PREFIX + '.modules.uploadlimit.worker', stop_upload_limit_worker=Mock())
     _module(monkeypatch, PREFIX + '.modules.uploadlimit.service',

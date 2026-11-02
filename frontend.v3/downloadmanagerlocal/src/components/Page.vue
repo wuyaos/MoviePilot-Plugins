@@ -139,14 +139,6 @@ const hrClearDialogDescription = computed(() => ({
 
 const transferRunDialog = ref(false)
 
-const cleanupDownloaders = ref([])
-const cleanupScan = ref(null)
-const cleanupKeep = reactive({})
-const cleanupScanning = ref(false)
-const cleanupExecuting = ref(false)
-const cleanupDialog = ref(false)
-const cleanupMessage = ref('')
-const cleanupStatus = ref('info')
 
 const OVERVIEW_REFRESH_INTERVAL_MS = 30_000
 let overviewRefreshTimer = null
@@ -535,9 +527,10 @@ const moduleCards = computed(() => {
       value: `${tag.completed || 0} 个补全`,
       desc: `补全成功 · 跳过 ${tag.skipped || 0}`,
       details: Object.entries(tag.matched || {}).map(([name, value]) => ({ label: name, value })),
-      notes: Object.keys(tag.matched || {}).length ? [] : [{ type: 'info', text: '暂无本轮站点标签匹配统计；标签清理工具见下方「标签清理」区块。' }],
+      notes: Object.keys(tag.matched || {}).length ? [] : [{ type: 'info', text: '暂无本轮站点标签匹配统计；可用「一键清理空标签」删除无任务使用的标签定义。' }],
       actions: [
         { key: 'tag-complement', label: '补全分类标签', icon: 'mdi-tag-plus-outline', color: 'primary', run: doTagComplement },
+        { key: 'tag-cleanup-run', label: '一键清理空标签', icon: 'mdi-tag-remove-outline', color: 'warning', run: doTagCleanupRun },
       ],
     },
     {
@@ -1313,6 +1306,11 @@ async function doTagComplement() {
   if (resp?.code !== 1) await refreshActive()
 }
 
+
+async function doTagCleanupRun() {
+  const resp = await runModuleAction('tag-cleanup-run', () => postApi('tag_cleanup_run', {}), '空标签清理完成')
+  if (resp?.code !== 1) await refreshActive()
+}
 async function doUploadReallocate() {
   const resp = await runModuleAction('upload-reallocate', () => postJsonApi('upload_limit_reallocate', {}), '上传额度已重新分配')
   if (resp?.code !== 1) await refreshActive()
@@ -1438,113 +1436,6 @@ function nextArchivePage() {
   paging.value = true
   archivePage.value++
   void loadArchive(beginRecordRequest(['archive']))
-}
-
-const qbDownloaderItems = computed(() => downloaderItems.value.filter(item => item.type === 'qbittorrent'))
-const cleanupGroups = computed(() => cleanupScan.value?.downloaders || [])
-const cleanupAutoRemovedCount = computed(() => cleanupScan.value?.auto_removed?.length || 0)
-const cleanupRemovals = computed(() => {
-  const removals = []
-  for (const group of cleanupGroups.value) {
-    for (const item of group.tags || []) {
-      if (item.removable && item.count === 0 && !cleanupKeep[tagSelectionKey(group.name, item.tag)]) {
-        removals.push({ downloader: group.name, tag: item.tag, hashes: [...(item.hashes || [])] })
-      }
-    }
-  }
-  return removals
-})
-const cleanupRemovalAssociations = computed(() => cleanupRemovals.value.reduce((sum, item) => sum + item.hashes.length, 0))
-
-function tagSelectionKey(downloader, tag) {
-  return `${downloader}\u0000${tag}`
-}
-
-function resetCleanupKeep(groups) {
-  Object.keys(cleanupKeep).forEach(key => delete cleanupKeep[key])
-  for (const group of groups || []) {
-    for (const item of group.tags || []) {
-      cleanupKeep[tagSelectionKey(group.name, item.tag)] = true
-    }
-  }
-}
-
-function setAllCleanupTags(keep) {
-  for (const group of cleanupGroups.value) {
-    for (const item of group.tags || []) cleanupKeep[tagSelectionKey(group.name, item.tag)] = keep
-  }
-}
-
-function cleanupKindMeta(kind) {
-  return {
-    site: { label: '站点', color: 'primary' },
-    managed: { label: '业务', color: 'default' },
-    temporary: { label: '临时', color: 'warning' },
-    legacy_temporary: { label: '旧临时', color: 'warning' },
-    legacy_candidate: { label: '疑似旧临时', color: 'warning' },
-    active_temporary: { label: '使用中', color: 'primary' },
-    other: { label: '其他', color: 'default' },
-  }[kind] || { label: '其他', color: 'default' }
-}
-
-async function scanCleanupTags() {
-  cleanupMessage.value = ''
-  if (!cleanupDownloaders.value.length) {
-    cleanupStatus.value = 'warning'
-    cleanupMessage.value = '请先选择下载器'
-    return
-  }
-  cleanupScanning.value = true
-  try {
-    const response = await postJsonApi('tag_cleanup_scan', { downloaders: cleanupDownloaders.value })
-    cleanupScan.value = response || null
-    resetCleanupKeep(response?.downloaders || [])
-    const errorCount = response?.errors?.length || 0
-    cleanupStatus.value = response?.code === 0 ? (errorCount ? 'warning' : 'success') : 'error'
-    cleanupMessage.value = response?.code === 0
-      ? `扫描完成 · ${(response?.downloaders || []).flatMap(group => group.tags || []).filter(item => item.removable).length} 个空标签可清理（未删除）`
-      : (response?.msg || '扫描失败')
-  } catch (error) {
-    cleanupStatus.value = 'error'
-    cleanupMessage.value = error?.message || '扫描失败'
-  } finally {
-    cleanupScanning.value = false
-  }
-}
-
-function previewCleanupTags() {
-  if (!cleanupRemovals.value.length) {
-    cleanupStatus.value = 'warning'
-    cleanupMessage.value = '没有需要清理的标签'
-    return
-  }
-  cleanupDialog.value = true
-}
-
-async function executeCleanupTags() {
-  cleanupExecuting.value = true
-  let response = null
-  try {
-    response = await postJsonApi('tag_cleanup_execute', { removals: cleanupRemovals.value, scan_id: cleanupScan.value?.scan_id })
-  } catch (error) {
-    if (error?.code === 2) {
-      // 部分失败（success=false 抛错）：按 warning 收尾，弹窗照常关闭并刷新列表
-      response = { code: 2, msg: error.message }
-    } else {
-      cleanupStatus.value = 'error'
-      cleanupMessage.value = error?.message || '清理失败'
-      cleanupExecuting.value = false
-      return
-    }
-  }
-  try {
-    cleanupDialog.value = false
-    await scanCleanupTags()
-    cleanupStatus.value = response?.code === 0 ? 'success' : (response?.code === 2 ? 'warning' : 'error')
-    cleanupMessage.value = response?.msg || '清理完成'
-  } finally {
-    cleanupExecuting.value = false
-  }
 }
 
 watch(
@@ -1692,29 +1583,7 @@ const uploadGroups = computed(() => {
   if (shared.length) groups.push({ key: 'shared', title: '跨下载器站点汇总（当前接口未拆分）', rows: shared, aggregate: true })
   return groups
 })
-const cleanupPanel = ref(false)
-const cleanupSearch = ref('')
-const cleanupTagMatrix = computed(() => {
-  const merged = new Map()
-  for (const group of cleanupGroups.value) for (const item of group.tags || []) {
-    if (!merged.has(item.tag)) merged.set(item.tag, { tag: item.tag, owners: [], keep: true, count: 0, removable: true })
-    const tag = merged.get(item.tag)
-    tag.owners.push(group.name)
-    tag.count += Number(item.count || 0)
-    tag.removable = tag.removable && !!item.removable
-    tag.keep = tag.keep && !!cleanupKeep[tagSelectionKey(group.name, item.tag)]
-  }
-  return [...merged.values()].sort((a, b) => a.tag.localeCompare(b.tag))
-})
-const filteredCleanupTags = computed(() => cleanupTagMatrix.value.filter(item => item.tag.toLowerCase().includes(cleanupSearch.value.toLowerCase())))
-function setMergedTag(tag, keep) { for (const group of cleanupGroups.value) if ((group.tags || []).some(item => item.tag === tag)) cleanupKeep[tagSelectionKey(group.name, tag)] = keep }
 function renameRowKey(row) { return `${row.downloader || row.downloader_id || ""}:${row.hash}` }
-async function openTagCleanup() {
-  cleanupPanel.value = true
-  const request = { revision: pageRequestRevision, pluginId: props.pluginId, tab: activeTab.value }
-  await loadDownloaders(request)
-  if (isCurrentPageRequest(request)) cleanupDownloaders.value = qbDownloaderItems.value.map(item => item.value)
-}
 function pageRecordChange(kind, value) {
   if (kind === 'history') { page.value = value; void loadHistory(beginRecordRequest(['history'])) }
   if (kind === 'archive') { archivePage.value = value; void loadArchive(beginRecordRequest(['archive'])) }
@@ -1804,7 +1673,6 @@ onBeforeUnmount(() => {
               <ModuleHeader v-bind="currentHeader" />
               <div class="dm-page-actions">
                 <VBtn v-for="action in moduleActions" :key="action.key" size="small" variant="tonal" :color="action.color || 'primary'" :loading="moduleRunning === action.key" :disabled="moduleRunning !== '' || (action.key === 'rename-scan' && renameStatus.batch_running)" @click="action.run()">{{ action.label }}</VBtn>
-                <VBtn color="primary" v-if="currentModule === 'tag'" size="small" variant="tonal" @click="openTagCleanup">标签清理</VBtn>
               </div>
             </div>
             <ConfigSummary :fields="summaryFields" @settings="settings" />
@@ -2051,57 +1919,6 @@ onBeforeUnmount(() => {
             <VSpacer />
             <VBtn size="small" variant="tonal" @click="autoRunConfirm = false">取消</VBtn>
             <VBtn size="small" :color="autoremoveStatus.observe_only ? 'warning' : 'error'" variant="flat" :disabled="!!moduleRunning" @click="confirmAutoremoveRun">确认执行</VBtn>
-          </VCardActions>
-        </VCard>
-      </VDialog>
-      <VDialog content-class="dm-page" v-model="cleanupPanel" max-width="760">
-        <VCard>
-          <VCardTitle class="dm-title">标签清理</VCardTitle>
-          <VCardText>
-            <CompactSelect v-model="cleanupDownloaders" :items="qbDownloaderItems" multiple label="下载器" />
-            <VBtn size="small" variant="tonal" :loading="cleanupScanning" :disabled="cleanupExecuting" @click="scanCleanupTags">扫描标签</VBtn>
-            <VAlert v-if="cleanupMessage" :type="cleanupStatus" variant="tonal" class="mt-3">{{ cleanupMessage }}</VAlert>
-            <template v-if="cleanupScan">
-              <VTextField v-model="cleanupSearch" label="搜索标签" density="compact" hide-details class="mt-3" />
-              <div class="dm-hint">仅清理关联种子数为 0 的标签定义；扫描不删除标签。取消勾选空标签后预览确认，使用中的标签不可清理。</div>
-              <div class="dm-tag-matrix">
-                <label v-for="item in filteredCleanupTags" :key="item.tag">
-                  <input type="checkbox" :checked="item.keep" :disabled="cleanupExecuting || !item.removable" @change="setMergedTag(item.tag, $event.target.checked)" />
-                  <span>{{ item.tag }} · {{ item.owners.join("、") }} · {{ item.count }} 个任务{{ item.removable ? "（可清理）" : "（保留）" }}</span>
-                </label>
-              </div>
-            </template>
-          </VCardText>
-          <VCardActions>
-            <VSpacer />
-            <VBtn size="small" variant="tonal" @click="cleanupPanel = false">关闭</VBtn>
-            <VBtn size="small" color="warning" variant="tonal" :disabled="!cleanupRemovals.length || cleanupScanning || cleanupExecuting" @click="previewCleanupTags">预览清理</VBtn>
-          </VCardActions>
-        </VCard>
-      </VDialog>
-      <VDialog content-class="dm-page" v-model="cleanupDialog" max-width="620">
-        <VCard>
-          <VCardItem>
-            <template #prepend>
-              <VAvatar color="warning" variant="tonal" size="40" rounded="lg"><VIcon icon="mdi-tag-remove-outline" /></VAvatar>
-            </template>
-            <VCardTitle class="dm-title">确认标签清理</VCardTitle>
-            <VCardSubtitle class="dm-hint">{{ cleanupRemovals.length }} 个空标签 · 不改动种子标签</VCardSubtitle>
-          </VCardItem>
-          <VDivider />
-          <VList density="compact" class="dm-cleanup-preview-list">
-            <VListItem v-for="item in cleanupRemovals" :key="`${item.downloader}-${item.tag}`">
-              <template #prepend><VIcon icon="mdi-tag-outline" size="18" /></template>
-              <VListItemTitle>{{ item.tag }}</VListItemTitle>
-              <VListItemSubtitle>{{ item.downloader }} · {{ item.hashes.length }} 个任务</VListItemSubtitle>
-            </VListItem>
-          </VList>
-          <VDivider />
-          <VCardActions>
-            <VSpacer />
-            <VBtn color="primary" size="small" variant="tonal" :disabled="cleanupExecuting" @click="cleanupDialog = false">取消</VBtn>
-            <VBtn size="small" color="error" variant="flat" prepend-icon="mdi-tag-remove-outline" :loading="cleanupExecuting"
-              @click="executeCleanupTags">删除标签</VBtn>
           </VCardActions>
         </VCard>
       </VDialog>

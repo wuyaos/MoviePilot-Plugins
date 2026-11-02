@@ -84,6 +84,7 @@ def autoremove(monkeypatch):
     module(PREFIX + ".modules.sitetag.service", DEFAULT_TAG_CONFIG={
         "interval_cron": "0 3 * * *", "enable_media_tag": False,
         "enable_tag": True, "enable_category": False, "enable_del_tags": False,
+        "cleanup_enabled": False, "cleanup_downloaders": [], "cleanup_cron": '15 4 * * *',
         "downloaders": [], "all_cat": [], "all_cat_rename": [],
         "rename_type": "movie", "path_rename": False, "catprefix": "",
     })

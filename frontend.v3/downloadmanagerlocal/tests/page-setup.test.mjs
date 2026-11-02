@@ -15,7 +15,7 @@ const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^i
 const setup = new Function(
   'reactive', 'ref', 'computed', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount',
   'defineProps', 'defineEmits', 'getPluginApi', 'postPluginApi', 'postPluginJsonApi',
-  `${script}\nreturn { renameRowKey, openTagCleanup, cleanupPanel, cleanupDownloaders, scanCleanupTags, previewCleanupTags, cleanupScan, cleanupDialog, cleanupRemovals, setMergedTag, transferSourceName, transferPrimaryText, transferSecondaryText, hrTaskTitle, detailLimit, DETAIL_LIMIT_CHOICES, diagnostics, moduleDetail, loadDiagnostics, loadOverviewTab, refreshActive, selectTab, activeTab, tabs, page, archivePage, cleanupCounts, cleanupTargetKey, cleanupConfirmDialog, cleanupRunning, CLEANUP_TARGETS, confirmCleanupData, openCleanupDialog, autoremovePreview, MODULE_RECORD_VIEWS, MODULE_CLEANUP_KEYS, moduleRecordView, moduleCleanupButtons, openModuleRecords };`)
+  `${script}\nreturn { renameRowKey, doTagCleanupRun, transferSourceName, transferPrimaryText, transferSecondaryText, hrTaskTitle, detailLimit, DETAIL_LIMIT_CHOICES, diagnostics, moduleDetail, loadDiagnostics, loadOverviewTab, refreshActive, selectTab, activeTab, tabs, page, archivePage, cleanupCounts, cleanupTargetKey, cleanupConfirmDialog, cleanupRunning, CLEANUP_TARGETS, confirmCleanupData, openCleanupDialog, autoremovePreview, MODULE_RECORD_VIEWS, MODULE_CLEANUP_KEYS, moduleRecordView, moduleCleanupButtons, openModuleRecords };`)
 
 function mount() {
   const props = reactive({ api: null, pluginId: 'DownloadManagerLocal', sourcePluginId: 'DownloadManagerLocal' })
@@ -290,23 +290,11 @@ test('确认框口径：失败清理说明保留累计统计，通用提示不�
 })
 
 
-test("标签清理入口以 value 选择下载器，扫描结果进入确认预览", async () => {
-  const { page: instance, calls } = mountRecording({ downloaders: () => [
-    { value: "QB", title: "下载器一", type: "qbittorrent" },
-    { value: "TR", title: "下载器二", type: "transmission" },
-  ] })
-  await instance.openTagCleanup()
-  assert.equal(instance.cleanupPanel.value, true)
-  assert.deepEqual(instance.cleanupDownloaders.value, ["QB"])
-  await instance.scanCleanupTags()
-  assert.deepEqual(calls.find(call => call.path === "tag_cleanup_scan").payload, { downloaders: ["QB"] })
-  instance.cleanupScan.value = { downloaders: [{ name: "QB", tags: [{ tag: "obsolete", hashes: [], count: 0, removable: true }, { tag: "inuse", hashes: [HASH40], count: 1, removable: false }] }] }
-  instance.setMergedTag("obsolete", false)
-  instance.previewCleanupTags()
-  assert.equal(instance.cleanupDialog.value, true)
-  assert.deepEqual(instance.cleanupRemovals.value, [{ downloader: "QB", tag: "obsolete", hashes: [] }])
-  instance.setMergedTag("inuse", false)
-  assert.equal(instance.cleanupRemovals.value.length, 1, "used tag is never a removal candidate")
-  assert.match(template, /v-model="cleanupPanel"/)
+test("一键清理空标签：直接调用 tag_cleanup_run，无弹窗无预览确认", async () => {
+  const { page: instance, calls } = mountRecording()
+  await instance.doTagCleanupRun()
+  assert.deepEqual(calls.find(call => call.path === "tag_cleanup_run").payload, {})
+  assert.match(source, /一键清理空标签/)
+  assert.doesNotMatch(template, /v-model="cleanupPanel"/)
   assert.notEqual(instance.renameRowKey({ downloader: "QB1", hash: HASH40 }), instance.renameRowKey({ downloader: "QB2", hash: HASH40 }))
 })

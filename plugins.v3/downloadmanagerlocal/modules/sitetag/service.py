@@ -439,6 +439,33 @@ def execute_tag_cleanup(plugin, removals: Iterable[dict], scan_id: str | None = 
             "removed": removed, "failed": failed, "observed": observed,
             "requested": len(items_all), "processed": len(items), "truncated": len(items_all) > len(items)}
 
+def run_tag_cleanup(plugin, downloader_names: list | None = None, trigger: str = "手动") -> dict:
+    """扫描并清理零任务关联的全局标签定义：只读预筛 + 执行前复查复用既有契约。"""
+    cfg = getattr(plugin, "_site_tag_config", None) or {}
+    names = list(downloader_names if downloader_names is not None else cfg.get("cleanup_downloaders") or [])
+    scan = scan_tag_candidates(plugin, names)
+    removals = [
+        {"downloader": group["name"], "tag": tag["tag"], "hashes": []}
+        for group in scan.get("downloaders", [])
+        for tag in group.get("tags", [])
+        if tag.get("removable") and tag.get("count") == 0
+    ]
+    scan_errors = [
+        {"downloader": row.get("downloader"), "tag": "", "message": row.get("message") or "下载器读取失败"}
+        for row in scan.get("errors", [])
+    ]
+    if not removals:
+        return {"code": 2 if scan_errors else 0, "msg": "未找到空标签" if not scan_errors else "未找到空标签；部分下载器读取失败",
+                "removed": [], "failed": scan_errors, "observed": 0, "requested": 0, "processed": 0,
+                "truncated": False, "trigger": trigger}
+    result = execute_tag_cleanup(plugin, removals, scan.get("scan_id"))
+    result["failed"] = list(result.get("failed") or []) + scan_errors
+    if scan_errors:
+        result["code"] = 2 if result.get("removed") else 1
+    result["trigger"] = trigger
+    return result
+
+
 def find_site_by_domain(domain: str) -> Optional[str]:
     """通过域名从 V3 站点数据库查找名称，索引模板作为回退。"""
     try:
@@ -513,6 +540,7 @@ __all__ = (
     "create_temporary_tag",
     "execute_tag_cleanup",
     "find_site_by_domain",
+    "run_tag_cleanup",
     "forget_temporary_tag",
     "release_temporary_tag",
     "scan_tag_candidates",
@@ -550,6 +578,9 @@ DEFAULT_TAG_CONFIG = {
     "enable_tag": True,
     "enable_category": False,
     "enable_del_tags": False,
+    "cleanup_enabled": False,
+    "cleanup_downloaders": [],
+    "cleanup_cron": "15 4 * * *",
     "downloaders": [],
     "all_cat": DEFAULT_ALL_CAT,
     "all_cat_rename": DEFAULT_ALL_CAT,
@@ -810,8 +841,6 @@ def complement_history(plugin, config: dict | None = None) -> dict:
     result["round"] = dict(round_stats)
     # 结果出口单次保存最近快照；旧数据缺键时读取仍返回 None。
     plugin.save_data(SITE_TAG_STATUS_KEY, dict(state))
-    if cfg["enable_del_tags"]:
-        scan_tag_candidates(plugin, cfg["downloaders"])
     return result
 
 

@@ -75,6 +75,7 @@ def _ensure_loaded():
             "enable_tag": True,
             "enable_category": False,
             "enable_del_tags": False,
+            "cleanup_enabled": False, "cleanup_downloaders": [], "cleanup_cron": '15 4 * * *',
             "downloaders": [],
             "all_cat": [],
             "all_cat_rename": [],

@@ -61,7 +61,7 @@ test('普通帮助无 caption/medium-emphasis 或蓝色信息框；所有观察�
 test('开关去 success/info；真实删除选项为 error，风险不替代字段错误', () => {
   for (const node of templates.Config.filter(node => node.tag === 'VSwitch')) {
     assert.ok(!['success', 'info'].includes(attribute(node, 'color')), node.loc.source)
-    if (['transferForm.delete_source', 'transferForm.delete_duplicate', 'form.tag_enable_del_tags'].includes(model(node))) assert.equal(attribute(node, 'color'), 'error')
+    if (['transferForm.delete_source', 'transferForm.delete_duplicate', 'form.tag_cleanup_enabled'].includes(model(node))) assert.equal(attribute(node, 'color'), 'error')
   }
   for (const key of ['hrNewSiteName', 'form.hr_site_config_str', 'form.upload_limit_downloaders', 'transferForm.from_downloader', 'transferForm.to_downloader', 'transferForm.from_path', 'transferForm.to_path']) {
     const node = templates.Config.find(candidate => model(candidate) === key)

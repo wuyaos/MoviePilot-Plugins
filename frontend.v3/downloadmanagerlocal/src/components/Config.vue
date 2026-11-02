@@ -94,6 +94,7 @@ const defaults = {
   rename_include_tags: '', rename_cron: '', rename_event_debounce_seconds: 3,
   tag_interval_cron: '5 4 * * *', tag_enable_media_tag: false, tag_enable_tag: true,
   tag_enable_category: false, tag_enable_del_tags: false, tag_downloaders: [],
+  tag_cleanup_enabled: false, tag_cleanup_downloaders: [], tag_cleanup_cron: '15 4 * * *',
   tag_all_cat: [], tag_all_cat_rename: [], tag_rename_type: false, tag_path_rename: '',
   tag_catprefix: '',
   enabled: false, transfer_enabled: true, delay_minutes: 25, notify: false,
@@ -635,6 +636,7 @@ function buildSavePayload() {
     remover_downloaders: [...(form.remover_downloaders || [])],
     rename_downloaders: [...(form.rename_downloaders || [])],
     tag_downloaders: [...(form.tag_downloaders || [])],
+    tag_cleanup_downloaders: [...(form.tag_cleanup_downloaders || [])],
     tag_downloaders: [...(form.tag_downloaders || [])],
     // 未编辑的映射保留原串/数组（含未收录旧值），不因保存其他页而重排。
     ...(JSON.stringify(tagCatPairs.value) === JSON.stringify(parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename))
@@ -1395,6 +1397,7 @@ Object.keys(form).forEach(k => delete form[k])
   form.remover_downloaders = [...(v?.remover_downloaders || [])]
   form.rename_downloaders = [...(v?.rename_downloaders || [])]
   form.tag_downloaders = [...(v?.tag_downloaders || [])]
+  form.tag_cleanup_downloaders = [...(v?.tag_cleanup_downloaders || [])]
   form.tag_all_cat = [...(v?.tag_all_cat || [])]
   form.tag_all_cat_rename = [...(v?.tag_all_cat_rename || [])]
   tagCatPairs.value = parseCatPairs(form.tag_all_cat, form.tag_all_cat_rename)
@@ -1872,13 +1875,19 @@ Object.keys(form).forEach(k => delete form[k])
 <VSwitch density="compact" v-model="form.tag_observe_only" color="warning" inset hide-details label="观察模式" />
 <VSwitch density="compact" v-model="form.tag_enable_tag" color="primary" inset hide-details label="站点名标签" />
 <VSwitch density="compact" v-model="form.tag_enable_media_tag" color="primary" inset hide-details label="剧名标签" />
-<VSwitch density="compact" v-model="form.tag_enable_category" color="primary" inset hide-details label="下载分类" />
-<VSwitch density="compact" v-model="form.tag_enable_del_tags" color="error" inset hide-details label="允许删除标签" /></div><div v-if="form.tag_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />只预览标签和分类，不修改下载器。</div><div v-if="form.tag_enable_del_tags" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />允许在标签补全时删除下载器标签。</div><div class="dm-field-row">
+<VSwitch density="compact" v-model="form.tag_enable_category" color="primary" inset hide-details label="下载分类" /></div><div v-if="form.tag_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />只预览标签和分类，不修改下载器。</div><div class="dm-field-row">
 <div class="dm-field"><VTextField density="compact" v-model="form.tag_siteprefix" label="站点标签前缀" variant="outlined" hide-details /></div>
 <div class="dm-field"><VSelect density="compact" v-model="form.tag_downloaders" label="下载器" variant="outlined"
                     :items="downloaderItems" multiple chips closable-chips clearable hide-details /></div>
 <div class="dm-field"><VCronField density="compact" v-model="form.tag_interval_cron" label="补全计划" variant="outlined" hide-details /></div>
 </div>
+<FormSection title="标签清理" :icon="MODULE_ICONS.tag"><div class="dm-switch-group"><VSwitch density="compact" v-model="form.tag_cleanup_enabled" color="error" inset hide-details label="自动清理空标签" /></div><div v-if="form.tag_cleanup_enabled" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />到达清理计划将直接删除空标签定义；观察模式下只记录，不删除。</div><div class="dm-field-row">
+<div class="dm-field"><VSelect density="compact" v-model="form.tag_cleanup_downloaders" label="清理下载器" variant="outlined"
+                    :items="qbDownloaderItems" multiple chips closable-chips clearable hide-details /></div>
+<div class="dm-field"><VCronField density="compact" v-model="form.tag_cleanup_cron" label="清理计划" variant="outlined" hide-details /></div>
+</div>
+              <div class="dm-hint">仅删除没有任何种子使用的全局标签定义，不修改种子标签；执行前重新检查关联，读取失败的下载器跳过。手动「一键清理空标签」不受此开关限制。</div>
+              </FormSection>
             </div>
 
             <div v-show="activeSub === 'mapping'" class="dm-pane dm-compact-form dm-unified-form">

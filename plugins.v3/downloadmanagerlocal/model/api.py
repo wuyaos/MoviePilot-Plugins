@@ -204,6 +204,19 @@ class TagCleanupExecuteRequest(ApiRequestModel):
     scan_id: Optional[str] = None
 
 
+
+class TagCleanupRunRequest(ApiRequestModel):
+    """一键清理空标签请求；downloaders 缺省时使用配置的清理下载器。"""
+
+    downloaders: Optional[list[str]] = None
+
+
+class TagCleanupRunResult(TagCleanupExecuteResult):
+    """扫描并直接清理空标签的合并结果。"""
+
+    observed: int = 0
+    trigger: str = "手动"
+
 class HrTasksResult(ApiBusinessModel):
     """H&R 任务列表与汇总。"""
 

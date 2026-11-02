@@ -132,7 +132,7 @@ MODEL_NAMES = (
     "ExecutionHistoryPageResult", "HashActionResult", "HrActionResult", "HrClearTaskRequest", "HrPresetsResult",
     "HrSkipStatsResult", "HrTasksResult", "ModuleActionResult", "ModuleConfigSummaryResult", "ModuleStatusResult",
     "OverviewResult", "RenamePageResult", "RetryRenamesResult", "SelectionItem", "TagCleanupExecuteRequest",
-    "TagCleanupExecuteResult", "TagCleanupScanRequest", "TagCleanupScanResult", "UploadLimitDisableResult",
+    "TagCleanupExecuteResult", "TagCleanupScanRequest", "TagCleanupScanResult", "TagCleanupRunRequest", "TagCleanupRunResult", "UploadLimitDisableResult",
     "UploadLimitReallocateResult", "UploadLimitRulesRequest", "UploadLimitRulesResult", "UploadLimitSiteTagsRequest",
     "UploadLimitSiteTagsResult", "UploadLimitStatusResult",
 )
@@ -206,7 +206,7 @@ def handlers_env(mods, monkeypatch):
     stub(PREFIX + ".modules.hr.rules", load_preset_rules=Mock(return_value={}))
     stub(PREFIX + ".modules.sitetag", __path__=[str(PLUGIN_DIR / "modules" / "sitetag")])
     stub(PREFIX + ".modules.sitetag.service", complement_history=Mock(), execute_tag_cleanup=Mock(),
-         scan_tag_candidates=Mock())
+         scan_tag_candidates=Mock(), run_tag_cleanup=Mock())
     stub(PREFIX + ".modules.uploadlimit", __path__=[str(PLUGIN_DIR / "modules" / "uploadlimit")])
     stub(PREFIX + ".modules.uploadlimit.worker", stop_upload_limit_worker=Mock())
     stub(PREFIX + ".modules.uploadlimit.service", get_upload_limit_status=Mock(),
