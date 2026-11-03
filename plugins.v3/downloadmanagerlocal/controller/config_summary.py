@@ -328,7 +328,7 @@ def _upload_limit_fields(config: dict, defaults: dict, status: dict) -> list[dic
                 active[str(name)] = speed
         if active:
             global_display = ", ".join(
-                f"{name} {speed} KiB/s" for name, speed in sorted(active.items()))
+                f"{name} {round(speed / 1024, 2)} MB/s" for name, speed in sorted(active.items()))
     sites_display = "未配置"
     if isinstance(site_rules, dict):
         active_sites = []

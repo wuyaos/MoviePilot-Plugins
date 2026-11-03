@@ -28,7 +28,7 @@ const declaration = (selector, prop) => rule(selector)?.nodes.find(node => node.
 test('完整脚本 SHA-256 与全部模板业务 directives 精确匹配批准后的 fixture', () => {
   const script = normalized.match(/<script setup>([\s\S]*?)<\/script>/)[1]
   assert.equal(createHash('sha256').update(script).digest('hex'), fixture.scriptSha256)
-  const directives = [...descriptor.template.content.matchAll(/(?:v-[\w.-]+|[:@][\w:-]+)="[^"]*"/g)].map(match => match[0]).sort()
+  const directives = [...descriptor.template.content.matchAll(/(?:v-[\w.-]+|[:@][\w:-]+)="[^"]*"/g)].map(match => match[0].replace(/\r\n/g, '\n')).sort()
   assert.deepEqual(directives, fixture.directives)
   assert.doesNotMatch(normalized, /emit\(['"]layout/)
 })

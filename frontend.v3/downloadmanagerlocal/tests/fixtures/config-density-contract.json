@@ -1,7 +1,7 @@
 {
-  "scriptSha256": "5c4f0d2da7a555cc54e31d8e183c1af62d766df5d516e375f66faa85e2a3e5ae",
+  "scriptSha256": "ab15839a036647d3e75c79631269b92e0c46342e500f5b14647aa9ab3936d077",
   "directives": [
-    ":actions=\"row.custom ? [\r\n                          { key: 'edit', label: row.expanded ? '收起' : '编辑', icon: row.expanded ? 'mdi-chevron-up' : 'mdi-pencil-outline' },\r\n                          { key: 'delete', label: row.preset ? '删除覆盖（恢复预设）' : '删除站点', icon: 'mdi-delete-outline', color: 'error', disabled: !form.hr_enable_site_config }\r\n                        ] : [{ key: 'copy', label: '复制规则', icon: 'mdi-content-copy', disabled: !form.hr_enable_site_config }]\"",
+    ":actions=\"row.custom ? [\n                          { key: 'edit', label: row.expanded ? '收起' : '编辑', icon: row.expanded ? 'mdi-chevron-up' : 'mdi-pencil-outline' },\n                          { key: 'delete', label: row.preset ? '删除覆盖（恢复预设）' : '删除站点', icon: 'mdi-delete-outline', color: 'error', disabled: !form.hr_enable_site_config }\n                        ] : [{ key: 'copy', label: '复制规则', icon: 'mdi-content-copy', disabled: !form.hr_enable_site_config }]\"",
     ":active=\"activeMain === item.key\"",
     ":aria-label=\"row.name + '规则启用'\"",
     ":class=\"{ 'dm-config--transfer': activeMain === 'transfer' }\"",
@@ -114,7 +114,7 @@
     ":model-value=\"hrTierNumber(tier, field.key)\"",
     ":model-value=\"pair.to\"",
     ":model-value=\"row.enabled\"",
-    ":model-value=\"row.limit_kib\"",
+    ":model-value=\"row.limit_kib ? Number((row.limit_kib / 1024).toFixed(2)) : null\"",
     ":model-value=\"uploadDownloaderLimit(item.value)\"",
     ":name=\"downloaderTitle(task.from_downloader)\"",
     ":name=\"downloaderTitle(task.to_downloader)\"",
@@ -173,7 +173,7 @@
     "@update:model-value=\"hrSetTierNumber(row.name, tierIndex, field.key, $event)\"",
     "@update:model-value=\"setTagCategoryTarget(pair.from, $event)\"",
     "@update:model-value=\"setUploadDownloaderLimit(item.value, $event)\"",
-    "@update:model-value=\"setUploadSiteRule(row.name, $event)\"",
+    "@update:model-value=\"setUploadSiteRuleLimitMb(row.name, $event)\"",
     "v-bind=\"chipProps\"",
     "v-bind=\"chipProps\"",
     "v-bind=\"menuProps\"",

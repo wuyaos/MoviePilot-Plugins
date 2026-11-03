@@ -208,8 +208,11 @@ function formatPercent(value) {
 
 function formatUploadRate(value) {
   const rate = Number(value || 0)
-  if (rate >= 1024 * 1024) return `${(rate / 1024 / 1024).toFixed(2)} MiB/s`
-  return `${(rate / 1024).toFixed(1)} KiB/s`
+  return `${(rate / 1024 / 1024).toFixed(2)} MB/s`
+}
+
+function formatKibSpeed(value) {
+  return value == null ? '—' : `${Number((Number(value) / 1024).toFixed(2))} MB/s`
 }
 
 function hrStatusColor(status) {
@@ -620,7 +623,7 @@ const moduleHeaders = computed(() => {
       fault: ['degraded', 'error'].includes(up.service_status) || !!up.errors?.length || !!up.state_error,
       badges: [headerMetric('受管种子', up.managed_torrents), headerMetric('上传中', up.uploading_torrents),
         headerMetric('当前上传', up.upload_rate_bps == null ? undefined : formatUploadRate(up.upload_rate_bps)),
-        headerMetric('已分配额度', up.allocated_kib == null ? undefined : `${up.allocated_kib} KiB/s`)],
+        headerMetric('已分配额度', up.allocated_kib == null ? undefined : formatKibSpeed(up.allocated_kib))],
     },
   }
   return Object.fromEntries(moduleCards.value.filter(card => headers[card.key]).map(card => {
@@ -1802,11 +1805,11 @@ onBeforeUnmount(() => {
                 <section v-for="group in uploadGroups" :key="group.key" class="dm-upload-group">
                   <button type="button" class="dm-group-heading" :aria-expanded="!closedUploadGroups[group.key]" @click="closedUploadGroups[group.key] = !closedUploadGroups[group.key]">
                     <span>{{ closedUploadGroups[group.key] ? '▸' : '▾' }} {{ group.title }}</span>
-                    <template v-if="!group.aggregate"><span>{{ group.error ? '异常：' + group.error : group.connected === false ? '未连接' : '状态：' + (group.status || '当前接口未提供') }}</span><span>当前上传 {{ group.upload_rate_bps == null ? '—' : formatUploadRate(group.upload_rate_bps) }}</span><span>全局限速 {{ group.global_limit_kib == null ? '—' : group.global_limit_kib + ' KiB/s' }}</span><span>受管 {{ group.managed_torrents ?? '—' }}</span><span>更新时间 {{ group.updated_at || '当前接口未提供' }}</span></template>
+                    <template v-if="!group.aggregate"><span>{{ group.error ? '异常：' + group.error : group.connected === false ? '未连接' : '状态：' + (group.status || '当前接口未提供') }}</span><span>当前上传 {{ group.upload_rate_bps == null ? '—' : formatUploadRate(group.upload_rate_bps) }}</span><span>全局限速 {{ formatKibSpeed(group.global_limit_kib) }}</span><span>受管 {{ group.managed_torrents ?? '—' }}</span><span>更新时间 {{ group.updated_at || '当前接口未提供' }}</span></template>
                   </button>
                   <ModuleTable v-if="!closedUploadGroups[group.key]" :title="group.title + ' · 站点额度'" :columns="recordColumns.sites" :rows="group.rows" row-key="key" :pagination="false">
                     <template #cell-upload_rate_bps="{ value }">{{ value == null ? '—' : formatUploadRate(value) }}</template>
-                    <template #cell-allocated_kib="{ value }">{{ value == null ? '—' : value + ' KiB/s' }}</template>
+                    <template #cell-allocated_kib="{ value }">{{ formatKibSpeed(value) }}</template>
                     <template #cell-uploading_torrents="{ value }">{{ value ?? '当前接口未提供' }}</template>
                     <template #cell-state="{ row }">{{ row.state || '当前接口未提供' }}</template>
                     <template #expand="{ row }"><p class="dm-hint">关联下载器：{{ row.downloaders?.join('、') || '当前接口未提供' }}；种子级明细当前接口未提供。</p></template>

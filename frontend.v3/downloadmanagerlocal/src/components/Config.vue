@@ -676,13 +676,17 @@ function selectMain(key) {
 
 function uploadDownloaderLimit(downloaderId) {
   const value = Number(form.upload_limit_downloader_limits_kib?.[downloaderId] || 0)
-  return value > 0 ? value : null
+  return value > 0 ? Number((value / 1024).toFixed(2)) : null
+}
+
+function setUploadSiteRuleLimitMb(siteName, value) {
+  setUploadSiteRule(siteName, value == null || value === '' ? 0 : Number(value) * 1024)
 }
 
 function setUploadDownloaderLimit(downloaderId, value) {
   const mapping = { ...(form.upload_limit_downloader_limits_kib || {}) }
   const normalized = Number(value)
-  if (Number.isFinite(normalized) && normalized > 0) mapping[downloaderId] = Math.floor(normalized)
+  if (Number.isFinite(normalized) && normalized > 0) mapping[downloaderId] = Math.round(normalized * 1024)
   else delete mapping[downloaderId]
   form.upload_limit_downloader_limits_kib = mapping
 }
@@ -1476,7 +1480,7 @@ Object.keys(form).forEach(k => delete form[k])
                   </div>
                   <VTextField density="compact" class="dm-number-input" :model-value="uploadDownloaderLimit(item.value)"
                     @update:model-value="setUploadDownloaderLimit(item.value, $event)"
-                     :error-messages="form.upload_limit_enabled && uploadMissingLimits.some(missing => missing.value === item.value) ? '请设置正整数总上限' : ''" label="总上限（KiB/s）" type="number" min="1" step="1" variant="outlined"
+                     :error-messages="form.upload_limit_enabled && uploadMissingLimits.some(missing => missing.value === item.value) ? '请设置正整数总上限' : ''" label="总上限（MB/s）" type="number" min="0.1" step="0.1" variant="outlined"
                     hint="必须大于 0；以插件配置为准" persistent-hint />
                 </div>
               </div>
@@ -1495,8 +1499,8 @@ Object.keys(form).forEach(k => delete form[k])
                       <div class="dm-hint">{{ form.tag_siteprefix || '🏠' }}{{ row.name }}</div>
                     </div>
                   </div>
-                  <VTextField density="compact" class="dm-number-input" :model-value="row.limit_kib" @update:model-value="setUploadSiteRule(row.name, $event)"
-                    label="合计上限（KiB/s）" type="number" min="0" step="1" clearable variant="outlined"
+                  <VTextField density="compact" class="dm-number-input" :model-value="row.limit_kib ? Number((row.limit_kib / 1024).toFixed(2)) : null" @update:model-value="setUploadSiteRuleLimitMb(row.name, $event)"
+                    label="合计上限（MB/s）" type="number" min="0" step="0.1" clearable variant="outlined"
                     hint="留空或 0 不额外写单种上限；仍受下载器全局上限约束" persistent-hint />
                   <VBtn size="small" aria-label="删除站点" icon="mdi-delete-outline" color="primary" variant="text" title="删除站点"
                     @click="removeUploadSiteRule(row.name)" />

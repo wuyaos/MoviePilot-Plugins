@@ -1027,3 +1027,72 @@ def test_no_change_cycle_keeps_single_save(svc, monkeypatch):
     assert result["service_status"] == "running"
     assert qb.set_prefs_calls == [] and qb.torrent_limit_calls == []
     assert len(saved) == 1, "无写入时不应有写后 save，仍只保留轮末一次"
+
+
+# ── B07c：下载器卡片实时字段（修复前端「当前接口未提供」） ────────────
+
+
+def test_cycle_summary_includes_live_fields(svc):
+    qb = FakeQb(upload_limit_bps=100 * 1024, alt_up_limit=100 * 1024)
+    state = _empty_state()
+    state["management_active"] = True
+    state["cycle"] = 1
+    state["last_run_at"] = 1000.0
+    state["downloaders"] = {"QB1": _seed_downloader()}
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_site_rules = {}
+    plugin.add_downloader("QB1", qb)
+
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    item = result["downloaders"][0]
+    assert item["connected"] is True
+    assert item["status"] == "正常"
+    assert item["global_limit_kib"] == 100
+    assert item["updated_at"]
+
+
+def test_cycle_summary_error_downloader_reports_abnormal(svc):
+    qb = FakeQb(upload_limit_bps=100 * 1024, alt_up_limit=100 * 1024)
+    qb.get_torrents_error = RuntimeError("boom")
+    state = _empty_state()
+    state["management_active"] = True
+    state["cycle"] = 1
+    state["last_run_at"] = 1000.0
+    state["downloaders"] = {"QB1": _seed_downloader()}
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_site_rules = {}
+    plugin.add_downloader("QB1", qb)
+
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    item = result["downloaders"][0]
+    assert item["error"]
+    # 扫描失败的下载器不会进入 contexts：无轮询数据即视为未连接，不伪造
+    assert item["connected"] is False
+    assert item["status"] == "异常"
+    assert item["global_limit_kib"] is None
+
+
+def test_cycle_summary_unpolled_downloader_reports_unpolled(svc):
+    qb = FakeQb(upload_limit_bps=100 * 1024, alt_up_limit=100 * 1024)
+    state = _empty_state()
+    state["management_active"] = True
+    state["cycle"] = 1
+    state["last_run_at"] = 1000.0
+    state["downloaders"] = {"QB1": _seed_downloader()}
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_site_rules = {}
+    plugin._upload_limit_downloaders = ["QB1", "QBX"]
+    plugin._upload_limit_downloader_limits_kib = {"QB1": 100, "QBX": 100}
+    plugin.add_downloader("QB1", qb)
+
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    items = {item["id"]: item for item in result["downloaders"]}
+    # 无服务实例的下载器同样走 errors 路径：展示「异常 + 下载器不可用」而非伪造状态
+    assert items["QBX"]["connected"] is False
+    assert items["QBX"]["status"] == "异常"
+    assert "下载器不可用" in items["QBX"]["error"]
+    assert items["QBX"]["global_limit_kib"] is None
+    assert items["QBX"]["updated_at"] == ""

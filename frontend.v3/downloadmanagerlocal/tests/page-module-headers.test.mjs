@@ -157,7 +157,7 @@ test('上传限速格式化真实汇总数值，缺速率/额度不显示假零�
   const p = page()
   p.overview.value = { upload_limit: { enabled: true, service_status: 'running', managed_torrents: 0, uploading_torrents: 2, upload_rate_bps: 2048, allocated_kib: 100 } }
   const header = p.moduleHeaders.value.upload_limit
-  assert.deepEqual(values(header), { 受管种子: 0, 上传中: 2, 当前上传: '2.0 KiB/s', 已分配额度: '100 KiB/s' })
+  assert.deepEqual(values(header), { 受管种子: 0, 上传中: 2, 当前上传: '0.00 MB/s', 已分配额度: '0.1 MB/s' })
   assert.equal(header.running, false)
   const html = await render(Header, header)
   for (const text of ['受管种子', '上传中', '当前上传', '已分配额度']) assert.ok(html.includes(text))

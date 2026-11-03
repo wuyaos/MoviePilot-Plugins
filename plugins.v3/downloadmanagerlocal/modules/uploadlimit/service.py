@@ -388,6 +388,8 @@ def run_upload_limit_cycle(
                     "type": downloader_type,
                     "snapshots": completed,
                     "initial_scan_pending": initial_scan_pending,
+                    "global_settings": global_settings_to_dict(current_global),
+                    "polled_at": timestamp,
                 }
                 if not site_policy_enabled:
                     release_result = _release_downloader_torrent_limits(
@@ -879,6 +881,36 @@ def _build_downloader_site_rows(state: dict) -> list[dict]:
     return rows
 
 
+def _downloader_live_fields(context: dict, *, error: str) -> dict:
+    """下载器卡片的实时展示字段，数据不可用时返回 None/空串，不伪造。"""
+    connected = bool(context)
+    settings = context.get("global_settings") if connected else None
+    has_settings = isinstance(settings, dict)
+    limit_bps = settings.get("upload_limit_bps") if has_settings else None
+    limit_enabled = bool(settings.get("upload_enabled")) if has_settings else False
+    polled_at = float(context.get("polled_at") or 0) if connected else 0.0
+    if error:
+        status = "异常"
+    elif not connected:
+        status = "未轮询"
+    else:
+        status = "正常"
+    return {
+        "connected": connected,
+        "status": status,
+        "global_limit_kib": (
+            max(0, int(limit_bps) // 1024)
+            if limit_enabled and limit_bps is not None
+            else None
+        ),
+        "updated_at": (
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(polled_at))
+            if connected and polled_at > 0
+            else ""
+        ),
+    }
+
+
 def get_upload_limit_status(plugin: Any, *, state: dict | None = None) -> dict:
     """返回配置页可展示的上传限速持久化状态。"""
     runtime = state if isinstance(state, dict) else load_upload_limit_state(plugin)
@@ -1092,6 +1124,10 @@ def _build_downloader_only_summary(
             "protected_torrents": 0,
             "allocated_kib": item_allocated_kib,
             "error": "; ".join(errors.get(downloader_id) or []),
+            **_downloader_live_fields(
+                context,
+                error="; ".join(errors.get(downloader_id) or []),
+            ),
         })
 
     flat_errors = [
@@ -1198,6 +1234,10 @@ def _build_summary(
                 and float(record.get("grace_until") or 0) <= float(state.get("last_run_at") or 0)
             ),
             "error": "; ".join(errors.get(downloader_id) or []),
+            **_downloader_live_fields(
+                context,
+                error="; ".join(errors.get(downloader_id) or []),
+            ),
         })
 
     site_items: dict[str, dict] = {}

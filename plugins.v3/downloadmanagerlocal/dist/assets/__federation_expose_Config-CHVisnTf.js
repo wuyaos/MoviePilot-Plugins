@@ -1194,13 +1194,17 @@ function selectMain(key) {
 
 function uploadDownloaderLimit(downloaderId) {
   const value = Number(form.upload_limit_downloader_limits_kib?.[downloaderId] || 0);
-  return value > 0 ? value : null
+  return value > 0 ? Number((value / 1024).toFixed(2)) : null
+}
+
+function setUploadSiteRuleLimitMb(siteName, value) {
+  setUploadSiteRule(siteName, value == null || value === '' ? 0 : Number(value) * 1024);
 }
 
 function setUploadDownloaderLimit(downloaderId, value) {
   const mapping = { ...(form.upload_limit_downloader_limits_kib || {}) };
   const normalized = Number(value);
-  if (Number.isFinite(normalized) && normalized > 0) mapping[downloaderId] = Math.floor(normalized);
+  if (Number.isFinite(normalized) && normalized > 0) mapping[downloaderId] = Math.round(normalized * 1024);
   else delete mapping[downloaderId];
   form.upload_limit_downloader_limits_kib = mapping;
 }
@@ -2174,10 +2178,10 @@ return (_ctx, _cache) => {
                                 "model-value": uploadDownloaderLimit(item.value),
                                 "onUpdate:modelValue": $event => (setUploadDownloaderLimit(item.value, $event)),
                                 "error-messages": form.upload_limit_enabled && uploadMissingLimits.value.some(missing => missing.value === item.value) ? '请设置正整数总上限' : '',
-                                label: "总上限（KiB/s）",
+                                label: "总上限（MB/s）",
                                 type: "number",
-                                min: "1",
-                                step: "1",
+                                min: "0.1",
+                                step: "0.1",
                                 variant: "outlined",
                                 hint: "必须大于 0；以插件配置为准",
                                 "persistent-hint": ""
@@ -2216,12 +2220,12 @@ return (_ctx, _cache) => {
                               _createVNode(_component_VTextField, {
                                 density: "compact",
                                 class: "dm-number-input",
-                                "model-value": row.limit_kib,
-                                "onUpdate:modelValue": $event => (setUploadSiteRule(row.name, $event)),
-                                label: "合计上限（KiB/s）",
+                                "model-value": row.limit_kib ? Number((row.limit_kib / 1024).toFixed(2)) : null,
+                                "onUpdate:modelValue": $event => (setUploadSiteRuleLimitMb(row.name, $event)),
+                                label: "合计上限（MB/s）",
                                 type: "number",
                                 min: "0",
-                                step: "1",
+                                step: "0.1",
                                 clearable: "",
                                 variant: "outlined",
                                 hint: "留空或 0 不额外写单种上限；仍受下载器全局上限约束",
@@ -5030,6 +5034,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-6eb652bd"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-c84a1f2e"]]);
 
 export { Config as default };

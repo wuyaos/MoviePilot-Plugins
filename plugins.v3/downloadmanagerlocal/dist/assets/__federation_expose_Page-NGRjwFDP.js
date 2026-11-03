@@ -1195,8 +1195,11 @@ function formatPercent(value) {
 
 function formatUploadRate(value) {
   const rate = Number(value || 0);
-  if (rate >= 1024 * 1024) return `${(rate / 1024 / 1024).toFixed(2)} MiB/s`
-  return `${(rate / 1024).toFixed(1)} KiB/s`
+  return `${(rate / 1024 / 1024).toFixed(2)} MB/s`
+}
+
+function formatKibSpeed(value) {
+  return value == null ? '—' : `${Number((Number(value) / 1024).toFixed(2))} MB/s`
 }
 
 function hrStatusColor(status) {
@@ -1607,7 +1610,7 @@ const moduleHeaders = computed(() => {
       fault: ['degraded', 'error'].includes(up.service_status) || !!up.errors?.length || !!up.state_error,
       badges: [headerMetric('受管种子', up.managed_torrents), headerMetric('上传中', up.uploading_torrents),
         headerMetric('当前上传', up.upload_rate_bps == null ? undefined : formatUploadRate(up.upload_rate_bps)),
-        headerMetric('已分配额度', up.allocated_kib == null ? undefined : `${up.allocated_kib} KiB/s`)],
+        headerMetric('已分配额度', up.allocated_kib == null ? undefined : formatKibSpeed(up.allocated_kib))],
     },
   };
   return Object.fromEntries(moduleCards.value.filter(card => headers[card.key]).map(card => {
@@ -3408,7 +3411,7 @@ return (_ctx, _cache) => {
                                     ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                                         _createElementVNode("span", null, _toDisplayString(group.error ? '异常：' + group.error : group.connected === false ? '未连接' : '状态：' + (group.status || '当前接口未提供')), 1),
                                         _createElementVNode("span", null, "当前上传 " + _toDisplayString(group.upload_rate_bps == null ? '—' : formatUploadRate(group.upload_rate_bps)), 1),
-                                        _createElementVNode("span", null, "全局限速 " + _toDisplayString(group.global_limit_kib == null ? '—' : group.global_limit_kib + ' KiB/s'), 1),
+                                        _createElementVNode("span", null, "全局限速 " + _toDisplayString(formatKibSpeed(group.global_limit_kib)), 1),
                                         _createElementVNode("span", null, "受管 " + _toDisplayString(group.managed_torrents ?? '—'), 1),
                                         _createElementVNode("span", null, "更新时间 " + _toDisplayString(group.updated_at || '当前接口未提供'), 1)
                                       ], 64))
@@ -3427,7 +3430,7 @@ return (_ctx, _cache) => {
                                         _createTextVNode(_toDisplayString(value == null ? '—' : formatUploadRate(value)), 1)
                                       ]),
                                       "cell-allocated_kib": _withCtx(({ value }) => [
-                                        _createTextVNode(_toDisplayString(value == null ? '—' : value + ' KiB/s'), 1)
+                                        _createTextVNode(_toDisplayString(formatKibSpeed(value)), 1)
                                       ]),
                                       "cell-uploading_torrents": _withCtx(({ value }) => [
                                         _createTextVNode(_toDisplayString(value ?? '当前接口未提供'), 1)
@@ -3905,6 +3908,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-2f2b876f"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b1e4b316"]]);
 
 export { Page as default };
