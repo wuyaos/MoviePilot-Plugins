@@ -15,7 +15,7 @@ assert.deepEqual(compileTemplate({ source: descriptor.template.content, filename
 const Header = await loadSfc('ModuleHeader.vue')
 const setup = new Function('reactive', 'ref', 'computed', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount',
   'defineProps', 'defineEmits', 'getPluginApi', 'postPluginApi', 'postPluginJsonApi',
-  `${descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)}\nreturn { overview, diagnostics, transferStatus, hrTasks, autoremoveStatus, failcleanStatus, siteTagStatus, renameStatus, moduleRunning, moduleHeaders, moduleCards, moduleGridCards, formatDuration, activeTab };`)
+  `${descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)}\nreturn { overview, diagnostics, transferStatus, hrTasks, autoremoveStatus, failcleanStatus, siteTagStatus, renameStatus, moduleRunning, moduleHeaders, moduleCards, moduleGridCards, formatDuration, activeTab, uploadLimitStateChip, formatAllocationMb, uploadGroups, uploadDownloaderFilter, uploadSiteFilter };`)
 function page(watcher = watch) {
   const noRequest = () => { throw new Error('Header projection must not request API') }
   return setup(reactive, ref, computed, watcher, nextTick, () => {}, () => {},

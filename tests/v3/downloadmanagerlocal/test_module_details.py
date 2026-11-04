@@ -478,3 +478,25 @@ def test_downloader_diagnostics_states_and_remote_path(service, monkeypatch,
     assert checks["目标下载器"]["status"] == expected_state
     assert "paths" in payload
     assert payload["paths"]["fromtorrentpath_exists"] is None
+
+
+def test_upload_limit_diagnostics_projects_target_state_and_mbps(service, monkeypatch):
+    uploadlimit = sys.modules[f"{PREFIX}.modules.uploadlimit.service"]
+    monkeypatch.setattr(uploadlimit, "get_upload_limit_status", lambda _plugin: {
+        "service_status": "running",
+        "managed_torrents": 1,
+        "downloader_site_rows": [{
+            "downloader_id": "QB1", "site": "site-a", "state": "uncertain",
+            "torrent_limit_kib": 1024, "desired_allocated_kib": 2048,
+            "allocated_kib": 1536,
+        }],
+    })
+
+    detail = service._uploadlimit_detail(_plugin(_upload_limit_notify=False))
+
+    assert _rows(detail)["异常通知"] == "未开启"
+    item = next(item for item in detail["items"] if item["title"] == "QB1 / site-a")
+    assert "uncertain" in item["meta"]
+    assert "目标 2048 KiB/s (2.00 MB/s)" in item["meta"]
+    assert "已应用 1536 KiB/s" in item["meta"]
+    assert "单种上限 1024 KiB/s (1.00 MB/s)" in item["meta"]

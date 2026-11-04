@@ -47,6 +47,7 @@ UPLOAD_LIMIT_CONFIG_DEFAULTS = {
     "upload_limit_downloaders": [],
     "upload_limit_downloader_limits_kib": {},
     "upload_limit_site_rules": {},
+    "upload_limit_notify": True,
     "upload_limit_grace_minutes": 30,
 }
 
@@ -180,8 +181,13 @@ def _normalize_upload_site_rules(value) -> dict[str, dict]:
             limit_kib = int(float(raw_rule.get("limit_kib") or 0))
         except (TypeError, ValueError):
             limit_kib = 0
+        try:
+            torrent_limit_kib = int(float(raw_rule.get("torrent_limit_kib") or 0))
+        except (TypeError, ValueError):
+            torrent_limit_kib = 0
         result[clean_name] = {
             "limit_kib": max(0, limit_kib),
+            "torrent_limit_kib": max(0, torrent_limit_kib),
         }
     return result
 
@@ -206,6 +212,7 @@ def normalize_upload_limit_config(config: dict | None) -> dict:
         "upload_limit_site_rules": _normalize_upload_site_rules(
             source.get("upload_limit_site_rules")
         ),
+        "upload_limit_notify": bool(source.get("upload_limit_notify", True)),
         "upload_limit_grace_minutes": safe_int(
             source.get("upload_limit_grace_minutes"), 30, 0, 1440
         ),

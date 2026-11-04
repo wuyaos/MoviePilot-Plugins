@@ -45,6 +45,7 @@ ALLOCATOR_NAMES = (
     'aggregate_pool_demand_kib',
     'allocate_site_pools',
     'allocate_task_limits',
+    'allocate_fair_task_limits',
     'estimate_task_demand_kib',
     'initial_auto_probe_count',
     'is_task_probe_candidate',

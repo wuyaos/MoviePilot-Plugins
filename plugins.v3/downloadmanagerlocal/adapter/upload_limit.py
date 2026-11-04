@@ -297,13 +297,14 @@ def write_torrent_upload_limit(
         )
         return TorrentUploadSettings(limit_bps=applied_bps, enabled=True)
     client = _require_attr(instance, "trc")
+    applied_limit = normalized_limit if normalized_limit > 0 else 1
     client.change_torrent(
         ids=clean_hash,
         uploadLimited=True,
-        uploadLimit=normalized_limit,
+        uploadLimit=applied_limit,
     )
     return TorrentUploadSettings(
-        limit_bps=normalized_limit * 1024,
+        limit_bps=applied_limit * 1024,
         enabled=True,
     )
 
@@ -321,7 +322,7 @@ def expected_torrent_upload_settings(
             enabled=True,
         )
     return TorrentUploadSettings(
-        limit_bps=normalized_limit * 1024,
+        limit_bps=normalized_limit * 1024 if normalized_limit > 0 else 1024,
         enabled=True,
     )
 

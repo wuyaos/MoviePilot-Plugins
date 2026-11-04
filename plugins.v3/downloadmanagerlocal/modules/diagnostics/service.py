@@ -487,11 +487,49 @@ def _uploadlimit_detail(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT) ->
         _row("受保护", _count(status.get("protected_torrents"))),
         _row("当前上传速率", rate_text),
         _row("已分配额度", f"{_count(status.get('allocated_kib'))} KiB"),
+        _row("异常通知", _bool_text(getattr(plugin, "_upload_limit_notify", True))),
         _row("周期", _count(status.get("cycle"))),
         _row("最近运行", _time_text(status.get("last_run_at")) or "尚未运行"),
         _row("态异常", status.get("state_error") or ""),
     ]
-    items = [_candidate_item(row) for row in (status.get("sites") or [])]
+    items = []
+    for row in status.get("sites") or []:
+        if not isinstance(row, dict):
+            continue
+        total = row.get("limit_kib")
+        single = row.get("torrent_limit_kib")
+        target = row.get("desired_allocated_kib")
+        applied = row.get("allocated_kib")
+        caps = []
+        if total:
+            caps.append(f"合计 {int(total) / 1024:.2f} MB/s")
+        if single:
+            caps.append(f"单种 {int(single) / 1024:.2f} MB/s")
+        meta = [str(row.get("state") or "未知")]
+        if caps:
+            meta.append(" / ".join(caps))
+        meta.append(f"目标 {target if target is not None else '未知'} KiB/s")
+        meta.append(f"已应用 {applied if applied is not None else '未知'} KiB/s")
+        items.append(_text_item(str(row.get("name") or row.get("key") or ""), " · ".join(meta)))
+    for row in status.get("downloader_site_rows") or []:
+        if not isinstance(row, dict):
+            continue
+        total = row.get("desired_allocated_kib")
+        single = row.get("torrent_limit_kib")
+        text = (
+            f"目标 {total if total is not None else '未知'} KiB/s"
+            f" ({float(total) / 1024:.2f} MB/s)" if total is not None
+            else "目标额度未知"
+        )
+        text += f" · 已应用 {row.get('allocated_kib', '未知')} KiB/s"
+        if single is not None:
+            text += f" · 单种上限 {single} KiB/s ({float(single) / 1024:.2f} MB/s)"
+        else:
+            text += " · 单种上限未知"
+        items.append(_text_item(
+            f"{row.get('downloader_id')} / {row.get('site')}",
+            f"{row.get('state') or '未知'} · {text}",
+        ))
     items += [_text_item(error, "") for error in (status.get("errors") or [])]
     return _detail("上传限速", rows, items, detail_limit=detail_limit)
 

@@ -339,9 +339,24 @@ def _upload_limit_fields(config: dict, defaults: dict, status: dict) -> list[dic
                 limit = int(rule.get("limit_kib") or 0)
             except (TypeError, ValueError):
                 limit = 0
-            if limit > 0:
-                active_sites.append(name)
+            try:
+                torrent_limit = int(rule.get("torrent_limit_kib") or 0)
+            except (TypeError, ValueError):
+                torrent_limit = 0
+            if limit > 0 or torrent_limit > 0:
+                limits = []
+                if limit > 0:
+                    limits.append(f"合计 {limit / 1024:.2f} MB/s")
+                if torrent_limit > 0:
+                    limits.append(f"单种 {torrent_limit / 1024:.2f} MB/s")
+                active_sites.append(f"{name}（{' / '.join(limits)}）")
         sites_display = ", ".join(sorted(active_sites)) if active_sites else "未配置"
+    allocation_rows = status.get("sites") if isinstance(status.get("sites"), list) else []
+    allocation_display = "; ".join(
+        f"{item.get('name') or item.get('key')}: 目标 {item.get('desired_allocated_kib', '未知')} KiB/s，"
+        f"已应用 {item.get('allocated_kib', '未知')} KiB/s，状态 {item.get('state') or '未知'}"
+        for item in allocation_rows if isinstance(item, dict)
+    ) or "暂无站点分配"
     return [
         _field("mode", "运行模式", mode_label, "gated_enabled",
                "运行时门控 upload_limit_enabled + 配置完整性", badge=True),
@@ -352,8 +367,12 @@ def _upload_limit_fields(config: dict, defaults: dict, status: dict) -> list[dic
                "配置键 upload_limit_downloader_limits_kib"),
         _field("sites", "站点限速", sites_display, "config_value",
                "配置键 upload_limit_site_rules"),
-        _field("dynamic", "动态调速", "按站点池自动分配（固有）", "static",
-               "固有行为（动态额度分配）"),
+        _field("allocation", "当前分配", allocation_display, "runtime_status",
+               "包含目标额度、已应用额度与分配状态"),
+        _field("notify", "异常通知", _bool_display(_cfg(config, defaults, "upload_limit_notify", True)),
+               "config_value", "配置键 upload_limit_notify"),
+        _field("dynamic", "分配策略", "按任务公平分配；不按实时速率/Peer估算", "static",
+               "固有行为（分配受下载器总额、站点总额与单种上限约束）"),
         _field("interval", "调整周期", "后台自动协调（固有）", "static",
                "固有行为（后台 worker 协调，非配置项）"),
     ]

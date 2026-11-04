@@ -9,7 +9,7 @@ import { reactive, ref, computed, watch, effectScope, nextTick } from 'vue'
 const source = readFileSync(new URL('../src/components/Config.vue', import.meta.url), 'utf8')
 const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)
 const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi',
-  `${script}\nreturn { form, transferTasks, hrCustomRules, hrRawError, saveConfig, switchToData, tagCatPairs, tagCategoryRows, tagCategoryNames, tagCategoriesError, tagCategoriesLoaded, loadTagCategories, setTagCategoryTarget, uploadNewSiteName, uploadAddError, addUploadSiteRule, setUploadSiteRule };`)
+  `${script}\nreturn { form, transferTasks, hrCustomRules, hrRawError, saveConfig, switchToData, tagCatPairs, tagCategoryRows, tagCategoryNames, tagCategoriesError, tagCategoriesLoaded, loadTagCategories, setTagCategoryTarget, uploadNewSiteName, uploadAddError, addUploadSiteRule, setUploadSiteRule, setUploadSiteRuleLimitMb, setUploadSiteRuleTorrentLimitMb, uploadSiteRuleRows };`)
 
 function mount(initialConfig) {
   const scope = effectScope()
@@ -111,10 +111,38 @@ test('自定义站点限速和可编辑分类来源保留原配置结构，不�
     state.tagCatPairs.value[0].from = '自定义来源'
     await state.saveConfig()
     const saved = state.calls[0][1]
-    assert.deepEqual(saved.upload_limit_site_rules, { CustomFixture: { limit_kib: 1024 } })
+    assert.deepEqual(saved.upload_limit_site_rules, { CustomFixture: { limit_kib: 1024, torrent_limit_kib: 0 } })
     assert.deepEqual(saved.tag_all_cat, ['自定义来源'])
     assert.deepEqual(saved.tag_all_cat_rename, ['Movies'])
   } finally { state.stop() }
+})
+
+test('单种上限 MB/s 换算写回 KiB，清空或填 0 归零；通知开关默认跟随后端 upload_limit_notify', async () => {
+  const state = mount({ upload_limit_site_rules: { SiteA: { limit_kib: 2048, torrent_limit_kib: 512 } } })
+  try {
+    assert.equal(state.form.upload_limit_notify, true)
+    const row = state.uploadSiteRuleRows.value.find(item => item.name === 'SiteA')
+    assert.equal(row.torrent_limit_kib, 512)
+    state.setUploadSiteRuleTorrentLimitMb('SiteA', 2)
+    assert.equal(state.form.upload_limit_site_rules.SiteA.torrent_limit_kib, 2048)
+    assert.equal(state.form.upload_limit_site_rules.SiteA.limit_kib, 2048, '合计上限不受单种上限写入影响')
+    state.setUploadSiteRuleTorrentLimitMb('SiteA', null)
+    assert.equal(state.form.upload_limit_site_rules.SiteA.torrent_limit_kib, 0)
+    state.setUploadSiteRuleTorrentLimitMb('SiteA', 0)
+    assert.equal(state.form.upload_limit_site_rules.SiteA.torrent_limit_kib, 0)
+
+    state.form.upload_limit_notify = false
+    await state.saveConfig()
+    assert.equal(state.calls[0][1].upload_limit_notify, false)
+  } finally { state.stop() }
+})
+
+test('旧配置缺失 upload_limit_notify 时回填默认开启（True）；无宽限相关字段残留', async () => {
+  const legacy = mount({ upload_limit_site_rules: {} })
+  try {
+    assert.equal(legacy.form.upload_limit_notify, true)
+    assert.equal('upload_limit_grace_minutes' in legacy.form, false)
+  } finally { legacy.stop() }
 })
 
 test('MP 分类加载去重且不修改已保存映射；编辑目标才创建新映射', async () => {

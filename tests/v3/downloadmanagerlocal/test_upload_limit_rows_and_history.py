@@ -681,6 +681,8 @@ def test_migrate_supported_versions_preserve_valid_values(svc):
             "torrents": {"QB1:abc": {"rate": 512}},
             "failures": {"QB1": 1},
             "last_summary": {"runs": 3},
+            "violations": {"tasks": {"QB1:a": {"count": 2}}},
+            "notify": {"io": {"downloader:QB1": {"count": 1}}},
         }
         if raw_version is not None:
             raw["schema_version"] = raw_version
@@ -695,6 +697,9 @@ def test_migrate_supported_versions_preserve_valid_values(svc):
             "torrents": {"QB1:abc": {"rate": 512}},
             "failures": {"QB1": 1},
             "last_summary": {"runs": 3},
+            "last_summary": {"runs": 3},
+            "violations": {"tasks": {"QB1:a": {"count": 2}}},
+            "notify": {"io": {"downloader:QB1": {"count": 1}}},
         }
 
 
@@ -766,6 +771,9 @@ def test_load_valid_state_saves_normally_positive_control(svc):
     """正控：无迁移错误时 save 正常落盘，证明上一条拒写断言非空转。"""
     raw = _persisted_unknown_version()
     raw["schema_version"] = 1  # 已支持版本
+    raw["schema_version"] = 1  # 已支持版本
+    raw["violations"] = {}
+    raw["notify"] = {}  # 与当前 schema 全等，load 不触发规范化落盘
     plugin = _LoadCountingPlugin(state=None)
     plugin._data["upload_limit_state"] = raw
 
@@ -1096,3 +1104,639 @@ def test_cycle_summary_unpolled_downloader_reports_unpolled(svc):
     assert "下载器不可用" in items["QBX"]["error"]
     assert items["QBX"]["global_limit_kib"] is None
     assert items["QBX"]["updated_at"] == ""
+
+
+def test_cycle_limits_unfinished_zero_rate_torrents_fairly(svc):
+    qb = FakeQb(torrents=[
+        {**_qb_torrent("a", tags="🏠site-a", upspeed=0), "progress": 0.5,
+         "amount_left": 500, "total_size": 1000, "state": "pausedDL"},
+        {**_qb_torrent("b", tags="🏠site-a", upspeed=225 * 1024),
+         "progress": 1.0},
+    ])
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_downloader_limits_kib = {"QB1": 45 * 1024}
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 45 * 1024}}
+    plugin.add_downloader("QB1", qb)
+
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert len(qb.torrent_limit_calls) == 2
+    assert {call["limit"] for call in qb.torrent_limit_calls} == {23_040 * 1024}
+    assert result["managed_torrents"] == 2
+    assert all(record["grace_until"] == 0 for record in plugin._upload_limit_state["torrents"].values())
+
+
+def test_cycle_single_only_uses_fixed_per_torrent_cap(svc):
+    qb = FakeQb(torrents=[
+        _qb_torrent("a", tags="🏠site-a"),
+        _qb_torrent("b", tags="🏠site-a"),
+    ])
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_site_rules = {
+        "site-a": {"limit_kib": 0, "torrent_limit_kib": 10}
+    }
+    plugin.add_downloader("QB1", qb)
+
+    svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert qb.torrent_limit_calls == [{"limit": 10 * 1024, "hashes": "a"},
+                                      {"limit": 10 * 1024, "hashes": "b"}]
+
+
+def test_cycle_failed_downloader_reserves_confirmed_site_allocation(svc):
+    qb = FakeQb(torrents=[_qb_torrent("healthy", tags="🏠site-a")])
+    state = _empty_state()
+    state["management_active"] = True
+    state["downloaders"] = {"QB1": _seed_downloader(100)}
+    state["torrents"] = {
+        "QB2:offline": {"downloader_id": "QB2", "site_key": "site-a",
+                        "last_allocation_kib": 20, "last_written_settings":
+                        {"limit_bps": 20 * 1024, "enabled": True}}
+    }
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_downloaders = ["QB1", "QB2"]
+    plugin._upload_limit_downloader_limits_kib = {"QB1": 100, "QB2": 100}
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert qb.torrent_limit_calls[0]["limit"] == 80 * 1024
+    assert any("不可用" in error for error in result["errors"])
+
+
+def test_cycle_reduction_failure_blocks_same_site_expansion(svc, monkeypatch):
+    qb = FakeQb(torrents=[
+        _qb_torrent("reduce", tags="🏠site-a", up_limit=80 * 1024),
+        _qb_torrent("expand", tags="🏠site-a", up_limit=20 * 1024),
+    ])
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_downloader_limits_kib = {"QB1": 100}
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+    original_write = svc.service.write_torrent_upload_limit
+
+    def fail_reduction(instance, downloader_type, torrent_hash, limit_kib):
+        if torrent_hash == "reduce":
+            raise RuntimeError("reduce failed")
+        return original_write(instance, downloader_type, torrent_hash, limit_kib)
+
+    monkeypatch.setattr(svc.service, "write_torrent_upload_limit", fail_reduction)
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert qb.torrent_limit_calls == []
+    assert any("减额失败" in error for error in result["errors"])
+
+
+def test_cycle_successful_write_is_ledgered_before_later_failure(svc, monkeypatch):
+    qb = FakeQb(torrents=[
+        _qb_torrent("reduce", tags="🏠site-a", up_limit=80 * 1024),
+        _qb_torrent("expand", tags="🏠site-a", up_limit=20 * 1024),
+    ])
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_downloader_limits_kib = {"QB1": 100}
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+    original_write = svc.service.write_torrent_upload_limit
+
+    def fail_expansion(instance, downloader_type, torrent_hash, limit_kib):
+        if torrent_hash == "expand":
+            raise RuntimeError("write failed")
+        return original_write(instance, downloader_type, torrent_hash, limit_kib)
+
+    monkeypatch.setattr(svc.service, "write_torrent_upload_limit", fail_expansion)
+    svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    records = plugin._upload_limit_state["torrents"]
+    assert records["QB1:reduce"]["last_allocation_kib"] == 50
+    assert records["QB1:expand"]["allocation_uncertain"] is True
+    assert records["QB1:expand"]["possible_allocation_kib"] >= 50
+
+
+def test_single_only_to_total_mode_rewrites_without_unlimited_restore(svc):
+    qb = FakeQb(torrents=[_qb_torrent("a", tags="🏠site-a", up_limit=10 * 1024)])
+    state = _empty_state()
+    state["management_active"] = True
+    state["downloaders"] = {"QB1": _seed_downloader(100)}
+    state["torrents"] = {
+        "QB1:a": {"downloader_id": "QB1", "torrent_hash": "a", "site_key": "site-a",
+                    "grace_until": 5000, "last_allocation_kib": 10,
+                    "last_written_settings": {"limit_bps": 10 * 1024, "enabled": True},
+                    "original_settings": {"limit_bps": 0, "enabled": False}}
+    }
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+
+    svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert qb.torrent_limit_calls == [{"limit": 100 * 1024, "hashes": "a"}]
+    assert not any(call["limit"] == 0 for call in qb.torrent_limit_calls)
+
+
+def test_cycle_combined_site_and_single_caps(svc):
+    qb = FakeQb(torrents=[
+        _qb_torrent("a", tags="🏠site-a"),
+        _qb_torrent("b", tags="🏠site-a"),
+    ])
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_site_rules = {
+        "site-a": {"limit_kib": 100, "torrent_limit_kib": 30}
+    }
+    plugin.add_downloader("QB1", qb)
+
+    svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert [call["limit"] for call in qb.torrent_limit_calls] == [30 * 1024, 30 * 1024]
+
+
+def test_cycle_fully_reserved_site_budget_is_zero_not_unlimited(svc):
+    qb = FakeQb(torrents=[_qb_torrent("healthy", tags="🏠site-a")])
+    state = _empty_state()
+    state["management_active"] = True
+    state["downloaders"] = {"QB1": _seed_downloader(100)}
+    state["torrents"] = {
+        "QB2:offline": {"downloader_id": "QB2", "site_key": "site-a",
+                        "last_allocation_kib": 100}
+    }
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_downloaders = ["QB1", "QB2"]
+    plugin._upload_limit_downloader_limits_kib = {"QB1": 100, "QB2": 100}
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+
+    svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert qb.torrent_limit_calls == [{"limit": 1, "hashes": "healthy"}]
+
+
+def test_cycle_cancellation_keeps_prior_success_ledger(svc, monkeypatch):
+    qb = FakeQb(torrents=[
+        _qb_torrent("a", tags="🏠site-a", up_limit=80 * 1024),
+        _qb_torrent("b", tags="🏠site-a", up_limit=80 * 1024),
+    ])
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_downloader_limits_kib = {"QB1": 100}
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+    original_write = svc.service.write_torrent_upload_limit
+
+    def stop_after_success(instance, downloader_type, torrent_hash, limit_kib):
+        result = original_write(instance, downloader_type, torrent_hash, limit_kib)
+        plugin._transfer_stop_generation += 1
+        return result
+
+    monkeypatch.setattr(svc.service, "write_torrent_upload_limit", stop_after_success)
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert result["service_status"] == "stopped"
+    assert len(qb.torrent_limit_calls) == 1
+    assert plugin._upload_limit_state["torrents"]["QB1:a"]["last_allocation_kib"] == 50
+    assert "QB1:b" not in plugin._upload_limit_state["torrents"] or "last_allocation_kib" not in plugin._upload_limit_state["torrents"]["QB1:b"]
+
+
+def test_cycle_failed_downloader_without_confirmed_ledger_blocks_site_expansion(svc):
+    qb = FakeQb(torrents=[_qb_torrent("healthy", tags="🏠site-a")])
+    state = _empty_state()
+    state["management_active"] = True
+    state["downloaders"] = {"QB1": _seed_downloader(100)}
+    state["torrents"] = {
+        "QB2:offline": {"downloader_id": "QB2", "site_key": "site-a",
+                        "allocation_uncertain": True}
+    }
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_downloaders = ["QB1", "QB2"]
+    plugin._upload_limit_downloader_limits_kib = {"QB1": 100, "QB2": 100}
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert qb.torrent_limit_calls == [{"limit": 1, "hashes": "healthy"}]
+    assert any("不确定" in error for error in result["errors"])
+
+
+def test_cycle_io_exception_racing_cancel_persists_uncertain_budget(svc, monkeypatch):
+    qb = FakeQb(torrents=[_qb_torrent("a", tags="🏠site-a")])
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+
+    def fail_after_possible_write(instance, downloader_type, torrent_hash, limit_kib):
+        plugin._transfer_stop_generation += 1
+        raise RuntimeError("ambiguous IO failure")
+
+    monkeypatch.setattr(svc.service, "write_torrent_upload_limit", fail_after_possible_write)
+    result = svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert result["service_status"] == "stopped"
+    record = plugin._upload_limit_state["torrents"]["QB1:a"]
+    assert record["allocation_uncertain"] is True
+    assert record["possible_allocation_kib"] > 0
+
+
+def test_cycle_single_only_caps_are_conservatively_reserved_from_shared_global_budget(svc):
+    qb = FakeQb(torrents=[
+        _qb_torrent("single", tags="🏠single-site"),
+        _qb_torrent("total-a", tags="🏠total-site"),
+        _qb_torrent("total-b", tags="🏠total-site"),
+    ])
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_downloader_limits_kib = {"QB1": 100}
+    plugin._upload_limit_site_rules = {
+        "single-site": {"limit_kib": 0, "torrent_limit_kib": 30},
+        "total-site": {"limit_kib": 100, "torrent_limit_kib": 0},
+    }
+    plugin.add_downloader("QB1", qb)
+
+    svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    limits = {call["hashes"]: call["limit"] for call in qb.torrent_limit_calls}
+    assert limits == {
+        "single": 30 * 1024,
+        "total-a": 35 * 1024,
+        "total-b": 35 * 1024,
+    }
+
+
+def test_cycle_failed_exit_release_blocks_site_expansion(svc, monkeypatch):
+    qb = FakeQb(torrents=[
+        _qb_torrent("left", tags="", up_limit=50 * 1024),
+        _qb_torrent("stay", tags="🏠site-a", up_limit=20 * 1024),
+    ])
+    state = _empty_state()
+    state["management_active"] = True
+    state["downloaders"] = {"QB1": _seed_downloader(100)}
+    state["torrents"] = {
+        "QB1:left": {"downloader_id": "QB1", "torrent_hash": "left", "site_key": "site-a",
+                      "last_allocation_kib": 50,
+                      "last_written_settings": {"limit_bps": 50 * 1024, "enabled": True},
+                      "original_settings": {"limit_bps": 0, "enabled": False}}
+    }
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+
+    def fail_release(*args, **kwargs):
+        raise RuntimeError("release failed")
+
+    monkeypatch.setattr(svc.service, "restore_torrent_upload_settings", fail_release)
+    svc.service.run_upload_limit_cycle(plugin, now=2000.0)
+
+    assert qb.torrent_limit_calls == [{"limit": 1, "hashes": "stay"}]
+
+
+def test_persist_single_only_rule_keeps_per_torrent_management_active(svc):
+    state = _empty_state()
+    state["management_active"] = True
+    state["downloaders"] = {"QB1": {
+        "initial_scan_complete": True,
+        "per_torrent_management_active": True,
+        "auto_probe_count": 3,
+    }}
+    plugin = FakePlugin(state=state)
+
+    rules = svc.service.persist_upload_limit_site_rules(
+        plugin, {"site-a": {"limit_kib": 0, "torrent_limit_kib": 25}}
+    )
+
+    assert rules == {"site-a": {"limit_kib": 0, "torrent_limit_kib": 25}}
+    assert state["downloaders"]["QB1"]["initial_scan_complete"] is True
+    assert state["downloaders"]["QB1"]["per_torrent_management_active"] is True
+    assert state["downloaders"]["QB1"]["auto_probe_count"] == 3
+
+
+def test_upload_limit_violation_notification_threshold_cooldown_and_submit_state(svc, monkeypatch):
+    state = _empty_state()
+    state["torrents"] = {"QB1:a": {"site_key": "site-a"}}
+    plugin = FakePlugin(state=state)
+    sent = []
+    monkeypatch.setattr(
+        svc.service, "_send_upload_limit_notification",
+        lambda plugin, *, suffix, text: sent.append((suffix, text)) or True,
+    )
+    task = SimpleNamespace(torrent_hash="a", upload_rate_bps=150 * 1024)
+    tasks = {"QB1:a": task}
+    desired = {"QB1:a": 100}
+    rules = {"site-a": {"limit_kib": 100}}
+
+    for now in (10_000.0, 10_030.0):
+        svc.service._update_upload_limit_notifications(plugin, state, tasks, desired, rules, {}, set(), now)
+    assert sent == []
+    svc.service._update_upload_limit_notifications(plugin, state, tasks, desired, rules, {}, set(), 10_060.0)
+    assert len(sent) == 1
+    entry = state["violations"]["tasks"]["QB1:a"]
+    assert entry["count"] == 3
+    assert entry["last_notified_at"] == 10_060.0
+
+    svc.service._update_upload_limit_notifications(plugin, state, tasks, desired, rules, {}, set(), 13_659.0)
+    assert len(sent) == 1
+    svc.service._update_upload_limit_notifications(plugin, state, tasks, desired, rules, {}, set(), 13_660.0)
+    assert len(sent) == 2
+    svc.service.save_upload_limit_state(plugin, state, committed_write=True)
+    assert plugin.get_data("upload_limit_state")["violations"]["tasks"]["QB1:a"]["last_notified_at"] == 13_660.0
+
+
+def test_upload_limit_violation_counter_resets_on_recovery_mode_change_and_exit(svc, monkeypatch):
+    state = _empty_state()
+    state["torrents"] = {"QB1:a": {"site_key": "site-a"}}
+    plugin = FakePlugin(state=state)
+    sent = []
+    monkeypatch.setattr(
+        svc.service, "_send_upload_limit_notification",
+        lambda plugin, *, suffix, text: sent.append(suffix) or True,
+    )
+    tasks = {"QB1:a": SimpleNamespace(torrent_hash="a", upload_rate_bps=150 * 1024)}
+    desired = {"QB1:a": 100}
+    total_rule = {"site-a": {"limit_kib": 100}}
+    for now in (20_000.0, 20_030.0):
+        svc.service._update_upload_limit_notifications(plugin, state, tasks, desired, total_rule, {}, set(), now)
+    tasks["QB1:a"].upload_rate_bps = 0
+    svc.service._update_upload_limit_notifications(plugin, state, tasks, desired, total_rule, {}, set(), 20_060.0)
+    assert state["violations"]["tasks"]["QB1:a"]["count"] == 0
+    tasks["QB1:a"].upload_rate_bps = 150 * 1024
+    for now in (20_090.0, 20_120.0):
+        svc.service._update_upload_limit_notifications(plugin, state, tasks, desired, total_rule, {}, set(), now)
+    single_rule = {"site-a": {"limit_kib": 0, "torrent_limit_kib": 100}}
+    svc.service._update_upload_limit_notifications(plugin, state, tasks, desired, single_rule, {}, set(), 20_150.0)
+    assert sent == []
+    assert state["violations"]["tasks"]["QB1:a"]["count"] == 1
+    svc.service._update_upload_limit_notifications(plugin, state, {}, {}, single_rule, {}, set(), 20_180.0)
+    assert "QB1:a" not in state["violations"]["tasks"]
+
+
+def test_upload_limit_notify_disabled_does_not_send_or_spend_cooldown(svc, monkeypatch):
+    state = _empty_state()
+    state["torrents"] = {"QB1:a": {"site_key": "site-a"}}
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_notify = False
+    sent = []
+    monkeypatch.setattr(
+        svc.service, "_send_upload_limit_notification",
+        lambda plugin, *, suffix, text: sent.append(suffix) or True,
+    )
+    tasks = {"QB1:a": SimpleNamespace(torrent_hash="a", upload_rate_bps=150 * 1024)}
+    rules = {"site-a": {"limit_kib": 100}}
+    for now in (30_000.0, 30_030.0, 30_060.0, 30_090.0):
+        svc.service._update_upload_limit_notifications(
+            plugin, state, tasks, {"QB1:a": 100}, rules, {}, set(), now
+        )
+    entry = state["violations"]["tasks"]["QB1:a"]
+    assert sent == []
+    assert entry["count"] == 4
+    assert entry["last_notified_at"] == 0.0
+    plugin._upload_limit_notify = True
+    svc.service._update_upload_limit_notifications(
+        plugin, state, tasks, {"QB1:a": 100}, rules, {}, set(), 30_120.0
+    )
+    assert len(sent) == 1
+    assert entry["last_notified_at"] == 30_120.0
+
+
+def test_upload_limit_io_notification_tracks_site_and_downloader_continuity(svc, monkeypatch):
+    state = _empty_state()
+    plugin = FakePlugin(state=state)
+    sent = []
+    monkeypatch.setattr(
+        svc.service, "_send_upload_limit_notification",
+        lambda plugin, *, suffix, text: sent.append((suffix, text)) or True,
+    )
+    errors = {"QB1": ["write uncertain"]}
+    for now in (40_000.0, 40_030.0):
+        svc.service._update_upload_limit_notifications(plugin, state, {}, {}, {}, errors, {"site-a"}, now)
+    assert sent == []
+    svc.service._update_upload_limit_notifications(plugin, state, {}, {}, {}, errors, {"site-a"}, 40_060.0)
+    assert {item[0] for item in sent} == {"限速IO异常"}
+    assert state["notify"]["io"]["downloader:QB1"]["count"] == 3
+    assert state["notify"]["io"]["site:site-a"]["last_notified_at"] == 40_060.0
+    svc.service._update_upload_limit_notifications(plugin, state, {}, {}, {}, {}, set(), 40_090.0)
+    assert state["notify"]["io"]["downloader:QB1"]["count"] == 0
+
+
+def test_downloader_site_rows_include_caps_desired_and_safety_states(svc):
+    state = _empty_state()
+    state["last_run_at"] = 100.0
+    state["torrents"] = {
+        "QB1:a": {"downloader_id": "QB1", "site_key": "managed", "grace_until": 0,
+                  "upload_rate_bps": 0, "last_allocation_kib": 20,
+                  "desired_allocated_kib": 24, "torrent_limit_kib": 30,
+                  "allocation_state": "managed"},
+        "QB2:b": {"downloader_id": "QB2", "site_key": "single", "grace_until": 0,
+                  "upload_rate_bps": 0, "last_allocation_kib": 30,
+                  "desired_allocated_kib": 30, "torrent_limit_kib": 30,
+                  "allocation_state": "single"},
+        "QB3:c": {"downloader_id": "QB3", "site_key": "uncertain", "grace_until": 0,
+                  "upload_rate_bps": 0, "last_allocation_kib": 15,
+                  "desired_allocated_kib": 0, "torrent_limit_kib": 20,
+                  "allocation_state": "uncertain", "allocation_uncertain": True},
+        "QB4:d": {"downloader_id": "QB4", "site_key": "frozen", "grace_until": 0,
+                  "upload_rate_bps": 0, "last_allocation_kib": 10,
+                  "desired_allocated_kib": 0, "torrent_limit_kib": 0,
+                  "allocation_state": "frozen"},
+    }
+
+    rows = svc.service._build_downloader_site_rows(state)
+    by_site = {row["site"]: row for row in rows}
+
+    assert by_site["managed"]["state"] == "managed"
+    assert by_site["managed"]["torrent_limit_kib"] == 30
+    assert by_site["managed"]["desired_allocated_kib"] == 24
+    assert by_site["single"]["state"] == "single"
+    assert by_site["uncertain"]["state"] == "uncertain"
+    assert by_site["frozen"]["state"] == "frozen"
+
+
+def test_cycle_integrates_three_round_violation_notification(svc, monkeypatch):
+    qb = FakeQb(torrents=[_qb_torrent("a", tags="🏠site-a", upspeed=150 * 1024)])
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+    sent = []
+    monkeypatch.setattr(
+        svc.service, "_send_upload_limit_notification",
+        lambda plugin, *, suffix, text: sent.append((suffix, text)) or True,
+    )
+
+    for cycle in range(3):
+        svc.service.run_upload_limit_cycle(plugin, now=50_000.0 + cycle * 30)
+
+    assert len(sent) == 1
+    assert sent[0][0] == "上传速度违规"
+    assert plugin._upload_limit_state["violations"]["tasks"]["QB1:a"]["count"] == 3
+
+
+def test_cycle_integrates_three_round_io_failure_notification(svc, monkeypatch):
+    qb = FakeQb(torrents=[_qb_torrent("a", tags="🏠site-a")])
+    qb.write_torrent_error = RuntimeError("simulated write failure")
+    plugin = FakePlugin(state=_empty_state())
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.add_downloader("QB1", qb)
+    sent = []
+    monkeypatch.setattr(
+        svc.service, "_send_upload_limit_notification",
+        lambda plugin, *, suffix, text: sent.append((suffix, text)) or True,
+    )
+
+    for cycle in range(3):
+        svc.service.run_upload_limit_cycle(plugin, now=60_000.0 + cycle * 30)
+
+    assert {suffix for suffix, _text in sent} == {"限速IO异常"}
+    assert plugin._upload_limit_state["notify"]["io"]["site:site-a"]["count"] == 3
+    assert plugin._upload_limit_state["torrents"]["QB1:a"]["allocation_uncertain"] is True
+
+
+def test_upload_limit_notification_failed_submit_does_not_start_cooldown(svc, monkeypatch):
+    state = _empty_state()
+    state["torrents"] = {"QB1:a": {"site_key": "site-a"}}
+    plugin = FakePlugin(state=state)
+    submitted = []
+
+    def submit(plugin, *, suffix, text):
+        submitted.append(suffix)
+        return len(submitted) > 1
+
+    monkeypatch.setattr(svc.service, "_send_upload_limit_notification", submit)
+    tasks = {"QB1:a": SimpleNamespace(torrent_hash="a", upload_rate_bps=150 * 1024)}
+    rules = {"site-a": {"limit_kib": 100}}
+    for now in (70_000.0, 70_030.0, 70_060.0, 70_090.0):
+        svc.service._update_upload_limit_notifications(
+            plugin, state, tasks, {"QB1:a": 100}, rules, {}, set(), now
+        )
+    assert submitted == ["上传速度违规", "上传速度违规"]
+    assert state["violations"]["tasks"]["QB1:a"]["last_notified_at"] == 70_090.0
+
+
+def test_write_torrent_upload_limit_tr_zero_uses_minimum_positive(svc):
+    """TR 零额度写最小正值 1（KB/s），避免被解释为不限速。"""
+    calls = []
+    instance = SimpleNamespace(
+        trc=SimpleNamespace(
+            change_torrent=lambda **kwargs: calls.append(kwargs)
+        )
+    )
+    settings = svc.adapter.write_torrent_upload_limit(
+        instance, "transmission", "abc", 0
+    )
+    assert calls == [{"ids": "abc", "uploadLimited": True, "uploadLimit": 1}]
+    assert settings.limit_bps == 1024
+    assert settings.enabled is True
+
+
+def test_write_torrent_upload_limit_tr_positive_keeps_kib(svc):
+    """TR 正数额度按 KiB/s 原值下发。"""
+    calls = []
+    instance = SimpleNamespace(
+        trc=SimpleNamespace(
+            change_torrent=lambda **kwargs: calls.append(kwargs)
+        )
+    )
+    settings = svc.adapter.write_torrent_upload_limit(
+        instance, "transmission", "abc", 50
+    )
+    assert calls == [{"ids": "abc", "uploadLimited": True, "uploadLimit": 50}]
+    assert settings.limit_bps == 50 * 1024
+
+
+def test_upload_limit_violation_threshold_uses_confirmed_allocation_when_frozen(
+    svc, monkeypatch
+):
+    """扩额被冻结时违规阈值用已确认额度，不以未生效的 desired 误报。"""
+    state = _empty_state()
+    state["torrents"] = {"QB1:a": {"site_key": "site-a", "last_allocation_kib": 100}}
+    plugin = FakePlugin(state=state)
+    sent = []
+    monkeypatch.setattr(
+        svc.service, "_send_upload_limit_notification",
+        lambda plugin, *, suffix, text: sent.append(suffix) or True,
+    )
+    tasks = {"QB1:a": SimpleNamespace(torrent_hash="a", upload_rate_bps=110 * 1024)}
+    desired = {"QB1:a": 0}
+    rules = {"site-a": {"limit_kib": 100}}
+    for now in (80_000.0, 80_030.0, 80_060.0):
+        svc.service._update_upload_limit_notifications(
+            plugin, state, tasks, desired, rules, {}, set(), now
+        )
+    assert sent == []
+    assert state["violations"]["tasks"]["QB1:a"]["count"] == 0
+    tasks["QB1:a"].upload_rate_bps = 130 * 1024
+    for now in (80_090.0, 80_120.0, 80_150.0):
+        svc.service._update_upload_limit_notifications(
+            plugin, state, tasks, desired, rules, {}, set(), now
+        )
+    assert sent == ["上传速度违规"]
+
+
+def test_notification_json_reload_preserves_count_and_cooldown(svc, monkeypatch):
+    import json
+
+    state = _empty_state()
+    state["torrents"] = {"QB1:a": {"site_key": "site-a", "last_allocation_kib": 100}}
+    plugin = FakePlugin(state=state)
+    sent = []
+    monkeypatch.setattr(svc.service, "_send_upload_limit_notification",
+                        lambda plugin, **kwargs: sent.append(kwargs) or True)
+    tasks = {"QB1:a": SimpleNamespace(torrent_hash="a", upload_rate_bps=150 * 1024)}
+    rules = {"site-a": {"limit_kib": 100}}
+
+    def tick(current, now):
+        svc.service._update_upload_limit_notifications(
+            plugin, current, tasks, {"QB1:a": 100}, rules, {}, set(), now)
+
+    tick(state, 10000)
+    tick(state, 10030)
+    svc.service.save_upload_limit_state(plugin, state, committed_write=True)
+    plugin._data["upload_limit_state"] = json.loads(json.dumps(plugin._data["upload_limit_state"]))
+    plugin._upload_limit_state = None
+    restored = svc.service.load_upload_limit_state(plugin)
+    tick(restored, 10060)
+    assert len(sent) == 1
+    assert restored["violations"]["tasks"]["QB1:a"]["count"] == 3
+    svc.service.save_upload_limit_state(plugin, restored, committed_write=True)
+    plugin._data["upload_limit_state"] = json.loads(json.dumps(plugin._data["upload_limit_state"]))
+    plugin._upload_limit_state = None
+    restored = svc.service.load_upload_limit_state(plugin)
+    tick(restored, 10100)
+    assert len(sent) == 1
+    assert restored["violations"]["tasks"]["QB1:a"]["count"] == 4
+    tick(restored, 13660)
+    assert len(sent) == 2
+
+
+def test_transmission_zero_allocation_cycle_converges(svc):
+    torrent = _tr_torrent()
+    torrent.labels = ["🏠site-a"]
+    calls = []
+    session = SimpleNamespace(speed_limit_up=100, speed_limit_up_enabled=True)
+
+    def change_torrent(**kwargs):
+        calls.append(kwargs)
+        torrent.uploadLimit = kwargs["uploadLimit"]
+        torrent.uploadLimited = kwargs["uploadLimited"]
+
+    client = SimpleNamespace(
+        get_session=lambda: session,
+        set_session=lambda **kwargs: session.__dict__.update(kwargs),
+        get_torrents=lambda arguments=None: [torrent],
+        change_torrent=change_torrent,
+    )
+    state = _empty_state()
+    state["torrents"] = {"offline:a": {
+        "downloader_id": "offline", "site_key": "site-a", "last_allocation_kib": 100,
+        "last_written_settings": {"limit_bps": 102400, "enabled": True}}}
+    plugin = FakePlugin(state=state)
+    plugin._upload_limit_downloaders = ["TR", "offline"]
+    plugin._upload_limit_downloader_limits_kib = {"TR": 100, "offline": 100}
+    plugin._upload_limit_site_rules = {"site-a": {"limit_kib": 100}}
+    plugin.services["TR"] = SimpleNamespace(type="transmission", instance=SimpleNamespace(trc=client))
+    svc.service.run_upload_limit_cycle(plugin, now=2000)
+    assert calls == [{"ids": torrent.hashString, "uploadLimited": True, "uploadLimit": 1}]
+    assert svc.adapter.expected_torrent_upload_settings("transmission", 0).limit_bps == 1024
+    before = [item for item in svc.exec_history.query(plugin, "upload_limit")["items"]
+              if item["torrent_hash"] == torrent.hashString]
+    assert any(item["torrent_hash"] == torrent.hashString for item in before)
+    for now in (2030, 2060, 2090):
+        svc.service.run_upload_limit_cycle(plugin, now=now)
+    assert len(calls) == 1
+    after = [item for item in svc.exec_history.query(plugin, "upload_limit")["items"]
+             if item["torrent_hash"] == torrent.hashString]
+    assert after == before

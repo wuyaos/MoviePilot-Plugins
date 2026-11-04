@@ -258,3 +258,32 @@ def test_summary_is_read_only(summary):
     plugin.save_data.assert_not_called()
     plugin.update_config.assert_not_called()
     plugin.post_message.assert_not_called()
+
+
+def test_upload_limit_summary_projects_total_single_and_runtime_allocations(summary, monkeypatch):
+    import sys
+
+    plugin = _fake_plugin({
+        "enabled": True,
+        "upload_limit_enabled": True,
+        "upload_limit_notify": False,
+        "upload_limit_downloaders": ["QB1"],
+        "upload_limit_downloader_limits_kib": {"QB1": 10 * 1024},
+        "upload_limit_site_rules": {
+            "site-a": {"limit_kib": 4 * 1024, "torrent_limit_kib": 1024}
+        },
+    }, enabled_attrs={"_upload_limit_enabled": True})
+    upload_service = sys.modules[f"{PREFIX}.modules.uploadlimit.service"]
+    monkeypatch.setattr(upload_service, "get_upload_limit_status", lambda _plugin: {
+        "service_status": "running",
+        "sites": [{"name": "site-a", "desired_allocated_kib": 3000,
+                   "allocated_kib": 2800, "state": "managed"}],
+    })
+
+    fields = _fields(summary, plugin, "upload_limit")
+
+    assert "合计 4.00 MB/s" in fields["sites"]["value"]
+    assert "单种 1.00 MB/s" in fields["sites"]["value"]
+    assert fields["notify"]["value"] == "关闭"
+    assert "目标 3000 KiB/s" in fields["allocation"]["value"]
+    assert "已应用 2800 KiB/s" in fields["allocation"]["value"]

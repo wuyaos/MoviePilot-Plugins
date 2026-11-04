@@ -1,5 +1,5 @@
 {
-  "scriptSha256": "ab15839a036647d3e75c79631269b92e0c46342e500f5b14647aa9ab3936d077",
+  "scriptSha256": "d8b3d47545666bf46310f6c2f31cb312e50a48ff199bf9f9c2da7c2428e89ac3",
   "directives": [
     ":actions=\"row.custom ? [\n                          { key: 'edit', label: row.expanded ? '收起' : '编辑', icon: row.expanded ? 'mdi-chevron-up' : 'mdi-pencil-outline' },\n                          { key: 'delete', label: row.preset ? '删除覆盖（恢复预设）' : '删除站点', icon: 'mdi-delete-outline', color: 'error', disabled: !form.hr_enable_site_config }\n                        ] : [{ key: 'copy', label: '复制规则', icon: 'mdi-content-copy', disabled: !form.hr_enable_site_config }]\"",
     ":active=\"activeMain === item.key\"",
@@ -115,6 +115,7 @@
     ":model-value=\"pair.to\"",
     ":model-value=\"row.enabled\"",
     ":model-value=\"row.limit_kib ? Number((row.limit_kib / 1024).toFixed(2)) : null\"",
+    ":model-value=\"row.torrent_limit_kib ? Number((row.torrent_limit_kib / 1024).toFixed(2)) : null\"",
     ":model-value=\"uploadDownloaderLimit(item.value)\"",
     ":name=\"downloaderTitle(task.from_downloader)\"",
     ":name=\"downloaderTitle(task.to_downloader)\"",
@@ -174,6 +175,7 @@
     "@update:model-value=\"setTagCategoryTarget(pair.from, $event)\"",
     "@update:model-value=\"setUploadDownloaderLimit(item.value, $event)\"",
     "@update:model-value=\"setUploadSiteRuleLimitMb(row.name, $event)\"",
+    "@update:model-value=\"setUploadSiteRuleTorrentLimitMb(row.name, $event)\"",
     "v-bind=\"chipProps\"",
     "v-bind=\"chipProps\"",
     "v-bind=\"menuProps\"",
@@ -256,7 +258,6 @@
     "v-model.number=\"form.seed_check_interval\"",
     "v-model.number=\"form.seed_max_wait_minutes\"",
     "v-model.number=\"form.transfer_fallback_interval_minutes\"",
-    "v-model.number=\"form.upload_limit_grace_minutes\"",
     "v-model=\"form.enabled\"",
     "v-model=\"form.failcleanup_clean_repeat\"",
     "v-model=\"form.failcleanup_cron\"",
@@ -336,6 +337,7 @@
     "v-model=\"form.transfer_rename_enabled\"",
     "v-model=\"form.upload_limit_downloaders\"",
     "v-model=\"form.upload_limit_enabled\"",
+    "v-model=\"form.upload_limit_notify\"",
     "v-model=\"form.upload_limit_observe_only\"",
     "v-model=\"hrAddDialog\"",
     "v-model=\"hrNewSiteName\"",

@@ -1,6 +1,6 @@
 # DownloadManagerLocal 插件上下文（AI 交接文档）
 
-面向后续维护本插件的 AI agent / 开发者。只记录代码不能可靠推断的事实、真实路径与边界；版本、路径、键名以当前工作树代码为准；配置平铺键共 119 个（外部 117 + 2 内部默认键，口径见 §4，2026-10-30 实测）。
+面向后续维护本插件的 AI agent / 开发者。只记录维护边界；键数以 `tests/v3/downloadmanagerlocal/test_gating.py` 为准：当前 123 个（外部 121 + 2 内部默认键）。
 
 ## 1. 插件概览
 
@@ -152,9 +152,12 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 ### 3.7 上传限速
 
-- 职责：统一写下载器全局上传上限；用户填正数的站点按站点合计上限跨下载器共享额度，空值/`0` 站点不写单种限速。
+- 职责：写下载器全局上传上限；站点合计上限跨下载器共享，单种上限独立生效。覆盖未完成、暂停、零速任务，不按当前速度或 Peer 分配额度。
 - 关键文件：`modules/uploadlimit/service.py`、`modules/uploadlimit/allocator.py`、`modules/uploadlimit/worker.py`、`adapter/upload_limit.py`、`model/upload_limit.py`、`utils/config.py::normalize_upload_limit_config`。
-- 关键配置：`upload_limit_enabled`（默认 false）、`upload_limit_downloaders`、`upload_limit_downloader_limits_kib`、`upload_limit_site_rules`（站点名 → `{limit_kib}`）、`upload_limit_grace_minutes`（默认 30）。
+- 关键配置：`upload_limit_enabled`、`upload_limit_downloaders`、`upload_limit_downloader_limits_kib`、`upload_limit_site_rules`（站点名 → `{limit_kib, torrent_limit_kib}`）、`upload_limit_notify`（默认 true）、`upload_limit_observe_only`。`upload_limit_grace_minutes` 仅保留旧配置兼容，不再延迟纳管。
+- 公平分配器预算契约：站点键缺失表示无合计约束，显式零表示预算耗尽；先减后增，失联保留已确认占用，未知写入冻结相关站点扩额，不得把未知占用当零。
+- 运行态 `violations`/`notify` 保存连续轮计数与通知冷却；签名须使用 JSON 往返稳定的结构，避免重启重置计数。连续三轮触发、同对象冷却 3600 秒。
+- 逻辑零额度是底层最小正值（qB 1 bps / TR 1 KiB/s），不是精确零；写入值与 expected 设置必须一致，防止每轮重写。
 - 端点：`GET /upload_limit_status`、`POST /upload_limit_reallocate`、`POST /upload_limit_site_tags`、`POST /upload_limit_site_rules_update`、`POST /upload_limit_disable_restore`。
 - 调度：无独立 MoviePilot service；由常驻 worker 每 30 秒协调一轮，`DownloadAdded` 可提前唤醒。
 - 事件：`DownloadAdded`（`wake_upload_limit_worker`）。
@@ -183,19 +186,19 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 - **组合函数**：`is_transfer_active`/`is_upload_limit_active` 基于门控属性，只追加配置完整性条件（下载器/路径/额度）；`is_plugin_active` = 七模块门控属性任一为真。
 - **新增模块时**：先在 `MODULE_SWITCHES` 登记，再让属性/服务/端点走注册表口径，禁止散落手写 `enabled and xxx_enabled`。
 
-**总键数：119，其中外部配置键 117**（`test_gating.py::test_registry_and_defaults` 运行时断言；另 2 个为 `transfer_delete_source_default`/`transfer_delete_duplicate_default` 内部默认键，仅作删源弹窗默认值，不进用户配置视图）（v3.7.0 删 6 键：`onlyonce`/`hr_onlyonce`/`remover_onlyonce`/`rename_onlyonce`/`rename_retry`/`rename_recovery`；分组见下，`utils/config.py` 显式键 + 7 处 spread 合并去重后，键数为 2026-10-30 实测）。
+**总键数：123，其中外部配置键 121**（`test_gating.py::test_registry_and_defaults` 断言；另 2 个为 `transfer_delete_source_default`/`transfer_delete_duplicate_default` 内部默认键）。
 
 | 分组 | 键数 | 键 |
 | --- | --- | --- |
 | 总开关 + 转移做种 | 31（另含 2 内部键*） | `enabled`、`delay_minutes`、`transfer_fallback_enabled`、`transfer_fallback_interval_minutes`、`seed_check_interval`、`seed_max_wait_minutes`，加 `TRANSFER_DEFAULTS`：`transfer_enabled`、`notify`、`nolabels`、`includelabels`、`includecategory`、`frompath`、`topath`、`fromdownloader`、`todownloader`、`transfer_delete_source_default`*、`transfer_delete_duplicate_default`*、`deletesource`、`deleteduplicate`、`fromtorrentpath`、`transfer_tasks`、`nopaths`、`seed_autostart`、`seed_skipverify`、`transferemptylabel`、`add_torrent_tags`、`remainoldcat`、`remainoldtag`、`scan_limit`、`pause_source`，加 `transfer_rename_enabled`、`downloader_ext`、`transfer_observe_only`（带 * 为内部默认键） |
 | 命名补刀 | 15 | `rename_enabled`、`rename_notify`、`rename_cron_enabled`、`rename_on_download_added`、`rename_downloaders`、`rename_exclude_dirs`、`rename_hash_white_list`、`rename_exclude_tags`、`rename_include_tags`、`rename_cron`、`rename_add_tag_after_rename`、`rename_movie_format`、`rename_tv_format`、`rename_event_debounce_seconds`、`rename_observe_only` |
-| 站点标签 | 16 | `tag_enabled`、`tag_siteprefix`、`tag_tracker_mappings_str`、`tag_custom_sites_str`、`tag_interval_cron`、`tag_enable_media_tag`、`tag_enable_tag`、`tag_enable_category`、`tag_enable_del_tags`、`tag_downloaders`、`tag_all_cat`、`tag_all_cat_rename`、`tag_rename_type`、`tag_path_rename`、`tag_catprefix`、`tag_observe_only` |
-| 上传限速 | 6 | `upload_limit_enabled`、`upload_limit_downloaders`、`upload_limit_downloader_limits_kib`、`upload_limit_site_rules`、`upload_limit_grace_minutes`、`upload_limit_observe_only` |
+| 站点标签 | 19 | `tag_enabled`、`tag_siteprefix`、`tag_tracker_mappings_str`、`tag_custom_sites_str`、`tag_interval_cron`、`tag_enable_media_tag`、`tag_enable_tag`、`tag_enable_category`、`tag_enable_del_tags`、`tag_downloaders`、`tag_all_cat`、`tag_all_cat_rename`、`tag_rename_type`、`tag_path_rename`、`tag_catprefix`、`tag_observe_only`、`tag_cleanup_enabled`、`tag_cleanup_downloaders`、`tag_cleanup_cron` |
+| 上传限速 | 7 | `upload_limit_enabled`、`upload_limit_downloaders`、`upload_limit_downloader_limits_kib`、`upload_limit_site_rules`、`upload_limit_grace_minutes`、`upload_limit_observe_only`、`upload_limit_notify` |
 | H&R | 24 | `hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_downloader`、`hr_sites`、`hr_notify`、`hr_check_period`、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str`、`hr_observe_only` |
 | 自动删种 | 19 | `remover_enabled`、`remover_notify`、`remover_action`、`remover_downloaders`、`remover_cron`、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys`、`remover_observe_only`、`migration_observe_only`（由自动删种模块读取，见 `modules/autoremove/constants.py`） |
 | 失败清理 | 6 | `failcleanup_enabled`、`failcleanup_notify`、`failcleanup_cron`、`failcleanup_clean_repeat`、`failcleanup_retain_hours`、`failcleanup_observe_only` |
 
-分组键数均计外部配置键；带 * 的内部默认键（`transfer_delete_source_default`/`transfer_delete_duplicate_default`）不计入分组键数，全表按行合计 31+2+15+16+6+24+19+6=119，与总键数一致。
+分组键数均计外部配置键；另 2 个内部键不计入分组，合计 31+2+15+19+7+24+19+6=123。
 
 各模块默认值来源：`utils/config.py::TRANSFER_DEFAULTS`、`modules/rename/service.py::DEFAULT_RENAME_CONFIG`（配 `RENAME_FLAT_CONFIG_KEYS` 映射）、`modules/sitetag/service.py::DEFAULT_TAG_CONFIG`、`modules/hr/constants.py::HR_FORM_DEFAULTS`、`modules/autoremove/constants.py::REMOVER_FORM_DEFAULTS`、`modules/failclean/constants.py::FAILCLEAN_FORM_DEFAULTS`。
 

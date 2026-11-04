@@ -117,7 +117,7 @@ const defaults = {
   scan_limit: 500, pause_source: true,
   upload_limit_enabled: false, upload_limit_downloaders: [],
   upload_limit_downloader_limits_kib: {}, upload_limit_site_rules: {},
-  upload_limit_grace_minutes: 30,
+  upload_limit_notify: true,
   // 观察模式（阶段三）：只预览候选、不执行写操作。老配置默认关闭（升级保持升级前行为），
   // 全新安装时由下方 fresh install 补丁打开；按模块前缀自动归入对应页签的「恢复默认」键集。
   transfer_observe_only: false, rename_observe_only: false, tag_observe_only: false,
@@ -243,7 +243,7 @@ function addUploadSiteRule() {
   uploadNewSiteName.value = ''
 }
 const uploadSiteRuleRows = computed(() => Object.entries(form.upload_limit_site_rules || {})
-  .map(([name, rule]) => ({ name, limit_kib: Number(rule?.limit_kib || 0) || null }))
+  .map(([name, rule]) => ({ name, limit_kib: Number(rule?.limit_kib || 0) || null, torrent_limit_kib: Number(rule?.torrent_limit_kib || 0) || null }))
   .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')))
 const hrBrushPluginItems = ['BrushFlow', '不启用']
 const hrNotifyModeItems = [
@@ -680,7 +680,11 @@ function uploadDownloaderLimit(downloaderId) {
 }
 
 function setUploadSiteRuleLimitMb(siteName, value) {
-  setUploadSiteRule(siteName, value == null || value === '' ? 0 : Number(value) * 1024)
+  setUploadSiteRule(siteName, value == null || value === '' ? 0 : Number(value) * 1024, 'limit_kib')
+}
+
+function setUploadSiteRuleTorrentLimitMb(siteName, value) {
+  setUploadSiteRule(siteName, value == null || value === '' ? 0 : Number(value) * 1024, 'torrent_limit_kib')
 }
 
 function setUploadDownloaderLimit(downloaderId, value) {
@@ -691,11 +695,11 @@ function setUploadDownloaderLimit(downloaderId, value) {
   form.upload_limit_downloader_limits_kib = mapping
 }
 
-function setUploadSiteRule(siteName, value) {
+function setUploadSiteRule(siteName, value, field = 'limit_kib') {
   const rules = Object.fromEntries(Object.entries(form.upload_limit_site_rules || {}).map(([name, rule]) => [name, { ...rule }]))
-  const current = rules[siteName] || { limit_kib: 0 }
+  const current = rules[siteName] || { limit_kib: 0, torrent_limit_kib: 0 }
   const limit = Number(value)
-  current.limit_kib = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 0
+  current[field] = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 0
   rules[siteName] = current
   form.upload_limit_site_rules = rules
 }
@@ -1455,14 +1459,13 @@ Object.keys(form).forEach(k => delete form[k])
               <div class="dm-switch-group">
                 <VSwitch density="compact" v-model="form.upload_limit_enabled" color="primary" inset hide-details label="启用" />
                 <VSwitch density="compact" v-model="form.upload_limit_observe_only" color="warning" inset hide-details label="观察模式" />
+                <VSwitch density="compact" v-model="form.upload_limit_notify" color="primary" inset hide-details label="违规通知" />
               </div>
               <div v-if="form.upload_limit_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />观察模式：不调整上传限速，也不执行恢复。</div>
               <div class="dm-field-row">
                 <div class="dm-field"><VSelect density="compact" v-model="form.upload_limit_downloaders" :error-messages="form.upload_limit_enabled && !uploadSelectedDownloaders.length ? '请至少选择一个下载器' : ''" label="下载器" variant="outlined"
                   :items="uploadDownloaderItems" multiple chips closable-chips clearable /></div>
-                <div class="dm-field"><VTextField density="compact" class="dm-number-input" v-model.number="form.upload_limit_grace_minutes" label="新种宽限（分钟）" type="number" min="0" max="1440" variant="outlined" hide-details /></div>
               </div>
-              <div class="dm-hint dm-upload-grace-hint">宽限期间不做站点和单种分配，但仍受对应下载器总上传上限。</div>
             </div>
 
             <!-- ═══ 上传限速 · 限速规则 ═══ -->
@@ -1502,6 +1505,9 @@ Object.keys(form).forEach(k => delete form[k])
                   <VTextField density="compact" class="dm-number-input" :model-value="row.limit_kib ? Number((row.limit_kib / 1024).toFixed(2)) : null" @update:model-value="setUploadSiteRuleLimitMb(row.name, $event)"
                     label="合计上限（MB/s）" type="number" min="0" step="0.1" clearable variant="outlined"
                     hint="留空或 0 不额外写单种上限；仍受下载器全局上限约束" persistent-hint />
+                  <VTextField density="compact" class="dm-number-input" :model-value="row.torrent_limit_kib ? Number((row.torrent_limit_kib / 1024).toFixed(2)) : null" @update:model-value="setUploadSiteRuleTorrentLimitMb(row.name, $event)"
+                    label="单种上限（MB/s）" type="number" min="0" step="0.1" clearable variant="outlined"
+                    hint="留空或 0 表示不设置单种上限；仅约束该站点单颗任务的上传速度" persistent-hint />
                   <VBtn size="small" aria-label="删除站点" icon="mdi-delete-outline" color="primary" variant="text" title="删除站点"
                     @click="removeUploadSiteRule(row.name)" />
                 </div>
@@ -2493,7 +2499,6 @@ Object.keys(form).forEach(k => delete form[k])
 .dm-form-dialog :deep(.v-btn--icon.v-btn--size-small) { width: var(--dm-button-height, 28px); min-width: var(--dm-button-height, 28px); }
 .dm-compact-form .dm-risk { margin-block: 8px 16px; }
 .dm-compact-form .dm-risk + .dm-field-row { margin-top: 0; }
-.dm-upload-grace-hint { margin-top: 12px; }
 .dm-cat-source { display: flex; align-items: center; gap: 8px; min-height: 36px; min-width: 0; }
 .dm-cat-source > .dm-body-text { min-width: 0; overflow-wrap: anywhere; }
 .dm-cat-source > :deep(.v-input) { flex: 1 1 auto; min-width: 0; }

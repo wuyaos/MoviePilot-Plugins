@@ -107,12 +107,13 @@ def test_registry_and_defaults(gating):
     defaults = u.build_plugin_config_defaults()
     # 112 → 110（2026-10-28）：删除两个死键。`transfer_cron` / `transfer_event_enabled`
     # 全仓零读取（调度实际只有 fallback 间隔一条路径），且后者在 defaults 里被重复声明两次。
-    # 110 → 117（阶段三）：新增 7 个模块观察模式键（OBSERVE_ONLY_KEYS）。
-    assert len(defaults) == 122
+    # 110 → 117（阶段三）新增观察键；上传限速配置另新增通知开关。
+    assert len(defaults) == 123
     new_keys = {"transfer_delete_source_default", "transfer_delete_duplicate_default"}
     assert defaults["transfer_delete_source_default"] is False
     assert defaults["transfer_delete_duplicate_default"] is False
-    assert len(defaults.keys() - new_keys) == 120
+    assert defaults["upload_limit_notify"] is True
+    assert len(defaults.keys() - new_keys) == 121
     for removed_key in ('onlyonce', 'hr_onlyonce', 'remover_onlyonce',
                         'rename_onlyonce', 'rename_retry', 'rename_recovery',
                         'transfer_cron', 'transfer_event_enabled'):

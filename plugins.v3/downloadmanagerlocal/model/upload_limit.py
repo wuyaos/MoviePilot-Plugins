@@ -86,6 +86,8 @@ def empty_upload_limit_state() -> dict:
         "torrents": {},
         "failures": {},
         "last_summary": {},
+        "violations": {},
+        "notify": {},
     }
 
 
@@ -108,6 +110,8 @@ def migrate_upload_limit_state(value: Any) -> dict:
         "torrents": _dict(value.get("torrents")),
         "failures": _dict(value.get("failures")),
         "last_summary": _dict(value.get("last_summary")),
+        "violations": _dict(value.get("violations")),
+        "notify": _dict(value.get("notify")),
     })
     return result
 

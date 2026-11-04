@@ -48,3 +48,11 @@ test('上传按下载器折叠分组，共用站点表；跨下载器汇总明�
   assert.match(source, /owners\.length === 1/)
   assert.doesNotMatch(source, /<VTable|dm-upload-status-grid|dm-upload-site-status-row/)
 })
+
+test('上传限速站点表展示单种/合计分配徽标与三态状态，不残留宽限控件', () => {
+  assert.match(source, /allocation_badge/)
+  assert.match(source, /cell-allocation_badge/)
+  assert.match(source, /uploadLimitStateChip\(row\)/)
+  assert.match(source, /formatAllocationMb\(row\.desired_allocated_kib \?\? row\.torrent_limit_kib\)/)
+  assert.doesNotMatch(source, /宽限|grace_torrents|grace_minutes/)
+})

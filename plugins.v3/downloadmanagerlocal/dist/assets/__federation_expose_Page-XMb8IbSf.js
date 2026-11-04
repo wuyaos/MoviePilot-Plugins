@@ -1202,6 +1202,27 @@ function formatKibSpeed(value) {
   return value == null ? '—' : `${Number((Number(value) / 1024).toFixed(2))} MB/s`
 }
 
+// 分配额度徽标：0/null 一律视为未设置，显示 —；否则精确两位小数，不丢尾随 0。
+function formatAllocationMb(value) {
+  const num = Number(value);
+  return value == null || !Number.isFinite(num) || num <= 0 ? '—' : `${(num / 1024).toFixed(2)} MB/s`
+}
+
+// 上传限速分配状态徽标：managed/single 为正常态，frozen 为冻结中性提示，
+// 其余（uncertain/error/mixed 等）一律按异常处理，文本进 tooltip 不改变展示文案。
+const UPLOAD_LIMIT_STATE_CHIP = {
+  managed: { label: '合计分配', color: 'primary' },
+  single: { label: '单种限速', color: 'secondary' },
+  mixed: { label: '混合', color: 'secondary' },
+  frozen: { label: '已冻结', color: 'warning' },
+};
+function uploadLimitStateChip(row) {
+  const state = String(row?.state || '');
+  const known = UPLOAD_LIMIT_STATE_CHIP[state];
+  if (known) return { ...known, tooltip: '' }
+  return { label: state === 'uncertain' ? '待确认' : state || '未知', color: 'error', tooltip: row?.error || '' }
+}
+
 function hrStatusColor(status) {
   return {
     Pending: 'warning',
@@ -1378,7 +1399,7 @@ computed(() => {
       icon: 'mdi-upload-network-outline',
       color: uploadLimitStatus.value.color,
       value: uploadLimitStatus.value.label,
-      desc: `受限 ${uploadLimit.value.managed_torrents || 0} · 宽限 ${uploadLimit.value.grace_torrents || 0}`,
+      desc: `受限 ${uploadLimit.value.managed_torrents || 0} · 上传中 ${uploadLimit.value.uploading_torrents || 0}`,
     },
     {
       title: '待关注',
@@ -1529,7 +1550,7 @@ const moduleCards = computed(() => {
       icon: MODULE_ICONS.upload_limit,
       color: uploadLimitStatus.value.color,
       value: uploadLimitStatus.value.label,
-      desc: `受限 ${up.managed_torrents || 0} · 宽限 ${up.grace_torrents || 0}`,
+      desc: `受限 ${up.managed_torrents || 0} · 上传中 ${up.uploading_torrents || 0}`,
       actions: [
         { key: 'upload-reallocate', label: '重新分配', icon: 'mdi-call-split', color: 'primary', run: doUploadReallocate },
         { key: 'upload-scan-sites', label: '扫描站点', icon: 'mdi-radar', color: 'primary', run: doUploadScanSites },
@@ -2416,7 +2437,7 @@ const recordColumns = {
   tagHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['name', '种子名称'], ['site', '站点'], ['tags', '标签变更'], ['category', '分类变更'], ['result', '结果']]),
   cleanupHistory: columnsOf([['time', '时间'], ['scope', '清理范围'], ['tags', '清理标签数'], ['success', '成功'], ['failed', '失败'], ['result', '结果']]),
   uploadHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['target', '作用对象'], ['action', '动作'], ['before', '调整前'], ['after', '调整后'], ['result', '结果']]),
-  sites: columnsOf([['name', '站点'], ['torrent_count', '受管种子'], ['uploading_torrents', '上传中'], ['upload_rate_bps', '当前上传'], ['allocated_kib', '已分配额度'], ['state', '状态']]),
+  sites: columnsOf([['name', '站点'], ['torrent_count', '受管种子'], ['uploading_torrents', '上传中'], ['upload_rate_bps', '当前上传'], ['allocated_kib', '已分配额度'], ['allocation_badge', '分配额度'], ['state', '状态']]),
   diagnostics: columnsOf([['name', '检查项'], ['module', '所属模块'], ['stateLabel', '状态'], ['message', '检查结果']]),
   attention: columnsOf([['level', '级别'], ['module', '模块'], ['detail', '问题']]),
 };
@@ -3435,8 +3456,30 @@ return (_ctx, _cache) => {
                                       "cell-uploading_torrents": _withCtx(({ value }) => [
                                         _createTextVNode(_toDisplayString(value ?? '当前接口未提供'), 1)
                                       ]),
+                                      "cell-allocation_badge": _withCtx(({ row }) => [
+                                        _createVNode(_component_VChip, {
+                                          size: "x-small",
+                                          color: "primary",
+                                          variant: "tonal"
+                                        }, {
+                                          default: _withCtx(() => [
+                                            _createTextVNode(_toDisplayString(formatAllocationMb(row.desired_allocated_kib ?? row.torrent_limit_kib)), 1)
+                                          ]),
+                                          _: 2
+                                        }, 1024)
+                                      ]),
                                       "cell-state": _withCtx(({ row }) => [
-                                        _createTextVNode(_toDisplayString(row.state || '当前接口未提供'), 1)
+                                        _createVNode(_component_VChip, {
+                                          size: "x-small",
+                                          color: uploadLimitStateChip(row).color,
+                                          variant: "tonal",
+                                          title: uploadLimitStateChip(row).tooltip
+                                        }, {
+                                          default: _withCtx(() => [
+                                            _createTextVNode(_toDisplayString(uploadLimitStateChip(row).label), 1)
+                                          ]),
+                                          _: 2
+                                        }, 1032, ["color", "title"])
                                       ]),
                                       expand: _withCtx(({ row }) => [
                                         _createElementVNode("p", _hoisted_31, "关联下载器：" + _toDisplayString(row.downloaders?.join('、') || '当前接口未提供') + "；种子级明细当前接口未提供。", 1)
@@ -3908,6 +3951,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b1e4b316"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-06c1f1d5"]]);
 
 export { Page as default };

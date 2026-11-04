@@ -510,8 +510,117 @@ __all__ = (
     "aggregate_pool_demand_kib",
     "allocate_site_pools",
     "allocate_task_limits",
+    "allocate_fair_task_limits",
     "estimate_task_demand_kib",
     "initial_auto_probe_count",
     "is_task_probe_candidate",
     "select_probe_keys",
 )
+
+
+def allocate_fair_task_limits(
+    tasks: dict[str, dict],
+    downloader_budgets_kib: dict[str, int],
+    site_budgets_kib: dict[str, int],
+) -> dict[str, int]:
+    """按任务等权 max-min 分配预算；输入中不包含速度或 Peer 需求。
+
+    `tasks` 的值包含 `downloader_id`、`site_key`、`single_limit_kib`。
+    正数站点预算限制同站任务总量；缺失站点预算表示未启用合计限速，
+    显式 0 表示预算耗尽（该站任务不再分配，其余站点不受影响）。
+    正数单种上限作为每任务 cap，零/缺失表示无单种 cap。下载器预算为
+    可分配上限，调用方可先扣除失联下载器保留预算。
+    """
+    keys = sorted(str(key) for key in tasks)
+    if not keys:
+        return {}
+
+    downloader_caps = {
+        str(key): max(0, int(value or 0)) for key, value in downloader_budgets_kib.items()
+    }
+    # Missing means no site-total constraint; an explicit zero means exhausted.
+    site_caps = {
+        str(key): max(0, int(value or 0))
+        for key, value in site_budgets_kib.items()
+    }
+    limits = {}
+    downloader_members: dict[str, list[str]] = defaultdict(list)
+    site_members: dict[str, list[str]] = defaultdict(list)
+    for key in keys:
+        task = tasks[key]
+        downloader = str(task.get("downloader_id") or "")
+        site = str(task.get("site_key") or "")
+        limits[key] = max(0, int(task.get("single_limit_kib") or 0))
+        downloader_members[downloader].append(key)
+        if site in site_caps:
+            site_members[site].append(key)
+
+    allocations = {key: 0.0 for key in keys}
+    active = {
+        key for key in keys
+        if downloader_caps.get(str(tasks[key].get("downloader_id") or ""), 0) > 0
+    }
+    while active:
+        constraints: list[tuple[float, list[str]]] = []
+        for downloader in sorted(downloader_members):
+            members = [key for key in downloader_members[downloader] if key in active]
+            if members:
+                remaining = downloader_caps.get(downloader, 0) - sum(
+                    allocations[key] for key in downloader_members[downloader]
+                )
+                constraints.append((max(0.0, remaining), members))
+        for site in sorted(site_members):
+            members = [key for key in site_members[site] if key in active]
+            if members:
+                remaining = site_caps[site] - sum(
+                    allocations[key] for key in site_members[site]
+                )
+                constraints.append((max(0.0, remaining), members))
+        for key in active:
+            if limits[key] > 0:
+                constraints.append((max(0.0, limits[key] - allocations[key]), [key]))
+
+        feasible = [
+            (budget, members)
+            for budget, members in constraints
+            if budget > _EPSILON
+        ]
+        active.difference_update(
+            key
+            for budget, members in constraints
+            if budget <= _EPSILON
+            for key in members
+        )
+        if not feasible or not active:
+            break
+        step = min(budget / len(members) for budget, members in feasible)
+        for key in active:
+            allocations[key] += step
+        saturated = {
+            key for budget, members in feasible
+            if budget / len(members) <= step + _EPSILON
+            for key in members
+        }
+        active.difference_update(saturated)
+    result = {key: max(0, int(math.floor(allocations[key] + _EPSILON))) for key in keys}
+    # Assign indivisible KiB in lexical order only where every applicable cap allows it.
+    for key in keys:
+        task = tasks[key]
+        downloader = str(task.get("downloader_id") or "")
+        site = str(task.get("site_key") or "")
+        if result[key] >= allocations[key] - _EPSILON:
+            continue
+        if limits[key] > 0 and result[key] + 1 > limits[key]:
+            continue
+        if (
+            sum(result[item] for item in downloader_members[downloader]) + 1
+            > downloader_caps.get(downloader, 0)
+        ):
+            continue
+        if (
+            site in site_caps
+            and sum(result[item] for item in site_members[site]) + 1 > site_caps[site]
+        ):
+            continue
+        result[key] += 1
+    return result
