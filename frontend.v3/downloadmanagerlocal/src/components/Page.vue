@@ -1048,7 +1048,7 @@ const MODULE_RECORD_VIEWS = {
   rename: { tab: 'history', anchor: '[data-record-block="rename-history"]' },
   hr: { tab: 'hr', anchor: '[data-record-block="hr-tasks"]' },
   autoremove: { tab: 'autoremove', anchor: '[data-record-block="autoremove-preview"]' },
-  // 失败清理没有逐条记录，只切页签看最近一次执行结果
+  // 失败清理页同时展示逐条历史与最近一次巡检快照。
   failclean: { tab: 'failclean', anchor: '' },
   tag: { tab: 'sitetag', anchor: '[data-record-block="tag-cleanup"]' },
   upload_limit: { tab: 'upload', anchor: '[data-runtime-section="upload-limit"]' },
@@ -1171,6 +1171,7 @@ async function refreshActive() {
     } else if (activeTab.value === 'upload' || activeTab.value === 'diagnostics') {
       tasks.push(loadUploadLimitStatus(request))
     }
+    for (const stream of executionStreams[activeTab.value] || []) tasks.push(loadExecutionHistory(stream))
     // 模块页签同样展示模块卡与运行明细：每轮刷新固定取一次诊断
     tasks.push(loadModuleConfigSummary(request))
     tasks.push(loadDiagnostics(request))
@@ -1505,16 +1506,65 @@ const recordColumns = {
   archive: columnsOf([['archived_at', '归档时间'], ['downloader', '下载器'], ['name', '名称'], ['category', '分类'], ['fail_count', '失败次数'], ['reason', '原因']]),
   hr: columnsOf([['name', '种子'], ['downloader_id', '下载器'], ['site', '站点'], ['status', '考核状态'], ['deleted', '存在状态'], ['remain_seconds', '剩余时长'], ['deadline', '截止日期'], ['progress', '做种进度']]),
   candidates: columnsOf([['downloader_id', '下载器'], ['name', '名称'], ['site', '站点'], ['size_text', '体积'], ['ratio', '分享率'], ['seeding_hours', '做种时长'], ['reason', '命中原因']]),
-  autoHistory: columnsOf([['time', '执行时间'], ['downloader', '下载器'], ['name', '名称'], ['action', '执行动作'], ['result', '结果'], ['reason', '原因']]),
-  failHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['name', '名称'], ['type', '清理类型'], ['source', '触发来源'], ['action', '动作'], ['result', '结果']]),
-  tagHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['name', '种子名称'], ['site', '站点'], ['tags', '标签变更'], ['category', '分类变更'], ['result', '结果']]),
-  cleanupHistory: columnsOf([['time', '时间'], ['scope', '清理范围'], ['tags', '清理标签数'], ['success', '成功'], ['failed', '失败'], ['result', '结果']]),
-  uploadHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['target', '作用对象'], ['action', '动作'], ['before', '调整前'], ['after', '调整后'], ['result', '结果']]),
   sites: columnsOf([['name', '站点'], ['torrent_count', '受管种子'], ['uploading_torrents', '上传中'], ['upload_rate_bps', '当前上传'], ['allocated_kib', '已分配额度'], ['allocation_badge', '分配额度'], ['state', '状态']]),
   diagnostics: columnsOf([['name', '检查项'], ['module', '所属模块'], ['stateLabel', '状态'], ['message', '检查结果']]),
   attention: columnsOf([['level', '级别'], ['module', '模块'], ['detail', '问题']]),
 }
-const unavailableHistory = '当前接口未提供逐条执行历史；此处不以候选、汇总或实时快照代替。'
+// Each history stream has independent paging and request ownership; snapshots never feed these rows.
+const executionStreams = { autoremove: ['autoremove'], failclean: ['failclean'], sitetag: ['tag', 'tag_cleanup'], upload: ['upload_limit'] }
+const executionHistory = reactive(Object.fromEntries(Object.values(executionStreams).flat().map(key => [key, {
+  rows: [], total: 0, page: 1, pageSize: 20, loading: false, loaded: false, error: '', revision: 0,
+}])))
+const executionColumns = columnsOf([['time', '时间'], ['downloader_id', '下载器'], ['name', '对象'], ['site', '站点'], ['trigger', '触发来源'], ['action', '动作'], ['result_text', '结果'], ['reason', '原因']])
+const executionResultLabels = { success: '成功', failed: '失败', skipped: '跳过', observed: '观察（未执行）' }
+function executionTableProps(stream) {
+  const block = executionHistory[stream]
+  return {
+    rows: block.rows, total: block.total, page: block.page, pageSize: block.pageSize,
+    columns: stream === 'upload_limit' ? [...executionColumns, ...columnsOf([['before_text', '调整前'], ['after_text', '调整后']])] : executionColumns,
+    state: { loading: block.loading, error: !block.loaded ? block.error || false : false, refreshFailed: block.loaded ? block.error || false : false, empty: 'none' },
+  }
+}
+async function loadExecutionHistory(stream) {
+  const block = executionHistory[stream]
+  const revision = ++block.revision
+  const pluginId = props.pluginId, tab = activeTab.value
+  const current = () => !pageDisposed && revision === block.revision && pluginId === props.pluginId && tab === activeTab.value
+  block.loading = true
+  block.error = ''
+  try {
+    const result = await getApi(`execution_history?module=${stream}&page=${block.page}&page_size=${block.pageSize}`, { feedback: 'silent' })
+    if (!current()) return
+    if ((result?.code != null && result.code !== 0) || !Array.isArray(result.items)) throw new Error(result?.msg || '执行历史响应无效')
+    if (block.page > result.total_pages && result.total_pages >= 1) {
+      block.page = result.total_pages
+      return await loadExecutionHistory(stream)
+    }
+    block.rows = result.items.map(row => ({ ...row, name: row.name || row.torrent_hash || '—', time: formatTimestamp(row.occurred_at),
+      result_text: executionResultLabels[row.result] || row.result || '—',
+      before_text: presentValue(row.before), after_text: presentValue(row.after),
+    }))
+    block.total = result.total
+    block.page = result.page || block.page
+    block.loaded = true
+  } catch (e) {
+    if (current()) block.error = e?.message || '执行历史加载失败'
+  } finally {
+    if (current()) block.loading = false
+  }
+}
+function changeExecutionPage(stream, page) {
+  const block = executionHistory[stream]
+  if (block.page === page) return
+  block.page = page
+  void loadExecutionHistory(stream)
+}
+function changeExecutionSize(stream, size) {
+  const block = executionHistory[stream]
+  block.pageSize = size
+  block.page = 1
+  void loadExecutionHistory(stream)
+}
 const currentModule = computed(() => tabModuleKeys[activeTab.value])
 const currentHeader = computed(() => moduleHeaders.value[currentModule.value])
 const settings = () => emit('switch')
@@ -1792,7 +1842,10 @@ onBeforeUnmount(() => {
                 <template #expand="{ row }"><RecordDetails :record="row" /></template>
               </ModuleTable>
               <p class="dm-hint">预览不锁定执行清单；执行时后端会按当前配置重新判断。</p>
-              <ModuleTable title="执行记录" :columns="recordColumns.autoHistory" :unavailable="unavailableHistory" />
+              <ModuleTable title="执行记录" data-execution-stream="autoremove" v-bind="executionTableProps('autoremove')" row-key="record_id"
+                @update:page="changeExecutionPage('autoremove', $event)" @update:page-size="changeExecutionSize('autoremove', $event)" @retry="loadExecutionHistory('autoremove')">
+                <template #cell-downloader_id="{ value }"><DownloaderBadge :name="value || '—'" /></template>
+              </ModuleTable>
               <details class="dm-runtime-details"><summary>最近运行详情</summary>
                 <VBtn color="primary" size="small" variant="tonal" :disabled="!cleanupCounts.autoremove_state" @click="openCleanupDialog('autoremove_state')">清最近运行记录</VBtn>
                 <ModuleDetailPanel :rows="moduleDetail('autoremove').rows" :items="moduleDetail('autoremove').items" :total="moduleDetail('autoremove').total" :limit="moduleDetail('autoremove').limit" :truncated="moduleDetail('autoremove').truncated" :error="moduleDetail('autoremove').error" />
@@ -1800,7 +1853,10 @@ onBeforeUnmount(() => {
             </template>
 
             <template v-if="activeTab === 'failclean'">
-              <ModuleTable title="执行记录" :columns="recordColumns.failHistory" :unavailable="unavailableHistory" />
+              <ModuleTable title="执行记录" data-execution-stream="failclean" v-bind="executionTableProps('failclean')" row-key="record_id"
+                @update:page="changeExecutionPage('failclean', $event)" @update:page-size="changeExecutionSize('failclean', $event)" @retry="loadExecutionHistory('failclean')">
+                <template #cell-downloader_id="{ value }"><DownloaderBadge :name="value || '—'" /></template>
+              </ModuleTable>
               <details class="dm-runtime-details" data-record-state="failclean" :aria-busy="recordStates.failclean.loading"><summary>事件与最近巡检详情</summary>
                 <VBtn color="primary" size="small" variant="tonal" :disabled="!cleanupCounts.failclean_state" @click="openCleanupDialog('failclean_state')">清最近运行记录</VBtn>
                 <TableState v-if="!failcleanRows.length || recordStates.failclean.error" v-bind="recordTableState('failclean', failcleanRows, failcleanEmptyState)" @retry="refreshActive" />
@@ -1809,8 +1865,14 @@ onBeforeUnmount(() => {
             </template>
 
             <template v-if="activeTab === 'sitetag'">
-              <ModuleTable title="补全执行记录" :columns="recordColumns.tagHistory" :unavailable="unavailableHistory" />
-              <ModuleTable title="标签清理记录" data-record-block="tag-cleanup" :columns="recordColumns.cleanupHistory" :unavailable="unavailableHistory" />
+              <ModuleTable title="补全执行记录" data-execution-stream="tag" v-bind="executionTableProps('tag')" row-key="record_id"
+                @update:page="changeExecutionPage('tag', $event)" @update:page-size="changeExecutionSize('tag', $event)" @retry="loadExecutionHistory('tag')">
+                <template #cell-downloader_id="{ value }"><DownloaderBadge :name="value || '—'" /></template>
+              </ModuleTable>
+              <ModuleTable title="标签清理记录" data-record-block="tag-cleanup" data-execution-stream="tag_cleanup" v-bind="executionTableProps('tag_cleanup')" row-key="record_id"
+                @update:page="changeExecutionPage('tag_cleanup', $event)" @update:page-size="changeExecutionSize('tag_cleanup', $event)" @retry="loadExecutionHistory('tag_cleanup')">
+                <template #cell-downloader_id="{ value }"><DownloaderBadge :name="value || '—'" /></template>
+              </ModuleTable>
               <details class="dm-runtime-details" data-record-block="tag-cleanup-snapshot"><summary>最近标签清理快照（非逐条历史）</summary>
                 <ModuleDetailPanel :rows="moduleDetail('tagcleanup').rows" :items="moduleDetail('tagcleanup').items" :total="moduleDetail('tagcleanup').total" :limit="moduleDetail('tagcleanup').limit" :truncated="moduleDetail('tagcleanup').truncated" :error="moduleDetail('tagcleanup').error" />
               </details>
@@ -1838,7 +1900,10 @@ onBeforeUnmount(() => {
                   </ModuleTable>
                 </section>
               </section>
-              <ModuleTable title="执行记录" :columns="recordColumns.uploadHistory" :unavailable="unavailableHistory" />
+              <ModuleTable title="执行记录" data-execution-stream="upload_limit" v-bind="executionTableProps('upload_limit')" row-key="record_id"
+                @update:page="changeExecutionPage('upload_limit', $event)" @update:page-size="changeExecutionSize('upload_limit', $event)" @retry="loadExecutionHistory('upload_limit')">
+                <template #cell-downloader_id="{ value }"><DownloaderBadge :name="value || '—'" /></template>
+              </ModuleTable>
               <p class="dm-hint">实际上传与分配额度是不同指标；MP 或插件离线后，下载器可能保留最后写入的限速。</p>
               <details class="dm-runtime-details"><summary>站点识别与策略操作</summary><VBtn color="primary" size="small" variant="tonal" :disabled="!!moduleRunning" @click="doUploadScanSites">扫描站点</VBtn><VBtn size="small" variant="tonal" color="error" :disabled="!!moduleRunning" @click="doUploadClearRules">清空策略</VBtn></details>
             </template>

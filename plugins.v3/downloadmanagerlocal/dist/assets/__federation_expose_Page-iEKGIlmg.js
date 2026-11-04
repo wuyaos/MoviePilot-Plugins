@@ -1000,7 +1000,6 @@ const _hoisted_38 = { class: "dm-runtime-details" };
 const {computed,nextTick,onBeforeUnmount,onMounted,reactive,ref,watch} = await importShared('vue');
 
 const OVERVIEW_REFRESH_INTERVAL_MS = 30_000;
-const unavailableHistory = '当前接口未提供逐条执行历史；此处不以候选、汇总或实时快照代替。';
 
 const _sfc_main = {
   __name: 'Page',
@@ -2015,7 +2014,7 @@ const MODULE_RECORD_VIEWS = {
   rename: { tab: 'history', anchor: '[data-record-block="rename-history"]' },
   hr: { tab: 'hr', anchor: '[data-record-block="hr-tasks"]' },
   autoremove: { tab: 'autoremove', anchor: '[data-record-block="autoremove-preview"]' },
-  // 失败清理没有逐条记录，只切页签看最近一次执行结果
+  // 失败清理页同时展示逐条历史与最近一次巡检快照。
   failclean: { tab: 'failclean', anchor: '' },
   tag: { tab: 'sitetag', anchor: '[data-record-block="tag-cleanup"]' },
   upload_limit: { tab: 'upload', anchor: '[data-runtime-section="upload-limit"]' },
@@ -2123,6 +2122,7 @@ async function refreshActive() {
     } else if (activeTab.value === 'upload' || activeTab.value === 'diagnostics') {
       tasks.push(loadUploadLimitStatus(request));
     }
+    for (const stream of executionStreams[activeTab.value] || []) tasks.push(loadExecutionHistory(stream));
     // 模块页签同样展示模块卡与运行明细：每轮刷新固定取一次诊断
     tasks.push(loadModuleConfigSummary(request));
     tasks.push(loadDiagnostics(request));
@@ -2432,15 +2432,65 @@ const recordColumns = {
   archive: columnsOf([['archived_at', '归档时间'], ['downloader', '下载器'], ['name', '名称'], ['category', '分类'], ['fail_count', '失败次数'], ['reason', '原因']]),
   hr: columnsOf([['name', '种子'], ['downloader_id', '下载器'], ['site', '站点'], ['status', '考核状态'], ['deleted', '存在状态'], ['remain_seconds', '剩余时长'], ['deadline', '截止日期'], ['progress', '做种进度']]),
   candidates: columnsOf([['downloader_id', '下载器'], ['name', '名称'], ['site', '站点'], ['size_text', '体积'], ['ratio', '分享率'], ['seeding_hours', '做种时长'], ['reason', '命中原因']]),
-  autoHistory: columnsOf([['time', '执行时间'], ['downloader', '下载器'], ['name', '名称'], ['action', '执行动作'], ['result', '结果'], ['reason', '原因']]),
-  failHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['name', '名称'], ['type', '清理类型'], ['source', '触发来源'], ['action', '动作'], ['result', '结果']]),
-  tagHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['name', '种子名称'], ['site', '站点'], ['tags', '标签变更'], ['category', '分类变更'], ['result', '结果']]),
-  cleanupHistory: columnsOf([['time', '时间'], ['scope', '清理范围'], ['tags', '清理标签数'], ['success', '成功'], ['failed', '失败'], ['result', '结果']]),
-  uploadHistory: columnsOf([['time', '时间'], ['downloader', '下载器'], ['target', '作用对象'], ['action', '动作'], ['before', '调整前'], ['after', '调整后'], ['result', '结果']]),
   sites: columnsOf([['name', '站点'], ['torrent_count', '受管种子'], ['uploading_torrents', '上传中'], ['upload_rate_bps', '当前上传'], ['allocated_kib', '已分配额度'], ['allocation_badge', '分配额度'], ['state', '状态']]),
   diagnostics: columnsOf([['name', '检查项'], ['module', '所属模块'], ['stateLabel', '状态'], ['message', '检查结果']]),
   attention: columnsOf([['level', '级别'], ['module', '模块'], ['detail', '问题']]),
 };
+// Each history stream has independent paging and request ownership; snapshots never feed these rows.
+const executionStreams = { autoremove: ['autoremove'], failclean: ['failclean'], sitetag: ['tag', 'tag_cleanup'], upload: ['upload_limit'] };
+const executionHistory = reactive(Object.fromEntries(Object.values(executionStreams).flat().map(key => [key, {
+  rows: [], total: 0, page: 1, pageSize: 20, loading: false, loaded: false, error: '', revision: 0,
+}])));
+const executionColumns = columnsOf([['time', '时间'], ['downloader_id', '下载器'], ['name', '对象'], ['site', '站点'], ['trigger', '触发来源'], ['action', '动作'], ['result_text', '结果'], ['reason', '原因']]);
+const executionResultLabels = { success: '成功', failed: '失败', skipped: '跳过', observed: '观察（未执行）' };
+function executionTableProps(stream) {
+  const block = executionHistory[stream];
+  return {
+    rows: block.rows, total: block.total, page: block.page, pageSize: block.pageSize,
+    columns: stream === 'upload_limit' ? [...executionColumns, ...columnsOf([['before_text', '调整前'], ['after_text', '调整后']])] : executionColumns,
+    state: { loading: block.loading, error: !block.loaded ? block.error || false : false, refreshFailed: block.loaded ? block.error || false : false, empty: 'none' },
+  }
+}
+async function loadExecutionHistory(stream) {
+  const block = executionHistory[stream];
+  const revision = ++block.revision;
+  const pluginId = props.pluginId, tab = activeTab.value;
+  const current = () => !pageDisposed && revision === block.revision && pluginId === props.pluginId && tab === activeTab.value;
+  block.loading = true;
+  block.error = '';
+  try {
+    const result = await getApi(`execution_history?module=${stream}&page=${block.page}&page_size=${block.pageSize}`, { feedback: 'silent' });
+    if (!current()) return
+    if ((result?.code != null && result.code !== 0) || !Array.isArray(result.items)) throw new Error(result?.msg || '执行历史响应无效')
+    if (block.page > result.total_pages && result.total_pages >= 1) {
+      block.page = result.total_pages;
+      return await loadExecutionHistory(stream)
+    }
+    block.rows = result.items.map(row => ({ ...row, name: row.name || row.torrent_hash || '—', time: formatTimestamp(row.occurred_at),
+      result_text: executionResultLabels[row.result] || row.result || '—',
+      before_text: presentValue(row.before), after_text: presentValue(row.after),
+    }));
+    block.total = result.total;
+    block.page = result.page || block.page;
+    block.loaded = true;
+  } catch (e) {
+    if (current()) block.error = e?.message || '执行历史加载失败';
+  } finally {
+    if (current()) block.loading = false;
+  }
+}
+function changeExecutionPage(stream, page) {
+  const block = executionHistory[stream];
+  if (block.page === page) return
+  block.page = page;
+  void loadExecutionHistory(stream);
+}
+function changeExecutionSize(stream, size) {
+  const block = executionHistory[stream];
+  block.pageSize = size;
+  block.page = 1;
+  void loadExecutionHistory(stream);
+}
 const currentModule = computed(() => tabModuleKeys[activeTab.value]);
 const currentHeader = computed(() => moduleHeaders.value[currentModule.value]);
 const settings = () => emit('switch');
@@ -2557,6 +2607,7 @@ function transferOutcomeText(row) {
   if (row.source_result) parts.push(sourceResults[row.source_result] || row.source_result);
   return parts.filter(Boolean).join(' · ')
 }
+function presentValue(value) { return value == null || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value) }
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
   void refreshActive();
@@ -2602,7 +2653,7 @@ return (_ctx, _cache) => {
           class: "ms-3 me-2",
           color: "primary"
         }),
-        _cache[52] || (_cache[52] = _createElementVNode("div", { class: "dm-title" }, "下载中心", -1)),
+        _cache[67] || (_cache[67] = _createElementVNode("div", { class: "dm-title" }, "下载中心", -1)),
         _createVNode(_component_VSpacer),
         _createVNode(_component_VBtn, {
           color: "primary",
@@ -2613,7 +2664,7 @@ return (_ctx, _cache) => {
           onClick: _cache[0] || (_cache[0] = $event => (refreshActive())),
           loading: loading.value
         }, {
-          default: _withCtx(() => [...(_cache[50] || (_cache[50] = [
+          default: _withCtx(() => [...(_cache[65] || (_cache[65] = [
             _createTextVNode("刷新数据", -1)
           ]))]),
           _: 1
@@ -2626,7 +2677,7 @@ return (_ctx, _cache) => {
           class: "text-none",
           onClick: _cache[1] || (_cache[1] = $event => (emit('switch')))
         }, {
-          default: _withCtx(() => [...(_cache[51] || (_cache[51] = [
+          default: _withCtx(() => [...(_cache[66] || (_cache[66] = [
             _createTextVNode("配置插件", -1)
           ]))]),
           _: 1
@@ -3018,7 +3069,7 @@ return (_ctx, _cache) => {
                                 disabled: !!moduleRunning.value || renameStatus.value.batch_running,
                                 onClick: doRetryRenames
                               }, {
-                                default: _withCtx(() => [...(_cache[53] || (_cache[53] = [
+                                default: _withCtx(() => [...(_cache[68] || (_cache[68] = [
                                   _createTextVNode("重试失败项", -1)
                                 ]))]),
                                 _: 1
@@ -3153,7 +3204,7 @@ return (_ctx, _cache) => {
                                 disabled: hrClearing.value || !hrSummary.value.compliant,
                                 onClick: _cache[25] || (_cache[25] = $event => (askHrClear('compliant')))
                               }, {
-                                default: _withCtx(() => [...(_cache[54] || (_cache[54] = [
+                                default: _withCtx(() => [...(_cache[69] || (_cache[69] = [
                                   _createTextVNode("清理达标记录", -1)
                                 ]))]),
                                 _: 1
@@ -3165,7 +3216,7 @@ return (_ctx, _cache) => {
                                 disabled: hrClearing.value || !hrSummary.value.deleted,
                                 onClick: _cache[26] || (_cache[26] = $event => (askHrClear('missing')))
                               }, {
-                                default: _withCtx(() => [...(_cache[55] || (_cache[55] = [
+                                default: _withCtx(() => [...(_cache[70] || (_cache[70] = [
                                   _createTextVNode("清理缺失记录", -1)
                                 ]))]),
                                 _: 1
@@ -3228,7 +3279,7 @@ return (_ctx, _cache) => {
                             _: 1
                           }, 8, ["columns", "rows", "total", "page", "page-size", "state"]),
                           _createElementVNode("details", _hoisted_22, [
-                            _cache[56] || (_cache[56] = _createElementVNode("summary", null, "保护跳过统计", -1)),
+                            _cache[71] || (_cache[71] = _createElementVNode("summary", null, "保护跳过统计", -1)),
                             _createElementVNode("dl", null, [
                               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(hrSkipRows.value, (row) => {
                                 return (_openBlock(), _createElementBlock(_Fragment, {
@@ -3276,7 +3327,7 @@ return (_ctx, _cache) => {
                                 disabled: !!moduleRunning.value,
                                 onClick: _cache[30] || (_cache[30] = $event => (autoRunConfirm.value = true))
                               }, {
-                                default: _withCtx(() => [...(_cache[57] || (_cache[57] = [
+                                default: _withCtx(() => [...(_cache[72] || (_cache[72] = [
                                   _createTextVNode("按当前配置执行", -1)
                                 ]))]),
                                 _: 1
@@ -3295,22 +3346,33 @@ return (_ctx, _cache) => {
                             ]),
                             _: 1
                           }, 8, ["columns", "rows", "total", "page", "page-size", "state"]),
-                          _cache[60] || (_cache[60] = _createElementVNode("p", { class: "dm-hint" }, "预览不锁定执行清单；执行时后端会按当前配置重新判断。", -1)),
-                          _createVNode(ModuleTable, {
+                          _cache[75] || (_cache[75] = _createElementVNode("p", { class: "dm-hint" }, "预览不锁定执行清单；执行时后端会按当前配置重新判断。", -1)),
+                          _createVNode(ModuleTable, _mergeProps({
                             title: "执行记录",
-                            columns: recordColumns.autoHistory,
-                            unavailable: unavailableHistory
-                          }, null, 8, ["columns"]),
+                            "data-execution-stream": "autoremove"
+                          }, executionTableProps('autoremove'), {
+                            "row-key": "record_id",
+                            "onUpdate:page": _cache[33] || (_cache[33] = $event => (changeExecutionPage('autoremove', $event))),
+                            "onUpdate:pageSize": _cache[34] || (_cache[34] = $event => (changeExecutionSize('autoremove', $event))),
+                            onRetry: _cache[35] || (_cache[35] = $event => (loadExecutionHistory('autoremove')))
+                          }), {
+                            "cell-downloader_id": _withCtx(({ value }) => [
+                              _createVNode(DownloaderBadge, {
+                                name: value || '—'
+                              }, null, 8, ["name"])
+                            ]),
+                            _: 1
+                          }, 16),
                           _createElementVNode("details", _hoisted_23, [
-                            _cache[59] || (_cache[59] = _createElementVNode("summary", null, "最近运行详情", -1)),
+                            _cache[74] || (_cache[74] = _createElementVNode("summary", null, "最近运行详情", -1)),
                             _createVNode(_component_VBtn, {
                               color: "primary",
                               size: "small",
                               variant: "tonal",
                               disabled: !cleanupCounts.value.autoremove_state,
-                              onClick: _cache[33] || (_cache[33] = $event => (openCleanupDialog('autoremove_state')))
+                              onClick: _cache[36] || (_cache[36] = $event => (openCleanupDialog('autoremove_state')))
                             }, {
-                              default: _withCtx(() => [...(_cache[58] || (_cache[58] = [
+                              default: _withCtx(() => [...(_cache[73] || (_cache[73] = [
                                 _createTextVNode("清最近运行记录", -1)
                               ]))]),
                               _: 1
@@ -3328,25 +3390,36 @@ return (_ctx, _cache) => {
                       : _createCommentVNode("", true),
                     (activeTab.value === 'failclean')
                       ? (_openBlock(), _createElementBlock(_Fragment, { key: 4 }, [
-                          _createVNode(ModuleTable, {
+                          _createVNode(ModuleTable, _mergeProps({
                             title: "执行记录",
-                            columns: recordColumns.failHistory,
-                            unavailable: unavailableHistory
-                          }, null, 8, ["columns"]),
+                            "data-execution-stream": "failclean"
+                          }, executionTableProps('failclean'), {
+                            "row-key": "record_id",
+                            "onUpdate:page": _cache[37] || (_cache[37] = $event => (changeExecutionPage('failclean', $event))),
+                            "onUpdate:pageSize": _cache[38] || (_cache[38] = $event => (changeExecutionSize('failclean', $event))),
+                            onRetry: _cache[39] || (_cache[39] = $event => (loadExecutionHistory('failclean')))
+                          }), {
+                            "cell-downloader_id": _withCtx(({ value }) => [
+                              _createVNode(DownloaderBadge, {
+                                name: value || '—'
+                              }, null, 8, ["name"])
+                            ]),
+                            _: 1
+                          }, 16),
                           _createElementVNode("details", {
                             class: "dm-runtime-details",
                             "data-record-state": "failclean",
                             "aria-busy": recordStates.failclean.loading
                           }, [
-                            _cache[62] || (_cache[62] = _createElementVNode("summary", null, "事件与最近巡检详情", -1)),
+                            _cache[77] || (_cache[77] = _createElementVNode("summary", null, "事件与最近巡检详情", -1)),
                             _createVNode(_component_VBtn, {
                               color: "primary",
                               size: "small",
                               variant: "tonal",
                               disabled: !cleanupCounts.value.failclean_state,
-                              onClick: _cache[34] || (_cache[34] = $event => (openCleanupDialog('failclean_state')))
+                              onClick: _cache[40] || (_cache[40] = $event => (openCleanupDialog('failclean_state')))
                             }, {
-                              default: _withCtx(() => [...(_cache[61] || (_cache[61] = [
+                              default: _withCtx(() => [...(_cache[76] || (_cache[76] = [
                                 _createTextVNode("清最近运行记录", -1)
                               ]))]),
                               _: 1
@@ -3365,19 +3438,41 @@ return (_ctx, _cache) => {
                       : _createCommentVNode("", true),
                     (activeTab.value === 'sitetag')
                       ? (_openBlock(), _createElementBlock(_Fragment, { key: 5 }, [
-                          _createVNode(ModuleTable, {
+                          _createVNode(ModuleTable, _mergeProps({
                             title: "补全执行记录",
-                            columns: recordColumns.tagHistory,
-                            unavailable: unavailableHistory
-                          }, null, 8, ["columns"]),
-                          _createVNode(ModuleTable, {
+                            "data-execution-stream": "tag"
+                          }, executionTableProps('tag'), {
+                            "row-key": "record_id",
+                            "onUpdate:page": _cache[41] || (_cache[41] = $event => (changeExecutionPage('tag', $event))),
+                            "onUpdate:pageSize": _cache[42] || (_cache[42] = $event => (changeExecutionSize('tag', $event))),
+                            onRetry: _cache[43] || (_cache[43] = $event => (loadExecutionHistory('tag')))
+                          }), {
+                            "cell-downloader_id": _withCtx(({ value }) => [
+                              _createVNode(DownloaderBadge, {
+                                name: value || '—'
+                              }, null, 8, ["name"])
+                            ]),
+                            _: 1
+                          }, 16),
+                          _createVNode(ModuleTable, _mergeProps({
                             title: "标签清理记录",
                             "data-record-block": "tag-cleanup",
-                            columns: recordColumns.cleanupHistory,
-                            unavailable: unavailableHistory
-                          }, null, 8, ["columns"]),
+                            "data-execution-stream": "tag_cleanup"
+                          }, executionTableProps('tag_cleanup'), {
+                            "row-key": "record_id",
+                            "onUpdate:page": _cache[44] || (_cache[44] = $event => (changeExecutionPage('tag_cleanup', $event))),
+                            "onUpdate:pageSize": _cache[45] || (_cache[45] = $event => (changeExecutionSize('tag_cleanup', $event))),
+                            onRetry: _cache[46] || (_cache[46] = $event => (loadExecutionHistory('tag_cleanup')))
+                          }), {
+                            "cell-downloader_id": _withCtx(({ value }) => [
+                              _createVNode(DownloaderBadge, {
+                                name: value || '—'
+                              }, null, 8, ["name"])
+                            ]),
+                            _: 1
+                          }, 16),
                           _createElementVNode("details", _hoisted_25, [
-                            _cache[63] || (_cache[63] = _createElementVNode("summary", null, "最近标签清理快照（非逐条历史）", -1)),
+                            _cache[78] || (_cache[78] = _createElementVNode("summary", null, "最近标签清理快照（非逐条历史）", -1)),
                             _createVNode(ModuleDetailPanel, {
                               rows: moduleDetail('tagcleanup').rows,
                               items: moduleDetail('tagcleanup').items,
@@ -3393,18 +3488,18 @@ return (_ctx, _cache) => {
                       ? (_openBlock(), _createElementBlock(_Fragment, { key: 6 }, [
                           _createElementVNode("section", _hoisted_26, [
                             _createElementVNode("div", _hoisted_27, [
-                              _cache[64] || (_cache[64] = _createElementVNode("h3", null, "实时监控", -1)),
+                              _cache[79] || (_cache[79] = _createElementVNode("h3", null, "实时监控", -1)),
                               _createElementVNode("div", _hoisted_28, [
                                 _createVNode(CompactSelect, {
                                   modelValue: uploadDownloaderFilter.value,
-                                  "onUpdate:modelValue": _cache[35] || (_cache[35] = $event => ((uploadDownloaderFilter).value = $event)),
+                                  "onUpdate:modelValue": _cache[47] || (_cache[47] = $event => ((uploadDownloaderFilter).value = $event)),
                                   items: [{title:'全部下载器',value:'all'}, ...uploadLimitDownloaderRows.value.map(item => ({title:item.name || item.id,value:String(item.id)}))],
                                   label: "下载器",
                                   class: "dm-filter"
                                 }, null, 8, ["modelValue", "items"]),
                                 _createVNode(_component_VTextField, {
                                   modelValue: uploadSiteFilter.value,
-                                  "onUpdate:modelValue": _cache[36] || (_cache[36] = $event => ((uploadSiteFilter).value = $event)),
+                                  "onUpdate:modelValue": _cache[48] || (_cache[48] = $event => ((uploadSiteFilter).value = $event)),
                                   label: "搜索站点",
                                   density: "compact",
                                   variant: "outlined",
@@ -3490,14 +3585,25 @@ return (_ctx, _cache) => {
                               ]))
                             }), 128))
                           ]),
-                          _createVNode(ModuleTable, {
+                          _createVNode(ModuleTable, _mergeProps({
                             title: "执行记录",
-                            columns: recordColumns.uploadHistory,
-                            unavailable: unavailableHistory
-                          }, null, 8, ["columns"]),
-                          _cache[68] || (_cache[68] = _createElementVNode("p", { class: "dm-hint" }, "实际上传与分配额度是不同指标；MP 或插件离线后，下载器可能保留最后写入的限速。", -1)),
+                            "data-execution-stream": "upload_limit"
+                          }, executionTableProps('upload_limit'), {
+                            "row-key": "record_id",
+                            "onUpdate:page": _cache[49] || (_cache[49] = $event => (changeExecutionPage('upload_limit', $event))),
+                            "onUpdate:pageSize": _cache[50] || (_cache[50] = $event => (changeExecutionSize('upload_limit', $event))),
+                            onRetry: _cache[51] || (_cache[51] = $event => (loadExecutionHistory('upload_limit')))
+                          }), {
+                            "cell-downloader_id": _withCtx(({ value }) => [
+                              _createVNode(DownloaderBadge, {
+                                name: value || '—'
+                              }, null, 8, ["name"])
+                            ]),
+                            _: 1
+                          }, 16),
+                          _cache[83] || (_cache[83] = _createElementVNode("p", { class: "dm-hint" }, "实际上传与分配额度是不同指标；MP 或插件离线后，下载器可能保留最后写入的限速。", -1)),
                           _createElementVNode("details", _hoisted_32, [
-                            _cache[67] || (_cache[67] = _createElementVNode("summary", null, "站点识别与策略操作", -1)),
+                            _cache[82] || (_cache[82] = _createElementVNode("summary", null, "站点识别与策略操作", -1)),
                             _createVNode(_component_VBtn, {
                               color: "primary",
                               size: "small",
@@ -3505,7 +3611,7 @@ return (_ctx, _cache) => {
                               disabled: !!moduleRunning.value,
                               onClick: doUploadScanSites
                             }, {
-                              default: _withCtx(() => [...(_cache[65] || (_cache[65] = [
+                              default: _withCtx(() => [...(_cache[80] || (_cache[80] = [
                                 _createTextVNode("扫描站点", -1)
                               ]))]),
                               _: 1
@@ -3517,7 +3623,7 @@ return (_ctx, _cache) => {
                               disabled: !!moduleRunning.value,
                               onClick: doUploadClearRules
                             }, {
-                              default: _withCtx(() => [...(_cache[66] || (_cache[66] = [
+                              default: _withCtx(() => [...(_cache[81] || (_cache[81] = [
                                 _createTextVNode("清空策略", -1)
                               ]))]),
                               _: 1
@@ -3543,7 +3649,7 @@ return (_ctx, _cache) => {
                         loading: loading.value,
                         onClick: runDiagnostics
                       }, {
-                        default: _withCtx(() => [...(_cache[69] || (_cache[69] = [
+                        default: _withCtx(() => [...(_cache[84] || (_cache[84] = [
                           _createTextVNode("刷新诊断", -1)
                         ]))]),
                         _: 1
@@ -3568,21 +3674,21 @@ return (_ctx, _cache) => {
                       page: localPages.diagnostics,
                       "page-size": localSizes.diagnostics,
                       state: { empty: diagnosticModuleFilter.value === 'all' && diagnosticStateFilter.value === 'all' ? 'none' : 'filtered' },
-                      "onUpdate:page": _cache[39] || (_cache[39] = $event => (localPages.diagnostics = $event)),
-                      "onUpdate:pageSize": _cache[40] || (_cache[40] = $event => (setLocalSize('diagnostics', $event))),
-                      onResetFilters: _cache[41] || (_cache[41] = $event => {diagnosticModuleFilter.value = 'all'; diagnosticStateFilter.value = 'all';})
+                      "onUpdate:page": _cache[54] || (_cache[54] = $event => (localPages.diagnostics = $event)),
+                      "onUpdate:pageSize": _cache[55] || (_cache[55] = $event => (setLocalSize('diagnostics', $event))),
+                      onResetFilters: _cache[56] || (_cache[56] = $event => {diagnosticModuleFilter.value = 'all'; diagnosticStateFilter.value = 'all';})
                     }, {
                       filters: _withCtx(() => [
                         _createVNode(CompactSelect, {
                           modelValue: diagnosticModuleFilter.value,
-                          "onUpdate:modelValue": _cache[37] || (_cache[37] = $event => ((diagnosticModuleFilter).value = $event)),
+                          "onUpdate:modelValue": _cache[52] || (_cache[52] = $event => ((diagnosticModuleFilter).value = $event)),
                           items: [...moduleFilterItems.value, {title:'插件',value:'plugin'}],
                           label: "模块",
                           class: "dm-filter"
                         }, null, 8, ["modelValue", "items"]),
                         _createVNode(CompactSelect, {
                           modelValue: diagnosticStateFilter.value,
-                          "onUpdate:modelValue": _cache[38] || (_cache[38] = $event => ((diagnosticStateFilter).value = $event)),
+                          "onUpdate:modelValue": _cache[53] || (_cache[53] = $event => ((diagnosticStateFilter).value = $event)),
                           items: ['all','正常','需关注','异常','未检查','不适用'],
                           label: "状态",
                           class: "dm-filter"
@@ -3601,19 +3707,19 @@ return (_ctx, _cache) => {
                       ? (_openBlock(), _createElementBlock("section", _hoisted_37, [
                           _createElementVNode("h3", null, _toDisplayString(selectedDiagnostic.value.name), 1),
                           _createElementVNode("dl", null, [
-                            _cache[70] || (_cache[70] = _createElementVNode("dt", null, "问题", -1)),
+                            _cache[85] || (_cache[85] = _createElementVNode("dt", null, "问题", -1)),
                             _createElementVNode("dd", null, _toDisplayString(selectedDiagnostic.value.reason || selectedDiagnostic.value.message || '—'), 1),
-                            _cache[71] || (_cache[71] = _createElementVNode("dt", null, "影响范围", -1)),
+                            _cache[86] || (_cache[86] = _createElementVNode("dt", null, "影响范围", -1)),
                             _createElementVNode("dd", null, _toDisplayString(selectedDiagnostic.value.target || selectedDiagnostic.value.module), 1),
-                            _cache[72] || (_cache[72] = _createElementVNode("dt", null, "建议", -1)),
+                            _cache[87] || (_cache[87] = _createElementVNode("dt", null, "建议", -1)),
                             _createElementVNode("dd", null, _toDisplayString(selectedDiagnostic.value.suggestion || '当前检查项未提供建议'), 1),
-                            _cache[73] || (_cache[73] = _createElementVNode("dt", null, "检查时间 / 来源", -1)),
+                            _cache[88] || (_cache[88] = _createElementVNode("dt", null, "检查时间 / 来源", -1)),
                             _createElementVNode("dd", null, _toDisplayString(diagnostics.value?.time || '未检查') + " / 最近诊断快照", 1)
                           ])
                         ]))
                       : _createCommentVNode("", true),
                     _createElementVNode("details", _hoisted_38, [
-                      _cache[74] || (_cache[74] = _createElementVNode("summary", null, "环境信息", -1)),
+                      _cache[89] || (_cache[89] = _createElementVNode("summary", null, "环境信息", -1)),
                       _createElementVNode("p", null, "插件版本：" + _toDisplayString(diagnostics.value?.plugin?.version || '—'), 1),
                       _createVNode(RecordDetails, {
                         record: diagnostics.value?.paths || {}
@@ -3627,7 +3733,7 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-page",
       modelValue: transferRunDialog.value,
-      "onUpdate:modelValue": _cache[43] || (_cache[43] = $event => ((transferRunDialog).value = $event)),
+      "onUpdate:modelValue": _cache[58] || (_cache[58] = $event => ((transferRunDialog).value = $event)),
       "max-width": "520"
     }, {
       default: _withCtx(() => [
@@ -3649,7 +3755,7 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "dm-title" }, {
-                  default: _withCtx(() => [...(_cache[75] || (_cache[75] = [
+                  default: _withCtx(() => [...(_cache[90] || (_cache[90] = [
                     _createTextVNode("确认立即运行转移做种", -1)
                   ]))]),
                   _: 1
@@ -3660,7 +3766,7 @@ return (_ctx, _cache) => {
                       icon: "mdi-alert-outline",
                       size: "16"
                     }),
-                    _cache[76] || (_cache[76] = _createTextVNode("按当前配置扫描源下载器并转移种子；若配置了删源，转移完成后会删除源任务。", -1))
+                    _cache[91] || (_cache[91] = _createTextVNode("按当前配置扫描源下载器并转移种子；若配置了删源，转移完成后会删除源任务。", -1))
                   ]),
                   _: 1
                 })
@@ -3676,9 +3782,9 @@ return (_ctx, _cache) => {
                   size: "small",
                   variant: "tonal",
                   disabled: moduleRunning.value === 'transfer-run',
-                  onClick: _cache[42] || (_cache[42] = $event => (transferRunDialog.value = false))
+                  onClick: _cache[57] || (_cache[57] = $event => (transferRunDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[77] || (_cache[77] = [
+                  default: _withCtx(() => [...(_cache[92] || (_cache[92] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3691,7 +3797,7 @@ return (_ctx, _cache) => {
                   loading: moduleRunning.value === 'transfer-run',
                   onClick: confirmTransferRun
                 }, {
-                  default: _withCtx(() => [...(_cache[78] || (_cache[78] = [
+                  default: _withCtx(() => [...(_cache[93] || (_cache[93] = [
                     _createTextVNode("运行转移", -1)
                   ]))]),
                   _: 1
@@ -3708,7 +3814,7 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-page",
       modelValue: cleanupConfirmDialog.value,
-      "onUpdate:modelValue": _cache[45] || (_cache[45] = $event => ((cleanupConfirmDialog).value = $event)),
+      "onUpdate:modelValue": _cache[60] || (_cache[60] = $event => ((cleanupConfirmDialog).value = $event)),
       "max-width": "520"
     }, {
       default: _withCtx(() => [
@@ -3748,7 +3854,7 @@ return (_ctx, _cache) => {
             _createVNode(_component_VCardText, { class: "dm-body-text" }, {
               default: _withCtx(() => [
                 _createElementVNode("div", null, _toDisplayString(cleanupTarget.value?.consequence), 1),
-                _cache[79] || (_cache[79] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 不修改下载器任务与文件，不影响 H&R 安全状态、活动队列与限速恢复状态。 ", -1))
+                _cache[94] || (_cache[94] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 不修改下载器任务与文件，不影响 H&R 安全状态、活动队列与限速恢复状态。 ", -1))
               ]),
               _: 1
             }),
@@ -3760,9 +3866,9 @@ return (_ctx, _cache) => {
                   size: "small",
                   variant: "tonal",
                   disabled: cleanupRunning.value,
-                  onClick: _cache[44] || (_cache[44] = $event => (cleanupConfirmDialog.value = false))
+                  onClick: _cache[59] || (_cache[59] = $event => (cleanupConfirmDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[80] || (_cache[80] = [
+                  default: _withCtx(() => [...(_cache[95] || (_cache[95] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3776,7 +3882,7 @@ return (_ctx, _cache) => {
                   disabled: cleanupTargetCount.value === 0,
                   onClick: confirmCleanupData
                 }, {
-                  default: _withCtx(() => [...(_cache[81] || (_cache[81] = [
+                  default: _withCtx(() => [...(_cache[96] || (_cache[96] = [
                     _createTextVNode("清理记录", -1)
                   ]))]),
                   _: 1
@@ -3793,7 +3899,7 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-page",
       modelValue: hrClearDialog.value,
-      "onUpdate:modelValue": _cache[47] || (_cache[47] = $event => ((hrClearDialog).value = $event)),
+      "onUpdate:modelValue": _cache[62] || (_cache[62] = $event => ((hrClearDialog).value = $event)),
       "max-width": "520"
     }, {
       default: _withCtx(() => [
@@ -3815,7 +3921,7 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "dm-title" }, {
-                  default: _withCtx(() => [...(_cache[82] || (_cache[82] = [
+                  default: _withCtx(() => [...(_cache[97] || (_cache[97] = [
                     _createTextVNode("确认清除 H&R 记录", -1)
                   ]))]),
                   _: 1
@@ -3853,9 +3959,9 @@ return (_ctx, _cache) => {
                   size: "small",
                   variant: "tonal",
                   disabled: hrClearing.value,
-                  onClick: _cache[46] || (_cache[46] = $event => (hrClearDialog.value = false))
+                  onClick: _cache[61] || (_cache[61] = $event => (hrClearDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[83] || (_cache[83] = [
+                  default: _withCtx(() => [...(_cache[98] || (_cache[98] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3868,7 +3974,7 @@ return (_ctx, _cache) => {
                   loading: hrClearing.value,
                   onClick: confirmHrClear
                 }, {
-                  default: _withCtx(() => [...(_cache[84] || (_cache[84] = [
+                  default: _withCtx(() => [...(_cache[99] || (_cache[99] = [
                     _createTextVNode("清理记录", -1)
                   ]))]),
                   _: 1
@@ -3885,14 +3991,14 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-page",
       modelValue: autoRunConfirm.value,
-      "onUpdate:modelValue": _cache[49] || (_cache[49] = $event => ((autoRunConfirm).value = $event)),
+      "onUpdate:modelValue": _cache[64] || (_cache[64] = $event => ((autoRunConfirm).value = $event)),
       "max-width": "620"
     }, {
       default: _withCtx(() => [
         _createVNode(_component_VCard, null, {
           default: _withCtx(() => [
             _createVNode(_component_VCardTitle, { class: "dm-title" }, {
-              default: _withCtx(() => [...(_cache[85] || (_cache[85] = [
+              default: _withCtx(() => [...(_cache[100] || (_cache[100] = [
                 _createTextVNode("确认自动删种操作", -1)
               ]))]),
               _: 1
@@ -3908,7 +4014,7 @@ return (_ctx, _cache) => {
                   ]),
                   _: 1
                 }, 8, ["type"]),
-                _cache[86] || (_cache[86] = _createElementVNode("div", { class: "dm-hint mt-3" }, "执行时后端重新扫描当前配置，不按上次预览清单直接处理；删除仍受 H&R 保护。", -1))
+                _cache[101] || (_cache[101] = _createElementVNode("div", { class: "dm-hint mt-3" }, "执行时后端重新扫描当前配置，不按上次预览清单直接处理；删除仍受 H&R 保护。", -1))
               ]),
               _: 1
             }),
@@ -3918,9 +4024,9 @@ return (_ctx, _cache) => {
                 _createVNode(_component_VBtn, {
                   size: "small",
                   variant: "tonal",
-                  onClick: _cache[48] || (_cache[48] = $event => (autoRunConfirm.value = false))
+                  onClick: _cache[63] || (_cache[63] = $event => (autoRunConfirm.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[87] || (_cache[87] = [
+                  default: _withCtx(() => [...(_cache[102] || (_cache[102] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3932,7 +4038,7 @@ return (_ctx, _cache) => {
                   disabled: !!moduleRunning.value,
                   onClick: confirmAutoremoveRun
                 }, {
-                  default: _withCtx(() => [...(_cache[88] || (_cache[88] = [
+                  default: _withCtx(() => [...(_cache[103] || (_cache[103] = [
                     _createTextVNode("确认执行", -1)
                   ]))]),
                   _: 1
@@ -3951,6 +4057,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-06c1f1d5"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ed1776da"]]);
 
 export { Page as default };

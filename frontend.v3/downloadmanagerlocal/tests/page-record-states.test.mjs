@@ -158,3 +158,79 @@ test('transfer legacy record keeps short hash and explicit missing-name label on
     for (const surface of view.surfaces('transfer')) { assert.ok(text(surface).includes('名称未记录')); assert.ok(text(surface).includes('abcdefgh')); assert.ok(!text(surface).includes('abcdefgh0123456789')) }
   } finally { view.unmount() }
 })
+
+const executionCases = [
+  ['autoremove', '删种记录'], ['failclean', '失败清理'], ['tag', '站点标签'],
+  ['tag_cleanup', '站点标签'], ['upload_limit', '上传限速'],
+]
+const historyRow = (stream, name = '真实执行样本') => ({ record_id: stream + '-1', occurred_at: 1700000000,
+  downloader_id: 'QB1', name, site: 'site-a', trigger: 'manual', action: '调整', result: 'success', reason: '实际操作成功', before: 0, after: false })
+const historyResult = (items, page = 1, total = items.length) => ({ items, page, page_size: 20, total,
+  total_pages: Math.max(1, Math.ceil(total / 20)), initialized: !!items.length })
+const historyBlock = (view, stream) => view.findAll(n => n.props['data-execution-stream'] === stream)[0]
+for (const [stream, tab] of executionCases) {
+  test(`${stream}: actual Page requests history, shows errors/retry, true records and empty state without snapshots`, async () => {
+    const view = await viewPage()
+    try {
+      view.handlers.execution_history = path => {
+        const key = new URLSearchParams(path.split('?')[1]).get('module')
+        if (key === stream) throw Error('history unavailable')
+        return historyResult([])
+      }
+      await view.click(tab); await flush()
+      assert.ok(text(historyBlock(view, stream)).includes('history unavailable'))
+      view.handlers.execution_history = path => historyResult([historyRow(new URLSearchParams(path.split('?')[1]).get('module'))])
+      walk(historyBlock(view, stream), n => n.type === 'button' && text(n) === '重试')[0].props.onClick()
+      await flush()
+      assert.ok(text(historyBlock(view, stream)).includes('真实执行样本'))
+      assert.ok(text(historyBlock(view, stream)).includes('实际操作成功'))
+      assert.ok(!text(historyBlock(view, stream)).includes('当前接口未提供'))
+      if (stream === 'upload_limit') {
+        assert.ok(text(historyBlock(view, stream)).includes('调整前'))
+        assert.ok(text(historyBlock(view, stream)).includes('false'))
+      }
+      view.handlers.execution_history = () => Promise.reject(Error('refresh lost'))
+      await view.click('刷新数据'); await flush()
+      assert.ok(text(historyBlock(view, stream)).includes('真实执行样本'))
+      assert.ok(text(historyBlock(view, stream)).includes('刷新失败，保留上次结果'))
+      view.handlers.execution_history = () => historyResult([])
+      await view.click('刷新数据'); await flush()
+      assert.ok(text(historyBlock(view, stream)).includes('暂无记录'), text(historyBlock(view, stream)))
+      assert.ok(!text(historyBlock(view, stream)).includes('真实执行样本'))
+      assert.ok(view.calls.some(p => p.includes('execution_history?module=' + stream)))
+    } finally { view.unmount() }
+  })
+}
+
+test('execution history server pagination, page-size reset, late response isolation and tag streams are independent', async () => {
+  const view = await viewPage()
+  try {
+    view.handlers.execution_history = path => {
+      const params = new URLSearchParams(path.split('?')[1])
+      const stream = params.get('module'), page = Number(params.get('page'))
+      return historyResult([historyRow(stream, stream + '-page-' + page)], page, 43)
+    }
+    await view.click('站点标签'); await flush()
+    const tag = () => historyBlock(view, 'tag')
+    const cleanup = () => historyBlock(view, 'tag_cleanup')
+    const before = view.calls.length
+    walk(tag(), n => n.props['aria-label'] === '下一页')[0].props.onClick(); await flush()
+    assert.ok(text(tag()).includes('tag-page-2'))
+    assert.ok(text(cleanup()).includes('tag_cleanup-page-1'))
+    assert.equal(view.calls.length, before + 1)
+    const sizeSelect = walk(tag(), n => n.props['onUpdate:modelValue'] && n.props['aria-label'] === '每页条数')[0]
+    assert.ok(sizeSelect, 'actual page-size select')
+    const priorSizeCalls = view.calls.length
+    sizeSelect.props['onUpdate:modelValue']('50'); await flush()
+    assert.equal(view.calls.length, priorSizeCalls + 1, 'page-size emits page 1 without duplicate query')
+    assert.ok(view.calls.at(-1).includes('page=1&page_size=50'))
+    const older = pending()
+    view.handlers.execution_history = path => path.includes('module=tag&') ? older.promise : historyResult([])
+    await view.click('刷新数据')
+    view.handlers.execution_history = path => historyResult([historyRow('tag', '最新执行')])
+    await view.click('刷新数据'); await flush()
+    older.resolve(historyResult([historyRow('tag', '过期执行')])); await flush()
+    assert.ok(text(tag()).includes('最新执行'))
+    assert.ok(!text(tag()).includes('过期执行'))
+  } finally { view.unmount() }
+})

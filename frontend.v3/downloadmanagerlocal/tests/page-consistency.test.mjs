@@ -34,11 +34,15 @@ test('实际业务表均复用 ModuleTable；保留表头、状态、分页、�
   assert.doesNotMatch(table, /getPluginApi|postPluginApi/)
 })
 
-test('无逐条历史时显式说明缺口，不以快照伪造执行记录', () => {
-  const missing = nodes.filter(n => n.tag === 'ModuleTable' && directive(n, 'bind', 'unavailable') === 'unavailableHistory')
-  assert.deepEqual(missing.map(n => attr(n, 'title')), ['执行记录', '执行记录', '补全执行记录', '标签清理记录', '执行记录'])
-  assert.ok(missing.every(n => !directive(n, 'bind', 'rows')))
-  assert.match(source, /当前接口未提供逐条执行历史/)
+test('五个执行历史表绑定真实历史流，保留独立分页和重试', () => {
+  const tables = nodes.filter(n => n.tag === 'ModuleTable' && attr(n, 'data-execution-stream'))
+  assert.deepEqual(tables.map(n => attr(n, 'data-execution-stream')), ['autoremove', 'failclean', 'tag', 'tag_cleanup', 'upload_limit'])
+  for (const table of tables) {
+    assert.equal(attr(table, 'row-key'), 'record_id')
+    assert.ok(directive(table, 'bind')?.startsWith('executionTableProps('))
+    assert.ok(directive(table, 'on', 'retry')?.startsWith('loadExecutionHistory('))
+  }
+  assert.doesNotMatch(source, /unavailableHistory/)
 })
 
 test('上传按下载器折叠分组，共用站点表；跨下载器汇总明确独立，不按下载器复制', () => {
