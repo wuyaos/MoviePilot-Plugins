@@ -436,3 +436,32 @@ def test_new_routes_registered(history_api):
     assert clear["methods"] == ["POST"]
     assert clear["auth"] == "bear"
     assert clear["summary"] == "清空模块展示历史"
+
+
+def test_tag_query_hides_legacy_nonexecuted_without_deleting_or_affecting_other_streams(history):
+    plugin = FakePlugin()
+    for stream in ("tag", "tag_cleanup", "upload_limit"):
+        for result in ("success", "failed", "observed", "skipped"):
+            history.append(plugin, stream, _record(result=result))
+    stored = copy.deepcopy(plugin._data)
+    save_count = len(plugin.save_calls)
+    assert {item["result"] for item in history.query(plugin, "tag")["items"]} == {"success", "failed"}
+    assert history.query(plugin, "tag", "observed")["items"] == []
+    assert history.query(plugin, "tag", "skipped")["items"] == []
+    for stream in ("tag_cleanup", "upload_limit"):
+        assert len(history.query(plugin, stream)["items"]) == 4
+    assert plugin._data == stored
+    assert len(plugin.save_calls) == save_count
+
+
+def test_tag_legacy_filter_precedes_api_pagination_and_total(history_api):
+    plugin = FakePlugin()
+    for i in range(24):
+        history_api.exec_history.append(plugin, "tag", _record(occurred_at=i, result="observed"))
+    for i in range(21):
+        history_api.exec_history.append(plugin, "tag", _record(occurred_at=100 + i))
+    response = history_api.handlers.api_execution_history(plugin, "tag", page=2, page_size=20)
+    assert response["total"] == 21
+    assert len(response["items"]) == 1
+    assert response["items"][0]["result"] == "success"
+    assert len(plugin._data["execution_history"]["streams"]["tag"]) == 45

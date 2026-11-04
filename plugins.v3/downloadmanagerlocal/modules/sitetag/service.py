@@ -50,7 +50,9 @@ def _complement_change_reason(outcome: dict) -> str:
 
 
 def _record_tag_outcome(plugin, trigger: str, downloader_id: str, torrent, outcome: dict) -> None:
-    """按 _apply_metadata 的四种返回形态写 tag 流展示历史。"""
+    """只记录已写入或失败；无变更/观察预览不属于补全执行历史。"""
+    if outcome.get("ok") and not outcome.get("changed"):
+        return
     record = {
         "trigger": trigger,
         "occurred_at": time.time(),
@@ -66,12 +68,6 @@ def _record_tag_outcome(plugin, trigger: str, downloader_id: str, torrent, outco
     elif not outcome.get("ok"):
         record["result"] = "failed"
         record["reason"] = str(outcome.get("reason") or "补全失败")
-    elif outcome.get("observe_only"):
-        record["result"] = "observed"
-        record["reason"] = "观察模式：仅预览未执行"
-    else:
-        record["result"] = "observed"
-        record["reason"] = "无变更"
     _append_history(plugin, "tag", record)
 
 

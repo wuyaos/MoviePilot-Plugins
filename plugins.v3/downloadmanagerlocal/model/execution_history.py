@@ -162,6 +162,9 @@ def query(plugin, module: str, result_filter: str = "all") -> dict:
         raw = plugin.get_data(EXECUTION_HISTORY_KEY)
         initialized = isinstance(raw, dict)
         items = _extract_stream_items(raw, module)
+    # 兼容旧版本把“无变更”标为 observed 的记录：只过滤补全流，不删原数据。
+    if module == "tag":
+        items = [item for item in items if item.get("result") not in {"observed", "skipped"}]
     if result_filter != "all":
         items = [item for item in items if item.get("result") == result_filter]
     items.sort(key=lambda item: item.get("record_id") or "")

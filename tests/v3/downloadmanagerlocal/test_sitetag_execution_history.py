@@ -5,7 +5,7 @@
   C:/app/scoop/apps/micromamba/2.9.0-0/base/envs/mp3/python.exe -m pytest tests/v3/downloadmanagerlocal/test_sitetag_execution_history.py -q
 
 覆盖：
-1. complement_history 四种 _apply_metadata 返回形态 → success/observed/failed/observed（可区分）；
+1. complement_history 成功/失败写入，无变更与观察预览不写执行历史；
 2. process_download_added 三个早退分支 → 各自 1 条 failed（reason 可区分），skipped 计数不变；
 3. 下载器级 get_torrents 失败 → 恰好 1 条下载器级 failed，无 per-torrent 记录，skipped 计数不变；
 4. execute_tag_cleanup 成功/失败项 → 每条计划项一条记录，不拆 per-hash；
@@ -145,7 +145,7 @@ def _items(history, plugin, module):
 
 # ── 流 1：tag（补全流）────────────────────────────────────────────────
 def test_complement_history_four_shapes(sitetag_history, monkeypatch):
-    """四种 _apply_metadata 返回形态分别映射 success/observed/failed/observed。"""
+    """成功/失败进入执行历史，无变更和观察预览不写入。"""
     tag = sitetag_history.tag
     history = sitetag_history.history
 
@@ -182,15 +182,14 @@ def test_complement_history_four_shapes(sitetag_history, monkeypatch):
     by_result = {}
     for item in items:
         by_result.setdefault(item["result"], []).append(item)
-    assert sorted(by_result) == ["failed", "observed", "success"]
+    assert sorted(by_result) == ["failed", "success"]
+    assert len(items) == 2
+    assert len(plugin.get_data("execution_history")["streams"]["tag"]) == 2
     assert len(by_result["success"]) == 1
     assert len(by_result["failed"]) == 1
-    assert len(by_result["observed"]) == 2
 
     assert by_result["success"][0]["reason"] == "已写入 标签=['SITE']"
     assert by_result["failed"][0]["reason"] == "hash_missing"
-    observed_reasons = sorted(item["reason"] for item in by_result["observed"])
-    assert observed_reasons == ["无变更", "观察模式：仅预览未执行"]
 
 
 def test_process_download_added_early_returns(sitetag_history):

@@ -1,17 +1,17 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
 import { _ as _export_sfc, M as MODULE_ICONS, R as RowActionMenu, D as DownloaderBadge, g as getPluginApi, p as postPluginApi, a as postPluginJsonApi } from './RowActionMenu-Dvq7t7J-.js';
 
-const {createElementVNode:_createElementVNode$6,renderList:_renderList$6,Fragment:_Fragment$5,openBlock:_openBlock$7,createElementBlock:_createElementBlock$6,createCommentVNode:_createCommentVNode$5,toDisplayString:_toDisplayString$6,createTextVNode:_createTextVNode$4,resolveComponent:_resolveComponent$5,withCtx:_withCtx$4,createVNode:_createVNode$4,normalizeClass:_normalizeClass$2,createBlock:_createBlock$5} = await importShared('vue');
+const {createElementVNode:_createElementVNode$6,renderList:_renderList$7,Fragment:_Fragment$6,openBlock:_openBlock$8,createElementBlock:_createElementBlock$7,createCommentVNode:_createCommentVNode$6,toDisplayString:_toDisplayString$7,createTextVNode:_createTextVNode$5,resolveComponent:_resolveComponent$6,withCtx:_withCtx$5,createVNode:_createVNode$4,normalizeClass:_normalizeClass$2,createBlock:_createBlock$6} = await importShared('vue');
 
 
-const _hoisted_1$6 = {
+const _hoisted_1$7 = {
   key: 0,
   class: "dm-table-state dm-table-state--loading",
   role: "status",
   "aria-label": "正在加载记录",
   "aria-busy": "true"
 };
-const _hoisted_2$5 = {
+const _hoisted_2$6 = {
   key: 1,
   class: "dm-table-state",
   role: "alert"
@@ -37,10 +37,10 @@ const _hoisted_8$3 = {
   class: "dm-table-state-help"
 };
 
-const {computed: computed$4} = await importShared('vue');
+const {computed: computed$5} = await importShared('vue');
 
 
-const _sfc_main$7 = {
+const _sfc_main$8 = {
   __name: 'TableState',
   props: {
   loading: { type: Boolean, default: false },
@@ -60,15 +60,15 @@ const emptyStates = {
   'no-candidates': { icon: 'mdi-check-circle-outline', title: '扫描无候选', help: '本次扫描未发现候选项。' },
   disabled: { icon: 'mdi-pause-circle-outline', title: '模块已关闭', help: '启用模块后可生成新记录。' },
 };
-const emptyState = computed$4(() => emptyStates[props.empty]);
+const emptyState = computed$5(() => emptyStates[props.empty]);
 
 return (_ctx, _cache) => {
-  const _component_VBtn = _resolveComponent$5("VBtn");
+  const _component_VBtn = _resolveComponent$6("VBtn");
 
   return (__props.loading)
-    ? (_openBlock$7(), _createElementBlock$6("div", _hoisted_1$6, [
+    ? (_openBlock$8(), _createElementBlock$7("div", _hoisted_1$7, [
         _cache[3] || (_cache[3] = _createElementVNode$6("span", { class: "dm-table-state-sr" }, "正在加载记录", -1)),
-        (_openBlock$7(), _createElementBlock$6(_Fragment$5, null, _renderList$6(3, (row) => {
+        (_openBlock$8(), _createElementBlock$7(_Fragment$6, null, _renderList$7(3, (row) => {
           return _createElementVNode$6("span", {
             key: row,
             class: "dm-table-skeleton",
@@ -77,15 +77,15 @@ return (_ctx, _cache) => {
         }), 64))
       ]))
     : (__props.error)
-      ? (_openBlock$7(), _createElementBlock$6("div", _hoisted_2$5, [
+      ? (_openBlock$8(), _createElementBlock$7("div", _hoisted_2$6, [
           _cache[5] || (_cache[5] = _createElementVNode$6("span", {
             class: "mdi mdi-alert-circle-outline dm-table-state-icon dm-table-state-error",
             "aria-hidden": "true"
           }, null, -1)),
           _cache[6] || (_cache[6] = _createElementVNode$6("p", { class: "dm-table-state-title" }, "记录加载失败", -1)),
           (typeof __props.error === 'string')
-            ? (_openBlock$7(), _createElementBlock$6("p", _hoisted_3$5, _toDisplayString$6(__props.error), 1))
-            : _createCommentVNode$5("", true),
+            ? (_openBlock$8(), _createElementBlock$7("p", _hoisted_3$5, _toDisplayString$7(__props.error), 1))
+            : _createCommentVNode$6("", true),
           _createVNode$4(_component_VBtn, {
             size: "small",
             variant: "tonal",
@@ -94,19 +94,19 @@ return (_ctx, _cache) => {
             class: "dm-table-state-button",
             onClick: _cache[0] || (_cache[0] = $event => (emit('retry')))
           }, {
-            default: _withCtx$4(() => [...(_cache[4] || (_cache[4] = [
-              _createTextVNode$4("重试", -1)
+            default: _withCtx$5(() => [...(_cache[4] || (_cache[4] = [
+              _createTextVNode$5("重试", -1)
             ]))]),
             _: 1
           })
         ]))
       : (__props.refreshFailed)
-        ? (_openBlock$7(), _createElementBlock$6("div", _hoisted_4$4, [
+        ? (_openBlock$8(), _createElementBlock$7("div", _hoisted_4$4, [
             _cache[8] || (_cache[8] = _createElementVNode$6("span", {
               class: "mdi mdi-alert-outline dm-table-state-icon",
               "aria-hidden": "true"
             }, null, -1)),
-            _createElementVNode$6("p", _hoisted_5$3, "刷新失败，保留上次结果" + _toDisplayString$6(typeof __props.refreshFailed === 'string' ? '：' + __props.refreshFailed : ''), 1),
+            _createElementVNode$6("p", _hoisted_5$3, "刷新失败，保留上次结果" + _toDisplayString$7(typeof __props.refreshFailed === 'string' ? '：' + __props.refreshFailed : ''), 1),
             _createVNode$4(_component_VBtn, {
               size: "small",
               variant: "tonal",
@@ -115,24 +115,24 @@ return (_ctx, _cache) => {
               class: "dm-table-state-button",
               onClick: _cache[1] || (_cache[1] = $event => (emit('retry')))
             }, {
-              default: _withCtx$4(() => [...(_cache[7] || (_cache[7] = [
-                _createTextVNode$4("重试", -1)
+              default: _withCtx$5(() => [...(_cache[7] || (_cache[7] = [
+                _createTextVNode$5("重试", -1)
               ]))]),
               _: 1
             })
           ]))
         : (emptyState.value)
-          ? (_openBlock$7(), _createElementBlock$6("div", _hoisted_6$3, [
+          ? (_openBlock$8(), _createElementBlock$7("div", _hoisted_6$3, [
               _createElementVNode$6("span", {
                 class: _normalizeClass$2(["mdi dm-table-state-icon", emptyState.value.icon]),
                 "aria-hidden": "true"
               }, null, 2),
-              _createElementVNode$6("p", _hoisted_7$3, _toDisplayString$6(emptyState.value.title), 1),
+              _createElementVNode$6("p", _hoisted_7$3, _toDisplayString$7(emptyState.value.title), 1),
               (emptyState.value.help)
-                ? (_openBlock$7(), _createElementBlock$6("p", _hoisted_8$3, _toDisplayString$6(emptyState.value.help), 1))
-                : _createCommentVNode$5("", true),
+                ? (_openBlock$8(), _createElementBlock$7("p", _hoisted_8$3, _toDisplayString$7(emptyState.value.help), 1))
+                : _createCommentVNode$6("", true),
               (__props.empty === 'filtered')
-                ? (_openBlock$7(), _createBlock$5(_component_VBtn, {
+                ? (_openBlock$8(), _createBlock$6(_component_VBtn, {
                     key: 1,
                     size: "small",
                     variant: "tonal",
@@ -141,25 +141,25 @@ return (_ctx, _cache) => {
                     class: "dm-table-state-button",
                     onClick: _cache[2] || (_cache[2] = $event => (emit('reset-filters')))
                   }, {
-                    default: _withCtx$4(() => [...(_cache[9] || (_cache[9] = [
-                      _createTextVNode$4("重置筛选", -1)
+                    default: _withCtx$5(() => [...(_cache[9] || (_cache[9] = [
+                      _createTextVNode$5("重置筛选", -1)
                     ]))]),
                     _: 1
                   }))
-                : _createCommentVNode$5("", true)
+                : _createCommentVNode$6("", true)
             ]))
-          : _createCommentVNode$5("", true)
+          : _createCommentVNode$6("", true)
 }
 }
 
 };
-const TableState = /*#__PURE__*/_export_sfc(_sfc_main$7, [['__scopeId',"data-v-6884839e"]]);
+const TableState = /*#__PURE__*/_export_sfc(_sfc_main$8, [['__scopeId',"data-v-6884839e"]]);
 
-const {resolveComponent:_resolveComponent$4,openBlock:_openBlock$6,createBlock:_createBlock$4} = await importShared('vue');
+const {resolveComponent:_resolveComponent$5,openBlock:_openBlock$7,createBlock:_createBlock$5} = await importShared('vue');
 
 
 
-const _sfc_main$6 = {
+const _sfc_main$7 = {
   __name: 'CompactSelect',
   props: {
   modelValue: { type: [String, Number, Array], default: '' },
@@ -174,9 +174,9 @@ const _sfc_main$6 = {
 const emit = __emit;
 
 return (_ctx, _cache) => {
-  const _component_VSelect = _resolveComponent$4("VSelect");
+  const _component_VSelect = _resolveComponent$5("VSelect");
 
-  return (_openBlock$6(), _createBlock$4(_component_VSelect, {
+  return (_openBlock$7(), _createBlock$5(_component_VSelect, {
     class: "dm-compact-select",
     "model-value": __props.modelValue,
     items: __props.items,
@@ -194,13 +194,13 @@ return (_ctx, _cache) => {
 }
 
 };
-const CompactSelect = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-23cd76a8"]]);
+const CompactSelect = /*#__PURE__*/_export_sfc(_sfc_main$7, [['__scopeId',"data-v-23cd76a8"]]);
 
-const {toDisplayString:_toDisplayString$5,createElementVNode:_createElementVNode$5,openBlock:_openBlock$5,createElementBlock:_createElementBlock$5,createCommentVNode:_createCommentVNode$4,renderSlot:_renderSlot$1,createTextVNode:_createTextVNode$3,resolveComponent:_resolveComponent$3,withCtx:_withCtx$3,createBlock:_createBlock$3,mergeProps:_mergeProps$1,renderList:_renderList$5,Fragment:_Fragment$4,normalizeStyle:_normalizeStyle,createVNode:_createVNode$3,normalizeClass:_normalizeClass$1} = await importShared('vue');
+const {toDisplayString:_toDisplayString$6,createElementVNode:_createElementVNode$5,openBlock:_openBlock$6,createElementBlock:_createElementBlock$6,createCommentVNode:_createCommentVNode$5,renderSlot:_renderSlot$1,createTextVNode:_createTextVNode$4,resolveComponent:_resolveComponent$4,withCtx:_withCtx$4,createBlock:_createBlock$4,mergeProps:_mergeProps$1,renderList:_renderList$6,Fragment:_Fragment$5,normalizeStyle:_normalizeStyle,createVNode:_createVNode$3,normalizeClass:_normalizeClass$1} = await importShared('vue');
 
 
-const _hoisted_1$5 = ["aria-label", "aria-busy"];
-const _hoisted_2$4 = { class: "dm-module-table-header" };
+const _hoisted_1$6 = ["aria-label", "aria-busy"];
+const _hoisted_2$5 = { class: "dm-module-table-header" };
 const _hoisted_3$4 = { class: "dm-module-table-heading" };
 const _hoisted_4$3 = { class: "dm-module-table-title" };
 const _hoisted_5$2 = {
@@ -265,10 +265,10 @@ const _hoisted_23$1 = { "aria-live": "polite" };
 const _hoisted_24$1 = ["aria-label"];
 const _hoisted_25$1 = { class: "dm-table-page-size" };
 
-const {computed: computed$3,ref: ref$1,watch: watch$1} = await importShared('vue');
+const {computed: computed$4,ref: ref$1,watch: watch$1} = await importShared('vue');
 
 
-const _sfc_main$5 = {
+const _sfc_main$6 = {
   __name: 'ModuleTable',
   props: {
   title: { type: String, required: true },
@@ -291,10 +291,10 @@ const _sfc_main$5 = {
 const props = __props;
 const emit = __emit;
 const pageSizes = [20, 50, 100];
-const effectivePageSize = computed$3(() => pageSizes.includes(props.pageSize) ? props.pageSize : 20);
-const pageCount = computed$3(() => Math.max(1, Math.ceil(props.total / effectivePageSize.value)));
-const currentPage = computed$3(() => Math.min(Math.max(1, props.page), pageCount.value));
-const cleanupDisabled = computed$3(() => props.cleanupBlocked || props.total === 0 || !!props.state.loading);
+const effectivePageSize = computed$4(() => pageSizes.includes(props.pageSize) ? props.pageSize : 20);
+const pageCount = computed$4(() => Math.max(1, Math.ceil(props.total / effectivePageSize.value)));
+const currentPage = computed$4(() => Math.min(Math.max(1, props.page), pageCount.value));
+const cleanupDisabled = computed$4(() => props.cleanupBlocked || props.total === 0 || !!props.state.loading);
 const expanded = ref$1(new Set());
 const keyOf = row => typeof props.rowKey === 'function' ? props.rowKey(row) : row[props.rowKey];
 watch$1(() => props.rows, rows => {
@@ -317,40 +317,40 @@ function changePageSize(value) {
 function alignment(column) {
   return column.align || (props.rows.some(row => typeof row[column.key] === 'number') ? 'right' : 'left')
 }
-const tableState = computed$3(() => props.rows.length
+const tableState = computed$4(() => props.rows.length
   ? { refreshFailed: props.state.refreshFailed || props.state.error }
   : { ...props.state, empty: props.state.empty || 'none' });
 const resetFilters = () => { emit('update:page', 1); emit('reset-filters'); };
 
 return (_ctx, _cache) => {
-  const _component_VBtn = _resolveComponent$3("VBtn");
-  const _component_VIcon = _resolveComponent$3("VIcon");
-  const _component_VTable = _resolveComponent$3("VTable");
+  const _component_VBtn = _resolveComponent$4("VBtn");
+  const _component_VIcon = _resolveComponent$4("VIcon");
+  const _component_VTable = _resolveComponent$4("VTable");
 
-  return (_openBlock$5(), _createElementBlock$5("section", {
+  return (_openBlock$6(), _createElementBlock$6("section", {
     class: "dm-module-table",
     "aria-label": __props.title,
     "aria-busy": !!__props.state.loading
   }, [
-    _createElementVNode$5("div", _hoisted_2$4, [
+    _createElementVNode$5("div", _hoisted_2$5, [
       _createElementVNode$5("div", _hoisted_3$4, [
-        _createElementVNode$5("h3", _hoisted_4$3, _toDisplayString$5(__props.title), 1),
+        _createElementVNode$5("h3", _hoisted_4$3, _toDisplayString$6(__props.title), 1),
         (__props.pagination && !__props.unavailable)
-          ? (_openBlock$5(), _createElementBlock$5("span", _hoisted_5$2, "共 " + _toDisplayString$5(__props.total) + " 条", 1))
-          : _createCommentVNode$4("", true)
+          ? (_openBlock$6(), _createElementBlock$6("span", _hoisted_5$2, "共 " + _toDisplayString$6(__props.total) + " 条", 1))
+          : _createCommentVNode$5("", true)
       ]),
       (_ctx.$slots.filters || _ctx.$slots.toolbar || __props.cleanupLabel)
-        ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_6$2, [
+        ? (_openBlock$6(), _createElementBlock$6("div", _hoisted_6$2, [
             (_ctx.$slots.filters)
-              ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_7$2, [
+              ? (_openBlock$6(), _createElementBlock$6("div", _hoisted_7$2, [
                   _renderSlot$1(_ctx.$slots, "filters", {}, undefined, true)
                 ]))
-              : _createCommentVNode$4("", true),
+              : _createCommentVNode$5("", true),
             (_ctx.$slots.toolbar || __props.cleanupLabel)
-              ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_8$2, [
+              ? (_openBlock$6(), _createElementBlock$6("div", _hoisted_8$2, [
                   _renderSlot$1(_ctx.$slots, "toolbar", { cleanupDisabled: cleanupDisabled.value }, undefined, true),
                   (__props.cleanupLabel)
-                    ? (_openBlock$5(), _createBlock$3(_component_VBtn, {
+                    ? (_openBlock$6(), _createBlock$4(_component_VBtn, {
                         key: 0,
                         type: "button",
                         size: "small",
@@ -360,25 +360,25 @@ return (_ctx, _cache) => {
                         disabled: cleanupDisabled.value,
                         onClick: _cache[0] || (_cache[0] = $event => (emit('cleanup')))
                       }, {
-                        default: _withCtx$3(() => [
-                          _createTextVNode$3(_toDisplayString$5(__props.cleanupLabel), 1)
+                        default: _withCtx$4(() => [
+                          _createTextVNode$4(_toDisplayString$6(__props.cleanupLabel), 1)
                         ]),
                         _: 1
                       }, 8, ["disabled"]))
-                    : _createCommentVNode$4("", true)
+                    : _createCommentVNode$5("", true)
                 ]))
-              : _createCommentVNode$4("", true)
+              : _createCommentVNode$5("", true)
           ]))
-        : _createCommentVNode$4("", true)
+        : _createCommentVNode$5("", true)
     ]),
     (__props.state.loading && __props.rows.length)
-      ? (_openBlock$5(), _createElementBlock$5("p", _hoisted_9$2, "正在刷新记录，保留上次结果"))
-      : _createCommentVNode$4("", true),
+      ? (_openBlock$6(), _createElementBlock$6("p", _hoisted_9$2, "正在刷新记录，保留上次结果"))
+      : _createCommentVNode$5("", true),
     (__props.rows.length && tableState.value.refreshFailed)
-      ? (_openBlock$5(), _createBlock$3(TableState, _mergeProps$1({ key: 1 }, tableState.value, {
+      ? (_openBlock$6(), _createBlock$4(TableState, _mergeProps$1({ key: 1 }, tableState.value, {
           onRetry: _cache[1] || (_cache[1] = $event => (emit('retry')))
         }), null, 16))
-      : _createCommentVNode$4("", true),
+      : _createCommentVNode$5("", true),
     _createElementVNode$5("div", {
       class: "dm-table-scroll",
       role: "region",
@@ -389,36 +389,36 @@ return (_ctx, _cache) => {
         class: "dm-table",
         density: "compact"
       }, {
-        default: _withCtx$3(() => [
-          _createElementVNode$5("caption", _hoisted_11$1, _toDisplayString$5(__props.title), 1),
+        default: _withCtx$4(() => [
+          _createElementVNode$5("caption", _hoisted_11$1, _toDisplayString$6(__props.title), 1),
           _createElementVNode$5("thead", null, [
             _createElementVNode$5("tr", null, [
               (_ctx.$slots.expand)
-                ? (_openBlock$5(), _createElementBlock$5("th", _hoisted_12$1, [...(_cache[5] || (_cache[5] = [
+                ? (_openBlock$6(), _createElementBlock$6("th", _hoisted_12$1, [...(_cache[5] || (_cache[5] = [
                     _createElementVNode$5("span", { class: "dm-table-sr" }, "详情", -1)
                   ]))]))
-                : _createCommentVNode$4("", true),
-              (_openBlock$5(true), _createElementBlock$5(_Fragment$4, null, _renderList$5(__props.columns, (column) => {
-                return (_openBlock$5(), _createElementBlock$5("th", {
+                : _createCommentVNode$5("", true),
+              (_openBlock$6(true), _createElementBlock$6(_Fragment$5, null, _renderList$6(__props.columns, (column) => {
+                return (_openBlock$6(), _createElementBlock$6("th", {
                   key: column.key,
                   scope: "col",
                   style: _normalizeStyle({ textAlign: alignment(column), width: typeof column.width === 'number' ? column.width + 'px' : column.width })
-                }, _toDisplayString$5(column.label), 5))
+                }, _toDisplayString$6(column.label), 5))
               }), 128)),
               (_ctx.$slots.rowActions)
-                ? (_openBlock$5(), _createElementBlock$5("th", _hoisted_13$1, "操作"))
-                : _createCommentVNode$4("", true)
+                ? (_openBlock$6(), _createElementBlock$6("th", _hoisted_13$1, "操作"))
+                : _createCommentVNode$5("", true)
             ])
           ]),
           (__props.rows.length)
-            ? (_openBlock$5(), _createElementBlock$5("tbody", _hoisted_14$1, [
-                (_openBlock$5(true), _createElementBlock$5(_Fragment$4, null, _renderList$5(__props.rows, (row) => {
-                  return (_openBlock$5(), _createElementBlock$5(_Fragment$4, {
+            ? (_openBlock$6(), _createElementBlock$6("tbody", _hoisted_14$1, [
+                (_openBlock$6(true), _createElementBlock$6(_Fragment$5, null, _renderList$6(__props.rows, (row) => {
+                  return (_openBlock$6(), _createElementBlock$6(_Fragment$5, {
                     key: keyOf(row)
                   }, [
                     _createElementVNode$5("tr", null, [
                       (_ctx.$slots.expand)
-                        ? (_openBlock$5(), _createElementBlock$5("td", _hoisted_15$1, [
+                        ? (_openBlock$6(), _createElementBlock$6("td", _hoisted_15$1, [
                             _createVNode$3(_component_VBtn, {
                               type: "button",
                               size: "small",
@@ -429,7 +429,7 @@ return (_ctx, _cache) => {
                               "aria-label": (expanded.value.has(keyOf(row)) ? '收起' : '展开') + '记录详情',
                               onClick: $event => (toggleRow(row))
                             }, {
-                              default: _withCtx$3(() => [
+                              default: _withCtx$4(() => [
                                 _createVNode$3(_component_VIcon, {
                                   icon: expanded.value.has(keyOf(row)) ? 'mdi-chevron-up' : 'mdi-chevron-down',
                                   size: "18",
@@ -439,9 +439,9 @@ return (_ctx, _cache) => {
                               _: 2
                             }, 1032, ["aria-expanded", "aria-label", "onClick"])
                           ]))
-                        : _createCommentVNode$4("", true),
-                      (_openBlock$5(true), _createElementBlock$5(_Fragment$4, null, _renderList$5(__props.columns, (column) => {
-                        return (_openBlock$5(), _createElementBlock$5("td", {
+                        : _createCommentVNode$5("", true),
+                      (_openBlock$6(true), _createElementBlock$6(_Fragment$5, null, _renderList$6(__props.columns, (column) => {
+                        return (_openBlock$6(), _createElementBlock$6("td", {
                           key: column.key,
                           style: _normalizeStyle({ textAlign: alignment(column) })
                         }, [
@@ -453,38 +453,38 @@ return (_ctx, _cache) => {
                               row: row,
                               value: row[column.key]
                             }, () => [
-                              _createTextVNode$3(_toDisplayString$5(row[column.key]), 1)
+                              _createTextVNode$4(_toDisplayString$6(row[column.key]), 1)
                             ], true)
                           ], 6)
                         ], 4))
                       }), 128)),
                       (_ctx.$slots.rowActions)
-                        ? (_openBlock$5(), _createElementBlock$5("td", _hoisted_16$1, [
+                        ? (_openBlock$6(), _createElementBlock$6("td", _hoisted_16$1, [
                             _renderSlot$1(_ctx.$slots, "rowActions", { row: row }, undefined, true)
                           ]))
-                        : _createCommentVNode$4("", true)
+                        : _createCommentVNode$5("", true)
                     ]),
                     (_ctx.$slots.expand && expanded.value.has(keyOf(row)))
-                      ? (_openBlock$5(), _createElementBlock$5("tr", _hoisted_17$1, [
+                      ? (_openBlock$6(), _createElementBlock$6("tr", _hoisted_17$1, [
                           _createElementVNode$5("td", {
                             colspan: __props.columns.length + 1 + (_ctx.$slots.rowActions ? 1 : 0)
                           }, [
                             _renderSlot$1(_ctx.$slots, "expand", { row: row }, undefined, true)
                           ], 8, _hoisted_18$1)
                         ]))
-                      : _createCommentVNode$4("", true)
+                      : _createCommentVNode$5("", true)
                   ], 64))
                 }), 128))
               ]))
-            : (_openBlock$5(), _createElementBlock$5("tbody", _hoisted_19$1, [
+            : (_openBlock$6(), _createElementBlock$6("tbody", _hoisted_19$1, [
                 _createElementVNode$5("tr", null, [
                   _createElementVNode$5("td", {
                     class: "dm-table-state-cell",
                     colspan: Math.max(1, __props.columns.length + (_ctx.$slots.expand ? 1 : 0) + (_ctx.$slots.rowActions ? 1 : 0))
                   }, [
                     (__props.unavailable)
-                      ? (_openBlock$5(), _createElementBlock$5("p", _hoisted_21$1, _toDisplayString$5(__props.unavailable), 1))
-                      : (_openBlock$5(), _createBlock$3(TableState, _mergeProps$1({ key: 1 }, tableState.value, {
+                      ? (_openBlock$6(), _createElementBlock$6("p", _hoisted_21$1, _toDisplayString$6(__props.unavailable), 1))
+                      : (_openBlock$6(), _createBlock$4(TableState, _mergeProps$1({ key: 1 }, tableState.value, {
                           onRetry: _cache[2] || (_cache[2] = $event => (emit('retry'))),
                           onResetFilters: resetFilters
                         }), null, 16))
@@ -496,8 +496,8 @@ return (_ctx, _cache) => {
       })
     ], 8, _hoisted_10$2),
     (__props.pagination && !__props.unavailable && __props.total > 0)
-      ? (_openBlock$5(), _createElementBlock$5("footer", _hoisted_22$1, [
-          _createElementVNode$5("span", _hoisted_23$1, "第 " + _toDisplayString$5(currentPage.value) + " / " + _toDisplayString$5(pageCount.value) + " 页", 1),
+      ? (_openBlock$6(), _createElementBlock$6("footer", _hoisted_22$1, [
+          _createElementVNode$5("span", _hoisted_23$1, "第 " + _toDisplayString$6(currentPage.value) + " / " + _toDisplayString$6(pageCount.value) + " 页", 1),
           _createElementVNode$5("div", {
             class: "dm-table-pagination",
             role: "navigation",
@@ -524,8 +524,8 @@ return (_ctx, _cache) => {
               "aria-label": "上一页",
               onClick: _cache[3] || (_cache[3] = $event => (emit('update:page', currentPage.value - 1)))
             }, {
-              default: _withCtx$3(() => [...(_cache[8] || (_cache[8] = [
-                _createTextVNode$3("上一页", -1)
+              default: _withCtx$4(() => [...(_cache[8] || (_cache[8] = [
+                _createTextVNode$4("上一页", -1)
               ]))]),
               _: 1
             }, 8, ["disabled"]),
@@ -539,26 +539,26 @@ return (_ctx, _cache) => {
               "aria-label": "下一页",
               onClick: _cache[4] || (_cache[4] = $event => (emit('update:page', currentPage.value + 1)))
             }, {
-              default: _withCtx$3(() => [...(_cache[9] || (_cache[9] = [
-                _createTextVNode$3("下一页", -1)
+              default: _withCtx$4(() => [...(_cache[9] || (_cache[9] = [
+                _createTextVNode$4("下一页", -1)
               ]))]),
               _: 1
             }, 8, ["disabled"])
           ], 8, _hoisted_24$1)
         ]))
-      : _createCommentVNode$4("", true)
-  ], 8, _hoisted_1$5))
+      : _createCommentVNode$5("", true)
+  ], 8, _hoisted_1$6))
 }
 }
 
 };
-const ModuleTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-39baad84"]]);
+const ModuleTable = /*#__PURE__*/_export_sfc(_sfc_main$6, [['__scopeId',"data-v-39baad84"]]);
 
-const {toDisplayString:_toDisplayString$4,openBlock:_openBlock$4,createElementBlock:_createElementBlock$4,createCommentVNode:_createCommentVNode$3,renderSlot:_renderSlot,renderList:_renderList$4,Fragment:_Fragment$3,createElementVNode:_createElementVNode$4} = await importShared('vue');
+const {toDisplayString:_toDisplayString$5,openBlock:_openBlock$5,createElementBlock:_createElementBlock$5,createCommentVNode:_createCommentVNode$4,renderSlot:_renderSlot,renderList:_renderList$5,Fragment:_Fragment$4,createElementVNode:_createElementVNode$4} = await importShared('vue');
 
 
-const _hoisted_1$4 = { class: "dm-detail-panel" };
-const _hoisted_2$3 = {
+const _hoisted_1$5 = { class: "dm-detail-panel" };
+const _hoisted_2$4 = {
   key: 0,
   class: "dm-detail-title"
 };
@@ -592,11 +592,11 @@ const _hoisted_10$1 = {
   class: "text-caption text-medium-emphasis dm-detail-truncated"
 };
 
-const {computed: computed$2} = await importShared('vue');
+const {computed: computed$3} = await importShared('vue');
 
 
 
-const _sfc_main$4 = {
+const _sfc_main$5 = {
   __name: 'ModuleDetailPanel',
   props: {
   title: { type: String, default: '' },
@@ -613,55 +613,55 @@ const _sfc_main$4 = {
 
 const props = __props;
 
-const shownCount = computed$2(() => (props.items.length ? props.items.length : props.rows.length));
+const shownCount = computed$3(() => (props.items.length ? props.items.length : props.rows.length));
 
 return (_ctx, _cache) => {
-  return (_openBlock$4(), _createElementBlock$4("div", _hoisted_1$4, [
+  return (_openBlock$5(), _createElementBlock$5("div", _hoisted_1$5, [
     (__props.title)
-      ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_2$3, _toDisplayString$4(__props.title), 1))
-      : _createCommentVNode$3("", true),
+      ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_2$4, _toDisplayString$5(__props.title), 1))
+      : _createCommentVNode$4("", true),
     (__props.subtitle)
-      ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_3$3, _toDisplayString$4(__props.subtitle), 1))
-      : _createCommentVNode$3("", true),
+      ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_3$3, _toDisplayString$5(__props.subtitle), 1))
+      : _createCommentVNode$4("", true),
     (__props.error)
-      ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_4$2, _toDisplayString$4(__props.error), 1))
-      : _createCommentVNode$3("", true),
+      ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_4$2, _toDisplayString$5(__props.error), 1))
+      : _createCommentVNode$4("", true),
     _renderSlot(_ctx.$slots, "actions", {}, undefined, true),
     _renderSlot(_ctx.$slots, "default", {}, () => [
       (__props.rows.length)
-        ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_5$1, [
-            (_openBlock$4(true), _createElementBlock$4(_Fragment$3, null, _renderList$4(__props.rows, (row) => {
-              return (_openBlock$4(), _createElementBlock$4("div", {
+        ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_5$1, [
+            (_openBlock$5(true), _createElementBlock$5(_Fragment$4, null, _renderList$5(__props.rows, (row) => {
+              return (_openBlock$5(), _createElementBlock$5("div", {
                 key: `row-${row.label}`,
                 class: "dm-detail-row"
               }, [
-                _createElementVNode$4("span", null, _toDisplayString$4(row.label), 1),
-                _createElementVNode$4("strong", null, _toDisplayString$4(row.value), 1)
+                _createElementVNode$4("span", null, _toDisplayString$5(row.label), 1),
+                _createElementVNode$4("strong", null, _toDisplayString$5(row.value), 1)
               ]))
             }), 128))
           ]))
-        : _createCommentVNode$3("", true),
+        : _createCommentVNode$4("", true),
       (__props.items.length)
-        ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_6$1, [
-            (_openBlock$4(true), _createElementBlock$4(_Fragment$3, null, _renderList$4(__props.items, (item, index) => {
-              return (_openBlock$4(), _createElementBlock$4("div", {
+        ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_6$1, [
+            (_openBlock$5(true), _createElementBlock$5(_Fragment$4, null, _renderList$5(__props.items, (item, index) => {
+              return (_openBlock$5(), _createElementBlock$5("div", {
                 key: `item-${index}`,
                 class: "dm-detail-item"
               }, [
-                _createElementVNode$4("div", _hoisted_7$1, _toDisplayString$4(item.title), 1),
+                _createElementVNode$4("div", _hoisted_7$1, _toDisplayString$5(item.title), 1),
                 (item.meta)
-                  ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_8$1, _toDisplayString$4(item.meta), 1))
-                  : _createCommentVNode$3("", true)
+                  ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_8$1, _toDisplayString$5(item.meta), 1))
+                  : _createCommentVNode$4("", true)
               ]))
             }), 128))
           ]))
-        : _createCommentVNode$3("", true),
+        : _createCommentVNode$4("", true),
       (__props.emptyText && !__props.rows.length && !__props.items.length)
-        ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_9$1, _toDisplayString$4(__props.emptyText), 1))
-        : _createCommentVNode$3("", true),
+        ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_9$1, _toDisplayString$5(__props.emptyText), 1))
+        : _createCommentVNode$4("", true),
       (__props.truncated)
-        ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_10$1, " 仅显示前 " + _toDisplayString$4(shownCount.value) + " 条，共 " + _toDisplayString$4(__props.total) + " 条（上限 " + _toDisplayString$4(__props.limit) + " 条）；可在「总览」页调整明细条数。 ", 1))
-        : _createCommentVNode$3("", true)
+        ? (_openBlock$5(), _createElementBlock$5("div", _hoisted_10$1, " 仅显示前 " + _toDisplayString$5(shownCount.value) + " 条，共 " + _toDisplayString$5(__props.total) + " 条（上限 " + _toDisplayString$5(__props.limit) + " 条）；可在「总览」页调整明细条数。 ", 1))
+        : _createCommentVNode$4("", true)
     ], true),
     _renderSlot(_ctx.$slots, "appendix", {}, undefined, true)
   ]))
@@ -669,13 +669,13 @@ return (_ctx, _cache) => {
 }
 
 };
-const ModuleDetailPanel = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-328ce9c4"]]);
+const ModuleDetailPanel = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-328ce9c4"]]);
 
-const {resolveComponent:_resolveComponent$2,createVNode:_createVNode$2,normalizeClass:_normalizeClass,withCtx:_withCtx$2,toDisplayString:_toDisplayString$3,createElementVNode:_createElementVNode$3,createTextVNode:_createTextVNode$2,openBlock:_openBlock$3,createBlock:_createBlock$2,createCommentVNode:_createCommentVNode$2,renderList:_renderList$3,Fragment:_Fragment$2,createElementBlock:_createElementBlock$3} = await importShared('vue');
+const {resolveComponent:_resolveComponent$3,createVNode:_createVNode$2,normalizeClass:_normalizeClass,withCtx:_withCtx$3,toDisplayString:_toDisplayString$4,createElementVNode:_createElementVNode$3,createTextVNode:_createTextVNode$3,openBlock:_openBlock$4,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$3,renderList:_renderList$4,Fragment:_Fragment$3,createElementBlock:_createElementBlock$4} = await importShared('vue');
 
 
-const _hoisted_1$3 = { class: "dm-module-header" };
-const _hoisted_2$2 = { class: "dm-module-header-line" };
+const _hoisted_1$4 = { class: "dm-module-header" };
+const _hoisted_2$3 = { class: "dm-module-header-line" };
 const _hoisted_3$2 = { class: "dm-module-title" };
 const _hoisted_4$1 = {
   key: 0,
@@ -684,7 +684,7 @@ const _hoisted_4$1 = {
 };
 
 
-const _sfc_main$3 = {
+const _sfc_main$4 = {
   __name: 'ModuleHeader',
   props: {
   title: { type: String, required: true },
@@ -702,12 +702,12 @@ const _sfc_main$3 = {
 const tones = ['primary', 'secondary', 'success', 'warning', 'error'];
 
 return (_ctx, _cache) => {
-  const _component_VIcon = _resolveComponent$2("VIcon");
-  const _component_VAvatar = _resolveComponent$2("VAvatar");
-  const _component_VChip = _resolveComponent$2("VChip");
+  const _component_VIcon = _resolveComponent$3("VIcon");
+  const _component_VAvatar = _resolveComponent$3("VAvatar");
+  const _component_VChip = _resolveComponent$3("VChip");
 
-  return (_openBlock$3(), _createElementBlock$3("header", _hoisted_1$3, [
-    _createElementVNode$3("div", _hoisted_2$2, [
+  return (_openBlock$4(), _createElementBlock$4("header", _hoisted_1$4, [
+    _createElementVNode$3("div", _hoisted_2$3, [
       _createVNode$2(_component_VAvatar, {
         color: __props.fault ? 'error' : __props.observing ? 'warning' : (__props.enabled || __props.running) ? 'primary' : undefined,
         variant: "tonal",
@@ -715,7 +715,7 @@ return (_ctx, _cache) => {
         rounded: "lg",
         class: _normalizeClass(["dm-module-icon", { 'dm-module-icon--enabled': __props.enabled }])
       }, {
-        default: _withCtx$2(() => [
+        default: _withCtx$3(() => [
           _createVNode$2(_component_VIcon, {
             icon: __props.icon,
             size: "17",
@@ -724,37 +724,37 @@ return (_ctx, _cache) => {
         ]),
         _: 1
       }, 8, ["color", "class"]),
-      _createElementVNode$3("h2", _hoisted_3$2, _toDisplayString$3(__props.title), 1),
+      _createElementVNode$3("h2", _hoisted_3$2, _toDisplayString$4(__props.title), 1),
       (__props.showStatus)
-        ? (_openBlock$3(), _createBlock$2(_component_VChip, {
+        ? (_openBlock$4(), _createBlock$3(_component_VChip, {
             key: 0,
             size: "x-small",
             variant: "tonal",
             color: __props.enabled ? 'success' : undefined,
             class: "dm-module-status"
           }, {
-            default: _withCtx$2(() => [
-              _createTextVNode$2(_toDisplayString$3(__props.enabled ? '已启用' : '已禁用'), 1)
+            default: _withCtx$3(() => [
+              _createTextVNode$3(_toDisplayString$4(__props.enabled ? '已启用' : '已禁用'), 1)
             ]),
             _: 1
           }, 8, ["color"]))
-        : _createCommentVNode$2("", true),
+        : _createCommentVNode$3("", true),
       (__props.observing)
-        ? (_openBlock$3(), _createBlock$2(_component_VChip, {
+        ? (_openBlock$4(), _createBlock$3(_component_VChip, {
             key: 1,
             size: "x-small",
             variant: "tonal",
             color: "warning",
             class: "dm-module-status"
           }, {
-            default: _withCtx$2(() => [...(_cache[0] || (_cache[0] = [
-              _createTextVNode$2("观察模式", -1)
+            default: _withCtx$3(() => [...(_cache[0] || (_cache[0] = [
+              _createTextVNode$3("观察模式", -1)
             ]))]),
             _: 1
           }))
-        : _createCommentVNode$2("", true),
+        : _createCommentVNode$3("", true),
       (__props.running)
-        ? (_openBlock$3(), _createBlock$2(_component_VChip, {
+        ? (_openBlock$4(), _createBlock$3(_component_VChip, {
             key: 2,
             size: "x-small",
             variant: "tonal",
@@ -762,14 +762,14 @@ return (_ctx, _cache) => {
             class: "dm-module-status",
             role: "status"
           }, {
-            default: _withCtx$2(() => [...(_cache[1] || (_cache[1] = [
-              _createTextVNode$2("执行中", -1)
+            default: _withCtx$3(() => [...(_cache[1] || (_cache[1] = [
+              _createTextVNode$3("执行中", -1)
             ]))]),
             _: 1
           }))
-        : _createCommentVNode$2("", true),
+        : _createCommentVNode$3("", true),
       (__props.fault)
-        ? (_openBlock$3(), _createBlock$2(_component_VChip, {
+        ? (_openBlock$4(), _createBlock$3(_component_VChip, {
             key: 3,
             size: "x-small",
             variant: "tonal",
@@ -777,44 +777,44 @@ return (_ctx, _cache) => {
             class: "dm-module-status",
             role: "status"
           }, {
-            default: _withCtx$2(() => [
-              _createTextVNode$2("故障" + _toDisplayString$3(typeof __props.fault === 'string' ? '：' + __props.fault : ''), 1)
+            default: _withCtx$3(() => [
+              _createTextVNode$3("故障" + _toDisplayString$4(typeof __props.fault === 'string' ? '：' + __props.fault : ''), 1)
             ]),
             _: 1
           }))
-        : _createCommentVNode$2("", true)
+        : _createCommentVNode$3("", true)
     ]),
     (__props.badges.length)
-      ? (_openBlock$3(), _createElementBlock$3("ul", _hoisted_4$1, [
-          (_openBlock$3(true), _createElementBlock$3(_Fragment$2, null, _renderList$3(__props.badges, (badge, index) => {
-            return (_openBlock$3(), _createElementBlock$3("li", {
+      ? (_openBlock$4(), _createElementBlock$4("ul", _hoisted_4$1, [
+          (_openBlock$4(true), _createElementBlock$4(_Fragment$3, null, _renderList$4(__props.badges, (badge, index) => {
+            return (_openBlock$4(), _createElementBlock$4("li", {
               key: index,
               class: _normalizeClass(["dm-module-stat", tones.includes(badge.tone) ? 'dm-tone-' + badge.tone : ''])
             }, [
-              _createElementVNode$3("span", null, _toDisplayString$3(badge.label), 1),
-              _createElementVNode$3("span", null, _toDisplayString$3(badge.value), 1)
+              _createElementVNode$3("span", null, _toDisplayString$4(badge.label), 1),
+              _createElementVNode$3("span", null, _toDisplayString$4(badge.value), 1)
             ], 2))
           }), 128))
         ]))
-      : _createCommentVNode$2("", true)
+      : _createCommentVNode$3("", true)
   ]))
 }
 }
 
 };
-const ModuleHeader = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-9fa8b562"]]);
+const ModuleHeader = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-9fa8b562"]]);
 
-const {createTextVNode:_createTextVNode$1,resolveComponent:_resolveComponent$1,withCtx:_withCtx$1,createVNode:_createVNode$1,toDisplayString:_toDisplayString$2,openBlock:_openBlock$2,createBlock:_createBlock$1,createCommentVNode:_createCommentVNode$1,createElementVNode:_createElementVNode$2,createElementBlock:_createElementBlock$2,renderList:_renderList$2,createSlots:_createSlots} = await importShared('vue');
+const {createTextVNode:_createTextVNode$2,resolveComponent:_resolveComponent$2,withCtx:_withCtx$2,createVNode:_createVNode$1,toDisplayString:_toDisplayString$3,openBlock:_openBlock$3,createBlock:_createBlock$2,createCommentVNode:_createCommentVNode$2,createElementVNode:_createElementVNode$2,createElementBlock:_createElementBlock$3,renderList:_renderList$3,createSlots:_createSlots} = await importShared('vue');
 
 
-const _hoisted_1$2 = {
+const _hoisted_1$3 = {
   key: 1,
   class: "dm-summary-long"
 };
-const _hoisted_2$1 = ["title"];
+const _hoisted_2$2 = ["title"];
 const _hoisted_3$1 = ["title"];
 
-const _sfc_main$2 = {
+const _sfc_main$3 = {
   __name: 'ConfigSummary',
   props: { fields: { type: Array, default: () => [] } },
   emits: ['settings'],
@@ -824,57 +824,57 @@ const _sfc_main$2 = {
 const emit = __emit;
 
 return (_ctx, _cache) => {
-  const _component_VBtn = _resolveComponent$1("VBtn");
-  const _component_VChip = _resolveComponent$1("VChip");
+  const _component_VBtn = _resolveComponent$2("VBtn");
+  const _component_VChip = _resolveComponent$2("VChip");
 
-  return (_openBlock$2(), _createBlock$1(ModuleTable, {
+  return (_openBlock$3(), _createBlock$2(ModuleTable, {
     title: "配置摘要",
     columns: __props.fields.map(field => ({ key: field.key, label: field.label })),
     rows: [{ id: 'current' }],
     pagination: false
   }, _createSlots({
-    toolbar: _withCtx$1(() => [
+    toolbar: _withCtx$2(() => [
       _createVNode$1(_component_VBtn, {
         size: "small",
         variant: "text",
         "prepend-icon": "mdi-cog-outline",
         onClick: _cache[0] || (_cache[0] = $event => (emit('settings')))
       }, {
-        default: _withCtx$1(() => [...(_cache[1] || (_cache[1] = [
-          _createTextVNode$1("前往设置", -1)
+        default: _withCtx$2(() => [...(_cache[1] || (_cache[1] = [
+          _createTextVNode$2("前往设置", -1)
         ]))]),
         _: 1
       })
     ]),
     _: 2
   }, [
-    _renderList$2(__props.fields, (field) => {
+    _renderList$3(__props.fields, (field) => {
       return {
         name: `cell-${field.key}`,
-        fn: _withCtx$1(() => [
+        fn: _withCtx$2(() => [
           (field.badge && field.value != null)
-            ? (_openBlock$2(), _createBlock$1(_component_VChip, {
+            ? (_openBlock$3(), _createBlock$2(_component_VChip, {
                 key: 0,
                 size: "x-small",
                 variant: "tonal",
                 color: field.color || 'default'
               }, {
-                default: _withCtx$1(() => [
-                  _createTextVNode$1(_toDisplayString$2(field.value), 1)
+                default: _withCtx$2(() => [
+                  _createTextVNode$2(_toDisplayString$3(field.value), 1)
                 ]),
                 _: 2
               }, 1032, ["color"]))
             : (field.long && field.value != null)
-              ? (_openBlock$2(), _createElementBlock$2("details", _hoisted_1$2, [
+              ? (_openBlock$3(), _createElementBlock$3("details", _hoisted_1$3, [
                   _createElementVNode$2("summary", {
                     title: String(field.value)
-                  }, _toDisplayString$2(field.value), 9, _hoisted_2$1),
-                  _createElementVNode$2("p", null, _toDisplayString$2(field.value), 1)
+                  }, _toDisplayString$3(field.value), 9, _hoisted_2$2),
+                  _createElementVNode$2("p", null, _toDisplayString$3(field.value), 1)
                 ]))
-              : (_openBlock$2(), _createElementBlock$2("span", {
+              : (_openBlock$3(), _createElementBlock$3("span", {
                   key: 2,
                   title: field.value == null ? '当前接口未提供' : String(field.value)
-                }, _toDisplayString$2(field.value ?? '当前接口未提供'), 9, _hoisted_3$1))
+                }, _toDisplayString$3(field.value ?? '当前接口未提供'), 9, _hoisted_3$1))
         ])
       }
     })
@@ -883,17 +883,17 @@ return (_ctx, _cache) => {
 }
 
 };
-const ConfigSummary = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-5c3fc233"]]);
+const ConfigSummary = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-5c3fc233"]]);
 
-const {renderList:_renderList$1,Fragment:_Fragment$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,toDisplayString:_toDisplayString$1,createElementVNode:_createElementVNode$1} = await importShared('vue');
-
-
-const _hoisted_1$1 = { class: "dm-record-details" };
-
-const {computed: computed$1} = await importShared('vue');
+const {renderList:_renderList$2,Fragment:_Fragment$2,openBlock:_openBlock$2,createElementBlock:_createElementBlock$2,toDisplayString:_toDisplayString$2,createElementVNode:_createElementVNode$1} = await importShared('vue');
 
 
-const _sfc_main$1 = {
+const _hoisted_1$2 = { class: "dm-record-details" };
+
+const {computed: computed$2} = await importShared('vue');
+
+
+const _sfc_main$2 = {
   __name: 'RecordDetails',
   props: { record: { type: Object, required: true } },
   setup(__props) {
@@ -912,17 +912,17 @@ const labels = {
   frompath: '源数据路径', topath: '目的数据路径', fromtorrentpath: '种子文件目录', fromtorrentpath_exists: '种子目录存在',
   archived_at: '归档时间', last_failed_at: '最近失败时间', fail_count: '失败次数', category: '分类', category_label: '分类名称',
 };
-const fields = computed$1(() => Object.entries(labels).filter(([key]) => props.record[key] != null)
+const fields = computed$2(() => Object.entries(labels).filter(([key]) => props.record[key] != null)
   .map(([key, label]) => ({ key, label, value: typeof props.record[key] === 'boolean' ? (props.record[key] ? '是' : '否') : props.record[key] })));
 
 return (_ctx, _cache) => {
-  return (_openBlock$1(), _createElementBlock$1("dl", _hoisted_1$1, [
-    (_openBlock$1(true), _createElementBlock$1(_Fragment$1, null, _renderList$1(fields.value, (field) => {
-      return (_openBlock$1(), _createElementBlock$1(_Fragment$1, {
+  return (_openBlock$2(), _createElementBlock$2("dl", _hoisted_1$2, [
+    (_openBlock$2(true), _createElementBlock$2(_Fragment$2, null, _renderList$2(fields.value, (field) => {
+      return (_openBlock$2(), _createElementBlock$2(_Fragment$2, {
         key: field.key
       }, [
-        _createElementVNode$1("dt", null, _toDisplayString$1(field.label), 1),
-        _createElementVNode$1("dd", null, _toDisplayString$1(field.value), 1)
+        _createElementVNode$1("dt", null, _toDisplayString$2(field.label), 1),
+        _createElementVNode$1("dd", null, _toDisplayString$2(field.value), 1)
       ], 64))
     }), 128))
   ]))
@@ -930,7 +930,70 @@ return (_ctx, _cache) => {
 }
 
 };
-const RecordDetails = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-320e24f2"]]);
+const RecordDetails = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-320e24f2"]]);
+
+const {renderList:_renderList$1,Fragment:_Fragment$1,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,toDisplayString:_toDisplayString$1,createTextVNode:_createTextVNode$1,resolveComponent:_resolveComponent$1,withCtx:_withCtx$1,createBlock:_createBlock$1,createCommentVNode:_createCommentVNode$1} = await importShared('vue');
+
+
+const _hoisted_1$1 = ["title", "aria-label"];
+const _hoisted_2$1 = { key: 0 };
+
+const {computed: computed$1} = await importShared('vue');
+
+
+const _sfc_main$1 = {
+  __name: 'UploadSettingsBadges',
+  props: { value: { default: null } },
+  setup(__props) {
+
+const props = __props;
+const tooltip = computed$1(() => props.value == null ? '未记录' : typeof props.value === 'object' ? JSON.stringify(props.value) : String(props.value));
+function setting(label, bps, enabled) {
+  const speed = bps == null ? '额度未知' : Number(bps) === 0 ? '不限速' : `${Number((Number(bps) / 1024 / 1024).toFixed(2))} MB/s`;
+  return { label: `${label} ${enabled === false ? '未启用' : speed}${enabled == null ? ' · 状态未知' : ''}`, color: enabled === false ? 'default' : 'primary' }
+}
+const badges = computed$1(() => {
+  const value = props.value;
+  if (value == null) return []
+  if (typeof value !== 'object') return [{ label: String(value), color: 'default' }]
+  const result = [];
+  if ('upload_limit_bps' in value || 'upload_enabled' in value) result.push(setting('普通', value.upload_limit_bps, value.upload_enabled));
+  if (value.alternate_upload_limit_bps != null || value.alternate_upload_enabled != null) result.push(setting('备用', value.alternate_upload_limit_bps, value.alternate_upload_enabled));
+  if ('limit_bps' in value || 'enabled' in value) result.push(setting('单种', value.limit_bps, value.enabled));
+  return result.length ? result : [{ label: '已记录', color: 'default' }]
+});
+
+return (_ctx, _cache) => {
+  const _component_VChip = _resolveComponent$1("VChip");
+
+  return (_openBlock$1(), _createElementBlock$1("span", {
+    class: "dm-upload-settings-badges",
+    title: tooltip.value,
+    tabindex: "0",
+    "aria-label": tooltip.value
+  }, [
+    (_openBlock$1(true), _createElementBlock$1(_Fragment$1, null, _renderList$1(badges.value, (badge) => {
+      return (_openBlock$1(), _createBlock$1(_component_VChip, {
+        key: badge.label,
+        size: "x-small",
+        variant: "tonal",
+        color: badge.color
+      }, {
+        default: _withCtx$1(() => [
+          _createTextVNode$1(_toDisplayString$1(badge.label), 1)
+        ]),
+        _: 2
+      }, 1032, ["color"]))
+    }), 128)),
+    (!badges.value.length)
+      ? (_openBlock$1(), _createElementBlock$1("span", _hoisted_2$1, "—"))
+      : _createCommentVNode$1("", true)
+  ], 8, _hoisted_1$1))
+}
+}
+
+};
+const UploadSettingsBadges = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-172ba671"]]);
 
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,createTextVNode:_createTextVNode,withCtx:_withCtx,renderList:_renderList,Fragment:_Fragment,openBlock:_openBlock,createElementBlock:_createElementBlock,toDisplayString:_toDisplayString,createBlock:_createBlock,createCommentVNode:_createCommentVNode,unref:_unref,mergeProps:_mergeProps,normalizeProps:_normalizeProps,guardReactiveProps:_guardReactiveProps} = await importShared('vue');
 
@@ -2447,7 +2510,7 @@ function executionTableProps(stream) {
   const block = executionHistory[stream];
   return {
     rows: block.rows, total: block.total, page: block.page, pageSize: block.pageSize,
-    columns: stream === 'upload_limit' ? [...executionColumns, ...columnsOf([['before_text', '调整前'], ['after_text', '调整后']])] : executionColumns,
+    columns: stream === 'upload_limit' ? [...executionColumns, ...columnsOf([['before', '调整前'], ['after', '调整后']])] : executionColumns,
     state: { loading: block.loading, error: !block.loaded ? block.error || false : false, refreshFailed: block.loaded ? block.error || false : false, empty: 'none' },
   }
 }
@@ -2468,7 +2531,6 @@ async function loadExecutionHistory(stream) {
     }
     block.rows = result.items.map(row => ({ ...row, name: row.name || row.torrent_hash || '—', time: formatTimestamp(row.occurred_at),
       result_text: executionResultLabels[row.result] || row.result || '—',
-      before_text: presentValue(row.before), after_text: presentValue(row.after),
     }));
     block.total = result.total;
     block.page = result.page || block.page;
@@ -2607,7 +2669,6 @@ function transferOutcomeText(row) {
   if (row.source_result) parts.push(sourceResults[row.source_result] || row.source_result);
   return parts.filter(Boolean).join(' · ')
 }
-function presentValue(value) { return value == null || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value) }
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
   void refreshActive();
@@ -3599,6 +3660,12 @@ return (_ctx, _cache) => {
                                 name: value || '—'
                               }, null, 8, ["name"])
                             ]),
+                            "cell-before": _withCtx(({ value }) => [
+                              _createVNode(UploadSettingsBadges, { value: value }, null, 8, ["value"])
+                            ]),
+                            "cell-after": _withCtx(({ value }) => [
+                              _createVNode(UploadSettingsBadges, { value: value }, null, 8, ["value"])
+                            ]),
                             _: 1
                           }, 16),
                           _cache[83] || (_cache[83] = _createElementVNode("p", { class: "dm-hint" }, "实际上传与分配额度是不同指标；MP 或插件离线后，下载器可能保留最后写入的限速。", -1)),
@@ -4057,6 +4124,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ed1776da"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-9fc0e3b9"]]);
 
 export { Page as default };

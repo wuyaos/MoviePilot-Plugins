@@ -11,6 +11,7 @@ import ConfigSummary from './ConfigSummary.vue'
 import RecordDetails from './RecordDetails.vue'
 import CompactSelect from './CompactSelect.vue'
 import RowActionMenu from './RowActionMenu.vue'
+import UploadSettingsBadges from './UploadSettingsBadges.vue'
 import { MODULE_ICONS } from './module-icons.js'
 
 const props = defineProps({
@@ -1521,7 +1522,7 @@ function executionTableProps(stream) {
   const block = executionHistory[stream]
   return {
     rows: block.rows, total: block.total, page: block.page, pageSize: block.pageSize,
-    columns: stream === 'upload_limit' ? [...executionColumns, ...columnsOf([['before_text', '调整前'], ['after_text', '调整后']])] : executionColumns,
+    columns: stream === 'upload_limit' ? [...executionColumns, ...columnsOf([['before', '调整前'], ['after', '调整后']])] : executionColumns,
     state: { loading: block.loading, error: !block.loaded ? block.error || false : false, refreshFailed: block.loaded ? block.error || false : false, empty: 'none' },
   }
 }
@@ -1542,7 +1543,6 @@ async function loadExecutionHistory(stream) {
     }
     block.rows = result.items.map(row => ({ ...row, name: row.name || row.torrent_hash || '—', time: formatTimestamp(row.occurred_at),
       result_text: executionResultLabels[row.result] || row.result || '—',
-      before_text: presentValue(row.before), after_text: presentValue(row.after),
     }))
     block.total = result.total
     block.page = result.page || block.page
@@ -1903,6 +1903,8 @@ onBeforeUnmount(() => {
               <ModuleTable title="执行记录" data-execution-stream="upload_limit" v-bind="executionTableProps('upload_limit')" row-key="record_id"
                 @update:page="changeExecutionPage('upload_limit', $event)" @update:page-size="changeExecutionSize('upload_limit', $event)" @retry="loadExecutionHistory('upload_limit')">
                 <template #cell-downloader_id="{ value }"><DownloaderBadge :name="value || '—'" /></template>
+                <template #cell-before="{ value }"><UploadSettingsBadges :value="value" /></template>
+                <template #cell-after="{ value }"><UploadSettingsBadges :value="value" /></template>
               </ModuleTable>
               <p class="dm-hint">实际上传与分配额度是不同指标；MP 或插件离线后，下载器可能保留最后写入的限速。</p>
               <details class="dm-runtime-details"><summary>站点识别与策略操作</summary><VBtn color="primary" size="small" variant="tonal" :disabled="!!moduleRunning" @click="doUploadScanSites">扫描站点</VBtn><VBtn size="small" variant="tonal" color="error" :disabled="!!moduleRunning" @click="doUploadClearRules">清空策略</VBtn></details>
