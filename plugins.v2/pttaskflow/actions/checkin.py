@@ -35,7 +35,7 @@ class FluxTorrentCheckin:
 
     @staticmethod
     def _envelope(response):
-        if response is None:
+        if response is None or not 200 <= getattr(response, "status_code", 200) < 300:
             return None
         try:
             payload = response.json()
@@ -51,22 +51,40 @@ class FluxTorrentCheckin:
         if pre is None:
             return TaskResult.fail("签到状态接口不可读（非 JSON 或请求失败）")
         payload, data = pre
-        if data.get("checked_today") is True:
-            return TaskResult.idempotent("今日已签到")
-        if payload.get("code") not in (0, "0"):
+        if type(payload.get("code")) is not int or payload["code"] != 0:
             return TaskResult.business(
                 f"签到状态未确认：{payload.get('message') or payload.get('code')}")
-        receipt = self._envelope(site.post(self.checkin_path, json={}))
-        after = self._envelope(site.get(self.status_path))
-        if after is None:
-            return TaskResult.fail("已提交签到，但回读未确认（状态接口不可读）")
-        if after[1].get("checked_today") is True:
+        if data.get("checked_today") is True:
+            return TaskResult.idempotent("今日已签到")
+        receipt = None
+        submit_error = ""
+        try:
+            response = site.post(self.checkin_path, json={})
+            receipt = self._envelope(response)
+            if response is None:
+                submit_error = site.request_error or "提交结果未知"
+            elif not 200 <= getattr(response, "status_code", 200) < 300:
+                submit_error = f"提交 HTTP {response.status_code}"
+            elif receipt is None:
+                submit_error = "提交响应不是有效 JSON"
+            elif type(receipt[0].get("code")) is not int or receipt[0]["code"] != 0:
+                code = str(receipt[0].get("code", ""))
+                submit_error = f"提交业务码 {code}" if code.isdecimal() else "提交业务拒绝"
+        except Exception as error:
+            submit_error = f"提交结果未知（{type(error).__name__}），未重放"
+        # 无论提交异常/拒绝与否，只读核验一次，不重放写请求。
+        try:
+            after = self._envelope(site.get(self.status_path))
+        except Exception:
+            after = None
+        if after and type(after[0].get("code")) is int and after[0]["code"] == 0 and after[1].get("checked_today") is True:
             parts = []
-            reward = (receipt or ({}, {}))[1].get("reward")
-            streak = (receipt or ({}, {}))[1].get("streak")
+            reward = (receipt or ({}, {}))[1].get("reward") if not submit_error else None
+            streak = (receipt or ({}, {}))[1].get("streak") if not submit_error else None
             if reward is not None:
                 parts.append(f"+{reward} 魔力")
             if streak is not None:
                 parts.append(f"连续 {streak} 天")
             return TaskResult.ok("签到成功" + ("（" + "，".join(parts) + "）" if parts else ""))
-        return TaskResult.business("已提交签到，但回读仍为未签到")
+        detail = "状态接口不可读" if after is None else "未取得今日已签到证据"
+        return TaskResult.business(f"{submit_error or '已提交签到'}；回读{detail}")
