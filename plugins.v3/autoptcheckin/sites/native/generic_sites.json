@@ -182,13 +182,6 @@
     "attendance_path": "/attendance.php"
   },
   {
-    "id": "hxpt",
-    "protocol": "nexus",
-    "name": "好学",
-    "url": "https://www.hxpt.org/",
-    "attendance_path": "/attendance.php"
-  },
-  {
     "id": "kufei",
     "protocol": "nexus",
     "name": "库非",
