@@ -33,13 +33,17 @@ class Http:
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = []
+        self.cookies = {"flux_csrf": "fixture%2Bcsrf"}
+        self.post_headers = None
 
     def get(self, url, **kwargs):
         self.calls.append(("get", url))
         return self.responses.pop(0)
 
-    def post(self, url, *, data=None, json=None, headers=None, referer=None):
+    def post(self, url, *, data=None, json=None, headers=None, referer=None, allow_redirects=None):
         self.calls.append(("post", url, json))
+        self.post_headers = headers
+        assert allow_redirects is False  # 307/308 不得自动重放签到 POST
         return self.responses.pop(0)
 
 
@@ -156,3 +160,53 @@ def test_malformed_bool_checked_is_not_already():
     http = Http([page('{"code":0,"data":{"checked_today":false}}'),
                  page(envelope()), page(envelope(checked=True))])
     assert Hxpt().signin(ctx(http)).status is SignStatus.SUCCESS
+
+
+@pytest.mark.parametrize("response, expected", [
+    (page(envelope(code=403), status=403), "HTTP 403"),
+    (page(envelope(code=2003)), "code=2003"),
+    (page("<html>blocked</html>"), "JSON"),
+])
+def test_submit_rejection_preserved_without_replay(response, expected):
+    http = Http([page(envelope(checked=False)), response, page(envelope(checked=False))])
+    result = Hxpt().signin(ctx(http))
+    assert result.status is SignStatus.UNCONFIRMED
+    assert expected in result.message
+    assert calls_of(http) == [("get", STATUS), ("post", CHECKIN), ("get", STATUS)]
+    assert http.post_headers == {"x-csrf-token": "fixture+csrf"}
+
+
+def test_missing_csrf_does_not_submit_but_still_rereads():
+    http = Http([page(envelope(checked=False)), page(envelope()), page(envelope(checked=False))])
+    http.cookies.clear()
+    result = Hxpt().signin(ctx(http))
+    assert result.status is SignStatus.UNCONFIRMED and "无法获取 CSRF" in result.message
+    assert calls_of(http) == [("get", STATUS), ("get", BASE + "api/v1/me/csrf"), ("get", STATUS)]
+
+
+def test_bootstrap_csrf_uses_refreshed_cookie():
+    class Bootstrap(Http):
+        def get(self, url, **kwargs):
+            response = super().get(url, **kwargs)
+            if url.endswith("/me/csrf"):
+                self.cookies["flux_csrf"] = "fresh%2Btoken"
+            return response
+    http = Bootstrap([page(envelope(checked=False)), page(envelope()),
+                      page(envelope()), page(envelope(checked=True))])
+    http.cookies.clear()
+    result = Hxpt().signin(ctx(http))
+    assert result.status is SignStatus.SUCCESS
+    assert http.post_headers == {"x-csrf-token": "fresh+token"}
+    assert sum(method == "post" for method, *_ in http.calls) == 1
+
+
+def test_post_exception_still_rereads_and_reports_type_only():
+    class Broken(Http):
+        def post(self, url, **kwargs):
+            self.calls.append(("post", url))
+            raise TimeoutError("secret cookie must not leak")
+    http = Broken([page(envelope(checked=False)), page(envelope(checked=False))])
+    result = Hxpt().signin(ctx(http))
+    assert result.status is SignStatus.UNCONFIRMED
+    assert "TimeoutError" in result.message and "secret" not in result.message
+    assert calls_of(http)[-1] == ("get", STATUS)

@@ -66,3 +66,73 @@ def test_actual_cffi_preserves_body_headers_and_redirect_image_session(monkeypat
     finally:
         server.shutdown(); server.server_close(); worker.join(timeout=5)
         assert not worker.is_alive()
+
+
+def test_hxpt_real_transports_do_not_replay_redirected_post(monkeypatch):
+    """Loopback requests/curl_cffi; SDK shim only delegates to a real Session."""
+    import requests
+    from threading import Event
+    from autoptcheckin.core.models import SignStatus
+    from autoptcheckin.core.sitemodel import SignContext
+    from autoptcheckin.sites.native.hxpt import Hxpt
+
+    class RequestUtils:
+        def __init__(self, session, headers=None, **kwargs):
+            self.session, self.headers = session, headers
+
+        def get_res(self, url, **kwargs):
+            return self.session.get(url, headers=self.headers, timeout=5, **kwargs)
+
+        def post_res(self, url, **kwargs):
+            return self.session.post(url, headers=self.headers, timeout=5, **kwargs)
+
+    sdk = ModuleType('app.sdk'); sdk.__path__ = []
+    app = ModuleType('app'); app.__path__ = []; app.sdk = sdk
+    config = ModuleType('app.sdk.config'); config.settings = SimpleNamespace(PROXY=None)
+    network = ModuleType('app.sdk.network'); network.RequestUtils = RequestUtils
+    sdk.config = config; sdk.network = network
+    for name, module in [('app', app), ('app.sdk', sdk), ('app.sdk.config', config), ('app.sdk.network', network)]:
+        monkeypatch.setitem(sys.modules, name, module)
+
+    for impersonate in (False, True):
+        for redirect_status in (307, 308):
+            seen = []
+
+            class Handler(BaseHTTPRequestHandler):
+                def log_message(self, *args): pass
+
+                def do_GET(self):
+                    seen.append(('GET', self.path, dict(self.headers)))
+                    self.send_response(200)
+                    self.send_header('Set-Cookie', 'flux_csrf=fresh%2Btoken; Path=/')
+                    self.end_headers()
+                    self.wfile.write(b'{"code":0,"data":{"checked_today":false}}')
+
+                def do_POST(self):
+                    self.rfile.read(int(self.headers.get('Content-Length', 0)))
+                    seen.append(('POST', self.path, dict(self.headers)))
+                    self.send_response(redirect_status)
+                    self.send_header('Location', '/replayed-write')
+                    self.end_headers()
+
+            server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+            worker = Thread(target=server.serve_forever, daemon=True); worker.start()
+            base = f'http://127.0.0.1:{server.server_port}/'
+            credential = Credential('fixture', 'flux_csrf=stale; sid=fixture')
+            try:
+                with requests.Session() as session:
+                    session.trust_env = False
+                    with NativeHttpClient(credential, {'url': base, 'impersonate': impersonate}, session=session) as http:
+                        site = Hxpt(); site.url = base
+                        result = site.signin(SignContext('hxpt', credential, http, cancel=Event()))
+                assert result.status is SignStatus.UNCONFIRMED
+                assert f'HTTP {redirect_status}' in result.message
+                assert [(method, path) for method, path, _ in seen] == [
+                    ('GET', '/api/v1/attendance'), ('POST', '/api/v1/attendance/checkin'),
+                    ('GET', '/api/v1/attendance')]
+                post = seen[1][2]
+                assert post['x-csrf-token'] == 'fresh+token'
+                assert 'flux_csrf=fresh%2Btoken' in post['Cookie']
+            finally:
+                server.shutdown(); server.server_close(); worker.join(timeout=5)
+                assert not worker.is_alive()

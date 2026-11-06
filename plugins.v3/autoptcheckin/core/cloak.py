@@ -186,15 +186,17 @@ class CloakHttpClient:
         return LoginPage(self.session.page.content(), self.session.page.url,
                          response.status if response else 0)
 
-    def post(self, url, *, data=None, json=None, headers=None, referer=None):
-        return self._run(lambda: self._post_impl(url, data=data, json=json, headers=headers, referer=referer))
+    def post(self, url, *, data=None, json=None, headers=None, referer=None, allow_redirects=None):
+        return self._run(lambda: self._post_impl(url, data=data, json=json, headers=headers, referer=referer, allow_redirects=allow_redirects))
 
-    def _post_impl(self, url, *, data=None, json=None, headers=None, referer=None):
+    def _post_impl(self, url, *, data=None, json=None, headers=None, referer=None, allow_redirects=None):
         import json as json_module
         body = json_module.dumps(json) if json is not None else urlencode(data or [])
         request_headers = {"Content-Type": "application/json; charset=UTF-8" if json is not None
                            else "application/x-www-form-urlencoded; charset=UTF-8", **(headers or {})}
         options = {"method": "POST", "credentials": "include", "headers": request_headers, "body": body}
+        if allow_redirects is False:
+            options["redirect"] = "manual"
         if referer: options["referrer"] = referer
         result = self.session.page.evaluate(
             "async ({url, options}) => { const r=await fetch(url,options); return {text:await r.text(),url:r.url,status:r.status}; }",

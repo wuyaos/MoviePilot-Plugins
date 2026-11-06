@@ -166,7 +166,7 @@ class NativeHttpClient:
             self._prepare_cookies(self._owned_session, url)
             response = getattr(self._owned_session, method)(
                 url, headers=request_headers, timeout=20,
-                allow_redirects=True,
+                allow_redirects=kwargs.pop('allow_redirects', True),
                 proxies=proxy,
                 **kwargs)
             session = self._owned_session
@@ -218,8 +218,10 @@ class NativeHttpClient:
             raise ValueError('image unavailable')
         return response.content
 
-    def post(self, url, *, data=None, json=None, headers=None, referer=None):
+    def post(self, url, *, data=None, json=None, headers=None, referer=None, allow_redirects=None):
         kwargs = {'referer': referer} if referer is not None else {}
+        if allow_redirects is not None:
+            kwargs['allow_redirects'] = allow_redirects
         if headers is not None:
             kwargs['headers'] = headers
         if json is not None:

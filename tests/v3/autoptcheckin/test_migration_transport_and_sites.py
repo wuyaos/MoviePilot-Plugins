@@ -347,3 +347,18 @@ def test_peergo_unknown_activity_configuration_never_submits():
     result = rousi.signin(http, {})
     assert result.status == 'protocol_pending'
     assert not any(c[0] == 'post' for c in http.calls)
+
+
+@pytest.mark.parametrize("allow_redirects, expected", [(None, None), (True, None), (False, "manual")])
+def test_cloak_post_redirect_option_preserves_default(allow_redirects, expected):
+    http = object.__new__(CloakHttpClient)
+    http._run = lambda fn: fn()
+    http._sync_cookies = Mock()
+    page = Mock()
+    page.evaluate.return_value = {"text": "", "url": "https://fixture.invalid/", "status": 0}
+    http.session = SimpleNamespace(page=page)
+    http.post("https://fixture.invalid/claim", json={}, allow_redirects=allow_redirects)
+    options = page.evaluate.call_args.args[1]["options"]
+    assert options.get("redirect") == expected
+    page.evaluate.assert_called_once()
+    http._sync_cookies.assert_called_once()
