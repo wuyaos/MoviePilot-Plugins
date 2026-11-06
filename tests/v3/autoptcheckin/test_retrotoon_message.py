@@ -89,7 +89,7 @@ def test_signed_preread_message_trimmed():
     http = Http([CLAIMED_PAGE])
     result = site.signin(context(site, http))
     assert result.status == "already"
-    assert "already claimed" in result.message
+    assert "已签" in result.message
     assert "Use this timezone" not in result.message
     assert "Your day resets" not in result.message
     assert "Change timezone" not in result.message
