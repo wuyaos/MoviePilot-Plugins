@@ -111,7 +111,7 @@ def test_cloud_pre_submit_auth_evidence_only(monkeypatch, page, expected):
         calls.append(1)
         return {'after': {'html': page}}
     monkeypatch.setattr(cloudsign, '_bql_request', request)
-    result = cloudsign.sign('audiences', 'https://cloud.invalid', 'session=fixture', {'browserless_token': 'fixture'})
+    result = cloudsign.sign('mua_xloli', 'https://cloud.invalid', 'session=fixture', {'browserless_token': 'fixture'})
     assert result.status == expected
     assert len(calls) == 1
 
@@ -121,7 +121,7 @@ def test_cloud_candidate_is_persisted_only_if_proven(monkeypatch, status):
     from test_cloudsign_c18 import cloud_site
     from autoptcheckin.core.runner import SignRunner
     from autoptcheckin.core import cloudsign
-    store = {'cookies.table': {'audiences': {'cookie': 'session=old', 'source': 'fixture'}}}
+    store = {'cookies.table': {'mua_xloli': {'cookie': 'session=old', 'source': 'fixture'}}}
     runner = SignRunner()
     runner.get_data, runner.save_data = store.get, store.__setitem__
     monkeypatch.setattr(native, 'cookiecloud_candidate', lambda url: SimpleNamespace(
@@ -133,9 +133,9 @@ def test_cloud_candidate_is_persisted_only_if_proven(monkeypatch, status):
             return cloudsign.CloudResult('auth_failed', 'pre-submit only')
         return cloudsign.CloudResult(status, 'fixture')
     monkeypatch.setattr(cloudsign, 'sign', sign)
-    native.run_native(runner, cloud_site(), {}, config={'site_cloudsign': ['audiences'], 'browserless_token': 'fixture'})
+    native.run_native(runner, cloud_site(), {}, config={'site_cloudsign': ['mua_xloli'], 'browserless_token': 'fixture'})
     assert calls == ['session=old', 'session=new']
-    entry = store['cookies.table']['audiences']
+    entry = store['cookies.table']['mua_xloli']
     assert entry['cookie'] == ('session=new' if status in ('success', 'already') else 'session=old')
     if status in ('success', 'already'):
         assert entry['source'] == 'cookiecloud'
@@ -149,6 +149,6 @@ def test_cloud_post_submit_login_page_never_rotates_or_reposts(monkeypatch):
         return ({'after': {'html': '未签到'}, 'solve': {'token': 'fixture'}} if len(calls) == 1 else
                 {'after': {'html': '<form action="login.php"><input name="username"><input type="password"></form>'}})
     monkeypatch.setattr(cloudsign, '_bql_request', request)
-    result = cloudsign.sign('audiences', 'https://cloud.invalid', 'session=fixture', {'browserless_token': 'fixture'})
+    result = cloudsign.sign('mua_xloli', 'https://cloud.invalid', 'session=fixture', {'browserless_token': 'fixture'})
     assert result.status == 'protocol_pending'
     assert len(calls) == 2

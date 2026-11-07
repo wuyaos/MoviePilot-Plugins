@@ -27,7 +27,8 @@ def test_all_native_sites_dispatch_without_legacy_bridge(monkeypatch, action, re
     for row in rows:
         run.reset_mock()
         result = obj._execute_site(row['id'], action=action, read_only=read_only)
-        if (action == 'sign' and (row['id'] in {'darkland', 'digitalcore'} or not row['signin_capable'])) :
+        if ((action == 'sign' and (row['id'] in {'darkland', 'digitalcore'} or not row['signin_capable']))
+                or (action == 'login' and not row['login_capable'])):
             assert result['status'] == 'skipped'
             run.assert_not_called()
         else:

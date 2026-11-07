@@ -24,9 +24,9 @@ def test_generic_declarations_unique_and_credential_free():
     assert all({'id', 'name', 'url', 'protocol'} <= set(row) for row in rows)
     base = {'id', 'name', 'url', 'attendance_path', 'protocol'}
     base_rows = sum(set(row) == base for row in rows)
-    assert base_rows == 45  # dragonhd signin_capable:false 进 extras；hxpt 已移出 generic
+    assert base_rows == 44  # Moment 转显式关闭，hxpt 已移出 generic
     extras = [row for row in rows if set(row) != base]
-    assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'protocol', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'login_page_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path', 'browser_login', 'slow', 'slow_timeout', 'headful', 'impersonate', 'reset_hour', 'success_texts'} for row in extras)
+    assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'protocol', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'login_page_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'signin_note', 'login_capable', 'status_map', 'use_default_message', 'cloak_entry_path', 'browser_login', 'slow', 'slow_timeout', 'headful', 'impersonate', 'reset_hour', 'success_texts'} for row in extras)
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'iptorrents'} & {row['id'] for row in rows}  # jpopsuki/nebulance/filelist 已转正为仅登录声明
 
 

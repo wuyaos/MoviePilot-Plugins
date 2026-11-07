@@ -15,20 +15,12 @@
   },
   {
     "id": "audiences",
-    "protocol": "page_action",
+    "protocol": "login_only",
     "name": "观众",
     "url": "https://audiences.me/",
-    "attendance_path": "/attendance.php",
-    "message": "//h2[contains(concat(\" \",normalize-space(@class),\" \"),\" attendance-card__title \")]",
-    "status_map": {
-      "今天已签到": "signed"
-    },
-    "emulate": true,
-    "slow": true,
-    "cloak_steps": [
-      "human_verify",
-      "sign_button"
-    ]
+    "attendance_path": null,
+    "signin_capable": false,
+    "signin_note": "站点已取消签到功能"
   },
   {
     "id": "bilibili",
@@ -204,10 +196,14 @@
   },
   {
     "id": "momentpt",
-    "protocol": "nexus",
+    "protocol": "login_only",
     "name": "Moment",
     "url": "https://www.momentpt.top/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": null,
+    "signin_capable": false,
+    "login_capable": false,
+    "signin_note": "站点已关闭",
+    "login_notice": "站点已关闭"
   },
   {
     "id": "mua_xloli",

@@ -54,10 +54,10 @@ def test_cloudsign_capability_is_declaration_and_selection_is_explicit():
     assert resolve('hdsky', {})['cloudsign_capable'] is False
     assert resolve('custom-1', {}, cloudsign_capable=False)['cloudsign_capable'] is False
     # 有能力且用户选择才 selected；显式 [] 不得经 falsy 回填。
-    assert resolve('audiences', {'site_cloudsign': []})['cloudsign_selected'] is False
-    assert resolve('audiences', {'site_cloudsign': ['audiences']})['cloudsign_selected'] is True
-    assert resolve('audiences', {'site_cloudsign': ['vclib']})['cloudsign_selected'] is False
-    assert resolve('audiences', {'site_cloudsign': [123, 'audiences']})['cloudsign_selected'] is True
+    assert resolve('mua_xloli', {'site_cloudsign': []})['cloudsign_selected'] is False
+    assert resolve('mua_xloli', {'site_cloudsign': ['mua_xloli']})['cloudsign_selected'] is True
+    assert resolve('mua_xloli', {'site_cloudsign': ['vclib']})['cloudsign_selected'] is False
+    assert resolve('mua_xloli', {'site_cloudsign': [123, 'mua_xloli']})['cloudsign_selected'] is True
 
 
 # ---------- cloak_proxy：显式关闭不被 PROXY_HOST 兜底 ----------
@@ -84,7 +84,7 @@ def test_cloak_proxy_enabled_uses_host_settings(monkeypatch):
 
 # ---------- 迁移：旧名单 / token 播种 / 幂等 ----------
 
-DECLARED_EMULATE = {'ourbits', 'audiences', 'hdkyl', 'mua_xloli', 'pt_0ff', 'vclib', 'piggo', '52pt', 'yema', 'anthelion'}
+DECLARED_EMULATE = {'ourbits', 'mua_xloli', 'hdkyl', 'mua_xloli', 'pt_0ff', 'vclib', 'piggo', '52pt', 'yema', 'anthelion'}
 
 
 def _emulate_map(plugin):
@@ -108,9 +108,9 @@ def test_partial_save_keeps_per_site_overrides_and_never_resurrects_legacy():
 
 def test_site_cloudsign_normalization_filters_unknown_ids():
     plugin, _ = _plugin_with_store()
-    plugin.init_plugin({'site_cloudsign': [123, 'audiences', 'audiences', '52pt', 'custom-1', 'hdsky']})
+    plugin.init_plugin({'site_cloudsign': [123, 'mua_xloli', 'mua_xloli', '52pt', 'custom-1', 'hdsky']})
     # 云签仅有三站实现：数字/未声明/自定义 ID（含 52pt 等仅仿真站）的脏项过滤，去重收口。
-    assert plugin._config['site_cloudsign'] == ['audiences']
+    assert plugin._config['site_cloudsign'] == ['mua_xloli']
 
 
 def test_site_keys_accept_new_fields_and_reject_unknown():
@@ -118,7 +118,7 @@ def test_site_keys_accept_new_fields_and_reject_unknown():
     plugin.update_config = lambda config: data.setdefault('host', {}).update(config)
     import asyncio as aio
     ok = aio.run(plugin.api_save_site_config({'site_emulate': {'hdsky': True}, 'site_proxy': {'hdsky': False},
-                                              'site_cloudsign': ['audiences']}))
+                                              'site_cloudsign': ['mua_xloli']}))
     assert ok['success'] is True
     assert plugin._config['site_emulate'] == {'hdsky': True}
     assert aio.run(plugin.api_save_site_config({'site_browserless': ['hdsky']}))['success'] is False
@@ -142,13 +142,13 @@ def test_new_user_token_with_explicit_empty_cloudsign_not_seeded():
 def test_purge_custom_overrides_on_delete_keeps_builtin_ids():
     plugin, data = _plugin_with_store()
     plugin.init_plugin({'custom_sites_data': [{'id': '7', 'name': 'X', 'url': 'https://x.invalid/'}],
-                        'site_emulate': {'7': True, 'audiences': True},
+                        'site_emulate': {'7': True, 'mua_xloli': True},
                         'site_proxy': {'7': True}})
     plugin.update_config = lambda config: data.setdefault('host', {}).update(config)
     asyncio.run(plugin.api_save_config({'custom_sites_data': []}))
     assert '7' not in plugin._config['site_emulate'] and '7' not in plugin._config['site_proxy']
     # 内置/未知 ID 不清（ID 复用防护只针对已删除的 custom 条目）。
-    assert plugin._config['site_emulate']['audiences'] is True
+    assert plugin._config['site_emulate']['mua_xloli'] is True
 
 
 # ---------- /sites 与 /stats 一致 ----------
@@ -158,7 +158,7 @@ def test_sites_and_stats_share_effective_flags(monkeypatch):
     monkeypatch.setattr(registry_module, 'managed_sites', lambda: [])
     plugin, _ = _plugin_with_store()
     plugin._config = {'enabled_sites': ['hdsky', 'custom-1'], 'site_emulate': {'hdsky': True},
-                      'site_cloudsign': ['audiences'],
+                      'site_cloudsign': ['mua_xloli'],
                       'custom_sites_data': [{'id': 'custom-1', 'name': 'C', 'url': 'https://c.invalid/', 'emulate': True}]}
     sites = {row['id']: row for row in asyncio.run(plugin.api_sites())['data']['sites']}
     stats_rows = {row['id']: row for row in asyncio.run(plugin.api_stats())['data']['sites']}
@@ -168,13 +168,13 @@ def test_sites_and_stats_share_effective_flags(monkeypatch):
     assert sites['hdsky']['emulate'] is True and sites['hdsky']['proxy'] is False
     assert sites['custom-1']['emulate'] is True
     # 云签徽标仅实际选择显示：有能力未选择回退仿真徽标。
-    assert sites['audiences']['cloudsign_capable'] is True
-    assert sites['audiences']['cloudsign_selected'] is True and sites['audiences']['shield'] == 'cloud'
+    assert sites['mua_xloli']['cloudsign_capable'] is True
+    assert sites['mua_xloli']['cloudsign_selected'] is True and sites['mua_xloli']['shield'] == 'cloud'
     plugin._config['site_cloudsign'] = []
     sites = {row['id']: row for row in asyncio.run(plugin.api_sites())['data']['sites']}
-    assert sites['audiences']['cloudsign_selected'] is False and sites['audiences']['shield'] == 'emulate'
+    assert sites['mua_xloli']['cloudsign_selected'] is False and sites['mua_xloli']['shield'] == 'emulate'
     # 注册表声明不被有效值反写污染。
-    fresh = next(row for row in registry_module.get_registry([])['sites'] if row['id'] == 'audiences')
+    fresh = next(row for row in registry_module.get_registry([])['sites'] if row['id'] == 'mua_xloli')
     assert fresh['shield'] == 'cloud' and 'proxy' not in fresh
 
 

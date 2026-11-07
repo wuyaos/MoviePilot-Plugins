@@ -44,7 +44,7 @@ def test_session_endpoint_keeps_path_and_appends_token():
 # ---- 配置矩阵与 Cookie 解析 ----
 
 def test_enabled_and_configured():
-    assert cloudsign.enabled('audiences') and cloudsign.enabled('vclib') and cloudsign.enabled('ourbits')
+    assert cloudsign.enabled('mua_xloli') and cloudsign.enabled('vclib') and cloudsign.enabled('ourbits')
     assert not cloudsign.enabled('52pt') and not cloudsign.enabled('hdsky')
     assert not cloudsign.configured({})
     assert not cloudsign.configured({'browserless_url': cloudsign.DEFAULT_BROWSERLESS_URL, 'browserless_token': ''})
@@ -53,21 +53,21 @@ def test_enabled_and_configured():
 
 
 def test_cookie_objects_parses_header():
-    items = cloudsign.cookie_objects('a=1; b= 2 ; broken', 'https://audiences.me/attendance.php')
-    assert items == [{'name': 'a', 'value': '1', 'domain': 'audiences.me', 'path': '/', 'secure': True},
-                     {'name': 'b', 'value': '2', 'domain': 'audiences.me', 'path': '/', 'secure': True}]
-    assert cloudsign.cookie_objects('', 'https://audiences.me/') == []
+    items = cloudsign.cookie_objects('a=1; b= 2 ; broken', 'https://mua_xloli.me/attendance.php')
+    assert items == [{'name': 'a', 'value': '1', 'domain': 'mua_xloli.me', 'path': '/', 'secure': True},
+                     {'name': 'b', 'value': '2', 'domain': 'mua_xloli.me', 'path': '/', 'secure': True}]
+    assert cloudsign.cookie_objects('', 'https://mua_xloli.me/') == []
     assert cloudsign.cookie_objects('a=1', 'not-a-url') == []
 
 
 # ---- 结果分类 ----
 
 def test_classify_priority_success_before_already():
-    rule = cloudsign.CLOUD_RULES['audiences']
+    rule = cloudsign.CLOUD_RULES['mua_xloli']
     # 成功页常带「已连续签到 N 天」，必须先判成功
     assert cloudsign._classify('签到成功 已连续签到 3 天', rule) == 'success'
     assert cloudsign._classify('今日已签到', rule) == 'already'
-    assert cloudsign._classify('完成人机验证即可领取今日爆米花奖励', rule) == 'pending'
+    assert cloudsign._classify('完成人机验证', cloudsign.CLOUD_RULES['vclib']) == 'pending'
     assert cloudsign._classify('<html>nothing</html>', rule) == 'unknown'
 
 
@@ -105,7 +105,7 @@ def test_sign_auto_two_stage_success(bql):
                    'https://production-sfo.browserless.io/e/s1/chromium/bql'}, 'after': {'html': '待签到'}}}),
         FakeResp({'data': {'verifyPage': {'html': '签到成功'}, 'after': {'html': ''}}}),
     ])
-    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    result = cloudsign.sign('mua_xloli', 'https://mua_xloli.me', 'a=1', {'browserless_token': 'tk'})
     assert (result.status, result.message) == ('success', '云签成功')
     assert len(calls) == 2
     # 第二段必须打到 reconnect 返回的会话地址（同浏览器复用），并带 token
@@ -121,14 +121,14 @@ def test_sign_auto_two_stage_success(bql):
 
 def test_sign_auto_already_in_stage1_skips_stage2(bql):
     calls = bql([FakeResp({'data': {'solve': {'token': ''}, 'after': {'html': '今日已签到'}}})])
-    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    result = cloudsign.sign('mua_xloli', 'https://mua_xloli.me', 'a=1', {'browserless_token': 'tk'})
     assert result.status == 'success' and '已签到' in result.message
     assert len(calls) == 1
 
 
 def test_sign_solve_failure_is_protocol_pending(bql):
     bql([FakeResp({'data': {'solve': {'token': ''}, 'after': {'html': '待签到'}}})])
-    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    result = cloudsign.sign('mua_xloli', 'https://mua_xloli.me', 'a=1', {'browserless_token': 'tk'})
     assert result.status == 'protocol_pending'
     assert 'solve 失败' in result.message
 
@@ -148,14 +148,14 @@ def test_sign_failed_definitive_after_submit(bql):
                            'autoDiag': '{"token": true, "post": 200, "still": false}',
                            'response': 'null', 'after': {'html': ''}}}),
     ])
-    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    result = cloudsign.sign('mua_xloli', 'https://mua_xloli.me', 'a=1', {'browserless_token': 'tk'})
     assert result.status == 'protocol_pending'
     assert '未确认签到' in result.message
 
 
 def test_sign_bql_step_error_does_not_abort_readback(bql):
     # BQL 官方语义：失败步骤不中止 mutation，errors[] 与 data 并存。
-    # evaluate 撞导航（audiences 凌晨竞态）后 verifyPage 回读仍可仲裁出已签。
+    # evaluate 撞导航（mua_xloli 凌晨竞态）后 verifyPage 回读仍可仲裁出已签。
     bql([
         FakeResp({'data': {'solve': {'token': '0.tk'}, 'session': {}, 'after': {'html': '待签到'}}}),
         FakeResp({'data': {'verifyPage': {'html': '<div>今日已签到，明天再来</div>'},
@@ -163,7 +163,7 @@ def test_sign_bql_step_error_does_not_abort_readback(bql):
                  'errors': [{'message': 'Protocol error (Runtime.evaluate): Inspected target navigated or closed',
                              'path': ['submit']}]}),
     ])
-    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    result = cloudsign.sign('mua_xloli', 'https://mua_xloli.me', 'a=1', {'browserless_token': 'tk'})
     assert result.status == 'success' and '已签到' in result.message
 
 
@@ -174,7 +174,7 @@ def test_sign_bql_step_error_appended_to_failed_message(bql):
                            'autoDiag': None, 'response': 'null', 'after': None},
                  'errors': [{'message': 'Inspected target navigated or closed', 'path': ['submit']}]}),
     ])
-    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    result = cloudsign.sign('mua_xloli', 'https://mua_xloli.me', 'a=1', {'browserless_token': 'tk'})
     assert result.status == 'protocol_pending'
     assert 'BQL步骤失败' in result.message and 'submit' in result.message
 
@@ -183,7 +183,7 @@ def test_sign_solve_error_reported_in_pending_message(bql):
     bql([FakeResp({'data': {'solve': None, 'after': {'html': '待签到'}},
                    'errors': [{'message': 'solve timed out', 'path': ['solve']}]}),
          ])
-    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': 'tk'})
+    result = cloudsign.sign('mua_xloli', 'https://mua_xloli.me', 'a=1', {'browserless_token': 'tk'})
     assert result.status == 'protocol_pending'
     assert 'solve 失败' in result.message and 'solve timed out' in result.message
 
@@ -287,7 +287,7 @@ def test_sign_http_errors_map_to_network_error_and_never_leak_token(monkeypatch)
         urls.append(url)
         return FakeResp(status=401)
     monkeypatch.setattr(cloudsign.requests, 'post', post)
-    result = cloudsign.sign('audiences', 'https://audiences.me', 'a=1', {'browserless_token': token})
+    result = cloudsign.sign('mua_xloli', 'https://mua_xloli.me', 'a=1', {'browserless_token': token})
     assert result.status == 'network_error'
     assert '鉴权' in result.message and token not in result.message
     assert any('token=' in u for u in urls)
@@ -312,7 +312,7 @@ def test_inject_script_contains_token_and_diag():
 
 @pytest.fixture
 def storage(monkeypatch):
-    data = {'cookies.table': {'audiences': {'cookie': 'session=stored', 'source': 'refreshed', 'updated': 'old'},
+    data = {'cookies.table': {'mua_xloli': {'cookie': 'session=stored', 'source': 'refreshed', 'updated': 'old'},
                               'hdsky': {'cookie': 'session=stored', 'source': 'refreshed', 'updated': 'old'}}}
     runner = SignRunner()
     runner.get_data = data.get
@@ -329,7 +329,7 @@ def module_namespace(site_id, **overrides):
     return SimpleNamespace(id=site_id, **attrs, **overrides)
 
 
-def cloud_site(site_id='audiences'):
+def cloud_site(site_id='mua_xloli'):
     return module_namespace(site_id, signin=lambda ctx: pytest.fail('本地仿真不应被执行'))
 
 
@@ -342,7 +342,7 @@ def test_native_self_hosted_without_token_executes_cloud(storage, monkeypatch, u
         return CloudResult('success', 'ok')
     monkeypatch.setattr(native.cloudsign, 'sign', sign)
     result = native.run_native(runner, cloud_site(), {'cookie': 'session=stored'},
-                               config={'site_cloudsign': ['audiences'], 'browserless_url': url})
+                               config={'site_cloudsign': ['mua_xloli'], 'browserless_url': url})
     assert result.status == SignStatus.SUCCESS
     assert len(calls) == 1
 
@@ -357,10 +357,10 @@ def test_run_native_routes_to_cloudsign_when_configured(storage, monkeypatch):
         return CloudResult('success', '云签成功')
     monkeypatch.setattr(native.cloudsign, 'sign', fake_sign)
     result = native.run_native(runner, site, {'cookie': 'session=managed'},
-                               config={'browserless_token': 'tk', 'site_cloudsign': ['audiences']})
+                               config={'browserless_token': 'tk', 'site_cloudsign': ['mua_xloli']})
     assert result.status == SignStatus.SUCCESS
     assert result.metadata['transport'] == 'cloud'
-    assert seen['id'] == 'audiences' and seen['cookie'] == 'session=stored' and seen['config']['browserless_token'] == 'tk'
+    assert seen['id'] == 'mua_xloli' and seen['cookie'] == 'session=stored' and seen['config']['browserless_token'] == 'tk'
 
 
 def test_run_native_fails_explicitly_when_selected_without_token(storage, monkeypatch):
@@ -370,7 +370,7 @@ def test_run_native_fails_explicitly_when_selected_without_token(storage, monkey
     monkeypatch.setattr(native.cloudsign, 'sign', lambda *a, **k: pytest.fail('缺 token 不应发起云签'))
     monkeypatch.setattr(native, 'native_cloak_client', lambda site, http, info, config: http)
     result = native.run_native(runner, site, {'cookie': 'session=stored'},
-                               config={'site_cloudsign': ['audiences']})
+                               config={'site_cloudsign': ['mua_xloli']})
     assert result.status == SignStatus.PROTOCOL_PENDING
     assert 'browserless_token' in result.message
     assert result.metadata['transport'] == 'cloud'
@@ -379,8 +379,8 @@ def test_missing_cloud_config_is_pending_without_same_round_retry(storage, monke
     from autoptcheckin import AutoPtCheckin
     from autoptcheckin.core.state_store import PENDING
     plugin = AutoPtCheckin()
-    plugin.init_plugin({'enabled_sites': ['audiences'], 'sign_sites': ['audiences'],
-                        'site_cloudsign': ['audiences'], 'retry_count': 3})
+    plugin.init_plugin({'enabled_sites': ['mua_xloli'], 'sign_sites': ['mua_xloli'],
+                        'site_cloudsign': ['mua_xloli'], 'retry_count': 3})
     runner, _ = storage
     runner.history = plugin._record_result
     calls = []
@@ -390,16 +390,16 @@ def test_missing_cloud_config_is_pending_without_same_round_retry(storage, monke
         result = native.run_native(runner, cloud_site(), {}, config=plugin._config)
         return {'status': result.status}
     monkeypatch.setattr(plugin, '_execute_site', execute)
-    plugin._run_with_retry('audiences', 'sign', 'manual')
+    plugin._run_with_retry('mua_xloli', 'sign', 'manual')
     assert calls == [1]
-    assert plugin._track_store().state_of('audiences', 'sign') == PENDING
+    assert plugin._track_store().state_of('mua_xloli', 'sign') == PENDING
 
 
 
 def test_run_native_keeps_local_emulation_without_token(storage, monkeypatch):
     runner, data = storage
     calls = []
-    site = module_namespace('audiences', signin=lambda ctx: calls.append(1) or SignResult('success'))
+    site = module_namespace('mua_xloli', signin=lambda ctx: calls.append(1) or SignResult('success'))
     monkeypatch.setattr(native.cloudsign, 'sign', lambda *a, **k: pytest.fail('未选云签不应走云签'))
     monkeypatch.setattr(native, 'native_cloak_client', lambda site, http, info, config: http)
     result = native.run_native(runner, site, {'cookie': 'session=stored'}, config={})
@@ -407,7 +407,7 @@ def test_run_native_keeps_local_emulation_without_token(storage, monkeypatch):
 
 
 def test_shield_field_from_cloak_steps():
-    assert shield_of(get_native_module('audiences')) == 'cloud'
+    assert shield_of(get_native_module('mua_xloli')) == 'cloud'
     assert shield_of(get_native_module('mua_xloli')) == 'cloud'
     assert shield_of(get_native_module('vclib')) == 'cloud'
     # 52pt 2026-10-28 转 signin_capable=False 并去掉仿真声明（站点入口下线）。
@@ -419,7 +419,7 @@ def test_shield_field_from_cloak_steps():
 def test_registry_sites_carry_shield():
     from autoptcheckin.core.registry import get_registry
     rows = {row['id']: row for row in get_registry()['sites']}
-    assert rows['audiences']['shield'] == 'cloud'
+    assert rows['mua_xloli']['shield'] == 'cloud'
     assert rows['52pt']['shield'] is None
     assert rows['hdsky']['shield'] is None
 

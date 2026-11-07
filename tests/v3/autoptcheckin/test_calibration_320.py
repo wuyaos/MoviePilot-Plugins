@@ -14,7 +14,6 @@ from test_get_signin_c2 import Http, context, signed, before, actions
 
 
 SIGNED = {
-    'audiences': '<h1 class="attendance-hero__title">每日签到</h1><h2 class="attendance-card__title">今天已签到</h2>',
     'baozi': '<a class="userbar__bonus-hint userbar__bonus-hint--attended" href="attendance.php">[签到已得3000, 补签卡: 1]</a>',
     'discfan': '<a href="attendance.php">[簽到已得300, 補簽卡: 1]</a><h2>簽到成功</h2>',
     'ptfans': '<h2>签到成功</h2><h2>签到勋章</h2><a href="attendance.php">[签到已得435, 补签卡: 1]</a>',

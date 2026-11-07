@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Browserless 云签引擎（BQL）：audiences / mua_xloli / ourbits / vclib 四个 CF 盾站。
+"""Browserless 云签引擎（BQL）：mua_xloli / ourbits / vclib 三个 CF 盾站。
 
 设计约束（与 qingyukb/MoviePilot-Plugins 的差异）：
 - 不引入其 200 行全量注入脚本与通用规则引擎，只保留「solve → reconnect → 注入 → 提交 → verify」
-  主干与四站小规则；签到结果判定用各站关键词在云签会话内完成（CF 挡住本地 HTTP 回读，
+  主干与三站小规则；签到结果判定用各站关键词在云签会话内完成（CF 挡住本地 HTTP 回读，
   无法复用 RecordSpec 回读，这一点是有意偏离并在 AGENTS.md 记录）。
 - 失败分类遵守插件既有语义：solve/验证未完成 → protocol_pending（下轮重入队）；
   BQL 请求/鉴权/网络失败 → network_error；仅提交后回读明确未签 → failed。
@@ -28,29 +28,15 @@ DEFAULT_RECONNECT_WAIT_MS = 60000
 DEFAULT_SOLVE_TIMEOUT_MS = 40000
 
 # 走云签的站点（CF 盾仿真站）；配置了 token 才实际分流
-CLOUD_SITES = ("audiences", "mua_xloli", "ourbits", "vclib")
+CLOUD_SITES = ("mua_xloli", "ourbits", "vclib")
 
 # 各站小规则：路径 / 提交方式 / 等待预算 / 判定关键词。
 # submit=auto 两段式（solve 拿 token → reconnect 留会话 → 第二段注入+兜底 POST+verify）；
 # submit=click 单段式（solve 后原生点击提交按钮，mua_xloli 沿用 qingyukb 实测选择器）。
 CLOUD_RULES: dict[str, dict[str, Any]] = {
-    "audiences": {
-        "path": "/attendance.php",
-        "submit": "auto",
-        "before_wait": 15000,
-        "solve_timeout": DEFAULT_SOLVE_TIMEOUT_MS,
-        "auto_wait": 30000,
-        "wait": 15000,
-        "verify": "/attendance.php",
-        "verify_wait": 15000,
-        "success": ["签到成功", "簽到成功", "成功签到", "签到完成", "领取成功"],
-        "already": ["今日已签到", "今天已经签到", "您今天已经签到", "已经签到", "已签到",
-                    "今日已领取", "已连续签到", "明日再来", "明天再来"],
-        "pending": ["验证通过后将自动完成签到", "完成人机验证即可领取今日爆米花奖励"],
-    },
     "mua_xloli": {
         # 2026-10-24: 单段 click 在已签页等不到提交表单（qnap 实测 10s 超时误判 network_error），
-        # 与 audiences 同款两段式：第一段回读即可判 already，未签才注入提交。
+        # 使用两段式：第一段回读即可判 already，未签才注入提交。
         "path": "/attendance.php",
         "submit": "auto",
         "before_wait": 15000,
@@ -89,7 +75,7 @@ CLOUD_RULES: dict[str, dict[str, Any]] = {
         "success": ["签到成功", "簽到成功"],
         "already": ["今日已签到", "今天已经签到", "已签到"],
         # 2026-10-26: 原词表 ["验证", "人机"] 单字宽泛匹配——站点公告/导航含「验证」即误判
-        # 「仍待人机验证」（00:06 轮实况）。改为 audiences 同款完整短语，仅真验证引导文案命中。
+        # 「仍待人机验证」（00:06 轮实况）。改为完整短语，仅真验证引导文案命中。
         "pending": ["完成人机验证", "人机验证", "验证通过后"],
     },
 }

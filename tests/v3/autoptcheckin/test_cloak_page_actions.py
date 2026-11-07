@@ -72,12 +72,10 @@ class Page:
     def title(self): return '签到'
     def content(self):
         assert self.clicked == 1
-        if self.sid == 'audiences':
-            return '<h2 class="attendance-card__title">今天已签到</h2>'
         return '<h2>签到已得100</h2>'
 
 
-@pytest.mark.parametrize('sid', ['audiences', 'mua_xloli', 'vclib'])
+@pytest.mark.parametrize('sid', ['mua_xloli', 'vclib'])
 @pytest.mark.parametrize('verify', ['absent', 'token', 'timeout', 'error'])
 def test_human_verify_continues_to_sign_and_stashed_readback(sid, verify, monkeypatch):
     site = get_native_module(sid)
@@ -133,7 +131,7 @@ def test_human_verify_timeout_is_per_site(monkeypatch):
         def close(self): pass
     monkeypatch.setattr(cloak, 'CloakSession', Session)
     http = SimpleNamespace(cookies={})
-    for sid, timeout in [('vclib', 90000), ('mua_xloli', 60000), ('audiences', 60000)]:
+    for sid, timeout in [('vclib', 90000), ('mua_xloli', 60000)]:
         site = get_native_module(sid)
         client = cloak.CloakHttpClient(http, {'url': 'https://fixture.invalid/'}, site)
         try:
