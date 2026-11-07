@@ -301,6 +301,17 @@ class HxPTJsonChatTests(unittest.TestCase):
         self.assertFalse(result.success)
         site.post.assert_not_called()
 
+    def test_maintenance_snapshot_explains_reason(self):
+        response = Resp("<html><body>站点维护中<br>暂停对外服务</body></html>")
+        response.url = "https://www.hxpt.org/maintenance"
+        self.assertEqual(HxPT._snapshot_error(response), "站点维护中，未发送")
+
+    def test_auth_snapshot_explains_reason(self):
+        self.assertEqual(
+            HxPT._snapshot_error(Resp({"code": 401, "message": "未登录"})),
+            "喊话前快照认证失败：未登录，未发送",
+        )
+
     def test_json_error_envelope_is_not_snapshot(self):
         self.assertIsNone(HxPT._chat_rows(Resp({"code": 403, "data": []})))
         self.assertIsNone(HxPT._chat_rows(Resp({"code": 0, "data": {}})))

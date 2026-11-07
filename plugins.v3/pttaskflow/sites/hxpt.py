@@ -15,8 +15,8 @@ from ..core.task import Chat, Claim
 
 class HxPT(Site):
     site_name = "好学"
-    domain = "haoxue.net"
-    domain_aliases = ("hxpt.org",)
+    domain = "hxpt.org"
+    domain_aliases = ("haoxue.net",)
     shoutbox = ShoutboxProfile(
         path="/api/v1/shoutbox",
         retry_on_unconfirmed=False,
@@ -92,6 +92,31 @@ class HxPT(Site):
         return response
 
     @staticmethod
+    def _snapshot_error(response):
+        """把快照不可读细分为维护、认证、HTTP 或响应格式问题。"""
+        if response is None:
+            return "喊话前快照请求失败，未发送"
+        status = getattr(response, "status_code", 200)
+        if status in (401, 403):
+            return f"喊话前快照认证失败（HTTP {status}），未发送"
+        if not 200 <= status < 300:
+            return f"喊话前快照请求失败（HTTP {status}），未发送"
+        text = (getattr(response, "text", "") or "").lower()
+        url = str(getattr(response, "url", "") or "").lower()
+        if "/maintenance" in url or "站点维护中" in text or "暂停对外服务" in text:
+            return "站点维护中，未发送"
+        try:
+            payload = response.json()
+        except (ValueError, TypeError, AttributeError):
+            return "喊话前快照不是有效 JSON，未发送"
+        if isinstance(payload, dict):
+            message = str(payload.get("message") or payload.get("msg") or "").strip()
+            if payload.get("code") in (401, 403) or any(
+                    term in message for term in ("未登录", "请先登录", "登录已过期", "认证失败")):
+                return f"喊话前快照认证失败：{message or '未登录'}，未发送"
+        return "喊话前快照格式异常，未发送"
+
+    @staticmethod
     def _chat_rows(response):
         if response is None or not 200 <= getattr(response, "status_code", 200) < 300:
             return None
@@ -136,9 +161,10 @@ class HxPT(Site):
         username = (self.get_username() or "").strip()
         if not username:
             return TaskResult.fail("未获取到站点用户名，停止发送以避免重复喊话")
-        before = self._chat_rows(self.read_shoutbox())
+        before_response = self.read_shoutbox()
+        before = self._chat_rows(before_response)
         if before is None:
-            return TaskResult.fail("喊话前快照不可读，未发送")
+            return TaskResult.fail(self._snapshot_error(before_response))
         baseline = {row["_id"] for row in before}
         highwater = max(baseline, default=0)
         started = time.time()
