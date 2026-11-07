@@ -259,5 +259,18 @@
             "3.5.0": "移除速度监控；命名补刀事件开关收敛为 rename_on_download_added（默认开启）；删种/H&R 页补齐手动执行、候选预览、残留巡检、立即核查与清除按钮；各模块发布默认值统一为来源表单默认值",
             "3.4.0": "六合一整合基线：转移做种（含做种校验子页）、命名补刀（事件+cron+来源过滤）、站点标签（二级分类/剧名标签/历史补全）、H&R 助手、自动删种、失败清理、速度监控、上传限速；移除 IYUU 辅种"
         }
+    },
+    "PtTaskFlow": {
+        "name": "PT任务流",
+        "description": "自动执行 PT 站点喊话、申领、勋章和抽奖任务",
+        "labels": "PT,任务流,喊话,抽奖",
+        "version": "1.0.0",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png",
+        "author": "wuyaos",
+        "level": 2,
+        "system_version": ">=3.0.0",
+        "history": {
+            "v1.0.0": "自 V2 v0.4.9 迁移为 V3 专用插件：移除签到任务，界面沿用宿主 Vuetify 渲染，保留喊话、申领、勋章、抽奖、兑换、长驻与织梦 24h 调度"
+        }
     }
 }

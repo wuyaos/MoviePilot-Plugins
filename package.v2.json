@@ -495,6 +495,7 @@
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png",
         "author": "wuyaos",
         "level": 2,
+        "v3": false,
         "history": {
             "v0.4.9": "修复好学 CSRF 与 JSON 聊天关联，签到申领未知结果不重放",
             "v0.4.8": "修复手动补跑重复执行织梦喊话：run_manual 与主 cron 一致排除 zmpt.cc，织梦喊话仅由邮件时间+24h 的独立调度执行，避免24小时窗口内重复祈愿触发上传量扣减。",
