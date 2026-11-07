@@ -225,3 +225,4 @@ API 站优先采用新安全页已签证据，否则采用动作 JSON 的精确�
 - 原65条通用声明中 nexushd/shaobaoyuan/vclib 与专属ID重复，按原 registry 最终专属行为覆盖（NexusHD 保留 v6.nexushd.org）；合并后82条通用声明。native 总数108守恒，专属 .py 从47减至27（含既有同ID声明，不等于唯一站点数）。不要运行只输出基础字段的旧导出脚本覆盖此行为表。
 - darkland/digitalcore/mteam 保留专属，新增仅登录字段不迁移其协议；btschool 明确下沉。hdsky/haitang/tjupt/chdbits/yzyy/u2/hdchina/opencd 及其余未列入下沉的专属模块不动，rousi/sunnypt 集成不动；hdchina URL 本轮不改。
 - 离线回归迁移 C1/C2/C3 三态至 generic 参数化，并保留原协议异常/取消/不重试测试；本轮不发送真实请求、不改 dist。生产消息/表单/CAPTCHA 与 hdchina 域名修正留后续授权，离线通过不提升 verified。
+- 2026-11-02：hxpt 从 generic（protocol:nexus /attendance.php）收敛为独立模块 sites/native/hxpt.py：FluxTorrent API，GET /api/v1/attendance（code=0, data.checked_today）回读、POST /api/v1/attendance/checkin 提交、提交后再次回读确认才 SUCCESS；401→auth_failed，非 JSON/非 200→network_error，回执只补奖励消息。离线回归 tests/v3/autoptcheckin/test_native_hxpt.py（15 例），未真实签到。

@@ -17,14 +17,14 @@ from autoptcheckin.sites.native import generic
 
 def test_generic_declarations_unique_and_credential_free():
     rows = json.loads(generic._DECLARATIONS.read_text(encoding='utf-8'))
-    assert len(rows) == 95  # piggo 新版 SPA 改为独立模块，其余站点数量不变
-    assert len({row["id"] for row in rows}) == 95
-    assert len({row["url"] for row in rows}) == 95
+    assert len(rows) == 94  # piggo/hxpt 收敛为独立模块
+    assert len({row["id"] for row in rows}) == 94
+    assert len({row["url"] for row in rows}) == 94
     assert not {'hares', '52movie'} & {row['id'] for row in rows}
     assert all({'id', 'name', 'url', 'protocol'} <= set(row) for row in rows)
     base = {'id', 'name', 'url', 'attendance_path', 'protocol'}
     base_rows = sum(set(row) == base for row in rows)
-    assert base_rows == 46  # dragonhd 声明 signin_capable:false 进 extras（无签到适配）
+    assert base_rows == 45  # dragonhd signin_capable:false 进 extras；hxpt 已移出 generic
     extras = [row for row in rows if set(row) != base]
     assert all(set(row) <= {'id', 'name', 'url', 'attendance_path', 'protocol', 'action_get', 'browserless', 'captcha', 'cloak_steps', 'emulate', 'form_data', 'form_path', 'login_notice', 'login_page_notice', 'message', 'protocol_pending', 'record_spec', 'referer', 'safe_read_path', 'signed_marker', 'signin_capable', 'status_map', 'use_default_message', 'cloak_entry_path', 'browser_login', 'slow', 'slow_timeout', 'headful', 'impersonate', 'reset_hour', 'success_texts'} for row in extras)
     assert not {'pterclub', 'pterclub_g', 'mteam', 'darkland', 'digitalcore', 'iptorrents'} & {row['id'] for row in rows}  # jpopsuki/nebulance/filelist 已转正为仅登录声明
@@ -34,7 +34,7 @@ def test_generic_dynamic_registry_and_default_message_chain():
     rows = registry.discover_sites()['sites']
     native = [row for row in rows if row['native']]
     # Baseline includes GTK and LP-Bits in addition to the original 46 declarations.
-    assert len(list(generic._DECLARATIONS.parent.glob("*.py"))) - 2 == 32  # +piggo 新版 SPA
+    assert len(list(generic._DECLARATIONS.parent.glob("*.py"))) - 2 == 33  # +piggo/hxpt 独立模块
     assert len(native) == 127  # Native package discovery includes all declarations.
     assert len({row['id'] for row in rows}) == len(rows)
     for cls in generic.build_generic_sites():
