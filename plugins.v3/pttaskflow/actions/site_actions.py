@@ -20,10 +20,11 @@ class ZhuqueSkillAction:
             return TaskResult.business(str(body.get("message") or "朱雀技能未释放"))
         data = body.get("data") if isinstance(body.get("data"), dict) else {}
         bonus = data.get("bonus")
+        description = f"获得{bonus}魔力值" if bonus is not None else "朱雀技能奖励"
         return TaskResult.ok(
-            f"技能释放成功{f'，获得{bonus}灵石' if bonus is not None else ''}",
-            rewards=[{"type": "bonus", "description": "朱雀技能奖励", "amount": bonus, "unit": "灵石"}]
-            if isinstance(bonus, (int, float)) else [],
+            f"技能释放成功，{description}" if bonus is not None else "技能释放成功",
+            rewards=[{"type": "魔力值", "description": description, "amount": bonus, "unit": "魔力值"}]
+            if bonus is not None else [],
         )
 
 

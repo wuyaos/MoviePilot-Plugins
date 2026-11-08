@@ -30,7 +30,7 @@ class PtTaskFlow(_PluginBase):
     plugin_name = "PT任务流"
     plugin_desc = "自动执行 PT 站点喊话、申领、勋章和抽奖任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png"
-    plugin_version = "1.0.6"
+    plugin_version = "1.0.7"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pttaskflow_"

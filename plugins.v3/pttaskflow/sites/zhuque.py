@@ -17,12 +17,11 @@ class ZhuqueLevelUpTask(ActionTask):
     def controls(self, site):
         controls = super().controls(site)
         controls.append(Control(
-            ControlKind.SELECT_ONE,
+            ControlKind.TEXT,
             self.key(site) + "_target",
             "朱雀目标等级",
             hint="升级会消耗灵石，请确认余额和目标等级",
-            options=[{"id": str(level), "label": f"等级 {level}"} for level in range(1, 80)],
-            placeholder="默认等级 79",
+            placeholder="默认 79",
         ))
         return controls
 

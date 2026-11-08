@@ -39,6 +39,12 @@ def _control_component(control):
             "model": control.key, "label": control.label, "hint": control.hint,
             "hide-details": "auto", "density": "compact",
         }}
+    elif control.kind == ControlKind.TEXT:
+        body = {"component": "VTextField", "props": {
+            "model": control.key, "label": control.label, "hint": control.hint,
+            "placeholder": control.placeholder, "type": "number",
+            "hide-details": "auto", "density": "compact",
+        }}
     else:
         props = {
             "model": control.key, "label": control.label, "hint": control.hint,
@@ -153,7 +159,7 @@ def build_form(plugin):
         for task in site.tasks:
             for control in task.controls(site):
                 default = [] if control.kind == ControlKind.SELECT_MANY else (
-                    "" if control.kind == ControlKind.SELECT_ONE else False
+                    "" if control.kind in (ControlKind.SELECT_ONE, ControlKind.TEXT) else False
                 )
                 model.setdefault(control.key, default)
     return form, model

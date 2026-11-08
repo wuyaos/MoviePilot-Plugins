@@ -17,6 +17,7 @@ class ControlKind(str, Enum):
 
     SWITCH = "switch"
     SELECT_ONE = "select_one"
+    TEXT = "text"
     SELECT_MANY = "select_many"
 
 
