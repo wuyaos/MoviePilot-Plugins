@@ -44,6 +44,7 @@ class JyingCheckin(_PluginBase):
     auth_level = 1
 
     def __init__(self):
+        super().__init__()  # 绑定宿主端口：plugindata/_plugininstance/systemmessage 等
         self._config: dict = {}
         self._stopped = False
         self._services: list[dict] = []
@@ -63,8 +64,8 @@ class JyingCheckin(_PluginBase):
     def _data_set(self, key: str, value: Any) -> None:
         try:
             self.save_data(key, value)
-        except Exception:
-            pass
+        except Exception as exc:  # 离线无宿主时退化；宿主异常留痕便于诊断
+            logger.debug("save_data 失败（离线或宿主端口异常）：%s", exc.__class__.__name__)
 
     # ---- 生命周期 ---------------------------------------------------------
 
@@ -76,9 +77,11 @@ class JyingCheckin(_PluginBase):
         enabled = bool(self._config.get("enabled"))
         if enabled and self._config.get("onlyonce"):
             from apscheduler.triggers.date import DateTrigger
+            from datetime import datetime, timedelta
 
             self._services = [{"id": "JyingCheckinRunOnce", "name": "聚影签到单次运行",
-                               "trigger": DateTrigger(), "func": self.run_once, "kwargs": {}}]
+                               "trigger": DateTrigger(run_date=datetime.now() + timedelta(seconds=5)),
+                               "func": self.run_once, "kwargs": {}}]
         elif enabled and self._config.get("cron"):
             try:
                 from apscheduler.triggers.cron import CronTrigger
@@ -230,6 +233,7 @@ class JyingCheckin(_PluginBase):
         if not self._round_lock.acquire(blocking=False):
             return {"status": "busy", "message": "上一轮仍在执行"}
         try:
+            self._consume_onlyonce()  # onlyonce 用后即关：开跑就回写，防止重复触发
             result = self._execute(trigger)
         except Exception as exc:  # 编排兜底：未预期异常按 pending 处理
             logger.error("聚影签到执行异常：%s", exc, exc_info=True)
@@ -237,6 +241,18 @@ class JyingCheckin(_PluginBase):
         finally:
             self._round_lock.release()
         return self._finalize(result, trigger)
+
+    def _consume_onlyonce(self) -> None:
+        """立即运行一次语义：开跑即把 onlyonce 回写为 false（宿主保存后不会自动复位）。"""
+        if not self._config.get("onlyonce"):
+            return
+        cfg = deepcopy(self._config)
+        cfg["onlyonce"] = False
+        try:
+            self.update_config(cfg)
+        except Exception:  # 离线测试无宿主 API 时静默跳过
+            logger.debug("onlyonce 回写跳过（无宿主 update_config）", exc_info=True)
+        self._config = cfg
 
     def _execute(self, trigger: str) -> dict:
         cfg = self._config

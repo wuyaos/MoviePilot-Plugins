@@ -203,3 +203,39 @@ def test_retry_budget_exhausted_pending_terminal(factory, monkeypatch):
     result = plugin.run_once(trigger="manual")
     assert result["status"] == "pending"  # 额度 0 → 直接终态落盘
     assert plugin._store.get_latest()["status"] == "pending"
+
+
+def test_onlyonce_consumed_on_run(factory):
+    """onlyonce 开跑即回写 false（update_config 被调用）。"""
+    calls = []
+
+    class _WithUpdate:
+        def update_config(self, cfg):
+            calls.append(dict(cfg))
+            return True
+
+    client, _ = make_fake_client(stats=ok_stats(checked=True))
+    plugin = factory(config={"username": "u", "password": "p", "onlyonce": True}, client=client)
+    plugin.update_config = _WithUpdate().update_config
+    plugin.run_once(trigger="manual")
+    assert calls and calls[-1]["onlyonce"] is False
+    assert plugin._config["onlyonce"] is False
+
+
+def test_onlyonce_kept_when_absent(factory):
+    """未开 onlyonce 时不触发回写。"""
+    calls = []
+    client, _ = make_fake_client(stats=ok_stats(checked=True))
+    plugin = factory(config={"username": "u", "password": "p"}, client=client)
+    plugin.update_config = lambda cfg: calls.append(cfg) or True
+    plugin.run_once(trigger="manual")
+    assert calls == []
+
+
+def test_init_plugin_onlyonce_smoke(factory):
+    """init_plugin onlyonce 分支冒烟：能注册单次任务（捕获 datetime 未导入类错误）。"""
+    plugin = factory(config={"enabled": True, "onlyonce": True, "username": "u", "password": "p"})
+    plugin.init_plugin({"enabled": True, "onlyonce": True, "username": "u", "password": "p"})
+    assert plugin._services and plugin._services[0]["id"] == "JyingCheckinRunOnce"
+    trigger = plugin._services[0]["trigger"]
+    assert trigger.run_date is not None  # DateTrigger 带未来时间缓冲

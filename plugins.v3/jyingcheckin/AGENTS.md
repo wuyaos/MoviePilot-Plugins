@@ -10,18 +10,29 @@ jying.top 聚影单站每日签到保活，**仅账密模式（B 路径）**—�
 - `config_defaults.json`：flat 配置模型（enabled/username/password/lucky_mode/notify/cron/onlyonce/retry_count/retry_interval）。
 - `config_form.py`：声明式 Vuetify JSON 表单拼装（`build_form()`），`get_form()` 代理；`get_page()` 用同风格 JSON 渲染 KPI 与记录表。**不使用 vue 联邦**（`get_render_mode()` 覆写已删，回落基类 `vuetify` 声明式渲染）。
 
+## 运行时关键约束
+
+- **必须 `super().__init__()`**：宿主端口（plugindata/_plugininstance/systemmessage）在基类构造器绑定，
+  缺失 = save_data/update_config 全部 AttributeError 且被适配层吞掉，签到「成功」但零落盘。
+  详见 `.agents/notes/2026-11-08-jyingcheckin-super-init-persistence.md`。
+- **onlyonce 用后即关**：宿主保存配置不复位 onlyonce；`run_once` 开跑即 `_consume_onlyonce()` 回写 false。
+- **单次任务 +5s 缓冲**：`DateTrigger(run_date=now+5s)`，date=now 曾出现到点未跑。
+- **手动触发验证**：`GET /api/v1/system/runscheduler?jobid=JyingCheckin_JyingCheckinScheduled`。
+- 真实签到协议已校准（2026-11-08 实测）：login/stats/do 无额外前置调用与守卫头；
+  已签时 do/stats 返回文案「今日已签到，明天再来吧~」→ status=already。
+
 ## 站点协议要点（浏览器取证）
 
 - 登录 `POST /api/app/login/`（username/password）→ Bearer token，**7 天绝对过期无 refresh**；多端登录互不踢线（已实测），token 失效即整段重登。
 - 统计 `GET /api/app/checkin/stats/` → `{status:"success", checked_today, can_checkin, my_total_days, reward_points,...}`（**status 风格 envelope**，不是 code 风格）。
-- 每日一签；提交类请求可能有 `await e()` 前置调用与 accountMutation 守卫头（X-Expected-App-User-Id/X-App-User-Token），**待真实运行校准**（修订 2 第 4 条）。
+- 每日一签；幸运签缺 user_id 时降级普通签并在文案注明。
 
 ## 状态机与重试语义
 
 - 五态：`success` / `already` / `auth_failed`（账密错或重登仍失败）/ `pending`（网络类，请求可能已落地）/ `unknown`（无法归类的站点响应）。
 - 单轮最多整段重登 1 次；`token_refreshed` 记录本轮是否发生过续登。
 - pending 重试链：retry_interval 分钟退避、retry_count 次上限；**只有终态落一次历史与通知**，中间态只注册重试调度。
-- 已签（checked_today 或文案含"已签"）不重试；幸运签缺 user_id 时降级普通签并在文案注明。
+- 已签（checked_today 或文案含"已签"）不重试。
 
 ## 安全边界
 
