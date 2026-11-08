@@ -45,6 +45,7 @@ class PluginConfig:
     zm_cooldown: int = 3600
     zm_mail_time: str = ""
     last_zm_execution_time: str = ""
+    zq_skill_next_time: str = ""
     site_ids: list = field(default_factory=list)
 
     @classmethod
@@ -64,6 +65,7 @@ class PluginConfig:
             history_days=max(1, int(raw.get("history_days", 30) or 30)),
             zm_cooldown=max(0, int(raw.get("zm_cooldown", 3600) or 0)),
             zm_mail_time=str(raw.get("zm_mail_time") or ""),
+            zq_skill_next_time=str(raw.get("zq_skill_next_time") or ""),
             last_zm_execution_time=str(raw.get("last_zm_execution_time") or ""),
             site_ids=list(raw.get("site_ids") or []),
         )
@@ -78,5 +80,6 @@ class PluginConfig:
             "history_days": self.history_days, "zm_cooldown": self.zm_cooldown,
             "zm_mail_time": self.zm_mail_time,
             "last_zm_execution_time": self.last_zm_execution_time,
+            "zq_skill_next_time": self.zq_skill_next_time,
             "site_ids": self.site_ids,
         }

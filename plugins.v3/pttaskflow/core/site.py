@@ -122,11 +122,14 @@ class Site:
             return response
         return None
 
-    def get(self, path: str, params=None):
-        return self._request("GET", path, params=params)
+    def request(self, method: str, path: str, **kwargs):
+        return self._request(method, path, **kwargs)
 
-    def post(self, path: str, data=None, json=None):
-        return self._request("POST", path, data=data, json=json)
+    def get(self, path: str, params=None, headers=None):
+        return self._request("GET", path, params=params, headers=headers)
+
+    def post(self, path: str, data=None, json=None, headers=None):
+        return self._request("POST", path, data=data, json=json, headers=headers)
 
     def get_username(self):
         try:

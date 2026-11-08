@@ -30,7 +30,26 @@ class TaskScheduler:
                 "trigger": DateTrigger(run_date=self._next_zm_time()),
                 "func": self.plugin.run_zm, "kwargs": {},
             })
+        if self._has_zhuque_skill():
+            services.append({
+                "id": "pttaskflow_zhuque_skill", "name": "朱雀技能释放",
+                "trigger": DateTrigger(run_date=self._next_zhuque_time()),
+                "func": self.plugin.run_zhuque, "kwargs": {},
+            })
         return services
+
+    def _has_zhuque_skill(self):
+        return any(site.domain == "zhuque.in" for site in self.plugin.runtime_sites())
+
+    def _next_zhuque_time(self):
+        if self.plugin.config.zq_skill_next_time:
+            try:
+                due = datetime.strptime(self.plugin.config.zq_skill_next_time, "%Y-%m-%d %H:%M:%S")
+                if due > datetime.now():
+                    return due
+            except ValueError:
+                logger.warning("[PtTaskFlow] [朱雀] next_time 格式无效，重新获取")
+        return datetime.now() + timedelta(seconds=3)
 
     def _has_zm(self):
         return any(site.domain == "zmpt.cc" for site in self.plugin.runtime_sites())

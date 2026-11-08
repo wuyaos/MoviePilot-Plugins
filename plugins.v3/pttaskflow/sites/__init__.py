@@ -20,6 +20,7 @@ from .ptlgs import PTLGS
 from .ptskit import PTSKit
 from .qingwa import Qingwa
 from .vclib import Vclib
+from .zhuque import Zhuque
 from .zm import ZM
 from .railgunpt import RailgunPT
 from .tangpt import TangPT
@@ -47,6 +48,7 @@ SITE_CLASSES = [
     PTSKit,
     Qingwa,
     Vclib,
+    Zhuque,
     ZM,
     RailgunPT,
     TangPT,

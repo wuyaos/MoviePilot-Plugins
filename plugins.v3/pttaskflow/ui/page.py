@@ -55,23 +55,26 @@ def _status_color(record):
 
 
 def _trend_label(runs):
-    """runs 为 [(date_text, success), ...]，按时间升序取最近 5 次渲染。
+    """runs 为 [(date_text, record_or_success), ...]，按时间升序取最近 5 次渲染。
 
-    存储顺序可能因并发或重试而不稳定，这里按 date_text 字符串排序后再取最近 5 次，
-    保证时间单调递增（左旧右新）；显示 MM-DD HH:MM，跨天也可区分。
+    业务未完成（success=False、retryable=False）显示 🟡，只有可重试的技术失败显示 ❌。
     """
     if not runs:
         return ""
     sorted_runs = sorted(runs, key=lambda item: str(item[0] or ""))
     items = []
-    for date_text, ok in sorted_runs[-5:]:
+    for date_text, result in sorted_runs[-5:]:
+        if isinstance(result, dict):
+            icon = "✅" if result.get("success") else ("❌" if result.get("retryable") else "🟡")
+        else:
+            icon = "✅" if result else "❌"
         text = str(date_text or "")
         if " " in text:
             date_part, time_part = text.split(" ", 1)
             label = f"{date_part[5:]} {time_part[:5]}"
         else:
             label = text
-        items.append(f"{label} {'✅' if ok else '❌'}")
+        items.append(f"{label} {icon}")
     return " · ".join(items)
 
 
@@ -180,7 +183,7 @@ def _merge_history(site_data, history):
             entry = data["tasks"].setdefault(unit_key, {"record": None, "runs": []})
             if entry["record"] is None or entry["record"].get("placeholder"):
                 entry["record"] = record
-            entry["runs"].append((run_date, bool(record.get("success"))))
+            entry["runs"].append((run_date, record))
             if unit_key != base_key and parent["record"].get("placeholder"):
                 data["tasks"].pop(base_key, None)
 

@@ -30,7 +30,7 @@ class PtTaskFlow(_PluginBase):
     plugin_name = "PT任务流"
     plugin_desc = "自动执行 PT 站点喊话、申领、勋章和抽奖任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png"
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.5"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pttaskflow_"
@@ -102,13 +102,19 @@ class PtTaskFlow(_PluginBase):
     @staticmethod
     def _site_dict(site):
         if isinstance(site, dict):
-            return dict(site)
-        return {
-            "id": getattr(site, "id", None), "name": getattr(site, "name", ""),
-            "domain": getattr(site, "domain", ""), "url": getattr(site, "url", ""),
-            "cookie": getattr(site, "cookie", ""), "ua": getattr(site, "ua", ""),
-        }
-
+            result = dict(site)
+        else:
+            result = {
+                "id": getattr(site, "id", None), "name": getattr(site, "name", ""),
+                "domain": getattr(site, "domain", ""), "url": getattr(site, "url", ""),
+                "cookie": getattr(site, "cookie", ""), "ua": getattr(site, "ua", ""),
+            }
+        # 好学的 FluxTorrent API 认证 Cookie 可能由 CookieCloud 更新；
+        # 站点表中的旧 Cookie 失效后，build_site() 才会刷新并重试。
+        host = str(result.get("domain") or result.get("url") or "").lower()
+        host = host.split("//", 1)[-1].split("/", 1)[0].removeprefix("www.")
+        result["cookiecloud"] = host in ("hxpt.org", "haoxue.net")
+        return result
     def all_sites(self):
         try:
             sites = [self._site_dict(site) for site in self.siteoper.list_order_by_pri()
@@ -253,6 +259,24 @@ class PtTaskFlow(_PluginBase):
         self.save_config()
         self._refresh_plugin_schedule()
         return records
+    def run_zhuque(self):
+        """朱雀技能独立 date 调度；执行后按接口返回的 next_time 续排。"""
+        records = self.engine.run_if_idle(
+            scene="朱雀技能", site_filter="zhuque.in", task_filter="skill_release"
+        )
+        next_time = None
+        for site in self.runtime_sites():
+            if site.domain == "zhuque.in":
+                next_time = site.get_skill_next_time()
+                break
+        if next_time:
+            self.config.zq_skill_next_time = datetime.fromtimestamp(next_time).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            self.config.zq_skill_next_time = ""
+        self.save_config()
+        self._refresh_plugin_schedule()
+        return records
+
 
     def _schedule_zm_retry(self, now):
         delay_minutes = max(1, self.config.retry_interval)
