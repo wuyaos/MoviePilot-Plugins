@@ -265,17 +265,31 @@
         "name": "PT任务流",
         "description": "自动执行 PT 站点喊话、申领、勋章和抽奖任务",
         "labels": "PT,任务流,喊话,抽奖",
-        "version": "1.0.5",
+        "version": "1.0.6",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png",
         "author": "wuyaos",
         "level": 2,
         "system_version": ">=3.0.0",
         "history": {
+            "v1.0.6": "朱雀技能释放对齐原插件：由接口判断可释放状态，不再本地提前拦截。",
             "v1.0.5": "修正任务趋势：业务窗口未到显示 🟡，仅技术失败显示 ❌。",
             "v1.0.4": "新增朱雀技能释放与目标等级一键升级任务；技能按站点返回的 next_time 独立续排。",
             "v1.0.2": "修复好学维护返回 HTTP 503 时的喊话前快照提示",
             "v1.0.1": "修复好学维护页与认证失败的喊话快照诊断；同步站点主域名",
             "v1.0.0": "自 V2 v0.4.9 迁移为 V3 专用插件：移除签到任务，界面沿用宿主 Vuetify 渲染，保留喊话、申领、勋章、抽奖、兑换、长驻与织梦 24h 调度"
+        }
+    },
+    "JyingCheckin": {
+        "name": "聚影签到",
+        "description": "聚影 jying.top 每日签到保活：账密自动登录、token 续期，支持普通/幸运签到",
+        "labels": "签到,影视",
+        "version": "1.0.0",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/jyingcheckin.png",
+        "author": "jtcym",
+        "level": 1,
+        "system_version": ">=3.0.0",
+        "history": {
+            "v1.0.0": "初始版本：账密自动登录、token 续期，支持普通/幸运签到"
         }
     }
 }

@@ -8,8 +8,6 @@ class ZhuqueSkillAction:
         payload = site.get_user_info(headers)
         if payload is None:
             return TaskResult.fail(site.request_error or "朱雀角色信息请求失败")
-        if not site.skill_is_due(payload):
-            return TaskResult.business("技能尚未到可释放时间")
         response = site.post("/api/gaming/fireGenshinCharacterMagic",
                              headers=headers, json={"all": 1, "resetModal": True})
         if response is None:
@@ -20,11 +18,6 @@ class ZhuqueSkillAction:
             return TaskResult.fail("朱雀技能接口返回非 JSON")
         if body.get("status") != 200:
             return TaskResult.business(str(body.get("message") or "朱雀技能未释放"))
-        confirmed = site.get_user_info(headers)
-        if confirmed is None:
-            return TaskResult.fail(site.request_error or "朱雀技能结果回读失败")
-        if site.skill_is_due(confirmed):
-            return TaskResult.fail("朱雀技能提交后未进入可确认状态")
         data = body.get("data") if isinstance(body.get("data"), dict) else {}
         bonus = data.get("bonus")
         return TaskResult.ok(
