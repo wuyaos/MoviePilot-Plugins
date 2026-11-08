@@ -1,7 +1,7 @@
 """统一通知出口（阶段四 P4-1）。
 
 只负责统一标题与数量口径文本、安全发送（异常不中断业务）；
-通知开关判断与消息类型留在各模块调用点，不引入队列、模板或调度。
+通知开关留在各模块调用点；消息类型统一为 SiteMessage，不指定解析模式。
 标题格式：`下载中心 · 模块名` 或 `下载中心 · 模块名（后缀）`；
 数量口径：普通轮次「结果：成功 X，跳过 Y，失败 Z」，观察期「预览：N 个候选，未执行」。
 """
@@ -62,15 +62,14 @@ def notify_module_result(
     suffix: str = "",
     mtype=None,
 ) -> bool:
-    """统一发送入口：开关与消息类型由调用点决定；任何异常只告警，不中断业务。"""
+    """统一发送站点消息；保留旧消息类型参数兼容，但不再按调用点分类。"""
     try:
         if plugin is None or not callable(getattr(plugin, "post_message", None)):
             return False
         plugin.post_message(
-            mtype=mtype or MessageType.Manual,
+            mtype=MessageType.SiteMessage,
             title=module_title(module, suffix),
             text=text,
-            parse_mode="plain",
         )
         return True
     except Exception as exc:  # noqa: BLE001 通知失败不影响业务主流程

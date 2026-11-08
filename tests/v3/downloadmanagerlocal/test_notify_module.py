@@ -7,7 +7,7 @@
 1. 标题统一为「下载中心 · 模块名（可选后缀）」；
 2. 数量口径统一：普通「结果：成功 X，跳过 Y，失败 Z」，观察期「预览：N 个候选，未执行」；
 3. notify_module_result 安全发送：post_message 抛异常只告警返回 False，不中断业务；
-4. 消息类型默认 Manual，可由调用点覆盖（保持各模块原路由）。
+4. 所有模块统一使用 SiteMessage；消息正文不指定 parse_mode，由宿主通知渠道处理。
 """
 import importlib.machinery
 import importlib.util
@@ -43,7 +43,7 @@ def notify(monkeypatch):
     module("app.sdk")
     module("app.sdk.logging", logger=Mock())
     module("app.schemas")
-    module("app.schemas.types", MessageType=Mock(Manual="manual", Plugin="plugin"))
+    module("app.schemas.types", MessageType=Mock(Manual="manual", Plugin="plugin", SiteMessage="site"))
     return load("utils/notify.py", PREFIX + ".utils.notify")
 
 
@@ -72,8 +72,8 @@ def test_notify_module_result_sends_with_defaults(notify):
     assert notify.notify_module_result(plugin, "rename", text="结果：成功 1，跳过 0，失败 0") is True
     kwargs = plugin.post_message.call_args.kwargs
     assert kwargs["title"] == "下载中心 · 种子重命名"
-    assert kwargs["parse_mode"] == "plain"
-    assert kwargs["mtype"] == "manual"
+    assert kwargs["mtype"] == "site"
+    assert "parse_mode" not in kwargs
 
 
 def test_notify_module_result_swallows_post_message_error(notify):
@@ -86,3 +86,13 @@ def test_notify_module_result_swallows_post_message_error(notify):
 def test_notify_module_result_handles_missing_plugin(notify):
     assert notify.notify_module_result(None, "hr", text="x") is False
     assert notify.notify_module_result(Mock(post_message=None), "hr", text="x") is False
+
+
+@pytest.mark.parametrize("module", ["transfer", "rename", "tag", "hr", "autoremove", "failclean", "upload_limit"])
+@pytest.mark.parametrize("legacy_type", [None, "plugin", "manual", "site"])
+def test_all_modules_ignore_legacy_classification(notify, module, legacy_type):
+    plugin = Mock()
+    assert notify.notify_module_result(plugin, module, text="unchanged", mtype=legacy_type) is True
+    assert plugin.post_message.call_args.kwargs == {
+        "mtype": "site", "title": notify.module_title(module), "text": "unchanged",
+    }

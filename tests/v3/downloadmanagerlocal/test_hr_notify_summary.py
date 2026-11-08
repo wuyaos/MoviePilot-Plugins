@@ -136,7 +136,6 @@ def test_send_success_clears_queue(hr_notify):
     assert len(plugin.messages) == 1
     message = plugin.messages[0]
     assert message["title"] == "下载中心 · H&R 管理"
-    assert message["parse_mode"] == "plain"
     from app.schemas.types import MessageType
 
     assert message["mtype"] is MessageType.SiteMessage
