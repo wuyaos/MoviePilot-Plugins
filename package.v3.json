@@ -265,12 +265,13 @@
         "name": "PT任务流",
         "description": "自动执行 PT 站点喊话、申领、勋章和抽奖任务",
         "labels": "PT,任务流,喊话,抽奖",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png",
         "author": "wuyaos",
         "level": 2,
         "system_version": ">=3.0.0",
         "history": {
+            "v1.0.2": "修复好学维护返回 HTTP 503 时的喊话前快照提示",
             "v1.0.1": "修复好学维护页与认证失败的喊话快照诊断；同步站点主域名",
             "v1.0.0": "自 V2 v0.4.9 迁移为 V3 专用插件：移除签到任务，界面沿用宿主 Vuetify 渲染，保留喊话、申领、勋章、抽奖、兑换、长驻与织梦 24h 调度"
         }

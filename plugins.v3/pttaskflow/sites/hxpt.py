@@ -92,9 +92,13 @@ class HxPT(Site):
         return response
 
     @staticmethod
-    def _snapshot_error(response):
+    def _snapshot_error(response, request_error=""):
         """把快照不可读细分为维护、认证、HTTP 或响应格式问题。"""
         if response is None:
+            if request_error == "HTTP 503":
+                return "站点维护中（HTTP 503），未发送"
+            if request_error:
+                return f"喊话前快照请求失败（{request_error}），未发送"
             return "喊话前快照请求失败，未发送"
         status = getattr(response, "status_code", 200)
         if status in (401, 403):
@@ -164,7 +168,7 @@ class HxPT(Site):
         before_response = self.read_shoutbox()
         before = self._chat_rows(before_response)
         if before is None:
-            return TaskResult.fail(self._snapshot_error(before_response))
+            return TaskResult.fail(self._snapshot_error(before_response, self.request_error))
         baseline = {row["_id"] for row in before}
         highwater = max(baseline, default=0)
         started = time.time()

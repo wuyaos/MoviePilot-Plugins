@@ -306,6 +306,12 @@ class HxPTJsonChatTests(unittest.TestCase):
         response.url = "https://www.hxpt.org/maintenance"
         self.assertEqual(HxPT._snapshot_error(response), "站点维护中，未发送")
 
+    def test_http_503_snapshot_explains_maintenance(self):
+        self.assertEqual(
+            HxPT._snapshot_error(None, "HTTP 503"),
+            "站点维护中（HTTP 503），未发送",
+        )
+
     def test_auth_snapshot_explains_reason(self):
         self.assertEqual(
             HxPT._snapshot_error(Resp({"code": 401, "message": "未登录"})),
