@@ -288,7 +288,7 @@
         "labels": "签到,影视",
         "version": "1.0.0",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/jyingcheckin.png",
-        "author": "jtcym",
+        "author": "wuyaos",
         "level": 1,
         "system_version": ">=3.0.0",
         "history": {
