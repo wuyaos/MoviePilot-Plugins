@@ -18,6 +18,9 @@ jying.top 聚影单站每日签到保活，**仅账密模式（B 路径）**—�
 - **onlyonce 用后即关**：宿主保存配置不复位 onlyonce；`run_once` 开跑即 `_consume_onlyonce()` 回写 false。
 - **单次任务 +5s 缓冲**：`DateTrigger(run_date=now+5s)`，date=now 曾出现到点未跑。
 - **手动触发验证**：`GET /api/v1/system/runscheduler?jobid=JyingCheckin_JyingCheckinScheduled`。
+- **类属性 `plugin_icon` 必须是完整 http URL**：前端对裸文件名拼 `./plugin_icon/<file>`，
+  V3 宿主无此路由 → 安装后无图标（市场卡片走 package.v3.json 的 URL 所以安装前有图）。
+  `plugin_author` 类属性与 package.v3.json 需同步维护（安装后列表读类属性）。
 - 真实签到协议已校准（2026-11-08 实测）：login/stats/do 无额外前置调用与守卫头；
   已签时 do/stats 返回文案「今日已签到，明天再来吧~」→ status=already。
 

@@ -37,8 +37,8 @@ class JyingCheckin(_PluginBase):
     plugin_name = "聚影签到"
     plugin_desc = "聚影 jying.top 每日签到保活：账密自动登录、token 续期，支持普通/幸运签到"
     plugin_version = "1.0.0"
-    plugin_author = "jtcym"
-    plugin_icon = "jyingcheckin.png"
+    plugin_author = "wuyaos"
+    plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/jyingcheckin.png"
     plugin_config_prefix = "jyingcheckin_"
     plugin_order = 26
     auth_level = 1
