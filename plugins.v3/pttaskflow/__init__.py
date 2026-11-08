@@ -30,7 +30,7 @@ class PtTaskFlow(_PluginBase):
     plugin_name = "PT任务流"
     plugin_desc = "自动执行 PT 站点喊话、申领、勋章和抽奖任务"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/pttaskflow.png"
-    plugin_version = "1.0.7"
+    plugin_version = "1.0.8"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos"
     plugin_config_prefix = "pttaskflow_"
@@ -185,8 +185,11 @@ class PtTaskFlow(_PluginBase):
         return sites
 
     def run_scheduled(self):
-        # 织梦喊话由邮件时间 +24h 的独立 date 服务负责，主 cron 不重复执行。
-        records = self.engine.run(scene="主定时", exclude_domains={"zmpt.cc"})
+        # 织梦和朱雀技能均由独立 date 服务负责，主 cron 不重复执行。
+        records = self.engine.run(
+            scene="主定时", exclude_domains={"zmpt.cc"},
+            exclude_tasks={("zhuque.in", "skill_release")},
+        )
         send_summary(self, records)
         self._retry_failures(records)
         return records

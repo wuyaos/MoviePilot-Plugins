@@ -21,11 +21,12 @@ class TaskEngine:
         self._lock = threading.Lock()
 
     def collect_units(self, debug=False, site_filter="", task_filter="", execution_keys=None,
-                      exclude_domains=None):
+                      exclude_domains=None, exclude_tasks=None):
         """按站点和任务配置收集执行单元。debug=True 时绕过任务启用开关。"""
         units = []
         execution_keys = set(execution_keys or [])
         exclude_domains = set(exclude_domains or [])
+        exclude_tasks = set(exclude_tasks or [])
         config = self.plugin.raw_config
         for site in self.plugin.runtime_sites(selected_only=not debug):
             if site.domain in exclude_domains:
@@ -33,6 +34,8 @@ class TaskEngine:
             if site_filter and str(site.site_id) != str(site_filter) and site.domain != site_filter:
                 continue
             for task in site.tasks:
+                if (site.domain, task.name) in exclude_tasks:
+                    continue
                 if task_filter and task_filter.lower() not in (
                         f"{task.name} {task.label(site)} {task.task_type}".lower()):
                     continue
@@ -54,31 +57,31 @@ class TaskEngine:
         return units
 
     def run(self, scene="主定时", debug=False, site_filter="", task_filter="", execution_keys=None,
-            exclude_domains=None):
+            exclude_domains=None, exclude_tasks=None):
         records = self.run_if_idle(
-            scene, debug, site_filter, task_filter, execution_keys, exclude_domains)
+            scene, debug, site_filter, task_filter, execution_keys, exclude_domains, exclude_tasks)
         return records if records is not None else []
 
     def run_if_idle(self, scene="主定时", debug=False, site_filter="", task_filter="",
-                    execution_keys=None, exclude_domains=None):
+                    execution_keys=None, exclude_domains=None, exclude_tasks=None):
         """执行任务；已有批次持锁时返回 ``None``，与正常空结果区分。"""
         if not self._lock.acquire(blocking=False):
             TaskLogger.run_end(scene, 0, 0, 0, 0)
             return None
         try:
             return self._run_locked(scene, debug, site_filter, task_filter, execution_keys,
-                                    exclude_domains)
+                                    exclude_domains, exclude_tasks)
         finally:
             self._lock.release()
 
     def _run_locked(self, scene, debug, site_filter, task_filter, execution_keys,
-                    exclude_domains):
+                    exclude_domains, exclude_tasks):
         # 进入持锁执行后清除历史 stop 信号；未持锁的 run 拿不到锁会直接返回，
         # 因此不会在新一轮运行开始前误清信号。
         self.plugin._stop_event.clear()
         units = self.collect_units(debug=debug, site_filter=site_filter,
                                    task_filter=task_filter, execution_keys=execution_keys,
-                                   exclude_domains=exclude_domains)
+                                   exclude_domains=exclude_domains, exclude_tasks=exclude_tasks)
         terminal_keys = set() if debug else self.plugin.history.terminal_keys_today()
         TaskLogger.run_start(scene, len(units))
         records = []
