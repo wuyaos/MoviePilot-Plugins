@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "username": "",
+  "password": "",
+  "lucky_mode": false,
+  "notify": true,
+  "cron": "30 8 * * *",
+  "onlyonce": false,
+  "retry_count": 3,
+  "retry_interval": 5
+}
