@@ -296,5 +296,18 @@
         "history": {
             "v1.0.0": "初始版本：账密自动登录、token 续期，支持普通/幸运签到"
         }
+    },
+    "TangRedPacketClaim": {
+        "name": "不可躺自动领红包",
+        "description": "自动领取不可躺红包，支持限流保护和历史统计，内置 antibot 人机验证（PoW 本地求解 + Cloudflare Turnstile 浏览器仿真）",
+        "labels": "不可躺,红包,自动领取",
+        "version": "2.0.0",
+        "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacketclaim.png",
+        "author": "wuyaos",
+        "level": 2,
+        "system_version": ">=3.0.0",
+        "history": {
+            "v2.0.0": "V3 迁移：app.sdk 宿主接口、相对 API 路径与 success/message/data envelope、plugin_id；新增 antibot 人机验证适配：challenge→verify 流程，PoW 模式本地 SHA-256 求解，Turnstile 模式经宿主 CloakBrowser 渲染取 token（headless 失败自动降级 headful），token/device 持久化复用，claim 428 自动重验证一次"
+        }
     }
 }
