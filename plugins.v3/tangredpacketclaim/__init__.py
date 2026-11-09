@@ -101,7 +101,7 @@ class TangRedPacketClaim(_PluginBase):
     _run_once = False
     _dry_run = False
     _lock = threading.Lock()
-    _antibot: Optional["AntibotClient"] = None
+    __antibot: Optional["AntibotClient"] = None
 
     def init_plugin(self, config: dict = None):
         config = config or {}
