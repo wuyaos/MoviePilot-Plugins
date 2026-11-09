@@ -54,4 +54,16 @@ class SchedulerTests(unittest.TestCase):
   run=scheduler.TaskScheduler(Plugin(value.strftime('%Y-%m-%d %H:%M:%S')))._next_zm_time()
   self.assertAlmostEqual((run-value).total_seconds(),24*3600,delta=1)
 
+ def test_zhuque_future_time_has_original_sixty_second_offset(self):
+  plugin=Plugin()
+  value=datetime.now().replace(microsecond=0)+timedelta(hours=1)
+  plugin.config.zq_skill_next_time=value.strftime("%Y-%m-%d %H:%M:%S")
+  schedule=scheduler.TaskScheduler(plugin)
+  self.assertEqual(schedule._next_zhuque_time(),value+timedelta(seconds=60))
+  self.assertEqual(schedule._next_zhuque_time(),value+timedelta(seconds=60))
+ def test_zhuque_just_expired_time_still_uses_offset(self):
+  plugin=Plugin()
+  value=datetime.now().replace(microsecond=0)-timedelta(seconds=10)
+  plugin.config.zq_skill_next_time=value.strftime("%Y-%m-%d %H:%M:%S")
+  self.assertEqual(scheduler.TaskScheduler(plugin)._next_zhuque_time(),value+timedelta(seconds=60))
 if __name__=='__main__':unittest.main()

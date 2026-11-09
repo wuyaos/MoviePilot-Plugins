@@ -29,6 +29,8 @@ class Task:
 
     name: str = ""
     task_type: str = TaskType.GENERIC
+    # 冷却型任务可关闭每日去重；仍保留成功历史和引擎互斥。
+    daily_dedup: bool = True
 
     def key(self, site) -> str:
         """本任务在指定站点的顶层配置 key。"""
@@ -196,13 +198,14 @@ class ActionTask(Task):
     由站点显式传入且发布后保持稳定；Action 仍需返回结构化 ``TaskResult``。
     """
 
-    def __init__(self, name: str, action, label: str, task_type=TaskType.GENERIC):
+    def __init__(self, name: str, action, label: str, task_type=TaskType.GENERIC, *, daily_dedup=True):
         if not name:
             raise ValueError("ActionTask.name 不能为空")
         self.name = str(name)
         self.action = action
         self._label = label
         self.task_type = task_type
+        self.daily_dedup = daily_dedup
 
     def label(self, site) -> str:
         return self._label

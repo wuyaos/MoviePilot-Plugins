@@ -42,7 +42,7 @@ class Zhuque(Site):
     domain = "zhuque.in"
     shoutbox = None
     tasks = [
-        ActionTask("skill_release", ZhuqueSkillAction(), "技能释放"),
+        ActionTask("skill_release", ZhuqueSkillAction(), "技能释放", daily_dedup=False),
         ZhuqueLevelUpTask(),
     ]
 
@@ -96,10 +96,12 @@ class Zhuque(Site):
         if not headers:
             return None
         payload = self.get_user_info(headers)
-        data = payload.get("data", {}) if isinstance(payload, dict) else {}
+        if not isinstance(payload, dict):
+            return None
+        data = payload.get("data", {})
         characters = data.get("characters", []) if isinstance(data, dict) else []
         now = datetime.now().timestamp()
         values = [float(item.get("info", {}).get("next_time")) for item in characters
                   if isinstance(item, dict) and str(item.get("info", {}).get("next_time", "")).replace(".", "", 1).isdigit()
                   and float(item.get("info", {}).get("next_time")) > now]
-        return min(values) if values else None
+        return min(values, default=now)

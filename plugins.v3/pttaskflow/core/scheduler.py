@@ -44,7 +44,7 @@ class TaskScheduler:
     def _next_zhuque_time(self):
         if self.plugin.config.zq_skill_next_time:
             try:
-                due = datetime.strptime(self.plugin.config.zq_skill_next_time, "%Y-%m-%d %H:%M:%S")
+                due = datetime.strptime(self.plugin.config.zq_skill_next_time, "%Y-%m-%d %H:%M:%S") + timedelta(seconds=60)
                 if due > datetime.now():
                     return due
             except ValueError:

@@ -91,7 +91,7 @@ class TaskEngine:
             if self.plugin._stop_event.is_set():
                 logger.info(f"[PtTaskFlow] [{scene}] 收到停止信号，剩余 {len(units) - len(records)} 个单元不再执行")
                 break
-            if unit.execution_key in terminal_keys:
+            if getattr(unit.task, "daily_dedup", True) and unit.execution_key in terminal_keys:
                 skipped += 1
                 TaskLogger.unit_skip(scene, unit, "当天已终态成功")
                 continue
