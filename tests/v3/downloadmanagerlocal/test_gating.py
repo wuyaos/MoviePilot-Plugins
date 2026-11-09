@@ -135,13 +135,21 @@ def test_module_active_matrix(gating):
     assert u.module_active(cfg, 'transfer') is False
     for name in u.MODULE_SWITCHES:
         cfg[u.MODULE_SWITCHES[name][0]] = True
-        assert u.module_active(cfg, name) is True
+        assert u.module_active(cfg, name) is (name != 'failclean')
     cfg['enabled'] = False
     for name in u.MODULE_SWITCHES:
         assert u.module_active(cfg, name) is False
     cfg['enabled'] = True
     assert u.module_switch_on(cfg, 'transfer') is True
 
+
+def test_legacy_failclean_enabled_is_always_inert(gating):
+    u = gating.utils
+    cfg = {"enabled": True, "failcleanup_enabled": True}
+    assert not u.module_switch_on(cfg, "failclean")
+    assert not u.module_active(cfg, "failclean")
+    assert u.build_module_switches(cfg)["failclean"] is False
+    assert not u.is_plugin_active(SimpleNamespace(_failcleanup_enabled=True))
 
 def test_build_module_switches_snapshot(gating):
     """裸值快照与注册表一一对应，且不受总开关影响。"""
@@ -185,8 +193,7 @@ def test_initialize_runtime_config_gating(gating):
     sc.initialize_runtime_config(plugin, dict(base))
     assert plugin._enabled is False
     for attr in ('_transfer_enabled', '_rename_enabled', '_tag_enabled',
-                 '_hr_enabled', '_remover_enabled', '_failcleanup_enabled',
-                 '_upload_limit_enabled'):
+                 '_hr_enabled', '_remover_enabled',                  '_upload_limit_enabled'):
         assert getattr(plugin, attr) is False, attr
     assert plugin._site_tag_config['enable'] is False
     assert plugin._rename_config['enabled'] is False

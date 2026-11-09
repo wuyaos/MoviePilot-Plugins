@@ -47,7 +47,7 @@ test('普通帮助无 caption/medium-emphasis 或蓝色信息框；所有观察�
   }
   const nodes = templates.Config
   const switches = nodes.filter(node => node.tag === 'VSwitch' && /_observe_only$/.test(model(node) || ''))
-  assert.equal(switches.length, 7)
+  assert.equal(switches.length, 6)
   for (const node of switches) {
     assert.equal(attribute(node, 'color'), 'warning')
     const condition = model(node)

@@ -87,8 +87,6 @@ const defaults = {
   remover_trackerkeywords: '', remover_errorkeywords: '', remover_torrentstates: '',
   remover_torrentcategorys: '',
   migration_observe_only: true,
-  failcleanup_enabled: false, failcleanup_notify: true, failcleanup_cron: '0 */2 * * *',
-  failcleanup_clean_repeat: true, failcleanup_retain_hours: 6,
   rename_notify: false, rename_cron_enabled: false, rename_on_download_added: true,
   rename_downloaders: [], rename_hash_white_list: '', rename_exclude_tags: '已重命名',
   rename_include_tags: '', rename_cron: '', rename_event_debounce_seconds: 3,
@@ -121,7 +119,7 @@ const defaults = {
   // 观察模式（阶段三）：只预览候选、不执行写操作。老配置默认关闭（升级保持升级前行为），
   // 全新安装时由下方 fresh install 补丁打开；按模块前缀自动归入对应页签的「恢复默认」键集。
   transfer_observe_only: false, rename_observe_only: false, tag_observe_only: false,
-  hr_observe_only: false, remover_observe_only: false, failcleanup_observe_only: false,
+  hr_observe_only: false, remover_observe_only: false,
   upload_limit_observe_only: false,
 }
 
@@ -139,7 +137,6 @@ const PANE_RESET_KEYS = {
   hr: Object.keys(defaults).filter(k => k.startsWith('hr_')),
   // remover 观察开关已迁移为 remover_observe_only（带前缀），旧 migration_observe_only 键保留在 defaults 供迁移回填
   remover: Object.keys(defaults).filter(k => k.startsWith('remover_')),
-  failclean: Object.keys(defaults).filter(k => k.startsWith('failcleanup_')),
   rename: Object.keys(defaults).filter(k => k.startsWith('rename_')),
   tag: Object.keys(defaults).filter(k => k.startsWith('tag_')),
   upload: Object.keys(defaults).filter(k => k.startsWith('upload_limit_')),
@@ -149,7 +146,7 @@ const PANE_RESET_KEYS = {
 // 全新安装默认开启，老配置升级保持升级前行为（见下方 watch 中的补丁）。
 const OBSERVE_ONLY_KEYS = [
   'transfer_observe_only', 'rename_observe_only', 'tag_observe_only', 'hr_observe_only',
-  'remover_observe_only', 'failcleanup_observe_only', 'upload_limit_observe_only',
+  'remover_observe_only', 'upload_limit_observe_only',
 ]
 const paneResetDialog = ref(false)
 const paneResetTarget = ref('')
@@ -181,7 +178,6 @@ const mainTabs = [
   { key: 'transfer', title: '转移做种', icon: MODULE_ICONS.transfer, desc: '监听下载完成事件，延迟后自动转移做种到目标下载器。' },
   { key: 'hr', title: 'H&R 管理', icon: MODULE_ICONS.hr, desc: '按站点规则跟踪 H&R 做种状态，为破坏性操作提供统一保护。' },
   { key: 'remover', title: '自动删种', icon: MODULE_ICONS.autoremove, desc: '按时间、分享率、体积等条件自动暂停或删除种子。' },
-  { key: 'failclean', title: '失败清理', icon: MODULE_ICONS.failclean, desc: '整理失败时立即清理源文件与下载历史，并定时清理重复残留。' },
   { key: 'rename', title: '种子重命名', icon: MODULE_ICONS.rename, desc: '转移后自动根据 TMDB 信息命名种子，失败记录进定时补查，也可手动补刀。' },
   { key: 'tag', title: '分类与标签', icon: MODULE_ICONS.tag, desc: '转移后自动根据 tracker 域名打站点标签。' },
   { key: 'upload', title: '上传限速', icon: MODULE_ICONS.upload_limit, desc: '设置下载器全局上传上限，并按需限制指定站点的合计上传速度。' },
@@ -203,7 +199,6 @@ const subTabs = {
   remover: [
     { key: 'remover_basic', title: '基础设置', icon: 'mdi-tune-variant' },
   ],
-  failclean: [{ key: 'failclean_basic', title: '基础设置', icon: 'mdi-tune-variant' }],
   rename: [
     { key: 'rename_basic', title: '基础设置', icon: 'mdi-tune-variant' },
     { key: 'rename_format', title: '重命名模板', icon: 'mdi-format-text' },
@@ -1835,17 +1830,6 @@ Object.keys(form).forEach(k => delete form[k])
 <div class="dm-field"><MultiValueInput density="compact" v-model="form.remover_torrentstates" label="任务状态" variant="outlined" hide-details /></div>
 </div><div class="dm-hint">路径、Tracker、错误关键词按原正则表达式匹配，不是逗号分隔列表。</div>
 </FormSection>
-            </div>
-
-            <div v-show="activeSub === 'failclean_basic'" class="dm-pane dm-compact-form dm-unified-form">
-<div class="dm-switch-group"><VSwitch density="compact" v-model="form.failcleanup_enabled" color="primary" inset hide-details label="启用" />
-<VSwitch density="compact" v-model="form.failcleanup_observe_only" color="warning" inset hide-details label="观察模式" />
-<VSwitch density="compact" v-model="form.failcleanup_notify" color="primary" inset hide-details label="发送通知" />
-<VSwitch density="compact" v-model="form.failcleanup_clean_repeat" color="primary" inset hide-details label="清理重复残留" /></div><div v-if="form.failcleanup_enabled && !form.failcleanup_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />真实模式可能删除源文件及下载历史。</div><div v-if="form.failcleanup_observe_only" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />观察模式只统计，不删除文件或下载历史。</div><div class="dm-field-row">
-<div class="dm-field"><VCronField density="compact" v-model="form.failcleanup_cron" :disabled="!form.failcleanup_clean_repeat" label="巡检计划" variant="outlined" hide-details /></div>
-<div class="dm-field"><VTextField density="compact" class="dm-number-input" v-model.number="form.failcleanup_retain_hours" :disabled="!form.failcleanup_clean_repeat" label="残留保留（小时）" type="number" variant="outlined"
-                    hide-details /></div>
-</div>
             </div>
 
             <div v-show="activeSub === 'rename_basic'" class="dm-pane dm-compact-form dm-unified-form">

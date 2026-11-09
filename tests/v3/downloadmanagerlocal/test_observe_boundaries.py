@@ -306,48 +306,6 @@ def _hr_snapshot(boundaries):
     boundaries.hr_scanner.remove_hr_tag.reset_mock()
 
 
-def test_observe_blocks_failclean_delete(boundaries):
-    """观察模式下失败清理不删文件、不删历史，返回 skipped（不计成功数、不消耗失败重试）。"""
-    service = _failclean_service(boundaries, observe=True)
-
-    result = service._delete_source_file(
-        fileitem=Mock(),
-        path='/downloads/影视/剧集/未整理.mkv',
-        downloader_id='QB1',
-        download_hash='hash1',
-        reason='整理失败',
-        send_notify=False,
-    )
-
-    assert result['deleted'] == 0
-    assert result['history_deleted'] is False
-    assert result['skipped'] is True
-    assert boundaries.failclean_host.delete_media_file.call_count == 0
-    assert boundaries.failclean_host.delete_download_history_file.call_count == 0
-    assert boundaries.failclean_host.send_download_file_deleted.call_count == 0
-    previews = boundaries.utils.observe_previews(service._plugin)
-    assert previews['failclean']['count'] == 1
-    assert '未整理.mkv' in previews['failclean']['samples'][0]
-
-
-def test_failclean_delete_runs_when_observe_disabled(boundaries):
-    """未开启观察时守卫不误拦：源文件与下载历史照常删除。"""
-    service = _failclean_service(boundaries, observe=False)
-
-    result = service._delete_source_file(
-        fileitem=Mock(),
-        path='/downloads/影视/剧集/未整理.mkv',
-        downloader_id='QB1',
-        download_hash='hash2',
-        reason='整理失败',
-        send_notify=False,
-    )
-
-    assert result['deleted'] == 1
-    assert result['skipped'] is False
-    assert boundaries.failclean_host.delete_media_file.call_count == 1
-    assert boundaries.failclean_host.delete_download_history_file.call_count == 1
-    assert boundaries.utils.observe_previews(service._plugin) == {}
 
 
 def test_observe_blocks_hr_tag_writes(boundaries):
@@ -381,3 +339,11 @@ def test_hr_tag_writes_run_when_observe_disabled(boundaries):
     service._remove_tag(task, {'QB1': Mock()})
     assert boundaries.hr_scanner.remove_hr_tag.call_count == 1
     assert boundaries.utils.observe_previews(service._plugin) == {}
+
+
+def test_failclean_is_disabled_regardless_of_observe_mode(boundaries):
+    service = _failclean_service(boundaries, observe=False)
+    result = service.handle_transfer_failed(object())
+    assert result == {"disabled": True, "deleted": 0, "skipped": 1}
+    assert boundaries.failclean_host.delete_media_file.call_count == 0
+    assert boundaries.failclean_host.delete_download_history_file.call_count == 0

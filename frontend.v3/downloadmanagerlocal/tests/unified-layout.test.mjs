@@ -58,7 +58,7 @@ test('九页共用单表，不再维护移动卡片副本；七业务模块用�
   assert.doesNotMatch(source, /class="dm-mobile-records|class="dm-record-card/)
   assert.match(source, /moduleCards\.value\.filter\(card => card\.key !== 'seed'\)/)
   assert.doesNotMatch(source, /当前接口未提供逐条执行历史/)
-  for (const stream of ['autoremove', 'failclean', 'tag', 'tag_cleanup', 'upload_limit']) {
+  for (const stream of ['autoremove', 'tag', 'tag_cleanup', 'upload_limit']) {
     assert.ok(source.includes(`v-bind="executionTableProps('${stream}')"`))
   }
 })

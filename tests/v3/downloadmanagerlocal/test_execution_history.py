@@ -156,18 +156,10 @@ def test_trim_1001_to_1000_independent_per_stream(history):
     plugin = FakePlugin()
     for i in range(1001):
         history.append(plugin, "autoremove", _record(occurred_at=float(i), action=f"a{i}"))
-    for i in range(1001):
-        history.append(plugin, "failclean", _record(occurred_at=float(i), action=f"f{i}"))
-
     ar = history.query(plugin, "autoremove")["items"]
-    fc = history.query(plugin, "failclean")["items"]
     assert len(ar) == 1000
-    assert len(fc) == 1000
     assert {item["occurred_at"] for item in ar} == set(range(1, 1001))
-    assert {item["occurred_at"] for item in fc} == set(range(1, 1001))
     assert all(item["action"].startswith("a") for item in ar)
-    assert all(item["action"].startswith("f") for item in fc)
-
 
 def test_unknown_module_rejected(history):
     """白名单外的 module 必须被拒绝（明确错误，不静默接受）。"""
@@ -424,7 +416,7 @@ def test_clear_endpoint_clears_only_history(history_api):
 def test_new_routes_registered(history_api):
     """两条新路由齐全：GET/POST 查询 + POST 清理，auth=bear。"""
     routes = history_api.routes.build_api_routes(Mock())
-    assert len(routes) == 43
+    assert len(routes) == 41
     by_path = {route["path"]: route for route in routes}
 
     query = by_path["/execution_history"]

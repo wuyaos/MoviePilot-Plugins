@@ -139,11 +139,10 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     # 永远为空，会让转移后打标路径静默忽略用户配置的自定义站点（只有补全历史路径生效）。
     plugin._custom_site_labels = dict(plugin._site_tag_config.get("custom_site_labels") or {})
 
-    # hr/autoremove/failclean/upload_limit 的门控属性（transfer/rename/tag 已在上方按注册表口径赋值）；
+    # hr/autoremove/upload_limit 的门控属性（transfer/rename/tag 已在上方按注册表口径赋值）；
     # upload_limit 此前由 normalize 循环写入裸值，此处统一覆盖为门控值。
     plugin._hr_enabled = module_active(config, "hr")
     plugin._remover_enabled = module_active(config, "autoremove")
-    plugin._failcleanup_enabled = module_active(config, "failclean")
     plugin._upload_limit_enabled = module_active(config, "upload_limit")
     # 裸开关快照：展示层区分「插件停用」与「模块停用」。
     plugin._module_switches = build_module_switches(config)

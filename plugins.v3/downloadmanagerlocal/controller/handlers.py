@@ -524,9 +524,6 @@ def _cleanup_actions(plugin) -> dict:
     """
     from ..modules.autoremove.constants import REMOVER_STATE_DATA_KEY
     from ..modules.autoremove.history import cleared_status, history_removed_count
-    from ..modules.failclean.constants import FAILCLEAN_STATUS_DATA_KEY
-    from ..modules.failclean.history import cleared_status as failclean_cleared_status
-    from ..modules.failclean.history import history_removed_count as failclean_history_removed_count
     from ..modules.rename.archive import clear_rename_archive
 
     def clear_rename_archive_data() -> int:
@@ -560,27 +557,12 @@ def _cleanup_actions(plugin) -> dict:
         plugin.save_data(REMOVER_STATE_DATA_KEY, cleared_status())
         return removed
 
-    def clear_failclean_status() -> int:
-        """清理最近巡检/即时清理结果并保留累计计数；服务在用则走服务清理。"""
-        service = getattr(plugin, "_failclean_service", None)
-        if service is not None:
-            outcome = service.clear_history()
-            if outcome.get("busy"):
-                raise HTTPException(status_code=409, detail="失败清理巡检正在运行，暂不能清理记录")
-            return int(outcome.get("removed", 0) or 0)
-        raw = plugin.get_data(FAILCLEAN_STATUS_DATA_KEY)
-        removed = failclean_history_removed_count(raw)
-        if not removed:
-            return 0
-        plugin.save_data(FAILCLEAN_STATUS_DATA_KEY, failclean_cleared_status(raw))
-        return removed
 
     return {
         "rename_archive": clear_rename_archive_data,
         "rename_history": clear_rename_history,
         "transfer_stats": clear_transfer_stats,
         "autoremove_state": clear_remover_state,
-        "failclean_state": clear_failclean_status,
     }
 
 
@@ -839,21 +821,6 @@ def api_autoremove_preview(plugin, payload: EmptyRequest | None = None):
     return _operation_response({"code": 0, "msg": "候选已生成", "result": result}, ModuleActionResult)
 
 
-def api_failclean_status(plugin):
-    """返回整理失败清理模块运行状态。"""
-    service = getattr(plugin, "_failclean_service", None)
-    status = service.get_module_status() if service is not None else {}
-    return ModuleStatusResult(code=0, status=status)
-
-
-def api_failclean_scan(plugin, payload: EmptyRequest | None = None):
-    """手动执行一轮重复下载残留巡检清理。"""
-    _require_module(plugin, "failclean", "失败清理")
-    service = getattr(plugin, "_failclean_service", None)
-    if service is None:
-        raise HTTPException(status_code=500, detail="整理失败清理服务未初始化")
-    result = service.cleanup_repeat_sources(trigger_source="手动")
-    return _operation_response({"code": 0, "msg": "巡检完成", "result": result}, ModuleActionResult)
 
 
 def api_transfer_run(plugin, payload: EmptyRequest | None = None):

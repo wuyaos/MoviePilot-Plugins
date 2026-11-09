@@ -312,7 +312,6 @@ def test_stop_plugin_service_isolates_failing_stop(env):
 
     lifecycle._stop_hr_service = boom
     lifecycle._stop_autoremove_service = lambda _plugin: calls.append("autoremove")
-    lifecycle._stop_failclean_service = lambda _plugin: calls.append("failclean")
     lifecycle.stop_seed_recheck_worker = lambda _plugin: calls.append("recheck")
     lifecycle.stop_upload_limit_worker = lambda _plugin: calls.append("upload_limit")
     plugin = SimpleNamespace(
@@ -326,7 +325,7 @@ def test_stop_plugin_service_isolates_failing_stop(env):
 
     lifecycle.stop_plugin_service(plugin)
 
-    assert calls == ["recheck", "hr", "autoremove", "failclean", "upload_limit"], (
+    assert calls == ["recheck", "hr", "autoremove", "upload_limit"], (
         "H&R 停止抛异常后，其余模块仍逐个执行停止"
     )
 

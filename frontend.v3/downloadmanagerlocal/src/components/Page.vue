@@ -33,7 +33,6 @@ const tabs = [
   { key: 'history', title: '命名历史', icon: MODULE_ICONS.rename },
   { key: 'hr', title: 'H&R 任务', icon: MODULE_ICONS.hr },
   { key: 'autoremove', title: '删种记录', icon: MODULE_ICONS.autoremove },
-  { key: 'failclean', title: '失败清理', icon: MODULE_ICONS.failclean },
   { key: 'sitetag', title: '站点标签', icon: MODULE_ICONS.tag },
   { key: 'upload', title: '上传限速', icon: MODULE_ICONS.upload_limit },
   { key: 'diagnostics', title: '运行诊断', icon: MODULE_ICONS.diagnostics },
@@ -43,7 +42,6 @@ const tabModuleKeys = {
   history: 'rename',
   hr: 'hr',
   autoremove: 'autoremove',
-  failclean: 'failclean',
   sitetag: 'tag',
   upload: 'upload_limit',
 }
@@ -66,7 +64,6 @@ const recordStates = reactive({
   transfer: { loading: false, loaded: false, error: '', revision: 0 },
   hr: { loading: false, loaded: false, error: '', revision: 0 },
   autoremove: { loading: false, loaded: false, error: '', revision: 0 },
-  failclean: { loading: false, loaded: false, error: '', revision: 0 },
 })
 function recordTableState(key, rows, empty = 'none', busyWithResult = false) {
   const state = recordStates[key]
@@ -109,13 +106,28 @@ function applyActionError(e, fallback) {
   actionMsg.value = e?.message || `${fallback.replace(/完成$|已触发$/, '')}失败`
 }
 
+
+const uploadLimit = computed(() => overview.value?.upload_limit || {})
+const uploadLimitDownloaderRows = computed(() => uploadLimit.value.downloaders || [])
+const uploadLimitSiteRows = computed(() => uploadLimit.value.sites || [])
+const uploadLimitStatus = computed(() => ({
+  disabled: { label: '未启用', color: 'default' }, starting: { label: '启动中', color: 'primary' },
+  running: { label: '分配中', color: 'primary' }, degraded: { label: '部分异常', color: 'warning' },
+  error: { label: '状态异常', color: 'error' }, observe_only: { label: '观察模式', color: 'warning' },
+}[uploadLimit.value.service_status] || { label: '未启用', color: 'default' }))
+const overviewAttentionCount = computed(() => {
+  const errors = Array.isArray(uploadLimit.value.errors) ? uploadLimit.value.errors.length : 0
+  const downloaderErrors = uploadLimitDownloaderRows.value.filter(item => item.error).length
+  return errors + downloaderErrors
+})
+const overviewPendingCount = computed(() => Number(overview.value?.archive?.active_failed || 0) + Number(overview.value?.archive?.near_archive || 0))
+
 const moduleRunning = ref('')
 const expandedModules = reactive({})
 
 const hrTasks = ref({ tasks: [], summary: {} })
 const hrSkipStats = ref({})
 const autoremoveStatus = ref({})
-const failcleanStatus = ref({})
 const siteTagStatus = ref({})
 const transferStatus = ref({})
 const transferPage = ref(1)
@@ -285,89 +297,9 @@ const autoremoveEmptyState = computed(() => {
   if (recordStates.autoremove.loaded && autoremoveStatus.value.enabled === false) return 'disabled'
   return 'not-scanned'
 })
-function failcleanMetric(value) {
-  return value == null || value === '' ? null : value
-}
-function hasFailcleanActivity(source, keys) {
-  return keys.some(key => Number(source?.[key] || 0) > 0)
-}
-const failcleanRows = computed(() => {
-  const status = failcleanStatus.value || {}
-  const rows = []
-  if (hasFailcleanActivity(status.event, ['deleted', 'failed', 'skipped'])) {
-    rows.push({ source: '来源事件', scanned: null, cleaned: failcleanMetric(status.event.deleted), failed: failcleanMetric(status.event.failed), skipped: failcleanMetric(status.event.skipped) })
-  }
-  if (hasFailcleanActivity(status.scan, ['scanned', 'cleaned', 'failed', 'skipped'])) {
-    rows.push({ source: '上轮巡检', scanned: failcleanMetric(status.scan.scanned), cleaned: failcleanMetric(status.scan.cleaned), failed: failcleanMetric(status.scan.failed), skipped: failcleanMetric(status.scan.skipped) })
-  }
-  if (hasFailcleanActivity(status.total, ['cleaned', 'failed', 'skipped'])) {
-    rows.push({ source: '累计', scanned: null, cleaned: failcleanMetric(status.total.cleaned), failed: failcleanMetric(status.total.failed), skipped: failcleanMetric(status.total.skipped) })
-  }
-  return rows
-})
-const failcleanHasRun = computed(() => Number(failcleanStatus.value.last_scan_time || 0) > 0)
-const failcleanHasResult = computed(() => failcleanHasRun.value || failcleanRows.value.length > 0)
-const failcleanEmptyState = computed(() => {
-  if (failcleanRows.value.length) return ''
-  if (failcleanHasResult.value) return 'no-candidates'
-  if (recordStates.failclean.loaded && failcleanStatus.value.enabled === false) return 'disabled'
-  return 'not-scanned'
-})
 const totalPages = computed(() => Math.max(1, Math.ceil((total.value || 0) / pageSize.value)))
-const archiveTotalPages = computed(() => Math.max(1, Math.ceil((archiveTotal.value || 0) / archivePageSize.value)))
-
-const diagnosticsCards = computed(() => {
-  const items = Array.isArray(diagnostics.value?.checks) ? diagnostics.value.checks : []
-  return items.map(item => ({
-    ...item,
-    statusText: item.status === 'ok' ? '正常' : item.status === 'error' ? '故障' : item.status === 'warn' ? '关注' : '未启用',
-    icon: item.status === 'ok'
-      ? 'mdi-check-circle-outline'
-      : item.status === 'error'
-        ? 'mdi-alert-octagon-outline'
-        : item.status === 'warn'
-          ? 'mdi-alert-circle-outline'
-          : 'mdi-minus-circle-outline',
-  }))
-})
-const diagnosticsOkCount = computed(() => diagnosticsCards.value.filter(item => item.status === 'ok').length)
-const diagnosticsAttentionCount = computed(() => diagnosticsCards.value.length - diagnosticsOkCount.value)
-
-const uploadLimit = computed(() => overview.value?.upload_limit || {})
-const uploadLimitDownloaderRows = computed(() => uploadLimit.value.downloaders || [])
-const uploadLimitSiteRows = computed(() => uploadLimit.value.sites || [])
-const uploadLimitStatus = computed(() => {
-  const status = uploadLimit.value.service_status
-  return {
-    disabled: { label: '未启用', color: 'default' },
-    starting: { label: '启动中', color: 'primary' },
-    running: { label: '分配中', color: 'primary' },
-    degraded: { label: '部分异常', color: 'warning' },
-    error: { label: '状态异常', color: 'error' },
-    observe_only: { label: '观察模式', color: 'warning' },
-  }[status] || { label: '未启用', color: 'default' }
-})
-
-const overviewAttentionCount = computed(() => {
-  const uploadErrors = Array.isArray(uploadLimit.value.errors) ? uploadLimit.value.errors.length : 0
-  const downloaderErrors = uploadLimitDownloaderRows.value.filter(item => item.error).length
-  const uploadStatusErrors = ['degraded', 'error'].includes(uploadLimit.value.service_status) && uploadErrors + downloaderErrors === 0 ? 1 : 0
-  return uploadErrors + downloaderErrors + uploadStatusErrors
-})
-const overviewPendingCount = computed(() => {
-  const archive = overview.value?.archive || {}
-  return Number(archive.active_failed || 0) + Number(archive.near_archive || 0)
-})
-const moduleFaultLabels = {
-  transfer: '转移做种',
-  rename: '种子重命名',
-  tag: '站点标签与分类',
-  hr: 'H&R 管理',
-  autoremove: '自动删种',
-  failclean: '失败清理',
-  upload_limit: '上传限速',
-}
-/** 模块运行异常项：模块关闭时后端不产生故障记录，只有启用后运行出错才会出现。 */
+const archiveTotalPages = computed(() => Math.max(1, Math.ceil((archiveTotal.value || 0) / pageSize.value)))
+const moduleFaultLabels = { transfer: '转移做种', rename: '命名补刀', tag: '站点标签', hr: 'H&R 助手', autoremove: '自动删种', upload_limit: '上传限速' }
 const moduleFaultItems = computed(() => {
   const faults = diagnostics.value?.module_faults
   if (!faults || typeof faults !== 'object') return []
@@ -434,6 +366,7 @@ const overviewCoreCards = computed(() => {
   ]
 })
 
+
 const moduleCards = computed(() => {
   const cards = overview.value?.cards || {}
   const archive = overview.value?.archive || {}
@@ -441,7 +374,6 @@ const moduleCards = computed(() => {
   const seed = cards.seed || {}
   const hr = hrSummary.value
   const auto = autoremoveStatus.value
-  const fail = failcleanStatus.value
   const tag = siteTagStatus.value
   const rename = renameStatus.value
   const up = uploadLimit.value
@@ -511,23 +443,6 @@ const moduleCards = computed(() => {
       ],
     },
     {
-      key: 'failclean',
-      title: '失败清理',
-      icon: MODULE_ICONS.failclean,
-      color: fail.enabled ? 'primary' : 'default',
-      value: `巡检清理 ${fail.scan?.cleaned || 0}`,
-      desc: `整理失败删源 ${fail.event?.deleted || 0} · 跳过 ${(fail.scan?.skipped || 0) + (fail.event?.skipped || 0)}`,
-      details: [
-        { label: '即时删源', value: fail.event?.deleted || 0 },
-        { label: '巡检清理', value: fail.scan?.cleaned || 0 },
-        { label: '失败合计', value: (fail.scan?.failed || 0) + (fail.event?.failed || 0) },
-        { label: '累计清理', value: fail.total?.cleaned || 0 },
-      ],
-      actions: [
-        { key: 'failclean-scan', label: '扫描残留', icon: 'mdi-radar', color: 'primary', run: doFailcleanScan },
-      ],
-    },
-    {
       key: 'rename',
       title: '种子重命名',
       icon: MODULE_ICONS.rename,
@@ -574,6 +489,7 @@ const moduleCards = computed(() => {
   ]
 })
 
+
 // Header projections only consume existing snapshots; missing counters are not inferred from rows.
 const headerMetric = (label, value, tone) => ({
   label, value: value ?? '—',
@@ -592,7 +508,6 @@ const moduleHeaders = computed(() => {
   const archive = overview.value?.archive || {}
   const hr = hrSummary.value
   const auto = autoremoveStatus.value
-  const fail = failcleanStatus.value
   const rename = renameStatus.value
   const tag = siteTagStatus.value
   const up = uploadLimit.value
@@ -633,11 +548,6 @@ const moduleHeaders = computed(() => {
       badges: [headerMetric('上轮候选', auto.candidates),
         headerMetric('成功', auto.observe_only ? undefined : (auto.action === 'pause' ? auto.paused : auto.deleted)),
         headerMetric('跳过', auto.skipped), headerMetric('失败', auto.failed)],
-    },
-    failclean: {
-      enabled: !!fail.enabled,
-      badges: [headerMetric('上轮扫描', fail.scan?.scanned), headerMetric('清理', fail.scan?.cleaned),
-        headerMetric('跳过', fail.scan?.skipped), headerMetric('失败', fail.scan?.failed)],
     },
     upload_limit: {
       enabled: !!up.enabled,
@@ -740,23 +650,6 @@ async function loadAutoremoveStatus(request) {
     reportRecordLoadError(recordRequest, e, '自动删种记录加载失败', 'autoremove')
   } finally {
     if (isCurrentRecordRequest(recordRequest, 'autoremove')) recordStates.autoremove.loading = false
-  }
-}
-
-async function loadFailcleanStatus(request) {
-  const recordRequest = beginRecordRequest(['failclean'])
-  recordStates.failclean.loading = true
-  recordStates.failclean.error = ''
-  try {
-    const resp = await getApi('failclean_status', { feedback: 'silent' })
-    if (!isCurrentPageRequest(request) || !isCurrentRecordRequest(recordRequest, 'failclean')) return
-    if (!resp?.status) throw new Error(resp?.msg || '失败清理明细加载失败')
-    failcleanStatus.value = resp.status
-    recordStates.failclean.loaded = true
-  } catch (e) {
-    reportRecordLoadError(recordRequest, e, '失败清理明细加载失败', 'failclean')
-  } finally {
-    if (isCurrentRecordRequest(recordRequest, 'failclean')) recordStates.failclean.loading = false
   }
 }
 
@@ -905,7 +798,6 @@ async function loadModuleStatuses(request) {
     loadRenameStatus(request),
     loadHrStatus(request),
     loadAutoremoveStatus(request),
-    loadFailcleanStatus(request),
     loadSiteTagStatus(request),
     loadDownloaders(request),
   ])
@@ -993,11 +885,6 @@ const CLEANUP_TARGETS = {
     detail: '自动删种最近一次执行结果',
     consequence: '只清插件记录，下载器中的种子保持不变。',
   },
-  failclean_state: {
-    label: '失败清理记录',
-    detail: '失败清理最近一次执行结果',
-    consequence: '只清最近一次执行结果，累计清理统计保留；实际文件与种子保持不变。',
-  },
 }
 const cleanupTargetKey = ref('')
 const cleanupConfirmDialog = ref(false)
@@ -1050,7 +937,6 @@ const MODULE_RECORD_VIEWS = {
   hr: { tab: 'hr', anchor: '[data-record-block="hr-tasks"]' },
   autoremove: { tab: 'autoremove', anchor: '[data-record-block="autoremove-preview"]' },
   // 失败清理页同时展示逐条历史与最近一次巡检快照。
-  failclean: { tab: 'failclean', anchor: '' },
   tag: { tab: 'sitetag', anchor: '[data-record-block="tag-cleanup"]' },
   upload_limit: { tab: 'upload', anchor: '[data-runtime-section="upload-limit"]' },
 }
@@ -1063,7 +949,6 @@ const MODULE_CLEANUP_KEYS = {
     { key: 'rename_archive', label: '清理归档' },
   ],
   autoremove: [{ key: 'autoremove_state', label: '清理记录' }],
-  failclean: [{ key: 'failclean_state', label: '清理记录' }],
 }
 
 function moduleRecordView(key) {
@@ -1113,8 +998,6 @@ async function confirmCleanupData() {
       // 记录已清空：同步清掉旧预览，避免「上轮候选」残留
       autoremovePreview.value = null
       await loadAutoremoveStatus(request)
-    } else if (key === 'failclean_state') {
-      await loadFailcleanStatus(request)
     }
   } catch (e) {
     applyActionError(e, '清理完成')
@@ -1163,8 +1046,6 @@ async function refreshActive() {
       tasks.push(loadHrStatus(request))
     } else if (activeTab.value === 'autoremove') {
       tasks.push(loadAutoremoveStatus(request))
-    } else if (activeTab.value === 'failclean') {
-      tasks.push(loadFailcleanStatus(request))
     } else if (activeTab.value === 'transfer') {
       tasks.push(loadTransferStatus(request))
     } else if (activeTab.value === 'sitetag') {
@@ -1309,11 +1190,6 @@ async function doAutoremovePreview() {
     }
     return previewResp
   }, '候选预览完成')
-  if (resp?.code !== 1) await refreshActive()
-}
-
-async function doFailcleanScan() {
-  const resp = await runModuleAction('failclean-scan', () => postApi('failclean_scan', {}), '残留巡检完成')
   if (resp?.code !== 1) await refreshActive()
 }
 
@@ -1512,7 +1388,7 @@ const recordColumns = {
   attention: columnsOf([['level', '级别'], ['module', '模块'], ['detail', '问题']]),
 }
 // Each history stream has independent paging and request ownership; snapshots never feed these rows.
-const executionStreams = { autoremove: ['autoremove'], failclean: ['failclean'], sitetag: ['tag', 'tag_cleanup'], upload: ['upload_limit'] }
+const executionStreams = { autoremove: ['autoremove'], sitetag: ['tag', 'tag_cleanup'], upload: ['upload_limit'] }
 const executionHistory = reactive(Object.fromEntries(Object.values(executionStreams).flat().map(key => [key, {
   rows: [], total: 0, page: 1, pageSize: 20, loading: false, loaded: false, error: '', revision: 0,
 }])))
@@ -1596,7 +1472,6 @@ const summaryFields = computed(() => {
     case 'rename': return [field('event', '入列触发', summaryValue('event')), field('cron', '定时补查及周期', summaryValue('cron')), field('movie', '电影模板', summaryValue('movie'), { long: true }), field('tv', '剧集模板', summaryValue('tv'), { long: true })]
     case 'hr': return [field('downloaders', '下载器范围', summaryValue('downloaders')), field('sites', '站点范围', summaryValue('sites')), field('rules', '规则来源', summaryValue('rules')), field('interval', '检查周期', summaryValue('interval')), field('guard', '删除保护', enabledValue(hrSummary.value.protection_enabled), { badge: true })]
     case 'autoremove': return [field('mode', '运行模式', mode, { badge: true }), field('action', '执行动作', ({ pause: '暂停任务', delete: '删除任务', deletefile: '删除任务及文件' })[autoremoveStatus.value.action]), field('downloaders', '下载器范围', summaryValue('downloaders')), field('rules', '命中规则', summaryValue('rules')), field('cron', '执行周期', summaryValue('cron')), field('guard', 'H&R保护', enabledValue(autoremoveStatus.value.guard_enabled), { badge: true })]
-    case 'failclean': return [field('scope', '清理范围', summaryValue('scope')), field('event', '事件触发', '整理失败事件（固有行为）'), field('cron', '定时巡检及周期', summaryValue('cron')), field('action', '清理动作', summaryValue('action'))]
     case 'tag': return [field('mode', '运行模式', mode, { badge: true }), field('downloaders', '下载器范围', summaryValue('downloaders')), field('site', '站点标签', summaryValue('site')), field('media', '媒体标签', summaryValue('media')), field('category', '下载分类', summaryValue('category')), field('cron', '执行周期', summaryValue('cron'))]
     case 'upload_limit': return [field('mode', '运行模式', uploadLimitStatus.value.label, { badge: true, color: uploadLimitStatus.value.color }), field('downloaders', '下载器范围', summaryValue('downloaders')), field('global', '全局限速', summaryValue('global')), field('sites', '站点限速', summaryValue('sites')), field('dynamic', '动态调速', summaryValue('dynamic')), field('interval', '调整周期', summaryValue('interval'))]
     default: return []
@@ -1621,7 +1496,6 @@ const diagnosticModule = name => {
   if (/重命名|补刀|命名/.test(name)) return 'rename'
   if (/H&R/.test(name)) return 'hr'
   if (/自动删种/.test(name)) return 'autoremove'
-  if (/失败|同步删除/.test(name)) return 'failclean'
   if (/标签|分类/.test(name)) return 'tag'
   if (/上传|限速/.test(name)) return 'upload_limit'
   return 'plugin'
@@ -1720,7 +1594,7 @@ onBeforeUnmount(() => {
       <main class="dm-main">
         <VAlert v-if="actionMsg" :type="actionLevel === 'success' ? 'success' : (actionLevel === 'partial' ? 'warning' : 'error')" variant="tonal" class="mb-3" closable density="compact">{{ actionMsg }}</VAlert>
         <VAlert v-if="error" type="error" variant="tonal" class="mb-3" density="compact">{{ error }}</VAlert>
-        <div v-if="loading && !['history', 'transfer', 'hr', 'autoremove', 'failclean'].includes(activeTab)" class="dm-state">
+        <div v-if="loading && !['history', 'transfer', 'hr', 'autoremove'].includes(activeTab)" class="dm-state">
           <VProgressCircular indeterminate color="primary" />
         </div>
 
@@ -1849,18 +1723,6 @@ onBeforeUnmount(() => {
               <details class="dm-runtime-details"><summary>最近运行详情</summary>
                 <VBtn color="primary" size="small" variant="tonal" :disabled="!cleanupCounts.autoremove_state" @click="openCleanupDialog('autoremove_state')">清最近运行记录</VBtn>
                 <ModuleDetailPanel :rows="moduleDetail('autoremove').rows" :items="moduleDetail('autoremove').items" :total="moduleDetail('autoremove').total" :limit="moduleDetail('autoremove').limit" :truncated="moduleDetail('autoremove').truncated" :error="moduleDetail('autoremove').error" />
-              </details>
-            </template>
-
-            <template v-if="activeTab === 'failclean'">
-              <ModuleTable title="执行记录" data-execution-stream="failclean" v-bind="executionTableProps('failclean')" row-key="record_id"
-                @update:page="changeExecutionPage('failclean', $event)" @update:page-size="changeExecutionSize('failclean', $event)" @retry="loadExecutionHistory('failclean')">
-                <template #cell-downloader_id="{ value }"><DownloaderBadge :name="value || '—'" /></template>
-              </ModuleTable>
-              <details class="dm-runtime-details" data-record-state="failclean" :aria-busy="recordStates.failclean.loading"><summary>事件与最近巡检详情</summary>
-                <VBtn color="primary" size="small" variant="tonal" :disabled="!cleanupCounts.failclean_state" @click="openCleanupDialog('failclean_state')">清最近运行记录</VBtn>
-                <TableState v-if="!failcleanRows.length || recordStates.failclean.error" v-bind="recordTableState('failclean', failcleanRows, failcleanEmptyState)" @retry="refreshActive" />
-                <RecordDetails v-for="row in failcleanRows" :key="row.source" :record="{ source: row.source, scanned: row.scanned, cleaned: row.cleaned, failed: row.failed, skipped: row.skipped }" />
               </details>
             </template>
 

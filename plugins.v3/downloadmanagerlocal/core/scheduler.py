@@ -7,11 +7,6 @@ from apscheduler.triggers.cron import CronTrigger
 from app.sdk.logging import logger
 
 from ..modules.autoremove.constants import REMOVER_SERVICE_ID, REMOVER_SERVICE_NAME
-from ..modules.failclean.constants import (
-    FAILCLEAN_LOG_PREFIX,
-    FAILCLEAN_REPEAT_SERVICE_ID,
-    FAILCLEAN_REPEAT_SERVICE_NAME,
-)
 from ..modules.hr.constants import (
     HR_CHECK_SERVICE_ID,
     HR_CHECK_SERVICE_NAME,
@@ -40,7 +35,6 @@ def build_plugin_services(plugin) -> List[Dict[str, Any]]:
         ("transfer", _build_transfer_fallback_services),
         ("hr", _build_hr_services),
         ("autoremove", _build_autoremove_services),
-        ("failclean", _build_failclean_services),
         ("tag", _build_site_tag_services),
         ("tag", _build_tag_cleanup_services),
         ("rename", _build_rename_services),
@@ -88,24 +82,6 @@ def _build_autoremove_services(plugin) -> List[Dict[str, Any]]:
         "func_kwargs": {"trigger_source": "定时"},
     }]
 
-
-def _build_failclean_services(plugin) -> List[Dict[str, Any]]:
-    """按整理失败清理配置构造重复残留巡检服务声明。"""
-    service = getattr(plugin, "_failclean_service", None)
-    if service is None or not service.config.enabled or not service.config.clean_repeat:
-        return []
-    try:
-        trigger = CronTrigger.from_crontab(service.config.cron)
-    except ValueError as error:
-        logger.error(f"【PT下载中心】{FAILCLEAN_LOG_PREFIX}Cron 无效，已禁用该服务：{service.config.cron}（{error}）")
-        return []
-    return [{
-        "id": FAILCLEAN_REPEAT_SERVICE_ID,
-        "name": FAILCLEAN_REPEAT_SERVICE_NAME,
-        "trigger": trigger,
-        "func": service.cleanup_repeat_sources,
-        "func_kwargs": {},
-    }]
 
 
 def _build_site_tag_services(plugin) -> List[Dict[str, Any]]:

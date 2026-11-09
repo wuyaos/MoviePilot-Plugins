@@ -87,8 +87,6 @@ def _cleanup_stats(plugin, archive_stats: dict) -> dict:
     """
     from ..autoremove.constants import REMOVER_STATE_DATA_KEY
     from ..autoremove.history import history_removed_count
-    from ..failclean.constants import FAILCLEAN_STATUS_DATA_KEY
-    from ..failclean.history import history_removed_count as failclean_history_removed_count
     from ...model.state import TRANSFER_SKIP_STATS_KEY, TRANSFER_STATS_KEY
 
     stats = plugin.get_data(TRANSFER_STATS_KEY) or {}
@@ -101,7 +99,6 @@ def _cleanup_stats(plugin, archive_stats: dict) -> dict:
         ),
         "transfer_stats": len(stats) + len(skip_stats),
         "autoremove_state": history_removed_count(plugin.get_data(REMOVER_STATE_DATA_KEY)),
-        "failclean_state": failclean_history_removed_count(plugin.get_data(FAILCLEAN_STATUS_DATA_KEY)),
     }
 
 
@@ -432,39 +429,6 @@ def _autoremove_detail(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT) -> 
     return _detail("自动删种", rows, items, detail_limit=detail_limit)
 
 
-def _failclean_detail(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT) -> dict:
-    """失败清理明细：巡检/事件/累计三段计数与保留期。"""
-    service = getattr(plugin, "_failclean_service", None)
-    status = service.get_module_status() if service is not None else {}
-    status = status if isinstance(status, dict) else {}
-    scan = status.get("scan")
-    scan = scan if isinstance(scan, dict) else {}
-    event = status.get("event")
-    event = event if isinstance(event, dict) else {}
-    total = status.get("total")
-    total = total if isinstance(total, dict) else {}
-    rows = [
-        _row("失败清理", _bool_text(getattr(plugin, "_failcleanup_enabled", False))),
-        _row("观察模式", _bool_text(_observe_of(plugin, "failclean"))),
-        _row("最近巡检", _time_text(status.get("last_scan_time")) or "尚未运行"),
-        _row("巡检触发", status.get("last_scan_trigger") or ""),
-        _row("保留期（小时）", _count(status.get("retain_hours"))),
-        _row(
-            "本轮扫描 / 清理 / 失败 / 跳过",
-            " / ".join(str(_count(scan.get(key))) for key in ("scanned", "cleaned", "failed", "skipped")),
-        ),
-        _row(
-            "事件删除 / 失败 / 跳过",
-            " / ".join(str(_count(event.get(key))) for key in ("deleted", "failed", "skipped")),
-        ),
-        _row(
-            "累计清理 / 失败 / 跳过",
-            " / ".join(str(_count(total.get(key))) for key in ("cleaned", "failed", "skipped")),
-        ),
-        *_skip_stat_rows(status.get("skip_stats")),
-    ]
-    return _detail("失败清理", rows, detail_limit=detail_limit)
-
 
 def _uploadlimit_detail(plugin, detail_limit: int = MODULE_DETAIL_ITEM_LIMIT) -> dict:
     """上传限速明细：服务状态、管理规模与配额分配。"""
@@ -548,7 +512,6 @@ def _module_details(plugin, rename_history: dict, archive_stats: dict,
         ("tagcleanup", "标签清理", lambda: _tagcleanup_detail(plugin, detail_limit)),
         ("hr", "H&R 管理", lambda: _hr_detail(plugin, detail_limit)),
         ("autoremove", "自动删种", lambda: _autoremove_detail(plugin, detail_limit)),
-        ("failclean", "失败清理", lambda: _failclean_detail(plugin, detail_limit)),
         ("upload_limit", "上传限速", lambda: _uploadlimit_detail(plugin, detail_limit)),
     )
     details = {}

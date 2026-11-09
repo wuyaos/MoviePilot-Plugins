@@ -14,7 +14,6 @@ from ..utils.config import (
 from .config import initialize_runtime_config
 from ..modules.autoremove.service import AutoRemoveService
 from ..modules.transfer.events import clear_transfer_schedule, restore_transfer_schedule
-from ..modules.failclean.service import FailCleanService
 from ..modules.hr.guard import get_guard
 from ..modules.hr.service import HrService
 from ..modules.transfer.recheck import (
@@ -55,9 +54,6 @@ def initialize_plugin(plugin, config: dict = None) -> None:
     _sync_hr_guard_intent(plugin, config)
     plugin._autoremove_service = _init_service_isolated(
         plugin, "自动删种", "autoremove", AutoRemoveService, config
-    )
-    plugin._failclean_service = _init_service_isolated(
-        plugin, "失败清理", "failclean", FailCleanService, config
     )
     if scheduler_needed:
         _start_scheduler_if_needed(plugin, print_jobs=True)
@@ -168,13 +164,6 @@ def _stop_autoremove_service(plugin) -> None:
     plugin._autoremove_service = None
 
 
-def _stop_failclean_service(plugin) -> None:
-    """停止整理失败清理服务。"""
-    service = getattr(plugin, "_failclean_service", None)
-    if service is None:
-        return
-    service.stop()
-    plugin._failclean_service = None
 
 def _stop_isolated(label: str, action) -> None:
     """隔离停止单个后台组件：任一组件停止失败只记录日志，不影响其它组件。"""
@@ -189,7 +178,6 @@ def _stop_background_services(plugin) -> None:
     _stop_isolated("做种校验 worker", lambda: stop_seed_recheck_worker(plugin))
     _stop_isolated("H&R", lambda: _stop_hr_service(plugin))
     _stop_isolated("自动删种", lambda: _stop_autoremove_service(plugin))
-    _stop_isolated("失败清理", lambda: _stop_failclean_service(plugin))
     _stop_isolated("上传限速", lambda: stop_upload_limit_worker(plugin))
 
 

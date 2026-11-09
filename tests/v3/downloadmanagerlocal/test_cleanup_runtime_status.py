@@ -38,6 +38,15 @@ FAILCLEAN_STATUS_KEY = 'failclean_status'
 RECENT_RUN_AT = 1710000000.0
 
 
+class _BusyService:
+    def __init__(self, result):
+        self.result = result
+        self.calls = 0
+    def clear_history(self):
+        self.calls += 1
+        return dict(self.result)
+
+
 def _module(monkeypatch, name, path=None, **attrs):
     result = types.ModuleType(name)
     result.__spec__ = importlib.machinery.ModuleSpec(name, None, is_package=path is not None)
@@ -225,92 +234,18 @@ def test_autoremove_clear_history_save_failure_keeps_memory(autoremove):
     assert service._status['candidate_list'] == [{'hash': 'a', 'name': 'seed'}]
 
 
-def test_failclean_clear_history_keeps_total(failclean):
-    """清最近巡检/即时清理结果，total 累计计数与 H&R 跳过统计保留。"""
-    plugin = FakePlugin({FAILCLEAN_STATUS_KEY: dict(FAILCLEAN_HISTORY)})
-    service = _failclean_service(failclean, plugin)
-    service._recent_deletes['a|/tmp/x'] = RECENT_RUN_AT
-
-    assert service.clear_history() == {'removed': 1, 'busy': False}
-
-    status = service.get_module_status()
-    assert status['last_scan_time'] == 0.0 and status['last_scan_trigger'] == ''
-    assert status['scan'] == {'scanned': 0, 'cleaned': 0, 'failed': 0, 'skipped': 0}
-    assert status['event'] == {'deleted': 0, 'failed': 0, 'skipped': 0}
-    assert status['total'] == {'cleaned': 9, 'failed': 2, 'skipped': 3}
-    assert plugin.get_data(FAILCLEAN_STATUS_KEY)['total'] == {'cleaned': 9, 'failed': 2, 'skipped': 3}
-    assert service._recent_deletes == {'a|/tmp/x': RECENT_RUN_AT}
 
 
-def test_failclean_clear_history_with_only_total(failclean):
-    """只有累计计数、没有最近结果时返回 0（不因状态对象非空误报）。"""
-    plugin = FakePlugin({FAILCLEAN_STATUS_KEY: {'total': {'cleaned': 5, 'failed': 1, 'skipped': 0}}})
-    service = _failclean_service(failclean, plugin)
 
-    assert service.clear_history() == {'removed': 0, 'busy': False}
-    assert plugin.get_data(FAILCLEAN_STATUS_KEY) == {'total': {'cleaned': 5, 'failed': 1, 'skipped': 0}}
-
-
-def test_failclean_clear_history_busy_and_save_failure(failclean):
-    """巡检运行中返回 busy；保存失败抛错且累计计数不变。"""
-    plugin = FakePlugin({FAILCLEAN_STATUS_KEY: dict(FAILCLEAN_HISTORY)})
-    service = _failclean_service(failclean, plugin)
-
-    assert service._run_lock.acquire(blocking=False) is True
-    try:
-        assert service.clear_history() == {'removed': 0, 'busy': True}
-    finally:
-        service._run_lock.release()
-
-    failing = _failclean_service(failclean, FailingPlugin({FAILCLEAN_STATUS_KEY: dict(FAILCLEAN_HISTORY)}))
-    with pytest.raises(RuntimeError):
-        failing.clear_history()
-    assert failing.get_module_status()['last_scan_time'] == RECENT_RUN_AT
-    assert failing.get_module_status()['total'] == {'cleaned': 9, 'failed': 2, 'skipped': 3}
-
-
-def test_failclean_status_lock_is_reentrant(failclean):
-    """状态锁可重入：_record_scan_result 内联 _record_result 不死锁且计数落盘。"""
-    plugin = FakePlugin({})
-    service = _failclean_service(failclean, plugin)
-
-    service._record_scan_result('定时', {'scanned': 2, 'cleaned': 1, 'failed': 0, 'skipped': 1})
-
-    assert service.get_module_status()['last_scan_trigger'] == '定时'
-    assert plugin.get_data(FAILCLEAN_STATUS_KEY)['total']['cleaned'] == 1
-    assert service.clear_history() == {'removed': 1, 'busy': False}
-
-
-def test_history_count_ignores_empty_template_and_cumulative_only(autoremove, failclean):
-    """数据页计数口径：空模板与「只有累计」都算 0 条可清理记录。"""
-    assert autoremove.service.history_removed_count({'last_run_at': 0.0}) == 0
-    assert autoremove.service.history_removed_count(autoremove.service._empty_status()) == 0
-    assert autoremove.service.history_removed_count({'last_run_at': RECENT_RUN_AT}) == 1
-    assert failclean.service.history_removed_count({'total': {'cleaned': 5, 'failed': 0, 'skipped': 0}}) == 0
-    assert failclean.service.history_removed_count({'scan': {'cleaned': 1}}) == 1
-    assert failclean.service.history_removed_count({'last_scan_time': RECENT_RUN_AT}) == 1
-
-
-class _BusyService:
-    """clear_history 返回固定结果的替身服务。"""
-
-    def __init__(self, outcome):
-        self.outcome = outcome
-        self.calls = 0
-
-    def clear_history(self):
-        self.calls += 1
-        return self.outcome
 
 
 def test_cleanup_handler_reports_busy_as_409(cleanup):
     """服务忙时 handler 转 409，且不写持久化。"""
     plugin = FakePlugin({REMOVER_STATE_KEY: {'last_run_at': RECENT_RUN_AT}})
     plugin._autoremove_service = _BusyService({'removed': 0, 'busy': True})
-    plugin._failclean_service = _BusyService({'removed': 0, 'busy': True})
     actions = cleanup._cleanup_actions(plugin)
 
-    for module in ('autoremove_state', 'failclean_state'):
+    for module in ('autoremove_state',):
         with pytest.raises(FakeHTTPException) as excinfo:
             actions[module]()
         assert excinfo.value.status_code == 409

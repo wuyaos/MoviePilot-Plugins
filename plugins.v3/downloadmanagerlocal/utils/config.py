@@ -235,6 +235,8 @@ MODULE_SWITCHES = {
 
 def module_switch_on(config: dict, module: str) -> bool:
     """读模块裸开关（不含总开关；展示层区分「插件停用」与「模块停用」时用）。"""
+    if module == "failclean":
+        return False  # 仅保留旧键兼容；不能令已移除功能或插件进入启用态。
     flat_key = MODULE_SWITCHES[module][0]
     default = PLUGIN_CONFIG_DEFAULTS.get(flat_key, False)
     return bool(config.get(flat_key, default))
@@ -415,5 +417,6 @@ def is_plugin_active(plugin) -> bool:
     """判断插件是否至少有一个模块处于生效状态（门控属性已含总开关）。"""
     return any(
         bool(getattr(plugin, attr, False))
-        for _, attr in MODULE_SWITCHES.values()
+        for name, (_, attr) in MODULE_SWITCHES.items()
+        if name != "failclean"
     )

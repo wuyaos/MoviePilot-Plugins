@@ -4,14 +4,14 @@
 
 ## 1. 插件概览
 
-`DownloadManagerLocal`（展示名「下载中心」）是 MoviePilot V3 原生插件，把七个模块聚合在一个插件里，后端是 Python 服务层，前端是 Vue 联邦组件（`__init__.py::get_render_mode()` 返回 `("vue", "dist/assets")`）。
+`DownloadManagerLocal`（展示名「下载中心」）是 MoviePilot V3 原生插件，把六个有效模块聚合在一个插件里，后端是 Python 服务层，前端是 Vue 联邦组件（`__init__.py::get_render_mode()` 返回 `("vue", "dist/assets")`）。
 
 - 源码目录：`plugins.v3/downloadmanagerlocal/`
 - 市场元数据：仓库根 `package.v3.json` 的 `DownloadManagerLocal` 条目
 - 插件身份：`plugin_name="下载中心"`、`plugin_config_prefix="downloadmanagerlocal_"`、`plugin_order=18`、`auth_level=2`
 - 渲染产物：`plugins.v3/downloadmanagerlocal/dist/`（联邦入口 `dist/assets/remoteEntry.js`）
 
-七模块（口径与 `README.md`、`__init__.py::plugin_desc` 一致；IYUU 辅种与速度监控均已移除）：
+六个有效模块（口径与 `README.md`、`__init__.py::plugin_desc` 一致；IYUU 辅种与速度监控均已移除）：
 
 | # | 模块 | 一句话职责 | 主要实现文件 |
 | --- | --- | --- | --- |
@@ -20,8 +20,10 @@
 | 3 | 站点标签 | 按 tracker 域名映射站点标签与剧名/分类标签，支持历史补全与临时标签回收 | `modules/sitetag/service.py`、`utils/tag_cleanup.py` |
 | 4 | H&R 助手 | 按站点规则跟踪 H&R 做种时长/比例，达标移除标签、超期告警，并作为删除路径的保护闸门 | `modules/hr/` |
 | 5 | 自动删种 | 按条件（做种时长/标签/来源等 AND 组合）定期暂停、删除任务或删任务加文件 | `modules/autoremove/` |
-| 6 | 失败清理 | 整理失败事件删源文件与下载历史；定时巡检清理已成功整理的重复残留 | `modules/failclean/` |
-| 7 | 上传限速 | 按站点合计上限 + 下载器总上限统一调控 qBittorrent / Transmission 上传限速 | `modules/uploadlimit/service.py`、`modules/uploadlimit/allocator.py`、`modules/uploadlimit/worker.py` |
+| 6 | 上传限速 | 按站点合计上限 + 下载器总上限统一调控 qBittorrent / Transmission 上传限速 | `modules/uploadlimit/service.py`、`modules/uploadlimit/allocator.py`、`modules/uploadlimit/worker.py` |
+
+
+失败清理已停用：`failcleanup_*` 仅兼容读取且忽略，不注册事件、调度、UI、诊断或手动删除接口；`modules/failclean/` 仅保留不执行删除的兼容 stub。
 
 入口层 `__init__.py` 只维护 `_PluginBase` 契约、插件身份、配置生命周期、事件注册、扩展点声明和薄委托，业务编排在 `modules/` 与 `controller/`。
 
@@ -71,7 +73,7 @@ plugins.v3/downloadmanagerlocal/
 │   │   └── service.py              # 同步删除与 PluginAction/WebhookMessage
 │   ├── hr/                         # H&R 模块子包（presets.json 内置站点验证预设）
 │   ├── autoremove/                 # 自动删种子包
-│   ├── failclean/                  # 失败清理子包
+│   ├── failclean/                  # 失败清理兼容 stub（不执行删除）
 │   └── __init__.py
 ├── utils/
 │   ├── config.py                   # PLUGIN_CONFIG_DEFAULTS 与配置清洗
@@ -141,14 +143,8 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 - 端点：`GET /autoremove_status`、`POST /autoremove_run`、`POST /autoremove_preview`（预览不执行）。
 - 调度：`AutoRemoveTorrents`（cron `remover_cron`，需 `remover_enabled` 且 cron 非空；`0`/空表示不注册）。
 
-### 3.6 失败清理
+### 3.6 失败清理（已停用）
 
-- 职责：`TransferFailed` 事件触发删除源文件与下载历史；定时巡检查出「已有成功整理历史 + 目标文件仍存在 + 残留超过 `failcleanup_retain_hours`」的重复源并清理。
-- 关键文件：`modules/failclean/service.py`（`FailCleanService.handle_transfer_failed`、`cleanup_repeat_sources`）、`modules/failclean/events.py`、`modules/failclean/config.py`、`modules/failclean/hostapi.py`、`modules/failclean/notify.py`、`modules/failclean/constants.py`。
-- 关键配置：`failcleanup_enabled`、`failcleanup_notify`、`failcleanup_cron`（默认 `0 */2 * * *`）、`failcleanup_clean_repeat`、`failcleanup_retain_hours`（默认 6）。
-- 端点：`GET /failclean_status`、`POST /failclean_scan`（手动巡检）。
-- 调度：`DownloadCenterRepeatCleanup`（cron `failcleanup_cron`，需 `failcleanup_enabled` 且 `failcleanup_clean_repeat`）。
-- 事件：`TransferFailed`（即时删源，无保留期；同一 `(hash, 路径)` 30 秒内重复事件不重复删）。
 
 ### 3.7 上传限速
 
@@ -164,7 +160,6 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 ### 3.8 支撑层
 
-- `core/lifecycle.py`：`initialize_plugin`（初始化运行时配置、启动 worker、登记一次性任务、构建 `HrService`/`AutoRemoveService`/`FailCleanService`）与 `stop_plugin_service`（发退出信号、代次递增、清空调度、停止各后台服务）。
 - `core/scheduler.py`：`build_plugin_services(plugin)` 汇总全部定时服务声明。
 - `modules/diagnostics/service.py`：`/diagnostics` 的只读诊断数据。
 - `modules/cleanup/service.py`：同步删除（`DownloadFileDeleted`/`DownloadDeleted`/`WebhookMessage`/`PluginAction`）。
@@ -177,13 +172,12 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 
 ### 4.1 开关体系（v3.5.1 规范化）
 
-- **单一真源**：`utils/config.py::MODULE_SWITCHES`——`{module: (扁平开关键, plugin 属性名)}`，七模块 transfer/rename/tag/hr/autoremove/failclean/upload_limit 全部登记。
+- **单一真源**：`utils/config.py::MODULE_SWITCHES`——`{module: (扁平开关键, plugin 属性名)}`，六个有效模块 transfer/rename/tag/hr/autoremove/failclean/upload_limit 全部登记。
 - **唯一门控口径**：`module_active(config, module)` = 插件总开关 `enabled` AND 模块开关。总开关关闭时，无论模块开关状态，模块一律视为关闭。
 - **属性层**：`core/config.py` 把 7 个 `plugin._*_enabled` 属性统一赋门控值；`plugin._module_switches` 存裸开关快照（展示层区分「插件停用」vs「模块停用」用）。
 - **服务配置层**：hr/autoremove/failclean 的 `init_module` 中 `self._config.enabled = module_active(...)`，因此 `core/scheduler.py` 各 `_build_*_services` 的注册条件（读各 service 的 `self._config.enabled` / `_site_tag_config["enable"]` / `_rename_config["enabled"]`）天然走门控值，调度注册无需重复判断总开关。
 - **嵌套视图对齐**：`_site_tag_config["enable"]` 与 `_rename_config["enabled"]` 在构造后对齐门控属性；`tag_enabled → enable` 已纳入 `_TAG_FLAT_PREFIX_MAP`。
-- **API 层**：`controller/handlers.py::_require_module(plugin, module, label)` 拦截 9 个模块核心执行端点（retry_renames/retry_rename/recovery_torrent/tag_cleanup_execute/hr_check/hr_scan/autoremove_run/failclean_scan/upload_limit_reallocate）。数据管理类端点（清历史、恢复/删除归档、hr_clear_*、upload_limit_disable_restore）不受门控——停用模块后仍允许管理自己的数据。
-- **组合函数**：`is_transfer_active`/`is_upload_limit_active` 基于门控属性，只追加配置完整性条件（下载器/路径/额度）；`is_plugin_active` = 七模块门控属性任一为真。
+- **组合函数**：`is_transfer_active`/`is_upload_limit_active` 基于门控属性，只追加配置完整性条件（下载器/路径/额度）；`is_plugin_active` = 六个有效模块门控属性任一为真。
 - **新增模块时**：先在 `MODULE_SWITCHES` 登记，再让属性/服务/端点走注册表口径，禁止散落手写 `enabled and xxx_enabled`。
 
 **总键数：123，其中外部配置键 121**（`test_gating.py::test_registry_and_defaults` 断言；另 2 个为 `transfer_delete_source_default`/`transfer_delete_duplicate_default` 内部默认键）。
@@ -196,11 +190,11 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 | 上传限速 | 7 | `upload_limit_enabled`、`upload_limit_downloaders`、`upload_limit_downloader_limits_kib`、`upload_limit_site_rules`、`upload_limit_grace_minutes`、`upload_limit_observe_only`、`upload_limit_notify` |
 | H&R | 24 | `hr_enabled`、`hr_protection_enabled`、`hr_auto_discover`、`hr_enable_site_config`、`hr_downloader`、`hr_sites`、`hr_notify`、`hr_check_period`、`hr_hit_and_run_tag`、`hr_auto_cleanup_days`、`hr_notify_summary_cron`、`hr_exclude_tags`、`hr_exclude_categories`、`hr_duration`、`hr_deadline_days`、`hr_additional_seed_time`、`hr_ratio`、`hr_upload_multiplier`、`hr_upload_gte_download`、`hr_active`、`hr_size_tiers`、`hr_brush_plugin`、`hr_site_config_str`、`hr_observe_only` |
 | 自动删种 | 19 | `remover_enabled`、`remover_notify`、`remover_action`、`remover_downloaders`、`remover_cron`、`remover_samedata`、`remover_mponly`、`remover_size`、`remover_ratio`、`remover_time`、`remover_upspeed`、`remover_labels`、`remover_pathkeywords`、`remover_trackerkeywords`、`remover_errorkeywords`、`remover_torrentstates`、`remover_torrentcategorys`、`remover_observe_only`、`migration_observe_only`（由自动删种模块读取，见 `modules/autoremove/constants.py`） |
-| 失败清理 | 6 | `failcleanup_enabled`、`failcleanup_notify`、`failcleanup_cron`、`failcleanup_clean_repeat`、`failcleanup_retain_hours`、`failcleanup_observe_only` |
+| 旧 `failcleanup_*` | 兼容读取且忽略，不计入有效配置键 |
 
 分组键数均计外部配置键；另 2 个内部键不计入分组，合计 31+2+15+19+7+24+19+6=123。
 
-各模块默认值来源：`utils/config.py::TRANSFER_DEFAULTS`、`modules/rename/service.py::DEFAULT_RENAME_CONFIG`（配 `RENAME_FLAT_CONFIG_KEYS` 映射）、`modules/sitetag/service.py::DEFAULT_TAG_CONFIG`、`modules/hr/constants.py::HR_FORM_DEFAULTS`、`modules/autoremove/constants.py::REMOVER_FORM_DEFAULTS`、`modules/failclean/constants.py::FAILCLEAN_FORM_DEFAULTS`。
+各模块默认值来源：`utils/config.py::TRANSFER_DEFAULTS`、`modules/rename/service.py::DEFAULT_RENAME_CONFIG`（配 `RENAME_FLAT_CONFIG_KEYS` 映射）、`modules/sitetag/service.py::DEFAULT_TAG_CONFIG`、`modules/hr/constants.py::HR_FORM_DEFAULTS`、`modules/autoremove/constants.py::REMOVER_FORM_DEFAULTS`、旧 `failcleanup_*` 兼容解析。
 
 配置读取：`controller/handlers.py` 通过 `plugin.get_config()` 读当前实例配置；站点标签扁平键→嵌套键映射在 `core/config.py::_TAG_FLAT_PREFIX_MAP` / `_flat_tag_module_config`（`tag_enabled → enable` 已登记，见 §4.1）。
 
@@ -223,7 +217,6 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 | `/hr/skip_stats` | 获取 H&R 保护跳过计数 | `api_hr_skip_stats` |
 | `/hr_presets` | 获取内置 H&R 站点验证预设（只读） | `api_hr_presets` |
 | `/autoremove_status` | 获取自动删种模块状态 | `api_autoremove_status` |
-| `/failclean_status` | 获取整理失败清理模块状态 | `api_failclean_status` |
 | `/tag_status` | 获取站点标签模块状态 | `api_tag_status` |
 | `/rename_status` | 获取命名补刀模块状态 | `api_rename_status` |
 
@@ -250,8 +243,7 @@ V3 测试在 `tests/v3/downloadmanagerlocal/`。
 | `/hr_clear_missing` | 批量清除需做种的 H&R 记录 | `api_hr_clear_missing` |
 | `/autoremove_run` | 手动执行一轮自动删种 | `api_autoremove_run` |
 | `/autoremove_preview` | 预览自动删种候选（不执行） | `api_autoremove_preview` |
-| `/failclean_scan` | 手动执行重复下载残留巡检 | `api_failclean_scan` |
-
+|
 Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布尔值时解包，裸业务模型原样返回。旧根级 `api.py` 兼容导出层已删除，handler 唯一来源是 `controller/handlers.py`。
 
 ## 6. 调度任务表
@@ -265,11 +257,9 @@ Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布�
 | `HitAndRunDiscover` | H&R自动发现 | interval，`hr_check_period × 2` 分钟 | `HrService.discover_tasks` | `hr_enabled` 且 `hr_auto_discover` |
 | `HitAndRunSummary` | H&R通知汇总 | cron `hr_notify_summary_cron`（默认 `0 8 * * *`） | `HrService.send_summary` | `hr_enabled` 且 cron 可解析 |
 | `AutoRemoveTorrents` | 自动删种 | cron `remover_cron`（默认 `0 */12 * * *`） | `AutoRemoveService.run_cycle` | `remover_enabled` 且 cron 非空、可解析 |
-| `DownloadCenterRepeatCleanup` | 重复下载残留清理 | cron `failcleanup_cron`（默认 `0 */2 * * *`） | `FailCleanService.cleanup_repeat_sources` | `failcleanup_enabled` 且 `failcleanup_clean_repeat` |
 | `DownloadCenterSiteHistory` | 站点标签历史补全 | cron `tag_interval_cron`（默认 `5 4 * * *`） | `complement_history` | 模块配置 `enable` 为真且 cron 非空（见 §9） |
 | `DownloadCenterRenameScan` | 命名补刀扫描 | cron `rename_cron` | `scan_renames` | `rename_enabled` 且 `rename_cron_enabled` 且 cron 非空 |
 
-无效 cron 只禁用对应服务并记 error 日志，不抛异常。v3.7.0 起无 `onlyonce` 一次性任务：立即运行语义由数据页模块卡按钮走执行端点（`transfer_run`/`tag_complement`/`autoremove_run`/`failclean_scan` 等）。
 
 ## 7. 事件订阅表
 
@@ -279,7 +269,6 @@ Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布�
 | --- | --- | --- | --- |
 | `TransferComplete` | `on_transfer_complete` | `modules/transfer/events.py::handle_transfer_complete_event` | 按 `delay_minutes` 保存每个 hash 最早到期时间，串行登记 date job |
 | `DownloadAdded` | `on_download_added` | `modules/transfer/events.py::handle_download_added_event` | 临时标签回收 → 站点标签即时补全 → 事件重命名 → H&R 纳管 → 唤醒上传限速 worker |
-| `TransferFailed` | `on_transfer_failed` | `modules/failclean/events.py::handle_transfer_failed_event` | 按配置删除源文件与下载历史 |
 | `DownloadFileDeleted`、`DownloadDeleted` | `on_download_sync_delete` | `modules/cleanup/service.py::handle_sync_delete_by_hash_event` | 按源 hash 同步删除转种/辅种目标任务（经 H&R guard） |
 | `WebhookMessage` | `on_webhook_message` | `modules/cleanup/service.py::handle_webhook_message_event` | Emby `library.deleted` 事件按路径反查 hash 后同步删除 |
 | `PluginAction` | `on_plugin_action` | `modules/cleanup/service.py::handle_plugin_action_event` | H&R 命令（`hnr_check`/`hnr_scan`/`hnr_clear_compliant`/`hnr_clear_missing`）与网盘同步删除（`networkdisk_del`） |
@@ -303,7 +292,6 @@ Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布�
 | `hr_tasks` | `modules/hr/constants.py` | H&R 任务集合 |
 | `hr_notify_events` | `modules/hr/constants.py` | H&R 待汇总通知事件 |
 | `remover_state` | `modules/autoremove/constants.py` | 最近一轮删种状态与候选明细 |
-| `failclean_status` | `modules/failclean/constants.py` | 最近巡检与累计清理计数 |
 | `<source_downloader>-<source_hash>` | `modules/cleanup/service.py` | 单条转种源→目标映射记录 |
 
 重构时这些 key 必须保持后向兼容，不得改名或迁移，除非先写兼容读取 + 回归测试。
@@ -319,7 +307,7 @@ Vue helper 仅在顶层字段恰为 `success/message/data` 且 `success` 为布�
 - **IYUU 辅种已移除**：`iyuu_helper.py`、`modules/iyuu.py`、`iyuu_*` 配置键均已删除（v3.4.0 六合一整合基线时移除）。
 - **命名补刀事件开关**：唯一键是 `rename_on_download_added`（默认 true）；旧名 `rename_event_enabled` 已删除，勿再引用。
 - **站点标签历史补全注册判据（v3.5.1 已修）**：`_TAG_FLAT_PREFIX_MAP` 历史上缺 `tag_enabled → enable` 映射，导致 `_site_tag_config["enable"]` 恒为默认 False、补全 cron 服务永不注册；现已登记映射并随门控值对齐，开关 `tag_enabled` 即可注册。
-- **H&R 保护闸门**：`modules/hr/guard.py::HrGuard().should_skip(path, downloader, hash)` 是转移删源、自动删种、失败清理、同步删除四条破坏性路径的统一入口，未达标任务不会被连带删除；`/hr/skip_stats` 读各路径跳过计数。
+- **H&R 保护闸门**：`modules/hr/guard.py::HrGuard().should_skip(path, downloader, hash)` 是转移删源、自动删种、同步删除四条破坏性路径的统一入口，未达标任务不会被连带删除；`/hr/skip_stats` 读各路径跳过计数。
 - **做种校验后台线程**：改动 `modules/transfer/recheck.py` 必须保持退出事件与锁语义，否则出现重复 worker 或无法停止。
 - **上传限速语义**：`upload_limit_grace_minutes` 内不写站点/单种额度但仍受下载器总上传上限；`allocated_kib` 是分配额度，不是实际吞吐或 Peer 能力证明；停用恢复走 compare-and-set。
 - **快速抢占运行态**：`MIGRATION_OBSERVE_ONLY_KEY = "migration_observe_only"` 为真时自动删种只列候选、不执行下载器写操作。

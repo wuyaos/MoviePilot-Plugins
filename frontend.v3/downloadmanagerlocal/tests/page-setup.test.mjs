@@ -15,7 +15,7 @@ const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^i
 const setup = new Function(
   'reactive', 'ref', 'computed', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount',
   'defineProps', 'defineEmits', 'getPluginApi', 'postPluginApi', 'postPluginJsonApi',
-  `${script}\nreturn { renameRowKey, doTagCleanupRun, transferSourceName, transferPrimaryText, transferSecondaryText, hrTaskTitle, detailLimit, DETAIL_LIMIT_CHOICES, diagnostics, moduleDetail, loadDiagnostics, loadOverviewTab, refreshActive, selectTab, activeTab, tabs, page, archivePage, cleanupCounts, cleanupTargetKey, cleanupConfirmDialog, cleanupRunning, CLEANUP_TARGETS, confirmCleanupData, openCleanupDialog, autoremovePreview, MODULE_RECORD_VIEWS, MODULE_CLEANUP_KEYS, moduleRecordView, moduleCleanupButtons, openModuleRecords };`)
+  `${script}\nreturn { total, archiveTotal, pageSize, totalPages, archiveTotalPages, moduleFaultItems, nextPage, nextArchivePage, renameRowKey, doTagCleanupRun, transferSourceName, transferPrimaryText, transferSecondaryText, hrTaskTitle, detailLimit, DETAIL_LIMIT_CHOICES, diagnostics, moduleDetail, loadDiagnostics, loadOverviewTab, refreshActive, selectTab, activeTab, tabs, page, archivePage, cleanupCounts, cleanupTargetKey, cleanupConfirmDialog, cleanupRunning, CLEANUP_TARGETS, confirmCleanupData, openCleanupDialog, autoremovePreview, MODULE_RECORD_VIEWS, MODULE_CLEANUP_KEYS, moduleRecordView, moduleCleanupButtons, openModuleRecords };`)
 
 function mount() {
   const props = reactive({ api: null, pluginId: 'DownloadManagerLocal', sourcePluginId: 'DownloadManagerLocal' })
@@ -28,6 +28,28 @@ const page = mount()
 const template = source.slice(source.indexOf('</script>'))
 const HASH40 = 'A'.repeat(40)
 
+
+test('模块故障提示与历史双分页保留真实运行定义', async () => {
+  const { page: instance, calls } = mountRecording()
+  instance.diagnostics.value = { module_faults: { autoremove: '扫描失败', failclean: '旧故障' } }
+  assert.deepEqual(instance.moduleFaultItems.value.map(item => item.title), ['自动删种运行异常'])
+  instance.total.value = 45
+  instance.archiveTotal.value = 41
+  instance.pageSize.value = 20
+  assert.equal(instance.totalPages.value, 3)
+  assert.equal(instance.archiveTotalPages.value, 3)
+  instance.nextPage()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(instance.page.value, 2)
+  const { page: archiveInstance, calls: archiveCalls } = mountRecording({ rename_archive: () => ({ code: 0, total: 41, items: [] }) })
+  archiveInstance.archiveTotal.value = 41
+  archiveInstance.pageSize.value = 20
+  archiveInstance.nextArchivePage()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(archiveInstance.archivePage.value, 2)
+  assert.ok(calls.some(call => call.path.startsWith('rename_history?')))
+  assert.ok(archiveCalls.some(call => call.path.startsWith('rename_archive?')))
+})
 test('源种子名缺失或空白时回退「名称未记录」，短 hash 仅作辅助', () => {
   const records = [
     { source_hash: HASH40 },
@@ -182,12 +204,12 @@ test('条数白名单与后端一致，模板提供选择器与截断提示', ()
 
 // —— 步骤12：查看记录 / 清理记录 入口 ——
 
-const TAB_KEYS = ['overview', 'transfer', 'history', 'hr', 'autoremove', 'failclean', 'sitetag', 'upload', 'diagnostics']
-const MODULE_KEYS = ['transfer', 'seed', 'hr', 'autoremove', 'failclean', 'tag', 'rename', 'upload_limit']
+const TAB_KEYS = ['overview', 'transfer', 'history', 'hr', 'autoremove', 'sitetag', 'upload', 'diagnostics']
+const MODULE_KEYS = ['transfer', 'seed', 'hr', 'autoremove', 'tag', 'rename', 'upload_limit']
 
 test('查看记录映射覆盖有记录的七个模块，页签与锚点都必须真实存在', () => {
   assert.deepEqual(Object.keys(page.MODULE_RECORD_VIEWS).sort(),
-    ['autoremove', 'failclean', 'hr', 'rename', 'tag', 'transfer', 'upload_limit'])
+    ['autoremove', 'hr', 'rename', 'tag', 'transfer', 'upload_limit'])
   for (const [key, view] of Object.entries(page.MODULE_RECORD_VIEWS)) {
     assert.ok(TAB_KEYS.includes(view.tab), `${key} 的页签 ${view.tab} 不存在`)
     if (view.anchor) {
@@ -203,7 +225,7 @@ test('查看记录映射覆盖有记录的七个模块，页签与锚点都必�
 test('模块卡清理按钮严格映射后端白名单，无记录模块不给清理入口', () => {
   const items = Object.values(page.MODULE_CLEANUP_KEYS).flat()
   assert.deepEqual([...new Set(items.map(item => item.key))].sort(),
-    ['autoremove_state', 'failclean_state', 'rename_archive', 'rename_history'])
+    ['autoremove_state', 'rename_archive', 'rename_history'])
   for (const item of items) assert.ok(page.CLEANUP_TARGETS[item.key], `${item.key} 不在 CLEANUP_TARGETS 内`)
   assert.deepEqual(page.moduleCleanupButtons('rename').map(item => item.label), ['清理历史', '清理归档'], '重命名历史与归档是两个独立按钮')
   for (const key of ['transfer', 'hr', 'tag', 'upload_limit', 'seed']) {
@@ -216,7 +238,7 @@ test('清理按钮 0 条禁用，数量取自诊断 cleanup_data', () => {
   page.diagnostics.value = { cleanup_data: { rename_history: 34, rename_archive: 31, autoremove_state: 1, failclean_state: 0 } }
   assert.deepEqual(page.moduleCleanupButtons('rename').map(item => item.count), [34, 31])
   assert.equal(page.moduleCleanupButtons('autoremove')[0].count, 1)
-  assert.equal(page.moduleCleanupButtons('failclean')[0].count, 0, '0 条时按钮禁用')
+  assert.deepEqual(page.moduleCleanupButtons('failclean'), [], '停用模块没有清理入口')
   page.diagnostics.value = null
   assert.deepEqual(page.moduleCleanupButtons('rename').map(item => item.count), [0, 0], '诊断缺失时按 0 处理，不误报有记录')
   assert.match(template, /:cleanup-blocked="!cleanupCounts\.rename_history"/)
@@ -282,8 +304,7 @@ test('清理成功后：重命名分页回第一页、自动删种清掉旧预�
 })
 
 test('确认框口径：失败清理说明保留累计统计，通用提示不含下载器数据', () => {
-  assert.ok(/累计/.test(page.CLEANUP_TARGETS.failclean_state.consequence), '失败清理必须说明累计统计保留')
-  assert.ok(/只清最近一次执行结果/.test(page.CLEANUP_TARGETS.failclean_state.consequence))
+  assert.equal(page.CLEANUP_TARGETS.failclean_state, undefined, '停用模块不提供清理目标')
   assert.ok(/可重新识别与补刀/.test(page.CLEANUP_TARGETS.rename_archive.consequence), '归档清理须写明后果（决策 C）')
   assert.ok(/无法再按记录恢复原名或补刀/.test(page.CLEANUP_TARGETS.rename_history.consequence))
   assert.ok(/不修改下载器任务与文件/.test(template), '确认框须写明不动下载器数据')

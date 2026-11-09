@@ -141,7 +141,7 @@ def test_module_details_covers_seven_modules(service):
     """七个模块都要有明细块，字段齐全且无错误。"""
     details = service._module_details(_plugin(), {"total": 5}, {"archived": 2, "threshold": 3})
 
-    assert set(details) == {"transfer", "rename", "tag", "tagcleanup", "hr", "autoremove", "failclean", "upload_limit"}
+    assert set(details) == {"transfer", "rename", "tag", "tagcleanup", "hr", "autoremove", "upload_limit"}
     for key, detail in details.items():
         assert detail["title"], key
         assert detail["error"] == "", key
@@ -172,32 +172,6 @@ def test_tagcleanup_detail_projects_latest_scan(service):
     ]
 
 
-def test_failclean_detail_breaks_counters_into_three_sections(service):
-    """失败清理明细：本轮/事件/累计三段计数、保留期与跳过统计都要展开成可读行。"""
-    status = {
-        "enabled": True,
-        "retain_hours": 6,
-        "last_scan_time": 1793263474.61,
-        "last_scan_trigger": "手动",
-        "scan": {"scanned": 12, "cleaned": 3, "failed": 1, "skipped": 8},
-        "event": {"deleted": 4, "failed": 0, "skipped": 5},
-        "total": {"cleaned": 30, "failed": 2, "skipped": 11},
-        "skip_stats": {"transfer_source": 2, "auto_remove": 0, "transfer_failure": 1, "sync_delete": 0},
-    }
-    plugin = _plugin(_failclean_service=SimpleNamespace(get_module_status=lambda: status))
-
-    detail = service._failclean_detail(plugin)
-    rows = _rows(detail)
-
-    assert rows["本轮扫描 / 清理 / 失败 / 跳过"] == "12 / 3 / 1 / 8"
-    assert rows["事件删除 / 失败 / 跳过"] == "4 / 0 / 5"
-    assert rows["累计清理 / 失败 / 跳过"] == "30 / 2 / 11"
-    assert rows["保留期（小时）"] == "6"
-    assert rows["巡检触发"] == "手动"
-    assert rows["最近巡检"] != "尚未运行", "有时间戳时要显示可读时间"
-    assert rows["跳过（转移源种子）"] == "2" and rows["跳过（整理失败）"] == "1"
-    assert detail["error"] == ""
-
 
 def test_autoremove_detail_lists_candidates_with_limit(service):
     """自动删种明细：观察开关与候选列表（按 MODULE_DETAIL_ITEM_LIMIT 截断）。"""
@@ -224,20 +198,6 @@ def test_autoremove_detail_lists_candidates_with_limit(service):
     assert detail["items"][0]["title"] == "dml-0.bin"
     assert "平均上传0.0KB/s" in detail["items"][0]["meta"]
 
-
-def test_module_details_isolates_failing_module(service):
-    """单模块读取抛异常只在该模块记 error，其他模块明细照常返回（模块隔离）。"""
-
-    def boom():
-        raise RuntimeError("服务未初始化")
-
-    plugin = _plugin(_failclean_service=SimpleNamespace(get_module_status=boom))
-    details = service._module_details(plugin, {}, {})
-
-    assert details["failclean"]["rows"] == []
-    assert details["failclean"]["error"].startswith("RuntimeError")
-    assert details["transfer"]["error"] == "" and details["transfer"]["rows"], "其他模块不受影响"
-    assert details["upload_limit"]["error"] == ""
 
 
 def test_rename_detail_lists_recent_failures(service):
@@ -362,20 +322,6 @@ def test_rename_detail_reports_real_failure_total(service):
     assert len(detail["items"]) == 20
     assert detail["total"] == 34 and detail["limit"] == 20 and detail["truncated"] is True
 
-
-def test_module_details_apply_limit_and_error_block_metadata(service):
-    """detail_limit 贯穿七个 builder；异常模块的错误块同样带 total/limit/truncated。"""
-    def boom():
-        raise RuntimeError("服务未初始化")
-
-    plugin = _plugin(_failclean_service=SimpleNamespace(get_module_status=boom))
-    details = service._module_details(plugin, {}, {}, detail_limit=50)
-
-    assert details["failclean"]["error"].startswith("RuntimeError")
-    assert (details["failclean"]["total"], details["failclean"]["limit"],
-            details["failclean"]["truncated"]) == (0, 50, False)
-    for key, detail in details.items():
-        assert detail["limit"] == 50, key
 
 
 def test_build_diagnostics_passes_detail_limit_through(service, monkeypatch):

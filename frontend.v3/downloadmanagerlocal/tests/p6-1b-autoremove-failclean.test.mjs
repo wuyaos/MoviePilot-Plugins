@@ -105,22 +105,6 @@ test('P6-1b 自动删种与失败清理区分尚未扫描、扫描无候选和�
     view.handlers.failclean_status = () => ({ code: 0, status: { enabled: true, last_scan_time: 1710000000, scan: { scanned: 0, cleaned: 0, failed: 0, skipped: 0 }, event: { deleted: 0, failed: 0, skipped: 0 }, total: { cleaned: 0, failed: 0, skipped: 0 } } })
     view.button('删种记录').props.onClick({}); await bounded(flush(), 'autoremove empty flush')
     assert.match(text(view.block('autoremove')), /扫描无候选/)
-    view.button('失败清理').props.onClick({}); await bounded(flush(), 'failclean empty flush')
-    assert.match(text(view.block('failclean')), /扫描无候选/)
-
-    view.handlers.failclean_status = () => ({ code: 0, status: {
-      enabled: true,
-      last_scan_time: 1710000000,
-      scan: { scanned: 4, cleaned: 2, failed: 1, skipped: 1 },
-      event: { deleted: 3, failed: 0, skipped: 2 },
-      total: { cleaned: 5, failed: 1, skipped: 3 },
-    } })
-    view.button('刷新数据').props.onClick({}); await bounded(flush(), 'failclean detail flush')
-    const block = view.block('failclean')
-    assert.match(text(block), /来源事件/)
-    assert.match(text(block), /上轮巡检/)
-    assert.match(text(block), /累计/)
-    assert.match(text(block), /来源事件[\s\S]*3/)
-    assert.match(text(block), /上轮巡检[\s\S]*4/)
+    assert.equal(view.findAll(node => text(node).trim() === '失败清理').length, 0, '停用模块不再显示')
   } finally { view.unmount() }
 })

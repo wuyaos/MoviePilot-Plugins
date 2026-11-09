@@ -270,20 +270,6 @@ def _remover_rule_active(config: dict, defaults: dict) -> bool:
     return False
 
 
-def _failclean_fields(config: dict, defaults: dict) -> list[dict]:
-    return [
-        _field("scope", "清理范围", "本地下载目录", "static",
-               "固有行为（按下载目录巡检）"),
-        _field("event", "事件触发", "整理失败事件（固有行为）", "static",
-               "固有行为（TransferFailed 事件）"),
-        _field("cron", "定时巡检及周期",
-               str(_cfg(config, defaults, "failcleanup_cron", "") or "").strip(),
-               "config_value", "配置键 failcleanup_cron"),
-        _field("action", "清理动作",
-               "删除重复下载残留" if _cfg(config, defaults, "failcleanup_clean_repeat", True)
-               else "关闭", "bare_switch", "配置键 failcleanup_clean_repeat"),
-    ]
-
 
 def _tag_fields(config: dict, defaults: dict, tag_config: dict,
                 enabled: bool) -> list[dict]:
@@ -404,13 +390,11 @@ def build_module_config_summary(plugin: Any) -> dict:
     tag_enabled = bool(getattr(plugin, "_tag_enabled", False))
     hr_enabled = bool(getattr(plugin, "_hr_enabled", False))
     autoremove_enabled = bool(getattr(plugin, "_remover_enabled", False))
-    failclean_enabled = bool(getattr(plugin, "_failcleanup_enabled", False))
     upload_enabled = bool(getattr(plugin, "_upload_limit_enabled", False))
 
     hr_service = getattr(plugin, "_hr_service", None)
     hr_runtime = _hr_runtime_config(hr_service)
     autoremove_status = _service_status(plugin, "_autoremove_service")
-    failclean_status = _service_status(plugin, "_failclean_service")
     upload_status = _upload_limit_status(plugin)
     tag_config = getattr(plugin, "_site_tag_config", None)
 
@@ -496,23 +480,6 @@ def build_module_config_summary(plugin: Any) -> dict:
             bool(observe.get("autoremove") or autoremove_status.get("observe_only"))),
     }
 
-    modules["failclean"] = {
-        "key": "failclean",
-        "title": "失败清理",
-        "enabled": failclean_enabled,
-        "bare_switch": bool(bare.get("failclean")),
-        "observe_only": bool(observe.get("failclean")),
-        "active": failclean_enabled,
-        "scope": _scope_view("本地下载目录", "固有行为"),
-        "schedule": _schedule_view(
-            str(_cfg(config, defaults, "failcleanup_cron", "") or "").strip(),
-            "配置键 failcleanup_cron"),
-        "protection": _protection_view(
-            hr_guard_effective,
-            f"跳过 {sum(int(v or 0) for v in (failclean_status.get('skip_stats') or {}).values())} 次",
-            "H&R 保护闸门（整理失败删源路径）"),
-        "fields": _failclean_fields(config, defaults),
-    }
 
     modules["tag"] = {
         "key": "tag",

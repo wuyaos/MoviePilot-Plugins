@@ -117,7 +117,7 @@ try {
   ruleToggle.click();await nextTick()
   const reEnabled=!sitePane.textContent.includes('已停用，回退全局')
   const moduleLayouts=[]
-  for(const name of ['自动删种','失败清理','种子重命名','分类与标签','上传限速']) {
+  for(const name of ['自动删种','种子重命名','分类与标签','上传限速']) {
     [...document.querySelectorAll('.dm-nav-item')].find(n=>n.textContent.includes(name)).click();await nextTick()
     for(const sub of [...document.querySelectorAll('.dm-subtab')]) {
       sub.click();await nextTick()
@@ -183,7 +183,7 @@ try {
     assert.equal(report.catSingleInput,true)
     assert.equal(report.catSourceEdited,true)
     for(const row of report.moduleLayouts){assert.equal(row.headerTrack,24);assert.ok(row.footerHeights.every(h=>h===28),JSON.stringify(row));assert.equal(row.footerTonal,true);if(row.name==='失败清理')assert.ok(row.riskGap>=16,JSON.stringify(row));}
-    assert.equal(report.moduleLayouts.length,32)
+    assert.equal(report.moduleLayouts.length,28)
     for(const row of report.moduleLayouts){ assert.ok(row.overflow<=1 && row.outer<=1 && row.footerOverflow<=1,JSON.stringify(row)); assert.ok(row.heights.every(h=>h===36),JSON.stringify(row)) }
     for (const row of report.layouts) {
       assert.ok(row.overflow <= 1, JSON.stringify(report))

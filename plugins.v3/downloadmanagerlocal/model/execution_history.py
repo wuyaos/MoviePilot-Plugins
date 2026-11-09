@@ -33,7 +33,7 @@ from .state import (
     _HISTORY_LOCK,
 )
 
-HISTORY_STREAMS = ("autoremove", "failclean", "tag", "tag_cleanup", "upload_limit")
+HISTORY_STREAMS = ("autoremove", "tag", "tag_cleanup", "upload_limit")
 HISTORY_MAX_ITEMS = 1000
 HISTORY_RESULT_VALUES = ("success", "failed", "skipped", "observed")
 HISTORY_FILTERS = ("all", "success", "failed", "skipped", "observed")

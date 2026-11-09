@@ -36,7 +36,7 @@ test('实际业务表均复用 ModuleTable；保留表头、状态、分页、�
 
 test('五个执行历史表绑定真实历史流，保留独立分页和重试', () => {
   const tables = nodes.filter(n => n.tag === 'ModuleTable' && attr(n, 'data-execution-stream'))
-  assert.deepEqual(tables.map(n => attr(n, 'data-execution-stream')), ['autoremove', 'failclean', 'tag', 'tag_cleanup', 'upload_limit'])
+  assert.deepEqual(tables.map(n => attr(n, 'data-execution-stream')), ['autoremove', 'tag', 'tag_cleanup', 'upload_limit'])
   for (const table of tables) {
     assert.equal(attr(table, 'row-key'), 'record_id')
     assert.ok(directive(table, 'bind')?.startsWith('executionTableProps('))

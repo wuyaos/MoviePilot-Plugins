@@ -1,6 +1,6 @@
 """
 DownloadManagerLocal v3.5.1 - MoviePilot V3 本地插件
-下载中心插件，支持转移做种、种子重命名、站点标签、H&R、自动删种、失败清理与上传限速
+下载中心插件，支持转移做种、种子重命名、站点标签、H&R、自动删种与上传限速
 """
 from threading import Event as ThreadEvent
 import threading
@@ -29,7 +29,6 @@ from .modules.transfer.service import validate_config as _validate_config_impl, 
 from .controller import handlers as _controller_handlers
 from .controller.api import build_api_routes as _build_api_routes_impl
 from .modules.transfer.events import handle_download_added_event as _handle_download_added_event_impl, handle_transfer_complete_event as _handle_transfer_complete_event_impl, handle_plugin_triggered_event as _handle_plugin_triggered_event_impl
-from .modules.failclean.events import handle_transfer_failed_event as _handle_transfer_failed_event_impl
 from .core.lifecycle import initialize_plugin as _initialize_plugin_impl, stop_plugin_service as _stop_plugin_service_impl
 from .core.scheduler import build_plugin_services as _build_plugin_services_impl
 from .modules.cleanup.service import handle_sync_delete_by_hash_event as _handle_sync_delete_by_hash_event_impl, handle_webhook_message_event as _handle_webhook_message_event_impl, handle_plugin_action_event as _handle_plugin_action_event_impl
@@ -40,7 +39,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件名称
     plugin_name = "下载中心"
     # 插件描述
-    plugin_desc = "转移做种、种子重命名、站点标签、H&R 保护、自动删种、失败清理与上传限速，一站式下载管理。"
+    plugin_desc = "转移做种、种子重命名、站点标签、H&R 保护、自动删种与上传限速，一站式下载管理。"
     # 插件图标
     plugin_icon = "downloadmanagerlocal.png"
     # 插件颜色
@@ -314,14 +313,6 @@ class DownloadManagerLocal(_PluginBase):
         """预览自动删种候选。"""
         return _controller_handlers.api_autoremove_preview(self, payload)
 
-    def api_failclean_status(self):
-        """返回整理失败清理模块状态。"""
-        return _controller_handlers.api_failclean_status(self)
-
-    def api_failclean_scan(self, payload: dict | None = None):
-        """手动执行重复下载残留巡检。"""
-        return _controller_handlers.api_failclean_scan(self, payload)
-
     def api_transfer_run(self, payload: dict | None = None):
         """手动执行一轮转移做种。"""
         return _controller_handlers.api_transfer_run(self, payload)
@@ -475,9 +466,6 @@ class DownloadManagerLocal(_PluginBase):
     @eventmanager.register(EventType.DownloadAdded)
     def on_download_added(self, event: Event):
         """监听下载新增事件，纳入 H&R/站点标签/命名补刀管理并唤醒上传限速协调。"""; return _handle_download_added_event_impl(self, event)
-    @eventmanager.register(EventType.TransferFailed)
-    def on_transfer_failed(self, event: Event):
-        """监听整理失败事件，按配置删除源文件与下载记录。"""; return _handle_transfer_failed_event_impl(self, event)
     @eventmanager.register([EventType.DownloadFileDeleted, EventType.DownloadDeleted])
     def on_download_sync_delete(self, event: Event):
         """监听下载删除事件，同步删除转种和辅种任务。"""; return _handle_sync_delete_by_hash_event_impl(self, event, trigger=getattr(getattr(event, "event_type", None), "value", "DownloadDeleted"))

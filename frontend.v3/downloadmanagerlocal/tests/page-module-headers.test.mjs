@@ -15,7 +15,7 @@ assert.deepEqual(compileTemplate({ source: descriptor.template.content, filename
 const Header = await loadSfc('ModuleHeader.vue')
 const setup = new Function('reactive', 'ref', 'computed', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount',
   'defineProps', 'defineEmits', 'getPluginApi', 'postPluginApi', 'postPluginJsonApi',
-  `${descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)}\nreturn { overview, diagnostics, transferStatus, hrTasks, autoremoveStatus, failcleanStatus, siteTagStatus, renameStatus, moduleRunning, moduleHeaders, moduleCards, moduleGridCards, formatDuration, activeTab, uploadLimitStateChip, formatAllocationMb, uploadGroups, uploadDownloaderFilter, uploadSiteFilter };`)
+  `${descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)}\nreturn { overview, diagnostics, transferStatus, hrTasks, autoremoveStatus, siteTagStatus, renameStatus, moduleRunning, moduleHeaders, moduleCards, moduleGridCards, formatDuration, activeTab, uploadLimitStateChip, formatAllocationMb, uploadGroups, uploadDownloaderFilter, uploadSiteFilter };`)
 function page(watcher = watch) {
   const noRequest = () => { throw new Error('Header projection must not request API') }
   return setup(reactive, ref, computed, watcher, nextTick, () => {}, () => {},
@@ -32,7 +32,7 @@ const directive = (node, name, arg) => node.props.find(prop => prop.type === 7 &
 
 test('Page 接入七模块公共头部，seed 不再独立显示，总览只导航不执行业务', () => {
   const p = page()
-  assert.deepEqual(Object.keys(p.moduleHeaders.value), ['transfer', 'hr', 'autoremove', 'failclean', 'rename', 'tag', 'upload_limit'])
+  assert.deepEqual(Object.keys(p.moduleHeaders.value), ['transfer', 'hr', 'autoremove', 'rename', 'tag', 'upload_limit'])
   const nodes = elements(parse(source).descriptor.template.ast)
   const overview = nodes.find(node => attribute(node, 'class') === 'dm-overview-card')
   assert.equal(directive(overview, 'for'), 'card in sevenCards')
@@ -134,8 +134,6 @@ test('H&R 和失败清理徽标直读汇总；事件计数不混入上轮巡检'
   const p = page()
   p.hrTasks.value = { summary: { enabled: true, total: 8, needs_seeding: 2, pending: 99, in_progress: 3, compliant: 1 } }
   assert.deepEqual(values(p.moduleHeaders.value.hr), { 总数: 8, 待做种: 2, 做种中: 3, 已达标: 1 })
-  p.failcleanStatus.value = { enabled: true, scan: { scanned: 15, cleaned: 2, skipped: 3, failed: 4 }, event: { deleted: 1000, skipped: 2000, failed: 3000 } }
-  assert.deepEqual(values(p.moduleHeaders.value.failclean), { 上轮扫描: 15, 清理: 2, 跳过: 3, 失败: 4 })
 })
 
 test('自动删种不以预览冒充成功，不以单项保护跳过冒充跳过总数；原动作按钮全保留', () => {
@@ -148,7 +146,7 @@ test('自动删种不以预览冒充成功，不以单项保护跳过冒充跳�
   assert.equal(values(p.moduleHeaders.value.autoremove)['成功'], '—')
   assert.deepEqual(Object.fromEntries(p.moduleCards.value.map(card => [card.key, card.actions.map(action => action.key)])), {
     transfer: ['transfer-run'], seed: [], hr: ['hr-check', 'hr-scan'], autoremove: ['autoremove-preview', 'autoremove-run'],
-    failclean: ['failclean-scan'], rename: ['rename-retry'], tag: ['tag-complement', 'tag-cleanup-run'],
+rename: ['rename-retry'], tag: ['tag-complement', 'tag-cleanup-run'],
     upload_limit: ['upload-reallocate', 'upload-scan-sites', 'upload-clear-rules'],
   })
 })

@@ -142,7 +142,7 @@ def test_seven_modules_and_shape(summary):
     data = summary.build_module_config_summary(plugin)
     assert data['code'] == 0
     assert set(data['modules']) == {
-        'transfer', 'rename', 'hr', 'autoremove', 'failclean', 'tag', 'upload_limit'}
+        'transfer', 'rename', 'hr', 'autoremove', 'tag', 'upload_limit'}
     for module in data['modules'].values():
         for key in ('enabled', 'bare_switch', 'observe_only', 'active', 'scope', 'schedule',
                     'protection', 'fields'):

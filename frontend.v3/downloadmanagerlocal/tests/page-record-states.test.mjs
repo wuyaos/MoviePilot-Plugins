@@ -160,7 +160,7 @@ test('transfer legacy record keeps short hash and explicit missing-name label on
 })
 
 const executionCases = [
-  ['autoremove', '删种记录'], ['failclean', '失败清理'], ['tag', '站点标签'],
+  ['autoremove', '删种记录'], ['tag', '站点标签'],
   ['tag_cleanup', '站点标签'], ['upload_limit', '上传限速'],
 ]
 const historyRow = (stream, name = '真实执行样本') => ({ record_id: stream + '-1', occurred_at: 1700000000,

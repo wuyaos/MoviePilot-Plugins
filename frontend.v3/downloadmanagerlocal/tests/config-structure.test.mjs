@@ -20,8 +20,8 @@ function mount(initialConfig) {
   const state = scope.run(() => setup(reactive, ref, computed, watch, () => {}, () => props, () => () => {}, () => { throw Error('Unexpected network request') }))
   return { ...state, calls, stop: () => scope.stop() }
 }
-const observeKeys = ['transfer_observe_only', 'hr_observe_only', 'remover_observe_only', 'failcleanup_observe_only', 'rename_observe_only', 'tag_observe_only', 'upload_limit_observe_only']
-const panes = ['transfer', 'hr', 'remover', 'failclean', 'rename', 'tag', 'upload']
+const observeKeys = ['transfer_observe_only', 'hr_observe_only', 'remover_observe_only', 'rename_observe_only', 'tag_observe_only', 'upload_limit_observe_only']
+const panes = ['transfer', 'hr', 'remover', 'rename', 'tag', 'upload']
 const off = Object.fromEntries(observeKeys.map(key => [key, false]))
 
 test('P2-1d: each pane reset enables only its own observation, stays local until save, and resets only owned keys', async () => {
@@ -185,7 +185,6 @@ test('P2-1d: dependent controls disable/re-enable without clearing values; unrel
   try {
     for (const [pane, toggle, fields] of [
       [null, '兜底扫描', ['兜底间隔（分钟）']],
-      ['失败清理', '清理重复残留', ['巡检计划', '残留保留（小时）']],
       ['种子重命名', '入列触发', ['事件防抖（秒）']],
       [null, '定时补查', ['补查计划']],
     ]) {
@@ -193,7 +192,6 @@ test('P2-1d: dependent controls disable/re-enable without clearing values; unrel
       const values = fields.map(label => view.field(label).props.value)
       await view.change(toggle, false)
       for (const [index, label] of fields.entries()) { assert.equal(view.field(label).props.disabled, true, label); assert.equal(view.field(label).props.value, values[index]) }
-      if (pane === '失败清理') { assert.notEqual(view.field('发送通知').props.disabled, true); assert.notEqual(view.field('启用').props.disabled, true) }
       await view.change(toggle, true)
       for (const [index, label] of fields.entries()) { assert.notEqual(view.field(label).props.disabled, true); assert.equal(view.field(label).props.value, values[index]) }
       await view.change(toggle, false)
