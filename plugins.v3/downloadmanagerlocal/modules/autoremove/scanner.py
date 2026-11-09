@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from ...adapter.downloader import (
@@ -58,29 +59,30 @@ def build_snapshot(
 ) -> RemoveSnapshot:
     """把 qBittorrent 字典或 Transmission 对象归一为删种采样快照。
 
-    做种时间取完成时间（qB completion_on / TR date_done），为 0 时回退添加时间；
-    平均上传速度由上传量除以做种时长得到，不是实时速度。
+    做种时间只取下载器累计做种秒数；缺失按 0 处理，绝不以完成/添加时间推算。
+    平均上传速度由上传量除以累计做种时长得到，不是实时速度。
     """
     dl_type = str(downloader_type_name or "").lower()
     size = int(get_torrent_size(torrent, dl_type) or 0)
     if dl_type == QBITTORRENT:
-        completed_at = _number(_field(torrent, "completion_on"))
-        added_at = _number(_field(torrent, "added_on"))
+        seeding_raw = _field(torrent, "seeding_time")
+        uploaded_raw = _field(torrent, "uploaded")
+        seeding_seconds = _number(seeding_raw)
         ratio = _number(_field(torrent, "ratio"))
-        uploaded = _number(_field(torrent, "uploaded"))
+        uploaded = _number(uploaded_raw)
         current_tracker = str(_field(torrent, "tracker", default="") or "")
         site = get_url_domain(current_tracker)
         error_string = ""
     else:
-        completed_at = _timestamp(_field(torrent, "done_date", "date_done", "doneDate"))
-        added_at = _timestamp(_field(torrent, "added_date", "date_added", "addedDate"))
+        seeding_raw = _field(torrent, "seconds_seeding", "secondsSeeding")
+        uploaded_raw = _field(torrent, "uploaded_ever", "uploadedEver")
+        seeding_seconds = _number(seeding_raw)
         ratio = _number(_field(torrent, "upload_ratio", "uploadRatio", "ratio"))
-        uploaded = _number(_field(torrent, "uploaded_ever", "uploadedEver")) or ratio * size
+        uploaded = _number(uploaded_raw)
         current_tracker = ""
         site = _transmission_site(torrent)
         error_string = str(_field(torrent, "error_string", "errorString", default="") or "")
 
-    reference = completed_at if completed_at > 0 else added_at
     return RemoveSnapshot(
         downloader=str(downloader_id or ""),
         downloader_type=dl_type,
@@ -88,7 +90,7 @@ def build_snapshot(
         name=str(_field(torrent, "name", default="") or ""),
         size=size,
         ratio=ratio,
-        seeding_seconds=max(now - reference, 0.0) if reference > 0 else 0.0,
+        seeding_seconds=seeding_seconds,
         uploaded=uploaded,
         save_path=str(get_save_path(torrent, dl_type) or ""),
         current_tracker=current_tracker,
@@ -98,6 +100,7 @@ def build_snapshot(
         category=str(get_category(torrent, dl_type) or ""),
         tags=tuple(get_label(torrent, dl_type)),
         error_string=error_string,
+        upload_stats_known=_valid_number(seeding_raw) and _valid_number(uploaded_raw),
     )
 
 
@@ -123,21 +126,18 @@ def _field(torrent: Any, *names: str, default: Any = None) -> Any:
 
 
 def _number(value: Any) -> float:
-    """把下载器数值字段转换为非负浮点数。"""
+    """非有限或负数采样值降为 0，不能以无穷大通过阈值。"""
+    return float(value) if _valid_number(value) else 0.0
+
+
+def _valid_number(value: Any) -> bool:
     try:
-        return max(0.0, float(value))
-    except (TypeError, ValueError):
-        return 0.0
+        number = float(value)
+        return math.isfinite(number) and number >= 0
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
-def _timestamp(value: Any) -> float:
-    """把时间戳或 datetime 对象转换为 Unix 秒。"""
-    if hasattr(value, "timestamp"):
-        try:
-            return _number(value.timestamp())
-        except (TypeError, ValueError, OSError):
-            return 0.0
-    return _number(value)
 
 
 __all__ = (

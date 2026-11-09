@@ -117,6 +117,7 @@ def _observe_result(candidates=3):
         "deleted_files": 0,
         "skipped_protected": 0,
         "skipped_missing": 0,
+        "skipped": 0,
         "failed": 0,
         "failed_operations": 0,
         "config_error": "",

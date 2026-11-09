@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -62,13 +63,17 @@ class RemoveSnapshot:
     category: str
     tags: tuple[str, ...]
     error_string: str
+    upload_stats_known: bool = True
 
     @property
-    def average_upload_bps(self) -> float:
-        """做种期间平均上传速度（字节/秒），未开始做种时为 0。"""
-        if self.seeding_seconds <= 0:
-            return 0.0
-        return self.uploaded / self.seeding_seconds
+    def average_upload_bps(self) -> float | None:
+        """缺少可信累计统计时未知，不得冒充零速。"""
+        if (not self.upload_stats_known or not math.isfinite(self.seeding_seconds)
+                or self.seeding_seconds <= 0 or not math.isfinite(self.uploaded)
+                or self.uploaded < 0):
+            return None
+        average = self.uploaded / self.seeding_seconds
+        return average if math.isfinite(average) else None
 
 
 @dataclass(frozen=True)
@@ -102,7 +107,8 @@ class RemoveCandidate:
             "size_text": format_bytes(snapshot.size),
             "ratio": round(snapshot.ratio, 4),
             "seeding_hours": round(snapshot.seeding_seconds / 3600, 2),
-            "average_upload_bps": round(snapshot.average_upload_bps, 2),
+            "average_upload_bps": (round(snapshot.average_upload_bps, 2)
+                                   if snapshot.average_upload_bps is not None else None),
             "state": snapshot.state,
             "category": snapshot.category,
             "save_path": snapshot.save_path,

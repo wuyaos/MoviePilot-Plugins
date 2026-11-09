@@ -334,7 +334,16 @@ class AutoRemoveService:
                 downloader=downloader,
             )
             return []
-        fresh = {torrent_hash(torrent, dl_type) for torrent in torrents}
+        now = time.time()
+        fresh = {torrent_hash(torrent, dl_type): build_snapshot(torrent, downloader, dl_type, now)
+                 for torrent in torrents}
+        fresh_pool = [snapshot for snapshot in fresh.values() if _has_required_tags(conditions, snapshot)]
+        eligible = [RemoveCandidate(snapshot=fresh[item.torrent_hash], reason=reason)
+                    for item in candidates if not item.same_data and item.torrent_hash in fresh
+                    if (reason := match_reason(conditions, fresh[item.torrent_hash])) is not None]
+        if conditions.same_data and eligible:
+            eligible = _append_same_data(eligible, fresh_pool)
+        eligible_hashes = {item.torrent_hash for item in eligible}
         executed: list[RemoveCandidate] = []
         for candidate in candidates:
             if self._stopped:
@@ -355,6 +364,13 @@ class AutoRemoveService:
                     site=snapshot.site or None,
                 )
                 continue
+            if snapshot.torrent_hash not in eligible_hashes:
+                detail["skipped_changed"] = int(detail.get("skipped_changed") or 0) + 1
+                self._record_history(records, trigger=trigger_source, action=action, result="skipped",
+                                     reason="执行前复查不再满足筛选条件或辅种关联", downloader=downloader,
+                                     torrent_hash=snapshot.torrent_hash, name=label, site=snapshot.site or None)
+                continue
+            snapshot = fresh[snapshot.torrent_hash]
             if self._skip_for_protection(action, downloader, snapshot.torrent_hash):
                 detail["skipped_protected"] += 1
                 self._record_history(records,
@@ -520,7 +536,8 @@ class AutoRemoveService:
             if key == "skipped":
                 continue
             result[key] = sum(int(detail.get(key) or 0) for detail in result["details"])
-        result["skipped"] = result["skipped_protected"] + result["skipped_missing"]
+        result["skipped"] = (result["skipped_protected"] + result["skipped_missing"]
+                             + sum(int(detail.get("skipped_changed") or 0) for detail in result["details"]))
 
     def _record_status(self, result: dict[str, Any]) -> None:
         """保存最近一轮执行状态，供 reload 后的 overview 展示。"""
@@ -533,7 +550,7 @@ class AutoRemoveService:
             "deleted_files": result["deleted_files"],
             "skipped_protected": result["skipped_protected"],
             "skipped_missing": result["skipped_missing"],
-            "skipped": result["skipped_protected"] + result["skipped_missing"],
+            "skipped": result["skipped"],
             "failed": result["failed"],
             "failed_operations": result["failed_operations"],
             "config_error": result["config_error"],

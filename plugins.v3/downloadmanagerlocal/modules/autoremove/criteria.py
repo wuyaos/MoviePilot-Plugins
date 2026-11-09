@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Optional, Pattern
@@ -53,22 +54,22 @@ def compile_conditions(config: RemoverConfig) -> CompiledConditions:
         min_size, max_size = _parse_size_range(config.size)
 
     ratio = _parse_number(config.ratio, "分享率")
-    hours = _parse_number(config.time, "做种时间")
-    speed = _parse_number(config.upspeed, "平均上传速度")
+    seconds = _parse_number(config.time, "做种时间", 3600)
+    speed = _parse_number(config.upspeed, "平均上传速度", 1024)
     return CompiledConditions(
         action=action,
         size_limit=size_limit,
         min_size=min_size,
         max_size=max_size,
         ratio=ratio,
-        seeding_seconds=hours * 3600 if hours is not None else None,
-        upload_bps=speed * 1024 if speed is not None else None,
+        seeding_seconds=seconds,
+        upload_bps=speed,
         required_tags=_required_tags(config),
         path_pattern=_compile(config.pathkeywords, "保存路径关键词"),
         tracker_pattern=_compile(config.trackerkeywords, "Tracker关键词"),
         error_pattern=_compile(config.errorkeywords, "错误信息关键词"),
-        torrent_states=str(config.torrentstates or ""),
-        torrent_categorys=str(config.torrentcategorys or ""),
+        torrent_states=str(config.torrentstates or "").strip(),
+        torrent_categorys=str(config.torrentcategorys or "").strip(),
         same_data=bool(config.samedata),
     )
 
@@ -77,7 +78,7 @@ def match_reason(conditions: CompiledConditions, snapshot: RemoveSnapshot) -> Op
     """按来源 AND 语义逐条判定；命中返回原因文本，未命中返回 None。
 
     分享率严格大于阈值、做种时长严格大于小时值、大小为 GB 开区间、平均上传速度严格小于
-    KB/s 阈值；任务状态与分类仅 qBittorrent 生效且保持来源的字符串包含语义，错误信息关键词
+    KB/s 阈值；任务状态与分类仅 qBittorrent 生效且按列表值精确匹配，错误信息关键词
     仅 Transmission 生效。
     """
     if conditions.ratio is not None and not snapshot.ratio > conditions.ratio:
@@ -89,17 +90,18 @@ def match_reason(conditions: CompiledConditions, snapshot: RemoveSnapshot) -> Op
         return None
     if conditions.size_limit and not conditions.min_size < snapshot.size < conditions.max_size:
         return None
-    if conditions.upload_bps is not None and not snapshot.average_upload_bps < conditions.upload_bps:
+    average = snapshot.average_upload_bps
+    if conditions.upload_bps is not None and (average is None or not average < conditions.upload_bps):
         return None
     if conditions.path_pattern is not None and not conditions.path_pattern.findall(snapshot.save_path):
         return None
     if conditions.tracker_pattern is not None and not _match_tracker(conditions.tracker_pattern, snapshot):
         return None
     if snapshot.downloader_type == QBITTORRENT:
-        if conditions.torrent_states and snapshot.state not in conditions.torrent_states:
+        if conditions.torrent_states and (not snapshot.state or snapshot.state not in _exact_values(conditions.torrent_states)):
             return None
         if conditions.torrent_categorys and (
-            not snapshot.category or snapshot.category not in conditions.torrent_categorys
+            not snapshot.category or snapshot.category not in _exact_values(conditions.torrent_categorys)
         ):
             return None
     elif conditions.error_pattern is not None and not conditions.error_pattern.findall(snapshot.error_string):
@@ -130,26 +132,37 @@ def _required_tags(config: RemoverConfig) -> tuple[str, ...]:
     return tuple(tags)
 
 
-def _parse_number(raw: str, label: str) -> Optional[float]:
-    """解析数值条件，空值为未启用，非法值抛配置错误。"""
-    text = str(raw or "").strip()
+def _exact_values(raw: str) -> set[str]:
+    """分类/状态为逗号列表，兼容中文逗号和换行；空条件仍不限。"""
+    return {part.strip() for part in re.split(r"[,，\r\n]+", str(raw)) if part.strip()}
+
+def _parse_number(raw: str, label: str, scale: float = 1.0) -> Optional[float]:
+    """解析有限、非负数值；空值为未启用，错误必须停止本轮。"""
+    text = str(raw).strip() if raw is not None else ""
     if not text:
         return None
     try:
-        return float(text)
-    except ValueError as error:
+        value = float(text) * scale
+    except (TypeError, ValueError, OverflowError) as error:
         raise RemoverConfigError(f"{label} {text!r} 无法解析为数值") from error
+    if not math.isfinite(value) or value < 0:
+        raise RemoverConfigError(f"{label} {text!r} 必须为有限非负数")
+    return value
 
 
 def _parse_size_range(raw: str) -> tuple[int, int]:
     """解析 GB 大小范围，取首尾值作开区间边界（与来源 split 首尾一致）。"""
     parts = [part.strip() for part in str(raw).split("-")]
+    message = f"种子大小 {raw!r} 无效，请填写最小值-最大值（GB，例如 1-100，且 0 ≤ 最小值 < 最大值）"
+    if len(parts) != 2:
+        raise RemoverConfigError(message)
     try:
-        values = [float(part) for part in parts]
+        low, high = (float(part) for part in parts)
     except ValueError as error:
-        raise RemoverConfigError(f"种子大小 {raw!r} 无法解析为 GB 数值范围") from error
-    return int(values[0] * GIB), int(values[-1] * GIB)
-
+        raise RemoverConfigError(message) from error
+    if not (0 <= low < high < float("inf")):
+        raise RemoverConfigError(message)
+    return int(low * GIB), int(high * GIB)
 
 def _compile(raw: str, label: str) -> Optional[Pattern[str]]:
     """编译关键词正则，空值为未启用，非法正则抛配置错误。"""

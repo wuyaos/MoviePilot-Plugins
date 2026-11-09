@@ -189,6 +189,13 @@ def _configure(autoremove, plugin, *, instance, torrents=(), read_error=None):
 def _run_downloader(service, *args, **kwargs):
     """按 run_cycle 的方式调用 _execute_downloader：收集后锁外落库，测试共用同一出口。"""
     records: list[dict] = []
+    module = sys.modules[PREFIX + ".modules.autoremove.criteria"]
+    models = sys.modules[PREFIX + ".modules.autoremove.models"]
+    args = list(args)
+    args[3] = module.compile_conditions(models.RemoverConfig(action=args[3].action))
+    scanner = sys.modules[PREFIX + ".modules.autoremove.scanner"]
+    snapshots = {item.torrent_hash: item.snapshot for item in args[1]}
+    scanner.build_snapshot.side_effect = lambda raw, *unused: snapshots.get(raw["hash"], _snapshot(models, hash_=raw["hash"]))
     executed = service._execute_downloader(*args, records, **kwargs)
     service._flush_history(records)
     return executed

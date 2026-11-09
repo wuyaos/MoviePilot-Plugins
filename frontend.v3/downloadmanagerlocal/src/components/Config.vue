@@ -1818,7 +1818,7 @@ Object.keys(form).forEach(k => delete form[k])
 <div class="dm-field"><VTextField density="compact" v-model="form.remover_ratio" label="分享率" variant="outlined" hide-details /></div>
 <div class="dm-field"><VTextField density="compact" v-model="form.remover_size" label="体积（GB）" variant="outlined" hide-details /></div>
 <div class="dm-field"><VTextField density="compact" v-model="form.remover_upspeed" label="平均上传速度（KB/s）" variant="outlined" hide-details /></div>
-</div><div class="dm-hint">做种时长、分享率为大于阈值，平均上传速度为小于阈值；体积填写上下限（GB，逗号分隔）。所有条件同时满足才命中。</div>
+</div><div class="dm-hint">做种时长读取下载器累计值，缺失按 0；做种时长、分享率为大于阈值，平均上传速度为小于阈值；体积填写最小值-最大值（GB，例如 1-100，边界不含）。所有条件同时满足才命中。</div>
 </FormSection><FormSection title="处理范围" :icon="MODULE_ICONS.autoremove">
 <div class="dm-switch-group"><VSwitch density="compact" v-model="form.remover_mponly" color="primary" inset hide-details label="仅 MoviePilot 任务" />
 <VSwitch density="compact" v-model="form.remover_samedata" color="error" inset hide-details label="连带同名同大小任务" /></div><div v-if="form.remover_samedata" class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />连带处理同名同大小任务，删除动作可能影响文件。</div><div class="dm-field-row">

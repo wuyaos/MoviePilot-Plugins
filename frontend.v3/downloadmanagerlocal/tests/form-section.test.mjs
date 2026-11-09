@@ -131,3 +131,8 @@ test('H&R layout retains the approved configuration business script byte-for-byt
     .split('\n').filter(line => !line.startsWith('        color: `var(--dm-hr-rule-')).join('\n')
   assert.equal(createHash('sha256').update(businessScript).digest('hex'),'c3e2622ed84299a803d7d8f17ddf4cf5c7b3af29c1db0218fa6cf2bbee347fcd')
 })
+
+test('自动删种体积帮助与后端范围语法一致，不再提示逗号', () => {
+  assert.match(descriptor.template.content, /体积填写最小值-最大值（GB，例如 1-100，边界不含）/)
+  assert.doesNotMatch(descriptor.template.content, /体积填写上下限（GB，逗号分隔）/)
+})

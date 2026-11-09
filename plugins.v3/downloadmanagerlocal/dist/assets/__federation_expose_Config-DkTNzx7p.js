@@ -3529,7 +3529,7 @@ return (_ctx, _cache) => {
                         }, null, 8, ["modelValue"])
                       ])
                     ]),
-                    _cache[148] || (_cache[148] = _createElementVNode("div", { class: "dm-hint" }, "做种时长、分享率为大于阈值，平均上传速度为小于阈值；体积填写上下限（GB，逗号分隔）。所有条件同时满足才命中。", -1))
+                    _cache[148] || (_cache[148] = _createElementVNode("div", { class: "dm-hint" }, "做种时长读取下载器累计值，缺失按 0；做种时长、分享率为大于阈值，平均上传速度为小于阈值；体积填写最小值-最大值（GB，例如 1-100，边界不含）。所有条件同时满足才命中。", -1))
                   ]),
                   _: 1
                 }, 8, ["icon"]),
@@ -4939,6 +4939,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-84e77e11"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b62c9909"]]);
 
 export { Config as default };
