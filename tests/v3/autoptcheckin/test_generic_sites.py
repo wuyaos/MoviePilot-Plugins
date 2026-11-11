@@ -54,6 +54,14 @@ def test_custom_numeric_ids_preserve_url_name_and_no_cookie(monkeypatch, site_id
     row = next(row for row in rows if row['id'] == site_id)
     assert row['name'] == 'Synthetic' and row['url'] == 'https://fixture.invalid/'
     assert 'cookie' not in row
+def test_hhanclub_login_notice_badge():
+    """憨憨公告禁止脚本签到：login_notice 透传到 registry（配置/站点卡 ⚠ 徽标）。"""
+    cls = next(c for c in generic.build_generic_sites() if c.id == 'hhanclub')
+    assert cls.login_notice == '公告禁止脚本自动签到'
+    row = next(row for row in registry.discover_sites()['sites'] if row['id'] == 'hhanclub')
+    assert row['notice'] == '公告禁止脚本自动签到'
+
+
 
 
 def test_generic_enabled_and_selected_executes_under_scheduler(monkeypatch):

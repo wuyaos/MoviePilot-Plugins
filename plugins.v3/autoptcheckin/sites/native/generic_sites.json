@@ -780,6 +780,7 @@
     "protocol": "get",
     "name": "憨憨",
     "url": "https://hhanclub.net/",
+    "login_notice": "公告禁止脚本自动签到",
     "status_map": {
       "今天已经签到过": "signed",
       "今天已签到": "signed",

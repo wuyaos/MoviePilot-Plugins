@@ -304,7 +304,7 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
             runner.history(result)
         if runner.notify:
             runner.notify(result)
-        logger.info(f'【PT 签到中心】{getattr(site, 'name', site.id)}（{site.id}）{read_only and "只读核验" or "签到"}结果：{getattr(result.status, 'value', result.status)} | {result.message}')
+        logger.info(f"【PT 签到中心】{getattr(site, 'name', site.id)}（{site.id}）{read_only and '只读核验' or '签到'}结果：{getattr(result.status, 'value', result.status)} | {result.message}")
         return result
 
     if getattr(site, 'signin_capable', True) is False:
@@ -328,6 +328,16 @@ def run_native(runner, site, info, *, read_only=False, trigger='manual', context
         if site.id == "piggo":
             return finish(_piggo_flow(runner, site, info, config, action="sign",
                                       read_only=read_only, get_data=get_data, save_data=save_data))
+        if site.id == "hdarea":
+            # 官方 API 双通道：配置 hdarea_apikey 即走 REST API；未配置回退
+            # generic form（Cookie 表单）通道，登录轨不受影响。
+            apikey = str((config or {}).get('hdarea_apikey') or info.get('hdarea_apikey') or '').strip()
+            if apikey:
+                from ..integrations.hdarea import run_hdarea_api
+                result = run_hdarea_api(site, info, config=config or {},
+                                        cancel=runner.stop, read_only=read_only)
+                result.metadata['transport'] = 'api'
+                return finish(result)
         attempted_cookie_sources = []
         result = SignResult(SignStatus.AUTH_FAILED, '缺少可用 Cookie')
         if flags['cloudsign_selected'] and not read_only:
@@ -549,7 +559,7 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
         result.metadata.update(action='login', trigger=trigger)
         if runner.history:
             runner.history(result)
-        logger.info(f'【PT 签到中心】{getattr(site, 'name', site.id)}（{site.id}）模拟登录结果：{getattr(result.status, 'value', result.status)} | {result.message}')
+        logger.info(f"【PT 签到中心】{getattr(site, 'name', site.id)}（{site.id}）模拟登录结果：{getattr(result.status, 'value', result.status)} | {result.message}")
         return result
 
     with runner.locks.acquire((site.id, '')) as acquired:
@@ -567,6 +577,16 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
                 result = LoginResult(LoginStatus.UNCONFIRMED, "M-Team 保活登录未确认")
             result.metadata["transport"] = "cloak"
             return finish(result)
+        if site.id == "hdarea":
+            # API Key 探活：配置 hdarea_apikey 后登录轨改验账号+Key 通道健康
+            #（API 不刷新站点动向、不续期 Web Cookie，语义是探活不是保活）；
+            # 未配置 Key 保持 Cookie 模拟登录。
+            apikey = str((config or {}).get('hdarea_apikey') or info.get('hdarea_apikey') or '').strip()
+            if apikey:
+                from ..integrations.hdarea import verify_hdarea_login
+                result = verify_hdarea_login(site, info, config=config or {})
+                result.metadata['transport'] = 'api'
+                return finish(result)
         if site.credential.kind in ('api_key', 'password'):
             from ..integrations.login import CredentialLoginProtocol
             return finish(CredentialLoginProtocol(credential_check).login(info))
