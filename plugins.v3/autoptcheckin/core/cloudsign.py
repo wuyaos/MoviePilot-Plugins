@@ -28,7 +28,7 @@ DEFAULT_RECONNECT_WAIT_MS = 60000
 DEFAULT_SOLVE_TIMEOUT_MS = 40000
 
 # 走云签的站点（CF 盾仿真站）；配置了 token 才实际分流
-CLOUD_SITES = ("mua_xloli", "ourbits", "vclib")
+CLOUD_SITES = ("mua_xloli", "ourbits", "vclib", "tangpt")
 
 # 各站小规则：路径 / 提交方式 / 等待预算 / 判定关键词。
 # submit=auto 两段式（solve 拿 token → reconnect 留会话 → 第二段注入+兜底 POST+verify）；
@@ -77,6 +77,23 @@ CLOUD_RULES: dict[str, dict[str, Any]] = {
         # 2026-10-26: 原词表 ["验证", "人机"] 单字宽泛匹配——站点公告/导航含「验证」即误判
         # 「仍待人机验证」（00:06 轮实况）。改为完整短语，仅真验证引导文案命中。
         "pending": ["完成人机验证", "人机验证", "验证通过后"],
+    },
+    "tangpt": {
+        # 2026-11-11: 躺平签到页已改 Turnstile（浏览器实测：隐藏 cf-turnstile-response +
+        # input[type=submit][value=立即签到]，非交互自动出 token；传统 imagehash 验证码已移除，
+        # HTTP 通道拿不到 token 永远签不上）。与 vclib 同款两段式：solve → reconnect →
+        # 注入提交（同源 attendance 表单兜底 POST）→ verify 回读。
+        "path": "/attendance.php",
+        "submit": "auto",
+        "before_wait": 15000,
+        "solve_timeout": DEFAULT_SOLVE_TIMEOUT_MS,
+        "auto_wait": 30000,
+        "wait": 8000,
+        "verify": "/attendance.php",
+        "verify_wait": 15000,
+        "success": ["签到成功", "签到已得", "簽到成功"],
+        "already": ["今日已签到", "今天已经签到", "已经签到", "已签到"],
+        "pending": [],
     },
 }
 

@@ -404,10 +404,16 @@
   },
   {
     "id": "tangpt",
-    "protocol": "nexus",
+    "protocol": "page_action",
     "name": "躺平",
     "url": "https://www.tangpt.top/",
-    "attendance_path": "/attendance.php"
+    "attendance_path": "/attendance.php",
+    "emulate": true,
+    "headful": true,
+    "cloak_steps": [
+      "human_verify",
+      "sign_button"
+    ]
   },
   {
     "id": "ubits",
