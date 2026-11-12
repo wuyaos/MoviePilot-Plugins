@@ -24,6 +24,19 @@ except ImportError:  # 兼容仅加载站点标签模块的旧宿主夹具
     TAG_CLEANUP_STATUS_KEY = "tag_cleanup_status"
 
 
+def _safe_url_domain(url: str) -> str:
+    """提取 tracker 域名；单个损坏的 tracker 不应中断整轮历史补全。"""
+    value = str(url or "").strip()
+    if not value:
+        return ""
+    try:
+        return str(get_url_domain(value) or "").strip()
+    except (TypeError, ValueError) as err:
+        # urllib.parse 在未加方括号的 IPv6 或损坏 URL 上会抛出 ``Invalid IPv6 URL``。
+        logger.warning(f"【PT下载中心:站点标签】忽略无效 tracker URL：{value!r}（{err}）")
+        return ""
+
+
 def _append_history(plugin, module: str, record: dict) -> None:
     """写入展示历史（tag / tag_cleanup 流）；失败只记日志，不影响业务结果。"""
     try:
@@ -467,8 +480,8 @@ def find_site_by_domain(domain: str) -> Optional[str]:
     try:
         for site_info in list_site_dicts():
             site_domain = site_info.get("domain") or site_info.get("url") or ""
-            site_domain_clean = get_url_domain(site_domain)
-            if site_domain_clean and site_domain_clean == get_url_domain(domain):
+            site_domain_clean = _safe_url_domain(site_domain)
+            if site_domain_clean and site_domain_clean == _safe_url_domain(domain):
                 return site_info.get("name")
     except Exception:
         pass
@@ -498,7 +511,7 @@ def tag_torrent(plugin, dl, dl_type: str, torrent_hash: str, torrent_tags: list,
                     domain = mapped
                     break
             if not domain:
-                domain = get_url_domain(tracker)
+                domain = _safe_url_domain(tracker)
             if not domain:
                 continue
             # 从系统配置中查找匹配的站点
@@ -733,8 +746,9 @@ def _apply_metadata(plugin, service, torrent, config: dict, context=None) -> dic
     for tracker in trackers:
         domain = next((mapped for key, mapped in config["tracker_mappings"].items() if key in tracker), None)
         custom_labels = config.get("custom_site_labels") or {}
-        site_name = find_site_by_domain(domain or get_url_domain(tracker)) or custom_labels.get(
-            (domain or get_url_domain(tracker) or "").lower()
+        tracker_domain = domain or _safe_url_domain(tracker)
+        site_name = find_site_by_domain(tracker_domain) or custom_labels.get(
+            (tracker_domain or "").lower()
         )
         if site_name:
             break
