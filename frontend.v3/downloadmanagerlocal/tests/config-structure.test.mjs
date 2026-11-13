@@ -37,7 +37,7 @@ test('P2-1d: each pane reset enables only its own observation, stays local until
       const prefixes = { hr: 'hr_', remover: 'remover_', failclean: 'failcleanup_', rename: 'rename_', tag: 'tag_', upload: 'upload_limit_' }
       for (const [owner, keys] of Object.entries(state.PANE_RESET_KEYS)) if (prefixes[owner]) assert.ok(keys.every(key => key.startsWith(prefixes[owner])), owner + ' has a foreign reset key')
       const legacyTransferResetKeys = ['transfer_enabled', 'delay_minutes', 'notify', 'transfer_fallback_enabled', 'transfer_fallback_interval_minutes', 'fromdownloader', 'todownloader', 'frompath', 'topath', 'fromtorrentpath', 'nopaths', 'nolabels', 'includelabels', 'includecategory', 'transferemptylabel', 'add_torrent_tags', 'deletesource', 'deleteduplicate', 'remainoldcat', 'remainoldtag', 'transfer_tasks', 'transfer_rename_enabled', 'downloader_ext', 'seed_autostart', 'seed_skipverify', 'seed_check_interval', 'seed_max_wait_minutes', 'scan_limit', 'pause_source', 'transfer_observe_only']
-      const newTransferResetKeys = ['transfer_delete_source_default', 'transfer_delete_duplicate_default']
+      const newTransferResetKeys = ['transfer_delete_source_default', 'transfer_delete_duplicate_default', 'transfer_path_detect_enabled', 'transfer_path_auto_repair']
       assert.equal(state.PANE_RESET_KEYS.transfer.length, legacyTransferResetKeys.length + newTransferResetKeys.length)
       assert.deepEqual(legacyTransferResetKeys.filter(key => !state.PANE_RESET_KEYS.transfer.includes(key)), [])
       assert.deepEqual(state.PANE_RESET_KEYS.transfer.filter(key => !legacyTransferResetKeys.includes(key)), newTransferResetKeys)

@@ -14,7 +14,7 @@ const end = script.indexOf('const removerActionItems', start)
 console.log(JSON.stringify({
   fixture: {
     scriptSha256: hash(normalized.match(/<script setup>([\s\S]*?)<\/script>/)[1]),
-    directives: [...descriptor.template.content.matchAll(/(?:v-[\w.-]+|[:@][\w:-]+)="[^"]*"/g)].map(m => m[0]).sort(),
+    directives: [...descriptor.template.content.matchAll(/(?:v-[\w.-]+|[:@][\w:-]+)="[^"]*"/g)].map(m => m[0].replace(/\r\n/g, '\n')).sort(),
   },
   businessSha: hash((script.slice(0, start) + script.slice(end)).split('\n')
     .filter(line => !line.startsWith('        color: `var(--dm-hr-rule-')).join('\n')),

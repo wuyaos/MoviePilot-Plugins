@@ -57,7 +57,7 @@ test('full names/reasons remain escaped in cells and expandable details; count a
 test('all existing row action columns share the same menu without changing business handlers', () => {
   const page = read('Page')
   const columns = [...page.matchAll(/<template #rowActions\b[^>]*>([\s\S]*?)<\/template>/g)]
-  assert.equal(columns.length, 6)
+  assert.equal(columns.length, 7)
   for (const [, content] of columns) {
     assert.match(content, /<RowActionMenu\b/)
     assert.doesNotMatch(content, /<VBtn\b|<button\b/)

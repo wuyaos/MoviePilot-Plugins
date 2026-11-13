@@ -93,6 +93,8 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
         config.update(delete_defaults)
     plugin._transfer_tasks = config.get("transfer_tasks")
     plugin._transfer_rename_enabled = config.get("transfer_rename_enabled", defaults["transfer_rename_enabled"])
+    plugin._transfer_path_detect_enabled = config.get("transfer_path_detect_enabled", True) is True
+    plugin._transfer_path_auto_repair = config.get("transfer_path_auto_repair", False) is True
     plugin._downloader_ext = config.get("downloader_ext", defaults["downloader_ext"])
     plugin._fromtorrentpath = config.get("fromtorrentpath", defaults["fromtorrentpath"])
     plugin._nopaths = config.get("nopaths", defaults["nopaths"])

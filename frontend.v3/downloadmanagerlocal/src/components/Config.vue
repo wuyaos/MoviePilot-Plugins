@@ -104,6 +104,7 @@ const defaults = {
   deletesource: false, deleteduplicate: false,
   remainoldcat: false, remainoldtag: false,
   transfer_tasks: '[]', transfer_rename_enabled: false, downloader_ext: '{}',
+  transfer_path_detect_enabled: true, transfer_path_auto_repair: false,
   rename_enabled: true,
   rename_movie_format: '[ {{ title }}{% if year %} ({{ year }}){% endif %} ] - {{original_name}}',
   rename_tv_format: '[ {{ title }}{% if year %} ({{ year }}){% endif %}{% if season_episode %} - {{season_episode}}{% endif %} ] - {{original_name}}',
@@ -132,6 +133,7 @@ const PANE_RESET_KEYS = {
     'nopaths', 'nolabels', 'includelabels', 'includecategory', 'transferemptylabel',
     'add_torrent_tags', 'deletesource', 'deleteduplicate', 'remainoldcat', 'remainoldtag',
     'transfer_tasks', 'transfer_rename_enabled', 'downloader_ext',
+    'transfer_path_detect_enabled', 'transfer_path_auto_repair',
     'seed_autostart', 'seed_skipverify', 'seed_check_interval', 'seed_max_wait_minutes',
     'scan_limit', 'pause_source', 'transfer_observe_only'],
   hr: Object.keys(defaults).filter(k => k.startsWith('hr_')),
@@ -1550,6 +1552,13 @@ Object.keys(form).forEach(k => delete form[k])
                     <VTextField density="compact" class="dm-number-input" v-model.number="form.transfer_fallback_interval_minutes" label="兜底间隔（分钟）" type="number" min="1" variant="outlined" :disabled="!form.transfer_fallback_enabled" hint="事件漏触发时按此间隔扫描，默认60分钟" persistent-hint />
                   </div>
                 </div>
+              </FormSection>
+              <FormSection title="内部文件路径核对" :icon="MODULE_ICONS.transfer">
+                <div class="dm-switch-group">
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_path_detect_enabled" color="primary" inset hide-details label="自动检测路径差异" /></div>
+                  <div class="dm-field dm-field--toggle"><VSwitch density="compact" v-model="form.transfer_path_auto_repair" :disabled="!form.transfer_path_detect_enabled" color="warning" inset hide-details label="自动修复（受限）" /></div>
+                </div>
+                <div class="dm-hint">默认仅检测，不修改任务。可在转移记录中预览并手动修复；远端现场无法确认、原路径存在或映射不唯一时拒绝修复。修复强制真实校验并保留源任务，不受“跳过校验”影响。</div>
               </FormSection>
               <FormSection title="转移后操作" :icon="MODULE_ICONS.transfer">
                 <div class="dm-switch-group">

@@ -128,6 +128,7 @@ def test_lookup_statuses(env):
 
 
 MODEL_NAMES = (
+    "TransferPathRequest",
     "ApiBusinessModel", "CleanupModuleRequest", "CleanupModuleResult", "DiagnosticsResult", "EmptyRequest",
     "ExecutionHistoryPageResult", "HashActionResult", "HrActionResult", "HrClearTaskRequest", "HrPresetsResult",
     "HrSkipStatsResult", "HrTasksResult", "ModuleActionResult", "ModuleConfigSummaryResult", "ModuleStatusResult",

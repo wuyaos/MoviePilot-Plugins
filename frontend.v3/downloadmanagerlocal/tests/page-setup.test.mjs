@@ -15,7 +15,7 @@ const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^i
 const setup = new Function(
   'reactive', 'ref', 'computed', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount',
   'defineProps', 'defineEmits', 'getPluginApi', 'postPluginApi', 'postPluginJsonApi',
-  `${script}\nreturn { total, archiveTotal, pageSize, totalPages, archiveTotalPages, moduleFaultItems, nextPage, nextArchivePage, renameRowKey, doTagCleanupRun, transferSourceName, transferPrimaryText, transferSecondaryText, hrTaskTitle, detailLimit, DETAIL_LIMIT_CHOICES, diagnostics, moduleDetail, loadDiagnostics, loadOverviewTab, refreshActive, selectTab, activeTab, tabs, page, archivePage, cleanupCounts, cleanupTargetKey, cleanupConfirmDialog, cleanupRunning, CLEANUP_TARGETS, confirmCleanupData, openCleanupDialog, autoremovePreview, MODULE_RECORD_VIEWS, MODULE_CLEANUP_KEYS, moduleRecordView, moduleCleanupButtons, openModuleRecords };`)
+  `${script}\nreturn { inspectTransferPath, confirmPathRepair, pathRepairDialog, pathRepairBusy, pathRepairPreview, visibleTorrentPath, total, archiveTotal, pageSize, totalPages, archiveTotalPages, moduleFaultItems, nextPage, nextArchivePage, renameRowKey, doTagCleanupRun, transferSourceName, transferPrimaryText, transferSecondaryText, hrTaskTitle, detailLimit, DETAIL_LIMIT_CHOICES, diagnostics, moduleDetail, loadDiagnostics, loadOverviewTab, refreshActive, selectTab, activeTab, tabs, page, archivePage, cleanupCounts, cleanupTargetKey, cleanupConfirmDialog, cleanupRunning, CLEANUP_TARGETS, confirmCleanupData, openCleanupDialog, autoremovePreview, MODULE_RECORD_VIEWS, MODULE_CLEANUP_KEYS, moduleRecordView, moduleCleanupButtons, openModuleRecords };`)
 
 function mount() {
   const props = reactive({ api: null, pluginId: 'DownloadManagerLocal', sourcePluginId: 'DownloadManagerLocal' })
@@ -109,7 +109,8 @@ function mountRecording(handlers = {}) {
   }
   const record = (kind) => (api, pluginId, path, payload) => {
     calls.push({ kind, path, payload })
-    return Promise.resolve({ code: 0, msg: '' })
+    const handler = handlers[path.split('?')[0]]
+    return Promise.resolve(typeof handler === 'function' ? handler(path, payload) : { code: 0, msg: '' })
   }
   const page = setup(reactive, ref, computed, watch, nextTick, () => {}, unmount => { unmounts.push(unmount) },
     () => props, () => () => {}, getPluginApi, record('post'), record('postJson'))
@@ -318,4 +319,30 @@ test("一键清理空标签：直接调用 tag_cleanup_run，无弹窗无预览�
   assert.match(source, /一键清理空标签/)
   assert.doesNotMatch(template, /v-model="cleanupPanel"/)
   assert.notEqual(instance.renameRowKey({ downloader: "QB1", hash: HASH40 }), instance.renameRowKey({ downloader: "QB2", hash: HASH40 }))
+})
+
+
+test('路径按钮先检测；未获安全许可不能执行；不可见字符显式展示', async () => {
+  const { page: instance, calls } = mountRecording({ transfer_path_repair: () => ({ code: 0, diagnostic: { state: 'mismatch', repairable: false, reason: '远端文件现场无法确认' } }) })
+  const row = { source_downloader: 'QB1', source_hash: HASH40 }
+  await instance.inspectTransferPath(row)
+  assert.equal(instance.pathRepairDialog.value, true)
+  assert.equal(instance.pathRepairPreview.value.repairable, false)
+  assert.deepEqual(calls[0].payload, row, '预览不能携带 execute')
+  await instance.confirmPathRepair()
+  assert.equal(calls.length, 1, '不安全时不能发执行请求')
+  assert.equal(instance.visibleTorrentPath('Album\u200e/file'), 'Album⟦U+200E⟧/file')
+})
+
+test('修复以预览 token 和源身份执行一次，失败必须重新检测', async () => {
+  const { page: instance, calls } = mountRecording({ transfer_path_repair: (path, body) => body.execute
+    ? { code: 1, msg: '现场已变化' }
+    : { code: 0, diagnostic: { repairable: true, token: 'proof' } } })
+  const row = { source_downloader: 'QB1', source_hash: HASH40 }
+  await instance.inspectTransferPath(row)
+  await instance.confirmPathRepair()
+  assert.deepEqual(calls[1].payload, { ...row, execute: true, token: 'proof' })
+  assert.equal(instance.pathRepairPreview.value.repairable, false)
+  await instance.confirmPathRepair()
+  assert.equal(calls.length, 2, '失败不能自动或重复执行')
 })

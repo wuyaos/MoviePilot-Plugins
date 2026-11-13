@@ -188,8 +188,8 @@ try {
     for (const row of report.layouts) {
       assert.ok(row.overflow <= 1, JSON.stringify(report))
       assert.ok(row.outerOverflow <= 1, JSON.stringify(report))
-      assert.equal(row.sections, 3)
-      assert.equal(row.icons, 3)
+      assert.equal(row.sections, 4)
+      assert.equal(row.icons, 4)
       assert.ok(row.fields.every(height => height === 36), JSON.stringify(report))
       assert.ok(row.tracks.every(height => height === 24), JSON.stringify(report))
       if (row.width === 360) assert.equal(row.fieldX[0], row.fieldX[1], JSON.stringify(report))

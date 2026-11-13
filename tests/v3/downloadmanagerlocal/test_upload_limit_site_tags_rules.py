@@ -59,6 +59,7 @@ class FakeBaseModel:
 
 
 MODEL_NAMES = (
+    "TransferPathRequest",
     'CleanupModuleRequest', 'CleanupModuleResult', 'DiagnosticsResult', 'EmptyRequest', 'HashActionResult', 'HrActionResult',
     'HrClearTaskRequest', 'HrPresetsResult', 'HrSkipStatsResult', 'HrTasksResult',
     'ModuleActionResult', 'ModuleConfigSummaryResult', 'ModuleStatusResult', 'OverviewResult', 'RenamePageResult',

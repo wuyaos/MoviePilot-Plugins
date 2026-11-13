@@ -16,6 +16,7 @@ from ..modules.rename.locator import resolve_record_downloader
 from ..modules.rename.record_keys import downloader_of_key, hash_of_key, lookup as lookup_record
 from ..model.api import (
     ApiBusinessModel,
+    TransferPathRequest,
     CleanupModuleRequest,
     CleanupModuleResult,
     DiagnosticsResult,
@@ -995,6 +996,8 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
             "fallback": bool(value.get("fallback")),
             "updated_at": float(value.get("updated_at") or 0),
             "error": value.get("error") or "",
+            "path_diagnostic": value.get("path_diagnostic") or {},
+            "path_repair_status": value.get("path_repair_status") or "",
             "attempts": value.get("attempts") or 0,
             "created_at": value.get("created_at") or 0,
             "delete_source_pending": bool(value.get("delete_source_requested") and not value.get("delete_source")),
@@ -1035,6 +1038,37 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
         },
     }
     return {"code": 0, "status": status, **pagination}
+
+
+def api_transfer_path_repair(plugin, payload: TransferPathRequest):
+    """仅定位已有转移记录；浏览器不能传递任意磁盘路径或下载器目标。"""
+    from ..modules.transfer.path_repair import PathRepairBlocked, diagnose, repair
+    from ..modules.transfer.recheck import _queue_key, _queue_lock, load_seed_recheck_queue
+
+    _require_module(plugin, "transfer", "转移做种")
+    with _queue_lock(plugin):
+        key = f"{payload.source_downloader}-{payload.source_hash.lower()}"
+        record = plugin.get_data(key)
+        if not isinstance(record, dict) or not _transfer_record_key(record):
+            raise HTTPException(status_code=404, detail="转移记录不存在")
+        item = dict(record)
+        item.update(source_downloader=payload.source_downloader, source_hash=payload.source_hash.lower(),
+                    downloader=record.get("to_download") or record.get("downloader"),
+                    hash=record.get("to_download_id") or record.get("hash"))
+        queue = load_seed_recheck_queue(plugin)
+        active = queue.get(_queue_key(item["downloader"], item["hash"]))
+        if active:
+            if active.get("source_hash") != item["source_hash"] or active.get("source_downloader") != item["source_downloader"]:
+                raise HTTPException(status_code=409, detail="目标被另一转移事务占用")
+            item = dict(active)
+        if payload.execute:
+            try:
+                result = repair(plugin, item, payload.token)
+            except PathRepairBlocked as exc:
+                result = {"code": 1, "msg": str(exc)}
+        else:
+            result = {"code": 0, "diagnostic": diagnose(plugin, item)}
+    return _operation_response(result, ModuleActionResult)
 
 
 def api_tag_complement(plugin, payload: EmptyRequest | None = None):

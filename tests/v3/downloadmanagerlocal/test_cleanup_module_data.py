@@ -92,6 +92,7 @@ def _load(relpath, name):
 
 
 MODEL_NAMES = (
+    "TransferPathRequest",
     'CleanupModuleRequest', 'CleanupModuleResult', 'DiagnosticsResult', 'EmptyRequest',
     'HashActionResult', 'HrActionResult', 'HrClearTaskRequest', 'HrPresetsResult',
     'HrSkipStatsResult', 'HrTasksResult', 'ModuleActionResult', 'ModuleConfigSummaryResult', 'ModuleStatusResult',

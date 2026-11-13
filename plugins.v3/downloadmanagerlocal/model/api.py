@@ -20,6 +20,13 @@ class ApiRequestModel(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+class TransferPathRequest(ApiRequestModel):
+    source_downloader: str = Field(min_length=1, max_length=200)
+    source_hash: str = Field(pattern=r"^[a-fA-F0-9]{40}$")
+    execute: bool = False
+    token: str = Field(default="", max_length=64)
+
+
 
 class SelectionItem(ApiBusinessModel):
     """下载器或站点选择项。"""

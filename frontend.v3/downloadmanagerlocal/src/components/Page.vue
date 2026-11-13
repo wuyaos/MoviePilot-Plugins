@@ -151,6 +151,47 @@ const hrClearDialogDescription = computed(() => ({
 }[hrClearKind.value] || '清除 H&R 记录，不操作下载器任务'))
 
 const transferRunDialog = ref(false)
+const pathRepairDialog = ref(false)
+const pathRepairBusy = ref(false)
+const pathRepairRow = ref(null)
+const pathRepairPreview = ref(null)
+let pathRepairRequest = 0
+function visibleTorrentPath(value) {
+  return String(value || '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/gu, c => `⟦U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}⟧`)
+}
+async function inspectTransferPath(row) {
+  if (pathRepairBusy.value) return
+  const request = ++pathRepairRequest
+  pathRepairRow.value = row
+  pathRepairPreview.value = null
+  pathRepairDialog.value = true
+  pathRepairBusy.value = true
+  try {
+    const resp = await postApi('transfer_path_repair', { source_downloader: row.source_downloader, source_hash: row.source_hash })
+    if (request !== pathRepairRequest) return
+    if (resp?.code !== 0 || !resp.diagnostic) throw new Error(resp?.msg || '路径检测失败')
+    pathRepairPreview.value = resp.diagnostic
+  } catch (e) {
+    if (request === pathRepairRequest) pathRepairPreview.value = { reason: e?.message || '路径检测失败', repairable: false }
+  } finally {
+    if (request === pathRepairRequest) pathRepairBusy.value = false
+  }
+}
+async function confirmPathRepair() {
+  if (pathRepairBusy.value || !pathRepairPreview.value?.repairable) return
+  const row = pathRepairRow.value
+  pathRepairBusy.value = true
+  try {
+    const resp = await postApi('transfer_path_repair', { source_downloader: row.source_downloader, source_hash: row.source_hash, execute: true, token: pathRepairPreview.value.token })
+    applyActionResp(resp, '路径修复已提交校验')
+    // 一次预览只供一次执行；失败也必须重新检测现场。
+    pathRepairPreview.value = { ...pathRepairPreview.value, repairable: false, reason: resp?.msg || '请重新检测' }
+    if (resp?.code === 0) { pathRepairDialog.value = false; await refreshActive() }
+  } catch (e) {
+    applyActionError(e, '路径修复失败')
+    pathRepairPreview.value = { repairable: false, reason: '执行结果未确认，请重新检测；不会自动重试' }
+  } finally { pathRepairBusy.value = false }
+}
 
 
 const OVERVIEW_REFRESH_INTERVAL_MS = 30_000
@@ -667,6 +708,7 @@ const TRANSFER_PHASE_LABELS = {
   // 当前 pipeline 不再产出，但 qnap 的历史记录里可能存在，缺映射会让界面漏出原始英文。
   stopped_after_add: '已添加目标（旧记录）',
   verifying: '做种校验',
+  path_repair_verifying: '路径修复待校验',
   target_ready: '待确认做种',
   completed: '已完成',
   rollback: '回滚中',
@@ -1547,8 +1589,12 @@ function resetHistoryFilter() { historyResultFilter.value = 'all'; pageRecordCha
 function resetTransferFilter() { transferResultFilter.value = 'all'; pageRecordChange('transfer', 1) }
 function routeText(row) { return `${row.source_downloader || row.from_downloader || '源下载器未知'} → ${row.target_downloader || row.to_downloader || row.downloader || row.to_download || '目的下载器未知'}` }
 function transferOutcomeText(row) {
-  const sourceResults = { disabled: '保留源：删除关闭', deleted: '已删源任务，不含文件', hr_protected: 'H&R 保护或状态未确认，保留源；无有效校验证据不解除保护', delete_failed: '删源失败，详见 H&R 联动记录', target_not_ready: '目标未就绪，保留源', identity_unconfirmed: '身份或路径未确认，保留源', query_failed: '查询失败，保留源', start_requested: '已请求启动，待确认做种', start_failed: '启动失败，保留源' }
+  const sourceResults = { path_mismatch: '内部文件路径不一致，保留源', path_repaired_source_retained: '路径修复校验通过，保留源', disabled: '保留源：删除关闭', deleted: '已删源任务，不含文件', hr_protected: 'H&R 保护或状态未确认，保留源；无有效校验证据不解除保护', delete_failed: '删源失败，详见 H&R 联动记录', target_not_ready: '目标未就绪，保留源', identity_unconfirmed: '身份或路径未确认，保留源', query_failed: '查询失败，保留源', start_requested: '已请求启动，待确认做种', start_failed: '启动失败，保留源' }
   const parts = [row.reuse_target ? '复用已有目的任务' : '']
+  if (row.path_diagnostic?.state === 'mismatch') parts.push(`内部路径不一致（${row.path_diagnostic.count || 0} 个文件），保留源`)
+  if (row.path_repair_status === 'verifying') parts.push('路径已对齐，等待真实校验')
+  if (row.path_repair_status === 'verified') parts.push('路径修复已校验，源任务保留')
+  if (row.path_repair_status === 'blocked') parts.push('路径修复已阻止，需重新检测')
   if (row.tag_result === 'failed' || row.site_tag_result === 'failed') parts.push('补标签失败')
   else if (row.tag_result === 'ok') parts.push('转移标签已核对')
   if (row.site_tag_result === 'unknown_site') parts.push('站点未识别')
@@ -1648,6 +1694,7 @@ onBeforeUnmount(() => {
                 <template #cell-route="{ row }">{{ routeText(row) }}</template>
                 <template #cell-phase="{ row }"><VChip size="x-small" :color="transferPhaseColor(row.phase)" variant="tonal">{{ transferPhaseText(row.phase) }}</VChip><div class="dm-hint">{{ transferOutcomeText(row) }}</div></template>
                 <template #cell-updated="{ row }">{{ formatTimestamp(row.updated_at || row.timestamp || row.created_at) }}</template>
+                <template #rowActions="{ row }"><RowActionMenu v-if="row.source_hash && row.source_downloader && !row.delete_source" :label="transferSourceName(row)" :busy="pathRepairBusy || !!moduleRunning" :actions="[{key:'path',label:'检测 / 修复路径',icon:'mdi-file-search-outline',disabled:pathRepairBusy || !!moduleRunning}]" @select="inspectTransferPath(row)" /></template>
                 <template #expand="{ row }"><RecordDetails :record="row" /></template>
               </ModuleTable>
             </template>
@@ -1796,6 +1843,25 @@ onBeforeUnmount(() => {
       </main>
     </div>
 
+      <VDialog content-class="dm-page" v-model="pathRepairDialog" :persistent="pathRepairBusy" max-width="760">
+        <VCard>
+          <VCardItem title="内部文件路径检测 / 修复" :subtitle="pathRepairRow?.source_name || '名称未记录'" />
+          <VCardText>
+            <VProgressLinear v-if="pathRepairBusy" indeterminate color="primary" />
+            <VAlert v-if="pathRepairPreview" :type="pathRepairPreview.repairable ? 'warning' : 'info'" variant="tonal" class="mb-3">{{ pathRepairPreview.reason }}</VAlert>
+            <div v-for="diff in pathRepairPreview?.differences || []" :key="diff.index" class="mb-3 text-break">
+              <div class="dm-hint">文件 #{{ diff.index }} · 源端现用路径</div><code>{{ visibleTorrentPath(diff.source) }}</code>
+              <div class="dm-hint">目标当前路径</div><code>{{ visibleTorrentPath(diff.target) }}</code>
+            </div>
+            <p class="dm-hint">不可见字符以 Unicode 转义显示；最多显示前 20 个差异。仅对齐目标内部根名称，不清洗磁盘文件名。修复后强制真实校验，保留源任务，不直接启动或删源。无法核实远端文件现场时拒绝修复。</p>
+          </VCardText>
+          <VCardActions><VSpacer />
+            <VBtn size="small" variant="text" :disabled="pathRepairBusy" @click="pathRepairDialog = false">关闭</VBtn>
+            <VBtn size="small" variant="tonal" :disabled="pathRepairBusy" @click="inspectTransferPath(pathRepairRow)">重新检测</VBtn>
+            <VBtn size="small" color="warning" variant="flat" :loading="pathRepairBusy" :disabled="pathRepairBusy || !pathRepairPreview?.repairable" @click="confirmPathRepair">确认修复并校验</VBtn>
+          </VCardActions>
+        </VCard>
+      </VDialog>
       <VDialog content-class="dm-page" v-model="transferRunDialog" max-width="520">
         <VCard>
           <VCardItem>

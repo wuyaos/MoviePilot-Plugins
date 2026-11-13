@@ -283,6 +283,17 @@ def advance_transfer(plugin, item, service, task, stopped):
     if transfer_observe_skip(plugin, "续办转移（原地等待）", str(item.get("source_hash", ""))):
         return False
     phase = item["phase"]
+    if phase == "path_repair_verifying":
+        from .path_repair import advance_repair
+        return advance_repair(plugin, item, service, task)
+    if (getattr(plugin, "_transfer_path_detect_enabled", False) is True
+            and phase in ("target_added", "verifying", "target_ready") and task is not None):
+        from .path_repair import detect_automatic
+        if detect_automatic(plugin, item):
+            if item.get("phase") != "path_repair_verifying":
+                item["source_result"] = "path_mismatch"
+            save_transaction(plugin, item)
+            return False
     if phase in ("source_pausing", "adding"):
         item["phase"] = "rollback"
         item["error"] = "事务中断：暂停/添加阶段未完成"

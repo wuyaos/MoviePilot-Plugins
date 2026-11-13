@@ -1059,6 +1059,7 @@ const _hoisted_36 = {
   class: "dm-runtime-details"
 };
 const _hoisted_37 = { class: "dm-runtime-details" };
+const _hoisted_38 = { class: "dm-hint" };
 const {computed,nextTick,onBeforeUnmount,onMounted,reactive,ref,watch} = await importShared('vue');
 
 const OVERVIEW_REFRESH_INTERVAL_MS = 30_000;
@@ -1199,6 +1200,47 @@ const hrClearDialogDescription = computed(() => ({
 }[hrClearKind.value] || '清除 H&R 记录，不操作下载器任务'));
 
 const transferRunDialog = ref(false);
+const pathRepairDialog = ref(false);
+const pathRepairBusy = ref(false);
+const pathRepairRow = ref(null);
+const pathRepairPreview = ref(null);
+let pathRepairRequest = 0;
+function visibleTorrentPath(value) {
+  return String(value || '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/gu, c => `⟦U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}⟧`)
+}
+async function inspectTransferPath(row) {
+  if (pathRepairBusy.value) return
+  const request = ++pathRepairRequest;
+  pathRepairRow.value = row;
+  pathRepairPreview.value = null;
+  pathRepairDialog.value = true;
+  pathRepairBusy.value = true;
+  try {
+    const resp = await postApi('transfer_path_repair', { source_downloader: row.source_downloader, source_hash: row.source_hash });
+    if (request !== pathRepairRequest) return
+    if (resp?.code !== 0 || !resp.diagnostic) throw new Error(resp?.msg || '路径检测失败')
+    pathRepairPreview.value = resp.diagnostic;
+  } catch (e) {
+    if (request === pathRepairRequest) pathRepairPreview.value = { reason: e?.message || '路径检测失败', repairable: false };
+  } finally {
+    if (request === pathRepairRequest) pathRepairBusy.value = false;
+  }
+}
+async function confirmPathRepair() {
+  if (pathRepairBusy.value || !pathRepairPreview.value?.repairable) return
+  const row = pathRepairRow.value;
+  pathRepairBusy.value = true;
+  try {
+    const resp = await postApi('transfer_path_repair', { source_downloader: row.source_downloader, source_hash: row.source_hash, execute: true, token: pathRepairPreview.value.token });
+    applyActionResp(resp, '路径修复已提交校验');
+    // 一次预览只供一次执行；失败也必须重新检测现场。
+    pathRepairPreview.value = { ...pathRepairPreview.value, repairable: false, reason: resp?.msg || '请重新检测' };
+    if (resp?.code === 0) { pathRepairDialog.value = false; await refreshActive(); }
+  } catch (e) {
+    applyActionError(e, '路径修复失败');
+    pathRepairPreview.value = { repairable: false, reason: '执行结果未确认，请重新检测；不会自动重试' };
+  } finally { pathRepairBusy.value = false; }
+}
 
 
 let overviewRefreshTimer = null;
@@ -1705,6 +1747,7 @@ const TRANSFER_PHASE_LABELS = {
   // 当前 pipeline 不再产出，但 qnap 的历史记录里可能存在，缺映射会让界面漏出原始英文。
   stopped_after_add: '已添加目标（旧记录）',
   verifying: '做种校验',
+  path_repair_verifying: '路径修复待校验',
   target_ready: '待确认做种',
   completed: '已完成',
   rollback: '回滚中',
@@ -2535,8 +2578,12 @@ function resetHistoryFilter() { historyResultFilter.value = 'all'; pageRecordCha
 function resetTransferFilter() { transferResultFilter.value = 'all'; pageRecordChange('transfer', 1); }
 function routeText(row) { return `${row.source_downloader || row.from_downloader || '源下载器未知'} → ${row.target_downloader || row.to_downloader || row.downloader || row.to_download || '目的下载器未知'}` }
 function transferOutcomeText(row) {
-  const sourceResults = { disabled: '保留源：删除关闭', deleted: '已删源任务，不含文件', hr_protected: 'H&R 保护或状态未确认，保留源；无有效校验证据不解除保护', delete_failed: '删源失败，详见 H&R 联动记录', target_not_ready: '目标未就绪，保留源', identity_unconfirmed: '身份或路径未确认，保留源', query_failed: '查询失败，保留源', start_requested: '已请求启动，待确认做种', start_failed: '启动失败，保留源' };
+  const sourceResults = { path_mismatch: '内部文件路径不一致，保留源', path_repaired_source_retained: '路径修复校验通过，保留源', disabled: '保留源：删除关闭', deleted: '已删源任务，不含文件', hr_protected: 'H&R 保护或状态未确认，保留源；无有效校验证据不解除保护', delete_failed: '删源失败，详见 H&R 联动记录', target_not_ready: '目标未就绪，保留源', identity_unconfirmed: '身份或路径未确认，保留源', query_failed: '查询失败，保留源', start_requested: '已请求启动，待确认做种', start_failed: '启动失败，保留源' };
   const parts = [row.reuse_target ? '复用已有目的任务' : ''];
+  if (row.path_diagnostic?.state === 'mismatch') parts.push(`内部路径不一致（${row.path_diagnostic.count || 0} 个文件），保留源`);
+  if (row.path_repair_status === 'verifying') parts.push('路径已对齐，等待真实校验');
+  if (row.path_repair_status === 'verified') parts.push('路径修复已校验，源任务保留');
+  if (row.path_repair_status === 'blocked') parts.push('路径修复已阻止，需重新检测');
   if (row.tag_result === 'failed' || row.site_tag_result === 'failed') parts.push('补标签失败');
   else if (row.tag_result === 'ok') parts.push('转移标签已核对');
   if (row.site_tag_result === 'unknown_site') parts.push('站点未识别');
@@ -2568,14 +2615,15 @@ return (_ctx, _cache) => {
   const _component_VProgressCircular = _resolveComponent("VProgressCircular");
   const _component_VChip = _resolveComponent("VChip");
   const _component_VTextField = _resolveComponent("VTextField");
-  const _component_VAvatar = _resolveComponent("VAvatar");
-  const _component_VCardTitle = _resolveComponent("VCardTitle");
-  const _component_VCardSubtitle = _resolveComponent("VCardSubtitle");
   const _component_VCardItem = _resolveComponent("VCardItem");
+  const _component_VProgressLinear = _resolveComponent("VProgressLinear");
+  const _component_VCardText = _resolveComponent("VCardText");
   const _component_VCardActions = _resolveComponent("VCardActions");
   const _component_VCard = _resolveComponent("VCard");
   const _component_VDialog = _resolveComponent("VDialog");
-  const _component_VCardText = _resolveComponent("VCardText");
+  const _component_VAvatar = _resolveComponent("VAvatar");
+  const _component_VCardTitle = _resolveComponent("VCardTitle");
+  const _component_VCardSubtitle = _resolveComponent("VCardSubtitle");
 
   return (_openBlock(), _createElementBlock("div", _hoisted_1, [
     _createVNode(_component_VToolbar, {
@@ -2588,7 +2636,7 @@ return (_ctx, _cache) => {
           class: "ms-3 me-2",
           color: "primary"
         }),
-        _cache[63] || (_cache[63] = _createElementVNode("div", { class: "dm-title" }, "下载中心", -1)),
+        _cache[66] || (_cache[66] = _createElementVNode("div", { class: "dm-title" }, "下载中心", -1)),
         _createVNode(_component_VSpacer),
         _createVNode(_component_VBtn, {
           color: "primary",
@@ -2599,7 +2647,7 @@ return (_ctx, _cache) => {
           onClick: _cache[0] || (_cache[0] = $event => (refreshActive())),
           loading: loading.value
         }, {
-          default: _withCtx(() => [...(_cache[61] || (_cache[61] = [
+          default: _withCtx(() => [...(_cache[64] || (_cache[64] = [
             _createTextVNode("刷新数据", -1)
           ]))]),
           _: 1
@@ -2612,7 +2660,7 @@ return (_ctx, _cache) => {
           class: "text-none",
           onClick: _cache[1] || (_cache[1] = $event => (emit('switch')))
         }, {
-          default: _withCtx(() => [...(_cache[62] || (_cache[62] = [
+          default: _withCtx(() => [...(_cache[65] || (_cache[65] = [
             _createTextVNode("配置插件", -1)
           ]))]),
           _: 1
@@ -2955,6 +3003,17 @@ return (_ctx, _cache) => {
                             "cell-updated": _withCtx(({ row }) => [
                               _createTextVNode(_toDisplayString(formatTimestamp(row.updated_at || row.timestamp || row.created_at)), 1)
                             ]),
+                            rowActions: _withCtx(({ row }) => [
+                              (row.source_hash && row.source_downloader && !row.delete_source)
+                                ? (_openBlock(), _createBlock(RowActionMenu, {
+                                    key: 0,
+                                    label: transferSourceName(row),
+                                    busy: pathRepairBusy.value || !!moduleRunning.value,
+                                    actions: [{key:'path',label:'检测 / 修复路径',icon:'mdi-file-search-outline',disabled:pathRepairBusy.value || !!moduleRunning.value}],
+                                    onSelect: $event => (inspectTransferPath(row))
+                                  }, null, 8, ["label", "busy", "actions", "onSelect"]))
+                                : _createCommentVNode("", true)
+                            ]),
                             expand: _withCtx(({ row }) => [
                               _createVNode(RecordDetails, { record: row }, null, 8, ["record"])
                             ]),
@@ -3004,7 +3063,7 @@ return (_ctx, _cache) => {
                                 disabled: !!moduleRunning.value || renameStatus.value.batch_running,
                                 onClick: doRetryRenames
                               }, {
-                                default: _withCtx(() => [...(_cache[64] || (_cache[64] = [
+                                default: _withCtx(() => [...(_cache[67] || (_cache[67] = [
                                   _createTextVNode("重试失败项", -1)
                                 ]))]),
                                 _: 1
@@ -3139,7 +3198,7 @@ return (_ctx, _cache) => {
                                 disabled: hrClearing.value || !hrSummary.value.compliant,
                                 onClick: _cache[25] || (_cache[25] = $event => (askHrClear('compliant')))
                               }, {
-                                default: _withCtx(() => [...(_cache[65] || (_cache[65] = [
+                                default: _withCtx(() => [...(_cache[68] || (_cache[68] = [
                                   _createTextVNode("清理达标记录", -1)
                                 ]))]),
                                 _: 1
@@ -3151,7 +3210,7 @@ return (_ctx, _cache) => {
                                 disabled: hrClearing.value || !hrSummary.value.deleted,
                                 onClick: _cache[26] || (_cache[26] = $event => (askHrClear('missing')))
                               }, {
-                                default: _withCtx(() => [...(_cache[66] || (_cache[66] = [
+                                default: _withCtx(() => [...(_cache[69] || (_cache[69] = [
                                   _createTextVNode("清理缺失记录", -1)
                                 ]))]),
                                 _: 1
@@ -3214,7 +3273,7 @@ return (_ctx, _cache) => {
                             _: 1
                           }, 8, ["columns", "rows", "total", "page", "page-size", "state"]),
                           _createElementVNode("details", _hoisted_22, [
-                            _cache[67] || (_cache[67] = _createElementVNode("summary", null, "保护跳过统计", -1)),
+                            _cache[70] || (_cache[70] = _createElementVNode("summary", null, "保护跳过统计", -1)),
                             _createElementVNode("dl", null, [
                               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(hrSkipRows.value, (row) => {
                                 return (_openBlock(), _createElementBlock(_Fragment, {
@@ -3262,7 +3321,7 @@ return (_ctx, _cache) => {
                                 disabled: !!moduleRunning.value,
                                 onClick: _cache[30] || (_cache[30] = $event => (autoRunConfirm.value = true))
                               }, {
-                                default: _withCtx(() => [...(_cache[68] || (_cache[68] = [
+                                default: _withCtx(() => [...(_cache[71] || (_cache[71] = [
                                   _createTextVNode("按当前配置执行", -1)
                                 ]))]),
                                 _: 1
@@ -3281,7 +3340,7 @@ return (_ctx, _cache) => {
                             ]),
                             _: 1
                           }, 8, ["columns", "rows", "total", "page", "page-size", "state"]),
-                          _cache[71] || (_cache[71] = _createElementVNode("p", { class: "dm-hint" }, "预览不锁定执行清单；执行时后端会按当前配置重新判断。", -1)),
+                          _cache[74] || (_cache[74] = _createElementVNode("p", { class: "dm-hint" }, "预览不锁定执行清单；执行时后端会按当前配置重新判断。", -1)),
                           _createVNode(ModuleTable, _mergeProps({
                             title: "执行记录",
                             "data-execution-stream": "autoremove"
@@ -3299,7 +3358,7 @@ return (_ctx, _cache) => {
                             _: 1
                           }, 16),
                           _createElementVNode("details", _hoisted_23, [
-                            _cache[70] || (_cache[70] = _createElementVNode("summary", null, "最近运行详情", -1)),
+                            _cache[73] || (_cache[73] = _createElementVNode("summary", null, "最近运行详情", -1)),
                             _createVNode(_component_VBtn, {
                               color: "primary",
                               size: "small",
@@ -3307,7 +3366,7 @@ return (_ctx, _cache) => {
                               disabled: !cleanupCounts.value.autoremove_state,
                               onClick: _cache[36] || (_cache[36] = $event => (openCleanupDialog('autoremove_state')))
                             }, {
-                              default: _withCtx(() => [...(_cache[69] || (_cache[69] = [
+                              default: _withCtx(() => [...(_cache[72] || (_cache[72] = [
                                 _createTextVNode("清最近运行记录", -1)
                               ]))]),
                               _: 1
@@ -3359,7 +3418,7 @@ return (_ctx, _cache) => {
                             _: 1
                           }, 16),
                           _createElementVNode("details", _hoisted_24, [
-                            _cache[72] || (_cache[72] = _createElementVNode("summary", null, "最近标签清理快照（非逐条历史）", -1)),
+                            _cache[75] || (_cache[75] = _createElementVNode("summary", null, "最近标签清理快照（非逐条历史）", -1)),
                             _createVNode(ModuleDetailPanel, {
                               rows: moduleDetail('tagcleanup').rows,
                               items: moduleDetail('tagcleanup').items,
@@ -3375,7 +3434,7 @@ return (_ctx, _cache) => {
                       ? (_openBlock(), _createElementBlock(_Fragment, { key: 5 }, [
                           _createElementVNode("section", _hoisted_25, [
                             _createElementVNode("div", _hoisted_26, [
-                              _cache[73] || (_cache[73] = _createElementVNode("h3", null, "实时监控", -1)),
+                              _cache[76] || (_cache[76] = _createElementVNode("h3", null, "实时监控", -1)),
                               _createElementVNode("div", _hoisted_27, [
                                 _createVNode(CompactSelect, {
                                   modelValue: uploadDownloaderFilter.value,
@@ -3494,9 +3553,9 @@ return (_ctx, _cache) => {
                             ]),
                             _: 1
                           }, 16),
-                          _cache[77] || (_cache[77] = _createElementVNode("p", { class: "dm-hint" }, "实际上传与分配额度是不同指标；MP 或插件离线后，下载器可能保留最后写入的限速。", -1)),
+                          _cache[80] || (_cache[80] = _createElementVNode("p", { class: "dm-hint" }, "实际上传与分配额度是不同指标；MP 或插件离线后，下载器可能保留最后写入的限速。", -1)),
                           _createElementVNode("details", _hoisted_31, [
-                            _cache[76] || (_cache[76] = _createElementVNode("summary", null, "站点识别与策略操作", -1)),
+                            _cache[79] || (_cache[79] = _createElementVNode("summary", null, "站点识别与策略操作", -1)),
                             _createVNode(_component_VBtn, {
                               color: "primary",
                               size: "small",
@@ -3504,7 +3563,7 @@ return (_ctx, _cache) => {
                               disabled: !!moduleRunning.value,
                               onClick: doUploadScanSites
                             }, {
-                              default: _withCtx(() => [...(_cache[74] || (_cache[74] = [
+                              default: _withCtx(() => [...(_cache[77] || (_cache[77] = [
                                 _createTextVNode("扫描站点", -1)
                               ]))]),
                               _: 1
@@ -3516,7 +3575,7 @@ return (_ctx, _cache) => {
                               disabled: !!moduleRunning.value,
                               onClick: doUploadClearRules
                             }, {
-                              default: _withCtx(() => [...(_cache[75] || (_cache[75] = [
+                              default: _withCtx(() => [...(_cache[78] || (_cache[78] = [
                                 _createTextVNode("清空策略", -1)
                               ]))]),
                               _: 1
@@ -3542,7 +3601,7 @@ return (_ctx, _cache) => {
                         loading: loading.value,
                         onClick: runDiagnostics
                       }, {
-                        default: _withCtx(() => [...(_cache[78] || (_cache[78] = [
+                        default: _withCtx(() => [...(_cache[81] || (_cache[81] = [
                           _createTextVNode("刷新诊断", -1)
                         ]))]),
                         _: 1
@@ -3600,19 +3659,19 @@ return (_ctx, _cache) => {
                       ? (_openBlock(), _createElementBlock("section", _hoisted_36, [
                           _createElementVNode("h3", null, _toDisplayString(selectedDiagnostic.value.name), 1),
                           _createElementVNode("dl", null, [
-                            _cache[79] || (_cache[79] = _createElementVNode("dt", null, "问题", -1)),
+                            _cache[82] || (_cache[82] = _createElementVNode("dt", null, "问题", -1)),
                             _createElementVNode("dd", null, _toDisplayString(selectedDiagnostic.value.reason || selectedDiagnostic.value.message || '—'), 1),
-                            _cache[80] || (_cache[80] = _createElementVNode("dt", null, "影响范围", -1)),
+                            _cache[83] || (_cache[83] = _createElementVNode("dt", null, "影响范围", -1)),
                             _createElementVNode("dd", null, _toDisplayString(selectedDiagnostic.value.target || selectedDiagnostic.value.module), 1),
-                            _cache[81] || (_cache[81] = _createElementVNode("dt", null, "建议", -1)),
+                            _cache[84] || (_cache[84] = _createElementVNode("dt", null, "建议", -1)),
                             _createElementVNode("dd", null, _toDisplayString(selectedDiagnostic.value.suggestion || '当前检查项未提供建议'), 1),
-                            _cache[82] || (_cache[82] = _createElementVNode("dt", null, "检查时间 / 来源", -1)),
+                            _cache[85] || (_cache[85] = _createElementVNode("dt", null, "检查时间 / 来源", -1)),
                             _createElementVNode("dd", null, _toDisplayString(diagnostics.value?.time || '未检查') + " / 最近诊断快照", 1)
                           ])
                         ]))
                       : _createCommentVNode("", true),
                     _createElementVNode("details", _hoisted_37, [
-                      _cache[83] || (_cache[83] = _createElementVNode("summary", null, "环境信息", -1)),
+                      _cache[86] || (_cache[86] = _createElementVNode("summary", null, "环境信息", -1)),
                       _createElementVNode("p", null, "插件版本：" + _toDisplayString(diagnostics.value?.plugin?.version || '—'), 1),
                       _createVNode(RecordDetails, {
                         record: diagnostics.value?.paths || {}
@@ -3625,8 +3684,106 @@ return (_ctx, _cache) => {
     ]),
     _createVNode(_component_VDialog, {
       "content-class": "dm-page",
+      modelValue: pathRepairDialog.value,
+      "onUpdate:modelValue": _cache[55] || (_cache[55] = $event => ((pathRepairDialog).value = $event)),
+      persistent: pathRepairBusy.value,
+      "max-width": "760"
+    }, {
+      default: _withCtx(() => [
+        _createVNode(_component_VCard, null, {
+          default: _withCtx(() => [
+            _createVNode(_component_VCardItem, {
+              title: "内部文件路径检测 / 修复",
+              subtitle: pathRepairRow.value?.source_name || '名称未记录'
+            }, null, 8, ["subtitle"]),
+            _createVNode(_component_VCardText, null, {
+              default: _withCtx(() => [
+                (pathRepairBusy.value)
+                  ? (_openBlock(), _createBlock(_component_VProgressLinear, {
+                      key: 0,
+                      indeterminate: "",
+                      color: "primary"
+                    }))
+                  : _createCommentVNode("", true),
+                (pathRepairPreview.value)
+                  ? (_openBlock(), _createBlock(_component_VAlert, {
+                      key: 1,
+                      type: pathRepairPreview.value.repairable ? 'warning' : 'info',
+                      variant: "tonal",
+                      class: "mb-3"
+                    }, {
+                      default: _withCtx(() => [
+                        _createTextVNode(_toDisplayString(pathRepairPreview.value.reason), 1)
+                      ]),
+                      _: 1
+                    }, 8, ["type"]))
+                  : _createCommentVNode("", true),
+                (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(pathRepairPreview.value?.differences || [], (diff) => {
+                  return (_openBlock(), _createElementBlock("div", {
+                    key: diff.index,
+                    class: "mb-3 text-break"
+                  }, [
+                    _createElementVNode("div", _hoisted_38, "文件 #" + _toDisplayString(diff.index) + " · 源端现用路径", 1),
+                    _createElementVNode("code", null, _toDisplayString(visibleTorrentPath(diff.source)), 1),
+                    _cache[87] || (_cache[87] = _createElementVNode("div", { class: "dm-hint" }, "目标当前路径", -1)),
+                    _createElementVNode("code", null, _toDisplayString(visibleTorrentPath(diff.target)), 1)
+                  ]))
+                }), 128)),
+                _cache[88] || (_cache[88] = _createElementVNode("p", { class: "dm-hint" }, "不可见字符以 Unicode 转义显示；最多显示前 20 个差异。仅对齐目标内部根名称，不清洗磁盘文件名。修复后强制真实校验，保留源任务，不直接启动或删源。无法核实远端文件现场时拒绝修复。", -1))
+              ]),
+              _: 1
+            }),
+            _createVNode(_component_VCardActions, null, {
+              default: _withCtx(() => [
+                _createVNode(_component_VSpacer),
+                _createVNode(_component_VBtn, {
+                  size: "small",
+                  variant: "text",
+                  disabled: pathRepairBusy.value,
+                  onClick: _cache[53] || (_cache[53] = $event => (pathRepairDialog.value = false))
+                }, {
+                  default: _withCtx(() => [...(_cache[89] || (_cache[89] = [
+                    _createTextVNode("关闭", -1)
+                  ]))]),
+                  _: 1
+                }, 8, ["disabled"]),
+                _createVNode(_component_VBtn, {
+                  size: "small",
+                  variant: "tonal",
+                  disabled: pathRepairBusy.value,
+                  onClick: _cache[54] || (_cache[54] = $event => (inspectTransferPath(pathRepairRow.value)))
+                }, {
+                  default: _withCtx(() => [...(_cache[90] || (_cache[90] = [
+                    _createTextVNode("重新检测", -1)
+                  ]))]),
+                  _: 1
+                }, 8, ["disabled"]),
+                _createVNode(_component_VBtn, {
+                  size: "small",
+                  color: "warning",
+                  variant: "flat",
+                  loading: pathRepairBusy.value,
+                  disabled: pathRepairBusy.value || !pathRepairPreview.value?.repairable,
+                  onClick: confirmPathRepair
+                }, {
+                  default: _withCtx(() => [...(_cache[91] || (_cache[91] = [
+                    _createTextVNode("确认修复并校验", -1)
+                  ]))]),
+                  _: 1
+                }, 8, ["loading", "disabled"])
+              ]),
+              _: 1
+            })
+          ]),
+          _: 1
+        })
+      ]),
+      _: 1
+    }, 8, ["modelValue", "persistent"]),
+    _createVNode(_component_VDialog, {
+      "content-class": "dm-page",
       modelValue: transferRunDialog.value,
-      "onUpdate:modelValue": _cache[54] || (_cache[54] = $event => ((transferRunDialog).value = $event)),
+      "onUpdate:modelValue": _cache[57] || (_cache[57] = $event => ((transferRunDialog).value = $event)),
       "max-width": "520"
     }, {
       default: _withCtx(() => [
@@ -3648,7 +3805,7 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "dm-title" }, {
-                  default: _withCtx(() => [...(_cache[84] || (_cache[84] = [
+                  default: _withCtx(() => [...(_cache[92] || (_cache[92] = [
                     _createTextVNode("确认立即运行转移做种", -1)
                   ]))]),
                   _: 1
@@ -3659,7 +3816,7 @@ return (_ctx, _cache) => {
                       icon: "mdi-alert-outline",
                       size: "16"
                     }),
-                    _cache[85] || (_cache[85] = _createTextVNode("按当前配置扫描源下载器并转移种子；若配置了删源，转移完成后会删除源任务。", -1))
+                    _cache[93] || (_cache[93] = _createTextVNode("按当前配置扫描源下载器并转移种子；若配置了删源，转移完成后会删除源任务。", -1))
                   ]),
                   _: 1
                 })
@@ -3675,9 +3832,9 @@ return (_ctx, _cache) => {
                   size: "small",
                   variant: "tonal",
                   disabled: moduleRunning.value === 'transfer-run',
-                  onClick: _cache[53] || (_cache[53] = $event => (transferRunDialog.value = false))
+                  onClick: _cache[56] || (_cache[56] = $event => (transferRunDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[86] || (_cache[86] = [
+                  default: _withCtx(() => [...(_cache[94] || (_cache[94] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3690,7 +3847,7 @@ return (_ctx, _cache) => {
                   loading: moduleRunning.value === 'transfer-run',
                   onClick: confirmTransferRun
                 }, {
-                  default: _withCtx(() => [...(_cache[87] || (_cache[87] = [
+                  default: _withCtx(() => [...(_cache[95] || (_cache[95] = [
                     _createTextVNode("运行转移", -1)
                   ]))]),
                   _: 1
@@ -3707,7 +3864,7 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-page",
       modelValue: cleanupConfirmDialog.value,
-      "onUpdate:modelValue": _cache[56] || (_cache[56] = $event => ((cleanupConfirmDialog).value = $event)),
+      "onUpdate:modelValue": _cache[59] || (_cache[59] = $event => ((cleanupConfirmDialog).value = $event)),
       "max-width": "520"
     }, {
       default: _withCtx(() => [
@@ -3747,7 +3904,7 @@ return (_ctx, _cache) => {
             _createVNode(_component_VCardText, { class: "dm-body-text" }, {
               default: _withCtx(() => [
                 _createElementVNode("div", null, _toDisplayString(cleanupTarget.value?.consequence), 1),
-                _cache[88] || (_cache[88] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 不修改下载器任务与文件，不影响 H&R 安全状态、活动队列与限速恢复状态。 ", -1))
+                _cache[96] || (_cache[96] = _createElementVNode("div", { class: "dm-hint mt-2" }, " 不修改下载器任务与文件，不影响 H&R 安全状态、活动队列与限速恢复状态。 ", -1))
               ]),
               _: 1
             }),
@@ -3759,9 +3916,9 @@ return (_ctx, _cache) => {
                   size: "small",
                   variant: "tonal",
                   disabled: cleanupRunning.value,
-                  onClick: _cache[55] || (_cache[55] = $event => (cleanupConfirmDialog.value = false))
+                  onClick: _cache[58] || (_cache[58] = $event => (cleanupConfirmDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[89] || (_cache[89] = [
+                  default: _withCtx(() => [...(_cache[97] || (_cache[97] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3775,7 +3932,7 @@ return (_ctx, _cache) => {
                   disabled: cleanupTargetCount.value === 0,
                   onClick: confirmCleanupData
                 }, {
-                  default: _withCtx(() => [...(_cache[90] || (_cache[90] = [
+                  default: _withCtx(() => [...(_cache[98] || (_cache[98] = [
                     _createTextVNode("清理记录", -1)
                   ]))]),
                   _: 1
@@ -3792,7 +3949,7 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-page",
       modelValue: hrClearDialog.value,
-      "onUpdate:modelValue": _cache[58] || (_cache[58] = $event => ((hrClearDialog).value = $event)),
+      "onUpdate:modelValue": _cache[61] || (_cache[61] = $event => ((hrClearDialog).value = $event)),
       "max-width": "520"
     }, {
       default: _withCtx(() => [
@@ -3814,7 +3971,7 @@ return (_ctx, _cache) => {
               ]),
               default: _withCtx(() => [
                 _createVNode(_component_VCardTitle, { class: "dm-title" }, {
-                  default: _withCtx(() => [...(_cache[91] || (_cache[91] = [
+                  default: _withCtx(() => [...(_cache[99] || (_cache[99] = [
                     _createTextVNode("确认清除 H&R 记录", -1)
                   ]))]),
                   _: 1
@@ -3852,9 +4009,9 @@ return (_ctx, _cache) => {
                   size: "small",
                   variant: "tonal",
                   disabled: hrClearing.value,
-                  onClick: _cache[57] || (_cache[57] = $event => (hrClearDialog.value = false))
+                  onClick: _cache[60] || (_cache[60] = $event => (hrClearDialog.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[92] || (_cache[92] = [
+                  default: _withCtx(() => [...(_cache[100] || (_cache[100] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3867,7 +4024,7 @@ return (_ctx, _cache) => {
                   loading: hrClearing.value,
                   onClick: confirmHrClear
                 }, {
-                  default: _withCtx(() => [...(_cache[93] || (_cache[93] = [
+                  default: _withCtx(() => [...(_cache[101] || (_cache[101] = [
                     _createTextVNode("清理记录", -1)
                   ]))]),
                   _: 1
@@ -3884,14 +4041,14 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-page",
       modelValue: autoRunConfirm.value,
-      "onUpdate:modelValue": _cache[60] || (_cache[60] = $event => ((autoRunConfirm).value = $event)),
+      "onUpdate:modelValue": _cache[63] || (_cache[63] = $event => ((autoRunConfirm).value = $event)),
       "max-width": "620"
     }, {
       default: _withCtx(() => [
         _createVNode(_component_VCard, null, {
           default: _withCtx(() => [
             _createVNode(_component_VCardTitle, { class: "dm-title" }, {
-              default: _withCtx(() => [...(_cache[94] || (_cache[94] = [
+              default: _withCtx(() => [...(_cache[102] || (_cache[102] = [
                 _createTextVNode("确认自动删种操作", -1)
               ]))]),
               _: 1
@@ -3907,7 +4064,7 @@ return (_ctx, _cache) => {
                   ]),
                   _: 1
                 }, 8, ["type"]),
-                _cache[95] || (_cache[95] = _createElementVNode("div", { class: "dm-hint mt-3" }, "执行时后端重新扫描当前配置，不按上次预览清单直接处理；删除仍受 H&R 保护。", -1))
+                _cache[103] || (_cache[103] = _createElementVNode("div", { class: "dm-hint mt-3" }, "执行时后端重新扫描当前配置，不按上次预览清单直接处理；删除仍受 H&R 保护。", -1))
               ]),
               _: 1
             }),
@@ -3917,9 +4074,9 @@ return (_ctx, _cache) => {
                 _createVNode(_component_VBtn, {
                   size: "small",
                   variant: "tonal",
-                  onClick: _cache[59] || (_cache[59] = $event => (autoRunConfirm.value = false))
+                  onClick: _cache[62] || (_cache[62] = $event => (autoRunConfirm.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[96] || (_cache[96] = [
+                  default: _withCtx(() => [...(_cache[104] || (_cache[104] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3931,7 +4088,7 @@ return (_ctx, _cache) => {
                   disabled: !!moduleRunning.value,
                   onClick: confirmAutoremoveRun
                 }, {
-                  default: _withCtx(() => [...(_cache[97] || (_cache[97] = [
+                  default: _withCtx(() => [...(_cache[105] || (_cache[105] = [
                     _createTextVNode("确认执行", -1)
                   ]))]),
                   _: 1
@@ -3950,6 +4107,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b7795d10"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-6e0fe12d"]]);
 
 export { Page as default };

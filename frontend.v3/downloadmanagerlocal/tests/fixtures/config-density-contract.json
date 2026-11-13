@@ -1,5 +1,5 @@
 {
-  "scriptSha256": "a3cc6136468c540d67f44779a020da672233a42bb42323719f916d16f559a6eb",
+  "scriptSha256": "65aec940806abe1cd767eb7cbed63a68ac32d56672e922538e67d4d252eb733c",
   "directives": [
     ":actions=\"row.custom ? [\n                          { key: 'edit', label: row.expanded ? '收起' : '编辑', icon: row.expanded ? 'mdi-chevron-up' : 'mdi-pencil-outline' },\n                          { key: 'delete', label: row.preset ? '删除覆盖（恢复预设）' : '删除站点', icon: 'mdi-delete-outline', color: 'error', disabled: !form.hr_enable_site_config }\n                        ] : [{ key: 'copy', label: '复制规则', icon: 'mdi-content-copy', disabled: !form.hr_enable_site_config }]\"",
     ":active=\"activeMain === item.key\"",
@@ -27,6 +27,7 @@
     ":disabled=\"!form.rename_cron_enabled\"",
     ":disabled=\"!form.rename_on_download_added\"",
     ":disabled=\"!form.transfer_fallback_enabled\"",
+    ":disabled=\"!form.transfer_path_detect_enabled\"",
     ":disabled=\"!hrNotificationEnabled\"",
     ":disabled=\"form.hr_notify === 'none'\"",
     ":disabled=\"savePending\"",
@@ -50,6 +51,7 @@
     ":icon=\"MODULE_ICONS.tag\"",
     ":icon=\"MODULE_ICONS.tag\"",
     ":icon=\"MODULE_ICONS.tag\"",
+    ":icon=\"MODULE_ICONS.transfer\"",
     ":icon=\"MODULE_ICONS.transfer\"",
     ":icon=\"MODULE_ICONS.transfer\"",
     ":icon=\"MODULE_ICONS.transfer\"",
@@ -324,6 +326,8 @@
     "v-model=\"form.transfer_enabled\"",
     "v-model=\"form.transfer_fallback_enabled\"",
     "v-model=\"form.transfer_observe_only\"",
+    "v-model=\"form.transfer_path_auto_repair\"",
+    "v-model=\"form.transfer_path_detect_enabled\"",
     "v-model=\"form.transfer_rename_enabled\"",
     "v-model=\"form.upload_limit_downloaders\"",
     "v-model=\"form.upload_limit_enabled\"",

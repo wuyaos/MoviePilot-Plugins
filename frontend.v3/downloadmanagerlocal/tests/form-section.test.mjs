@@ -44,10 +44,10 @@ test('transfer pilot separates switches from fields and keeps fallback disabling
   const pane = panes[0]
   assert.match(pane.loc.source, /dm-transfer-form/)
   const sections = pane.children.filter(n => n.type === 1 && n.tag === 'FormSection')
-  assert.equal(sections.length, 3)
-  assert.deepEqual(sections.map(n => n.props.find(p => p.type === 6 && p.name === 'title').value.content), ['基础设置', '转移策略', '转移后操作'])
+  assert.equal(sections.length, 4)
+  assert.deepEqual(sections.map(n => n.props.find(p => p.type === 6 && p.name === 'title').value.content), ['基础设置', '转移策略', '内部文件路径核对', '转移后操作'])
   for (const key of ['transfer_delete_source_default', 'transfer_delete_duplicate_default']) assert.ok(pane.loc.source.includes('v-model="form.' + key + '"'))
-  const post = sections[2].children.find(n => n.type === 1 && n.props.some(p => p.type === 6 && p.value?.content === 'dm-switch-group'))
+  const post = sections[3].children.find(n => n.type === 1 && n.props.some(p => p.type === 6 && p.value?.content === 'dm-switch-group'))
   assert.equal((post.loc.source.match(/<VSwitch/g) || []).length, 3)
   for (const key of ['transfer_rename_enabled', 'seed_autostart', 'seed_skipverify']) assert.ok(post.loc.source.includes('form.' + key))
   for (const section of sections) assert.ok(section.props.some(p => p.type === 7 && p.arg?.content === 'icon' && p.exp?.content === 'MODULE_ICONS.transfer'))
@@ -129,7 +129,7 @@ test('H&R layout retains the approved configuration business script byte-for-byt
   const adapterEnd = script.indexOf('const removerActionItems', adapterStart)
   const businessScript = (script.slice(0, adapterStart) + script.slice(adapterEnd))
     .split('\n').filter(line => !line.startsWith('        color: `var(--dm-hr-rule-')).join('\n')
-  assert.equal(createHash('sha256').update(businessScript).digest('hex'),'c3e2622ed84299a803d7d8f17ddf4cf5c7b3af29c1db0218fa6cf2bbee347fcd')
+  assert.equal(createHash('sha256').update(businessScript).digest('hex'),'58f808fdeed4e00a675731cc1e5e7ec90bceb57a8b939bb5450259ad92ed6acc')
 })
 
 test('自动删种体积帮助与后端范围语法一致，不再提示逗号', () => {

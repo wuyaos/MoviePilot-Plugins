@@ -269,6 +269,11 @@ def _reconcile_existing(plugin, task, from_service, to_service, source, targets,
     if (str(actual_hash or "").lower() != str(source["hash"]).lower() or not actual_path
             or os.path.normpath(actual_path) != os.path.normpath(expected_path)):
         return finish("protected", "identity_unconfirmed")
+    from .path_repair import detect_automatic
+    if detect_automatic(plugin, item):
+        if item.get("phase") == "path_repair_verifying":
+            return "protected"
+        return finish("protected", "path_mismatch")
     state = get_torrent_state(target, to_service.type)
     if not seed_is_ready(state, to_service.type, target) or seed_is_error(state, to_service.type):
         return finish("protected", "target_not_ready")

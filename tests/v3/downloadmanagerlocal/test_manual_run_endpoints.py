@@ -60,6 +60,7 @@ class FakeBaseModel:
 
 
 MODEL_NAMES = (
+    "TransferPathRequest",
     'CleanupModuleRequest', 'CleanupModuleResult', 'DiagnosticsResult', 'EmptyRequest', 'ExecutionHistoryPageResult', 'HashActionResult', 'HrActionResult',
     'HrClearTaskRequest', 'HrPresetsResult', 'HrSkipStatsResult', 'HrTasksResult',
     'ModuleActionResult', 'ModuleConfigSummaryResult', 'ModuleStatusResult', 'OverviewResult', 'RenamePageResult',
@@ -180,7 +181,7 @@ def _wait_called(mock, timeout=2.0):
 def test_route_contract(endpoints):
     """按当前工作树：40 条路由（含数据清理端点），新 POST 端点 auth=bear 且用 Response 包装。"""
     routes = endpoints.routes.build_api_routes(Mock())
-    assert len(routes) == 41
+    assert len(routes) == 42
     by_path = {route['path']: route for route in routes}
     for path, summary in (('/transfer_run', '手动执行一轮转移做种'),
                           ('/tag_complement', '手动执行站点标签历史补全')):

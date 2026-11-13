@@ -30,6 +30,8 @@ TRANSFER_DEFAULTS = {
     "fromtorrentpath": "",
     "transfer_tasks": "[]",
     "transfer_rename_enabled": False,
+    "transfer_path_detect_enabled": True,
+    "transfer_path_auto_repair": False,
     "downloader_ext": "{}",
     "nopaths": "",
     "seed_autostart": True,
