@@ -45,9 +45,15 @@ def me_ok(csrf="c" * 64):
     return json.dumps({"id": 492, "username": "fixture", "session": {"csrf_token": csrf}})
 
 
-def cola_week(amount):
-    return json.dumps({"week": {"checkin_amount": amount, "next_start": "2026-11-02T00:00:00+08:00"},
-                       "rules": {"checkin_min": 1, "checkin_max": 30}})
+def cola_week(amount, today=None, daily_reward=None):
+    rules = {"checkin_min": 1, "checkin_max": 30}
+    if daily_reward is not None:
+        rules["daily_login_reward"] = daily_reward
+    payload = {"week": {"checkin_amount": amount, "next_start": "2026-11-02T00:00:00+08:00"},
+               "rules": rules}
+    if today is not None:
+        payload["today"] = today
+    return json.dumps(payload)
 
 
 def test_probe_signed_skips_post_zero_side_effect():
@@ -114,3 +120,67 @@ def test_registry_declares_colapt_native_sign_capable():
     from autoptcheckin.core.registry import discover_sites
     row = next(r for r in discover_sites()["sites"] if r["id"] == "colapt")
     assert row["native"] and row["source"] == "插件适配" and row["url"] == "https://www.colapt.com/"
+
+
+def _signin(http):
+    return Colapt().signin(SignContext("colapt", Credential("cookie", "fixture"), http))
+
+
+def test_daily_already_from_today_logged_in_no_post():
+    http = Http([me_ok(), (cola_week(14, today={"logged_in": True, "login_earned": 3}), 200)])
+    r = _signin(http)
+    assert r.status == "already"
+    assert r.message.startswith("每日登录 +3；本周已签到（+14）")
+    assert [c[0] for c in http.calls] == ["get", "get"]
+
+
+def test_daily_claim_200_merges_into_success():
+    http = Http([me_ok(), (cola_week(0, daily_reward=3), 200),
+                 (json.dumps({"earned": 3, "balance": 20, "currency": "cola"}), 200),
+                 (json.dumps({"earned": 14, "balance": 34, "currency": "cola"}), 200),
+                 (cola_week(14), 200)])
+    r = _signin(http)
+    assert r.status == "success"
+    assert r.message.startswith("每日登录 +3；获得 14 个核子可乐")
+    posts = [c for c in http.calls if c[0] == "post"]
+    assert posts[0][1].endswith("/api/v1/me/cola/daily-login")
+    assert posts[0][3]["X-CSRF-Token"] == "c" * 64
+    assert posts[0][2] == {}
+    assert posts[1][1].endswith("/api/v1/me/cola/checkin")
+
+
+def test_daily_claim_409_treated_as_already():
+    http = Http([me_ok(), (cola_week(0, daily_reward=3), 200),
+                 (json.dumps({"error": {"code": "daily_login_done"}}), 409),
+                 (json.dumps({"earned": 14, "balance": 34, "currency": "cola"}), 200),
+                 (cola_week(14), 200)])
+    r = _signin(http)
+    assert r.status == "success" and "每日登录已领取" in r.message and "获得 14" in r.message
+
+
+def test_daily_claim_5xx_degrades_without_blocking_checkin():
+    http = Http([me_ok(), (cola_week(0, daily_reward=3), 200),
+                 (json.dumps({}), 503),
+                 (json.dumps({"earned": 14, "balance": 34, "currency": "cola"}), 200),
+                 (cola_week(14), 200)])
+    r = _signin(http)
+    assert r.status == "success"
+    assert "每日登录奖励未确认（HTTP 503）" in r.message and "获得 14" in r.message
+
+
+def test_daily_reward_disabled_no_claim_post():
+    http = Http([me_ok(), (cola_week(14, daily_reward=0), 200)])
+    r = _signin(http)
+    assert r.status == "already" and "每日登录" not in r.message
+    assert [c[0] for c in http.calls] == ["get", "get"]
+
+
+def test_daily_probe_resp_missing_fields_no_claim():
+    # /me/cola 响应缺 today/rules（老版接口或字段缺失）：不发 daily-login，签到主流程照常
+    http = Http([me_ok(), (json.dumps({"week": {}, "rules": {}}), 200),
+                 (json.dumps({"earned": 14, "balance": 34, "currency": "cola"}), 200),
+                 (cola_week(14), 200)])
+    r = _signin(http)
+    assert r.status == "success" and "每日登录" not in r.message
+    posts = [c for c in http.calls if c[0] == "post"]
+    assert len(posts) == 1 and posts[0][1].endswith("/api/v1/me/cola/checkin")
