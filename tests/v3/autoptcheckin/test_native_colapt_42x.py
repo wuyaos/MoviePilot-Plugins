@@ -175,6 +175,56 @@ def test_daily_reward_disabled_no_claim_post():
     assert [c[0] for c in http.calls] == ["get", "get"]
 
 
+def test_after_login_hook_claims_when_unsigned():
+    site = Colapt()
+    http = Http([me_ok(), (cola_week(0, daily_reward=3), 200),
+                 (json.dumps({"earned": 3}), 200)])
+    msg = site.after_login(http, {})
+    assert msg == "每日登录 +3"
+    assert [c[0] for c in http.calls] == ["get", "get", "post"]
+
+
+def test_after_login_hook_already_logged_in_no_post():
+    site = Colapt()
+    http = Http([me_ok(), (cola_week(0, today={"logged_in": True, "login_earned": 3}), 200)])
+    msg = site.after_login(http, {})
+    assert msg == "每日登录 +3"
+    assert [c[0] for c in http.calls] == ["get", "get"]
+
+
+def test_after_login_hook_missing_csrf_no_post():
+    site = Colapt()
+    http = Http([(json.dumps({"id": 1, "username": "x"}), 200)])
+    msg = site.after_login(http, {})
+    assert msg == "" and not [c for c in http.calls if c[0] == "post"]
+
+
+def test_after_login_hook_cola_error_degrades_empty():
+    site = Colapt()
+    http = Http([me_ok(), (json.dumps({"error": {"code": "x"}}), 500)])
+    msg = site.after_login(http, {})
+    assert msg == ""
+
+
+def test_run_after_login_gates_and_swallows():
+    # native._run_after_login 门禁：仅 LOGIN_OK 调钩子；钩子异常吞掉返回空串
+    from types import SimpleNamespace
+    from autoptcheckin.core.models import LoginStatus
+    from autoptcheckin.core.native import _run_after_login
+
+    class Boom:
+        def after_login(self, http, info):
+            raise RuntimeError("boom")
+
+    site = Colapt()
+    http = Http([])
+    ok = SimpleNamespace(status=LoginStatus.LOGIN_OK)
+    unconfirmed = SimpleNamespace(status=LoginStatus.UNCONFIRMED)
+    assert _run_after_login(site, http, {}, unconfirmed) == ""
+    assert _run_after_login(Boom(), http, {}, ok) == ""
+    site.after_login = lambda h, i: "每日登录 +3"
+    assert _run_after_login(site, http, {}, ok) == "每日登录 +3"
+
 def test_daily_probe_resp_missing_fields_no_claim():
     # /me/cola 响应缺 today/rules（老版接口或字段缺失）：不发 daily-login，签到主流程照常
     http = Http([me_ok(), (json.dumps({"week": {}, "rules": {}}), 200),

@@ -37,7 +37,7 @@ class Colapt(SiteModule):
         # 只读探测：本周已签直接跳过，不发提交请求（零副作用）。
         # 只读探测：today（每日登录状态）与 week（每周签到）在同一 /me/cola 响应里。
         cola = self._json(ctx.http.get(urljoin(self.url, "/api/v1/me/cola")))
-        daily = self._claim_daily_login(ctx, csrf, cola)
+        daily = self._claim_daily_login(ctx.http, csrf, cola)
         week = (cola.get("week") or {})
         amount = week.get("checkin_amount") or 0
         if amount:
@@ -71,7 +71,7 @@ class Colapt(SiteModule):
         return ctx.result(status=SignStatus.UNCONFIRMED,
                           message=self._join(daily, f"签到回执未确认（HTTP {code}）"))
 
-    def _claim_daily_login(self, ctx: SignContext, csrf: str, cola: dict) -> str:
+    def _claim_daily_login(self, http, csrf: str, cola: dict) -> str:
         """每日登录奖励（POST /api/v1/me/cola/daily-login，前端 operationId claimColaDailyLogin）。
 
         「每天打开站点 +3」由前端显式 POST claim 领取，纯 GET 探活不发放。
@@ -86,11 +86,11 @@ class Colapt(SiteModule):
             return f"每日登录 +{earned}" if earned else "每日登录已领取"
         if not (cola.get("rules") or {}).get("daily_login_reward", 0):
             return ""
-        resp = ctx.http.post(urljoin(self.url, "/api/v1/me/cola/daily-login"), json={},
-                             headers={"Origin": self.url.rstrip("/"),
-                                      "X-CSRF-Token": csrf,
-                                      "Accept": "application/json",
-                                      "Referer": urljoin(self.url, "/account/cola")})
+        resp = http.post(urljoin(self.url, "/api/v1/me/cola/daily-login"), json={},
+                         headers={"Origin": self.url.rstrip("/"),
+                                  "X-CSRF-Token": csrf,
+                                  "Accept": "application/json",
+                                  "Referer": urljoin(self.url, "/account/cola")})
         code = resp.status_code if resp is not None else 0
         if code == 200:
             earned = self._json(resp).get("earned") or 0
@@ -98,6 +98,21 @@ class Colapt(SiteModule):
         if code == 409:
             return "每日登录已领取"
         return f"每日登录奖励未确认（HTTP {code}）"
+
+    def after_login(self, http, info) -> str:
+        """登录轨后置钩子：模拟登录成功后顺带领取每日登录奖励。
+
+        「每日登录」语义就是登录即领，绑定登录轨后手动点登录/定时登录轮都能领；
+        签到轨的 claim 保留作兜底（today.logged_in 预检保证两轨不重复 POST）。
+        GET /api/v1/me 取 CSRF → GET /api/v1/me/cola 探测 → 未领则 POST。
+        抛出的异常由 native._run_after_login 吞掉，不影响 login_ok 判定。
+        """
+        me = http.get(urljoin(self.url, "/api/v1/me"))
+        csrf = (self._json(me).get("session") or {}).get("csrf_token") or ""
+        if not csrf:
+            return ""
+        cola = self._json(http.get(urljoin(self.url, "/api/v1/me/cola")))
+        return self._claim_daily_login(http, csrf, cola)
 
     @staticmethod
     def _join(*parts: str) -> str:

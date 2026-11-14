@@ -519,6 +519,20 @@ def persist_cookie_value(result, cookie, site_id, cookie_source, get_data, save_
         record_cookie(cookie_table, site_id, cookie, cookie_source)
         save_cookie_table(save_data, cookie_table)
 
+def _run_after_login(site, client, info, result):
+    """登录轨后置钩子：仅 LOGIN_OK 且客户端未关闭时调用站点的 after_login。
+
+    返回消息片段（空 = 无需展示）；任何异常吞掉——附加领取失败不降级登录判定。
+    """
+    hook = getattr(site, 'after_login', None)
+    if not callable(hook) or getattr(result, 'status', None) is not LoginStatus.LOGIN_OK:
+        return ''
+    if getattr(client, 'closed', False):
+        return ''
+    try:
+        return hook(client, info) or ''
+    except Exception:
+        return ''
 
 def read_login_twice(fetch_page, site, credential=None):
     """以明确首读短路；仅首读不确定时重读一次，避免瞬态页面误判。"""
@@ -627,6 +641,9 @@ def run_native_login(runner, site, info, *, custom_cookie='', trigger='manual', 
                     else:
                         result = read_login_twice(lambda: client.get(urljoin(url, '/')), site, site.credential)
                     persist_cookie_result(result, client, site.id, credential.source, get_data, save_data)
+                    extra = _run_after_login(site, client, info, result)
+                    if extra:
+                        result.message = f"{result.message}，{extra}" if result.message else extra
                 finally:
                     if isinstance(client, (NativeHttpClient, CloakHttpClient)):
                         try:

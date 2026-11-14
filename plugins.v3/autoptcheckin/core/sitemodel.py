@@ -176,6 +176,9 @@ class SiteModule(ABC):
     cf: bool | None = None
     record_spec: RecordSpec
     impersonate: bool = False
+    # 登录轨后置钩子（可选）：站点可定义 after_login(http, info) -> str，
+    # LOGIN_OK 且 HTTP 客户端未关闭时调用；返回片段拼进登录消息，异常吞掉不影响判定。
+    after_login: callable | None = None
 
     @abstractmethod
     def signin(self, ctx: SignContext) -> SignResult:
