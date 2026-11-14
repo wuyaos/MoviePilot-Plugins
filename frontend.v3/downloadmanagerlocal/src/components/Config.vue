@@ -32,7 +32,6 @@ const transferForm = reactive({})
 const transferError = ref('')
 const transferDeleteDialog = ref(false)
 const transferDeleteIndex = ref(-1)
-const transferStatusTasks = ref([])
 const siteItems = ref([])
 const hrPresets = ref([])
 const hrPresetsLoading = ref(false)
@@ -50,10 +49,9 @@ let hrSyncedSiteConfigText = ''
 
 onMounted(async () => {
   try {
-    const [dlResp, siteResp, transferStatusResp] = await Promise.all([
+    const [dlResp, siteResp] = await Promise.all([
       getApi('downloaders', { feedback: 'silent' }),
       getApi('sites', { feedback: 'silent' }),
-      getApi('transfer_status?page=1&page_size=100', { feedback: 'silent' }),
       loadHrPresets(),
       loadTagCategories(),
     ])
@@ -63,9 +61,6 @@ onMounted(async () => {
     if (siteResp) {
       siteItems.value = siteResp
     }
-    transferStatusTasks.value = Array.isArray(transferStatusResp?.status?.tasks)
-      ? transferStatusResp.status.tasks
-      : (Array.isArray(transferStatusResp?.tasks) ? transferStatusResp.tasks : [])
   } catch (e) {
     console.error('获取列表失败:', e)
   }
@@ -100,7 +95,7 @@ const defaults = {
   transfer_delete_source_default: false, transfer_delete_duplicate_default: false,
   fromdownloader: '', todownloader: '', frompath: '', topath: '',
   fromtorrentpath: '', nopaths: '', nolabels: '', includelabels: '', includecategory: '',
-  transferemptylabel: false, add_torrent_tags: '⏩转种',
+  add_torrent_tags: '⏩转种',
   deletesource: false, deleteduplicate: false,
   remainoldcat: false, remainoldtag: false,
   transfer_tasks: '[]', transfer_rename_enabled: false, downloader_ext: '{}',
@@ -130,7 +125,7 @@ const PANE_RESET_KEYS = {
     'transfer_fallback_enabled', 'transfer_fallback_interval_minutes',
     'transfer_delete_source_default', 'transfer_delete_duplicate_default',
     'fromdownloader', 'todownloader', 'frompath', 'topath', 'fromtorrentpath',
-    'nopaths', 'nolabels', 'includelabels', 'includecategory', 'transferemptylabel',
+    'nopaths', 'nolabels', 'includelabels', 'includecategory',
     'add_torrent_tags', 'deletesource', 'deleteduplicate', 'remainoldcat', 'remainoldtag',
     'transfer_tasks', 'transfer_rename_enabled', 'downloader_ext',
     'transfer_path_detect_enabled', 'transfer_path_auto_repair',
@@ -386,7 +381,7 @@ function addTrackerPair() {
 /** 任务字段与后端 service/transfer_tasks.py::_TASK_DEFAULTS 一致。 */
 const transferTaskDefaults = {
   name: '', enabled: true, from_downloader: '', to_downloader: '',
-  include_category: '', include_labels: '', exclude_labels: '', empty_label_ok: true,
+  include_category: '', include_labels: '', exclude_labels: '',
   no_paths: '', from_path: '', to_path: '',
   delete_source: 'inherit', delete_duplicate: 'inherit', keep_category: true, keep_tag: true,
   transfer_tag: '已转移',
@@ -409,7 +404,7 @@ function legacyTransferTasks(config) {
   return [{ ...transferTaskDefaults, name: "默认任务（旧配置迁移）",
     from_downloader: from, to_downloader: to,
     include_category: config.includecategory || "", include_labels: config.includelabels || "",
-    exclude_labels: config.nolabels || "", empty_label_ok: config.transferemptylabel ?? true,
+    exclude_labels: config.nolabels || "",
     no_paths: config.nopaths || "", from_path: config.frompath || "", to_path: config.topath || "",
     delete_source: config.deletesource ?? false, delete_duplicate: config.deleteduplicate ?? true,
     keep_category: config.remainoldcat ?? true, keep_tag: config.remainoldtag ?? true, transfer_tag: "",
@@ -426,7 +421,7 @@ function parseTransferTasks(raw) {
   if (!Array.isArray(parsed)) return []
   return parsed
     .filter(item => item && typeof item === 'object')
-    .map(item => ({
+    .map(({ empty_label_ok: _obsolete, ...item }) => ({
       ...transferTaskDefaults,
       ...item,
       delete_source: normalizeTransferDeleteState(item.delete_source, false),
@@ -470,7 +465,6 @@ function taskFilterChips(task) {
   if (labels) chips.push(`标签 ${labels}`)
   const excludeLabels = String(task.exclude_labels || '').trim()
   if (excludeLabels) chips.push(`排除 ${excludeLabels}`)
-  if (task.empty_label_ok) chips.push('允许无标签')
   if (task.no_paths) chips.push('不限路径')
   return chips
 }
@@ -503,18 +497,16 @@ const transferDeleteOriginLabels = {
   'legacy-default': '升级前默认',
 }
 
-function transferStatusForTask(task) {
-  return transferStatusTasks.value.find(item => item?.name === task?.name) || null
-}
-
 function transferDeleteMeta(task, field) {
-  const status = transferStatusForTask(task)
-  const origin = status?.[`${field}_origin`]
-  const effective = status?.[`${field}_effective`]
-  return {
-    origin: transferDeleteOriginLabels[origin] || '—',
-    effective: effective === true ? '开启' : (effective === false ? '关闭' : '—'),
-  }
+  // 配置摘要不依赖任务是否执行、是否启用或上次状态请求是否成功。
+  const value = task?.[field]
+  const inherited = value === 'inherit'
+  const explicit = typeof value === 'boolean'
+  const origin = inherited ? 'global' : (explicit ? 'task' : 'legacy-default')
+  const effective = inherited
+    ? form[`transfer_${field}_default`] === true
+    : (explicit ? value : field === 'delete_duplicate')
+  return { origin: transferDeleteOriginLabels[origin], effective: effective ? '开启' : '关闭' }
 }
 
 const transferDialogSourceType = computed(() => (
@@ -573,7 +565,6 @@ function confirmTransferTask() {
     include_category: String(transferForm.include_category || '').trim(),
     include_labels: String(transferForm.include_labels || '').trim(),
     exclude_labels: String(transferForm.exclude_labels || '').trim(),
-    empty_label_ok: transferForm.empty_label_ok !== false,
     no_paths: String(transferForm.no_paths || ''),
     from_path: fromPath,
     to_path: toPath,
@@ -1637,6 +1628,7 @@ Object.keys(form).forEach(k => delete form[k])
                     <span v-if="!taskSettingBadges(task).length" class="dm-hint">默认</span>
                     <span class="dm-hint">删源：来源 {{ transferDeleteMeta(task, 'delete_source').origin }}，生效 {{ transferDeleteMeta(task, 'delete_source').effective }}</span>
                     <span class="dm-hint">删重复：来源 {{ transferDeleteMeta(task, 'delete_duplicate').origin }}，生效 {{ transferDeleteMeta(task, 'delete_duplicate').effective }}</span>
+                    <span class="dm-hint">以上删除策略按当前表单计算，保存后生效；规则关闭时不执行删除。</span>
                   </div>
                   <div class="dm-task-actions">
                     <VBtn size="small" aria-label="编辑任务" icon="mdi-pencil-outline" variant="text" title="编辑任务"
@@ -2074,7 +2066,7 @@ Object.keys(form).forEach(k => delete form[k])
               <MultiValueInput v-model="transferForm.include_category" label="包含分类" variant="outlined" hint="仅转移这些分类的种子，留空不限制" persistent-hint />
             </div>
             <div class="dm-field">
-              <MultiValueInput v-model="transferForm.include_labels" label="包含标签" variant="outlined" hint="仅转移包含这些标签的种子，留空不限制" persistent-hint />
+              <MultiValueInput v-model="transferForm.include_labels" label="包含标签" variant="outlined" hint="必须包含全部指定标签；无标签种子跳过。留空不限制标签" persistent-hint />
             </div>
           </div>
           <div class="dm-field-row">
@@ -2082,7 +2074,6 @@ Object.keys(form).forEach(k => delete form[k])
               <MultiValueInput v-model="transferForm.exclude_labels" label="排除标签" variant="outlined" hint="包含这些标签的种子跳过" persistent-hint />
             </div>
           </div>
-          <div class="dm-switch-group"><VCheckbox density="compact" v-model="transferForm.empty_label_ok" color="info" hide-details label="允许无标签种子" /></div>
           <div class="dm-field-row">
             <div class="dm-field dm-field--full">
               <VTextarea density="compact" v-model="transferForm.no_paths" label="排除路径" variant="outlined" rows="3" hint="每行一个路径" persistent-hint />

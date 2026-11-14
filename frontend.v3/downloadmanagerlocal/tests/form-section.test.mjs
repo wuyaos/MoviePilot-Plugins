@@ -129,7 +129,7 @@ test('H&R layout retains the approved configuration business script byte-for-byt
   const adapterEnd = script.indexOf('const removerActionItems', adapterStart)
   const businessScript = (script.slice(0, adapterStart) + script.slice(adapterEnd))
     .split('\n').filter(line => !line.startsWith('        color: `var(--dm-hr-rule-')).join('\n')
-  assert.equal(createHash('sha256').update(businessScript).digest('hex'),'58f808fdeed4e00a675731cc1e5e7ec90bceb57a8b939bb5450259ad92ed6acc')
+  assert.equal(createHash('sha256').update(businessScript).digest('hex'),'d89716bbda2bd52bc1eb39fb64d6b39b0eee3766baca8d5a7ca4f02e4664bc82')
 })
 
 test('自动删种体积帮助与后端范围语法一致，不再提示逗号', () => {

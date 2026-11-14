@@ -156,7 +156,6 @@ def test_legacy_single_chain_fallback():
     plugin._includecategory = ""
     plugin._includelabels = ""
     plugin._nolabels = ""
-    plugin._transferemptylabel = True
     plugin._nopaths = ""
     plugin._frompath = "/downloads"
     plugin._topath = "/downloads"

@@ -942,7 +942,6 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
             "delete_duplicate": task.get("delete_duplicate"),
             "keep_category": bool(task["keep_category"]),
             "keep_tag": bool(task["keep_tag"]),
-            "empty_label_ok": bool(task["empty_label_ok"]),
             "no_paths": task["no_paths"],
             "transfer_tag": task["transfer_tag"],
         }

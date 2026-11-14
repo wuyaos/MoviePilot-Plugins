@@ -7,7 +7,7 @@ import { loadSfc, mount as renderMount } from './helpers/load-sfc.mjs'
 
 const source = readFileSync(new URL('../src/components/Config.vue', import.meta.url), 'utf8')
 const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)
-const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi', `${script}\nreturn { form, transferTasks, transferForm, transferStatusTasks, openTransferDialog, confirmTransferTask, transferDeleteMeta, transferDeleteItems, saveConfig };`)
+const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi', `${script}\nreturn { form, transferTasks, transferForm, openTransferDialog, confirmTransferTask, transferDeleteMeta, transferDeleteItems, saveConfig, taskFilterChips };`)
 
 function mountSetup(initialConfig = {}) {
   const scope = effectScope()
@@ -24,6 +24,23 @@ function mountSetup(initialConfig = {}) {
   return { ...state, calls, stop: () => scope.stop() }
 }
 
+
+test('旧无标签字段被丢弃，标签摘要与保存遵守包含标签硬条件', async () => {
+  const state = mountSetup({ transfer_tasks: JSON.stringify([
+    { name: 'strict', from_downloader: 'TR', to_downloader: 'QB', include_labels: '已转移', empty_label_ok: true },
+    { name: 'unrestricted', from_downloader: 'TR', to_downloader: 'QB', include_labels: '', empty_label_ok: false },
+  ]) })
+  try {
+    assert.deepEqual(state.taskFilterChips(state.transferTasks.value[0]), ['不限分类', '标签 已转移'])
+    assert.deepEqual(state.taskFilterChips(state.transferTasks.value[1]), ['不限分类'])
+    assert.doesNotMatch(source, /v-model="transferForm.empty_label_ok"/)
+    assert.match(source, /hint="必须包含全部指定标签；无标签种子跳过。留空不限制标签"/)
+    await state.saveConfig()
+    const saved = JSON.parse(state.calls.at(-1).transfer_tasks)
+    assert.deepEqual(saved.map(task => task.include_labels), ['已转移', ''])
+    assert.ok(saved.every(task => !Object.hasOwn(task, 'empty_label_ok')))
+  } finally { state.stop() }
+})
 test('全局删除设置仍保留已存值，新任务用默认开关状态提示且不固化继承', async () => {
   const state = mountSetup({ transfer_delete_source_default: true, transfer_delete_duplicate_default: false })
   try {
@@ -72,30 +89,24 @@ test('删源/删重复三态经过应用与保存 payload 原样保留', async (
   }
 })
 
-test('来源映射逐项使用 transfer_status 投影，缺失不回退表单值', () => {
+test('删除策略按当前配置展示，不依赖首次运行，关闭规则仍有来源和生效值', () => {
   const state = mountSetup({
-    transfer_tasks: JSON.stringify([{ name: 'status-task', delete_source: false, delete_duplicate: 'inherit' }]),
+    enabled: false, transfer_delete_source_default: true, transfer_delete_duplicate_default: true,
+    transfer_tasks: JSON.stringify([{ name: 'not-run', enabled: false, delete_source: 'inherit', delete_duplicate: 'inherit' }]),
   })
   try {
     const task = state.transferTasks.value[0]
-    state.transferStatusTasks.value = [{
-      name: 'status-task',
-      delete_source_origin: 'task',
-      delete_source_effective: true,
-      delete_duplicate_origin: 'global',
-      delete_duplicate_effective: false,
-    }]
+    assert.deepEqual(state.transferDeleteMeta(task, 'delete_source'), { origin: '继承全局', effective: '开启' })
+    assert.deepEqual(state.transferDeleteMeta(task, 'delete_duplicate'), { origin: '继承全局', effective: '开启' })
+    state.form.transfer_delete_source_default = false
+    assert.deepEqual(state.transferDeleteMeta(task, 'delete_source'), { origin: '继承全局', effective: '关闭' })
+    task.delete_source = true
     assert.deepEqual(state.transferDeleteMeta(task, 'delete_source'), { origin: '任务覆盖', effective: '开启' })
-    assert.deepEqual(state.transferDeleteMeta(task, 'delete_duplicate'), { origin: '继承全局', effective: '关闭' })
-
-    state.transferStatusTasks.value = [{ name: 'status-task', delete_source_origin: 'legacy-default', delete_source_effective: false }]
-    assert.deepEqual(state.transferDeleteMeta(task, 'delete_source'), { origin: '升级前默认', effective: '关闭' })
-    assert.deepEqual(state.transferDeleteMeta(task, 'delete_duplicate'), { origin: '—', effective: '—' })
-    state.transferStatusTasks.value = []
-    assert.deepEqual(state.transferDeleteMeta(task, 'delete_source'), { origin: '—', effective: '—' })
-  } finally {
-    state.stop()
-  }
+    task.delete_duplicate = false
+    assert.deepEqual(state.transferDeleteMeta(task, 'delete_duplicate'), { origin: '任务覆盖', effective: '关闭' })
+    assert.deepEqual(state.transferDeleteMeta({}, 'delete_source'), { origin: '升级前默认', effective: '关闭' })
+    assert.deepEqual(state.transferDeleteMeta({}, 'delete_duplicate'), { origin: '升级前默认', effective: '开启' })
+  } finally { state.stop() }
 })
 
 const component = await loadSfc('Config.vue')
@@ -122,7 +133,7 @@ function visible(node) {
   return !node || (node.style.display !== 'none' && visible(node.parent))
 }
 
-test('任务列表渲染来源与生效值文本，并对缺失投影显示破折号', async () => {
+test('真实任务列表按表单配置渲染删除策略，不受旧状态或缺失状态影响', async () => {
   const statusTasks = [{
     name: 'render-task',
     delete_source_origin: 'task',
@@ -144,8 +155,8 @@ test('任务列表渲染来源与生效值文本，并对缺失投影显示破�
     taskTab.props.onClick({})
     await nextTick()
     const text = treeText(view.root)
-    assert.match(text, /删源：来源 任务覆盖，生效 开启/)
-    assert.match(text, /删重复：来源 继承全局，生效 关闭/)
+    assert.match(text, /删源：来源 继承全局，生效 关闭/)
+    assert.match(text, /删重复：来源 任务覆盖，生效 开启/)
 
     const missingView = renderMount(component, {
       initialConfig: { transfer_tasks: JSON.stringify([{ name: 'missing-render', from_downloader: 'QB', to_downloader: 'TR', delete_source: true, delete_duplicate: false }]) },
@@ -156,8 +167,8 @@ test('任务列表渲染来源与生效值文本，并对缺失投影显示破�
       const missingTab = missingView.findAll(node => node.type === 'button' && treeText(node).trim() === '任务列表' && visible(node))[0]
       missingTab.props.onClick({}); await nextTick()
       const missingText = treeText(missingView.root)
-      assert.match(missingText, /删源：来源 —，生效 —/)
-      assert.match(missingText, /删重复：来源 —，生效 —/)
+      assert.match(missingText, /删源：来源 任务覆盖，生效 开启/)
+      assert.match(missingText, /删重复：来源 任务覆盖，生效 关闭/)
     } finally {
       missingView.unmount()
     }

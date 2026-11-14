@@ -98,7 +98,6 @@ def initialize_runtime_config(plugin, config: dict = None) -> dict:
     plugin._downloader_ext = config.get("downloader_ext", defaults["downloader_ext"])
     plugin._fromtorrentpath = config.get("fromtorrentpath", defaults["fromtorrentpath"])
     plugin._nopaths = config.get("nopaths", defaults["nopaths"])
-    plugin._transferemptylabel = config.get("transferemptylabel", defaults["transferemptylabel"])
     plugin._add_torrent_tags = config.get("add_torrent_tags") or ""
     plugin._torrent_tags = (
         plugin._add_torrent_tags.strip().split(",")

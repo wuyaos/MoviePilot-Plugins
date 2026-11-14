@@ -1,5 +1,5 @@
 {
-  "scriptSha256": "65aec940806abe1cd767eb7cbed63a68ac32d56672e922538e67d4d252eb733c",
+  "scriptSha256": "1d655b482d7a287721a40e45dc0aa45c9ff880f1e0aca34906f2ab5ba7df6b66",
   "directives": [
     ":actions=\"row.custom ? [\n                          { key: 'edit', label: row.expanded ? '收起' : '编辑', icon: row.expanded ? 'mdi-chevron-up' : 'mdi-pencil-outline' },\n                          { key: 'delete', label: row.preset ? '删除覆盖（恢复预设）' : '删除站点', icon: 'mdi-delete-outline', color: 'error', disabled: !form.hr_enable_site_config }\n                        ] : [{ key: 'copy', label: '复制规则', icon: 'mdi-content-copy', disabled: !form.hr_enable_site_config }]\"",
     ":active=\"activeMain === item.key\"",
@@ -346,7 +346,6 @@
     "v-model=\"transferDialog\"",
     "v-model=\"transferForm.delete_duplicate\"",
     "v-model=\"transferForm.delete_source\"",
-    "v-model=\"transferForm.empty_label_ok\"",
     "v-model=\"transferForm.enabled\"",
     "v-model=\"transferForm.exclude_labels\"",
     "v-model=\"transferForm.ext_source_plugin\"",

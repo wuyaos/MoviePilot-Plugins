@@ -161,7 +161,7 @@ def _service_case(tr, monkeypatch, value, global_default, duplicate, target_type
                              get_label=lambda *a: [], get_category=lambda *a: "",
                              get_data=lambda *a: {}, save_data=Mock(), _seed_autostart=False, convert_save_path=lambda *a: "/data")
     task = dict(name="决策", from_downloader="A", to_downloader="B", no_paths="",
-                include_category="", include_labels="", exclude_labels="", empty_label_ok=True,
+                include_category="", include_labels="", exclude_labels="",
                 from_path="", to_path="")
     if value is not MISSING:
         task.update(delete_source=value, delete_duplicate=value)
@@ -244,7 +244,7 @@ def test_target_poll_invalid_dict_counts_fail_and_keeps_source(tr, monkeypatch):
                              get_label=lambda *a: [], get_category=lambda *a: "",
                              get_data=lambda *a: {}, convert_save_path=lambda *a: "/data")
     task = dict(name="决策", from_downloader="A", to_downloader="B", no_paths="",
-                include_category="", include_labels="", exclude_labels="", empty_label_ok=True,
+                include_category="", include_labels="", exclude_labels="",
                 from_path="", to_path="")
     monkeypatch.setattr(tr, "_transfer_stopped", lambda *a: False)
     monkeypatch.setattr(tr, "_transfer_delay_status", lambda *a: (False, 0, 0))

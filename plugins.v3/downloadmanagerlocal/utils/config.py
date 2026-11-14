@@ -36,7 +36,6 @@ TRANSFER_DEFAULTS = {
     "nopaths": "",
     "seed_autostart": True,
     "seed_skipverify": False,
-    "transferemptylabel": False,
     "add_torrent_tags": "已整理,转移做种",
     "remainoldcat": False,
     "remainoldtag": False,

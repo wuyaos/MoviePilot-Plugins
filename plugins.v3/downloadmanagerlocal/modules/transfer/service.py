@@ -454,28 +454,15 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
             if torrent_category not in task["include_category"].split(','):
                 logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 不含有转移分类 {task['include_category']}，跳过 ...")
                 continue
-        if is_torrent_labels_empty:
-            if not task["empty_label_ok"]:
-                continue
-        else:
-            if task["exclude_labels"]:
-                is_skip = False
-                for label in task["exclude_labels"].split(','):
-                    if label in torrent_labels:
-                        logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 含有不转移标签 {label}，跳过 ...")
-                        is_skip = True
-                        break
-                if is_skip:
-                    continue
-            if task["include_labels"]:
-                is_skip = False
-                for label in task["include_labels"].split(','):
-                    if label not in torrent_labels:
-                        logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 不含有转移标签 {label}，跳过 ...")
-                        is_skip = True
-                        break
-                if is_skip:
-                    continue
+        # 包含标签是硬条件；未填写则不限制标签。
+        include_labels = [label.strip() for label in task["include_labels"].split(",") if label.strip()]
+        exclude_labels = [label.strip() for label in task["exclude_labels"].split(",") if label.strip()]
+        if any(label in torrent_labels for label in exclude_labels):
+            logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 命中排除标签，跳过 ...")
+            continue
+        if any(label not in torrent_labels for label in include_labels):
+            logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 不满足包含标签 {task['include_labels']}，跳过 ...")
+            continue
 
         trans_torrents.append({
             "hash": hash_str,

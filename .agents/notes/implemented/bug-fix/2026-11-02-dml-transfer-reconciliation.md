@@ -14,7 +14,7 @@ Status: implemented
 
 在途事务在删除前重新匹配当前启用任务的源/目的下载器与任务名，唯一匹配才解析当前 delete_source。inherit 使用 `_transfer_delete_source_default`，不能退回可能已失同步的 `_deletesource`；移除、禁用或匹配不唯一则保留源任务。旧任务缺字段继续使用旧默认，前端保存时显式保留原生效值，不自动改成继承。
 
-全局删除开关恢复可编辑，任务新建/编辑显示“继承全局（当前：开启/关闭）”，任务列表实际生效值只消费后端投影，不以尚未保存的草稿冒充运行设置。沿用既有样式。这一项替代[统一布局笔记](../architecture/2026-10-30-dml-unified-data-layout.md)中隐藏默认设置的决定，其余布局决定不变。
+全局删除开关恢复可编辑，任务新建/编辑显示“继承全局（当前：开启/关闭）”。配置列表原先只使用后端运行投影；此部分由[配置摘要修复](2026-11-14-dml-transfer-label-filter-and-policy-summary.md)替代为明确标注保存后生效的表单预览，其余运行协调约束不变。沿用既有样式。恢复默认设置这一项替代[统一布局笔记](../architecture/2026-10-30-dml-unified-data-layout.md)中隐藏默认设置的决定，其余布局决定不变。
 
 ## Alternatives considered
 

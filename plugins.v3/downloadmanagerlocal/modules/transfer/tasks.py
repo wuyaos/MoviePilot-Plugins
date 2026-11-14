@@ -2,7 +2,8 @@
 
 transfer_tasks 为 JSON 数组字符串，每条任务字段：
 - name/enabled/from_downloader/to_downloader
-- include_category/include_labels/exclude_labels/empty_label_ok/no_paths
+- include_category/include_labels/exclude_labels/no_paths
+- include_labels 留空不限制标签
 - from_path/to_path（数据可见性映射）
 - delete_source/delete_duplicate/keep_category/keep_tag/transfer_tag
 """
@@ -19,7 +20,7 @@ _DEPRECATION_NOTIFIED_FLAG = "_fromtorrentpath_deprecation_notified"
 
 _TASK_FIELDS = (
     "name", "enabled", "from_downloader", "to_downloader",
-    "include_category", "include_labels", "exclude_labels", "empty_label_ok",
+    "include_category", "include_labels", "exclude_labels",
     "no_paths", "from_path", "to_path",
     "delete_source", "delete_duplicate", "keep_category", "keep_tag",
     "transfer_tag",
@@ -33,7 +34,6 @@ _TASK_DEFAULTS: Dict[str, Any] = {
     "include_category": "",
     "include_labels": "",
     "exclude_labels": "",
-    "empty_label_ok": True,
     "no_paths": "",
     "from_path": "",
     "to_path": "",
@@ -137,7 +137,6 @@ def load_transfer_tasks(plugin) -> List[Dict[str, Any]]:
             "include_category": str(getattr(plugin, "_includecategory", "") or ""),
             "include_labels": str(getattr(plugin, "_includelabels", "") or ""),
             "exclude_labels": str(getattr(plugin, "_nolabels", "") or ""),
-            "empty_label_ok": bool(getattr(plugin, "_transferemptylabel", True)),
             "no_paths": str(getattr(plugin, "_nopaths", "") or ""),
             "from_path": str(getattr(plugin, "_frompath", "") or ""),
             "to_path": str(getattr(plugin, "_topath", "") or ""),

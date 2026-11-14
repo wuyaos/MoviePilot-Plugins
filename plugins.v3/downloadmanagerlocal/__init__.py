@@ -45,7 +45,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件颜色
     plugin_color = "#4CAF50"
     # 插件版本
-    plugin_version = "3.9.32"
+    plugin_version = "3.10.0"
     # 插件作者
     plugin_author = "Kurisu, wuyaos"
     # 作者主页
@@ -87,7 +87,6 @@ class DownloadManagerLocal(_PluginBase):
     _deletesource = False
     _deleteduplicate = False
     _fromtorrentpath = None
-    _transferemptylabel = False
     _add_torrent_tags = None
     _remainoldcat = False
     _remainoldtag = False

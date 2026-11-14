@@ -481,32 +481,31 @@ const _hoisted_218 = { class: "dm-field" };
 const _hoisted_219 = { class: "dm-field" };
 const _hoisted_220 = { class: "dm-field-row" };
 const _hoisted_221 = { class: "dm-field" };
-const _hoisted_222 = { class: "dm-switch-group" };
-const _hoisted_223 = { class: "dm-field-row" };
-const _hoisted_224 = { class: "dm-field dm-field--full" };
-const _hoisted_225 = {
+const _hoisted_222 = { class: "dm-field-row" };
+const _hoisted_223 = { class: "dm-field dm-field--full" };
+const _hoisted_224 = {
   key: 0,
   class: "dm-hint dm-risk mb-2"
 };
-const _hoisted_226 = { class: "dm-field-row" };
-const _hoisted_227 = { class: "dm-field" };
-const _hoisted_228 = {
+const _hoisted_225 = { class: "dm-field-row" };
+const _hoisted_226 = { class: "dm-field" };
+const _hoisted_227 = {
   key: 0,
   class: "dm-hint dm-risk"
 };
-const _hoisted_229 = { class: "dm-field" };
-const _hoisted_230 = {
+const _hoisted_228 = { class: "dm-field" };
+const _hoisted_229 = {
   key: 0,
   class: "dm-hint dm-risk"
 };
-const _hoisted_231 = { class: "dm-field-row" };
+const _hoisted_230 = { class: "dm-field-row" };
+const _hoisted_231 = { class: "dm-field dm-field--toggle" };
 const _hoisted_232 = { class: "dm-field dm-field--toggle" };
-const _hoisted_233 = { class: "dm-field dm-field--toggle" };
-const _hoisted_234 = { class: "dm-field-row" };
-const _hoisted_235 = { class: "dm-field" };
-const _hoisted_236 = { class: "dm-field-row" };
+const _hoisted_233 = { class: "dm-field-row" };
+const _hoisted_234 = { class: "dm-field" };
+const _hoisted_235 = { class: "dm-field-row" };
+const _hoisted_236 = { class: "dm-field dm-field--full" };
 const _hoisted_237 = { class: "dm-field dm-field--full" };
-const _hoisted_238 = { class: "dm-field dm-field--full" };
 const {reactive,ref,computed,watch,onMounted} = await importShared('vue');
 
 
@@ -539,7 +538,6 @@ const transferForm = reactive({});
 const transferError = ref('');
 const transferDeleteDialog = ref(false);
 const transferDeleteIndex = ref(-1);
-const transferStatusTasks = ref([]);
 const siteItems = ref([]);
 const hrPresets = ref([]);
 const hrPresetsLoading = ref(false);
@@ -557,10 +555,9 @@ let hrSyncedSiteConfigText = '';
 
 onMounted(async () => {
   try {
-    const [dlResp, siteResp, transferStatusResp] = await Promise.all([
+    const [dlResp, siteResp] = await Promise.all([
       getApi('downloaders', { feedback: 'silent' }),
       getApi('sites', { feedback: 'silent' }),
-      getApi('transfer_status?page=1&page_size=100', { feedback: 'silent' }),
       loadHrPresets(),
       loadTagCategories(),
     ]);
@@ -570,9 +567,6 @@ onMounted(async () => {
     if (siteResp) {
       siteItems.value = siteResp;
     }
-    transferStatusTasks.value = Array.isArray(transferStatusResp?.status?.tasks)
-      ? transferStatusResp.status.tasks
-      : (Array.isArray(transferStatusResp?.tasks) ? transferStatusResp.tasks : []);
   } catch (e) {
     console.error('获取列表失败:', e);
   }
@@ -607,7 +601,7 @@ const defaults = {
   transfer_delete_source_default: false, transfer_delete_duplicate_default: false,
   fromdownloader: '', todownloader: '', frompath: '', topath: '',
   fromtorrentpath: '', nopaths: '', nolabels: '', includelabels: '', includecategory: '',
-  transferemptylabel: false, add_torrent_tags: '⏩转种',
+  add_torrent_tags: '⏩转种',
   deletesource: false, deleteduplicate: false,
   remainoldcat: false, remainoldtag: false,
   transfer_tasks: '[]', transfer_rename_enabled: false, downloader_ext: '{}',
@@ -637,7 +631,7 @@ const PANE_RESET_KEYS = {
     'transfer_fallback_enabled', 'transfer_fallback_interval_minutes',
     'transfer_delete_source_default', 'transfer_delete_duplicate_default',
     'fromdownloader', 'todownloader', 'frompath', 'topath', 'fromtorrentpath',
-    'nopaths', 'nolabels', 'includelabels', 'includecategory', 'transferemptylabel',
+    'nopaths', 'nolabels', 'includelabels', 'includecategory',
     'add_torrent_tags', 'deletesource', 'deleteduplicate', 'remainoldcat', 'remainoldtag',
     'transfer_tasks', 'transfer_rename_enabled', 'downloader_ext',
     'transfer_path_detect_enabled', 'transfer_path_auto_repair',
@@ -893,7 +887,7 @@ function addTrackerPair() {
 /** 任务字段与后端 service/transfer_tasks.py::_TASK_DEFAULTS 一致。 */
 const transferTaskDefaults = {
   name: '', enabled: true, from_downloader: '', to_downloader: '',
-  include_category: '', include_labels: '', exclude_labels: '', empty_label_ok: true,
+  include_category: '', include_labels: '', exclude_labels: '',
   no_paths: '', from_path: '', to_path: '',
   delete_source: 'inherit', delete_duplicate: 'inherit', keep_category: true, keep_tag: true,
   transfer_tag: '已转移',
@@ -916,7 +910,7 @@ function legacyTransferTasks(config) {
   return [{ ...transferTaskDefaults, name: "默认任务（旧配置迁移）",
     from_downloader: from, to_downloader: to,
     include_category: config.includecategory || "", include_labels: config.includelabels || "",
-    exclude_labels: config.nolabels || "", empty_label_ok: config.transferemptylabel ?? true,
+    exclude_labels: config.nolabels || "",
     no_paths: config.nopaths || "", from_path: config.frompath || "", to_path: config.topath || "",
     delete_source: config.deletesource ?? false, delete_duplicate: config.deleteduplicate ?? true,
     keep_category: config.remainoldcat ?? true, keep_tag: config.remainoldtag ?? true, transfer_tag: "",
@@ -933,7 +927,7 @@ function parseTransferTasks(raw) {
   if (!Array.isArray(parsed)) return []
   return parsed
     .filter(item => item && typeof item === 'object')
-    .map(item => ({
+    .map(({ empty_label_ok: _obsolete, ...item }) => ({
       ...transferTaskDefaults,
       ...item,
       delete_source: normalizeTransferDeleteState(item.delete_source, false),
@@ -977,7 +971,6 @@ function taskFilterChips(task) {
   if (labels) chips.push(`标签 ${labels}`);
   const excludeLabels = String(task.exclude_labels || '').trim();
   if (excludeLabels) chips.push(`排除 ${excludeLabels}`);
-  if (task.empty_label_ok) chips.push('允许无标签');
   if (task.no_paths) chips.push('不限路径');
   return chips
 }
@@ -1010,18 +1003,16 @@ const transferDeleteOriginLabels = {
   'legacy-default': '升级前默认',
 };
 
-function transferStatusForTask(task) {
-  return transferStatusTasks.value.find(item => item?.name === task?.name) || null
-}
-
 function transferDeleteMeta(task, field) {
-  const status = transferStatusForTask(task);
-  const origin = status?.[`${field}_origin`];
-  const effective = status?.[`${field}_effective`];
-  return {
-    origin: transferDeleteOriginLabels[origin] || '—',
-    effective: effective === true ? '开启' : (effective === false ? '关闭' : '—'),
-  }
+  // 配置摘要不依赖任务是否执行、是否启用或上次状态请求是否成功。
+  const value = task?.[field];
+  const inherited = value === 'inherit';
+  const explicit = typeof value === 'boolean';
+  const origin = inherited ? 'global' : (explicit ? 'task' : 'legacy-default');
+  const effective = inherited
+    ? form[`transfer_${field}_default`] === true
+    : (explicit ? value : field === 'delete_duplicate');
+  return { origin: transferDeleteOriginLabels[origin], effective: effective ? '开启' : '关闭' }
 }
 
 const transferDialogSourceType = computed(() => (
@@ -1080,7 +1071,6 @@ function confirmTransferTask() {
     include_category: String(transferForm.include_category || '').trim(),
     include_labels: String(transferForm.include_labels || '').trim(),
     exclude_labels: String(transferForm.exclude_labels || '').trim(),
-    empty_label_ok: transferForm.empty_label_ok !== false,
     no_paths: String(transferForm.no_paths || ''),
     from_path: fromPath,
     to_path: toPath,
@@ -1945,7 +1935,6 @@ return (_ctx, _cache) => {
   const _component_VCard = _resolveComponent("VCard");
   const _component_VCardText = _resolveComponent("VCardText");
   const _component_VDialog = _resolveComponent("VDialog");
-  const _component_VCheckbox = _resolveComponent("VCheckbox");
 
   return (_openBlock(), _createElementBlock("div", {
     class: _normalizeClass(["dm-config dm-config--compact", { 'dm-config--transfer': activeMain.value === 'transfer' }])
@@ -1985,7 +1974,7 @@ return (_ctx, _cache) => {
           ]),
           default: _withCtx(() => [
             _createVNode(_component_VCardTitle, { class: "dm-title" }, {
-              default: _withCtx(() => [...(_cache[127] || (_cache[127] = [
+              default: _withCtx(() => [...(_cache[126] || (_cache[126] = [
                 _createTextVNode("下载中心", -1)
               ]))]),
               _: 1
@@ -2064,7 +2053,7 @@ return (_ctx, _cache) => {
                     class: "ml-auto",
                     onClick: _cache[1] || (_cache[1] = $event => (askPaneReset(activeMain.value)))
                   }, {
-                    default: _withCtx(() => [...(_cache[128] || (_cache[128] = [
+                    default: _withCtx(() => [...(_cache[127] || (_cache[127] = [
                       _createTextVNode(" 恢复默认 ", -1)
                     ]))]),
                     _: 1
@@ -2109,7 +2098,7 @@ return (_ctx, _cache) => {
                         icon: "mdi-alert-outline",
                         size: "16"
                       }),
-                      _cache[129] || (_cache[129] = _createTextVNode("观察模式：不调整上传限速，也不执行恢复。", -1))
+                      _cache[128] || (_cache[128] = _createTextVNode("观察模式：不调整上传限速，也不执行恢复。", -1))
                     ]))
                   : _createCommentVNode("", true),
                 _createElementVNode("div", _hoisted_10, [
@@ -2241,7 +2230,7 @@ return (_ctx, _cache) => {
                           }), 128))
                         ]))
                       : (_openBlock(), _createElementBlock("div", _hoisted_24, "尚未配置站点上限；没有站点上限时只应用下载器全局上限")),
-                    _cache[131] || (_cache[131] = _createElementVNode("div", { class: "dm-hint mt-4" }, " 正数上限限制该站点全部任务的合计上传速度；多个受限站点在下载器全局额度内按实际需求共享可用带宽。 ", -1)),
+                    _cache[130] || (_cache[130] = _createElementVNode("div", { class: "dm-hint mt-4" }, " 正数上限限制该站点全部任务的合计上传速度；多个受限站点在下载器全局额度内按实际需求共享可用带宽。 ", -1)),
                     _createElementVNode("div", _hoisted_25, [
                       _createElementVNode("div", _hoisted_26, [
                         _createVNode(_component_VCombobox, {
@@ -2262,7 +2251,7 @@ return (_ctx, _cache) => {
                         "prepend-icon": "mdi-plus",
                         onClick: addUploadSiteRule
                       }, {
-                        default: _withCtx(() => [...(_cache[130] || (_cache[130] = [
+                        default: _withCtx(() => [...(_cache[129] || (_cache[129] = [
                           _createTextVNode("添加站点", -1)
                         ]))]),
                         _: 1
@@ -2324,7 +2313,7 @@ return (_ctx, _cache) => {
                             icon: "mdi-alert-outline",
                             size: "16"
                           }),
-                          _cache[132] || (_cache[132] = _createTextVNode("观察模式：转移任务只统计（诊断页可见），不向目标下载器添加种子、不删除源种子。", -1))
+                          _cache[131] || (_cache[131] = _createTextVNode("观察模式：转移任务只统计（诊断页可见），不向目标下载器添加种子、不删除源种子。", -1))
                         ]))
                       : _createCommentVNode("", true)
                   ]),
@@ -2441,7 +2430,7 @@ return (_ctx, _cache) => {
                         }, null, 8, ["modelValue", "disabled"])
                       ])
                     ]),
-                    _cache[133] || (_cache[133] = _createElementVNode("div", { class: "dm-hint" }, "默认仅检测，不修改任务。可在转移记录中预览并手动修复；远端现场无法确认、原路径存在或映射不唯一时拒绝修复。修复强制真实校验并保留源任务，不受“跳过校验”影响。", -1))
+                    _cache[132] || (_cache[132] = _createElementVNode("div", { class: "dm-hint" }, "默认仅检测，不修改任务。可在转移记录中预览并手动修复；远端现场无法确认、原路径存在或映射不唯一时拒绝修复。修复强制真实校验并保留源任务，不受“跳过校验”影响。", -1))
                   ]),
                   _: 1
                 }, 8, ["icon"]),
@@ -2539,9 +2528,9 @@ return (_ctx, _cache) => {
                         }, null, 8, ["modelValue"])
                       ])
                     ]),
-                    _cache[134] || (_cache[134] = _createElementVNode("div", { class: "dm-hint" }, "选择“继承全局”的任务使用以上设置，仅删源任务，不删文件。旧任务保留原设置，需手动改为继承。", -1)),
-                    _cache[135] || (_cache[135] = _createElementVNode("div", { class: "dm-hint" }, "重命名仅支持 qB 目的端，只改显示名，不改文件；Transmission 自动跳过。", -1)),
-                    _cache[136] || (_cache[136] = _createElementVNode("div", { class: "dm-hint" }, "转移或手动补刀添加种子后启动校验，队列清空后自动停止。", -1))
+                    _cache[133] || (_cache[133] = _createElementVNode("div", { class: "dm-hint" }, "选择“继承全局”的任务使用以上设置，仅删源任务，不删文件。旧任务保留原设置，需手动改为继承。", -1)),
+                    _cache[134] || (_cache[134] = _createElementVNode("div", { class: "dm-hint" }, "重命名仅支持 qB 目的端，只改显示名，不改文件；Transmission 自动跳过。", -1)),
+                    _cache[135] || (_cache[135] = _createElementVNode("div", { class: "dm-hint" }, "转移或手动补刀添加种子后启动校验，队列清空后自动停止。", -1))
                   ]),
                   _: 1
                 }, 8, ["icon"])
@@ -2561,7 +2550,7 @@ return (_ctx, _cache) => {
                       "prepend-icon": "mdi-plus",
                       onClick: _cache[24] || (_cache[24] = $event => (openTransferDialog()))
                     }, {
-                      default: _withCtx(() => [...(_cache[137] || (_cache[137] = [
+                      default: _withCtx(() => [...(_cache[136] || (_cache[136] = [
                         _createTextVNode("添加任务", -1)
                       ]))]),
                       _: 1
@@ -2656,7 +2645,8 @@ return (_ctx, _cache) => {
                               ? (_openBlock(), _createElementBlock("span", _hoisted_70, "默认"))
                               : _createCommentVNode("", true),
                             _createElementVNode("span", _hoisted_71, "删源：来源 " + _toDisplayString(transferDeleteMeta(task, 'delete_source').origin) + "，生效 " + _toDisplayString(transferDeleteMeta(task, 'delete_source').effective), 1),
-                            _createElementVNode("span", _hoisted_72, "删重复：来源 " + _toDisplayString(transferDeleteMeta(task, 'delete_duplicate').origin) + "，生效 " + _toDisplayString(transferDeleteMeta(task, 'delete_duplicate').effective), 1)
+                            _createElementVNode("span", _hoisted_72, "删重复：来源 " + _toDisplayString(transferDeleteMeta(task, 'delete_duplicate').origin) + "，生效 " + _toDisplayString(transferDeleteMeta(task, 'delete_duplicate').effective), 1),
+                            _cache[137] || (_cache[137] = _createElementVNode("span", { class: "dm-hint" }, "以上删除策略按当前表单计算，保存后生效；规则关闭时不执行删除。", -1))
                           ]),
                           _createElementVNode("div", _hoisted_73, [
                             _createVNode(_component_VBtn, {
@@ -4434,7 +4424,7 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-config",
       modelValue: transferDialog.value,
-      "onUpdate:modelValue": _cache[122] || (_cache[122] = $event => ((transferDialog).value = $event)),
+      "onUpdate:modelValue": _cache[121] || (_cache[121] = $event => ((transferDialog).value = $event)),
       "max-width": "780",
       scrollable: ""
     }, {
@@ -4590,7 +4580,7 @@ return (_ctx, _cache) => {
                           "onUpdate:modelValue": _cache[110] || (_cache[110] = $event => ((transferForm.include_labels) = $event)),
                           label: "包含标签",
                           variant: "outlined",
-                          hint: "仅转移包含这些标签的种子，留空不限制",
+                          hint: "必须包含全部指定标签；无标签种子跳过。留空不限制标签",
                           "persistent-hint": ""
                         }, null, 8, ["modelValue"])
                       ])
@@ -4608,21 +4598,11 @@ return (_ctx, _cache) => {
                       ])
                     ]),
                     _createElementVNode("div", _hoisted_222, [
-                      _createVNode(_component_VCheckbox, {
-                        density: "compact",
-                        modelValue: transferForm.empty_label_ok,
-                        "onUpdate:modelValue": _cache[112] || (_cache[112] = $event => ((transferForm.empty_label_ok) = $event)),
-                        color: "info",
-                        "hide-details": "",
-                        label: "允许无标签种子"
-                      }, null, 8, ["modelValue"])
-                    ]),
-                    _createElementVNode("div", _hoisted_223, [
-                      _createElementVNode("div", _hoisted_224, [
+                      _createElementVNode("div", _hoisted_223, [
                         _createVNode(_component_VTextarea, {
                           density: "compact",
                           modelValue: transferForm.no_paths,
-                          "onUpdate:modelValue": _cache[113] || (_cache[113] = $event => ((transferForm.no_paths) = $event)),
+                          "onUpdate:modelValue": _cache[112] || (_cache[112] = $event => ((transferForm.no_paths) = $event)),
                           label: "排除路径",
                           variant: "outlined",
                           rows: "3",
@@ -4640,7 +4620,7 @@ return (_ctx, _cache) => {
                 }, {
                   default: _withCtx(() => [
                     (transferForm.delete_source === true)
-                      ? (_openBlock(), _createElementBlock("div", _hoisted_225, [
+                      ? (_openBlock(), _createElementBlock("div", _hoisted_224, [
                           _createVNode(_component_VIcon, {
                             icon: "mdi-alert-outline",
                             size: "16"
@@ -4648,12 +4628,12 @@ return (_ctx, _cache) => {
                           _cache[178] || (_cache[178] = _createTextVNode(" 仅删除源任务，不删除文件。目的端真实校验完成后可通过 H&R 管理联动解除源保护；只有“完整／做种中”状态不构成解除证据。联动失败保留源，删源失败恢复保护。 ", -1))
                         ]))
                       : _createCommentVNode("", true),
-                    _createElementVNode("div", _hoisted_226, [
-                      _createElementVNode("div", _hoisted_227, [
+                    _createElementVNode("div", _hoisted_225, [
+                      _createElementVNode("div", _hoisted_226, [
                         _createVNode(_component_VSelect, {
                           density: "compact",
                           modelValue: transferForm.delete_source,
-                          "onUpdate:modelValue": _cache[114] || (_cache[114] = $event => ((transferForm.delete_source) = $event)),
+                          "onUpdate:modelValue": _cache[113] || (_cache[113] = $event => ((transferForm.delete_source) = $event)),
                           items: transferDeleteItems(form.transfer_delete_source_default),
                           label: "删除源任务",
                           variant: "outlined",
@@ -4661,7 +4641,7 @@ return (_ctx, _cache) => {
                           "persistent-hint": ""
                         }, null, 8, ["modelValue", "items"]),
                         (transferForm.delete_source === true)
-                          ? (_openBlock(), _createElementBlock("div", _hoisted_228, [
+                          ? (_openBlock(), _createElementBlock("div", _hoisted_227, [
                               _createVNode(_component_VIcon, {
                                 icon: "mdi-alert-outline",
                                 size: "16"
@@ -4670,11 +4650,11 @@ return (_ctx, _cache) => {
                             ]))
                           : _createCommentVNode("", true)
                       ]),
-                      _createElementVNode("div", _hoisted_229, [
+                      _createElementVNode("div", _hoisted_228, [
                         _createVNode(_component_VSelect, {
                           density: "compact",
                           modelValue: transferForm.delete_duplicate,
-                          "onUpdate:modelValue": _cache[115] || (_cache[115] = $event => ((transferForm.delete_duplicate) = $event)),
+                          "onUpdate:modelValue": _cache[114] || (_cache[114] = $event => ((transferForm.delete_duplicate) = $event)),
                           items: transferDeleteItems(form.transfer_delete_duplicate_default),
                           label: "目的端已有任务时删除源任务",
                           variant: "outlined",
@@ -4682,7 +4662,7 @@ return (_ctx, _cache) => {
                           "persistent-hint": ""
                         }, null, 8, ["modelValue", "items"]),
                         (transferForm.delete_duplicate === true)
-                          ? (_openBlock(), _createElementBlock("div", _hoisted_230, [
+                          ? (_openBlock(), _createElementBlock("div", _hoisted_229, [
                               _createVNode(_component_VIcon, {
                                 icon: "mdi-alert-outline",
                                 size: "16"
@@ -4692,23 +4672,23 @@ return (_ctx, _cache) => {
                           : _createCommentVNode("", true)
                       ])
                     ]),
-                    _createElementVNode("div", _hoisted_231, [
-                      _createElementVNode("div", _hoisted_232, [
+                    _createElementVNode("div", _hoisted_230, [
+                      _createElementVNode("div", _hoisted_231, [
                         _createVNode(_component_VSwitch, {
                           density: "compact",
                           modelValue: transferForm.keep_category,
-                          "onUpdate:modelValue": _cache[116] || (_cache[116] = $event => ((transferForm.keep_category) = $event)),
+                          "onUpdate:modelValue": _cache[115] || (_cache[115] = $event => ((transferForm.keep_category) = $event)),
                           color: "primary",
                           inset: "",
                           "hide-details": "",
                           label: "保留原分类"
                         }, null, 8, ["modelValue"])
                       ]),
-                      _createElementVNode("div", _hoisted_233, [
+                      _createElementVNode("div", _hoisted_232, [
                         _createVNode(_component_VSwitch, {
                           density: "compact",
                           modelValue: transferForm.keep_tag,
-                          "onUpdate:modelValue": _cache[117] || (_cache[117] = $event => ((transferForm.keep_tag) = $event)),
+                          "onUpdate:modelValue": _cache[116] || (_cache[116] = $event => ((transferForm.keep_tag) = $event)),
                           color: "primary",
                           inset: "",
                           "hide-details": "",
@@ -4716,12 +4696,12 @@ return (_ctx, _cache) => {
                         }, null, 8, ["modelValue"])
                       ])
                     ]),
-                    _createElementVNode("div", _hoisted_234, [
-                      _createElementVNode("div", _hoisted_235, [
+                    _createElementVNode("div", _hoisted_233, [
+                      _createElementVNode("div", _hoisted_234, [
                         _createVNode(_component_VTextField, {
                           density: "compact",
                           modelValue: transferForm.transfer_tag,
-                          "onUpdate:modelValue": _cache[118] || (_cache[118] = $event => ((transferForm.transfer_tag) = $event)),
+                          "onUpdate:modelValue": _cache[117] || (_cache[117] = $event => ((transferForm.transfer_tag) = $event)),
                           label: "目标标签",
                           variant: "outlined",
                           hint: "默认「已转移」；留空表示不打标签",
@@ -4740,23 +4720,23 @@ return (_ctx, _cache) => {
                     }, {
                       default: _withCtx(() => [
                         _cache[181] || (_cache[181] = _createElementVNode("div", { class: "dm-hint mb-2" }, "源端为 rtorrent 时，必须填写 ruTorrent WebUI 地址与 source 插件路径，否则无法导出种子数据。", -1)),
-                        _createElementVNode("div", _hoisted_236, [
-                          _createElementVNode("div", _hoisted_237, [
+                        _createElementVNode("div", _hoisted_235, [
+                          _createElementVNode("div", _hoisted_236, [
                             _createVNode(_component_VTextField, {
                               density: "compact",
                               modelValue: transferForm.ext_webui_url,
-                              "onUpdate:modelValue": _cache[119] || (_cache[119] = $event => ((transferForm.ext_webui_url) = $event)),
+                              "onUpdate:modelValue": _cache[118] || (_cache[118] = $event => ((transferForm.ext_webui_url) = $event)),
                               label: "ruTorrent WebUI 地址",
                               variant: "outlined",
                               hint: "如 http://127.0.0.1:8080/rutorrent，不含末尾斜杠",
                               "persistent-hint": ""
                             }, null, 8, ["modelValue"])
                           ]),
-                          _createElementVNode("div", _hoisted_238, [
+                          _createElementVNode("div", _hoisted_237, [
                             _createVNode(_component_VTextField, {
                               density: "compact",
                               modelValue: transferForm.ext_source_plugin,
-                              "onUpdate:modelValue": _cache[120] || (_cache[120] = $event => ((transferForm.ext_source_plugin) = $event)),
+                              "onUpdate:modelValue": _cache[119] || (_cache[119] = $event => ((transferForm.ext_source_plugin) = $event)),
                               label: "source 插件路径",
                               variant: "outlined",
                               hint: "相对 WebUI 地址的 source 插件路径，如 plugins/source/action.php",
@@ -4778,7 +4758,7 @@ return (_ctx, _cache) => {
                 _createVNode(_component_VBtn, {
                   size: "small",
                   variant: "text",
-                  onClick: _cache[121] || (_cache[121] = $event => (transferDialog.value = false))
+                  onClick: _cache[120] || (_cache[120] = $event => (transferDialog.value = false))
                 }, {
                   default: _withCtx(() => [...(_cache[182] || (_cache[182] = [
                     _createTextVNode("取消", -1)
@@ -4809,7 +4789,7 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-config",
       modelValue: transferDeleteDialog.value,
-      "onUpdate:modelValue": _cache[124] || (_cache[124] = $event => ((transferDeleteDialog).value = $event)),
+      "onUpdate:modelValue": _cache[123] || (_cache[123] = $event => ((transferDeleteDialog).value = $event)),
       "max-width": "480"
     }, {
       default: _withCtx(() => [
@@ -4859,7 +4839,7 @@ return (_ctx, _cache) => {
                 _createVNode(_component_VBtn, {
                   size: "small",
                   variant: "text",
-                  onClick: _cache[123] || (_cache[123] = $event => (transferDeleteDialog.value = false))
+                  onClick: _cache[122] || (_cache[122] = $event => (transferDeleteDialog.value = false))
                 }, {
                   default: _withCtx(() => [...(_cache[186] || (_cache[186] = [
                     _createTextVNode("取消", -1)
@@ -4890,7 +4870,7 @@ return (_ctx, _cache) => {
     _createVNode(_component_VDialog, {
       "content-class": "dm-config",
       modelValue: paneResetDialog.value,
-      "onUpdate:modelValue": _cache[126] || (_cache[126] = $event => ((paneResetDialog).value = $event)),
+      "onUpdate:modelValue": _cache[125] || (_cache[125] = $event => ((paneResetDialog).value = $event)),
       "max-width": "560"
     }, {
       default: _withCtx(() => [
@@ -4945,7 +4925,7 @@ return (_ctx, _cache) => {
                 _createVNode(_component_VBtn, {
                   size: "small",
                   variant: "text",
-                  onClick: _cache[125] || (_cache[125] = $event => (paneResetDialog.value = false))
+                  onClick: _cache[124] || (_cache[124] = $event => (paneResetDialog.value = false))
                 }, {
                   default: _withCtx(() => [...(_cache[189] || (_cache[189] = [
                     _createTextVNode("取消", -1)
@@ -4978,6 +4958,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-55a29831"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-170c0773"]]);
 
 export { Config as default };

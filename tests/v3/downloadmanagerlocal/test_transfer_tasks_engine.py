@@ -63,6 +63,14 @@ def tt(monkeypatch):
     return _load_real(monkeypatch, "tasks")
 
 
+@pytest.mark.parametrize("legacy_value", [True, False, None])
+def test_normalize_task_drops_obsolete_empty_label_flag(tt, legacy_value):
+    raw = {"name": "legacy", "from_downloader": "A", "to_downloader": "B",
+           "include_labels": "已转移", "empty_label_ok": legacy_value}
+    task = tt._normalize_task(raw, 0)
+    assert "empty_label_ok" not in task
+    assert task["include_labels"] == "已转移"
+
 @pytest.fixture
 def pe(monkeypatch):
     """payload_export 真模块。"""
@@ -135,7 +143,6 @@ def _make_plugin(**config):
     plugin._includecategory = config.get("includecategory", "")
     plugin._includelabels = config.get("includelabels", "")
     plugin._nolabels = config.get("nolabels", "")
-    plugin._transferemptylabel = config.get("transferemptylabel", False)
     plugin._nopaths = config.get("nopaths", "")
     plugin._frompath = config.get("frompath", "")
     plugin._topath = config.get("topath", "")

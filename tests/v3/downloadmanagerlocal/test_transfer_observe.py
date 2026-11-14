@@ -66,7 +66,7 @@ def observed(interlock, monkeypatch):
     env.source.get_completed_torrents.return_value = [{"hash": "abc", "state": "pausedUP"}]
     env.target.get_torrents.return_value = ([], None)
     env.task = dict(name="preview", from_downloader="source", to_downloader="target",
-                    no_paths="", include_category="", empty_label_ok=True,
+                    no_paths="", include_category="",
                     exclude_labels="", include_labels="", from_path="", to_path="")
     assert env.config.observe_only(plugin, "transfer") is True
     return env
