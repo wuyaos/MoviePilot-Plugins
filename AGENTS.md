@@ -64,3 +64,4 @@ Todo 必须与实际进度同步，避免滞后或遗漏：
 - 重载插件: `curl -sS http://127.0.0.1:7300/api/v1/plugin/reload/<PluginId> -H "X-API-KEY: <key>"`
 - 触发签到: `moviepilot scheduler run <service_id>`
 - V3 插件中心安装位置：容器内 `/app/app/plugins/<lower(id)>`（qnap MP 为 `docker exec MP` 路径）；`/config/plugins/<id>` 不在加载路径，手工写入会被当孤儿目录，产生「安装成功但跑旧码」的混合状态——手工部署直接覆盖 `/app/app/plugins/<lower(id)>` 后 reload
+- qnap 部署任意插件: `micromamba run -n base python -X utf8 scripts/deploy_plugin_qnap.py <plugins.v3|plugins.v2>/<plugin_dir>`（tar→scp→docker cp→解压 chmod→reload→运行态版本校验一条龙；reload id 取插件类名；MP API key 从 qnap 宿主 `<v3 config>/.mp_api_key` 读取，勿提交密钥）
