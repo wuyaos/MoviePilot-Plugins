@@ -11,6 +11,7 @@ transfer_tasks 为 JSON 数组字符串，每条任务字段：
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List, Optional
 
 from app.sdk.logging import logger
@@ -21,6 +22,7 @@ _DEPRECATION_NOTIFIED_FLAG = "_fromtorrentpath_deprecation_notified"
 _TASK_FIELDS = (
     "name", "enabled", "from_downloader", "to_downloader",
     "include_category", "include_labels", "exclude_labels",
+    "include_trackers", "exclude_trackers",
     "no_paths", "from_path", "to_path",
     "delete_source", "delete_duplicate", "keep_category", "keep_tag",
     "transfer_tag",
@@ -34,6 +36,8 @@ _TASK_DEFAULTS: Dict[str, Any] = {
     "include_category": "",
     "include_labels": "",
     "exclude_labels": "",
+    "include_trackers": "",
+    "exclude_trackers": "",
     "no_paths": "",
     "from_path": "",
     "to_path": "",
@@ -56,6 +60,16 @@ def resolve_task_flag(task: dict, field: str, global_default: bool) -> tuple[boo
     if value == "inherit":
         return global_default is True, "global"
     return _LEGACY_FLAG_DEFAULTS[field], "legacy-default"
+
+
+def parse_tracker_domains(value: str) -> set[str]:
+    """只接受域名列表，不把完整 announce URL / passkey 当筛选配置。"""
+    domains = {item.strip().lower().rstrip(".") for item in re.split(r"[,\n]", value or "") if item.strip()}
+    if any(len(domain) > 253 or not re.fullmatch(
+            r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*", domain)
+           for domain in domains):
+        raise ValueError("tracker 筛选只接受域名，不接受 URL、路径或通配符")
+    return domains
 
 
 def _normalize_task(raw: Any, index: int) -> Optional[Dict[str, Any]]:
@@ -92,6 +106,12 @@ def _normalize_task(raw: Any, index: int) -> Optional[Dict[str, Any]]:
         logger.warning(
             f"【PT下载中心:转移做种】任务「{task['name']}」数据映射路径需同时填写或同时留空，已忽略"
         )
+        return None
+    try:
+        for field in ("include_trackers", "exclude_trackers"):
+            task[field] = ",".join(sorted(parse_tracker_domains(task[field])))
+    except (TypeError, ValueError):
+        logger.warning(f"【PT下载中心:转移做种】任务「{task['name']}」tracker 筛选配置无效，已忽略")
         return None
     return task
 

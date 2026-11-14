@@ -1,5 +1,6 @@
 """下载管理插件 - API 路由实现"""
 
+import hashlib
 import json
 import threading
 import time
@@ -898,6 +899,59 @@ def _iter_transfer_records(plugin):
             yield key, value
 
 
+TRANSFER_HISTORY_SNAPSHOTS_KEY = "transfer_history_snapshots"
+
+
+def _transfer_history_fingerprint(value):
+    """展示快照覆盖整条记录；业务状态变化后自动重新显示。"""
+    try:
+        content = json.dumps(value, sort_keys=True, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError):
+        return ""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def _transfer_history_ended(value, queue):
+    from ..modules.transfer.recheck import _queue_key
+
+    if value.get("transfer_state") not in ("completed", "failed", "rolled_back"):
+        return False
+    if value.get("hr_protected") or (value.get("delete_source_requested") and not value.get("delete_source")):
+        return False
+    target = value.get("to_download") or value.get("downloader") or ""
+    hash_text = value.get("to_download_id") or value.get("hash") or ""
+    return _queue_key(target, hash_text) not in queue
+
+
+def _transfer_history_snapshots(plugin):
+    value = plugin.get_data(TRANSFER_HISTORY_SNAPSHOTS_KEY)
+    return value if isinstance(value, dict) else {}
+
+
+def api_transfer_history_clear(plugin, payload: EmptyRequest):
+    """仅记录展示快照，不触碰事务、保护、队列、统计或下载器。"""
+    from ..modules.transfer.recheck import load_seed_recheck_queue
+
+    queue = load_seed_recheck_queue(plugin)
+    previous = _transfer_history_snapshots(plugin)
+    snapshots = {}
+    removed = 0
+    for key, value in _iter_transfer_records(plugin):
+        if not _transfer_history_ended(value, queue):
+            continue
+        fingerprint = _transfer_history_fingerprint(value)
+        if not fingerprint:
+            continue
+        snapshots[key] = fingerprint
+        if not value.get("history_hidden") and previous.get(key) != fingerprint:
+            removed += 1
+    plugin.save_data(TRANSFER_HISTORY_SNAPSHOTS_KEY, snapshots)
+    return _operation_response({
+        "code": 0, "msg": f"已清理 {removed} 条已结束展示记录；在途任务与安全状态保留",
+        "result": {"removed": removed},
+    }, ModuleActionResult)
+
+
 def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filter: str = "all"):
     """返回转移任务、在途事务与记录；统计保持全量口径。
 
@@ -935,6 +989,8 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
             "include_category": task["include_category"],
             "include_labels": task["include_labels"],
             "exclude_labels": task["exclude_labels"],
+            "include_trackers": task.get("include_trackers", ""),
+            "exclude_trackers": task.get("exclude_trackers", ""),
             "from_path": task["from_path"],
             "to_path": task["to_path"],
             "delete_source": task.get("delete_source"),
@@ -948,8 +1004,10 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
         for task in load_transfer_tasks(plugin)
     ]
 
+    queue = load_seed_recheck_queue(plugin) or {}
+    snapshots = _transfer_history_snapshots(plugin)
     pending = []
-    for key, item in (load_seed_recheck_queue(plugin) or {}).items():
+    for key, item in queue.items():
         if not isinstance(item, dict):
             continue
         created_at = float(item.get("created_at") or now)
@@ -974,7 +1032,11 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
     for key, value in _iter_transfer_records(plugin):
         records.append({
             "_record_key": key,
-            "_history_hidden": bool(value.get("history_hidden")),
+            "_history_hidden": bool(value.get("history_hidden")) or (
+                bool(snapshots.get(key))
+                and _transfer_history_ended(value, queue)
+                and snapshots[key] == _transfer_history_fingerprint(value)
+            ),
             "_source_pending": bool(
                 value.get("delete_source_requested") and not value.get("delete_source")
                 and value.get("transfer_state") in ("target_ready", "completed")

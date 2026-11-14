@@ -57,7 +57,7 @@ test('transfer pilot separates switches from fields and keeps fallback disabling
   }
   check(pane)
   assert.match(pane.loc.source, /:disabled="!form.transfer_fallback_enabled"/)
-  assert.equal((descriptor.template.content.match(/<MultiValueInput\b/g) || []).length, 10)
+  assert.equal((descriptor.template.content.match(/<MultiValueInput\b/g) || []).length, 12)
   assert.equal((descriptor.template.content.match(/v-model="transferForm\.(?:include_category|include_labels|exclude_labels)"/g) || []).length, 3)
 })
 
@@ -129,7 +129,7 @@ test('H&R layout retains the approved configuration business script byte-for-byt
   const adapterEnd = script.indexOf('const removerActionItems', adapterStart)
   const businessScript = (script.slice(0, adapterStart) + script.slice(adapterEnd))
     .split('\n').filter(line => !line.startsWith('        color: `var(--dm-hr-rule-')).join('\n')
-  assert.equal(createHash('sha256').update(businessScript).digest('hex'),'d89716bbda2bd52bc1eb39fb64d6b39b0eee3766baca8d5a7ca4f02e4664bc82')
+  assert.equal(createHash('sha256').update(businessScript).digest('hex'),'b885fffebce5da961a0f3a71a9f7cfc84a72a2599bb173ef9a47fcd2f2f7e7c6')
 })
 
 test('自动删种体积帮助与后端范围语法一致，不再提示逗号', () => {

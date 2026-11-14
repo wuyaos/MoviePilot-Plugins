@@ -54,6 +54,7 @@ from .handlers import (
     api_tag_status,
     api_transfer_run,
     api_transfer_status,
+    api_transfer_history_clear,
     api_transfer_path_repair,
     api_tag_cleanup_scan,
     api_upload_limit_disable_restore,
@@ -371,6 +372,14 @@ def build_api_routes(plugin) -> List[Dict[str, Any]]:
             "methods": ["GET", "POST"],
             "summary": "获取转移做种数据页",
             "response_model": ModuleStatusResult,
+        },
+        {
+            "path": "/transfer_history_clear",
+            "endpoint": partial(api_transfer_history_clear, plugin),
+            "auth": "bear",
+            "methods": ["POST"],
+            "summary": "清理已结束的转移展示记录（保留业务与保护状态）",
+            "response_model": schemas.Response[ModuleActionResult],
         },
         {
             "path": "/transfer_path_repair",

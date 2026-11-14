@@ -24,10 +24,11 @@ import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import 'vuetify/styles'
 import Config from ${configPath}
+const transferTasks=[{name:'映射任务',enabled:true,from_downloader:'QB',to_downloader:'TR',from_path:'/share/very/long/'.repeat(4),to_path:'/share/target',include_labels:'LongLabel'.repeat(20),include_trackers:'shadowthein.net',delete_source:'inherit',delete_duplicate:false},{name:'无映射任务',enabled:false,from_downloader:'TR',to_downloader:'QB'}]
 const writes=[]
 const api={ get:async(path)=>path==='media/category'?{success:true,message:'',data:{电影:['电影','新分类'],电视剧:['剧集']}}:[], put:async()=>{writes.push('put');throw Error('Unexpected save')}, post:async()=>{writes.push('post');throw Error('Unexpected action')} }
 const vuetify=createVuetify({components:{...components,VCronField:components.VTextField}})
-createApp({render:()=>h(components.VApp,()=>h('div',{class:'fixture',style:'width:1100px;max-width:100%'},[h(Config,{pluginId:'DownloadManagerLocal',api,initialConfig:{enabled:true,tag_all_cat:['电影'],tag_all_cat_rename:['Movies'],failcleanup_enabled:true,failcleanup_observe_only:false,transfer_fallback_enabled:false,hr_enable_site_config:true,hr_site_config_str:"- site_name: 'Fixture'\\n  hr_duration: 72\\n",hr_notify:'none',hr_protection_enabled:false,hr_sites:['SiteName'.repeat(25),'SiteB'],hr_exclude_tags:['VeryLongTagName'.repeat(25),'TagB']}})]))}).use(vuetify).mount('#app')
+createApp({render:()=>h(components.VApp,()=>h('div',{class:'fixture',style:'width:1100px;max-width:100%'},[h(Config,{pluginId:'DownloadManagerLocal',api,initialConfig:{transfer_tasks:JSON.stringify(transferTasks),enabled:true,tag_all_cat:['电影'],tag_all_cat_rename:['Movies'],failcleanup_enabled:true,failcleanup_observe_only:false,transfer_fallback_enabled:false,hr_enable_site_config:true,hr_site_config_str:"- site_name: 'Fixture'\\n  hr_duration: 72\\n",hr_notify:'none',hr_protection_enabled:false,hr_sites:['SiteName'.repeat(25),'SiteB'],hr_exclude_tags:['VeryLongTagName'.repeat(25),'TagB']}})]))}).use(vuetify).mount('#app')
 const sleep=ms=>new Promise(r=>setTimeout(r,ms))
 const button=text=>[...document.querySelectorAll('button')].find(n=>n.textContent.trim()===text)
 async function inspect(width,theme){
@@ -146,6 +147,13 @@ try {
   const catSourceEdited=catRow.querySelector('.dm-cat-source').textContent.trim()==='电影'&&!catRow.querySelector('.dm-cat-source input')&&catRow.querySelector('.v-text-field input').value==='Films'&&[...document.querySelectorAll('.dm-cat-source')].some(n=>n.textContent.trim()==='新分类')
   ;[...document.querySelectorAll('.dm-nav-item')].find(n=>n.textContent.includes('转移做种')).click();await nextTick()
   button('任务列表').click();await nextTick()
+  const taskLayouts=[]
+  for(const width of [1100,360])for(const theme of ['light','dark']) {
+    document.querySelector('.fixture').style.width=width+'px';vuetify.theme.global.name.value=theme;await nextTick();await sleep(30)
+    const table=document.querySelector('.dm-task-table')
+    const rows=[...table.querySelectorAll('.dm-task-row:not(.dm-task-row--head)')]
+    taskLayouts.push({width,theme,outer:document.querySelector('.fixture').scrollWidth-document.querySelector('.fixture').clientWidth,scrollable:table.scrollWidth>table.clientWidth,names:rows.map(row=>row.querySelector('.dm-task-name').textContent.trim()),statesOnlySwitches:rows.every(row=>!row.querySelector('.dm-task-state').textContent.trim()),unmapped:rows[1].querySelector('.dm-task-paths').textContent.trim(),arrows:[...table.querySelectorAll('.dm-map-arrow')].map(n=>{const a=n.getBoundingClientRect(),p=n.parentElement.getBoundingClientRect();return Math.abs((a.left+a.right-p.left-p.right)/2)}),chipsFit:[...table.querySelectorAll('.v-chip')].every(n=>n.getBoundingClientRect().width<=n.parentElement.getBoundingClientRect().width+1)})
+  }
   button('添加任务').click();await sleep(200)
   document.querySelector('.v-overlay--active .v-overlay__content').style.maxWidth='312px'
   const dialog=document.querySelector('.v-overlay--active .dm-transfer-form')
@@ -166,7 +174,7 @@ try {
   const imeChipCount=multi[0].querySelectorAll('.v-chip').length
   tagInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));await nextTick()
   const enteredChip=[...multi[0].querySelectorAll('.v-chip')].some(n=>n.textContent.includes('普通标签Fixture'))
-  document.getElementById('result').textContent=JSON.stringify({customSiteAdded,catSingleInput,catSourceEdited,imeChipCount,enteredChip,moduleLayouts,notifyOffInitially,choseError,notifyDisabledAgain,restoredError,siteLayouts,overflowMenuCount,fallsBack,reEnabled,hrLayouts,riskCleared,layouts,initiallyDisabled,enabledAfterClick,multi:multi.length,chips:chips.length,dialogOverflow,chipOverflow,wrapped,chipsAfterRemoval,writes})
+  document.getElementById('result').textContent=JSON.stringify({taskLayouts,customSiteAdded,catSingleInput,catSourceEdited,imeChipCount,enteredChip,moduleLayouts,notifyOffInitially,choseError,notifyDisabledAgain,restoredError,siteLayouts,overflowMenuCount,fallsBack,reEnabled,hrLayouts,riskCleared,layouts,initiallyDisabled,enabledAfterClick,multi:multi.length,chips:chips.length,dialogOverflow,chipOverflow,wrapped,chipsAfterRemoval,writes})
 }catch(error){document.getElementById('result').textContent=JSON.stringify({error:error.message,stack:error.stack})}
 `)
     await build({ configFile: false, root: entry, base: './', plugins: [vue()], logLevel: 'error', build: { target: 'esnext', outDir: path.join(output, 'site'), emptyOutDir: true } })
@@ -177,6 +185,8 @@ try {
     assert.ok(match, result.stdout.slice(-1500))
     const report = JSON.parse(match[1].replaceAll('&quot;', '"').replaceAll('&amp;', '&'))
     assert.equal(report.error, undefined, JSON.stringify(report))
+    assert.equal(report.taskLayouts.length,4)
+    for(const row of report.taskLayouts){assert.deepEqual(row.names,['映射任务','无映射任务']);assert.equal(row.statesOnlySwitches,true);assert.equal(row.unmapped,'—');assert.equal(row.arrows.length,3);assert.ok(row.arrows.every(x=>x<=1),JSON.stringify(row));assert.equal(row.chipsFit,true,JSON.stringify(row));assert.ok(row.outer<=1,JSON.stringify(row));if(row.width===360)assert.equal(row.scrollable,true)}
     assert.equal(report.imeChipCount, report.chipsAfterRemoval)
     assert.equal(report.enteredChip, true)
     assert.equal(report.customSiteAdded,true)
@@ -252,7 +262,7 @@ try {
     assert.equal(report.riskCleared, true)
     assert.equal(report.initiallyDisabled, true)
     assert.equal(report.enabledAfterClick, true)
-    assert.equal(report.multi, 3)
+    assert.equal(report.multi, 5)
     assert.equal(report.chips, 2)
     assert.ok(report.dialogOverflow <= 1, JSON.stringify(report))
     assert.equal(report.chipOverflow, false)

@@ -7,7 +7,7 @@ import { loadSfc, mount as renderMount } from './helpers/load-sfc.mjs'
 
 const source = readFileSync(new URL('../src/components/Config.vue', import.meta.url), 'utf8')
 const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace(/^/, `const MODULE_ICONS = ${JSON.stringify(MODULE_ICONS)};\n`)
-const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi', `${script}\nreturn { form, transferTasks, transferForm, openTransferDialog, confirmTransferTask, transferDeleteMeta, transferDeleteItems, saveConfig, taskFilterChips };`)
+const setup = new Function('reactive', 'ref', 'computed', 'watch', 'onMounted', 'defineProps', 'defineEmits', 'getPluginApi', `${script}\nreturn { form, transferTasks, transferForm, transferError, openTransferDialog, confirmTransferTask, transferDeleteMeta, transferDeleteItems, saveConfig, taskFilterChips };`)
 
 function mountSetup(initialConfig = {}) {
   const scope = effectScope()
@@ -196,4 +196,48 @@ test("旧单链路缺任务键时迁移，显式空列表与迁移标记不复�
       }
     } finally { state.stop() }
   }
+})
+
+
+test('tracker 包含/排除字段经过编辑、摘要和真实保存 payload 保留', async () => {
+  const state = mountSetup()
+  try {
+    state.openTransferDialog()
+    state.transferForm.from_downloader = 'TR'
+    state.transferForm.to_downloader = 'QB'
+    state.transferForm.include_trackers = ' SHADOWTHEIN.NET,other.net '
+    state.transferForm.exclude_trackers = 'blocked.net'
+    state.confirmTransferTask()
+    assert.equal(state.transferError.value, '')
+    const task = state.transferTasks.value[0]
+    assert.equal(task.include_trackers, 'shadowthein.net,other.net')
+    assert.equal(task.exclude_trackers, 'blocked.net')
+    assert.ok(state.taskFilterChips(task).includes('Tracker shadowthein.net,other.net'))
+    assert.ok(state.taskFilterChips(task).includes('排除 Tracker blocked.net'))
+    await state.saveConfig()
+    const saved = JSON.parse(state.calls.at(-1).transfer_tasks)[0]
+    assert.equal(saved.include_trackers, task.include_trackers)
+    assert.equal(saved.exclude_trackers, task.exclude_trackers)
+    state.openTransferDialog(0)
+    assert.equal(state.transferForm.include_trackers, saved.include_trackers)
+    assert.equal(state.transferForm.exclude_trackers, saved.exclude_trackers)
+    assert.doesNotMatch(source, /以上删除策略按当前表单计算，保存后生效；规则关闭时不执行删除。/)
+    assert.match(source, /label="包含 tracker 域名"/)
+    assert.match(source, /label="排除 tracker 域名"/)
+  } finally { state.stop() }
+})
+
+test('tracker 非法配置阻止应用，旧任务默认留空不启用筛选', () => {
+  const state = mountSetup({ transfer_tasks: JSON.stringify([{ name: '旧规则', from_downloader: 'TR', to_downloader: 'QB' }]) })
+  try {
+    state.openTransferDialog(0)
+    assert.equal(state.transferForm.include_trackers, '')
+    assert.equal(state.transferForm.exclude_trackers, '')
+    for (const value of ['https://shadowthein.net/passkey/announce', '*.shadowthein.net', 'bad..net']) {
+      state.transferForm.include_trackers = value
+      state.confirmTransferTask()
+      assert.match(state.transferError.value, /只填写域名/)
+      assert.equal(state.transferTasks.value[0].include_trackers, '')
+    }
+  } finally { state.stop() }
 })

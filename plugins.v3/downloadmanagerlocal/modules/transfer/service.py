@@ -4,6 +4,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from app.schemas import ServiceInfo
 from app.schemas.types import MessageType
@@ -22,7 +23,7 @@ from .pipeline import (
 )
 from ..rename.service import _get_torrent_content_name, build_rename_config, resolve_retry_original_name
 from ..sitetag.service import create_temporary_tag, forget_temporary_tag, release_temporary_tag
-from .tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated, resolve_task_flag
+from .tasks import load_transfer_tasks, notify_fromtorrentpath_deprecated, resolve_task_flag, parse_tracker_domains
 from .payload_export import get_torrent_payloads
 
 _AUTOMATIC_DELAY_TRIGGER_SOURCES = frozenset({"兜底扫描", "事件驱动"})
@@ -233,8 +234,6 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
             outcome["site_tag_result"] = "failed" if tag_result is False else ("unknown_site" if tag_result is None else "ok")
         if tag_result is False:
             logger.error(f"【PT下载中心:转移做种】站点标签写入失败 hash={torrent_hash}")
-        elif tag_result is None:
-            logger.warning(f"【PT下载中心:转移做种】站点未识别，跳过站点标签 hash={torrent_hash}")
     return True
 
 
@@ -412,8 +411,15 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
         logger.info(f"【PT下载中心:转移做种】任务「{task_name}」源 {from_service.name} 没有已做种的种子")
         return
 
+    try:
+        include_trackers = parse_tracker_domains(task.get("include_trackers", ""))
+        exclude_trackers = parse_tracker_domains(task.get("exclude_trackers", ""))
+    except (TypeError, ValueError):
+        logger.warning(f"【PT下载中心:转移做种】任务「{task_name}」tracker 筛选配置无效，跳过")
+        return
     trans_torrents = []
-    for torrent in torrents[:max(1, int(getattr(plugin, "_scan_limit", 500)))]:
+    candidate_limit = max(1, int(getattr(plugin, "_scan_limit", 500)))
+    for torrent in torrents:
         if _transfer_stopped(plugin, generation):
             logger.info("【PT下载中心:转移做种】转移服务停止")
             return
@@ -464,11 +470,26 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
             logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} 不满足包含标签 {task['include_labels']}，跳过 ...")
             continue
 
+        if include_trackers or exclude_trackers:
+            try:
+                urls = get_tracker_urls(torrent, from_service.type)
+                domains = {(urlsplit(url).hostname or "").lower().rstrip(".") for url in urls}
+                matches = (bool(domains) and "" not in domains
+                           and not (domains & exclude_trackers)
+                           and (not include_trackers or bool(domains & include_trackers)))
+            except Exception:
+                # tracker 读取失败不能被当作“未命中排除条件”；不输出带 passkey 的 URL。
+                matches = False
+            if not matches:
+                logger.info(f"【PT下载中心:转移做种】任务「{task_name}」种子 {hash_str} tracker 不满足筛选或无法确认，跳过")
+                continue
         trans_torrents.append({
             "hash": hash_str,
             "save_path": save_path,
             "torrent": torrent
         })
+        if len(trans_torrents) >= candidate_limit:
+            break
 
     if not trans_torrents:
         logger.info(f"【PT下载中心:转移做种】任务「{task_name}」没有需要转移的种子")

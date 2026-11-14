@@ -416,7 +416,7 @@ def test_clear_endpoint_clears_only_history(history_api):
 def test_new_routes_registered(history_api):
     """两条新路由齐全：GET/POST 查询 + POST 清理，auth=bear。"""
     routes = history_api.routes.build_api_routes(Mock())
-    assert len(routes) == 42
+    assert len(routes) == 43
     by_path = {route["path"]: route for route in routes}
 
     query = by_path["/execution_history"]

@@ -38,7 +38,8 @@ def records_api(endpoints, monkeypatch):
     plugin = Mock()
     plugin.get_data.side_effect = lambda key=None: copy.deepcopy(data if key is None else data.get(key))
     _module(monkeypatch, PREFIX + '.modules.transfer.tasks', load_transfer_tasks=lambda plugin: [])
-    _module(monkeypatch, PREFIX + '.modules.transfer.recheck', load_seed_recheck_queue=lambda plugin: {})
+    _module(monkeypatch, PREFIX + '.modules.transfer.recheck', load_seed_recheck_queue=lambda plugin: {},
+            _queue_key=lambda name, hash_text: f"{name}::{hash_text.lower()}")
     monkeypatch.setattr(sys.modules[PREFIX + '.model.state'], 'load_transfer_stats', lambda plugin: {})
     routes = endpoints.routes.build_api_routes(plugin)
     queries = {route["path"]: route["endpoint"] for route in routes if route["path"] in PATHS}

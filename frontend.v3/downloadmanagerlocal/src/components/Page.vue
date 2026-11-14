@@ -150,6 +150,8 @@ const hrClearDialogDescription = computed(() => ({
   missing: '清除种子已不在下载器的 H&R 记录',
 }[hrClearKind.value] || '清除 H&R 记录，不操作下载器任务'))
 
+const transferClearDialog = ref(false)
+const transferClearing = ref(false)
 const transferRunDialog = ref(false)
 const pathRepairDialog = ref(false)
 const pathRepairBusy = ref(false)
@@ -1170,6 +1172,28 @@ function confirmTransferRun() {
   void doTransferRun()
 }
 
+function askTransferClear() {
+  transferClearDialog.value = true
+}
+
+async function confirmTransferClear() {
+  if (transferClearing.value) return
+  transferClearDialog.value = false
+  actionMsg.value = ''
+  actionLevel.value = ''
+  transferClearing.value = true
+  try {
+    const resp = await postJsonApi('transfer_history_clear', {})
+    applyActionResp(resp, '已清理已结束记录')
+    transferPage.value = 1
+    await loadTransferStatus(beginPageRequest())
+  } catch (e) {
+    applyActionError(e, '已清理已结束记录')
+  } finally {
+    transferClearing.value = false
+  }
+}
+
 async function doHrScan() {
   const resp = await runModuleAction('hr-scan', () => postApi('hr_scan', {}), 'H&R 发现完成')
   if (resp?.code !== 1) await refreshActive()
@@ -1597,7 +1621,6 @@ function transferOutcomeText(row) {
   if (row.path_repair_status === 'blocked') parts.push('路径修复已阻止，需重新检测')
   if (row.tag_result === 'failed' || row.site_tag_result === 'failed') parts.push('补标签失败')
   else if (row.tag_result === 'ok') parts.push('转移标签已核对')
-  if (row.site_tag_result === 'unknown_site') parts.push('站点未识别')
   if (row.source_result) parts.push(sourceResults[row.source_result] || row.source_result)
   return parts.filter(Boolean).join(' · ')
 }
@@ -1688,7 +1711,7 @@ onBeforeUnmount(() => {
                 <template #cell-options="{ row }">{{ row.delete_source === true ? '含删源' : row.delete_source === false ? '保留源' : '见详情' }}</template>
                 <template #expand="{ row }"><RecordDetails :record="row" /></template>
               </ModuleTable>
-              <ModuleTable title="最近记录" data-record-block="transfer-records" data-record-state="transfer" :columns="recordColumns.transfer" :rows="transferRecords" :total="transferStatus.total || 0" :row-key="rowIdentity" :page="transferPage" :page-size="transferPageSize" :state="recordTableState('transfer', transferRecords, transferResultFilter === 'all' ? 'none' : 'filtered')" @retry="refreshActive" @reset-filters="resetTransferFilter" @update:page="pageRecordChange('transfer', $event)" @update:page-size="sizeRecordChange('transfer', $event)">
+              <ModuleTable title="最近记录" data-record-block="transfer-records" data-record-state="transfer" :columns="recordColumns.transfer" :rows="transferRecords" :total="transferStatus.total || 0" :row-key="rowIdentity" :page="transferPage" :page-size="transferPageSize" :state="recordTableState('transfer', transferRecords, transferResultFilter === 'all' ? 'none' : 'filtered')" cleanup-label="清理记录" :cleanup-blocked="transferClearing" @cleanup="askTransferClear" @retry="refreshActive" @reset-filters="resetTransferFilter" @update:page="pageRecordChange('transfer', $event)" @update:page-size="sizeRecordChange('transfer', $event)">
                 <template #filters><CompactSelect v-model="transferResultFilter" :items="[{title:'全部结果',value:'all'},{title:'成功',value:'success'},{title:'失败',value:'failed'},{title:'源端待处理',value:'source_pending'},{title:'回滚',value:'rollback'}]" label="结果" class="dm-filter" @update:model-value="pageRecordChange('transfer', 1)" /></template>
                 <template #cell-name="{ row }"><span :title="transferSourceName(row)">{{ transferPrimaryText(row) }}</span><div class="dm-hint">{{ transferSecondaryText(row) }}</div></template>
                 <template #cell-route="{ row }">{{ routeText(row) }}</template>
@@ -1901,6 +1924,24 @@ onBeforeUnmount(() => {
             <VBtn color="primary" size="small" variant="tonal" :disabled="cleanupRunning" @click="cleanupConfirmDialog = false">取消</VBtn>
             <VBtn size="small" color="error" variant="flat" prepend-icon="mdi-delete-sweep-outline" :loading="cleanupRunning"
               :disabled="cleanupTargetCount === 0" @click="confirmCleanupData">清理记录</VBtn>
+          </VCardActions>
+        </VCard>
+      </VDialog>
+
+      <VDialog content-class="dm-page" v-model="transferClearDialog" max-width="520">
+        <VCard>
+          <VCardItem>
+            <template #prepend>
+              <VAvatar color="warning" variant="tonal" size="40" rounded="lg"><VIcon icon="mdi-delete-sweep-outline" /></VAvatar>
+            </template>
+            <VCardTitle class="dm-title">确认清理转移做种记录</VCardTitle>
+            <VCardSubtitle class="dm-hint dm-risk"><VIcon icon="mdi-alert-outline" size="16" />仅隐藏全部已结束记录的展示；不删除下载器任务或文件，不影响进行中、待校验、待删源与已保护恢复的数据。</VCardSubtitle>
+          </VCardItem>
+          <VDivider />
+          <VCardActions>
+            <VSpacer />
+            <VBtn color="primary" size="small" variant="tonal" :disabled="transferClearing" @click="transferClearDialog = false">取消</VBtn>
+            <VBtn size="small" color="error" variant="flat" prepend-icon="mdi-delete-sweep-outline" :loading="transferClearing" @click="confirmTransferClear">清理记录</VBtn>
           </VCardActions>
         </VCard>
       </VDialog>

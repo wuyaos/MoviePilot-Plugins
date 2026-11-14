@@ -382,6 +382,7 @@ function addTrackerPair() {
 const transferTaskDefaults = {
   name: '', enabled: true, from_downloader: '', to_downloader: '',
   include_category: '', include_labels: '', exclude_labels: '',
+  include_trackers: '', exclude_trackers: '',
   no_paths: '', from_path: '', to_path: '',
   delete_source: 'inherit', delete_duplicate: 'inherit', keep_category: true, keep_tag: true,
   transfer_tag: '已转移',
@@ -465,15 +466,19 @@ function taskFilterChips(task) {
   if (labels) chips.push(`标签 ${labels}`)
   const excludeLabels = String(task.exclude_labels || '').trim()
   if (excludeLabels) chips.push(`排除 ${excludeLabels}`)
-  if (task.no_paths) chips.push('不限路径')
+  if (task.include_trackers) chips.push(`Tracker ${task.include_trackers}`)
+  if (task.exclude_trackers) chips.push(`排除 Tracker ${task.exclude_trackers}`)
+  if (task.no_paths) chips.push(`排除路径 ${task.no_paths}`)
   return chips
 }
 
 /** 设置列徽标：显示该任务启用了哪些高级设置，未启用任何项时前端显示「默认」。 */
 function taskSettingBadges(task) {
   const badges = []
-  if (task.delete_source === true) badges.push({ text: '删源种', color: 'error' })
-  if (task.delete_duplicate === true) badges.push({ text: '去重', color: 'warning' })
+  for (const [field, title] of [['delete_source', '删源'], ['delete_duplicate', '删重复']]) {
+    const meta = transferDeleteMeta(task, field)
+    badges.push({ text: `${title}：来源 ${meta.origin}，生效 ${meta.effective}`, color: meta.effective === '开启' ? 'warning' : 'secondary' })
+  }
   if (!task.keep_category) badges.push({ text: '不保留分类', color: 'secondary' })
   if (!task.keep_tag) badges.push({ text: '不保留标签', color: 'secondary' })
   const transferTag = String(task.transfer_tag || '').trim()
@@ -554,6 +559,14 @@ function confirmTransferTask() {
     transferError.value = '源数据路径与目的数据路径需同时填写或同时留空（都留空＝不做路径映射）'
     return
   }
+  const trackerDomain = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/
+  const domains = [transferForm.include_trackers, transferForm.exclude_trackers]
+    .flatMap(value => String(value || '').split(/[,\n]/))
+    .map(value => value.trim().toLowerCase().replace(/\.$/, '')).filter(Boolean)
+  if (domains.some(domain => domain.length > 253 || !trackerDomain.test(domain))) {
+    transferError.value = 'Tracker 筛选只填写域名，不接受完整 URL、路径或通配符'
+    return
+  }
   const index = transferEditing.value
   const task = {
     ...transferTaskDefaults,
@@ -565,6 +578,8 @@ function confirmTransferTask() {
     include_category: String(transferForm.include_category || '').trim(),
     include_labels: String(transferForm.include_labels || '').trim(),
     exclude_labels: String(transferForm.exclude_labels || '').trim(),
+    include_trackers: String(transferForm.include_trackers || '').trim().toLowerCase(),
+    exclude_trackers: String(transferForm.exclude_trackers || '').trim().toLowerCase(),
     no_paths: String(transferForm.no_paths || ''),
     from_path: fromPath,
     to_path: toPath,
@@ -1589,7 +1604,7 @@ Object.keys(form).forEach(k => delete form[k])
                   <span>名称</span>
                   <span>状态</span>
                   <span>下载器</span>
-                  <span>数据映射</span>
+                  <span>路径映射</span>
                   <span>筛选条件</span>
                   <span>设置</span>
                   <span class="dm-task-actions">操作</span>
@@ -1597,26 +1612,30 @@ Object.keys(form).forEach(k => delete form[k])
                 <div v-for="(task, idx) in transferTasks" :key="`transfer-task-${idx}`" class="dm-task-row">
                   <div class="dm-task-name">
                     <strong class="dm-break-text">{{ task.name }}</strong>
-                    <span class="dm-hint">转移标签：{{ task.transfer_tag || '不打标签' }}</span>
                   </div>
                   <div class="dm-task-state">
                     <VSwitch density="compact" v-model="task.enabled" inset hide-details />
-                    <span class="dm-hint">{{ task.enabled ? '启用' : '停用' }}</span>
                   </div>
                   <div class="dm-task-route">
                     <span class="dm-route-item">
                       <DownloaderBadge :name="downloaderTitle(task.from_downloader)"
                         :type="downloaderTypeOf(task.from_downloader)" :size="16" />
                     </span>
-                    <VIcon icon="mdi-arrow-right" size="15" class="dm-map-arrow" />
+                    <VIcon icon="mdi-arrow-down" size="15" class="dm-map-arrow" />
                     <span class="dm-route-item">
                       <DownloaderBadge :name="downloaderTitle(task.to_downloader)"
                         :type="downloaderTypeOf(task.to_downloader)" :size="16" />
                     </span>
                   </div>
                   <div class="dm-task-paths">
-                    <span class="dm-hint dm-break-text">{{ task.from_path || '—' }}</span>
-                    <div class="dm-hint dm-map-arrow">→ {{ task.to_path || '—' }}</div>
+                    <template v-if="!task.from_path && !task.to_path">
+                      <span class="dm-hint">—</span>
+                    </template>
+                    <template v-else>
+                      <span class="dm-hint dm-break-text" :title="task.from_path || '—'">{{ task.from_path || '—' }}</span>
+                      <VIcon icon="mdi-arrow-down" size="15" class="dm-map-arrow" />
+                      <span class="dm-hint dm-break-text" :title="task.to_path || '—'">{{ task.to_path || '—' }}</span>
+                    </template>
                   </div>
                   <div class="dm-task-filters">
                     <VChip v-for="chip in taskFilterChips(task)" :key="chip" size="x-small" variant="tonal"
@@ -1626,9 +1645,6 @@ Object.keys(form).forEach(k => delete form[k])
                     <VChip v-for="badge in taskSettingBadges(task)" :key="badge.text" size="x-small" variant="flat"
                       :color="badge.color">{{ badge.text }}</VChip>
                     <span v-if="!taskSettingBadges(task).length" class="dm-hint">默认</span>
-                    <span class="dm-hint">删源：来源 {{ transferDeleteMeta(task, 'delete_source').origin }}，生效 {{ transferDeleteMeta(task, 'delete_source').effective }}</span>
-                    <span class="dm-hint">删重复：来源 {{ transferDeleteMeta(task, 'delete_duplicate').origin }}，生效 {{ transferDeleteMeta(task, 'delete_duplicate').effective }}</span>
-                    <span class="dm-hint">以上删除策略按当前表单计算，保存后生效；规则关闭时不执行删除。</span>
                   </div>
                   <div class="dm-task-actions">
                     <VBtn size="small" aria-label="编辑任务" icon="mdi-pencil-outline" variant="text" title="编辑任务"
@@ -2012,7 +2028,7 @@ Object.keys(form).forEach(k => delete form[k])
         <VDivider />
         <VCardActions>
           <VSpacer />
-          <VBtn size="small" variant="text" @click="hrAddDialog = false">取消</VBtn>
+          <VBtn size="small" color="primary" variant="tonal" @click="hrAddDialog = false">取消</VBtn>
           <VBtn size="small" color="primary" variant="flat" prepend-icon="mdi-plus" @click="hrConfirmAddSite">添加站点</VBtn>
         </VCardActions>
       </VCard>
@@ -2075,6 +2091,14 @@ Object.keys(form).forEach(k => delete form[k])
             </div>
           </div>
           <div class="dm-field-row">
+            <div class="dm-field">
+              <MultiValueInput v-model="transferForm.include_trackers" label="包含 tracker 域名" variant="outlined" hint="任一域名精确命中即可；留空不限制，与标签、分类条件同时满足" persistent-hint />
+            </div>
+            <div class="dm-field">
+              <MultiValueInput v-model="transferForm.exclude_trackers" label="排除 tracker 域名" variant="outlined" hint="任一命中即跳过，排除优先；只填域名，子域名需单独填写" persistent-hint />
+            </div>
+          </div>
+          <div class="dm-field-row">
             <div class="dm-field dm-field--full">
               <VTextarea density="compact" v-model="transferForm.no_paths" label="排除路径" variant="outlined" rows="3" hint="每行一个路径" persistent-hint />
             </div>
@@ -2130,7 +2154,7 @@ Object.keys(form).forEach(k => delete form[k])
         <VDivider />
         <VCardActions>
           <VSpacer />
-          <VBtn size="small" variant="text" @click="transferDialog = false">取消</VBtn>
+          <VBtn size="small" color="primary" variant="tonal" @click="transferDialog = false">取消</VBtn>
           <VBtn size="small" color="primary" variant="flat" prepend-icon="mdi-check" @click="confirmTransferTask">应用任务</VBtn>
         </VCardActions>
       </VCard>
@@ -2328,8 +2352,10 @@ Object.keys(form).forEach(k => delete form[k])
 .dm-task-row--head { font-size: var(--dm-text-table-head-size); font-weight: var(--dm-text-table-head-weight); line-height: var(--dm-text-table-head-line-height); color: var(--dm-text-table-head-color); background: rgba(var(--v-theme-on-surface), 0.03); }
 .dm-task-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .dm-task-name > strong { font-size: var(--dm-text-body-size); font-weight: var(--dm-text-body-weight); line-height: var(--dm-text-body-line-height); color: var(--dm-text-body-color); }
-.dm-task-route { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.dm-task-paths { min-width: 0; }
+.dm-task-route { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.dm-task-route .dm-map-arrow { align-self: center; }
+.dm-task-paths { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; max-width: 100%; }
+.dm-task-paths .dm-map-arrow { align-self: center; }
 .dm-task-state { display: flex; flex-direction: column; align-items: center; gap: 0; }
 .dm-route-item { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .dm-task-filters, .dm-task-settings { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; align-content: center; }
