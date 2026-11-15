@@ -21,7 +21,13 @@
 | 3 | 封面工坊 | CoverGen 迁移的轻量版：三种风格渲染、预览、回传服务器（`covers_upload` 双开关） | `modules/covers/service.py`、`core/style/` |
 | 4 | 服务端能力 | Emby/Jellyfin 插件探测与关键词匹配（如 StrmAssistant 神医、弹幕、Playback Reporting） | `modules/capabilities/service.py` |
 
-另有 `modules/diagnostics/` 提供运行诊断（配置摘要、模块开关、数据目录）。
+另有 `modules/diagnostics/` 提供运行诊断（配置摘要、模块开关、数据目录、功能重叠插件、最近 webhook 事件）。
+
+v1.1.0 新增行为：
+
+- **观察模式**（`observe_only`，默认关）：开启后体检等只读检查照常运行，但所有刷新请求与封面上传被跳过，任务时间线 status 记 `observed`（见 `modules/refresh/service.py::_execute_refresh`、`modules/covers/service.py` 上传分支）。
+- **Webhook 登记**：订阅宿主 `WebhookMessage` 事件，只记录渠道/事件名/摘要到 `WebhookEvents` 持久化键（上限 50 条）供诊断页展示；删除类事件（`deleted/removed/删除` 关键词）额外打日志显式留痕「不联动删除」，插件不基于 webhook 执行任何破坏性动作（`controller/events.py::handle_webhook_event`）。
+- **CoverGen 互斥**：封面模块启用时若检测到本机已装并启用 `CoverGen` 插件，cover 相关执行直接拒绝并在 job 记录冲突原因，避免两个插件重复生成/上传封面。
 
 ## 2. 边界（不做项）
 
@@ -39,10 +45,10 @@ plugins.v3/mediaserverenhance/
 ├── adapter/
 │   └── mediaserver.py         # MediaServerHelper 封装：列表/库/条目遍历、刷新、季集、图片上传
 ├── controller/
-│   ├── api.py                 # build_api_routes(plugin)：13 条路由声明（overview/servers/.../history_clear）
+│   ├── api.py                 # build_api_routes(plugin)：14 条路由声明（overview/servers/.../history_clear）
 │   ├── handlers.py            # Handlers 静态方法集，endpoint 用 partial(Handlers.x, plugin)
 │   └── events.py              # 宿主事件订阅声明
-├── core/
+│   └── events.py              # 宿主事件订阅声明（TransferComplete 入库触发 / PluginAction 命令 / WebhookMessage 只记录）
 │   ├── lifecycle.py           # initialize_plugin：先停旧运行时再写新配置
 │   ├── scheduler.py           # cron 注册（refresh_cron/audit_cron/covers_cron/capabilities_cron）
 │   └── style/                 # 封面渲染风格实现
@@ -65,6 +71,10 @@ plugins.v3/mediaserverenhance/
 - **缺集检查**：`item.seasoninfo` 不可信（宿主遍历不返回季集），必须走 `adapter/mediaserver.py::fetch_season_episodes` 实时向服务器查询，该方法吞异常返回空映射。
 - **缺封面复核**：本地目录无图片不直接报问题，先经 `adapter/mediaserver.py::fetch_primary_image`（缩略 240px）向服务器复核，服务端抓图条目本地常无图片文件。
 - **封面迁移来源**：`core/style/` 迁自 `plugins.v2/covergen`（业务精简版，去掉 UI/API 层与库过滤逻辑）；原插件继续独立维护。
+- **事件数据展开**：宿主事件 `event_data` 可能是 dict（TransferComplete）或 pydantic 模型（WebhookMessage → `WebhookEventInfo`），统一经 `controller/events.py::_event_data` 展开，新增事件处理不要绕过它直接 `event.event_data.get(...)`。
+- **Webhook 真实报文**：宿主 webhook 端点 `POST /api/v1/webhook/?token=<API_TOKEN>&source=<实例名>` 只接受 **multipart form 的 `data` 字段**（JSON，必须有 `Event` 键），JSON body 会被静默忽略（Emby 解析器 form.get("data")）。
+- **插件日志**：插件 logger（`app.sdk.logging`）按实例写入 `config/logs/plugins/mediaserverenhance.log`，不在主 `moviepilot.log` 里。
+- **封面迁移来源**：`core/style/` 迁自 `plugins.v2/covergen`（业务精简版，去掉 UI/API 层与库过滤逻辑）；原插件继续独立维护。
 
 ## 5. 验证要点
 
@@ -75,5 +85,6 @@ plugins.v3/mediaserverenhance/
   3. `POST .../audit_run` → `GET .../audit` 看问题明细（Test Show S1 应缺 2 集：3、5）；
   4. `POST .../cover_preview` / `cover_run`（`upload:true`）确认生成与上传；
   5. `POST .../capabilities_probe` → `GET .../capabilities`；
-  6. `GET .../jobs/1/20` 任务时间线。
+  6. `GET .../jobs/1/20` 任务时间线；
+  7. webhook 登记：`curl -F 'data={"Event":"item.markplayed","Item":{...}}' ".../api/v1/webhook/?token=<API_TOKEN>&source=<实例名>"` → `GET .../diagnostics` 看 webhooks 记录；观察模式开 `observe_only` 后 `POST .../refresh` 应返回 `status: observed`。
 - reload 用类名 id：`POST /api/v1/plugin/reload/MediaServerEnhance`。

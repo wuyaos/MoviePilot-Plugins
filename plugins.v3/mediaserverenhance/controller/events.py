@@ -13,6 +13,7 @@ from ..modules import capabilities
 from ..modules.audit import service as audit_service
 from ..modules.covers import service as cover_service
 from ..modules.refresh import service as refresh_service
+from ..utils import store
 from ..utils.config import as_bool
 
 # 插件远程命令 → 处理动作
@@ -35,7 +36,19 @@ def _event_data(event: Any) -> Dict[str, Any]:
         data = event.get("event_data")
         return data if isinstance(data, dict) else event
     data = getattr(event, "event_data", None)
-    return data if isinstance(data, dict) else {}
+    if isinstance(data, dict):
+        return data
+    # WebhookMessage 等事件携带 pydantic 模型（如 WebhookEventInfo），统一展开成字典
+    for dump_name in ("model_dump", "dict"):
+        dump = getattr(data, dump_name, None)
+        if callable(dump):
+            try:
+                dumped = dump()
+            except Exception:
+                continue
+            if isinstance(dumped, dict):
+                return dumped
+    return {}
 
 
 def handle_transfer_complete_event(plugin, event: Any) -> None:
@@ -89,3 +102,35 @@ def handle_plugin_action_event(plugin, event: Any) -> Optional[Dict[str, Any]]:
     except Exception as error:  # noqa: BLE001 - 远程命令失败需回执而非抛出
         logger.error(f"【媒体服务器增强】远程命令 {action} 执行失败：{error}")
         return {"success": False, "message": f"执行失败：{error}"}
+
+
+# webhook 事件里代表「媒体库条目被删除」的关键词；只记录声明，绝不联动删除
+_DELETED_HINTS = ("deleted", "removed", "删除")
+
+
+def handle_webhook_event(plugin, event: Any) -> None:
+    """媒体服务器 webhook 事件：只记录到诊断展示，不执行任何破坏性动作。
+
+    删除类事件显式留痕（媒体库删除联动属下载中心职责），其余事件仅登记
+    渠道与事件名，供运行诊断页观察 webhook 链路是否正常。
+
+    :param plugin: 插件实例
+    :param event: ``WebhookMessage`` 事件
+    """
+    try:
+        data = _event_data(event)
+        channel = str(data.get("channel") or "").strip() or "unknown"
+        event_name = str(data.get("event") or data.get("event_type") or "").strip() or "unknown"
+        summary = str(data.get("item_name") or data.get("overview") or "").strip()[:120]
+        low = event_name.lower()
+        if any(hint in low or hint in event_name for hint in _DELETED_HINTS):
+            logger.info(
+                f"【媒体服务器增强】收到 {channel} 删除类 webhook（{event_name}），"
+                f"媒体库删除联动不在本插件职责内，已忽略"
+            )
+        store.record_webhook(
+            plugin,
+            {"time": store.now_text(), "channel": channel, "event": event_name, "summary": summary},
+        )
+    except Exception as error:  # noqa: BLE001 - 事件线程不得向宿主抛错
+        logger.error(f"【媒体服务器增强】处理 webhook 事件失败：{error}")

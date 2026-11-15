@@ -20,7 +20,12 @@ CAPABILITIES_KEY = "capabilities_snapshot"
 # 封面生成历史
 COVER_HISTORY_KEY = "cover_history"
 # 刷新运行态（最近刷新时间、待处理批次）
+# 刷新运行态（最近刷新时间、待处理批次）
 REFRESH_STATE_KEY = "refresh_state"
+# 最近媒体服务器 webhook 事件（只记录不动作）
+WEBHOOK_KEY = "webhook_events"
+# webhook 事件保留条数
+WEBHOOK_LIMIT = 30
 
 DEFAULT_HISTORY_LIMIT = 300
 
@@ -226,3 +231,24 @@ def first_text(*values: Optional[Any]) -> str:
         if text:
             return text
     return ""
+
+
+def record_webhook(plugin, entry: Dict[str, Any]) -> None:
+    """记录一条媒体服务器 webhook 事件，超出上限时裁剪。
+
+    webhook 只做记录与展示，本插件不基于 webhook 执行删除等破坏性动作。
+
+    :param plugin: 插件实例
+    :param entry: ``{time, channel, event, summary}`` 字典
+    """
+    rows = read_list(plugin, WEBHOOK_KEY)
+    write_value(plugin, WEBHOOK_KEY, merge_history(rows, entry, WEBHOOK_LIMIT))
+
+
+def read_webhooks(plugin) -> List[Dict[str, Any]]:
+    """读取最近记录的 webhook 事件列表。
+
+    :param plugin: 插件实例
+    :return: 事件字典列表，最新在前
+    """
+    return read_list(plugin, WEBHOOK_KEY)

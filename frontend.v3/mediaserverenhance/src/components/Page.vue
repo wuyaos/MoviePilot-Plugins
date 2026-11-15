@@ -66,6 +66,7 @@ function errorToast(error) {
 }
 
 const serverRows = computed(() => (overview.value?.servers || []))
+const hasPlexServer = computed(() => serverRows.value.some((row) => String(row.type || '').toLowerCase() === 'plex'))
 const moduleStates = computed(() => (overview.value?.module_states || {}))
 const auditCounts = computed(() => {
   const counts = auditReport.value?.counts || {}
@@ -516,6 +517,9 @@ onMounted(() => {
               variant="outlined" label="数量" hide-details style="max-width: 120px;" />
             <v-btn size="small" color="primary" :loading="coverLoading" @click="previewCovers">生成预览</v-btn>
             <v-btn size="small" variant="tonal" :loading="busy === 'covers'" @click="runCovers">生成并上传</v-btn>
+            <span v-if="hasPlexServer" class="text-caption text-orange-darken-2 mr-2">
+              含 Plex 实例：封面上传暂不支持 Plex，会自动跳过
+            </span>
             <v-spacer />
             <span v-if="coverMessage" class="text-caption text-medium-emphasis">{{ coverMessage }}</span>
           </div>
@@ -543,6 +547,9 @@ onMounted(() => {
               读取快照
             </v-btn>
             <v-btn size="small" variant="text" @click="clearHistory('capabilities')">清空快照</v-btn>
+            <span v-if="hasPlexServer" class="text-caption text-orange-darken-2 mr-2">
+              含 Plex 实例：插件探测仅支持 Emby / Jellyfin
+            </span>
             <v-spacer />
             <span class="text-caption text-medium-emphasis">快照时间：{{ capabilities?.time || '暂无' }}</span>
           </div>
@@ -611,6 +618,9 @@ onMounted(() => {
             type="warning" variant="tonal" class="mb-2">
             {{ item }}
           </v-alert>
+          <v-alert v-if="diagnostics?.observe_only" density="compact" type="info" variant="tonal" class="mb-2">
+            当前处于观察模式：体检等只读检查照常运行，刷新与封面上传被跳过。
+          </v-alert>
           <v-row dense>
             <v-col cols="12" md="6">
               <v-card variant="outlined" class="pa-3">
@@ -651,6 +661,34 @@ onMounted(() => {
                 </div>
                 <div v-if="!(diagnostics?.servers || []).length" class="text-caption text-medium-emphasis">
                   暂无服务器诊断信息
+                </div>
+              </v-card>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-card variant="outlined" class="pa-3">
+                <div class="text-subtitle-2 mb-2">功能重叠插件</div>
+                <div v-for="(row, index) in (diagnostics?.overlap || [])" :key="index"
+                  class="text-body-2 d-flex mb-1">
+                  <span style="min-width: 160px;">{{ row.plugin }}</span>
+                  <span class="text-medium-emphasis">{{ row.capability }}</span>
+                </div>
+                <div v-if="!(diagnostics?.overlap || []).length" class="text-caption text-medium-emphasis">
+                  没有检测到功能重叠的插件
+                </div>
+              </v-card>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-card variant="outlined" class="pa-3">
+                <div class="text-subtitle-2 mb-2">最近 Webhook 事件（只记录）</div>
+                <div v-for="(row, index) in (diagnostics?.webhooks || []).slice(0, 8)" :key="index"
+                  class="text-body-2 mb-1">
+                  <span class="text-medium-emphasis mr-2">{{ row.time }}</span>
+                  <span class="font-weight-medium">{{ row.channel }}</span>
+                  <span class="ml-2">{{ row.event }}</span>
+                  <span v-if="row.summary" class="text-truncate text-medium-emphasis ml-2">{{ row.summary }}</span>
+                </div>
+                <div v-if="!(diagnostics?.webhooks || []).length" class="text-caption text-medium-emphasis">
+                  尚未收到媒体服务器 webhook；收到播放/入库事件后会在这里登记
                 </div>
               </v-card>
             </v-col>

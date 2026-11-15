@@ -13,6 +13,7 @@ from .config import as_bool, as_list, normalize_config, safe_int
 # 配置键 → 运行时属性名
 CONFIG_ATTRS: Dict[str, str] = {
     "enabled": "_enabled",
+    "observe_only": "_observe_only",
     "notify": "_notify",
     "history_limit": "_history_limit",
     "request_timeout": "_request_timeout",
@@ -49,6 +50,7 @@ CONFIG_ATTRS: Dict[str, str] = {
 # 布尔型配置键
 BOOL_KEYS: Tuple[str, ...] = (
     "enabled",
+    "observe_only",
     "notify",
     "refresh_enabled",
     "refresh_on_transfer",
@@ -137,3 +139,15 @@ def config_snapshot(plugin) -> List[Dict[str, Any]]:
     """
     config = current_config(plugin)
     return [{"key": key, "value": value} for key, value in config.items()]
+
+
+def observe_only(plugin) -> bool:
+    """返回插件是否处于观察模式。
+
+    观察模式下体检等只读动作照常执行，刷新请求与封面上传等
+    对媒体服务器的写操作全部跳过，只记录任务结果。
+
+    :param plugin: 插件实例
+    :return: 是否观察模式
+    """
+    return as_bool(getattr(plugin, "_observe_only", False))

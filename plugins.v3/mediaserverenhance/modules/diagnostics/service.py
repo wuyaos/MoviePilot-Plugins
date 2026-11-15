@@ -116,4 +116,6 @@ def build(plugin) -> Dict[str, Any]:
         "overlap": [
             {"plugin": name, "capability": label} for name, label in OVERLAP_PLUGINS
         ],
+        "webhooks": store.read_webhooks(plugin),
+        "observe_only": as_bool(getattr(plugin, "_observe_only", False)),
     }

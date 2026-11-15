@@ -26,6 +26,7 @@ const emit = __emit;
 
 const DEFAULTS = {
   enabled: false,
+  observe_only: false,
   notify: false,
   history_limit: 300,
   request_timeout: 30,
@@ -236,7 +237,7 @@ return (_ctx, _cache) => {
     default: _withCtx(() => [
       _createVNode(_component_v_card_title, { class: "d-flex align-center ga-2 py-3" }, {
         default: _withCtx(() => [
-          _cache[36] || (_cache[36] = _createElementVNode("span", { class: "text-subtitle-1 font-weight-medium" }, "媒体服务器增强 · 配置", -1)),
+          _cache[37] || (_cache[37] = _createElementVNode("span", { class: "text-subtitle-1 font-weight-medium" }, "媒体服务器增强 · 配置", -1)),
           _createVNode(_component_v_spacer),
           (form.enabled)
             ? (_openBlock(), _createBlock(_component_v_chip, {
@@ -245,7 +246,7 @@ return (_ctx, _cache) => {
                 size: "small",
                 variant: "tonal"
               }, {
-                default: _withCtx(() => [...(_cache[34] || (_cache[34] = [
+                default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
                   _createTextVNode("总开关已开", -1)
                 ]))]),
                 _: 1
@@ -256,7 +257,7 @@ return (_ctx, _cache) => {
                 size: "small",
                 variant: "tonal"
               }, {
-                default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
+                default: _withCtx(() => [...(_cache[36] || (_cache[36] = [
                   _createTextVNode("总开关已关", -1)
                 ]))]),
                 _: 1
@@ -293,7 +294,7 @@ return (_ctx, _cache) => {
         default: _withCtx(() => [
           _createVNode(_component_v_window, {
             modelValue: activeTab.value,
-            "onUpdate:modelValue": _cache[33] || (_cache[33] = $event => ((activeTab).value = $event))
+            "onUpdate:modelValue": _cache[34] || (_cache[34] = $event => ((activeTab).value = $event))
           }, {
             default: _withCtx(() => [
               _createVNode(_component_v_window_item, { value: "general" }, {
@@ -313,7 +314,7 @@ return (_ctx, _cache) => {
                             "hide-details": "",
                             label: "启用插件"
                           }, null, 8, ["modelValue"]),
-                          _cache[37] || (_cache[37] = _createElementVNode("div", { class: "text-caption text-medium-emphasis mb-3" }, " 关闭后全部模块停止工作，定时任务不再注册，事件也不再响应。 ", -1))
+                          _cache[38] || (_cache[38] = _createElementVNode("div", { class: "text-caption text-medium-emphasis mb-3" }, " 关闭后全部模块停止工作，定时任务不再注册，事件也不再响应。 ", -1))
                         ]),
                         _: 1
                       }),
@@ -330,7 +331,21 @@ return (_ctx, _cache) => {
                             "hide-details": "",
                             label: "推送运行通知"
                           }, null, 8, ["modelValue"]),
-                          _cache[38] || (_cache[38] = _createElementVNode("div", { class: "text-caption text-medium-emphasis mb-3" }, " 仅在任务失败或部分失败时推送，成功任务不打扰。 ", -1))
+                          _cache[40] || (_cache[40] = _createElementVNode("div", { class: "text-caption text-medium-emphasis mb-3" }, " 仅在任务失败或部分失败时推送，成功任务不打扰。 ", -1)),
+                          _createVNode(_component_v_col, { cols: "12" }, {
+                            default: _withCtx(() => [
+                              _createVNode(_component_v_switch, {
+                                modelValue: form.observe_only,
+                                "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((form.observe_only) = $event)),
+                                color: "primary",
+                                density: "compact",
+                                "hide-details": "",
+                                label: "观察模式（只记录不执行）"
+                              }, null, 8, ["modelValue"]),
+                              _cache[39] || (_cache[39] = _createElementVNode("div", { class: "text-caption text-medium-emphasis mb-3" }, " 开启后体检等只读检查照常运行，但所有刷新请求与封面上传都被跳过， 任务时间线会记录「观察模式」结果。适合先观察插件会做什么再放开执行。 ", -1))
+                            ]),
+                            _: 1
+                          })
                         ]),
                         _: 1
                       }),
@@ -341,7 +356,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.history_limit,
-                            "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((form.history_limit) = $event)),
+                            "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((form.history_limit) = $event)),
                             modelModifiers: { number: true },
                             type: "number",
                             min: "20",
@@ -361,7 +376,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.request_timeout,
-                            "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((form.request_timeout) = $event)),
+                            "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((form.request_timeout) = $event)),
                             modelModifiers: { number: true },
                             type: "number",
                             min: "5",
@@ -383,7 +398,7 @@ return (_ctx, _cache) => {
                     type: "info",
                     variant: "tonal"
                   }, {
-                    default: _withCtx(() => [...(_cache[39] || (_cache[39] = [
+                    default: _withCtx(() => [...(_cache[41] || (_cache[41] = [
                       _createTextVNode(" 媒体服务器连接统一由 MoviePilot 的「媒体服务器」设置提供，本插件不重复维护实例。 ", -1)
                     ]))]),
                     _: 1
@@ -395,7 +410,7 @@ return (_ctx, _cache) => {
                 default: _withCtx(() => [
                   _createVNode(_component_v_switch, {
                     modelValue: form.refresh_enabled,
-                    "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((form.refresh_enabled) = $event)),
+                    "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((form.refresh_enabled) = $event)),
                     color: "primary",
                     density: "compact",
                     "hide-details": "",
@@ -414,7 +429,7 @@ return (_ctx, _cache) => {
                           _createVNode(_component_v_select, {
                             modelValue: form.refresh_servers,
                             "onUpdate:modelValue": [
-                              _cache[6] || (_cache[6] = $event => ((form.refresh_servers) = $event)),
+                              _cache[7] || (_cache[7] = $event => ((form.refresh_servers) = $event)),
                               refreshLibraries
                             ],
                             items: serverOptions.value,
@@ -438,7 +453,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_select, {
                             modelValue: form.refresh_libraries,
-                            "onUpdate:modelValue": _cache[7] || (_cache[7] = $event => ((form.refresh_libraries) = $event)),
+                            "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((form.refresh_libraries) = $event)),
                             items: libraryOptions(form.refresh_servers),
                             multiple: "",
                             chips: "",
@@ -459,13 +474,13 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_switch, {
                             modelValue: form.refresh_on_transfer,
-                            "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((form.refresh_on_transfer) = $event)),
+                            "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((form.refresh_on_transfer) = $event)),
                             color: "primary",
                             density: "compact",
                             "hide-details": "",
                             label: "整理完成后自动刷新"
                           }, null, 8, ["modelValue"]),
-                          _cache[40] || (_cache[40] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, " 命中媒体库路径的入库条目会在防抖窗口结束后合并成一次刷新。 ", -1))
+                          _cache[42] || (_cache[42] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, " 命中媒体库路径的入库条目会在防抖窗口结束后合并成一次刷新。 ", -1))
                         ]),
                         _: 1
                       }),
@@ -476,7 +491,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.refresh_debounce_seconds,
-                            "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((form.refresh_debounce_seconds) = $event)),
+                            "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((form.refresh_debounce_seconds) = $event)),
                             modelModifiers: { number: true },
                             type: "number",
                             min: "0",
@@ -496,7 +511,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.refresh_delay_seconds,
-                            "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((form.refresh_delay_seconds) = $event)),
+                            "onUpdate:modelValue": _cache[11] || (_cache[11] = $event => ((form.refresh_delay_seconds) = $event)),
                             modelModifiers: { number: true },
                             type: "number",
                             min: "0",
@@ -516,13 +531,13 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_switch, {
                             modelValue: form.refresh_recent_enabled,
-                            "onUpdate:modelValue": _cache[11] || (_cache[11] = $event => ((form.refresh_recent_enabled) = $event)),
+                            "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((form.refresh_recent_enabled) = $event)),
                             color: "primary",
                             density: "compact",
                             "hide-details": "",
                             label: "定时任务只刷新最近媒体"
                           }, null, 8, ["modelValue"]),
-                          _cache[41] || (_cache[41] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, " 关闭时定时任务执行整库刷新；开启时只刷新最近条目，压力更小。 ", -1))
+                          _cache[43] || (_cache[43] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, " 关闭时定时任务执行整库刷新；开启时只刷新最近条目，压力更小。 ", -1))
                         ]),
                         _: 1
                       }),
@@ -533,7 +548,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.refresh_recent_count,
-                            "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((form.refresh_recent_count) = $event)),
+                            "onUpdate:modelValue": _cache[13] || (_cache[13] = $event => ((form.refresh_recent_count) = $event)),
                             modelModifiers: { number: true },
                             type: "number",
                             min: "1",
@@ -553,7 +568,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.refresh_cron,
-                            "onUpdate:modelValue": _cache[13] || (_cache[13] = $event => ((form.refresh_cron) = $event)),
+                            "onUpdate:modelValue": _cache[14] || (_cache[14] = $event => ((form.refresh_cron) = $event)),
                             density: "compact",
                             variant: "outlined",
                             label: "定时刷新 Cron",
@@ -574,7 +589,7 @@ return (_ctx, _cache) => {
                 default: _withCtx(() => [
                   _createVNode(_component_v_switch, {
                     modelValue: form.audit_enabled,
-                    "onUpdate:modelValue": _cache[14] || (_cache[14] = $event => ((form.audit_enabled) = $event)),
+                    "onUpdate:modelValue": _cache[15] || (_cache[15] = $event => ((form.audit_enabled) = $event)),
                     color: "primary",
                     density: "compact",
                     "hide-details": "",
@@ -593,7 +608,7 @@ return (_ctx, _cache) => {
                           _createVNode(_component_v_select, {
                             modelValue: form.audit_servers,
                             "onUpdate:modelValue": [
-                              _cache[15] || (_cache[15] = $event => ((form.audit_servers) = $event)),
+                              _cache[16] || (_cache[16] = $event => ((form.audit_servers) = $event)),
                               refreshLibraries
                             ],
                             items: serverOptions.value,
@@ -617,7 +632,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_select, {
                             modelValue: form.audit_libraries,
-                            "onUpdate:modelValue": _cache[16] || (_cache[16] = $event => ((form.audit_libraries) = $event)),
+                            "onUpdate:modelValue": _cache[17] || (_cache[17] = $event => ((form.audit_libraries) = $event)),
                             items: libraryOptions(form.audit_servers),
                             multiple: "",
                             chips: "",
@@ -635,7 +650,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_select, {
                             modelValue: form.audit_checks,
-                            "onUpdate:modelValue": _cache[17] || (_cache[17] = $event => ((form.audit_checks) = $event)),
+                            "onUpdate:modelValue": _cache[18] || (_cache[18] = $event => ((form.audit_checks) = $event)),
                             items: AUDIT_CHECK_ITEMS,
                             multiple: "",
                             chips: "",
@@ -655,7 +670,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.audit_max_items,
-                            "onUpdate:modelValue": _cache[18] || (_cache[18] = $event => ((form.audit_max_items) = $event)),
+                            "onUpdate:modelValue": _cache[19] || (_cache[19] = $event => ((form.audit_max_items) = $event)),
                             modelModifiers: { number: true },
                             type: "number",
                             min: "100",
@@ -665,7 +680,7 @@ return (_ctx, _cache) => {
                             label: "单次扫描条目上限",
                             "hide-details": ""
                           }, null, 8, ["modelValue"]),
-                          _cache[42] || (_cache[42] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, " 超出上限时报告会标记「已截断」，可在体检页单独重跑某个媒体库。 ", -1))
+                          _cache[44] || (_cache[44] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, " 超出上限时报告会标记「已截断」，可在体检页单独重跑某个媒体库。 ", -1))
                         ]),
                         _: 1
                       }),
@@ -676,7 +691,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.audit_cron,
-                            "onUpdate:modelValue": _cache[19] || (_cache[19] = $event => ((form.audit_cron) = $event)),
+                            "onUpdate:modelValue": _cache[20] || (_cache[20] = $event => ((form.audit_cron) = $event)),
                             density: "compact",
                             variant: "outlined",
                             label: "定时体检 Cron",
@@ -695,7 +710,7 @@ return (_ctx, _cache) => {
                     type: "warning",
                     variant: "tonal"
                   }, {
-                    default: _withCtx(() => [...(_cache[43] || (_cache[43] = [
+                    default: _withCtx(() => [...(_cache[45] || (_cache[45] = [
                       _createTextVNode(" 体检只读：不删除文件、不改数据库，只读取服务器返回的条目与本地目录状态。 ", -1)
                     ]))]),
                     _: 1
@@ -707,7 +722,7 @@ return (_ctx, _cache) => {
                 default: _withCtx(() => [
                   _createVNode(_component_v_switch, {
                     modelValue: form.covers_enabled,
-                    "onUpdate:modelValue": _cache[20] || (_cache[20] = $event => ((form.covers_enabled) = $event)),
+                    "onUpdate:modelValue": _cache[21] || (_cache[21] = $event => ((form.covers_enabled) = $event)),
                     color: "primary",
                     density: "compact",
                     "hide-details": "",
@@ -726,7 +741,7 @@ return (_ctx, _cache) => {
                           _createVNode(_component_v_select, {
                             modelValue: form.covers_servers,
                             "onUpdate:modelValue": [
-                              _cache[21] || (_cache[21] = $event => ((form.covers_servers) = $event)),
+                              _cache[22] || (_cache[22] = $event => ((form.covers_servers) = $event)),
                               refreshLibraries
                             ],
                             items: serverOptions.value,
@@ -750,7 +765,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_select, {
                             modelValue: form.covers_libraries,
-                            "onUpdate:modelValue": _cache[22] || (_cache[22] = $event => ((form.covers_libraries) = $event)),
+                            "onUpdate:modelValue": _cache[23] || (_cache[23] = $event => ((form.covers_libraries) = $event)),
                             items: libraryOptions(form.covers_servers),
                             multiple: "",
                             chips: "",
@@ -771,7 +786,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_select, {
                             modelValue: form.covers_style,
-                            "onUpdate:modelValue": _cache[23] || (_cache[23] = $event => ((form.covers_style) = $event)),
+                            "onUpdate:modelValue": _cache[24] || (_cache[24] = $event => ((form.covers_style) = $event)),
                             items: COVER_STYLES,
                             density: "compact",
                             variant: "outlined",
@@ -788,7 +803,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.covers_limit,
-                            "onUpdate:modelValue": _cache[24] || (_cache[24] = $event => ((form.covers_limit) = $event)),
+                            "onUpdate:modelValue": _cache[25] || (_cache[25] = $event => ((form.covers_limit) = $event)),
                             modelModifiers: { number: true },
                             type: "number",
                             min: "1",
@@ -808,13 +823,13 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_switch, {
                             modelValue: form.covers_upload,
-                            "onUpdate:modelValue": _cache[25] || (_cache[25] = $event => ((form.covers_upload) = $event)),
+                            "onUpdate:modelValue": _cache[26] || (_cache[26] = $event => ((form.covers_upload) = $event)),
                             color: "primary",
                             density: "compact",
                             "hide-details": "",
                             label: "生成后上传回服务器"
                           }, null, 8, ["modelValue"]),
-                          _cache[44] || (_cache[44] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, " 关闭时只落地到本地目录，可在运行页预览后再决定是否上传。 ", -1))
+                          _cache[46] || (_cache[46] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, " 关闭时只落地到本地目录，可在运行页预览后再决定是否上传。 ", -1))
                         ]),
                         _: 1
                       }),
@@ -825,7 +840,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.covers_font,
-                            "onUpdate:modelValue": _cache[26] || (_cache[26] = $event => ((form.covers_font) = $event)),
+                            "onUpdate:modelValue": _cache[27] || (_cache[27] = $event => ((form.covers_font) = $event)),
                             density: "compact",
                             variant: "outlined",
                             label: "字体文件路径（可选）",
@@ -842,7 +857,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.covers_output_dir,
-                            "onUpdate:modelValue": _cache[27] || (_cache[27] = $event => ((form.covers_output_dir) = $event)),
+                            "onUpdate:modelValue": _cache[28] || (_cache[28] = $event => ((form.covers_output_dir) = $event)),
                             density: "compact",
                             variant: "outlined",
                             label: "输出目录（可选）",
@@ -859,7 +874,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.covers_cron,
-                            "onUpdate:modelValue": _cache[28] || (_cache[28] = $event => ((form.covers_cron) = $event)),
+                            "onUpdate:modelValue": _cache[29] || (_cache[29] = $event => ((form.covers_cron) = $event)),
                             density: "compact",
                             variant: "outlined",
                             label: "定时生成 Cron",
@@ -878,7 +893,7 @@ return (_ctx, _cache) => {
                     type: "info",
                     variant: "tonal"
                   }, {
-                    default: _withCtx(() => [...(_cache[45] || (_cache[45] = [
+                    default: _withCtx(() => [...(_cache[47] || (_cache[47] = [
                       _createTextVNode(" 封面渲染依赖宿主已安装的 Pillow；缺失时模块会跳过渲染并在运行页提示。 ", -1)
                     ]))]),
                     _: 1
@@ -890,7 +905,7 @@ return (_ctx, _cache) => {
                 default: _withCtx(() => [
                   _createVNode(_component_v_switch, {
                     modelValue: form.capabilities_enabled,
-                    "onUpdate:modelValue": _cache[29] || (_cache[29] = $event => ((form.capabilities_enabled) = $event)),
+                    "onUpdate:modelValue": _cache[30] || (_cache[30] = $event => ((form.capabilities_enabled) = $event)),
                     color: "primary",
                     density: "compact",
                     "hide-details": "",
@@ -908,7 +923,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_select, {
                             modelValue: form.capabilities_servers,
-                            "onUpdate:modelValue": _cache[30] || (_cache[30] = $event => ((form.capabilities_servers) = $event)),
+                            "onUpdate:modelValue": _cache[31] || (_cache[31] = $event => ((form.capabilities_servers) = $event)),
                             items: serverOptions.value,
                             loading: serverLoading.value,
                             multiple: "",
@@ -930,7 +945,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: capabilityWatchText.value,
-                            "onUpdate:modelValue": _cache[31] || (_cache[31] = $event => ((capabilityWatchText).value = $event)),
+                            "onUpdate:modelValue": _cache[32] || (_cache[32] = $event => ((capabilityWatchText).value = $event)),
                             density: "compact",
                             variant: "outlined",
                             label: "关注的插件关键词（逗号分隔）",
@@ -947,7 +962,7 @@ return (_ctx, _cache) => {
                         default: _withCtx(() => [
                           _createVNode(_component_v_text_field, {
                             modelValue: form.capabilities_cron,
-                            "onUpdate:modelValue": _cache[32] || (_cache[32] = $event => ((form.capabilities_cron) = $event)),
+                            "onUpdate:modelValue": _cache[33] || (_cache[33] = $event => ((form.capabilities_cron) = $event)),
                             density: "compact",
                             variant: "outlined",
                             label: "定时探测 Cron",
@@ -966,7 +981,7 @@ return (_ctx, _cache) => {
                     type: "info",
                     variant: "tonal"
                   }, {
-                    default: _withCtx(() => [...(_cache[46] || (_cache[46] = [
+                    default: _withCtx(() => [...(_cache[48] || (_cache[48] = [
                       _createTextVNode(" 本节只识别 Emby/Jellyfin 已安装的服务端插件，不代为安装，也不修改其配置。 ", -1)
                     ]))]),
                     _: 1
@@ -988,7 +1003,7 @@ return (_ctx, _cache) => {
             loading: savePending.value,
             onClick: saveConfig
           }, {
-            default: _withCtx(() => [...(_cache[47] || (_cache[47] = [
+            default: _withCtx(() => [...(_cache[49] || (_cache[49] = [
               _createTextVNode("保存配置", -1)
             ]))]),
             _: 1
@@ -997,7 +1012,7 @@ return (_ctx, _cache) => {
             variant: "text",
             onClick: close
           }, {
-            default: _withCtx(() => [...(_cache[48] || (_cache[48] = [
+            default: _withCtx(() => [...(_cache[50] || (_cache[50] = [
               _createTextVNode("关闭", -1)
             ]))]),
             _: 1

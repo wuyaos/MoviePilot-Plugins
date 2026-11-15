@@ -54,6 +54,7 @@ COVER_STYLE_KEYS: Tuple[str, ...] = tuple(item[0] for item in COVER_STYLES)
 PLUGIN_CONFIG_DEFAULTS: Dict[str, Any] = {
     # 通用
     "enabled": False,
+    "observe_only": False,
     "notify": False,
     "history_limit": 300,
     "request_timeout": 30,

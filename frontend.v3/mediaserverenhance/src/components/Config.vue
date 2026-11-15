@@ -13,6 +13,7 @@ const emit = defineEmits(['close', 'switch'])
 
 const DEFAULTS = {
   enabled: false,
+  observe_only: false,
   notify: false,
   history_limit: 300,
   request_timeout: 30,
@@ -226,6 +227,14 @@ function close() {
               <div class="text-caption text-medium-emphasis mb-3">
                 仅在任务失败或部分失败时推送，成功任务不打扰。
               </div>
+            <v-col cols="12">
+              <v-switch v-model="form.observe_only" color="primary" density="compact" hide-details
+                label="观察模式（只记录不执行）" />
+              <div class="text-caption text-medium-emphasis mb-3">
+                开启后体检等只读检查照常运行，但所有刷新请求与封面上传都被跳过，
+                任务时间线会记录「观察模式」结果。适合先观察插件会做什么再放开执行。
+              </div>
+            </v-col>
             </v-col>
             <v-col cols="12" md="6">
               <v-text-field v-model.number="form.history_limit" type="number" min="20" max="5000"

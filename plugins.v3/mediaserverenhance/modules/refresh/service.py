@@ -14,6 +14,7 @@ from app.sdk.logging import logger
 from ...adapter import mediaserver
 from ...utils import store
 from ...utils.config import as_bool, as_list, safe_int, servers_allowed
+from ...utils.runtime import observe_only
 
 MODULE = "refresh"
 
@@ -213,6 +214,16 @@ def run_refresh(plugin, payloads: List[Dict[str, Any]], trigger: str = "手动",
     if not targets:
         store.finish_job(job, "skipped", "没有可用的媒体服务器")
         store.append_job(plugin, job, history_limit(plugin))
+        return job
+    if observe_only(plugin):
+        store.finish_job(
+            job, "observed",
+            f"观察模式：已分析 {len(payloads) or '整库'} 刷新请求，跳过 {len(targets)} 台服务器的真实刷新",
+            success=len(targets),
+        )
+        job["detail"]["duration_ms"] = store.elapsed_ms(started)
+        store.append_job(plugin, job, history_limit(plugin))
+        _notify(plugin, job)
         return job
 
     success = 0

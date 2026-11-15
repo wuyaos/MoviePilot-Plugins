@@ -14,6 +14,7 @@ from app.sdk.logging import logger
 from ...adapter import mediaserver
 from ...utils import store
 from ...utils.config import as_bool, as_list, safe_int
+from ...utils.runtime import observe_only
 from ...utils.pillow import pillow_available
 from ..refresh.service import history_limit, plugin_active
 from . import render
@@ -206,7 +207,9 @@ def _build_one(plugin, server: str, item: Any, item_id: str, style_key: str,
         "uploaded": False,
         "time": store.now_text(),
     }
-    if upload_enabled:
+    if upload_enabled and observe_only(plugin):
+        entry["upload_message"] = "观察模式：已生成本地文件，未上传服务器"
+    if upload_enabled and not observe_only(plugin):
         ok, message = mediaserver.upload_primary_image(server, item_id, content)
         entry["uploaded"] = bool(ok)
         entry["upload_message"] = message

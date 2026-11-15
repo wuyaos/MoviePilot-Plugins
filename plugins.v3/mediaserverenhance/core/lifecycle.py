@@ -41,7 +41,42 @@ def initialize_plugin(plugin, config: Any = None) -> Dict[str, Any]:
         logger.info(f"{LOG_PREFIX}已启用，媒体服务器实例由宿主配置提供")
     else:
         logger.info(f"{LOG_PREFIX}总开关关闭，全部模块保持待命")
+    _reject_cover_conflict(plugin, normalized)
     return normalized
+
+
+def _reject_cover_conflict(plugin, config: Dict[str, Any]) -> None:
+    """封面工坊与已启用的 CoverGen 互斥：检测到冲突时强制停用封面模块。
+
+    两者都会向媒体库写入主图，并存会互相覆盖封面，因此启用时
+    主动探测 CoverGen；命中冲突则关闭本插件封面模块并提示用户。
+
+    :param plugin: 插件实例
+    :param config: 归一化后的配置字典
+    """
+    if not (config.get("enabled") and config.get("covers_enabled")):
+        return
+    try:
+        from ..adapter.host import installed_plugin_state
+
+        state = installed_plugin_state("CoverGen")
+    except Exception as error:  # noqa: BLE001 - 探测失败不应阻断初始化
+        logger.warning(f"{LOG_PREFIX}探测 CoverGen 状态失败：{error}")
+        return
+    if not state.get("enabled"):
+        return
+    plugin._covers_enabled = False
+    config["covers_enabled"] = False
+    plugin._config = {**getattr(plugin, "_config", {}), "covers_enabled": False}
+    message = (
+        "检测到 CoverGen（封面生成）已启用，两者都会覆盖媒体库封面，"
+        "封面工坊已自动停用，请先停用其中一方"
+    )
+    logger.warning(f"{LOG_PREFIX}{message}")
+    try:
+        plugin.post_message(mtype=None, title="媒体服务器增强", text=message)
+    except Exception:  # noqa: BLE001 - 通知失败只留日志
+        pass
 
 
 def runtime_summary(plugin) -> Dict[str, Any]:

@@ -41,65 +41,90 @@ const _hoisted_17 = {
 const _hoisted_18 = { class: "d-flex flex-wrap align-center ga-2 mb-3" };
 const _hoisted_19 = {
   key: 0,
-  class: "text-caption text-medium-emphasis"
+  class: "text-caption text-orange-darken-2 mr-2"
 };
 const _hoisted_20 = {
+  key: 1,
+  class: "text-caption text-medium-emphasis"
+};
+const _hoisted_21 = {
   key: 0,
   class: "mse-cover-grid"
 };
-const _hoisted_21 = {
+const _hoisted_22 = {
   key: 1,
   class: "text-caption text-medium-emphasis d-flex align-center justify-center",
   style: {"height":"180px"}
 };
-const _hoisted_22 = { class: "text-body-2 mt-2 text-truncate" };
-const _hoisted_23 = { class: "text-caption text-medium-emphasis text-truncate" };
-const _hoisted_24 = {
+const _hoisted_23 = { class: "text-body-2 mt-2 text-truncate" };
+const _hoisted_24 = { class: "text-caption text-medium-emphasis text-truncate" };
+const _hoisted_25 = {
   key: 1,
   class: "text-center text-medium-emphasis py-8"
 };
-const _hoisted_25 = { class: "d-flex flex-wrap align-center ga-2 mb-3" };
-const _hoisted_26 = { class: "text-caption text-medium-emphasis" };
+const _hoisted_26 = { class: "d-flex flex-wrap align-center ga-2 mb-3" };
 const _hoisted_27 = {
+  key: 0,
+  class: "text-caption text-orange-darken-2 mr-2"
+};
+const _hoisted_28 = { class: "text-caption text-medium-emphasis" };
+const _hoisted_29 = {
   key: 0,
   class: "d-flex flex-column ga-3"
 };
-const _hoisted_28 = { class: "d-flex align-center ga-2 mb-2" };
-const _hoisted_29 = { class: "text-body-1 font-weight-medium" };
-const _hoisted_30 = { class: "text-caption text-medium-emphasis" };
-const _hoisted_31 = {
+const _hoisted_30 = { class: "d-flex align-center ga-2 mb-2" };
+const _hoisted_31 = { class: "text-body-1 font-weight-medium" };
+const _hoisted_32 = { class: "text-caption text-medium-emphasis" };
+const _hoisted_33 = {
   key: 1,
   class: "d-flex flex-wrap ga-2 mb-2"
 };
-const _hoisted_32 = {
+const _hoisted_34 = {
   key: 3,
   class: "text-caption text-medium-emphasis"
 };
-const _hoisted_33 = {
+const _hoisted_35 = {
   key: 1,
   class: "text-center text-medium-emphasis py-8"
 };
-const _hoisted_34 = { class: "d-flex flex-wrap align-center ga-2 mb-3" };
-const _hoisted_35 = { class: "text-caption text-medium-emphasis" };
-const _hoisted_36 = {
-  class: "text-medium-emphasis",
-  style: {"min-width":"120px"}
-};
-const _hoisted_37 = {
-  class: "text-medium-emphasis",
-  style: {"min-width":"120px"}
-};
+const _hoisted_36 = { class: "d-flex flex-wrap align-center ga-2 mb-3" };
+const _hoisted_37 = { class: "text-caption text-medium-emphasis" };
 const _hoisted_38 = {
   class: "text-medium-emphasis",
   style: {"min-width":"120px"}
 };
-const _hoisted_39 = { class: "font-weight-medium" };
+const _hoisted_39 = {
+  class: "text-medium-emphasis",
+  style: {"min-width":"120px"}
+};
 const _hoisted_40 = {
+  class: "text-medium-emphasis",
+  style: {"min-width":"120px"}
+};
+const _hoisted_41 = { class: "font-weight-medium" };
+const _hoisted_42 = {
   class: "text-medium-emphasis",
   style: {"min-width":"96px"}
 };
-const _hoisted_41 = { class: "text-truncate" };
-const _hoisted_42 = {
+const _hoisted_43 = { class: "text-truncate" };
+const _hoisted_44 = {
+  key: 0,
+  class: "text-caption text-medium-emphasis"
+};
+const _hoisted_45 = { style: {"min-width":"160px"} };
+const _hoisted_46 = { class: "text-medium-emphasis" };
+const _hoisted_47 = {
+  key: 0,
+  class: "text-caption text-medium-emphasis"
+};
+const _hoisted_48 = { class: "text-medium-emphasis mr-2" };
+const _hoisted_49 = { class: "font-weight-medium" };
+const _hoisted_50 = { class: "ml-2" };
+const _hoisted_51 = {
+  key: 0,
+  class: "text-truncate text-medium-emphasis ml-2"
+};
+const _hoisted_52 = {
   key: 0,
   class: "text-caption text-medium-emphasis"
 };
@@ -177,6 +202,7 @@ function errorToast(error) {
 }
 
 const serverRows = computed(() => (overview.value?.servers || []));
+const hasPlexServer = computed(() => serverRows.value.some((row) => String(row.type || '').toLowerCase() === 'plex'));
 const moduleStates = computed(() => (overview.value?.module_states || {}));
 const auditCounts = computed(() => {
   const counts = auditReport.value?.counts || {};
@@ -1038,13 +1064,16 @@ return (_ctx, _cache) => {
                       ]))]),
                       _: 1
                     }, 8, ["loading"]),
+                    (hasPlexServer.value)
+                      ? (_openBlock(), _createElementBlock("span", _hoisted_19, " 含 Plex 实例：封面上传暂不支持 Plex，会自动跳过 "))
+                      : _createCommentVNode("", true),
                     _createVNode(_component_v_spacer),
                     (coverMessage.value)
-                      ? (_openBlock(), _createElementBlock("span", _hoisted_19, _toDisplayString(coverMessage.value), 1))
+                      ? (_openBlock(), _createElementBlock("span", _hoisted_20, _toDisplayString(coverMessage.value), 1))
                       : _createCommentVNode("", true)
                   ]),
                   (coverItems.value.length)
-                    ? (_openBlock(), _createElementBlock("div", _hoisted_20, [
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_21, [
                         (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(coverItems.value, (item, index) => {
                           return (_openBlock(), _createBlock(_component_v_card, {
                             key: `${item.item_id}-${index}`,
@@ -1060,21 +1089,21 @@ return (_ctx, _cache) => {
                                     cover: "",
                                     class: "rounded"
                                   }, null, 8, ["src"]))
-                                : (_openBlock(), _createElementBlock("div", _hoisted_21, "无预览图")),
-                              _createElementVNode("div", _hoisted_22, _toDisplayString(item.title || item.item_id), 1),
-                              _createElementVNode("div", _hoisted_23, _toDisplayString(item.server) + " · " + _toDisplayString(item.status), 1)
+                                : (_openBlock(), _createElementBlock("div", _hoisted_22, "无预览图")),
+                              _createElementVNode("div", _hoisted_23, _toDisplayString(item.title || item.item_id), 1),
+                              _createElementVNode("div", _hoisted_24, _toDisplayString(item.server) + " · " + _toDisplayString(item.status), 1)
                             ]),
                             _: 2
                           }, 1024))
                         }), 128))
                       ]))
-                    : (_openBlock(), _createElementBlock("div", _hoisted_24, " 还没有预览。选择风格与数量后点击「生成预览」，预览不会上传到服务器。 "))
+                    : (_openBlock(), _createElementBlock("div", _hoisted_25, " 还没有预览。选择风格与数量后点击「生成预览」，预览不会上传到服务器。 "))
                 ]),
                 _: 1
               }),
               _createVNode(_component_v_window_item, { value: "capabilities" }, {
                 default: _withCtx(() => [
-                  _createElementVNode("div", _hoisted_25, [
+                  _createElementVNode("div", _hoisted_26, [
                     _createVNode(_component_v_btn, {
                       size: "small",
                       color: "primary",
@@ -1107,11 +1136,14 @@ return (_ctx, _cache) => {
                       ]))]),
                       _: 1
                     }),
+                    (hasPlexServer.value)
+                      ? (_openBlock(), _createElementBlock("span", _hoisted_27, " 含 Plex 实例：插件探测仅支持 Emby / Jellyfin "))
+                      : _createCommentVNode("", true),
                     _createVNode(_component_v_spacer),
-                    _createElementVNode("span", _hoisted_26, "快照时间：" + _toDisplayString(capabilities.value?.time || '暂无'), 1)
+                    _createElementVNode("span", _hoisted_28, "快照时间：" + _toDisplayString(capabilities.value?.time || '暂无'), 1)
                   ]),
                   ((capabilities.value?.servers || []).length)
-                    ? (_openBlock(), _createElementBlock("div", _hoisted_27, [
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_29, [
                         (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(capabilities.value.servers, (row) => {
                           return (_openBlock(), _createBlock(_component_v_card, {
                             key: row.server,
@@ -1119,8 +1151,8 @@ return (_ctx, _cache) => {
                             class: "pa-3"
                           }, {
                             default: _withCtx(() => [
-                              _createElementVNode("div", _hoisted_28, [
-                                _createElementVNode("span", _hoisted_29, _toDisplayString(row.server), 1),
+                              _createElementVNode("div", _hoisted_30, [
+                                _createElementVNode("span", _hoisted_31, _toDisplayString(row.server), 1),
                                 _createVNode(_component_v_chip, {
                                   size: "x-small",
                                   variant: "tonal",
@@ -1142,7 +1174,7 @@ return (_ctx, _cache) => {
                                   _: 2
                                 }, 1032, ["color"]),
                                 _createVNode(_component_v_spacer),
-                                _createElementVNode("span", _hoisted_30, _toDisplayString(row.checked_at), 1)
+                                _createElementVNode("span", _hoisted_32, _toDisplayString(row.checked_at), 1)
                               ]),
                               (row.error)
                                 ? (_openBlock(), _createBlock(_component_v_alert, {
@@ -1159,7 +1191,7 @@ return (_ctx, _cache) => {
                                   }, 1024))
                                 : _createCommentVNode("", true),
                               ((row.watched || []).length)
-                                ? (_openBlock(), _createElementBlock("div", _hoisted_31, [
+                                ? (_openBlock(), _createElementBlock("div", _hoisted_33, [
                                     (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(row.watched, (hit) => {
                                       return (_openBlock(), _createBlock(_component_v_chip, {
                                         key: hit.name || hit.keyword,
@@ -1205,19 +1237,19 @@ return (_ctx, _cache) => {
                                     ]),
                                     _: 2
                                   }, 1024))
-                                : (_openBlock(), _createElementBlock("div", _hoisted_32, "未读取到服务端插件列表"))
+                                : (_openBlock(), _createElementBlock("div", _hoisted_34, "未读取到服务端插件列表"))
                             ]),
                             _: 2
                           }, 1024))
                         }), 128))
                       ]))
-                    : (_openBlock(), _createElementBlock("div", _hoisted_33, _toDisplayString(capabilityLoading.value ? '探测中…' : '还没有服务端能力快照，点击「立即探测」获取。'), 1))
+                    : (_openBlock(), _createElementBlock("div", _hoisted_35, _toDisplayString(capabilityLoading.value ? '探测中…' : '还没有服务端能力快照，点击「立即探测」获取。'), 1))
                 ]),
                 _: 1
               }),
               _createVNode(_component_v_window_item, { value: "diagnostics" }, {
                 default: _withCtx(() => [
-                  _createElementVNode("div", _hoisted_34, [
+                  _createElementVNode("div", _hoisted_36, [
                     _createVNode(_component_v_btn, {
                       size: "small",
                       color: "primary",
@@ -1251,7 +1283,7 @@ return (_ctx, _cache) => {
                       _: 1
                     }),
                     _createVNode(_component_v_spacer),
-                    _createElementVNode("span", _hoisted_35, _toDisplayString(diagnostics.value?.time || ''), 1)
+                    _createElementVNode("span", _hoisted_37, _toDisplayString(diagnostics.value?.time || ''), 1)
                   ]),
                   (diagnostics.value && diagnostics.value.checked === false)
                     ? (_openBlock(), _createBlock(_component_v_alert, {
@@ -1281,6 +1313,20 @@ return (_ctx, _cache) => {
                       _: 2
                     }, 1024))
                   }), 128)),
+                  (diagnostics.value?.observe_only)
+                    ? (_openBlock(), _createBlock(_component_v_alert, {
+                        key: 1,
+                        density: "compact",
+                        type: "info",
+                        variant: "tonal",
+                        class: "mb-2"
+                      }, {
+                        default: _withCtx(() => [...(_cache[44] || (_cache[44] = [
+                          _createTextVNode(" 当前处于观察模式：体检等只读检查照常运行，刷新与封面上传被跳过。 ", -1)
+                        ]))]),
+                        _: 1
+                      }))
+                    : _createCommentVNode("", true),
                   _createVNode(_component_v_row, { dense: "" }, {
                     default: _withCtx(() => [
                       _createVNode(_component_v_col, {
@@ -1293,60 +1339,8 @@ return (_ctx, _cache) => {
                             class: "pa-3"
                           }, {
                             default: _withCtx(() => [
-                              _cache[44] || (_cache[44] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "插件", -1)),
+                              _cache[45] || (_cache[45] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "插件", -1)),
                               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((diagnostics.value?.plugin || {}), (value, key) => {
-                                return (_openBlock(), _createElementBlock("div", {
-                                  key: key,
-                                  class: "text-body-2 d-flex"
-                                }, [
-                                  _createElementVNode("span", _hoisted_36, _toDisplayString(key), 1),
-                                  _createElementVNode("span", null, _toDisplayString(value), 1)
-                                ]))
-                              }), 128))
-                            ]),
-                            _: 1
-                          })
-                        ]),
-                        _: 1
-                      }),
-                      _createVNode(_component_v_col, {
-                        cols: "12",
-                        md: "6"
-                      }, {
-                        default: _withCtx(() => [
-                          _createVNode(_component_v_card, {
-                            variant: "outlined",
-                            class: "pa-3"
-                          }, {
-                            default: _withCtx(() => [
-                              _cache[45] || (_cache[45] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "配置", -1)),
-                              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((diagnostics.value?.config || {}), (value, key) => {
-                                return (_openBlock(), _createElementBlock("div", {
-                                  key: key,
-                                  class: "text-body-2 d-flex"
-                                }, [
-                                  _createElementVNode("span", _hoisted_37, _toDisplayString(key), 1),
-                                  _createElementVNode("span", null, _toDisplayString(value), 1)
-                                ]))
-                              }), 128))
-                            ]),
-                            _: 1
-                          })
-                        ]),
-                        _: 1
-                      }),
-                      _createVNode(_component_v_col, {
-                        cols: "12",
-                        md: "6"
-                      }, {
-                        default: _withCtx(() => [
-                          _createVNode(_component_v_card, {
-                            variant: "outlined",
-                            class: "pa-3"
-                          }, {
-                            default: _withCtx(() => [
-                              _cache[46] || (_cache[46] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "历史", -1)),
-                              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((diagnostics.value?.history || {}), (value, key) => {
                                 return (_openBlock(), _createElementBlock("div", {
                                   key: key,
                                   class: "text-body-2 d-flex"
@@ -1371,26 +1365,140 @@ return (_ctx, _cache) => {
                             class: "pa-3"
                           }, {
                             default: _withCtx(() => [
-                              _cache[47] || (_cache[47] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "服务器", -1)),
+                              _cache[46] || (_cache[46] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "配置", -1)),
+                              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((diagnostics.value?.config || {}), (value, key) => {
+                                return (_openBlock(), _createElementBlock("div", {
+                                  key: key,
+                                  class: "text-body-2 d-flex"
+                                }, [
+                                  _createElementVNode("span", _hoisted_39, _toDisplayString(key), 1),
+                                  _createElementVNode("span", null, _toDisplayString(value), 1)
+                                ]))
+                              }), 128))
+                            ]),
+                            _: 1
+                          })
+                        ]),
+                        _: 1
+                      }),
+                      _createVNode(_component_v_col, {
+                        cols: "12",
+                        md: "6"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_v_card, {
+                            variant: "outlined",
+                            class: "pa-3"
+                          }, {
+                            default: _withCtx(() => [
+                              _cache[47] || (_cache[47] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "历史", -1)),
+                              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((diagnostics.value?.history || {}), (value, key) => {
+                                return (_openBlock(), _createElementBlock("div", {
+                                  key: key,
+                                  class: "text-body-2 d-flex"
+                                }, [
+                                  _createElementVNode("span", _hoisted_40, _toDisplayString(key), 1),
+                                  _createElementVNode("span", null, _toDisplayString(value), 1)
+                                ]))
+                              }), 128))
+                            ]),
+                            _: 1
+                          })
+                        ]),
+                        _: 1
+                      }),
+                      _createVNode(_component_v_col, {
+                        cols: "12",
+                        md: "6"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_v_card, {
+                            variant: "outlined",
+                            class: "pa-3"
+                          }, {
+                            default: _withCtx(() => [
+                              _cache[48] || (_cache[48] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "服务器", -1)),
                               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((diagnostics.value?.servers || []), (row, index) => {
                                 return (_openBlock(), _createElementBlock("div", {
                                   key: index,
                                   class: "text-body-2 mb-2"
                                 }, [
-                                  _createElementVNode("div", _hoisted_39, _toDisplayString(row.name), 1),
+                                  _createElementVNode("div", _hoisted_41, _toDisplayString(row.name), 1),
                                   (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(row, (value, key) => {
                                     return (_openBlock(), _createElementBlock("div", {
                                       key: key,
                                       class: "d-flex"
                                     }, [
-                                      _createElementVNode("span", _hoisted_40, _toDisplayString(key), 1),
-                                      _createElementVNode("span", _hoisted_41, _toDisplayString(value), 1)
+                                      _createElementVNode("span", _hoisted_42, _toDisplayString(key), 1),
+                                      _createElementVNode("span", _hoisted_43, _toDisplayString(value), 1)
                                     ]))
                                   }), 128))
                                 ]))
                               }), 128)),
                               (!(diagnostics.value?.servers || []).length)
-                                ? (_openBlock(), _createElementBlock("div", _hoisted_42, " 暂无服务器诊断信息 "))
+                                ? (_openBlock(), _createElementBlock("div", _hoisted_44, " 暂无服务器诊断信息 "))
+                                : _createCommentVNode("", true)
+                            ]),
+                            _: 1
+                          })
+                        ]),
+                        _: 1
+                      }),
+                      _createVNode(_component_v_col, {
+                        cols: "12",
+                        md: "6"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_v_card, {
+                            variant: "outlined",
+                            class: "pa-3"
+                          }, {
+                            default: _withCtx(() => [
+                              _cache[49] || (_cache[49] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "功能重叠插件", -1)),
+                              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((diagnostics.value?.overlap || []), (row, index) => {
+                                return (_openBlock(), _createElementBlock("div", {
+                                  key: index,
+                                  class: "text-body-2 d-flex mb-1"
+                                }, [
+                                  _createElementVNode("span", _hoisted_45, _toDisplayString(row.plugin), 1),
+                                  _createElementVNode("span", _hoisted_46, _toDisplayString(row.capability), 1)
+                                ]))
+                              }), 128)),
+                              (!(diagnostics.value?.overlap || []).length)
+                                ? (_openBlock(), _createElementBlock("div", _hoisted_47, " 没有检测到功能重叠的插件 "))
+                                : _createCommentVNode("", true)
+                            ]),
+                            _: 1
+                          })
+                        ]),
+                        _: 1
+                      }),
+                      _createVNode(_component_v_col, {
+                        cols: "12",
+                        md: "6"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_v_card, {
+                            variant: "outlined",
+                            class: "pa-3"
+                          }, {
+                            default: _withCtx(() => [
+                              _cache[50] || (_cache[50] = _createElementVNode("div", { class: "text-subtitle-2 mb-2" }, "最近 Webhook 事件（只记录）", -1)),
+                              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((diagnostics.value?.webhooks || []).slice(0, 8), (row, index) => {
+                                return (_openBlock(), _createElementBlock("div", {
+                                  key: index,
+                                  class: "text-body-2 mb-1"
+                                }, [
+                                  _createElementVNode("span", _hoisted_48, _toDisplayString(row.time), 1),
+                                  _createElementVNode("span", _hoisted_49, _toDisplayString(row.channel), 1),
+                                  _createElementVNode("span", _hoisted_50, _toDisplayString(row.event), 1),
+                                  (row.summary)
+                                    ? (_openBlock(), _createElementBlock("span", _hoisted_51, _toDisplayString(row.summary), 1))
+                                    : _createCommentVNode("", true)
+                                ]))
+                              }), 128)),
+                              (!(diagnostics.value?.webhooks || []).length)
+                                ? (_openBlock(), _createElementBlock("div", _hoisted_52, " 尚未收到媒体服务器 webhook；收到播放/入库事件后会在这里登记 "))
                                 : _createCommentVNode("", true)
                             ]),
                             _: 1
@@ -1429,6 +1537,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-84676056"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-5495ec46"]]);
 
 export { Page as default };

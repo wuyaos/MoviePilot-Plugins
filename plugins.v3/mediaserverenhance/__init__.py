@@ -1,5 +1,5 @@
 """
-MediaServerEnhance v1.0.0 - MoviePilot V3 插件
+MediaServerEnhance v1.1.0 - MoviePilot V3 插件
 媒体服务器增强：服务器与刷新、媒体库体检、封面工坊、服务端能力四模块聚合。
 """
 
@@ -49,7 +49,7 @@ class MediaServerEnhance(_PluginBase):
     # 插件颜色
     plugin_color = "#3F8CFF"
     # 插件版本
-    plugin_version = "1.0.0"
+    plugin_version = "1.1.0"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -199,6 +199,11 @@ class MediaServerEnhance(_PluginBase):
     def on_plugin_action(self, event: Event):
         """监听插件动作事件，执行远程命令。"""
         return _events.handle_plugin_action_event(self, event)
+
+    @eventmanager.register(EventType.WebhookMessage)
+    def on_webhook_message(self, event: Event):
+        """监听媒体服务器 webhook 事件，只记录不动作。"""
+        return _events.handle_webhook_event(self, event)
 
     # ── API 实现（同时供路由 partial 与直接调用使用）──
 
