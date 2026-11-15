@@ -127,35 +127,35 @@ class MediaServerEnhance(_PluginBase):
         """返回插件远程命令声明列表。"""
         return [
             {
-                "cmd": "媒体库刷新",
+                "cmd": "/mse_refresh_now",
                 "event": EventType.PluginAction,
                 "desc": "对全部启用实例执行整库刷新",
                 "category": "",
                 "data": {"action": "refresh_now"},
             },
             {
-                "cmd": "刷新最近媒体",
+                "cmd": "/mse_refresh_recent",
                 "event": EventType.PluginAction,
                 "desc": "只刷新各实例最近入库的条目",
                 "category": "",
                 "data": {"action": "refresh_recent"},
             },
             {
-                "cmd": "媒体库体检",
+                "cmd": "/mse_audit_run",
                 "event": EventType.PluginAction,
                 "desc": "执行一次只读体检并保存报告",
                 "category": "",
                 "data": {"action": "audit_run"},
             },
             {
-                "cmd": "生成封面",
+                "cmd": "/mse_cover_run",
                 "event": EventType.PluginAction,
                 "desc": "按当前风格生成一批封面",
                 "category": "",
                 "data": {"action": "cover_run"},
             },
             {
-                "cmd": "能力探测",
+                "cmd": "/mse_probe",
                 "event": EventType.PluginAction,
                 "desc": "探测服务端插件与能力",
                 "category": "",
