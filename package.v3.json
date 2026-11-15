@@ -317,5 +317,18 @@
         "history": {
             "v2.0.0": "V3 迁移：app.sdk 宿主接口、相对 API 路径与 success/message/data envelope、plugin_id；新增 antibot 人机验证适配：challenge→verify 流程，PoW 模式本地 SHA-256 求解，Turnstile 模式经宿主 CloakBrowser 渲染取 token（headless 失败自动降级 headful），token/device 持久化复用，claim 428 自动重验证一次"
         }
+    },
+    "MediaServerEnhance": {
+        "name": "媒体服务器增强",
+        "description": "媒体服务器 API 域聚合：服务器连接与刷新编排、媒体库体检、封面工坊、服务端能力识别，只读巡检不删文件。",
+        "labels": "媒体服务器,Emby,Jellyfin,媒体库,体检,封面",
+        "version": "1.0.0",
+        "icon": "mediaserverenhance.png",
+        "author": "wuyaos",
+        "level": 1,
+        "system_version": ">=3.0.0",
+        "history": {
+            "v1.0.0": "初始版本：复用宿主媒体服务器配置，提供刷新编排（整理入库触发、防抖合并、待刷新队列）、媒体库体检（缺集/重复/空目录/孤立旁车/缺封面/失效路径，只读）、封面工坊（三种风格渲染、预览与回传服务器）、服务端能力识别（Emby/Jellyfin 插件探测与关键词匹配）与运行诊断。"
+        }
     }
 }
