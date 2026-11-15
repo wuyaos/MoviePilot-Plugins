@@ -25,6 +25,11 @@ def _session_result(page):
         return LoginResult(LoginStatus.LOGIN_OK, 'PeerGo 会话有效')
     if code == 401:
         return LoginResult(LoginStatus.AUTH_FAILED, 'PeerGo 会话认证失败（HTTP 401）')
+    if code == 204:
+        # 2026-11 实测：站点未登录响应已从 401+JSON 改为 204 空响应（无 Cookie 浏览器验证；
+        # 前端 fetch 同样以无 body 视为未登录并跳转登录页）。204 必须判 AUTH_FAILED：
+        # 归 UNCONFIRMED 会让候选轮提前 break、账密兜底不触发，失效 Cookie 卡死 stored 首位。
+        return LoginResult(LoginStatus.AUTH_FAILED, 'PeerGo 会话认证失败（HTTP 204 无会话响应）')
     detail = f'HTTP {code}' if code is not None else '无响应'
     return LoginResult(LoginStatus.UNCONFIRMED, f'PeerGo 会话未确认（{detail}；未重复登录）')
 

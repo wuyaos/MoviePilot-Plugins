@@ -76,6 +76,23 @@ def test_rousi_explicit_401_allows_only_one_password_post():
     assert [call[0] for call in client.calls] == ['GET', 'POST']
 
 
+def test_rousi_empty_204_session_is_auth_failed():
+    # 2026-11 站点把未登录响应从 401+JSON 改为 204 空响应（无 Cookie 浏览器实测）；
+    # 204 必须判 auth_failed，否则候选轮提前 break、账密兜底不触发，Cookie 卡死 stored 首位。
+    client = Client([Response(204, {}), Response(401, {})])
+    result = rousi.login(client, {'rousi_username': 'fixture', 'rousi_password': 'fixture-secret'})
+    assert result.status == 'auth_failed'
+    assert [call[0] for call in client.calls] == ['GET', 'POST']
+
+
+def test_rousi_signin_204_rotates_without_post_or_credential_leak():
+    client = Client([Response(204, {})])
+    result = rousi.signin(client, {})
+    assert result.status == 'auth_failed'
+    assert [call[0] for call in client.calls] == ['GET']
+    assert 'fixture-secret' not in str(result.message)
+
+
 def test_rousi_post_submit_auth_failure_is_not_a_rotation_signal():
     client = Client([Response(200, {'user': {'id': 7}, 'csrf_token': 'fixture'}),
                      Response(200, {'claimed_today': False, 'policy': {'settings': {'enabled': True, 'fixed_enabled': True}}}),

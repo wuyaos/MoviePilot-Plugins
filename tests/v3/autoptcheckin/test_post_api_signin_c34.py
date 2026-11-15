@@ -226,6 +226,20 @@ def test_opencd_never_sends_cookie_to_foreign_image():
     assert not http.actions and not ocr.called
 
 
+def test_opencd_submits_form_csrf_token():
+    # 2026-11 站点在 frmSignin 新增 hidden csrf_token：缺失会被 CSRF 校验拒绝，
+    # 响应不再是 JSON {state}，record_result 归 unconfirmed 空 message。
+    site = get_native_module('opencd')
+    http, ocr = Http(site), Mock(return_value='Ab1234')
+    http.form = http.form.replace('<input name="imagehash"',
+                                  '<input name="csrf_token" value="fixture-csrf"><input name="imagehash"')
+    assert site.signin(context(site, http, ocr)).status == 'success'
+    data = dict(http.actions[0][2]['data'])
+    assert data['csrf_token'] == 'fixture-csrf'
+    assert data['imagehash'] == 'fixture'
+    assert data['imagestring'] == 'Ab1234'
+
+
 @pytest.mark.parametrize('value,state', [(True, 'signed'), (False, 'unsigned'), (1, 'unconfirmed'), (0, 'unconfirmed'), ('true', 'unconfirmed'), ('false', 'unconfirmed'), (None, 'unconfirmed'), ({}, 'unconfirmed')])
 def test_record_spec_bool_exact_type(value, state):
     site = get_native_module('hdchina')

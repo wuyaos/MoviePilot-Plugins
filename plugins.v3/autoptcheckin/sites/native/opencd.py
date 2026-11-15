@@ -52,8 +52,14 @@ class OpenCD(ApiSignin):
             except Exception:
                 code = None
             if isinstance(code, str) and re.fullmatch(r'[A-Za-z0-9]{6}', code):
-                return SigninForm(self.url + 'plugin_sign-in.php?cmd=signin',
-                                  [('imagehash', hashes[0]), ('imagestring', code)])
+                # 2026-11 实测：站点在 frmSignin 表单新增 hidden csrf_token（浏览器登录态验证），
+                # 只提交 imagehash/imagestring 会被 CSRF 校验拒绝，响应不再是 JSON {state}，
+                # record_result 归 unconfirmed 空 message。表单里有 csrf_token 就一并提交。
+                csrf = forms[0].xpath('.//input[@name="csrf_token"]/@value')
+                data = [('imagehash', hashes[0]), ('imagestring', code)]
+                if csrf and csrf[0]:
+                    data.insert(0, ('csrf_token', csrf[0]))
+                return SigninForm(self.url + 'plugin_sign-in.php?cmd=signin', data)
         return None
 
     def perform_action(self, ctx, form):

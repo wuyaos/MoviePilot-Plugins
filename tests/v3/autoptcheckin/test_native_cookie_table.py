@@ -1,4 +1,5 @@
 """Unified Cookie persistence and fallback, using synthetic sessions only."""
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -130,6 +131,53 @@ def test_password_is_last_resort_and_persists_even_if_sign_is_unconfirmed(storag
     assert data['cookies.table'][site_id]['source'] == 'password_login'
     assert data['cookies.table'][site_id]['cookie'] == 'session=password-refreshed'
 
+
+
+def test_rousi_204_session_rotates_to_password_login(storage, monkeypatch):
+    """2026-11 站点把未登录响应从 401+JSON 改为 204 空响应：必须判 auth_failed，
+    否则 unconfirmed 让候选轮提前 break、账密兜底不触发，失效 Cookie 卡死 stored 首位。"""
+    runner, data = storage
+    data['cookies.table']['rousi'] = {'cookie': 'session=expired', 'source': 'stored_cookie', 'updated': 'old'}
+    state = {'logged': False, 'claimed': False}
+
+    def page(status, payload):
+        return SimpleNamespace(status_code=status, text=json.dumps(payload))
+
+    session_204 = page(204, {})
+    session_ok = page(200, {'user': {'id': 7}, 'csrf_token': 'csrf'})
+    policy = page(200, {'claimed_today': False, 'policy': {'settings': {'enabled': True, 'fixed_enabled': True}}})
+    claimed = page(200, {'success': True})
+    readback = page(200, {'claimed_today': True})
+
+    class StubHttp:
+        cookies = {}
+
+        def __init__(self, credential, info):
+            self.credential = credential
+
+        def get(self, url, **kwargs):
+            if url.endswith('/api/v1/session'):
+                return session_ok if state['logged'] else session_204
+            return readback if state['claimed'] else policy
+
+        def post(self, url, **kwargs):
+            if url.endswith('/api/v1/session'):
+                state['logged'] = True
+                self.cookies = {'session': 'password-refreshed'}
+                return session_ok
+            state['claimed'] = True
+            return claimed
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(native, 'NativeHttpClient', StubHttp)
+    result = native.run_integration(runner, 'rousi', 'rousi', {'cookie': 'session=managed'},
+                                    {'rousi_username': 'fixture', 'rousi_password': 'fixture-secret'}, action='sign')
+    assert result.status == 'success'
+    assert result.metadata['cookie_sources'] == ['stored_cookie', 'managed_site', 'cookiecloud', 'password_login']
+    assert data['cookies.table']['rousi']['source'] == 'password_login'
+    assert data['cookies.table']['rousi']['cookie'] == 'session=password-refreshed'
 
 @pytest.mark.parametrize('status', ['success', 'signed', 'already'])
 def test_success_family_cookie_persistence(storage, status):
