@@ -120,6 +120,20 @@ def run_cover(plugin, servers: Optional[Sequence[str]] = None,
         result["message"] = "没有可用的媒体服务器"
         return result
 
+    if upload_enabled:
+        # 运行期互斥复查：初始化时的静态检测可能因插件启动时序漏检 CoverGen
+        try:
+            from ...adapter.host import installed_plugin_state
+
+            cover_conflict = bool(installed_plugin_state("CoverGen").get("enabled"))
+        except Exception:  # noqa: BLE001 - 探测失败按无冲突处理，由初始化兜底
+            cover_conflict = False
+        if cover_conflict:
+            store.finish_job(job, "skipped", "检测到 CoverGen 已启用，封面上传与其互斥，已跳过")
+            store.append_job(plugin, job, history_limit(plugin))
+            result["message"] = "检测到 CoverGen（封面生成）已启用，两者都会覆盖媒体库封面，本次上传已跳过"
+            return result
+
     for name in server_names:
         if result["generated"] >= quota:
             break

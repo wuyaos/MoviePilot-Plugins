@@ -47,7 +47,6 @@ plugins.v3/mediaserverenhance/
 ├── controller/
 │   ├── api.py                 # build_api_routes(plugin)：14 条路由声明（overview/servers/.../history_clear）
 │   ├── handlers.py            # Handlers 静态方法集，endpoint 用 partial(Handlers.x, plugin)
-│   └── events.py              # 宿主事件订阅声明
 │   └── events.py              # 宿主事件订阅声明（TransferComplete 入库触发 / PluginAction 命令 / WebhookMessage 只记录）
 │   ├── lifecycle.py           # initialize_plugin：先停旧运行时再写新配置
 │   ├── scheduler.py           # cron 注册（refresh_cron/audit_cron/covers_cron/capabilities_cron）
@@ -71,10 +70,9 @@ plugins.v3/mediaserverenhance/
 - **缺集检查**：`item.seasoninfo` 不可信（宿主遍历不返回季集），必须走 `adapter/mediaserver.py::fetch_season_episodes` 实时向服务器查询，该方法吞异常返回空映射。
 - **缺封面复核**：本地目录无图片不直接报问题，先经 `adapter/mediaserver.py::fetch_primary_image`（缩略 240px）向服务器复核，服务端抓图条目本地常无图片文件。
 - **封面迁移来源**：`core/style/` 迁自 `plugins.v2/covergen`（业务精简版，去掉 UI/API 层与库过滤逻辑）；原插件继续独立维护。
-- **事件数据展开**：宿主事件 `event_data` 可能是 dict（TransferComplete）或 pydantic 模型（WebhookMessage → `WebhookEventInfo`），统一经 `controller/events.py::_event_data` 展开，新增事件处理不要绕过它直接 `event.event_data.get(...)`。
+- **事件数据展开**：宿主事件 `event_data` 形态不一：dict（宿主直接传字典时）、扁平 pydantic 模型（WebhookMessage → `WebhookEventInfo`，`_event_data(event, dump_models=True)` 展开）、嵌套模型（TransferComplete → `TransferResultContractData`，**不要 dump**，浅层 dump 会破坏嵌套 `mediainfo`/`transferinfo` 的取值；`modules/refresh/service.py::build_payload_from_event` 内的 `_get` 同时兼容属性与字典）。新增事件处理一律走 `controller/events.py::_event_data`，不要直接 `event.event_data.get(...)`。
 - **Webhook 真实报文**：宿主 webhook 端点 `POST /api/v1/webhook/?token=<API_TOKEN>&source=<实例名>` 只接受 **multipart form 的 `data` 字段**（JSON，必须有 `Event` 键），JSON body 会被静默忽略（Emby 解析器 form.get("data")）。
 - **插件日志**：插件 logger（`app.sdk.logging`）按实例写入 `config/logs/plugins/mediaserverenhance.log`，不在主 `moviepilot.log` 里。
-- **封面迁移来源**：`core/style/` 迁自 `plugins.v2/covergen`（业务精简版，去掉 UI/API 层与库过滤逻辑）；原插件继续独立维护。
 
 ## 5. 验证要点
 

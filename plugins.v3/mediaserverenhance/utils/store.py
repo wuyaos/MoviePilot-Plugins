@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -20,12 +21,11 @@ CAPABILITIES_KEY = "capabilities_snapshot"
 # 封面生成历史
 COVER_HISTORY_KEY = "cover_history"
 # 刷新运行态（最近刷新时间、待处理批次）
-# 刷新运行态（最近刷新时间、待处理批次）
 REFRESH_STATE_KEY = "refresh_state"
 # 最近媒体服务器 webhook 事件（只记录不动作）
 WEBHOOK_KEY = "webhook_events"
-# webhook 事件保留条数
-WEBHOOK_LIMIT = 30
+# webhook 事件保留条数（与 AGENTS.md/提交说明口径一致）
+WEBHOOK_LIMIT = 50
 
 DEFAULT_HISTORY_LIMIT = 300
 
@@ -237,12 +237,23 @@ def record_webhook(plugin, entry: Dict[str, Any]) -> None:
     """记录一条媒体服务器 webhook 事件，超出上限时裁剪。
 
     webhook 只做记录与展示，本插件不基于 webhook 执行删除等破坏性动作。
+    事件线程可能并发触发，read-modify-write 全程持实例级锁。
 
     :param plugin: 插件实例
     :param entry: ``{time, channel, event, summary}`` 字典
     """
-    rows = read_list(plugin, WEBHOOK_KEY)
-    write_value(plugin, WEBHOOK_KEY, merge_history(rows, entry, WEBHOOK_LIMIT))
+    with _plugin_lock(plugin, "_webhook_lock"):
+        rows = read_list(plugin, WEBHOOK_KEY)
+        write_value(plugin, WEBHOOK_KEY, merge_history(rows, entry, WEBHOOK_LIMIT))
+
+
+def _plugin_lock(plugin, attr: str):
+    """返回挂在插件实例上的互斥锁，缺失时创建（模块级读改写保护）。"""
+    lock = getattr(plugin, attr, None)
+    if lock is None:
+        lock = threading.RLock()
+        setattr(plugin, attr, lock)
+    return lock
 
 
 def read_webhooks(plugin) -> List[Dict[str, Any]]:

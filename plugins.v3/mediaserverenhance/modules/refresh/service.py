@@ -74,33 +74,47 @@ def enabled_servers(plugin, override: Optional[List[str]] = None) -> List[str]:
     return result
 
 
-def build_payload_from_event(event_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def build_payload_from_event(event_data: Any) -> Optional[Dict[str, Any]]:
     """从入库事件数据构造刷新请求。
 
-    :param event_data: ``TransferComplete`` 的 ``event_data``
+    :param event_data: ``TransferComplete`` 的 ``event_data``，
+        可能是 dict（宿主直接传字典）或嵌套 pydantic 模型（透传），
+        子模型同样可能是属性或字典，统一经 ``_get`` 兼容两种形态
     :return: 刷新请求字典；缺少媒体信息时返回 None
     """
-    if not isinstance(event_data, dict):
-        return None
-    media = event_data.get("mediainfo")
+
+    def _get(obj: Any, name: str, default: Any = None) -> Any:
+        if isinstance(obj, dict):
+            return obj.get(name, default)
+        return getattr(obj, name, default)
+
+    if isinstance(event_data, dict):
+        media = _get(event_data, "mediainfo")
+        transfer = _get(event_data, "transferinfo")
+    else:
+        media = getattr(event_data, "mediainfo", None)
+        transfer = getattr(event_data, "transferinfo", None)
     if not media:
         return None
-    transfer = event_data.get("transferinfo")
-    target_dir = getattr(transfer, "target_diritem", None) if transfer else None
-    target_item = getattr(transfer, "target_item", None) if transfer else None
+    target_dir = _get(transfer, "target_diritem") if transfer else None
+    target_item = _get(transfer, "target_item") if transfer else None
     path = ""
     for candidate in (target_dir, target_item):
-        candidate_path = getattr(candidate, "path", None) if candidate else None
+        candidate_path = _get(candidate, "path") if candidate else None
         if candidate_path:
             path = str(candidate_path)
             break
-    media_type = getattr(media, "type", None)
+    media_type = _get(media, "type")
     type_text = getattr(media_type, "value", None) or str(media_type or "")
+    title = str(_get(media, "title", "") or "")
+    if not title and not path:
+        # 媒体名与目标路径都取不到（异常事件），放弃而非产生空刷新条目
+        return None
     return {
-        "title": getattr(media, "title", "") or "",
-        "year": getattr(media, "year", "") or "",
+        "title": title,
+        "year": str(_get(media, "year", "") or ""),
         "type": type_text,
-        "category": getattr(media, "category", "") or "",
+        "category": str(_get(media, "category", "") or ""),
         "path": path,
     }
 

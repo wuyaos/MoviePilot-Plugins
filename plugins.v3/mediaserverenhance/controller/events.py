@@ -26,29 +26,42 @@ COMMAND_ACTIONS: Dict[str, str] = {
 }
 
 
-def _event_data(event: Any) -> Dict[str, Any]:
-    """兼容字典与事件对象两种形态取出 event_data。
+def _event_data(event: Any, dump_models: bool = False) -> Any:
+    """兼容字典、扁平模型与嵌套模型三种形态取出 event_data。
 
     :param event: 宿主事件对象
-    :return: 事件数据字典，取不到时返回空字典
+    :param dump_models: 是否把 pydantic 模型浅层展开成字典。
+        仅 ``WebhookMessage``（``WebhookEventInfo``）这类扁平模型需要；
+        ``TransferComplete`` 的 ``TransferResultContractData`` 嵌套
+        ``mediainfo``/``transferinfo`` 子模型，保持原模型透传，
+        由 ``build_payload_from_event`` 的 ``_get`` 兼容属性取值。
+    :return: 事件数据（dict 或模型），取不到时返回空字典
     """
+    if isinstance(event, dict):
+        data = event.get("event_data")
+        return data if isinstance(data, dict) else event
     if isinstance(event, dict):
         data = event.get("event_data")
         return data if isinstance(data, dict) else event
     data = getattr(event, "event_data", None)
     if isinstance(data, dict):
         return data
-    # WebhookMessage 等事件携带 pydantic 模型（如 WebhookEventInfo），统一展开成字典
-    for dump_name in ("model_dump", "dict"):
-        dump = getattr(data, dump_name, None)
-        if callable(dump):
-            try:
-                dumped = dump()
-            except Exception:
-                continue
-            if isinstance(dumped, dict):
-                return dumped
-    return {}
+    if not data:
+        return {}
+    if dump_models:
+        # WebhookMessage 等事件携带扁平 pydantic 模型，统一展开成字典
+        for dump_name in ("model_dump", "dict"):
+            dump = getattr(data, dump_name, None)
+            if callable(dump):
+                try:
+                    dumped = dump()
+                except Exception:
+                    continue
+                if isinstance(dumped, dict):
+                    return dumped
+        return {}
+    # 嵌套模型（如 TransferComplete）原样透传，由下游 _get 兼容属性取值
+    return data
 
 
 def handle_transfer_complete_event(plugin, event: Any) -> None:
@@ -118,7 +131,7 @@ def handle_webhook_event(plugin, event: Any) -> None:
     :param event: ``WebhookMessage`` 事件
     """
     try:
-        data = _event_data(event)
+        data = _event_data(event, dump_models=True)
         channel = str(data.get("channel") or "").strip() or "unknown"
         event_name = str(data.get("event") or data.get("event_type") or "").strip() or "unknown"
         summary = str(data.get("item_name") or data.get("overview") or "").strip()[:120]

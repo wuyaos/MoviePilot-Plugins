@@ -68,9 +68,13 @@ def _reject_cover_conflict(plugin, config: Dict[str, Any]) -> None:
     plugin._covers_enabled = False
     config["covers_enabled"] = False
     plugin._config = {**getattr(plugin, "_config", {}), "covers_enabled": False}
+    try:
+        plugin.update_config(config)
+    except Exception as error:  # noqa: BLE001 - 持久化失败不阻断启动，仅日志
+        logger.warning(f"{LOG_PREFIX}互斥结果写回宿主配置失败：{error}")
     message = (
         "检测到 CoverGen（封面生成）已启用，两者都会覆盖媒体库封面，"
-        "封面工坊已自动停用，请先停用其中一方"
+        "封面工坊已自动停用并写回配置，请先停用其中一方"
     )
     logger.warning(f"{LOG_PREFIX}{message}")
     try:

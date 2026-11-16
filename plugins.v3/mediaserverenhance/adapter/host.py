@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 from app.sdk.logging import logger
 
+from ..utils.config import as_bool
 LOG_PREFIX = "【媒体服务器增强】"
 
 
@@ -30,7 +31,8 @@ def installed_plugin_state(plugin_id: str) -> Dict[str, Any]:
         installed = instance is not None or bool(config)
         enabled = False
         if isinstance(config, dict):
-            enabled = bool(config.get("enabled"))
+            # 配置值可能被宿主存成字符串，统一经 as_bool 归一（"false" 不得误判为 True）
+            enabled = as_bool(config.get("enabled"))
         if not enabled and instance is not None:
             getter = getattr(instance, "get_state", None)
             enabled = bool(getter()) if callable(getter) else False
