@@ -39,7 +39,7 @@ class DownloadManagerLocal(_PluginBase):
     # 插件名称
     plugin_name = "下载中心"
     # 插件描述
-    plugin_desc = "转移做种、种子重命名、站点标签、H&R 保护、自动删种与上传限速，一站式下载管理。"
+    plugin_desc = "转移做种、种子重命名、站点标签、H&R 保护、自动删种、媒体删除联动清理与上传限速，一站式下载管理。"
     # 插件图标
     plugin_icon = "downloadmanagerlocal.png"
     # 插件颜色

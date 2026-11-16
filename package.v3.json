@@ -212,8 +212,8 @@
     },
     "DownloadManagerLocal": {
         "name": "下载中心",
-        "description": "转移做种、种子重命名、站点标签、H&R 保护、自动删种与上传限速，一站式下载管理。",
-        "labels": "下载管理,做种,H&R",
+        "description": "转移做种、种子重命名、站点标签、H&R 保护、自动删种、媒体删除联动清理与上传限速，一站式下载管理。",
+        "labels": "下载管理,做种,H&R,联动删除",
         "version": "3.10.1",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/downloadmanagerlocal.png",
         "author": "Kurisu, wuyaos",
