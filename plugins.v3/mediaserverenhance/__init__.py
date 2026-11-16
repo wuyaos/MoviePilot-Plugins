@@ -51,7 +51,7 @@ class MediaServerEnhance(_PluginBase):
     # 插件颜色
     plugin_color = "#3F8CFF"
     # 插件版本
-    plugin_version = "1.1.1"
+    plugin_version = "1.1.2"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页

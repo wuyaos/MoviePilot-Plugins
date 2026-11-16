@@ -194,16 +194,14 @@ def _iter_items(server: str, library: Any, remaining: int) -> List[MediaServerIt
     :param server: 服务器名称
     :param library: 媒体库信息
     :param remaining: 本次最多读取的条目数
-    :return: 条目列表
+    :return: 条目列表；读取失败时抛出异常（由调用方记入报告）
     """
     library_id = _lib_field(library, "id")
     if not library_id:
         return []
-    try:
-        return list(mediaserver.iter_library_items(server, library_id, remaining))
-    except Exception as error:  # noqa: BLE001 - 单库读取失败由调用方记入报告
-        logger.warning(f"【媒体服务器增强】读取 {server}/{library_id} 条目失败：{error}")
-        return []
+    # 生成器惰性求值：异常只在 list() 物化时抛出，这里必须让异常原样外抛，
+    # 由 run_audit 的 try 记入报告 errors，防止服务器故障被误判为空库
+    return list(mediaserver.iter_library_items(server, library_id, remaining))
 
 def run_audit(plugin, servers: Optional[Sequence[str]] = None,
               libraries: Optional[Sequence[str]] = None,
@@ -254,7 +252,20 @@ def run_audit(plugin, servers: Optional[Sequence[str]] = None,
             offline.append(f"{name}: 服务器不可用（{reason}）")
             report["errors"].append(offline[-1])
             continue
-        libraries_of_server = mediaserver.list_libraries(name) or []
+        # strict：在线但媒体库列表读取失败必须记入 errors，防止「登录后宕机」静默 success
+        try:
+            libraries_of_server = mediaserver.list_libraries(name, strict=True) or []
+        except Exception as error:  # noqa: BLE001 - 单台服务器失败不影响其它服务器
+            report["errors"].append(f"{name}: 媒体库列表读取失败（{error}）")
+            continue
+        if not libraries_of_server:
+            # 宿主 get_librarys 会吞网络异常返回空列表，用活性探测区分「真空库」与「宕机」
+            probe = mediaserver.probe_server_plugins(name)
+            if probe.get("reachable") is False:
+                report["errors"].append(
+                    f"{name}: 服务器无响应（{probe.get('error')}），媒体库读取结果不可信"
+                )
+                continue
         for library in libraries_of_server:
             library_name = _lib_field(library, "name")
             if not scope_allows(library_filter, name, _lib_field(library, "id")):
@@ -288,6 +299,9 @@ def run_audit(plugin, servers: Optional[Sequence[str]] = None,
     else:
         status = "success"
     message = f"扫描 {scanned} 条，发现 {total_issues} 个问题"
+    if library_filter and not report["scanned_libraries"] and not report["errors"]:
+        # 范围配置了但零命中：与「干净」区分开，提示配置可能失配
+        message += "（配置的媒体库范围未匹配到任何库，请检查范围设置）"
     if report["errors"]:
         message += f"，{len(report['errors'])} 个错误"
     store.finish_job(

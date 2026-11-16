@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from app.sdk.logging import logger
 
@@ -136,7 +136,20 @@ def run_cover(plugin, servers: Optional[Sequence[str]] = None,
     for name in server_names:
         if result["generated"] >= quota:
             break
-        for library in mediaserver.list_libraries(name) or []:
+        try:
+            libraries = mediaserver.list_libraries(name, strict=True) or []
+        except Exception as error:  # noqa: BLE001 - 单台服务器失败不影响其它服务器
+            logger.warning(f"【媒体服务器增强】{name} 媒体库列表读取失败，跳过该服务器：{error}")
+            result["failed"] += 1
+            continue
+        if not libraries:
+            # 宿主 get_librarys 会吞网络异常返回空列表，活性探测区分「真空库」与「宕机」
+            probe = mediaserver.probe_server_plugins(name)
+            if probe.get("reachable") is False:
+                logger.warning(f"【媒体服务器增强】{name} 服务器无响应（{probe.get('error')}），媒体库读取结果不可信")
+                result["failed"] += 1
+                continue
+        for library in libraries:
             if not scope_allows(library_filter, name, str(library.get("id") or "")):
                 continue
             library_id = str(library.get("id") or "")
@@ -146,9 +159,12 @@ def run_cover(plugin, servers: Optional[Sequence[str]] = None,
                 break
             remaining = quota - result["generated"]
             try:
-                library_items = mediaserver.iter_library_items(name, library_id, remaining)
+                # 物化为 list：生成器惰性求值，异常只在消费时抛出，
+                # 不物化则 try 形同虚设、异常会冲出 run_cover
+                library_items = list(mediaserver.iter_library_items(name, library_id, remaining))
             except Exception as error:  # noqa: BLE001 - 单库读取失败不中断其它媒体库
                 logger.warning(f"【媒体服务器增强】{name}/{library_id} 条目读取失败，跳过该库：{error}")
+                result["failed"] += 1
                 continue
             for item in library_items or []:
                 item_id = str(getattr(item, "item_id", "") or "")

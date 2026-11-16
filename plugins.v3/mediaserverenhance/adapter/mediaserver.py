@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
@@ -110,6 +111,12 @@ def get_service_options(service) -> Dict[str, Any]:
     }
 
 
+# 页面渲染路径（overview/servers/diagnostics）每次都会调 server_online，
+# 重连是同步网络调用（RequestUtils 默认超时 20s），必须加冷却防止 UI 重连风暴
+RECONNECT_COOLDOWN_SECONDS = 60.0
+_RECONNECT_AT: Dict[str, float] = {}
+
+
 def server_online(name: str) -> Tuple[bool, str]:
     """判断媒体服务器是否可正常访问。
 
@@ -126,9 +133,12 @@ def server_online(name: str) -> Tuple[bool, str]:
     if callable(is_inactive):
         try:
             if is_inactive():
-                # 服务器可能曾不可达导致宿主实例未完成登录：尝试一次重连再判定
+                # 冷却期内直接按当前状态判定，避免同步重连阻塞只读页面
+                now = time.time()
+                last = _RECONNECT_AT.get(name, 0.0)
                 reconnect = getattr(instance, "reconnect", None)
-                if callable(reconnect):
+                if callable(reconnect) and now - last >= RECONNECT_COOLDOWN_SECONDS:
+                    _RECONNECT_AT[name] = now
                     try:
                         reconnect()
                     except Exception as error:  # noqa: BLE001 - 重连失败保持原判定
@@ -140,23 +150,30 @@ def server_online(name: str) -> Tuple[bool, str]:
     return True, ""
 
 
-def list_libraries(name: str) -> List[Dict[str, Any]]:
+def list_libraries(name: str, strict: bool = False) -> List[Dict[str, Any]]:
     """读取指定服务器的媒体库列表。
 
     :param name: 服务器配置名称
-    :return: 每项包含 id / name / type / item_count 的字典列表；失败时返回空列表
+    :param strict: True 时读取失败向上抛出异常（供体检等需要区分「空库」与「失败」的场景）
+    :return: 每项包含 id / name / type / item_count 的字典列表；非 strict 失败时返回空列表
     """
     service = get_service(name)
     instance = getattr(service, "instance", None) if service else None
     if not instance:
+        if strict:
+            raise RuntimeError("服务器实例不可用")
         return []
     loader = getattr(instance, "get_librarys", None)
     if not callable(loader):
+        if strict:
+            raise RuntimeError("宿主实例不支持媒体库查询")
         return []
     try:
         libraries = loader()
     except Exception as error:  # noqa: BLE001 - 宿主适配器异常不应中断聚合查询
         logger.error(f"【媒体服务器增强】读取 {name} 媒体库失败：{error}")
+        if strict:
+            raise
         return []
     rows: List[Dict[str, Any]] = []
     for library in libraries or []:
@@ -319,15 +336,26 @@ def probe_server_plugins(name: str, timeout: int = DEFAULT_TIMEOUT) -> Dict[str,
         response = RequestUtils(timeout=timeout, content_type="application/json").get_res(
             url=url, params={"api_key": apikey}
         )
-        if not response or response.status_code != 200:
+        if response is None:
+            # RequestUtils 网络失败返回 None 而不抛异常：视为服务器无响应
             return {
                 "supported": False,
                 "plugins": [],
-                "error": f"HTTP {getattr(response, 'status_code', 'unknown')}",
+                "error": "服务器无响应（连接失败或超时）",
+                "reachable": False,
+            }
+        if response.status_code != 200:
+            return {
+                "supported": False,
+                "plugins": [],
+                "error": f"HTTP {response.status_code}",
+                "reachable": True,
             }
         payload = response.json()
     except Exception as error:  # noqa: BLE001 - 探测失败由界面展示原因
-        return {"supported": False, "plugins": [], "error": str(error)}
+        # reachable=False 标记网络层失败（宕机/超时），与 HTTP 状态异常区分：
+        # 宿主 get_librarys 会吞异常返回空列表，体检靠该字段识别「空库还是宕机」
+        return {"supported": False, "plugins": [], "error": str(error), "reachable": False}
     plugins: List[Dict[str, Any]] = []
     for entry in payload or []:
         if not isinstance(entry, dict):

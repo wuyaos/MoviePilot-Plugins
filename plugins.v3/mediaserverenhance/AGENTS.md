@@ -67,6 +67,8 @@ plugins.v3/mediaserverenhance/
 - **上传双开关**：封面回传需要配置 `covers_upload=true` **且** 请求体 `upload=true`，二者缺一不上传。
 - **API 路径**：动态路由为下划线风格（`/audit_run`、`/cover_run`、`/capabilities_probe`），不是斜杠子路径。
 - **类型归一**：Emby/Jellyfin 条目 `item_type` 可能是 `Movie/Series`（服务器原值）或宿主中文值，统一经 `modules/audit/service.py::_item_kind` 归一为 `movie/tv` 再判定。
+- **宿主方法的异常语义（重要）**：宿主 `get_items` 是**生成器函数**（异常在迭代时抛，调用时不抛），宿主 `get_librarys` **内部吞网络异常返回空列表**，宿主 `RequestUtils.get_res` 网络失败**返回 None 而非抛异常**。因此：消费条目必须先物化（`list(...)`）让异常落在 try 内；「空库」不可信，audit/covers 在库列表为空时用 `probe_server_plugins` 的 `reachable` 字段复核活性（网络层失败 reachable=False → 记入 errors），不要依赖异常传播。
+- **重连冷却**：`server_online` 对未登录实例会尝试 `reconnect()`（同步网络调用，RequestUtils 默认超时 20s），已加 60 秒实例级冷却（`_RECONNECT_AT`）。页面渲染路径（overview/servers/diagnostics）每次都调 server_online，新增重连逻辑时必须保持冷却，防止 UI 重连风暴。
 - **缺集检查**：`item.seasoninfo` 不可信（宿主遍历不返回季集），必须走 `adapter/mediaserver.py::fetch_season_episodes` 实时向服务器查询，该方法吞异常返回空映射。
 - **缺封面复核**：本地目录无图片不直接报问题，先经 `adapter/mediaserver.py::fetch_primary_image`（缩略 240px）向服务器复核，服务端抓图条目本地常无图片文件。
 - **封面迁移来源**：`core/style/` 迁自 `plugins.v2/covergen`（业务精简版，去掉 UI/API 层与库过滤逻辑）；原插件继续独立维护。

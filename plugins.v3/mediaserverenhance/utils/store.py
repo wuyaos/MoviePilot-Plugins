@@ -250,14 +250,20 @@ def record_webhook(plugin, entry: Dict[str, Any]) -> None:
         write_value(plugin, WEBHOOK_KEY, merge_history(rows, entry, WEBHOOK_LIMIT))
 
 
+# 保护 _plugin_lock 的 get-or-create：两线程同时首次取锁会各建一把、互斥失效
+_LOCK_GUARD = threading.Lock()
+
+
 def _plugin_lock(plugin, attr: str):
-    """返回挂在插件实例上的互斥锁，缺失时创建（模块级读改写保护）。"""
+    """返回挂在插件实例上的互斥锁，缺失时创建（get-or-create 全程持模块级 guard）。"""
     lock = getattr(plugin, attr, None)
     if lock is None:
-        lock = threading.RLock()
-        setattr(plugin, attr, lock)
+        with _LOCK_GUARD:
+            lock = getattr(plugin, attr, None)
+            if lock is None:
+                lock = threading.RLock()
+                setattr(plugin, attr, lock)
     return lock
-
 
 def read_webhooks(plugin) -> List[Dict[str, Any]]:
     """读取最近记录的 webhook 事件列表。
