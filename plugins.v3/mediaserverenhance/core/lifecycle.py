@@ -100,3 +100,7 @@ def runtime_summary(plugin) -> Dict[str, Any]:
         "modules": modules,
         "config": config,
     }
+
+
+# 供 __init__.py 跨模块调用时使用公开名
+reject_cover_conflict = _reject_cover_conflict

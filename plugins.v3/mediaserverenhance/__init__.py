@@ -15,9 +15,11 @@ from app.sdk.logging import logger
 from .controller import events as _events
 from .controller.api import build_api_routes as _build_api_routes_impl
 from .controller.handlers import MediaServerEnhanceApiHandlers as _Handlers
+from .core import lifecycle as _lifecycle
 from .core.lifecycle import initialize_plugin as _initialize_plugin_impl
 from .core.lifecycle import stop_plugin as _stop_plugin_impl
 from .core.scheduler import build_plugin_services as _build_plugin_services_impl
+from .utils import runtime as _runtime
 from .model.api import (
     ActionSummary,
     AuditReport,
@@ -49,7 +51,7 @@ class MediaServerEnhance(_PluginBase):
     # 插件颜色
     plugin_color = "#3F8CFF"
     # 插件版本
-    plugin_version = "1.1.0"
+    plugin_version = "1.1.1"
     # 插件作者
     plugin_author = "wuyaos"
     # 作者主页
@@ -183,6 +185,20 @@ class MediaServerEnhance(_PluginBase):
     def get_page(self) -> Optional[List[dict]]:
         """Vue 模式下无 Vuetify 详情页。"""
         return None
+
+    def update_config(self, config: Dict[str, Any], plugin_id: Optional[str] = None) -> Optional[bool]:
+        """保存配置并同步运行时属性。
+
+        宿主默认实现只落盘、不触发 ``init_plugin``，保存后运行态仍是旧值；
+        这里保存后立即把配置写入实例属性，免去一次 reload。
+        """
+        result = super().update_config(config, plugin_id)
+        try:
+            normalized = _runtime.apply_runtime_config(self, config)
+            _lifecycle.reject_cover_conflict(self, normalized)
+        except Exception as error:  # noqa: BLE001 - 同步失败不阻断保存
+            logger.error(f"【媒体服务器增强】保存后同步运行态失败：{error}")
+        return result
 
     def stop_service(self):
         """停止插件后台任务并释放运行资源。"""

@@ -126,7 +126,15 @@ def server_online(name: str) -> Tuple[bool, str]:
     if callable(is_inactive):
         try:
             if is_inactive():
-                return False, "服务未连接"
+                # 服务器可能曾不可达导致宿主实例未完成登录：尝试一次重连再判定
+                reconnect = getattr(instance, "reconnect", None)
+                if callable(reconnect):
+                    try:
+                        reconnect()
+                    except Exception as error:  # noqa: BLE001 - 重连失败保持原判定
+                        logger.warning(f"【媒体服务器增强】{name} 重连失败：{error}")
+                if is_inactive():
+                    return False, "服务未连接"
         except Exception as error:  # noqa: BLE001 - 宿主实现差异，探测失败按不可用处理
             return False, str(error)
     return True, ""
@@ -171,18 +179,16 @@ def iter_library_items(name: str, library_id: str, limit: int = 0) -> Iterator[M
     :param name: 服务器配置名称
     :param library_id: 媒体库标识
     :param limit: 最多返回条目数，0 表示不限制
-    :return: 宿主统一媒体条目迭代器；服务器不可用时返回空迭代器
+    :return: 宿主统一媒体条目迭代器
+    :raises Exception: 服务器读取失败时原样外抛，调用方负责区分
+        「空库」与「读取失败」并写入报告，防止服务器故障被误判为媒体库清空
     """
     service = get_service(name)
     instance = getattr(service, "instance", None) if service else None
     loader = getattr(instance, "get_items", None) if instance else None
     if not callable(loader):
         return iter(())
-    try:
-        items = loader(library_id, 0, -1)
-    except Exception as error:  # noqa: BLE001 - 读取失败按空结果处理并记录
-        logger.error(f"【媒体服务器增强】读取 {name}/{library_id} 条目失败：{error}")
-        return iter(())
+    items = loader(library_id, 0, -1)
 
     def _bounded() -> Iterator[MediaServerItem]:
         count = 0
@@ -267,7 +273,9 @@ def refresh_server(name: str, payloads: Iterable[Dict[str, Any]]) -> Tuple[bool,
         return False, "服务器未启用或实例不可用"
     if items:
         by_items = getattr(instance, "refresh_library_by_items", None)
-        if callable(by_items):
+        # 条目全部缺少目标路径时按条目刷新必然空转（服务器查不到对应媒体库），
+        # 直接落整库刷新，避免虚假的「按条目刷新 N 项」成功记录
+        if callable(by_items) and any(item.target_path for item in items):
             try:
                 result = by_items(items)
                 if result:
@@ -313,13 +321,13 @@ def probe_server_plugins(name: str, timeout: int = DEFAULT_TIMEOUT) -> Dict[str,
         )
         if not response or response.status_code != 200:
             return {
-                "supported": True,
+                "supported": False,
                 "plugins": [],
                 "error": f"HTTP {getattr(response, 'status_code', 'unknown')}",
             }
         payload = response.json()
     except Exception as error:  # noqa: BLE001 - 探测失败由界面展示原因
-        return {"supported": True, "plugins": [], "error": str(error)}
+        return {"supported": False, "plugins": [], "error": str(error)}
     plugins: List[Dict[str, Any]] = []
     for entry in payload or []:
         if not isinstance(entry, dict):

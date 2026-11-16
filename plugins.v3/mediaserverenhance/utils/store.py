@@ -86,10 +86,12 @@ def append_job(plugin, job: Dict[str, Any], limit: int = DEFAULT_HISTORY_LIMIT) 
     :param job: 任务记录字典
     :param limit: 保留的最大记录数
     """
-    jobs = load_jobs(plugin)
-    jobs.insert(0, job)
-    keep = limit if limit and limit > 0 else DEFAULT_HISTORY_LIMIT
-    write_value(plugin, JOBS_KEY, jobs[:keep])
+    # 任务时间线由并发事件线程与定时任务共同写入，read-modify-write 全程持锁
+    with _plugin_lock(plugin, "_jobs_lock"):
+        jobs = load_jobs(plugin)
+        jobs.insert(0, job)
+        keep = limit if limit and limit > 0 else DEFAULT_HISTORY_LIMIT
+        write_value(plugin, JOBS_KEY, jobs[:keep])
 
 
 def clear_jobs(plugin, module: str = "") -> int:
@@ -99,12 +101,13 @@ def clear_jobs(plugin, module: str = "") -> int:
     :param module: 只清理指定模块，空串表示全部
     :return: 被清理的记录数
     """
-    jobs = load_jobs(plugin)
-    if not module:
-        write_value(plugin, JOBS_KEY, [])
-        return len(jobs)
-    remaining = [job for job in jobs if job.get("module") != module]
-    write_value(plugin, JOBS_KEY, remaining)
+    with _plugin_lock(plugin, "_jobs_lock"):
+        jobs = load_jobs(plugin)
+        if not module:
+            write_value(plugin, JOBS_KEY, [])
+            return len(jobs)
+        remaining = [job for job in jobs if job.get("module") != module]
+        write_value(plugin, JOBS_KEY, remaining)
     return len(jobs) - len(remaining)
 
 

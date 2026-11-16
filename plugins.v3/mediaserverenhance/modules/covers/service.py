@@ -13,7 +13,7 @@ from app.sdk.logging import logger
 
 from ...adapter import mediaserver
 from ...utils import store
-from ...utils.config import as_bool, as_list, safe_int
+from ...utils.config import as_bool, as_list, parse_scope, safe_int, scope_allows
 from ...utils.runtime import observe_only
 from ...utils.pillow import pillow_available
 from ..refresh.service import history_limit, plugin_active
@@ -49,12 +49,11 @@ def _selected_servers(plugin, override: Optional[Sequence[str]] = None) -> List[
     return [row["name"] for row in mediaserver.list_server_configs() if row.get("enabled")]
 
 
-def _selected_libraries(plugin, override: Optional[Sequence[str]] = None) -> set:
-    """解析封面任务涉及的媒体库名称集合，空集表示不限。"""
+def _selected_libraries(plugin, override: Optional[Sequence[str]] = None) -> List[Tuple[str, str]]:
+    """解析封面的媒体库范围（``server|library_id``），空列表表示不限。"""
     explicit = as_list(override)
-    if explicit:
-        return {str(item) for item in explicit}
-    return {str(item) for item in as_list(getattr(plugin, "_cover_libraries", None))}
+    raw = explicit if explicit else as_list(getattr(plugin, "_cover_libraries", None))
+    return parse_scope(raw)
 
 
 def _subtitle(item: Any) -> str:
@@ -138,8 +137,7 @@ def run_cover(plugin, servers: Optional[Sequence[str]] = None,
         if result["generated"] >= quota:
             break
         for library in mediaserver.list_libraries(name) or []:
-            library_name = str(library.get("name") or "")
-            if library_filter and library_name not in library_filter:
+            if not scope_allows(library_filter, name, str(library.get("id") or "")):
                 continue
             library_id = str(library.get("id") or "")
             if not library_id:
@@ -147,7 +145,12 @@ def run_cover(plugin, servers: Optional[Sequence[str]] = None,
             if result["generated"] >= quota:
                 break
             remaining = quota - result["generated"]
-            for item in mediaserver.iter_library_items(name, library_id, remaining) or []:
+            try:
+                library_items = mediaserver.iter_library_items(name, library_id, remaining)
+            except Exception as error:  # noqa: BLE001 - 单库读取失败不中断其它媒体库
+                logger.warning(f"【媒体服务器增强】{name}/{library_id} 条目读取失败，跳过该库：{error}")
+                continue
+            for item in library_items or []:
                 item_id = str(getattr(item, "item_id", "") or "")
                 if not item_id:
                     result["skipped"] += 1
@@ -199,9 +202,8 @@ def _build_one(plugin, server: str, item: Any, item_id: str, style_key: str,
     """
     title = str(getattr(item, "title", "") or "")
     base = mediaserver.fetch_primary_image(server, item_id)
-    if not base:
-        return {"status": "skipped", "server": server, "item_id": item_id, "title": title,
-                "reason": "服务器侧没有主图"}
+    # 无底图不再跳过：render_cover 对三种风格都有渐变兜底画布，
+    # 缺封面的条目恰恰是本模块的目标场景。
     content = render.render_cover(style_key, title, _subtitle(item), base, font_conf)
     if not content:
         return {"status": "failed", "server": server, "item_id": item_id, "title": title,
@@ -239,16 +241,18 @@ def _remember(plugin, result: Dict[str, Any], style_key: str) -> None:
     :param result: 任务结果
     :param style_key: 风格键
     """
-    existing = store.read_list(plugin, store.COVER_HISTORY_KEY)
-    entry = {
-        "time": store.now_text(),
-        "style": style_key,
-        "generated": result["generated"],
-        "uploaded": result["uploaded"],
-        "failed": result["failed"],
-        "items": result["items"][:50],
-    }
-    store.write_value(plugin, store.COVER_HISTORY_KEY, store.merge_history(existing, entry, 100))
+    # 与 webhook/job 同模式：read-modify-write 全程持实例级锁
+    with store._plugin_lock(plugin, "_cover_history_lock"):
+        existing = store.read_list(plugin, store.COVER_HISTORY_KEY)
+        entry = {
+            "time": store.now_text(),
+            "style": style_key,
+            "generated": result["generated"],
+            "uploaded": result["uploaded"],
+            "failed": result["failed"],
+            "items": result["items"][:50],
+        }
+        store.write_value(plugin, store.COVER_HISTORY_KEY, store.merge_history(existing, entry, 100))
 
 
 def cover_history(plugin) -> List[Dict[str, Any]]:

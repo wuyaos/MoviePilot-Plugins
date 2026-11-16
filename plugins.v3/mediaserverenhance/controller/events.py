@@ -40,9 +40,6 @@ def _event_data(event: Any, dump_models: bool = False) -> Any:
     if isinstance(event, dict):
         data = event.get("event_data")
         return data if isinstance(data, dict) else event
-    if isinstance(event, dict):
-        data = event.get("event_data")
-        return data if isinstance(data, dict) else event
     data = getattr(event, "event_data", None)
     if isinstance(data, dict):
         return data

@@ -16,7 +16,7 @@ from app.sdk.logging import logger
 
 from ...adapter import mediaserver
 from ...utils import store
-from ...utils.config import as_bool, as_list, safe_int
+from ...utils.config import as_bool, as_list, parse_scope, safe_int, scope_allows
 from ..refresh.service import history_limit, plugin_active
 
 MODULE = "audit"
@@ -64,12 +64,11 @@ def _selected_servers(plugin, override: Optional[Sequence[str]] = None) -> List[
     return [row["name"] for row in mediaserver.list_server_configs() if row.get("enabled")]
 
 
-def _selected_libraries(plugin, override: Optional[Sequence[str]] = None) -> Set[str]:
-    """解析体检涉及的媒体库名称集合，空集表示不限。"""
+def _selected_libraries(plugin, override: Optional[Sequence[str]] = None) -> List[Tuple[str, str]]:
+    """解析体检的媒体库范围（``server|library_id``），空列表表示不限。"""
     explicit = as_list(override)
-    if explicit:
-        return {str(item) for item in explicit}
-    return {str(item) for item in as_list(getattr(plugin, "_audit_libraries", None))}
+    raw = explicit if explicit else as_list(getattr(plugin, "_audit_libraries", None))
+    return parse_scope(raw)
 
 
 def _scan_dir(root: str) -> Tuple[bool, List[str]]:
@@ -247,11 +246,18 @@ def run_audit(plugin, servers: Optional[Sequence[str]] = None,
     issues: List[Dict[str, Any]] = []
     counts: Dict[str, int] = defaultdict(int)
     scanned = 0
+    offline: List[str] = []
     for name in server_names:
+        online, reason = mediaserver.server_online(name)
+        if not online:
+            # 服务器不可达时不能当「空库」静默跳过，必须留下可读错误
+            offline.append(f"{name}: 服务器不可用（{reason}）")
+            report["errors"].append(offline[-1])
+            continue
         libraries_of_server = mediaserver.list_libraries(name) or []
         for library in libraries_of_server:
             library_name = _lib_field(library, "name")
-            if library_filter and library_name not in library_filter:
+            if not scope_allows(library_filter, name, _lib_field(library, "id")):
                 continue
             if scanned >= budget:
                 report["truncated"] = True
@@ -276,10 +282,18 @@ def run_audit(plugin, servers: Optional[Sequence[str]] = None,
     report["duration_ms"] = store.elapsed_ms(started)
     store.write_value(plugin, store.AUDIT_REPORT_KEY, report)
     total_issues = len(issues)
+    if report["errors"]:
+        # 有错误必须反映在状态里：全部失败即 failed，部分失败即 partial
+        status = "failed" if scanned == 0 and not report["scanned_libraries"] else "partial"
+    else:
+        status = "success"
+    message = f"扫描 {scanned} 条，发现 {total_issues} 个问题"
+    if report["errors"]:
+        message += f"，{len(report['errors'])} 个错误"
     store.finish_job(
         job,
-        "success",
-        f"扫描 {scanned} 条，发现 {total_issues} 个问题",
+        status,
+        message,
         success=report["scanned_libraries"],
         failed=len(report["errors"]),
         total=report["scanned_libraries"],
@@ -393,7 +407,6 @@ def _audit_library(server: str, library: Any, items: Sequence[MediaServerItem],
             continue
         if not exists:
             continue
-        has_video, has_image, has_meta = _classify(names)
         has_video, has_image, has_meta = _classify(names)
         if "empty_dir" in checks and not has_video:
             results.append(
