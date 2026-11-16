@@ -8,8 +8,9 @@ from typing import Any, Dict, Iterable, List
 
 from app.sdk.logging import logger
 
+from ..hr.guard import SKIP_PATH_SYNC_DELETE, HrGuard
 from ..transfer.tasks import load_transfer_tasks
-from ...adapter.moviepilot import get_download_hash_by_fullpath
+from ...adapter.moviepilot import get_download_hash_by_fullpath, get_downloader_services
 
 RECENT_CLEANUP_WINDOW_SECONDS = 30
 HR_ACTION_CHECK = "hnr_check"
@@ -121,7 +122,7 @@ def cleanup_by_hash(plugin, source_hash: str, downloader: str = "", trigger: str
 
 
 def _cleanup_by_hash(plugin, source_hash: str, downloader: str = "", trigger: str = "") -> Dict[str, Any]:
-    """按源下载 hash 记录转种副本（只记录，不清理任何下载器任务）。"""
+    """按源下载 hash 清理转种目标任务。"""
     source_hash = _clean_text(source_hash)
     result = _empty_result(trigger=trigger)
     result["source_hash"] = source_hash
@@ -136,19 +137,18 @@ def _cleanup_by_hash(plugin, source_hash: str, downloader: str = "", trigger: st
 
     transfer_deleted = _cleanup_transfer_target(plugin, source_hash, source_downloader)
     if transfer_deleted is None:
-        # 记录查询失败不写去重缓存，让下一次事件可以重试。
+        # 查询/删除失败或保护跳过都不缓存，让下一次事件可以重试。
         return result
     if transfer_deleted > 0:
         plugin._sync_delete_recent[identity] = time.time()
     result["transfer_deleted"] = transfer_deleted
+    if transfer_deleted:
+        logger.info(f"【PT下载中心:失败清理】{trigger or '事件'} 已按源 hash={source_hash} 删除转种 {transfer_deleted} 个（含文件）")
     return result
 
 
 def _cleanup_transfer_target(plugin, source_hash: str, source_downloader: str) -> int | None:
-    """转种副本只记录不清理：联动删除不碰任何下载器任务。
-
-    返回 1=发现副本并已记录日志，0=无转种记录，None=记录查询失败（允许下次事件重试）。
-    """
+    """返回成功删除数；失败/保护/身份歧义返回 None，缺记录不写去重。"""
     if not source_downloader:
         # 多任务配置下旧单链路键可能为空：遍历已知源下载器找记录。
         record, source_downloader = _find_transfer_record_any_source(plugin, source_hash)
@@ -162,10 +162,28 @@ def _cleanup_transfer_target(plugin, source_hash: str, source_downloader: str) -
     target_hash = _clean_text(record.get("to_download_id"))
     if not target_downloader or not target_hash:
         return 0
-    logger.info(
-        f"【PT下载中心:失败清理】媒体文件已删除，转种副本 {target_downloader} / {target_hash} 保留做种，不清理任何任务"
-    )
+    if HrGuard().should_skip(SKIP_PATH_SYNC_DELETE, target_downloader, target_hash):
+        logger.info(f"【PT下载中心:失败清理】H&R 保护跳过转种目标 {target_downloader} / {target_hash}")
+        return None
+    try:
+        service = get_downloader_services(name_filters=[target_downloader]).get(target_downloader)
+        instance = getattr(service, "instance", None)
+        if instance is None or instance.is_inactive():
+            logger.warning(f"【PT下载中心:失败清理】转种目标下载器 {target_downloader} 不可用，跳过删除 {target_hash}")
+            return None
+    except Exception as err:
+        logger.error(f"【PT下载中心:失败清理】查询转种目标下载器 {target_downloader} 失败：{err}")
+        return None
+    try:
+        if instance.delete_torrents(delete_file=True, ids=[target_hash]) is False:
+            logger.error(f"【PT下载中心:失败清理】删除转种目标失败：{target_downloader} / {target_hash}")
+            return None
+    except Exception as err:
+        logger.error(f"【PT下载中心:失败清理】删除转种目标异常：{target_downloader} / {target_hash} {err}")
+        return None
+    logger.info(f"【PT下载中心:失败清理】已删除转种目标 {target_downloader} / {target_hash}")
     return 1
+
 
 def _find_transfer_record_any_source(plugin, source_hash: str):
     """旧键为空时，在全部配置下载器里查源记录（找不到返回 (None, "")）。"""
