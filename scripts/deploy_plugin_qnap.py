@@ -56,7 +56,10 @@ def read_plugin_meta(plugin_dir):
     m_ver = re.search(r'^\s*plugin_version\s*=\s*["\']([^"\']+)["\']', text, re.M)
     if not m_ver:
         sys.exit(f"[deploy] {init_py} 中未找到 plugin_version")
-    m_cls = re.search(r"^class\s+(\w+)\s*\(", text, re.M)
+    # 优先取 _PluginBase 子类：文件里的辅助类（异常、dataclass）会排在真正的插件类之前
+    m_cls = re.search(r"^class\s+(\w+)\s*\(\s*_PluginBase[^)]*\)\s*:", text, re.M)
+    if not m_cls:
+        m_cls = re.search(r"^class\s+(\w+)\s*\(", text, re.M)
     if not m_cls:
         sys.exit(f"[deploy] {init_py} 中未找到插件类定义（reload 需要插件 id）")
     m_name = re.search(r'^\s*plugin_name\s*=\s*["\']([^"\']+)["\']', text, re.M)
