@@ -2608,7 +2608,7 @@ function transferOutcomeText(row) {
   if (row.path_repair_status === 'verifying') parts.push('路径已对齐，等待真实校验');
   if (row.path_repair_status === 'verified') parts.push('路径修复已校验，源任务保留');
   if (row.path_repair_status === 'blocked') parts.push('路径修复已阻止，需重新检测');
-  if (row.tag_result === 'failed' || row.site_tag_result === 'failed') parts.push('补标签失败');
+  if (row.tag_result === 'failed') parts.push('转移标签失败');
   else if (row.tag_result === 'ok') parts.push('转移标签已核对');
   if (row.source_result) parts.push(sourceResults[row.source_result] || row.source_result);
   return parts.filter(Boolean).join(' · ')
@@ -4214,6 +4214,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-d3e08f95"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-8c063e15"]]);
 
 export { Page as default };

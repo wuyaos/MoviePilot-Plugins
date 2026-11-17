@@ -29,6 +29,18 @@ from .payload_export import get_torrent_payloads
 _AUTOMATIC_DELAY_TRIGGER_SOURCES = frozenset({"兜底扫描", "事件驱动"})
 
 
+
+def _tracker_domain(url: Any) -> str:
+    """安全提取 tracker 主机名；单个损坏 URL 不应吞掉其他 tracker。"""
+    value = str(url or "").strip()
+    if not value:
+        return ""
+    try:
+        parsed = urlsplit(value if "://" in value else f"//{value}")
+        return (parsed.hostname or "").lower().rstrip(".")
+    except (TypeError, ValueError):
+        return ""
+
 def _torrent_state_of(target: Any, dl_type: str) -> Any:
     """读取目的端任务状态，兼容对象（.state/.status）与 dict（部分宿主版本）。"""
     if isinstance(target, dict):
@@ -183,7 +195,7 @@ def download_torrent(plugin, service: ServiceInfo, content: bytes,
 def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
                           stop_generation: Optional[int] = None, outcome: Optional[dict] = None):
     """目标任务后处理逐步响应停止信号。"""
-    if transfer_observe_skip(plugin, "转移后重命名及标签", torrent_hash):
+    if transfer_observe_skip(plugin, "转移后重命名", torrent_hash):
         return False
     generation = int(getattr(plugin, "_transfer_stop_generation", 0) or 0) if stop_generation is None else stop_generation
     if _transfer_stopped(plugin, generation):
@@ -206,8 +218,6 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
         # 宿主下载器模块对 qB 返回 dict、对 TR/rt 在部分版本返回对象或 dict，
         # 统一走适配器读取，避免 `.name` 直接取属性在 dict 形态下抛 AttributeError。
         torrent_name = get_torrent_name(torrent)
-        torrent_tags = get_label(torrent, dl_type)
-        trackers = get_tracker_urls(torrent, dl_type)
         save_path = get_save_path(torrent, dl_type)
     except Exception as e:
         logger.error(f"【PT下载中心:转移做种】转移后处理：获取种子信息失败 hash={torrent_hash}: {e}")
@@ -226,14 +236,6 @@ def post_transfer_process(plugin, to_service: ServiceInfo, torrent_hash: str,
         plugin._rename_torrent(dl, dl_type, torrent_hash, torrent_name, save_path,
                                downloader=str(getattr(to_service, "name", "") or ""))
 
-    if _transfer_stopped(plugin, generation):
-        return False
-    if plugin._tag_enabled:
-        tag_result = plugin._tag_torrent(dl, dl_type, torrent_hash, torrent_tags, trackers)
-        if outcome is not None:
-            outcome["site_tag_result"] = "failed" if tag_result is False else ("unknown_site" if tag_result is None else "ok")
-        if tag_result is False:
-            logger.error(f"【PT下载中心:转移做种】站点标签写入失败 hash={torrent_hash}")
     return True
 
 
@@ -473,7 +475,7 @@ def _run_task(plugin, task: dict, trigger_source: str, generation: int, totals: 
         if include_trackers or exclude_trackers:
             try:
                 urls = get_tracker_urls(torrent, from_service.type)
-                domains = {(urlsplit(url).hostname or "").lower().rstrip(".") for url in urls}
+                domains = {_tracker_domain(url) for url in urls} - {""}
                 matches = (bool(domains) and "" not in domains
                            and not (domains & exclude_trackers)
                            and (not include_trackers or bool(domains & include_trackers)))

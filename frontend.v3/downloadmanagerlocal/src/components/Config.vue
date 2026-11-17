@@ -176,7 +176,7 @@ const mainTabs = [
   { key: 'hr', title: 'H&R 管理', icon: MODULE_ICONS.hr, desc: '按站点规则跟踪 H&R 做种状态，为破坏性操作提供统一保护。' },
   { key: 'remover', title: '自动删种', icon: MODULE_ICONS.autoremove, desc: '按时间、分享率、体积等条件自动暂停或删除种子。' },
   { key: 'rename', title: '种子重命名', icon: MODULE_ICONS.rename, desc: '转移后自动根据 TMDB 信息命名种子，失败记录进定时补查，也可手动补刀。' },
-  { key: 'tag', title: '分类与标签', icon: MODULE_ICONS.tag, desc: '转移后自动根据 tracker 域名打站点标签。' },
+  { key: 'tag', title: '分类与标签', icon: MODULE_ICONS.tag, desc: '独立按 tracker 域名维护站点标签，不参与转移做种。' },
   { key: 'upload', title: '上传限速', icon: MODULE_ICONS.upload_limit, desc: '设置下载器全局上传上限，并按需限制指定站点的合计上传速度。' },
 ]
 

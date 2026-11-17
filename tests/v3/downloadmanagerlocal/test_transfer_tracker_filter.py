@@ -23,7 +23,7 @@ from test_transfer_tasks_engine import tr, tt  # noqa: F401
     ("shadowthein.net", "", [], False),
     ("", "blocked.net", [], False),
     ("shadowthein.net", "", ["http://[invalid/a"], False),
-    ("shadowthein.net", "", ["https://shadowthein.net/a", "invalid"], False),
+    ("shadowthein.net", "", ["https://shadowthein.net/a", "invalid"], True),
     ("", "", [], True),
     ("", "", ["http://[invalid/a"], True),
     ("https://shadowthein.net/private-key/announce", "", ["https://shadowthein.net/a"], False),
@@ -90,16 +90,13 @@ def test_legacy_task_does_not_enable_tracker_filter(tt):
     assert task["include_trackers"] == task["exclude_trackers"] == ""
 
 
-@pytest.mark.parametrize("tag_result,expected", [(None, "unknown_site"), (False, "failed"), (True, "ok")])
-def test_post_transfer_keeps_tag_outcome_without_unknown_site_warning(tr, monkeypatch, tag_result, expected):
+def test_post_transfer_does_not_invoke_site_tag(tr, monkeypatch):
     target = Mock()
     target.get_torrents.return_value = ([dict(hash="abc", name="data.mkv", tags="", save_path="/data", trackers=[])], None)
-    plugin = SimpleNamespace(_tag_enabled=True, _tag_torrent=Mock(return_value=tag_result))
+    plugin = SimpleNamespace(_tag_enabled=True, _tag_torrent=Mock())
     monkeypatch.setattr(tr, "_transfer_stopped", lambda *a: False)
     outcome = {}
     assert tr.post_transfer_process(plugin, SimpleNamespace(instance=target, type="qbittorrent"), "abc", 0, outcome)
-    assert outcome["site_tag_result"] == expected
-    assert not any("站点未识别" in str(call) for call in tr.logger.warning.call_args_list)
-    if tag_result is False:
-        assert any("站点标签写入失败" in str(call) for call in tr.logger.error.call_args_list)
+    assert "site_tag_result" not in outcome
+    plugin._tag_torrent.assert_not_called()
     target.delete_torrents.assert_not_called()

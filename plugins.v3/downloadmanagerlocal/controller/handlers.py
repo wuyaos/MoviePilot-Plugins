@@ -1052,7 +1052,6 @@ def api_transfer_status(plugin, page: int = 1, page_size: int = 20, result_filte
             "hr_protected": bool(value.get("hr_protected")),
             "reuse_target": bool(value.get("reuse_target")),
             "tag_result": value.get("tag_result") or "",
-            "site_tag_result": value.get("site_tag_result") or "",
             "source_result": value.get("source_result") or "",
             "fallback": bool(value.get("fallback")),
             "updated_at": float(value.get("updated_at") or 0),

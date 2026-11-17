@@ -125,8 +125,16 @@ def svc(monkeypatch):
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.modules.rename.service",
             _get_torrent_content_name=Mock(return_value=""),
             build_rename_config=Mock(return_value={"enabled": True, "downloader": []}),
+            build_rename_flat_defaults=Mock(return_value={}),
             resolve_retry_original_name=Mock(return_value=""))
     _module(monkeypatch, "app.plugins.downloadmanagerlocal.modules.sitetag.service",
+            DEFAULT_TAG_CONFIG={
+                "interval_cron": "5 4 * * *", "enable_media_tag": False,
+                "enable_tag": True, "enable_category": False, "enable_del_tags": False,
+                "cleanup_enabled": False, "cleanup_downloaders": [], "cleanup_cron": "15 4 * * *",
+                "downloaders": [], "all_cat": [], "all_cat_rename": [], "rename_type": False,
+                "path_rename": None, "catprefix": "", "siteprefix": "",
+            },
             create_temporary_tag=Mock(), forget_temporary_tag=Mock(),
             release_temporary_tag=Mock())
     return _load_real(monkeypatch, "service")
@@ -161,12 +169,20 @@ def _run_post(service, plugin):
 
 
 def test_transfer_pane_rename_disabled_skips_followup(svc):
-    """关联模块关闭：rename 关 → 转移后补刀不发生，站点标签联动不受影响。"""
+    """关联模块关闭：rename 关 → 转移后补刀不发生。"""
     plugin = _post_plugin(rename_enabled=False, tag_enabled=True)
     ok, plugin, _ = _run_post(svc, plugin)
     assert ok is True
     plugin._rename_torrent.assert_not_called()
-    plugin._tag_torrent.assert_called_once()
+    plugin._tag_torrent.assert_not_called()
+
+
+def test_transfer_pane_never_writes_site_tag(svc):
+    """转移后不再隐式执行站点识别或写站点标签。"""
+    plugin = _post_plugin(rename_enabled=True, tag_enabled=True)
+    ok, plugin, _ = _run_post(svc, plugin)
+    assert ok is True
+    plugin._tag_torrent.assert_not_called()
 
 
 def test_transfer_pane_rename_enabled_runs_followup(svc):
@@ -179,12 +195,12 @@ def test_transfer_pane_rename_enabled_runs_followup(svc):
 
 
 def test_transfer_pane_both_enabled_runs_both(svc):
-    """关联模块全开：改名与标签联动互不阻断，各自执行一次。"""
+    """关联模块全开时只执行转移后的改名补刀，不写站点标签。"""
     plugin = _post_plugin(rename_enabled=True, tag_enabled=True)
     ok, plugin, _ = _run_post(svc, plugin)
     assert ok is True
     plugin._rename_torrent.assert_called_once()
-    plugin._tag_torrent.assert_called_once()
+    plugin._tag_torrent.assert_not_called()
 
 
 def test_transfer_pane_transfer_rename_off_gates_followup(svc):

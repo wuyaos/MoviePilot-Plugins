@@ -391,7 +391,7 @@ class DownloadManagerLocal(_PluginBase):
         return _can_seeding_impl(torrent, dl_type)
 
     # ════════════════════════════════════════════════════════════
-    # v2.0.0: 转移后自动重命名 + 站点标签
+    # 转移后自动重命名；站点标签独立运行
     # ════════════════════════════════════════════════════════════
 
     def _post_transfer_process(self, to_service: ServiceInfo, torrent_hash: str):

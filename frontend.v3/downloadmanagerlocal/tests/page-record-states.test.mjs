@@ -236,7 +236,7 @@ test('execution history server pagination, page-size reset, late response isolat
 })
 
 
-test('未识别站点不再混入转移说明，标签写入失败仍可见', async () => {
+test('站点标签独立于转移记录，转移标签状态仍可见', async () => {
   const view = await viewPage()
   const fixture = fixtures.find(item => item.key === 'transfer')
   try {
@@ -244,8 +244,8 @@ test('未识别站点不再混入转移说明，标签写入失败仍可见', as
     await view.click('转移做种'); await flush()
     assert.ok(text(view.block('transfer')).includes('转移标签已核对'))
     assert.ok(!text(view.block('transfer')).includes('站点未识别'))
-    view.handlers.transfer_status = () => fixture.response([{ ...fixture.row, site_tag_result: 'failed' }])
+    view.handlers.transfer_status = () => fixture.response([{ ...fixture.row, tag_result: 'failed', site_tag_result: 'failed' }])
     await view.click('刷新数据'); await flush()
-    assert.ok(text(view.block('transfer')).includes('补标签失败'))
+    assert.ok(text(view.block('transfer')).includes('转移标签失败'))
   } finally { view.unmount() }
 })
