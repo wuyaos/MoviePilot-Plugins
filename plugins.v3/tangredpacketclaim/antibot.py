@@ -7,7 +7,8 @@
 1. POST /api/redpacket/antibot/challenge（头 X-RedPacket-Device），返回
    {mode: disabled|pow|turnstile, challenge_id, site_key?, action?, salt?, difficulty_bits?}
 2. mode=disabled 直接放行；pow 在本地解 SHA-256 前导零位；
-   turnstile 需要真实浏览器渲染 Cloudflare Turnstile 组件拿 token。
+   turnstile 先由 CloakBrowser 渲染一次（headless 单次 25s 预算）；浏览器失败
+   时按站点脚本同款语义降级：challenge {fallback:1} → mode=pow 本地求解。
 3. POST /api/redpacket/antibot/verify 提交解，返回
    {token, expires_at, max_uses, risk_level, method, token_id}。
 4. 后续 claim 请求带 X-RedPacket-Token + X-RedPacket-Device；HTTP 428 表示
@@ -32,8 +33,11 @@ ANTIBOT_VERIFY = "/api/redpacket/antibot/verify"
 DEVICE_DATA_KEY = "antibot_device"
 TOKEN_DATA_KEY = "antibot_token"
 POW_MAX_ATTEMPTS = 5_000_000
+POW_MAX_ATTEMPTS = 5_000_000
 TURNSTILE_PAGE_TIMEOUT_MS = 30_000
-TURNSTILE_TOKEN_TIMEOUT_MS = 75_000
+# 浏览器 Turnstile 只给一次短预算：站点自身脚本对 Turnstile 也只等 12s 就降级
+# fallback PoW；qnap CloakBrowser 长时间无回调时不必反复烧时间。
+TURNSTILE_TOKEN_TIMEOUT_MS = 25_000
 
 
 class AntibotError(RuntimeError):
@@ -171,7 +175,6 @@ class AntibotClient:
         self._lock = threading.Lock()
         self._disabled_until = 0.0
         self._disabled_until = 0.0
-
     # ---- device / token 持久化 ------------------------------------------
 
     def device(self) -> str:
@@ -239,19 +242,13 @@ class AntibotClient:
                 self._disabled_until = time.time() + 3600
                 self._log("antibot 未启用（mode=disabled），直接领取")
                 return None
-            verify_payload: Dict[str, Any] = {}
-            if mode == "pow":
-                nonce = solve_pow(str(challenge.get("salt")), str(challenge.get("challenge_id")),
-                                  int(challenge.get("difficulty_bits") or 0))
-                verify_payload = {"nonce": nonce}
-                self._log("antibot 走 PoW 验证（纯本地计算）")
-            elif mode == "turnstile":
-                verify_payload = {"turnstile_token": self._solve_turnstile(challenge, session)}
-                self._log("antibot 走 Turnstile 验证（CloakBrowser）")
-            else:
-                raise AntibotError(f"未知 antibot 模式：{mode}")
+            mode, verify_payload, effective = self._solve_challenge(session, challenge)
+            if mode == "disabled":
+                # 主流程或 fallback 通道都可能返回 disabled：统一短路
+                self._disabled_until = time.time() + 3600
+                return None
             verify = self._api(session, ANTIBOT_VERIFY,
-                               data={"challenge_id": challenge.get("challenge_id"),
+                               data={"challenge_id": effective.get("challenge_id"),
                                      "mode": mode, **verify_payload})
             if not verify or verify.get("ok") is False or not verify.get("token"):
                 raise AntibotError(str((verify or {}).get("message") or "antibot verify 失败"))
@@ -271,26 +268,61 @@ class AntibotClient:
 
     # ---- 内部 ------------------------------------------------------------
 
-    def _solve_turnstile(self, challenge: Dict[str, Any], session: requests.Session) -> str:
+    def _solve_challenge(self, session: requests.Session,
+                         challenge: Dict[str, Any]) -> tuple:
+        """按 challenge.mode 求解，返回 (mode, verify_payload, 生效 challenge)。
+
+        turnstile 先浏览器渲染一次（headless，真实 Chrome 实测同款渲染 9.9s 可
+        拿 token；qnap CloakBrowser 会被 Cloudflare 卡死，故不做 headful 重试）；
+        失败后走站点自带的降级通道：challenge {fallback:1} → mode=pow 本地求解，
+        与站点脚本「Turnstile 12s watchdog → fallback」语义一致。
+        """
+        mode = str(challenge.get("mode") or "")
+        if mode == "pow":
+            self._log("antibot 走 PoW 验证（纯本地计算）")
+            return mode, self._pow_payload(challenge), challenge
+        if mode == "turnstile":
+            try:
+                token = self._solve_turnstile(challenge)
+            except AntibotError as err:
+                self._log(f"Turnstile 浏览器验证失败，降级 fallback PoW：{err}")
+                return self._fallback_pow(session)
+            self._log("antibot 走 Turnstile 验证（CloakBrowser）")
+            return mode, {"turnstile_token": token}, challenge
+        raise AntibotError(f"未知 antibot 模式：{mode}")
+
+    def _fallback_pow(self, session: requests.Session) -> tuple:
+        """站点降级通道：challenge {fallback:1} → pow 本地求解。"""
+        challenge = self._api(session, ANTIBOT_CHALLENGE, data={"fallback": 1})
+        if not challenge or challenge.get("ok") is False:
+            raise AntibotError(str((challenge or {}).get("message")
+                                   or "antibot fallback challenge 请求失败"))
+        mode = str(challenge.get("mode") or "")
+        if mode == "disabled":
+            return mode, {}, challenge
+        if mode != "pow":
+            raise AntibotError(f"antibot fallback 返回未知模式：{mode}，无法降级")
+        self._log("antibot fallback 走 PoW 验证（纯本地计算）")
+        return mode, self._pow_payload(challenge), challenge
+
+    @staticmethod
+    def _pow_payload(challenge: Dict[str, Any]) -> Dict[str, Any]:
+        nonce = solve_pow(str(challenge.get("salt")), str(challenge.get("challenge_id")),
+                          int(challenge.get("difficulty_bits") or 0))
+        # 站点脚本恒定提交 confirm（「本人操作」勾选，未弹窗时为 0）；服务端实测
+        # 接受 confirm=0/1/缺省，此处与站点客户端保持一致提交 0。
+        return {"nonce": nonce, "confirm": 0}
+
+    def _solve_turnstile(self, challenge: Dict[str, Any]) -> str:
         site_key = str(challenge.get("site_key") or "")
         action = str(challenge.get("action") or "redpacket_claim")
         if not site_key:
             raise AntibotError("challenge 缺少 site_key，无法进行 Turnstile 验证")
-        errors = []
-        for headless in (True, False):
-            try:
-                token = solve_turnstile_in_browser(self.base_url, self.cookie, site_key, action, headless)
-                # 同步一次 Cookie，浏览器会话可能刷新了会话态
-                self._sync_session_cookies(session)
-                return token
-            except Exception as err:
-                errors.append(f"headless={headless}: {err}")
-                self._log(f"Turnstile 浏览器验证失败（headless={headless}）：{err}")
-        raise AntibotError("Turnstile 浏览器验证失败：" + "；".join(errors))
-
-    @staticmethod
-    def _sync_session_cookies(session: requests.Session) -> None:
-        """预留：浏览器与 HTTP 会话 Cookie 同步（当前 token 绑定 device，不依赖浏览器 Cookie）。"""
+        try:
+            return solve_turnstile_in_browser(self.base_url, self.cookie, site_key,
+                                              action, headless=True)
+        except Exception as err:
+            raise AntibotError(f"Turnstile 浏览器验证失败（headless）：{err}") from err
 
     def _api(self, session: requests.Session, path: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         try:
