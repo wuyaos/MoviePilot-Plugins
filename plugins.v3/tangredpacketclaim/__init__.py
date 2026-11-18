@@ -64,7 +64,7 @@ class TangRedPacketClaim(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动领取不可躺红包，支持限流保护和历史统计"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacketclaim.png"
-    plugin_version = "2.2.1"
+    plugin_version = "2.2.2"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacketclaim_"
@@ -230,22 +230,22 @@ class TangRedPacketClaim(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 2},
+                                "props": {"cols": 12, "md": 2, "style": "flex-grow: 1"},
                                 "content": [{"component": "VSwitch", "props": {"model": "enabled", "label": "启用插件"}}]
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 2},
+                                "props": {"cols": 12, "md": 2, "style": "flex-grow: 1"},
                                 "content": [{"component": "VSwitch", "props": {"model": "notify", "label": "发送通知"}}]
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 2},
+                                "props": {"cols": 12, "md": 2, "style": "flex-grow: 1"},
                                 "content": [{"component": "VSwitch", "props": {"model": "dry_run", "label": "仅检测不领取"}}]
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 2},
+                                "props": {"cols": 12, "md": 2, "style": "flex-grow: 1"},
                                 "content": [
                                     {
                                         "component": "VSwitch",
@@ -259,7 +259,7 @@ class TangRedPacketClaim(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 2},
+                                "props": {"cols": 12, "md": 2, "style": "flex-grow: 1"},
                                 "content": [
                                     {
                                         "component": "VSwitch",
