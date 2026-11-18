@@ -309,12 +309,13 @@
         "name": "不可躺自动领红包",
         "description": "自动领取不可躺红包，支持限流保护和历史统计，内置 antibot 人机验证（PoW 本地求解 + Cloudflare Turnstile 浏览器仿真）",
         "labels": "不可躺,红包,自动领取",
-        "version": "2.2.0",
+        "version": "2.2.1",
         "icon": "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacketclaim.png",
         "author": "wuyaos",
         "level": 2,
         "system_version": ">=3.0.0",
         "history": {
+            "v2.2.1": "设置页布局调整：快速模式开关移至首行与其他开关同行；每日上限保留在第三行（与领取间隔、限流轮询间隔同排）",
             "v2.2.0": "1. 上限口径重构：daily_limit 仅作显示分母（默认 300 兜底，解析到站点上限自动回写配置）；实际上限只认站点拒绝解析，达到后当轮停止且当天后续轮跳过（无通知、次日自动失效、手动运行清标记）\n2. 站点配额对账不封顶：站点权威口径可超过显示上限（显示「超 N」）；本地计数下界绝不降低；达到上限的请求回写站点当日已领数\n3. 今日收益聚合：按日累计 bonus，通知与运行历史展示「今日收益」\n4. 通知优化：标题带本轮收益/异常短版，正文四行制（本轮/今日/当前魔力），魔力千分位，去掉说明行与「剩余 X」行；达上限轮显示站点口径\n5. run_once 全量配置合并写回，防止单键覆盖丢失学习回写的 daily_limit\n6. 修复若干编辑残留问题（重复行、装饰器丢失）",
             "v2.1.0": "antibot修复: Turnstile浏览器验证失败自动降级fallback PoW通道(challenge fallback:1 to pow), 浏览器只试一次headless 25s; pow verify补confirm字段",
             "v2.0.0": "V3 迁移：app.sdk 宿主接口、相对 API 路径与 success/message/data envelope、plugin_id；新增 antibot 人机验证适配：challenge→verify 流程，PoW 模式本地 SHA-256 求解，Turnstile 模式经宿主 CloakBrowser 渲染取 token（headless 失败自动降级 headful），token/device 持久化复用，claim 428 自动重验证一次"

@@ -64,7 +64,7 @@ class TangRedPacketClaim(_PluginBase):
     plugin_name = "不可躺自动领红包"
     plugin_desc = "自动领取不可躺红包，支持限流保护和历史统计"
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/tangredpacketclaim.png"
-    plugin_version = "2.2.0"
+    plugin_version = "2.2.1"
     plugin_author = "wuyaos"
     author_url = "https://github.com/wuyaos/MoviePilot-Plugins"
     plugin_config_prefix = "tangredpacketclaim_"
@@ -230,22 +230,22 @@ class TangRedPacketClaim(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 3},
+                                "props": {"cols": 12, "md": 2},
                                 "content": [{"component": "VSwitch", "props": {"model": "enabled", "label": "启用插件"}}]
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 3},
+                                "props": {"cols": 12, "md": 2},
                                 "content": [{"component": "VSwitch", "props": {"model": "notify", "label": "发送通知"}}]
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 3},
+                                "props": {"cols": 12, "md": 2},
                                 "content": [{"component": "VSwitch", "props": {"model": "dry_run", "label": "仅检测不领取"}}]
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 3},
+                                "props": {"cols": 12, "md": 2},
                                 "content": [
                                     {
                                         "component": "VSwitch",
@@ -253,6 +253,20 @@ class TangRedPacketClaim(_PluginBase):
                                             "model": "run_once",
                                             "label": "立即运行一次",
                                             "hint": "保存配置后执行，并自动关闭"
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 2},
+                                "content": [
+                                    {
+                                        "component": "VSwitch",
+                                        "props": {
+                                            "model": "fast_mode",
+                                            "label": "快速模式",
+                                            "hint": "跳过 detail 直接 claim，平均分配红包安全"
                                         }
                                     }
                                 ]
@@ -312,20 +326,6 @@ class TangRedPacketClaim(_PluginBase):
                     {
                         "component": "VRow",
                         "content": [
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
-                                "content": [
-                                    {
-                                        "component": "VSwitch",
-                                        "props": {
-                                            "model": "fast_mode",
-                                            "label": "快速模式",
-                                            "hint": "跳过 detail 直接 claim，平均分配红包安全"
-                                        }
-                                    }
-                                ]
-                            },
                             {
                                 "component": "VCol",
                                 "props": {"cols": 12, "md": 4},
