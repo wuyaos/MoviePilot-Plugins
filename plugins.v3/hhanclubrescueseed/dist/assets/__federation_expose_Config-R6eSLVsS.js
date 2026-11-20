@@ -469,7 +469,7 @@ return (_ctx, _cache) => {
                           "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((form.max_downloading) = $event)),
                           modelModifiers: { number: true },
                           label: "最大同时下载数",
-                          hint: "下载器并发上限",
+                          hint: "下载器全局未完成种子数上限（含其他插件/手动任务）",
                           "persistent-hint": "",
                           type: "number",
                           variant: "outlined",
@@ -817,6 +817,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-23d33957"]]);
+const ConfigComponent = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-13c198b5"]]);
 
 export { ConfigComponent as default };

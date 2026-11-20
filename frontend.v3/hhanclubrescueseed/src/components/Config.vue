@@ -140,7 +140,7 @@ onMounted(loadConfig)
             <v-col cols="12" md="3"><VCronField v-model="form.cron" label="获取任务调度" hint="保种区每天 14:00 更新种子" persistent-hint /></v-col>
             <v-col cols="12" sm="6" md="3"><v-text-field v-model.number="form.max_pages" label="翻页数" type="number" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" sm="6" md="3"><v-text-field v-model.number="form.download_limit" label="本轮下载配额" hint="0 = 不限" persistent-hint type="number" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" sm="6" md="3"><v-text-field v-model.number="form.max_downloading" label="最大同时下载数" hint="下载器并发上限" persistent-hint type="number" variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" sm="6" md="3"><v-text-field v-model.number="form.max_downloading" label="最大同时下载数" hint="下载器全局未完成种子数上限（含其他插件/手动任务）" persistent-hint type="number" variant="outlined" density="comfortable" /></v-col>
           </v-row>
           <div class="filter-block">
             <div class="filter-label">列表页粗筛</div>

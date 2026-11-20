@@ -31,7 +31,7 @@ class Hhanclubrescueseed(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/wuyaos/MoviePilot-Plugins/main/icons/hhanclubrescueseed.png"
     # 插件版本
-    plugin_version = "3.3.12"
+    plugin_version = "3.3.13"
     # 插件作者
     plugin_author = "Seed680, wuyaos"
     # 作者主页
@@ -658,11 +658,11 @@ class Hhanclubrescueseed(_PluginBase):
             unfinished = None
             if max_downloading > 0:
                 try:
-                    scoped = self._get_scoped_torrents(self._downloader)
+                    unfinished = self._count_unfinished(self._downloader)
                 except Exception as exc:
                     logger.error(f"检查下载器未完成种子数失败，无法计算本轮容量，终止本轮: {exc}")
                     return
-                unfinished = sum(1 for torrent in scoped if (self._get_torrent_stats(torrent) or {}).get("progress", 1) < 1)
+                # 口径=下载器全局（含非本插件任务），max_downloading 语义为下载器并发上限
                 available_slots = max(0, max_downloading - unfinished)
             else:
                 available_slots = math.inf
@@ -743,8 +743,7 @@ class Hhanclubrescueseed(_PluginBase):
                         break
                     if self._max_downloading:
                         try:
-                            scoped = self._get_scoped_torrents(self._downloader)
-                            unfinished = sum(1 for torrent in scoped if (self._get_torrent_stats(torrent) or {}).get("progress", 1) < 1)
+                            unfinished = self._count_unfinished(self._downloader)
                             if unfinished >= self._max_downloading:
                                 logger.info(f"下载器未完成种子 {unfinished} 个，已达上限 {self._max_downloading}，停止本轮")
                                 break
@@ -1200,6 +1199,35 @@ class Hhanclubrescueseed(_PluginBase):
         stats = self._get_torrent_stats(torrent)
         expected = {tag.strip() for tag in str(self._custom_tag or "").split(",") if tag.strip()}
         return bool(stats and expected.intersection(set(stats["tags"])))
+
+    def _count_unfinished(self, downloader) -> int:
+        """下载器全局未完成种子数（含非本插件任务）。max_downloading 语义=下载器并发上限，
+        需要统计全部任务；只看插件标签会让插件在其他任务占满带宽时仍继续添加。"""
+        if not self.downloader_helper:
+            return 0
+        service = self.downloader_helper.get_service(downloader)
+        if not service or not service.instance:
+            return 0
+        count = 0
+        for torrent in self._fetch_torrents(service.instance):
+            try:
+                try:
+                    pd = torrent.get("percent_done")
+                except Exception:
+                    pd = getattr(torrent, "percent_done", None)
+                if pd is not None:
+                    if float(pd) / 100.0 < 1:
+                        count += 1
+                    continue
+                try:
+                    prog = torrent.get("progress")
+                except Exception:
+                    prog = getattr(torrent, "progress", None)
+                if prog is not None and float(prog) < 1:
+                    count += 1
+            except (TypeError, ValueError):
+                continue
+        return count
 
     def _get_scoped_torrents(self, downloader):
         """Downloader tag queries are only a hint; enforce exact application-layer tag matching."""
