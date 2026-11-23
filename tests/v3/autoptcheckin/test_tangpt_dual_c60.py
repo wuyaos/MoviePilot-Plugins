@@ -1,8 +1,11 @@
-"""躺平（tangpt）双通道适配回归：签到页改 Turnstile 后云签/仿真并存。
+"""躺平（tangpt）nexus HTTP 通道回归。
 
-站点实测（2026-11-11）：attendance.php 为隐藏 cf-turnstile-response + 立即签到提交，
-非交互自动出 token；传统 imagehash 验证码已移除，HTTP 通道拿不到 token 无法提交。
+站点实测（2026-11-23）：attendance.php 未签表单已无 Turnstile（sitekey 空、
+仅「立即签到」submit），2026-11-11 适配的表单内嵌 Turnstile 已被站点移除——
+solve 无 widget 可解，11-21/23 连续「未获取到 token」。tangpt 退出云签，
+转 nexus HTTP 声明（ourbits 同款 status_map）。
 """
+import json
 import sys
 from pathlib import Path
 
@@ -13,86 +16,49 @@ sys.path.insert(0, str(Path(__file__).parents[3] / 'plugins.v3'))
 from autoptcheckin.core import cloudsign, siteconf
 from autoptcheckin.core.registry import get_native_module
 
-
-class FakeResp:
-    def __init__(self, payload, status_code=200):
-        self.payload = payload
-        self.status_code = status_code
-
-    def json(self):
-        if self.status_code != 200:
-            raise ValueError
-        return self.payload
+DECLARATIONS = Path(__file__).parents[3] / 'plugins.v3' / 'autoptcheckin' / 'sites' / 'native' / 'generic_sites.json'
 
 
-@pytest.fixture
-def bql(monkeypatch):
-    calls = []
-
-    def install(responses):
-        def fake_post(url, json=None, timeout=None):
-            calls.append({'url': url, 'payload': json, 'timeout': timeout})
-            resp = responses.pop(0)
-            if isinstance(resp, Exception):
-                raise resp
-            return resp
-        monkeypatch.setattr(cloudsign.requests, 'post', fake_post)
-        return calls
-    return install
+def _tangpt_declaration() -> dict:
+    rows = json.loads(DECLARATIONS.read_text(encoding='utf-8'))
+    return next(r for r in rows if r['id'] == 'tangpt')
 
 
-# ---- 能力与声明 ----
+# ---- 云签退出 ----
 
-def test_cloud_rule_registered():
-    assert 'tangpt' in cloudsign.CLOUD_SITES
-    assert cloudsign.enabled('tangpt')
-    rule = cloudsign.CLOUD_RULES['tangpt']
-    assert rule['path'] == '/attendance.php'
-    assert rule['submit'] == 'auto'
-    assert rule['verify'] == '/attendance.php'
-    assert rule['success'] and rule['already']
+def test_tangpt_removed_from_cloud_sign():
+    assert 'tangpt' not in cloudsign.CLOUD_SITES
+    assert not cloudsign.enabled('tangpt')
+    assert 'tangpt' not in cloudsign.CLOUD_RULES
+    result = cloudsign.sign('tangpt', 'https://www.tangpt.top/', 'a=1', {'browserless_token': 'tk'})
+    assert result.status == 'network_error'
+    assert '云签未适配' in result.message
 
 
-def test_declaration_is_page_action_emulate():
+def test_siteconf_no_cloud_capability():
+    flags = siteconf.resolve('tangpt', {'site_cloudsign': ['tangpt']}, declared_emulate=False)
+    assert not flags['cloudsign_capable']
+    assert not flags['cloudsign_selected']
+    # 归一化会把残留选择剔除（__init__ 归一化用 CLOUD_SITES 过滤）
+
+
+# ---- nexus 声明 ----
+
+def test_declaration_is_nexus_http():
+    row = _tangpt_declaration()
+    assert row['protocol'] == 'nexus'
+    assert row['attendance_path'] == '/attendance.php'
+    assert not row.get('emulate')
+    assert not row.get('headful')
+    assert not row.get('cloak_steps')
+    assert row['status_map'].get('签到成功') == 'signed'
+    assert row['status_map'].get('今天已经签到过') == 'signed'
+    assert row['status_map'].get('未签到') == 'unsigned'
+
+
+def test_native_module_has_no_cloak_steps():
     site = get_native_module('tangpt')
     assert site is not None
-    assert tuple(getattr(site, 'cloak_steps', ())) == ('human_verify', 'sign_button')
+    assert not tuple(getattr(site, 'cloak_steps', ()) or ())
     assert getattr(site, 'attendance_path', '') == '/attendance.php'
-    assert bool(getattr(site, 'emulate', False)) is True
-    assert bool(getattr(site, 'headful', False)) is True
-
-
-def test_dual_channels_coexist():
-    # 未选云签：声明 emulate 默认走本地仿真
-    flags = siteconf.resolve('tangpt', {'site_cloudsign': []}, declared_emulate=True)
-    assert flags['emulate'] and flags['cloudsign_capable'] and not flags['cloudsign_selected']
-    # 选中云签：两通道能力并存，由 site_cloudsign 选择分流
-    flags = siteconf.resolve('tangpt', {'site_cloudsign': ['tangpt']}, declared_emulate=True)
-    assert flags['emulate'] and flags['cloudsign_capable'] and flags['cloudsign_selected']
-
-
-# ---- 云签编排（与 c18 同款离线 BQL 桩）----
-
-def test_sign_already_in_stage1_skips_stage2(bql):
-    calls = bql([FakeResp({'data': {'solve': {'token': ''}, 'after': {'html': '今日已签到'}}})])
-    result = cloudsign.sign('tangpt', 'https://www.tangpt.top/', 'a=1', {'browserless_token': 'tk'})
-    assert result.status == 'success' and '已签到' in result.message
-    assert len(calls) == 1
-
-
-def test_sign_two_stage_success_hits_verify(bql):
-    calls = bql([
-        FakeResp({'data': {'solve': {'token': '0.tk'}, 'session': {'browserQLEndpoint':
-                   'https://production-sfo.browserless.io/e/s1/chromium/bql'}, 'after': {'html': '待签到'}}}),
-        FakeResp({'data': {'verifyPage': {'html': '签到成功'}, 'after': {'html': ''}}}),
-    ])
-    result = cloudsign.sign('tangpt', 'https://www.tangpt.top/', 'a=1', {'browserless_token': 'tk'})
-    assert (result.status, result.message) == ('success', '云签成功')
-    assert len(calls) == 2
-    assert calls[1]['payload']['variables']['verifyUrl'] == 'https://www.tangpt.top/attendance.php'
-
-
-def test_sign_solve_failure_is_protocol_pending(bql):
-    bql([FakeResp({'data': {'solve': {'token': ''}, 'after': {'html': '待签到'}}})])
-    result = cloudsign.sign('tangpt', 'https://www.tangpt.top/', 'a=1', {'browserless_token': 'tk'})
-    assert result.status == 'protocol_pending'
+    assert bool(getattr(site, 'emulate', False)) is False

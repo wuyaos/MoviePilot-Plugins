@@ -27,8 +27,10 @@ INJECT_STEP_MARGIN_MS = 12000
 DEFAULT_RECONNECT_WAIT_MS = 60000
 DEFAULT_SOLVE_TIMEOUT_MS = 40000
 
-# 走云签的站点（CF 盾仿真站）；配置了 token 才实际分流
-CLOUD_SITES = ("mua_xloli", "ourbits", "vclib", "tangpt")
+# 走云签的站点（CF 盾仿真站）；配置了 token 才实际分流。
+# 2026-11-23: tangpt 退出——浏览器实测未签表单已无 Turnstile（sitekey 空、仅「立即签到」submit），
+# solve 无 widget 可解致 11-21/23 连续「未获取到 token」；转 nexus HTTP 声明。
+CLOUD_SITES = ("mua_xloli", "ourbits", "vclib")
 
 # 各站小规则：路径 / 提交方式 / 等待预算 / 判定关键词。
 # submit=auto 两段式（solve 拿 token → reconnect 留会话 → 第二段注入+兜底 POST+verify）；
@@ -84,24 +86,6 @@ CLOUD_RULES: dict[str, dict[str, Any]] = {
         # 2026-10-26: 原词表 ["验证", "人机"] 单字宽泛匹配——站点公告/导航含「验证」即误判
         # 「仍待人机验证」（00:06 轮实况）。改为完整短语，仅真验证引导文案命中。
         "pending": ["完成人机验证", "人机验证", "验证通过后"],
-    },
-    "tangpt": {
-        # 2026-11-11: 躺平签到页已改 Turnstile（浏览器实测：隐藏 cf-turnstile-response +
-        # input[type=submit][value=立即签到]，非交互自动出 token；传统 imagehash 验证码已移除，
-        # HTTP 通道拿不到 token 永远签不上）。与 vclib 同款两段式：solve → reconnect →
-        # 注入提交（同源 attendance 表单兜底 POST）→ verify 回读。
-        "path": "/attendance.php",
-        "submit": "auto",
-        "before_wait": 15000,
-        "solve_timeout": DEFAULT_SOLVE_TIMEOUT_MS,
-        "solve_retry_timeouts": (60000, 90000, 120000),  # 最多三次 solve；无 token 时不提交
-        "auto_wait": 30000,
-        "wait": 8000,
-        "verify": "/attendance.php",
-        "verify_wait": 15000,
-        "success": ["签到成功", "签到已得", "簽到成功"],
-        "already": ["今日已签到", "今天已经签到", "已经签到", "已签到"],
-        "pending": [],
     },
 }
 
