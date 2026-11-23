@@ -180,9 +180,10 @@ def test_sign_bql_step_error_appended_to_failed_message(bql):
 
 
 def test_sign_solve_error_reported_in_pending_message(bql):
-    bql([FakeResp({'data': {'solve': None, 'after': {'html': '待签到'}},
-                   'errors': [{'message': 'solve timed out', 'path': ['solve']}]}),
-         ])
+    # 2026-11-23: mua_xloli 配了 solve_retry_timeouts 三档，transient 超时换档重试 3 次才判 pending。
+    _solve_timeout_stub = FakeResp({'data': {'solve': None, 'after': {'html': '待签到'}},
+                                    'errors': [{'message': 'solve timed out', 'path': ['solve']}]})
+    bql([_solve_timeout_stub, _solve_timeout_stub, _solve_timeout_stub])
     result = cloudsign.sign('mua_xloli', 'https://mua_xloli.me', 'a=1', {'browserless_token': 'tk'})
     assert result.status == 'protocol_pending'
     assert 'solve 失败' in result.message and 'solve timed out' in result.message

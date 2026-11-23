@@ -41,6 +41,7 @@ CLOUD_RULES: dict[str, dict[str, Any]] = {
         "submit": "auto",
         "before_wait": 15000,
         "solve_timeout": DEFAULT_SOLVE_TIMEOUT_MS,
+        "solve_retry_timeouts": (60000, 90000, 120000),  # 最多三次 solve；无 token 时不提交
         "auto_wait": 30000,
         "wait": 8000,
         "verify": "/attendance.php",
@@ -65,15 +66,21 @@ CLOUD_RULES: dict[str, dict[str, Any]] = {
         "pending": [],
     },
     "vclib": {
-        # DOM 未校准：保守两段式，靠注入脚本的表单兜底 POST；首版可能签不上，按 diag 迭代
+        # 2026-11-23 浏览器实测校准：结果页 h2「签到成功」+ 顶部「[签到已得600]」（NexusPHP），
+        # 未签表单内嵌 Turnstile（已签页表单不渲染，故已签快照无盾痕迹）。此前无 verify、
+        # 提交后只看 after 快照，连续 7 天首轮「提交后未确认」靠重入队兜底；补 verify 回读 +
+        # 「签到已得」「已经签到」判定词，与其他三站对齐。
+        "verify": "/attendance.php",
+        "verify_wait": 15000,
+        # 两段式：solve → reconnect → 注入提交（同源 attendance 表单兜底 POST）→ verify 回读
         "path": "/attendance.php",
         "submit": "auto",
         "before_wait": 15000,
         "solve_timeout": DEFAULT_SOLVE_TIMEOUT_MS,
         "auto_wait": 30000,
         "wait": 8000,
-        "success": ["签到成功", "簽到成功"],
-        "already": ["今日已签到", "今天已经签到", "已签到"],
+        "success": ["签到成功", "签到已得", "簽到成功"],
+        "already": ["今日已签到", "今天已经签到", "已经签到", "已签到"],
         # 2026-10-26: 原词表 ["验证", "人机"] 单字宽泛匹配——站点公告/导航含「验证」即误判
         # 「仍待人机验证」（00:06 轮实况）。改为完整短语，仅真验证引导文案命中。
         "pending": ["完成人机验证", "人机验证", "验证通过后"],
@@ -87,6 +94,7 @@ CLOUD_RULES: dict[str, dict[str, Any]] = {
         "submit": "auto",
         "before_wait": 15000,
         "solve_timeout": DEFAULT_SOLVE_TIMEOUT_MS,
+        "solve_retry_timeouts": (60000, 90000, 120000),  # 最多三次 solve；无 token 时不提交
         "auto_wait": 30000,
         "wait": 8000,
         "verify": "/attendance.php",
