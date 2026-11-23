@@ -194,18 +194,35 @@ class HistoryStore:
                 self._save(records)
         return deepcopy(record)
 
+    def _aggregate_latest(self, items: list) -> list:
+        """每站×本地日一条：当日有 sign 记录取最新一条 sign，否则才用最新 login（签到轨道优先）。"""
+        sign_latest: dict[tuple, dict] = {}
+        login_latest: dict[tuple, dict] = {}
+        tz = self._clock().tzinfo
+        for item in items:  # 调用方保证 time 倒序；首见即最新
+            key = (item.get("site"),
+                   self._time(item["time"]).astimezone(tz).date().isoformat())
+            if item.get("action", "sign") == "login":
+                login_latest.setdefault(key, item)
+            else:
+                sign_latest.setdefault(key, item)
+        merged = list(sign_latest.values()) + [
+            item for key, item in login_latest.items() if key not in sign_latest]
+        merged.sort(key=lambda item: item["time"], reverse=True)
+        return merged
+
+    def _fetch_all(self) -> list:
+        if self._conn:
+            rows = self._conn.execute("SELECT data FROM records ORDER BY time DESC").fetchall()
+            return [json.loads(row[0]) for row in rows]
+        return sorted(self._load(), key=lambda item: item["time"], reverse=True)
+
     def list(self, page: int = 1, size: int = 20) -> dict:
         page, size = max(1, page), max(1, min(100, size))
         with self._lock:
-            if self._conn:
-                total = self._conn.execute("SELECT count(*) FROM records").fetchone()[0]
-                rows = self._conn.execute(
-                    "SELECT data FROM records ORDER BY time DESC LIMIT ? OFFSET ?",
-                    (size, (page - 1) * size)).fetchall()
-                return {"total": total, "items": [json.loads(row[0]) for row in rows]}
-            records = sorted(self._load(), key=lambda item: self._time(item["time"]), reverse=True)
+            merged = self._aggregate_latest(self._fetch_all())
             start = (page - 1) * size
-            return {"total": len(records), "items": deepcopy(records[start:start + size])}
+            return {"total": len(merged), "items": deepcopy(merged[start:start + size])}
 
     def clear_today(self) -> int:
         """删除本地时区当天的签到缓存记录并返回删除数量。"""
@@ -225,18 +242,20 @@ class HistoryStore:
             return len(records) - len(kept)
 
     def today_counts(self) -> dict[str, int]:
-        """今日三卡口径（统一 status）：signed/failed/pending；旧原始值经 unify_result 兼容读取。"""
+        """今日三卡口径：每站当日最新一条 sign 记录（重试虚高不再累计）；统一 status 三值。"""
         now = self._clock()
         counts = dict(signed=0, failed=0, pending=0)
+        tz = now.tzinfo
         with self._lock:
-            if self._conn:
-                rows = self._conn.execute("SELECT data FROM records").fetchall()
-                items = [json.loads(data) for (data,) in rows]
-            else:
-                items = self._load()
-            for item in items:
-                if item.get("action", "sign") == "sign" and self._time(item["time"]).astimezone(now.tzinfo).date() == now.date():
-                    status, _ = unify_result(item.get("status"), item.get("reason"))
-                    if status in counts:
-                        counts[status] += 1
+            latest: dict[str, dict] = {}
+            for item in self._fetch_all():  # time 倒序；首见即当日最新
+                if item.get("action", "sign") != "sign":
+                    continue
+                if self._time(item["time"]).astimezone(tz).date() != now.date():
+                    continue
+                latest.setdefault(item.get("site"), item)
+            for item in latest.values():
+                status, _ = unify_result(item.get("status"), item.get("reason"))
+                if status in counts:
+                    counts[status] += 1
         return counts

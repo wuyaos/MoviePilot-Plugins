@@ -219,10 +219,13 @@ toggleSiteFilter('login_pending');
 toggleSiteFilter('paused'); assert.deepEqual(visibleSites.value.map(s=>s.id),[3]);
 toggleSiteFilter('paused');
 const today=historyDay(new Date());
-assert.equal(historyDays.value.some(g=>g.day===today),false);
+assert.equal(historyDays.value.some(g=>g.day===today),true);
+assert.equal(historyDays.value[0].day,today);
+assert.equal(historyDays.value[0].sign.total,1);
+assert.equal(historyDays.value[0].login.total,0);
 assert.equal(dayIsOpen('2020-01-02'),false);
 toggleDay('2020-01-02'); assert.equal(dayIsOpen('2020-01-02'),true);
-assert.equal(historyDays.value.find(g=>g.day==='2020-01-02').records.length,2);
+assert.equal(historyDays.value.find(g=>g.day==='2020-01-02').sign.total,2);
 assert.equal(historyDay('bad'),'日期未知');
 """
     subprocess.run(['node','-e',script],check=True,capture_output=True,text=True)

@@ -155,12 +155,14 @@ def test_manual_execution_does_not_use_onlyonce(monkeypatch):
 
 
 def test_scheduler_and_manual_history_sources():
-    p = plugin({**BASE, 'enabled_sites': ['hdsky'], 'sign_sites': ['hdsky']})
-    p.get_service()[0]['func']()
-    p._execute_all()  # 批次已在后台线程（API 只返回 started）；trigger 语义直接验证
+    p = plugin({**BASE, 'enabled_sites': ['hdsky', 'hdchina'], 'sign_sites': ['hdsky', 'hdchina']})
+    p.get_service()[0]['func']()  # 调度轮：两站 trigger=scheduler
+    # 手动单站（API 线程语义另测）：hdchina trigger=manual 覆盖其调度轮记录
+    asyncio.run(p.api_signin_by_domain(domain='hdchina'))
     records = asyncio.run(p.api_history())['data']['items']
+    # 每站×当日聚合一条：hdsky 保留 scheduler、hdchina 被 manual 覆盖
     assert {row['trigger'] for row in records} == {'scheduler', 'manual'}
-    assert records and {row['trigger'] for row in records} == {'scheduler', 'manual'}
+    assert {row['trigger'] for row in records} == {'scheduler', 'manual'}
 
 
 def test_stop_and_config_reregistration(monkeypatch):

@@ -55,20 +55,21 @@ function historyDay(value) {
 const SUCCESS_STATUSES = new Set(['success', 'signed', 'already', 'login_ok'])
 const UNREACHABLE_REASONS = new Set(['network_error', 'maintenance', 'protocol_pending'])
 const historyDays = computed(() => {
-  const today = historyDay(new Date())
   const groups = new Map()
+  const bucket = () => ({total: 0, success: 0, failed: 0, unconfirmed: 0, unreachable: 0})
   history.value.items.forEach((item, index) => {
     const day = historyDay(item.time)
-    if (day === today) return
-    if (!groups.has(day)) groups.set(day, {day, records: [], success: 0, failed: 0, unconfirmed: 0, unreachable: 0})
+    if (!groups.has(day)) groups.set(day, {day, records: [], sign: bucket(), login: bucket()})
     const group = groups.get(day)
     group.records.push({item, index})
+    const track = item.action === 'login' ? group.login : group.sign
+    track.total++
     const reason = item.reason || legacyReason(item.status)
-    if (SUCCESS_STATUSES.has(item.status)) group.success++
-    else if (item.status === 'failed' || item.status === 'auth_failed') group.failed++
+    if (SUCCESS_STATUSES.has(item.status)) track.success++
+    else if (item.status === 'failed' || item.status === 'auth_failed') track.failed++
     else if (item.status === 'pending' || item.status === 'unconfirmed') {
-      if (UNREACHABLE_REASONS.has(reason)) group.unreachable++
-      else group.unconfirmed++
+      if (UNREACHABLE_REASONS.has(reason)) track.unreachable++
+      else track.unconfirmed++
     }
   })
   return [...groups.values()].sort((a, b) => b.day.localeCompare(a.day))
@@ -201,6 +202,6 @@ emit('layout',{maxWidth:'1000px'})
 <div class="site-r1"><button type="button" class="pwr" :class="site.site_paused ? 'paused' : 'active'" :aria-label="site.site_paused ? '恢复站点' : '暂停站点'" @click="toggleSitePaused(site)">⏻</button><strong class="site-label"><img v-if="site.icon && !brokenIcons[site.id]" class="site-icon" :src="site.icon" alt="" @error="brokenIcons[site.id] = true"><span v-else class="site-icon site-initial" aria-hidden="true">{{ site.name?.slice(0,1) }}</span><a v-if="site.url" class="site-link" :href="site.url" target="_blank" rel="noopener" @click.stop>{{ site.name }}</a><span v-else>{{ site.name }}</span></strong><span class="head-right"><button v-if="site.sign_selected && !site.sign_disabled_struct && trackChip(site,'sign')" type="button" class="chip" :class="trackChip(site,'sign')[1]" :title="site.site_paused ? '站点已暂停执行' : trackTitle(site,'sign')" :disabled="site.site_paused || busy" @click="execute('signin_by_domain',site.id)">{{ trackChip(site,'sign')[0] }}</button><button v-if="site.login_selected && !site.login_disabled_struct && trackChip(site,'login')" type="button" class="chip" :class="trackChip(site,'login')[1]" :title="site.site_paused ? '站点已暂停执行' : trackTitle(site,'login')" :disabled="site.site_paused || busy" @click="execute('login_by_domain',site.id)">{{ trackChip(site,'login')[0] }}</button></span></div>
 <div class="site-caps"><span v-if="site.cloudsign_selected" class="chip badge-shield-cloud">云签</span><span v-if="site.emulate" class="chip badge-emulate">仿真</span><span v-if="site.proxy" class="chip blue">代理</span></div>
 <p class="site-msg" :title="cardMessage(site)">{{ cardMessage(site) }}</p></article></div><button v-if="filteredSites.length > siteLimit" class="btn ghost sites-toggle" :aria-expanded="showAllSites" @click="showAllSites = !showAllSites">{{ showAllSites ? '收起其余站点' : `展开其余 ${filteredSites.length - siteLimit} 个站点` }}</button><div v-if="!stats.sites.length" class="empty">暂无站点结果</div><div v-else-if="!filteredSites.length" class="empty">该状态暂无站点</div><h3 style="margin:28px 0 0">历史记录</h3></div>
-<div class="table-wrap"><table><caption class="hint" style="text-align:left;padding:0 24px 12px">{{ history.total || 0 }} 条记录</caption><thead><tr><th v-for="label in ['时间','站点','状态','最近消息']" :key="label">{{ label }}</th></tr></thead><tbody><template v-for="group in historyDays" :key="group.day"><tr class="history-day"><th colspan="4"><button class="btn ghost mini" :aria-expanded="dayIsOpen(group.day)" @click="toggleDay(group.day)">{{ dayIsOpen(group.day) ? '▾' : '▸' }} {{ group.day }} · {{ group.records.length }} 条 · <span class="num-success">成功 {{ group.success }}</span> / <span class="num-failure">失败 {{ group.failed }}</span> / <span class="num-unknown">未确认 {{ group.unconfirmed }}</span> / <span class="num-off">不可达 {{ group.unreachable }}</span></button></th></tr><template v-if="dayIsOpen(group.day)"><template v-for="{item,index} in group.records" :key="index"><tr><td>{{ formatTime(item.time) }}</td><td>{{ siteName(item.site) }}</td><td><span class="chip" :class="historyBadge(item)[1]">{{ historyBadge(item)[0] }}</span></td><td>{{ resultMessage(item) }}</td></tr></template></template></template><tr v-if="!historyDays.length"><td colspan="4" class="muted">暂无历史记录</td></tr></tbody></table></div></template><div v-else class="win">加载中…</div></section></div></template>
+<div class="table-wrap"><table><caption class="hint" style="text-align:left;padding:0 24px 12px">{{ history.total || 0 }} 条记录</caption><thead><tr><th v-for="label in ['时间','站点','状态','最近消息']" :key="label">{{ label }}</th></tr></thead><tbody><template v-for="group in historyDays" :key="group.day"><tr class="history-day"><th colspan="4"><button class="btn ghost mini" :aria-expanded="dayIsOpen(group.day)" @click="toggleDay(group.day)">{{ dayIsOpen(group.day) ? '▾' : '▸' }} {{ group.day }} · 签到 {{ group.sign.total }}：成功 {{ group.sign.success }} / 失败 {{ group.sign.failed }} / 未确认 {{ group.sign.unconfirmed }} / 不可达 {{ group.sign.unreachable }}<template v-if="group.login.total"> · 登录 {{ group.login.total }}：成功 {{ group.login.success }} / 失败 {{ group.login.failed }} / 未确认 {{ group.login.unconfirmed }} / 不可达 {{ group.login.unreachable }}</template></button></th></tr><template v-if="dayIsOpen(group.day)"><template v-for="{item,index} in group.records" :key="index"><tr><td>{{ formatTime(item.time) }}</td><td>{{ siteName(item.site) }}</td><td><span class="chip" :class="historyBadge(item)[1]">{{ historyBadge(item)[0] }}</span></td><td>{{ resultMessage(item) }}</td></tr></template></template></template><tr v-if="!historyDays.length"><td colspan="4" class="muted">暂无历史记录</td></tr></tbody></table></div></template><div v-else class="win">加载中…</div></section></div></template>
 <style scoped src="./preview.css"></style>
 <style scoped> .data-grid .site-card.is-paused{opacity:.55;border-color:var(--ptc-off-border,var(--ptc-line-strong))}.pwr.active{background:var(--ptc-success-bg);color:var(--ptc-success-text)}.pwr.paused{background:var(--ptc-unknown-bg);color:var(--ptc-unknown-text)}.site-card .head-right .chip{min-height:24px;padding:0 8px;line-height:24px;border-radius:12px;gap:3px}.site-card .chip:disabled{opacity:.6;cursor:not-allowed} </style>
